@@ -432,7 +432,7 @@ test("listen capture stream port surfaces transcript, connection, and entitlemen
     connections.push(state.status === "closed" ? `closed:${state.code}` : state.status);
   });
   port.observeEntitlementState((payload) => {
-    entitlements.push(payload ? `${payload.state}|${payload.upgradeTarget}|${payload.limit.kind}` : null);
+    entitlements.push(payload ? `${payload.status}|${payload.upgradeTarget}|${payload.limit.kind}` : null);
   });
 
   assert.deepEqual(port.getConnectionState(), { status: "idle" });

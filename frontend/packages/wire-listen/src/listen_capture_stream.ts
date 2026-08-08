@@ -77,13 +77,128 @@ export type ListenEntitlementReason = EntitlementEvent["reason"];
 export type ListenEntitlementUsage = EntitlementUsage;
 export type ListenEntitlementLimit = EntitlementLimit;
 
-/** Payload surfaces consume after the adapter validates the entitlement frame. */
+/**
+ * The ONE internal entitlement state a surface consumes, normalised from BOTH
+ * wire shapes (coordinator ruling, decisions/COORD-entitlement-frame-collision.md).
+ *
+ * Two frames describe "the user has hit a plan limit":
+ * `freemium_threshold_reached` is what the legacy server emits TODAY, and
+ * `entitlement` is reserved for the rewritten wire and emitted by nobody yet.
+ * Replacing the reserve with the emitted frame would fix today and break
+ * tomorrow — a reserve priced before a binding exists is cheap, a reshape after
+ * two consumers exist is not. So the client accepts both and the surface never
+ * learns there were two.
+ *
+ * WHAT IS NULL HERE IS NULL ON PURPOSE. The two wires carry genuinely different
+ * information: the entitlement frame knows usage/limit/reason/upgrade target and
+ * not remaining time; the freemium frame knows remaining seconds and a suggested
+ * action and none of the rest. Every field a given wire does not carry is
+ * `null`, never a plausible default. A fabricated `limit` here would be read by
+ * a surface as a real ceiling and shown to a user as a number the server never
+ * said — the same class of fabrication as a synthesized memory carrying
+ * `locked: false`.
+ *
+ * `status` and `captureContinuing` are the normalised decision fields: they are
+ * the two things BOTH wires can always answer, and therefore the only two a
+ * surface may branch on without checking `source`.
+ */
+export interface ListenEntitlementSnapshot {
+  /** Which wire shape produced this. Provenance for telemetry — NOT presentational. */
+  readonly source: "entitlement" | "freemium_threshold_reached";
+  /** Normalised severity. Both wires can always answer this. */
+  readonly status: ListenEntitlementStatus;
+  /** Is audio capture still running? Both wires can always answer this. */
+  readonly captureContinuing: boolean;
+  /** Remaining allowance, when the wire carried one. */
+  readonly remaining: { readonly amount: number; readonly unit: "seconds" } | null;
+  readonly usage: ListenEntitlementUsage | null;
+  /** `{ kind: "unknown" }` when the wire stated no ceiling — distinct from unmetered. */
+  readonly limit: ListenEntitlementLimit;
+  readonly reason: ListenEntitlementReason | null;
+  readonly upgradeTarget: string | null;
+  readonly suggestedAction: "setup_on_device_stt" | "none" | null;
+}
+
+/**
+ * Closed union so a surface's exhaustive switch breaks at COMPILE time when a
+ * new severity appears — which is the moment a human must decide how to phrase
+ * it, not a moment to fall through to generic copy.
+ */
+export type ListenEntitlementStatus =
+  /** Credit is running low; capture and transcription both continue. */
+  | "approaching_limit"
+  /** The ceiling was reached. `captureContinuing` says whether audio survives. */
+  | "limit_reached"
+  /** Nothing further without a plan change; expect a close to follow. */
+  | "upgrade_required";
+
+/** Parse result of the reserved `entitlement` frame specifically. */
 export interface ListenEntitlementPayload {
   readonly state: ListenEntitlementState;
   readonly reason: ListenEntitlementReason;
   readonly usage: ListenEntitlementUsage;
   readonly limit: ListenEntitlementLimit;
   readonly upgradeTarget: string;
+}
+
+/** Which wire shape this generation is expected to emit (ADR-010: never mixed). */
+export type ListenEntitlementGeneration = "legacy" | "platform";
+
+const EXPECTED_ENTITLEMENT_FRAME: Readonly<Record<ListenEntitlementGeneration, string>> = {
+  legacy: "freemium_threshold_reached",
+  platform: "entitlement",
+};
+
+/** Reserved `entitlement` frame -> the normalised state. */
+export function listenEntitlementSnapshotFromEntitlement(
+  payload: ListenEntitlementPayload,
+): ListenEntitlementSnapshot {
+  return {
+    source: "entitlement",
+    status:
+      payload.state === "upgrade_required"
+        ? "upgrade_required"
+        : "limit_reached",
+    // Only this one state keeps audio alive, and it says so in its name.
+    captureContinuing: payload.state === "transcription_paused_capture_continuing",
+    // The entitlement frame carries usage against a ceiling, not a countdown.
+    remaining: null,
+    usage: payload.usage,
+    limit: payload.limit,
+    reason: payload.reason,
+    upgradeTarget: payload.upgradeTarget,
+    suggestedAction: null,
+  };
+}
+
+/**
+ * Legacy `freemium_threshold_reached` -> the same normalised state.
+ *
+ * `remaining_seconds === 0` is `upgrade_required` rather than `limit_reached`
+ * because the schema is explicit that this frame at zero is sent "pre-emptively
+ * at connect when already exhausted/paywalled … immediately before a 1008
+ * trial_expired close". Calling that `limit_reached` would tell a surface that
+ * capture might continue, moments before the socket dies.
+ */
+export function listenEntitlementSnapshotFromFreemium(event: {
+  readonly remaining_seconds: number;
+  readonly action: string;
+}): ListenEntitlementSnapshot {
+  const exhausted = event.remaining_seconds <= 0;
+  return {
+    source: "freemium_threshold_reached",
+    status: exhausted ? "upgrade_required" : "approaching_limit",
+    captureContinuing: !exhausted,
+    remaining: { amount: event.remaining_seconds, unit: "seconds" },
+    // This wire says nothing about consumption, the ceiling, the reason, or
+    // where to upgrade. Every one of those stays null rather than invented.
+    usage: null,
+    limit: { kind: "unknown" },
+    reason: null,
+    upgradeTarget: null,
+    suggestedAction:
+      event.action === "setup_on_device_stt" || event.action === "none" ? event.action : null,
+  };
 }
 
 export type ListenStreamConnectionState =
@@ -122,7 +237,7 @@ export interface ListenCaptureStreamPort {
     listener: (segments: readonly TranscriptSegment[]) => void,
   ): () => void;
   observeConnectionState(listener: (state: ListenStreamConnectionState) => void): () => void;
-  observeEntitlementState(listener: (payload: ListenEntitlementPayload | null) => void): () => void;
+  observeEntitlementState(listener: (payload: ListenEntitlementSnapshot | null) => void): () => void;
   /**
    * Latest degradation evidence (malformed / unknown frame dropped while
    * keeping the stream). `null` before any degradation. Emits current value
@@ -133,7 +248,7 @@ export interface ListenCaptureStreamPort {
   ): () => void;
   getListenCaptureDegradation(): ListenCaptureDegradation | null;
   getConnectionState(): ListenStreamConnectionState;
-  getEntitlementState(): ListenEntitlementPayload | null;
+  getEntitlementState(): ListenEntitlementSnapshot | null;
   /**
    * Close advice for the current closed state, or `null` while idle/open.
    * Entitlement exhaustion (4020) is distinguishable and marked do-not-retry.
@@ -161,6 +276,14 @@ export interface ListenCaptureStreamHandle {
 export interface ListenCaptureStreamDeps {
   readonly sink: FallbackSink;
   readonly env: Env;
+  /**
+   * Which generation this client is running. Determines which entitlement
+   * frame is EXPECTED — both are still accepted, but receiving the other one
+   * is reported, because ADR-010's whole-account cutover means the two are
+   * never intentionally mixed, so a mismatch is real signal rather than noise.
+   * Defaults to "legacy", which is what a server actually emits today.
+   */
+  readonly generation?: ListenEntitlementGeneration;
   /** Full listen-protocol schema document (contracts/wire/listen/...). */
   readonly schema: SchemaDocument;
 }
@@ -209,7 +332,7 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
   if (!entitlementDef) throw new Error("schema missing EntitlementEvent $def");
 
   let connection: ListenStreamConnectionState = { status: "idle" };
-  let entitlement: ListenEntitlementPayload | null = null;
+  let entitlement: ListenEntitlementSnapshot | null = null;
   let degradation: ListenCaptureDegradation | null = null;
   /** Id → segment. Last writer wins on same id (revision / reconnect redelivery). */
   const segmentsById = new Map<string, TranscriptSegment>();
@@ -218,7 +341,7 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
 
   const transcriptListeners = new Set<(segments: readonly TranscriptSegment[]) => void>();
   const connectionListeners = new Set<(state: ListenStreamConnectionState) => void>();
-  const entitlementListeners = new Set<(payload: ListenEntitlementPayload | null) => void>();
+  const entitlementListeners = new Set<(payload: ListenEntitlementSnapshot | null) => void>();
   const degradationListeners = new Set<(d: ListenCaptureDegradation | null) => void>();
 
   function snapshotTranscript(): TranscriptSegment[] {
@@ -237,7 +360,7 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
     for (const listener of connectionListeners) listener(connection);
   }
 
-  function setEntitlement(next: ListenEntitlementPayload | null): void {
+  function setEntitlement(next: ListenEntitlementSnapshot | null): void {
     entitlement = next;
     for (const listener of entitlementListeners) listener(entitlement);
   }
@@ -253,6 +376,34 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
       deps.sink,
       { ...fallback, at: deps.env.now() },
       substituted,
+    );
+    setDegradation(degraded.fallback);
+  }
+
+  const generation: ListenEntitlementGeneration = deps.generation ?? "legacy";
+
+  /**
+   * Accept an entitlement frame from the OTHER generation, and say so.
+   *
+   * Not a drop: the state is real and the surface gets it. But ADR-010
+   * guarantees generations are never intentionally mixed, so this is either a
+   * misconfigured client or a server mid-cutover, and both are worth a
+   * telemetry record. Silence here is how "my entitlement UI never fires"
+   * becomes a bug nobody can see.
+   */
+  function reportGenerationMismatch(received: string): void {
+    const expected = EXPECTED_ENTITLEMENT_FRAME[generation];
+    if (received === expected) return;
+    const degraded = degrade(
+      deps.sink,
+      {
+        path: "listen.capture.entitlement-generation-mismatch",
+        from: `${generation}:expected:${expected}`,
+        to: `received:${received}`,
+        detail: `accepted a ${received} frame on the ${generation} generation, which expects ${expected}`,
+        at: deps.env.now(),
+      },
+      "accepted_normalized",
     );
     setDegradation(degraded.fallback);
   }
@@ -362,7 +513,38 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
         }
         // Mid-session entitlement does NOT terminate the transcript or close
         // the socket — especially state=transcription_paused_capture_continuing.
-        setEntitlement(listenEntitlementPayloadFromEvent(unwrapped.event));
+        reportGenerationMismatch("entitlement");
+        setEntitlement(
+          listenEntitlementSnapshotFromEntitlement(listenEntitlementPayloadFromEvent(unwrapped.event)),
+        );
+        return;
+      }
+
+      if (unwrapped.kind === "event" && unwrapped.event.type === "freemium_threshold_reached") {
+        // The frame a real server emits TODAY. Normalised into the same state
+        // as the reserved one so the surface never learns there were two.
+        const freemiumDef = deps.schema.$defs["FreemiumThresholdReachedEvent"];
+        const errors = freemiumDef
+          ? validator.validate(freemiumDef, unwrapped.event, "freemium_threshold_reached")
+          : ["schema missing FreemiumThresholdReachedEvent $def"];
+        if (errors.length > 0) {
+          recordDrop(
+            {
+              path: "listen.capture.malformed-entitlement",
+              from: "freemium_threshold_reached",
+              to: "dropped_keep_stream",
+              detail: errors.join("; "),
+            },
+            "dropped_keep_stream",
+          );
+          return;
+        }
+        reportGenerationMismatch("freemium_threshold_reached");
+        setEntitlement(
+          listenEntitlementSnapshotFromFreemium(
+            unwrapped.event as unknown as { remaining_seconds: number; action: string },
+          ),
+        );
         return;
       }
 
