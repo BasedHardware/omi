@@ -16,7 +16,7 @@
  */
 
 import { createBunMcpHttpHandler } from "../../apps/mcp/bun-http";
-import { createMcpProtocolHandler } from "../../apps/mcp/protocol";
+import { createMcpProtocolHandler, SYNTHESIZED_MEMORY_READ_DEPENDENCY } from "../../apps/mcp/protocol";
 import { createServiceApp } from "../../apps/service/app";
 
 import { createQaPorts } from "./compose";
@@ -31,10 +31,75 @@ const timezone = assertFixtureTimezone();
 const store = new QaStore();
 store.seed(7);
 
-const mcpHandler = createBunMcpHttpHandler(
-  createMcpProtocolHandler(createQaPorts({ store })),
-);
+const ports = createQaPorts({ store });
+const mcpHandler = createBunMcpHttpHandler(createMcpProtocolHandler(ports));
 const app = createServiceApp(mcpHandler);
+
+/**
+ * The settled client recall route: `GET /v1/memories?limit=&cursor=` with
+ * `Authorization: Bearer <token>`, agreed between FE-CORE and BE-SURFACE
+ * (2026-08-08). Serving it here is what makes this instance interchangeable
+ * with BE-SURFACE's 4811 and the dev stub on 4821 **by base URL alone**.
+ *
+ * It deliberately reuses the SAME ports object as the MCP path, so the two
+ * transports cannot drift into serving different data from the same store.
+ */
+const PLATFORM_RECALL_PATH = "/v1/memories";
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+
+async function handleRecallRoute(url: URL, request: Request): Promise<Response> {
+  const credential = await ports.authenticate({
+    apiKeyHeader: request.headers.get("authorization") ?? undefined,
+    requiredKind: "mcp_api_key",
+  });
+  if (credential === null) {
+    return json({ error: "authentication_required" }, 401);
+  }
+
+  const decision = await ports.authorize({
+    credential,
+    tool: { name: "read_synthesized_memory", dependency: SYNTHESIZED_MEMORY_READ_DEPENDENCY },
+  });
+  if (decision.allowed !== true) {
+    // Same body and status as an unknown route would produce for a caller who
+    // may not know this collection exists.
+    return json({ error: "not_found" }, 404);
+  }
+
+  const rawLimit = Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT);
+  const limit = Number.isSafeInteger(rawLimit) && rawLimit >= 1
+    ? Math.min(rawLimit, MAX_LIMIT)
+    : DEFAULT_LIMIT;
+  const cursor = url.searchParams.get("cursor");
+
+  store.countRequest();
+
+  let page: unknown;
+  try {
+    page = await ports.readPage({
+      authorization: decision.readAuthorization,
+      cursor: cursor === null || cursor === "" ? null : cursor,
+      limit,
+    });
+  } catch {
+    // Public shape for every client-controlled cursor failure. It must not
+    // distinguish "forged", "expired", "other owner's" or "unknown".
+    return json({ error: "invalid_cursor" }, 400);
+  }
+
+  const validated = await ports.validatePage(page);
+  if (typeof validated !== "string") {
+    return json({ error: "internal_server_error" }, 500);
+  }
+
+  // Emit the validated canonical text verbatim. Re-serializing would defeat
+  // the client's strong `canonical-json-text` parse boundary.
+  return new Response(validated, {
+    status: 200,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
 
 const port = Number(process.env.OMI_INTEGRATION_PORT ?? DEFAULT_PORT);
 
@@ -46,6 +111,10 @@ const server = Bun.serve({
 
     if (url.pathname.startsWith("/qa/")) {
       return handleQaControl(url, request);
+    }
+
+    if (url.pathname === PLATFORM_RECALL_PATH) {
+      return handleRecallRoute(url, request);
     }
 
     // Count every domain-path request that reaches the app under test.
