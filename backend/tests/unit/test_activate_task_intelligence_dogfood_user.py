@@ -22,7 +22,10 @@ def load_script():
 
 @pytest.fixture
 def script():
-    return load_script()
+    module = load_script()
+    module.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    module.CANONICAL_MEMORY_USERS = frozenset({module.TASK_INTELLIGENCE_DOGFOOD_UID})
+    return module
 
 
 class _Snapshot:
@@ -104,6 +107,8 @@ def test_missing_control_plans_explicit_read_at_default_generation(script):
 
 def test_activation_preserves_existing_generation_and_is_idempotent(monkeypatch):
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     monkeypatch.setattr(script, 'firestore', _Firestore())
     path = script.control_path(script.TASK_INTELLIGENCE_DOGFOOD_UID)
     db = _Db({path: {'workflow_mode': 'off', 'account_generation': 7}})
@@ -124,6 +129,8 @@ def test_activation_preserves_existing_generation_and_is_idempotent(monkeypatch)
 
 def test_activation_rejects_stale_generation_without_a_write(monkeypatch):
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     monkeypatch.setattr(script, 'firestore', _Firestore())
     path = script.control_path(script.TASK_INTELLIGENCE_DOGFOOD_UID)
     db = _Db({path: {'workflow_mode': 'off', 'account_generation': 3}})
@@ -142,12 +149,14 @@ def test_activation_rejects_stale_generation_without_a_write(monkeypatch):
 def test_tool_rejects_any_non_dogfood_uid():
     script = load_script()
 
-    with pytest.raises(ValueError, match='restricted'):
+    with pytest.raises(RuntimeError, match='paused'):
         script.build_activation_plan('another-user', script.TaskWorkflowControl())
 
 
 def test_gcloud_user_transport_uses_current_document_precondition_and_never_reports_token():
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     requests = []
     current_document = {
         'fields': {

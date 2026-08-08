@@ -96,7 +96,11 @@ from utils.mcp_analytics import (
     schedule_mcp_tool_call,
 )
 from utils.observability.api_keys import record_api_key_repairs
-from utils.other.endpoints import enforce_account_deletion_http_access
+from utils.other.endpoints import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_deletion_http_access,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -112,6 +116,23 @@ OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+
+
+def _enforce_mcp_cutover_access(uid: str) -> None:
+    """Fence MCP product principals when cutover enforcement is enabled.
+
+    MCP auth helpers are Request-free; evaluate as a mutating product path so
+    positive-generation and migrating/new rules apply fail-closed.
+    """
+    if not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method='POST',
+        path='/v1/mcp/sse',
+        headers={},
+    )
+
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -183,6 +204,7 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not user_data or not user_data.get("user_id"):
         return None
     enforce_account_deletion_http_access(user_data["user_id"])
+    _enforce_mcp_cutover_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -202,6 +224,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         if not user_data or not user_data.get("user_id"):
             return None
         enforce_account_deletion_http_access(user_data["user_id"])
+        _enforce_mcp_cutover_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -215,6 +238,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     if not oauth_context:
         return None
     enforce_account_deletion_http_access(oauth_context["uid"])
+    _enforce_mcp_cutover_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",

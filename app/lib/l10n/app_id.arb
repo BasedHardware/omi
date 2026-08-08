@@ -3250,5 +3250,11 @@
     "pinAsBaseline": "Sematkan sebagai dasar",
     "unpinAsBaseline": "Lepas dari dasar",
     "baselineMemory": "Memori dasar",
-    "alwaysInContext": "Selalu dalam konteks"
+    "alwaysInContext": "Selalu dalam konteks",
+    "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
+    "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
+    "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
+    "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
+    "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
+    "accountCutoverOpenStore": "Buka toko"
 }

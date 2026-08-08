@@ -416,10 +416,12 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    # 22 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
-    # step (founder-reviewed re-land, PR #10317).
-    if len(canonical_scripts) != 22:
-        errors.append("canonical workflow must retain exactly 22 approved script steps")
+    # 23 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
+    # step (founder-reviewed re-land, PR #10317) + the separately surfaced
+    # signed Omi Beta smoke step. Stable and Beta keep identical evidence gates;
+    # distinct provider steps make an otherwise private-log failure diagnosable.
+    if len(canonical_scripts) != 23:
+        errors.append("canonical workflow must retain exactly 23 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -591,17 +593,25 @@ def check_desktop_codemagic_release() -> list[str]:
         "publish-desktop-debug-symbols.sh upload",
         '"$DSYM_ARCHIVE"',
         "- build/*.dSYM",
+        "source scripts/launcher-bootstrap.sh",
+        "omi_normalize_packaged_resource_bundle",
+        '"$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"',
     ):
         if required_fragment not in desktop_workflow_body:
-            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
+            errors.append(f"desktop release is missing required release fragment: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
+    beta_smoke_index = desktop_workflow_body.find("Smoke signed desktop beta artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")
     dispatch_index = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
     if smoke_index == -1:
         errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
     elif release_index == -1 or smoke_index > release_index:
         errors.append("desktop signed artifact smoke must run before Create GitHub release")
+    if beta_smoke_index == -1:
+        errors.append("desktop release must run the signed Omi Beta artifact smoke in a distinct provider step")
+    elif release_index == -1 or not (smoke_index < beta_smoke_index < release_index):
+        errors.append("desktop signed Omi Beta artifact smoke must run after stable smoke and before Create GitHub release")
     if dispatch_index == -1 or release_index == -1 or dispatch_index < release_index:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     reserve_index = desktop_workflow_body.find("/v2/desktop/beta/candidates/reserve")
@@ -609,7 +619,7 @@ def check_desktop_codemagic_release() -> list[str]:
     if (
         reserve_index == -1
         or canonical_publish_index == -1
-        or not (smoke_index < reserve_index < canonical_publish_index)
+        or not (smoke_index < beta_smoke_index < reserve_index < canonical_publish_index)
     ):
         errors.append(
             "desktop release must reserve its exact candidate after signed smoke and before canonical publication"
@@ -911,6 +921,7 @@ def check_desktop_qualification_runner() -> list[str]:
         'workflows: ["Qualify Desktop Beta Candidate"]',
         "types: [completed]",
         "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.head_repository.full_name == github.repository",
         "github.event.workflow_run.id",
         "qualification-evidence.json",
         "EVIDENCE_SOURCE_SHA",

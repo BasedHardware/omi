@@ -40,13 +40,8 @@ struct MemoryGraphPage: View {
 
   var body: some View {
     ZStack {
-      // Match the SceneKit canvas to the page, so the graph blends into the
-      // Memory page instead of drawing a separate gray rectangle.
-      OmiColors.backgroundPrimary.ignoresSafeArea()
-
       if !viewModel.isEmpty {
         MemoryGraphSceneView(viewModel: viewModel)
-          .ignoresSafeArea()
       }
 
       // Minimal floating controls — no boxes, no backgrounds. (The Brain Map is
@@ -63,7 +58,7 @@ struct MemoryGraphPage: View {
           } label: {
             Image(systemName: "arrow.clockwise")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(viewModel.isRebuilding ? 0.2 : 0.5))
+              .foregroundColor(Ink.secondary.opacity(viewModel.isRebuilding ? 0.4 : 1))
               .frame(width: 28, height: 28)
           }
           .buttonStyle(.plain)
@@ -82,20 +77,24 @@ struct MemoryGraphPage: View {
       if viewModel.isLoading || viewModel.isRebuilding {
         ProgressView()
           .scaleEffect(1.2)
-          .tint(.white.opacity(0.4))
+          .tint(Ink.secondary)
       } else if viewModel.isEmpty {
         VStack(spacing: OmiSpacing.sm) {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(.white.opacity(0.3))
+            .foregroundColor(Ink.secondary)
           Text("Brain map will appear once enough linked memories are available.")
             .scaledFont(size: 12.5)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
         }
         .padding(OmiSpacing.lg)
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(OmiSpacing.md)
+    .glassMediaMat(cornerRadius: PageGlass.cardRadius)
+    .padding(OmiSpacing.md)
     .task {
       await viewModel.prepareGraph()
     }
@@ -113,7 +112,7 @@ struct MemoryGraphSceneView: NSViewRepresentable {
     scnView.pointOfView = viewModel.cameraNode
     scnView.allowsCameraControl = true
     scnView.autoenablesDefaultLighting = false  // We set up our own lights
-    scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)
+    scnView.backgroundColor = .clear
     scnView.antialiasingMode = .multisampling2X  // Lighter AA
     scnView.preferredFramesPerSecond = 30  // Cap render rate
 

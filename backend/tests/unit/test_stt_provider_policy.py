@@ -13,6 +13,8 @@ from config.stt_provider_policy import (
     PARAKEET_PROVIDER,
     STTServingSurface,
     canonical_model_config,
+    deepgram_provider_for_runtime,
+    model_is_enabled,
     modulate_supports_language,
     parakeet_supports_language,
     provider_for_model_token,
@@ -35,8 +37,12 @@ def _chart_env_value(values_path: Path, name: str) -> str | None:
     return None
 
 
-def test_hosted_deepgram_is_disabled_for_every_serving_surface():
-    assert all(not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, surface) for surface in STTServingSurface)
+def test_hosted_deepgram_serves_streaming_only():
+    assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
+    # PTT dispatches only Parakeet and Modulate and raises on anything else;
+    # batch is carried by Parakeet/Velma.
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
 
 
 def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
@@ -47,7 +53,7 @@ def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,dg-nova-3,parakeet',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }
@@ -57,8 +63,15 @@ def test_policy_owns_the_safe_model_order_for_every_serving_surface():
         assert provider_is_enabled(MODULATE_PROVIDER, surface)
 
 
-def test_deepgram_model_tokens_are_classified_as_self_hosted_only():
-    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_SELF_HOSTED_PROVIDER
+def test_deepgram_model_tokens_report_the_hosted_deployment_by_default():
+    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_CLOUD_PROVIDER
+    assert deepgram_provider_for_runtime(False) == DEEPGRAM_CLOUD_PROVIDER
+    assert deepgram_provider_for_runtime(True) == DEEPGRAM_SELF_HOSTED_PROVIDER
+
+
+def test_deepgram_token_is_admissible_while_either_deployment_serves_the_surface():
+    assert model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.PRERECORDED)
 
 
 def test_parakeet_capability_tracks_the_model_selected_for_each_surface():

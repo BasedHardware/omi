@@ -788,6 +788,19 @@ class LocalWalSyncImpl implements LocalWalSync {
         await _saveWalsToFile();
         listener.onWalUpdated();
         break;
+      } on SyncOfflineQueueQuarantinedException {
+        // Cutover fence: leave WALs retryable and skip quietly until control allows drain.
+        DebugLogManager.logEvent('local_upload_cutover_quarantined', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
+        });
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
       } on SyncRecoveryWindowExceededException {
         // Clear the in-flight flag on the whole batch first: the members the
         // rejection does NOT prove too old stay `miss` and must not be left
@@ -950,6 +963,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    } on SyncOfflineQueueQuarantinedException {
+      DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;

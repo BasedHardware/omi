@@ -29,6 +29,7 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 | INV-NAV-1 | Feature parity across desktop shells | proposed | [desktop-shell-feature-parity.md](./desktop-shell-feature-parity.md) |
 | INV-TASK-1 | Complete dated task buckets with bounded No Deadline paging | proposed | [task-dated-bucket-completeness.md](./task-dated-bucket-completeness.md) |
 | INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |
+| INV-CUTOVER-1 | Whole-account cohort cutover authority | proposed | [account-cohort-cutover.md](./account-cohort-cutover.md) |
 
 ## File template
 
