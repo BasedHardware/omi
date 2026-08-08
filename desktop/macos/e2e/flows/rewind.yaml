@@ -7,6 +7,29 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchLayout.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindSurfaceLayout.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindPalette.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindVideoFrameCursor.swift
+  # The span line, the retention note, and Older / Newer / Oldest capture — all inside the day
+  # popover behind the timestamp pill, exercised by S2b.
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindHistoryReach.swift
+  # The blobs the semantic half of Rewind's search reads. S3c is the user-facing path into
+  # `OCREmbeddingService.searchSimilar` -> `readEmbeddingBatch`, which is the only caller; it runs
+  # unbounded and newest-first, so an all-time query is what proves the range and the ordering.
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+Embeddings.swift
+  # Rewind is the page that holds keyboard focus itself so arrow keys and the scroll wheel work
+  # wherever the pointer is (S3b). The focus effect that came with it is what S3d looks for.
+  - desktop/macos/Desktop/Sources/MainWindow/ShellPageKeyboardTarget.swift
 preconditions:
   - auth_ready
 
@@ -24,9 +47,47 @@ steps:
     expect:
       interactive_count: { min: 3 }
 
+  - id: S2b
+    name: The day popover says how far back capture actually goes
+    # A calendar alone cannot answer "what do I still have" — most days in it hold nothing. The two
+    # absences must not collapse into one: before the survey finishes the line reads "Checking how
+    # far back your capture goes…", and only a finished survey that found nothing may say "No screen
+    # capture yet". A confident "no screen capture" over an account with months of it is the defect.
+    do: "Click the timestamp pill at the bottom-left of the frame stage (calendar glyph, date, chevron) to open the day popover. Verify it shows a graphical date picker, one line stating the real span ('N days of capture · <oldest> – <newest>'), and a second line naming the retention setting ('Capture older than N days is deleted', or 'Keeping everything — nothing is deleted' when retention is unlimited). Verify the span line never reads 'No screen capture yet' on an account that has capture. Press 'Oldest capture' and verify the timeline jumps to a day that actually holds frames and the button then disables; press 'Newer' and verify it steps to the next day holding capture rather than to the next calendar day."
+    expect:
+      interactive_count: { min: 3 }
+
   - id: S3
     name: Verify permission gate or timeline
     do: "Check the Rewind content area. If Screen Recording permission is not granted, verify 'Screen Recording Permission Required' message with 'Grant Permission' button (orange). If permission is granted, verify timeline content with screenshot thumbnails and time markers."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3b
+    name: Verify per-app colour identity and scrub smoothness
+    do: "With the timeline showing, find an app badge whose real icon could not be resolved — it draws as a letter monogram on a filled circle. Verify the circle is a solid, saturated colour (not grey) and that the letter is white and legible on it. Verify two different apps get two different colours, and that the same app keeps its colour after quitting and relaunching the app (RewindPalette hashes the name, so the colour must not change across launches). Then hold the left/right arrow keys to scrub several seconds of frames and verify the stage image keeps up with the keypresses rather than lagging behind them."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3c
+    name: Searching Rewind searches all of Rewind
+    # Both passes used to be clamped to whichever day the timeline happened to be showing, which made
+    # the one control that can reach the whole history the one control that could not: a phrase read
+    # last week came back empty, indistinguishable from never having been read. The semantic pass
+    # reads embedding blobs newest-first over an unbounded range, so results from days other than the
+    # one on screen are what proves the range; results ordered from the oldest frames in the database
+    # would be the ordering regression.
+    do: "With the timeline showing some day, type into the search field a phrase you know you read on a different, older day. Verify results come back and that the result groups carry full dates spanning more than the day the timeline was on. Verify a phrase that is semantically close but not literally present also returns frames (the vector pass), and that clearing the field restores the timeline."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3d
+    name: The page takes keyboard focus without tracing the window
+    # The page is `focusable()` so its arrow-key and scroll-wheel handlers fire wherever the pointer
+    # is. AppKit draws a focus effect around whatever holds focus, and at content-area scale on a
+    # window with no visible extent that effect is a 1 pt accent rectangle on the user's wallpaper —
+    # in the one hue this product never uses (INV-UI-1). Focus is kept; the paint is not.
+    do: "Click once on the Rewind page background so the page itself holds keyboard focus, then look at the window's left, right and bottom edges and at the line under the top bar. Verify no accent-coloured rectangle or hairline is traced there and none appears on the wallpaper. Then press the arrow keys and verify frames still step, confirming focus was kept rather than removed."
     expect:
       interactive_count: { min: 1 }
 

@@ -324,15 +324,31 @@ final class PhoneMicController {
         case .interruptionEnded(let shouldResume):
             guard state == .interrupted else { return }
             NSLog("[PhoneMic] interruption ended shouldResume=%d", shouldResume ? 1 : 0)
-            // Without shouldResume we stay interrupted: the recording intent
-            // persists and the ticker/call-observer keep probing.
-            if shouldResume {
-                attemptResume()
-            }
+            // Always probe once. Other-app audio (YouTube / Stage Manager, #4706)
+            // often ends without shouldResume; waiting only for the 3s ticker left
+            // sessions stuck until the user force-stopped. Failures stay silent —
+            // the ticker keeps probing if bring-up is still blocked.
+            attemptResume()
 
-        case .allCallsEnded, .appBecameActive:
+        case .allCallsEnded:
             guard state == .interrupted else { return }
             attemptResume()
+
+        case .appBecameActive:
+            switch state {
+            case .interrupted:
+                attemptResume()
+            case .running:
+                // #4706: with .mixWithOthers, competing audio can stop the engine
+                // without an interruption notification. Foreground return must
+                // heal a zombie "still Listening" session.
+                if engine?.isRunning != true {
+                    NSLog("[PhoneMic] app active with dead engine, rebuilding")
+                    beginRebuild()
+                }
+            default:
+                break
+            }
 
         case .routeChanged(let reason):
             guard state == .running else { return }

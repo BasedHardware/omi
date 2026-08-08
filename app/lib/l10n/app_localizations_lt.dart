@@ -747,11 +747,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsų planas bus atnaujintas $date.';
-  }
-
-  @override
   String get basicPlan => 'Nemokamas planas';
 
   @override
@@ -2127,16 +2122,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get editMemory => '✏️ Redaguoti atminimą';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Prisegti kaip pagrindą';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Atsegti nuo pagrindo';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pagrindinė atmintis';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Visada kontekste';
 
   @override
   String get memoryContentHint => 'Mėgstu valgyti ledus...';
@@ -9791,4 +9786,56 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Pasirinkite planą ir atrakinkite neribotą Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pasiekiama Mac, mobiliajame ir žiniatinklyje';
+
+  @override
+  String get popularBadge => 'POPULIARU';
+
+  @override
+  String get worksOnDesktop => 'Veikia kompiuteryje';
+
+  @override
+  String get noDesktopAccess => 'Neveikia kompiuteryje';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mėn. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mėnesių nemokamai',
+      many: '$count mėnesio nemokamai',
+      few: '$count mėnesiai nemokamai',
+      one: '$count mėnuo nemokamai',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi yra nemokamas, tačiau nemokama versija turi apribojimų, kurie veikia jūsų patirtį:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekundžių delsa (ne realiuoju laiku)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pereiti prie nemokamos versijos';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Gaukite nemokamą neribotą prieigą';
+
+  @override
+  String get shareDataForTraining => 'Dalytis duomenimis mokymui';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsų užklausa nagrinėjama';
 }

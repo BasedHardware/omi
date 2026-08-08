@@ -747,11 +747,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Twój plan odnawia się $date.';
-  }
-
-  @override
   String get basicPlan => 'Plan darmowy';
 
   @override
@@ -2130,16 +2125,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get editMemory => '✏️ Edytuj wspomnienie';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Przypnij jako bazę';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odepnij od bazy';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pamięć bazowa';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Zawsze w kontekście';
 
   @override
   String get memoryContentHint => 'Lubię jeść lody...';
@@ -9801,4 +9796,56 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Zbyt stare, aby zsynchronizować — Omi nie może tego przyjąć';
+
+  @override
+  String get planSheetChooseYourPlan => 'Wybierz plan, aby odblokować nieograniczone Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Dostępne na Macu, telefonie i w sieci';
+
+  @override
+  String get popularBadge => 'POPULARNE';
+
+  @override
+  String get worksOnDesktop => 'Działa na komputerze';
+
+  @override
+  String get noDesktopAccess => 'Nie działa na komputerze';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months miesięcy / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count miesiąca gratis',
+      many: '$count miesięcy gratis',
+      few: '$count miesiące gratis',
+      one: '$count miesiąc gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi jest darmowe, ale wersja bezpłatna ma ograniczenia, które wpływają na Twoje wrażenia:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Opóźnienie 5–7 sekund (nie w czasie rzeczywistym)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Przejdź na wersję bezpłatną';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Uzyskaj darmowy nieograniczony dostęp';
+
+  @override
+  String get shareDataForTraining => 'Udostępnij dane do trenowania';
+
+  @override
+  String get yourRequestUnderReview => 'Twoja prośba jest rozpatrywana';
 }

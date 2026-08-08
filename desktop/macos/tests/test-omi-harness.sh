@@ -77,6 +77,69 @@ assert not module.expectation_matches(
     {"result.error_message": {"contains": "HTTP 500"}},
 )
 
+trace_context = module.HarnessContext(
+    base_url="http://127.0.0.1:59999",
+    flow_path=Path("flow.yaml"),
+    run_dir=Path("runs"),
+    steps_dir=Path("runs/steps"),
+    lane="bridge",
+    log_path=Path("/private/tmp/omi/harness-test.log"),
+    log_start=0,
+    bundle_id=None,
+    process_match=None,
+)
+original_recent_traces = module.recent_traces
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "durationMs": 12},
+    {"path": "/navigate", "durationMs": 145},
+    {"path": "/state", "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    ok, error = module.assert_trace(
+        trace_context, {"latest": True, "trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert not ok and "145" in error, error
+    ok, error = module.assert_trace(
+        trace_context, {"trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert ok, error
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "durationMs": 12},
+    {"path": "/state", "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    ok, error = module.assert_trace(
+        trace_context, {"latest": True, "trace.path": "/navigate", "trace.durationMs": {"max": 100}}, trace_artifact
+    )
+    assert ok, error
+module.recent_traces = lambda _ctx: [
+    {"path": "/navigate", "method": "POST", "statusCode": 200, "durationMs": 12},
+    {"path": "/navigate", "method": "POST", "statusCode": 500, "durationMs": 8},
+    {"path": "/state", "method": "GET", "statusCode": 200, "durationMs": 4},
+]
+with tempfile.TemporaryDirectory() as directory:
+    trace_artifact = Path(directory) / "traces.json"
+    # The latest /navigate returned 500. The selector must NOT filter it out,
+    # so statusCode: 200 must fail on the newest matching route trace.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.statusCode": 200, "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert not ok, "latest failed trace must not be hidden by an earlier success"
+    # Duration alone should also fail because the latest trace is the 500 (8ms),
+    # not the earlier 200 (12ms) — the selector must pick the newest by identity.
+    ok, error = module.assert_trace(
+        trace_context,
+        {"latest": True, "trace.path": "/navigate", "trace.method": "POST", "trace.durationMs": {"max": 100}},
+        trace_artifact,
+    )
+    assert ok, error
+
+module.recent_traces = original_recent_traces
+
 mismatch = module.expectation_mismatches(
     {"result": {"count": "1"}}, {"result.count": {"minimum": 1}}
 )["result.count"]
@@ -123,7 +186,7 @@ module.state_snapshot = original_state_snapshot
 assert not stale_ok and stale_state["snapshotStale"] is True, "persistent MainActor contention must still fail closed"
 
 
-def run_rewind_flow_case(state_sequence, action_response):
+def run_rewind_flow_case(state_sequence, action_response, presentation_action_available=True):
     flow = {
         "version": 2,
         "name": "rewind-settings-gating-contract",
@@ -162,9 +225,10 @@ def run_rewind_flow_case(state_sequence, action_response):
     navigation_started = [False]
     state_calls = []
     action_calls = []
+    presentation_calls = []
 
     def fake_request_json(_base_url, method, route, body=None, authenticate=True):
-        del body, authenticate
+        del authenticate
         if method == "POST" and route == "/traces/clear":
             return {"ok": True}
         if method == "GET" and route == "/capabilities":
@@ -179,6 +243,16 @@ def run_rewind_flow_case(state_sequence, action_response):
             navigation_started[0] = True
             return {"ok": True}
         if method == "POST" and route == "/action":
+            if body and body.get("name") == module.AUTOMATION_UI_PRESENTATION_ACTION:
+                params = body.get("params") or {}
+                presentation_calls.append(body)
+                if not presentation_action_available:
+                    return {"ok": False, "error": "unknown_action: set_automation_ui_presentation"}
+                mode = params.get("mode")
+                if mode is None:
+                    return {"ok": True, "result": {"detail": {"mode": "normal"}}}
+                previous = "normal" if mode == "quiet" else "quiet"
+                return {"ok": True, "result": {"detail": {"previous_mode": previous, "mode": mode}}}
             action_calls.append({"state_call_count": len(state_calls), "response": action_response})
             return action_response
         if method == "GET" and route == "/traces/recent":
@@ -225,7 +299,7 @@ def run_rewind_flow_case(state_sequence, action_response):
             setattr(module, name, value)
         module.time.monotonic = original_monotonic
         module.time.sleep = original_sleep
-    return code, metrics, state_calls, action_calls
+    return code, metrics, state_calls, action_calls, presentation_calls
 
 
 fresh_stale_fresh = [
@@ -233,32 +307,49 @@ fresh_stale_fresh = [
     {"selectedSettingsSection": "Rewind", "snapshotStale": True},
     {"selectedSettingsSection": "Rewind", "snapshotStale": False},
 ]
-stable_code, stable_metrics, stable_state_calls, stable_action_calls = run_rewind_flow_case(
+stable_code, stable_metrics, stable_state_calls, stable_action_calls, stable_presentation_calls = run_rewind_flow_case(
     fresh_stale_fresh, {"ok": True, "result": {"accepted": True}}
 )
 assert stable_code == 0, stable_metrics
 assert len(stable_action_calls) == 1, "fresh-stale-fresh readiness must dispatch exactly once"
+assert [call.get("params") for call in stable_presentation_calls] == [
+    None,
+    {"mode": "quiet", "activate": False},
+    {"mode": "normal", "activate": False},
+], "successful runs must restore the prior presentation mode"
 assert stable_action_calls[0]["state_call_count"] >= 5, (
     "action must wait for a fresh snapshot to remain stable across the configured window",
     stable_state_calls,
     stable_action_calls,
 )
 
-stale_code, stale_metrics, _, stale_action_calls = run_rewind_flow_case(
+legacy_code, legacy_metrics, _, _, legacy_presentation_calls = run_rewind_flow_case(
+    fresh_stale_fresh, {"ok": True, "result": {"accepted": True}}, presentation_action_available=False
+)
+assert legacy_code == 0, legacy_metrics
+assert not legacy_metrics["setup_errors"]
+assert legacy_metrics["setup_warnings"] and "continuing without quiet UI presentation" in legacy_metrics[
+    "setup_warnings"
+][0]
+assert len(legacy_presentation_calls) == 1, "legacy bundles should get one compatibility probe and no mode writes"
+
+stale_code, stale_metrics, _, stale_action_calls, stale_presentation_calls = run_rewind_flow_case(
     [{"selectedSettingsSection": "Rewind", "snapshotStale": True}],
     {"ok": True, "result": {"accepted": True}},
 )
 assert stale_code == 1, stale_metrics
 assert not stale_action_calls, "permanently stale readiness must dispatch zero actions"
+assert stale_presentation_calls[-1]["params"]["mode"] == "normal", "failed runs must restore presentation mode"
 assert [step["id"] for step in stale_metrics["steps"]] == ["S1"]
 
-timeout_code, timeout_metrics, _, timeout_action_calls = run_rewind_flow_case(
+timeout_code, timeout_metrics, _, timeout_action_calls, timeout_presentation_calls = run_rewind_flow_case(
     [{"selectedSettingsSection": "Rewind", "snapshotStale": False}],
     {"ok": False, "error": "connection_timeout: timed out"},
 )
 assert timeout_code == 1, timeout_metrics
 assert len(timeout_action_calls) == 1, "action timeout must remain terminal and single-attempt"
 assert [step["id"] for step in timeout_metrics["steps"]] == ["S1", "S2"]
+assert timeout_presentation_calls[-1]["params"]["mode"] == "normal", "action failures must restore presentation mode"
 
 
 class FakeResponse:
@@ -292,6 +383,16 @@ def fake_urlopen(request, timeout):
     if route == "/state":
         return FakeResponse({"ok": True, "result": {"selectedTab": "home"}})
     if route == "/action":
+        body = json.loads(request.data.decode("utf-8")) if request.data else {}
+        if body.get("name") == module.AUTOMATION_UI_PRESENTATION_ACTION:
+            params = body.get("params") or {}
+            mode = params.get("mode")
+            if mode is None:
+                return FakeResponse({"ok": True, "result": {"detail": {"mode": "normal"}}})
+            previous = "normal" if mode == "quiet" else "quiet"
+            return FakeResponse(
+                {"ok": True, "result": {"detail": {"previous_mode": previous, "mode": mode}}}
+            )
         return FakeResponse({"ok": True, "result": {"accepted": True}})
     raise AssertionError(f"unexpected route: {route}")
 
@@ -377,7 +478,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert ok, error
     ok, error = module.activate_ax(ctx, {"identifier": "chat-first-sidebar-goals"}, artifacts / "activate.json")
     assert ok, error
-    assert commands[-1] == ["find", "identifier", "chat-first-sidebar-goals", "click"]
+    assert commands[-1] == ["find", "identifier", "chat-first-sidebar-goals", "press"]
     ok, error = module.activate_ax(ctx, {"identifier": "not a stable id"}, artifacts / "activate-invalid.json")
     assert not ok and "stable identifier" in error
     ok, error = module.assert_ax(
@@ -414,6 +515,88 @@ with tempfile.TemporaryDirectory() as directory:
         raise AssertionError("production bundle was not rejected")
 
 assert module.NAMED_NON_PRODUCTION_BUNDLE_PREFIX == "com.omi.omi-"
+
+# Semantic AX commands stay quiet and cursor-free. Only an explicit click owns
+# an interactive window, and it restores quiet even when the click fails.
+original_request_json = module.request_json
+presentation_requests = []
+
+
+def fake_presentation_request(_base_url, method, route, body=None, authenticate=True):
+    del authenticate
+    assert method == "POST" and route == "/action"
+    assert body["name"] == module.AUTOMATION_UI_PRESENTATION_ACTION
+    params = body.get("params") or {}
+    presentation_requests.append(params)
+    mode = params["mode"]
+    previous = "quiet" if mode == "interactive" else "interactive"
+    return {"ok": True, "result": {"detail": {"previous_mode": previous, "mode": mode}}}
+
+
+module.request_json = fake_presentation_request
+module.run_agent_swift = lambda _ctx, args: module.subprocess.CompletedProcess(
+    args, 0 if args[0] != "find" else 1, snapshot_json if args[0] == "snapshot" else "agent failed"
+)
+with tempfile.TemporaryDirectory() as directory:
+    artifacts = Path(directory)
+    ui_context = module.HarnessContext(
+        base_url="http://127.0.0.1:9",
+        flow_path=Path("flow.yaml"),
+        run_dir=artifacts,
+        steps_dir=artifacts,
+        lane="ui",
+        log_path=artifacts / "missing.log",
+        log_start=0,
+        bundle_id="com.omi.omi-chat-first-e2e",
+        process_match=None,
+        presentation_restore_mode="normal",
+        presentation_control_available=True,
+    )
+    ok, error = module.assert_ax(
+        ui_context,
+        {"identifiers_visible": ["chat-first-sidebar-chat"]},
+        artifacts / "ax-presentation.json",
+    )
+    assert ok, error
+    ok, error = module.activate_ax(
+        ui_context,
+        {"identifier": "chat-first-sidebar-goals", "action": "click"},
+        artifacts / "activate-presentation.json",
+    )
+    assert not ok and "agent-swift failed" in error
+    assert presentation_requests == [
+        {"mode": "interactive", "activate": True},
+        {"mode": "quiet", "activate": False},
+    ], "only explicit AX clicks may reveal the window, and must restore quiet in finally"
+
+    presentation_requests.clear()
+    module.run_agent_swift = lambda _ctx, args: module.subprocess.CompletedProcess(args, 0, "pressed")
+    ok, error = module.activate_ax(
+        ui_context, {"identifier": "chat-first-sidebar-goals"}, artifacts / "press-presentation.json"
+    )
+    assert ok, error
+    assert not presentation_requests, "default semantic press must remain in quiet mode"
+
+unavailable_warnings = []
+module.request_json = lambda *_args, **_kwargs: {
+    "ok": False,
+    "error": "unknown_action: set_automation_ui_presentation",
+}
+legacy_context = module.HarnessContext(
+    base_url="http://127.0.0.1:9",
+    flow_path=Path("flow.yaml"),
+    run_dir=Path("runs"),
+    steps_dir=Path("runs/steps"),
+    lane="bridge",
+    log_path=Path("/private/tmp/omi-harness-test.log"),
+    log_start=0,
+    bundle_id=None,
+    process_match=None,
+)
+module.prepare_automation_ui_presentation(legacy_context, unavailable_warnings)
+assert unavailable_warnings and "continuing without quiet UI presentation" in unavailable_warnings[0]
+assert not legacy_context.presentation_control_available
+module.request_json = original_request_json
 
 # Missing token must fail loud (not silently omit Authorization).
 del os.environ["OMI_AUTOMATION_TOKEN"]

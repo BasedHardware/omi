@@ -181,7 +181,8 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
           edges: [],
           hasMore: true,
           nextCursor: "cursor-1",
-          processedItemCount: 200)
+          processedItemCount: 200,
+          catalogNodes: [nodeData(id: "memory:catalog-a", label: "Unlinked memory")])
       ),
       (
         200,
@@ -190,7 +191,8 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
           edges: [],
           hasMore: false,
           eligibleItemCount: 201,
-          processedItemCount: 201)
+          processedItemCount: 201,
+          catalogNodes: [nodeData(id: "memory:catalog-b", label: "Another memory")])
       ),
     ])
     let client = await makeClient(urlProtocolClass: KnowledgeGraphURLStub.self)
@@ -203,6 +205,7 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     XCTAssertNil(graph.nextCursor)
     XCTAssertEqual(graph.eligibleItemCount, 201)
     XCTAssertEqual(graph.processedItemCount, 201)
+    XCTAssertEqual(graph.catalogNodes?.map(\.id), ["memory:catalog-a", "memory:catalog-b"])
 
     let requests = KnowledgeGraphURLStub.requests()
     XCTAssertEqual(requests.count, 2)
@@ -212,6 +215,20 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     XCTAssertNil(queryItems(in: requests[0].url)["cursor"])
     XCTAssertEqual(queryItems(in: requests[1].url)["limit"], "200")
     XCTAssertEqual(queryItems(in: requests[1].url)["cursor"], "cursor-1")
+  }
+
+  func testLegacyPayloadDecodesWithoutCatalogNodesAndPreservesAtlasFallback() throws {
+    let legacy = try JSONSerialization.data(
+      withJSONObject: [
+        "nodes": [nodeData(id: "entity-a"), nodeData(id: "memory:catalog-old", label: "Old catalog")],
+        "edges": [],
+      ])
+
+    let response = try OmiHTTPTransport.makeDecoder().decode(KnowledgeGraphResponse.self, from: legacy)
+
+    XCTAssertNil(response.catalogNodes)
+    XCTAssertEqual(response.nodes.map(\.id), ["entity-a", "memory:catalog-old"])
+    XCTAssertEqual(response.atlasNodes.map(\.id), ["entity-a"])
   }
 
   func testDuplicateNodesEdgesAndMemoryCitationsMergeDeterministicallyAndCleanDanglingEdges() {
@@ -433,6 +450,28 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     XCTAssertTrue(viewModel.isEmpty)
   }
 
+  func testCatalogOnlyCanonicalAtlasIsRenderableAndActivationCached() async throws {
+    let fetches = LockedCounter()
+    let response = KnowledgeGraphResponse(
+      nodes: [],
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory-only", label: "Canonical memory", nodeType: .concept)])
+    let viewModel = MemoryGraphViewModel(
+      canonicalGraphFetcher: { _ in
+        fetches.increment()
+        return response
+      },
+      initialGraphResponse: KnowledgeGraphResponse(nodes: [], edges: []))
+
+    await viewModel.prepareCanonicalAtlas()
+    await viewModel.prepareCanonicalAtlas()
+
+    XCTAssertEqual(fetches.read(), 1, "A catalog-only atlas is a settled atlas, not an empty retry loop")
+    XCTAssertFalse(viewModel.isEmpty)
+    XCTAssertFalse(viewModel.isLoading)
+    XCTAssertEqual(viewModel.canonicalAtlasProjection?.snapshot.nodes.map(\.id), ["memory-only"])
+  }
+
   private func makeClient(urlProtocolClass: URLProtocol.Type) async -> APIClient {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [urlProtocolClass]
@@ -508,7 +547,8 @@ private func pageData(
   hasMore: Bool = false,
   nextCursor: String? = nil,
   eligibleItemCount: Int? = nil,
-  processedItemCount: Int? = nil
+  processedItemCount: Int? = nil,
+  catalogNodes: [[String: Any]]? = nil
 ) -> Data {
   var object: [String: Any] = [
     "nodes": nodes,
@@ -518,5 +558,6 @@ private func pageData(
   if let nextCursor { object["next_cursor"] = nextCursor }
   if let eligibleItemCount { object["eligible_item_count"] = eligibleItemCount }
   if let processedItemCount { object["processed_item_count"] = processedItemCount }
+  if let catalogNodes { object["catalog_nodes"] = catalogNodes }
   return (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
 }

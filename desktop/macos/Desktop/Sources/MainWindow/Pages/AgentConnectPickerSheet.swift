@@ -48,18 +48,18 @@ struct ConnectDestinationSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text("Connect \(groupName)")
               .scaledFont(size: OmiType.heading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             Text("Pick how to connect.")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
           Button(action: onDismiss) {
             Image(systemName: "xmark")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 28, height: 28)
-              .background(Circle().fill(OmiColors.backgroundTertiary))
+              .background(Circle().fill(Ink.rowFill))
           }
           .buttonStyle(.plain)
           .accessibilityLabel("Close")
@@ -76,7 +76,7 @@ struct ConnectDestinationSheet: View {
           .padding(.bottom, OmiSpacing.xxl)
         }
       }
-      .background(OmiColors.backgroundPrimary)
+      .background(Ink.surface)
     } else {
       MemoryExportDestinationSheet(
         destination: destination, statuses: $statuses, onDismiss: onDismiss)
@@ -129,14 +129,14 @@ private struct ConnectOptionCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack(spacing: OmiSpacing.md) {
-        ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
+        ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: SettingsGlassMetrics.cardRadius)
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(optionLabel)
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Text(destination.description)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
         Spacer(minLength: 8)
@@ -169,7 +169,7 @@ private struct ConnectOptionCard: View {
               if destination == .chatgpt {
                 Text("Use this only when your workspace requires a developer-mode custom app.")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
                 manualBlock(chatGPTDeveloperModeText)
@@ -177,7 +177,7 @@ private struct ConnectOptionCard: View {
                 ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
                   Text("\(idx + 1). \(step)")
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -206,7 +206,7 @@ private struct ConnectOptionCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.wash)
     )
     .task {
       statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
@@ -280,18 +280,18 @@ private struct ConnectOptionCard: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark.seal.fill")
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(OmiColors.success)
+        .foregroundColor(Ink.listeningGreen)
         .padding(.top, 1)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(completion.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         if destination == .claudeCode {
           ClaudeCodeRestartSubtitle()
         } else {
           Text(completion.subtitle)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
       }
@@ -299,11 +299,11 @@ private struct ConnectOptionCard: View {
     .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(OmiColors.backgroundTertiary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(Ink.rowFill)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+            .stroke(Ink.listeningGreen.opacity(0.22), lineWidth: 1))
     )
   }
 
@@ -350,7 +350,7 @@ private struct ConnectOptionCard: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(text)
         .font(.system(size: 11, design: .monospaced))
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -361,17 +361,18 @@ private struct ConnectOptionCard: View {
       } label: {
         Text("Copy")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(.black)
+          .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.xs)
-          .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(Color.white))
+          .background(
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
     }
     .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(OmiColors.backgroundTertiary))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous).fill(Ink.rowFill))
   }
 }
 
@@ -387,7 +388,7 @@ struct ClaudeCodeRestartSubtitle: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(ClaudeCodeSessions.completionSubtitle(sessionCount: pids.count, didStop: didStop))
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
       if !didStop && !pids.isEmpty {
         Button("Restart \(pids.count) running session\(pids.count == 1 ? "" : "s")") {
@@ -396,7 +397,7 @@ struct ClaudeCodeRestartSubtitle: View {
         }
         .buttonStyle(.plain)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
     }
     .task {
@@ -419,9 +420,9 @@ private enum ConnectOptionResultMessage {
   var foregroundColor: Color {
     switch self {
     case .success:
-      return OmiColors.success
+      return Ink.listeningGreen
     case .failure:
-      return OmiColors.warning
+      return SettingsInk.notice
     }
   }
 }

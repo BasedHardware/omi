@@ -9,8 +9,6 @@ struct SidebarView: View {
   @Binding var memoryDestinationRawValue: Int
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
-  @ObservedObject private var insightStorage = InsightStorage.shared
-  @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
   @ObservedObject private var crispManager = CrispManager.shared
 
@@ -30,8 +28,6 @@ struct SidebarView: View {
   @State private var isRewindPageLoading = false
   @State private var isConversationsPageLoading = false
   @State private var isTasksPageLoading = false
-  @State private var isFocusPageLoading = false
-  @State private var isInsightPageLoading = false
   @State private var isAppsPageLoading = false
 
   // Drag state
@@ -59,12 +55,6 @@ struct SidebarView: View {
       return SidebarNavItem.mainItems
     }
     return SidebarNavItem.mainItems.filter { $0.requiredTier <= tier }
-  }
-
-  /// Color for focus status indicator (green = focused, orange = distracted, nil = no status)
-  private var focusStatusColor: Color? {
-    guard let status = focusStorage.currentStatus else { return nil }
-    return status == .focused ? Color.green : Color.orange
   }
 
   var body: some View {
@@ -158,8 +148,6 @@ struct SidebarView: View {
                   isSelected: !locked && selectedIndex == item.rawValue,
                   isCollapsed: isCollapsed,
                   iconWidth: iconWidth,
-                  badge: item == .insight ? insightStorage.unreadCount : 0,
-                  statusColor: item == .focus ? focusStatusColor : nil,
                   isLoading: pageLoadingState(for: item),
                   isLocked: locked,
                   lockTooltip: locked ? "Unlocks at Tier \(item.requiredTier)" : nil,
@@ -208,7 +196,7 @@ struct SidebarView: View {
 
           Spacer().frame(height: OmiSpacing.lg)
           Rectangle()
-            .fill(OmiColors.backgroundTertiary.opacity(0.5))
+            .fill(Ink.rowFillHover)
             .frame(height: 1)
 
           Spacer().frame(height: OmiSpacing.md)
@@ -330,12 +318,6 @@ struct SidebarView: View {
     .onReceive(NotificationCenter.default.publisher(for: .tasksPageDidLoad)) { _ in
       isTasksPageLoading = false
     }
-    .onReceive(NotificationCenter.default.publisher(for: .focusPageDidLoad)) { _ in
-      isFocusPageLoading = false
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .insightPageDidLoad)) { _ in
-      isInsightPageLoading = false
-    }
     .onReceive(NotificationCenter.default.publisher(for: .appsPageDidLoad)) { _ in
       isAppsPageLoading = false
     }
@@ -344,27 +326,16 @@ struct SidebarView: View {
   // MARK: - Header Section (Logo + Collapse Button on same row)
   private var headerSection: some View {
     HStack(spacing: OmiSpacing.md) {
-      // Omi logo icon - using the herologo from Resources
-      if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-        let logoImage = NSImage(contentsOf: logoURL)
-      {
-        Image(nsImage: logoImage)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: iconWidth, height: iconWidth)
-      } else {
-        // Fallback SF Symbol
-        Image(systemName: "circle.fill")
-          .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.accent)
-          .frame(width: iconWidth)
-      }
+      // SBLogo resolves the packaged mark through signed-app, development, and
+      // preview layouts, and retains the eight-dot Omi silhouette if an asset
+      // host is incomplete. Never substitute a generic solid circle here.
+      SBLogo(size: iconWidth, tint: Ink.primary)
 
       if !isCollapsed {
         // Brand name
         Text(UpdateChannel.appDisplayName)
           .scaledFont(size: OmiType.heading, weight: .bold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .tracking(-0.5)
 
         Spacer()
@@ -377,7 +348,7 @@ struct SidebarView: View {
         }) {
           Image(systemName: "sidebar.left")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
         .help("Collapse sidebar")
@@ -399,7 +370,7 @@ struct SidebarView: View {
     }) {
       Image(systemName: "sidebar.left")
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .frame(width: iconWidth)
     }
     .buttonStyle(.plain)
@@ -411,15 +382,15 @@ struct SidebarView: View {
   private var proBadge: some View {
     Text("Pro")
       .scaledFont(size: OmiType.caption, weight: .semibold)
-      .foregroundColor(OmiColors.accent)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.hairline)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-          .fill(OmiColors.accent.opacity(0.15))
+        RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
+          .fill(Ink.rowFillHover)
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-              .stroke(OmiColors.accent.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
+              .strokeBorder(Ink.separator, lineWidth: 1)
           )
       )
   }
@@ -439,12 +410,12 @@ struct SidebarView: View {
         if isDownloading {
           ProgressView()
             .controlSize(.small)
-            .tint(OmiColors.backgroundPrimary)
+            .tint(Ink.surface)
             .frame(width: iconWidth)
         } else {
           Image(systemName: "arrow.down.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .frame(width: iconWidth)
         }
 
@@ -452,12 +423,12 @@ struct SidebarView: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isDownloading ? "Downloading Update…" : "Update Available")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
 
             if !isDownloading, !updaterViewModel.availableVersion.isEmpty {
               Text("v\(updaterViewModel.availableVersion)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.backgroundPrimary.opacity(0.8))
+                .foregroundColor(Ink.surface.opacity(0.8))
             }
           }
 
@@ -466,7 +437,7 @@ struct SidebarView: View {
           if !isDownloading {
             Image(systemName: "chevron.right")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.backgroundPrimary.opacity(0.7))
+              .foregroundColor(Ink.surface.opacity(0.7))
           }
         }
       }
@@ -474,9 +445,9 @@ struct SidebarView: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(OmiColors.accent)
+          .fill(Ink.primary)
       )
-      .shadow(color: OmiColors.accent.opacity(updateGlowAnimating ? 0.7 : 0.3), radius: 8)
+      .shadow(color: Ink.primary.opacity(updateGlowAnimating ? 0.28 : 0.14), radius: 12, y: 4)
     }
     .buttonStyle(.plain)
     .help(
@@ -546,18 +517,18 @@ struct SidebarView: View {
       HStack(spacing: isCollapsed ? 0 : 10) {
         ZStack {
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(OmiColors.backgroundTertiary.opacity(0.75))
+            .fill(Ink.rowFillHover)
             .frame(width: 34, height: 34)
 
           Image(systemName: "gearshape.fill")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
 
         if !isCollapsed {
           Text("Settings")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           Spacer(minLength: 8)
@@ -570,7 +541,7 @@ struct SidebarView: View {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .fill(
             selectedIndex == SidebarNavItem.settings.rawValue || isProfileButtonHovered
-              ? OmiColors.backgroundTertiary.opacity(0.55) : Color.clear
+              ? Ink.rowFillHover : Color.clear
           )
       )
       .contentShape(Rectangle())
@@ -628,10 +599,10 @@ struct SidebarView: View {
     let needsReset = isBroken  // Show reset when broken (not stale — stale needs toggle off/on)
     let color: Color =
       isToggleable
-      ? OmiColors.textSecondary
-      : ((isDenied || isBroken || isStale) ? .red : OmiColors.warning)
+      ? Ink.secondary
+      : Ink.errorRed  // Denied, broken or stale read as one failure.
     let titleColor: Color =
-      isToggleable ? OmiColors.textSecondary : color
+      isToggleable ? Ink.secondary : color
 
     let row = HStack(spacing: OmiSpacing.sm) {
       Image(
@@ -725,10 +696,10 @@ struct SidebarView: View {
     let isActive = transcriptionEnabled && isToggleable
     let color: Color =
       isToggleable
-      ? OmiColors.textSecondary
-      : (isDenied ? .red : OmiColors.warning)
+      ? Ink.secondary
+      : Ink.errorRed
     let titleColor: Color =
-      isToggleable ? OmiColors.textSecondary : color
+      isToggleable ? Ink.secondary : color
 
     let row = HStack(spacing: OmiSpacing.sm) {
       Image(systemName: isDenied ? "mic.slash.fill" : "mic.fill")
@@ -806,7 +777,7 @@ struct SidebarView: View {
     let isDenied = appState.isAccessibilityPermissionDenied()
     let isBroken = appState.isAccessibilityBroken  // TCC yes but AX calls fail
     let needsReset = isBroken  // Show reset when broken
-    let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
+    let color: Color = Ink.errorRed
 
     return HStack(spacing: OmiSpacing.sm) {
       Image(systemName: (isDenied || isBroken) ? "hand.raised.slash.fill" : "hand.raised.fill")
@@ -866,7 +837,7 @@ struct SidebarView: View {
       Capsule()
         .fill(
           isOn
-            ? OmiColors.success.opacity(0.9) : OmiColors.backgroundQuaternary.opacity(0.9)
+            ? Ink.listeningGreen.opacity(0.9) : Ink.rowFillHover
         )
         .frame(width: 30, height: 18)
 
@@ -965,8 +936,6 @@ struct SidebarView: View {
   private func pageLoadingState(for item: SidebarNavItem) -> Bool {
     switch item {
     case .tasks: return isTasksPageLoading
-    case .focus: return isFocusPageLoading
-    case .insight: return isInsightPageLoading
     case .apps: return isAppsPageLoading
     default: return false
     }
@@ -975,8 +944,6 @@ struct SidebarView: View {
   private func setPageLoading(for item: SidebarNavItem, loading: Bool) {
     switch item {
     case .tasks: isTasksPageLoading = loading
-    case .focus: isFocusPageLoading = loading
-    case .insight: isInsightPageLoading = loading
     case .apps: isAppsPageLoading = loading
     default: break
     }
@@ -993,7 +960,6 @@ struct NavItemView: View {
   let isSelected: Bool
   let isCollapsed: Bool
   let iconWidth: CGFloat
-  var badge: Int = 0
   var statusColor: Color? = nil
   var isLoading: Bool = false
   var isLocked: Bool = false
@@ -1005,7 +971,7 @@ struct NavItemView: View {
   @State private var isLockHovered = false
 
   /// Foreground color for icon and text when locked
-  private var lockedColor: Color { OmiColors.textQuaternary.opacity(0.45) }
+  private var lockedColor: Color { Ink.secondary.opacity(0.45) }
 
   var body: some View {
     HStack(spacing: OmiSpacing.md) {
@@ -1018,30 +984,12 @@ struct NavItemView: View {
           Image(systemName: icon)
             .scaledFont(size: OmiType.subheading)
             .foregroundColor(
-              isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+              isLocked ? lockedColor : (isSelected ? Ink.primary : Ink.secondary)
             )
             .frame(width: iconWidth)
         }
 
-        // Badge on icon (collapsed = dot, expanded = count)
-        if badge > 0 && !isLocked {
-          if isCollapsed {
-            Circle()
-              .fill(OmiColors.accent)
-              .frame(width: 8, height: 8)
-              .offset(x: 4, y: -4)
-          } else {
-            Text("\(badge)")
-              .font(.system(size: 9, weight: .bold))
-              .foregroundColor(OmiColors.backgroundPrimary)
-              .frame(minWidth: 14, minHeight: 14)
-              .background(OmiColors.accent)
-              .clipShape(Circle())
-              .offset(x: 6, y: -6)
-          }
-        }
-
-        // Status indicator when collapsed (for Focus, hidden when locked)
+        // Status indicator when collapsed, hidden when locked
         if isCollapsed, let color = statusColor, !isLocked {
           Circle()
             .fill(color)
@@ -1060,7 +1008,7 @@ struct NavItemView: View {
         Text(label)
           .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
           .foregroundColor(
-            isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textSecondary))
+            isLocked ? lockedColor : (isSelected ? Ink.primary : Ink.secondary))
 
         Spacer()
 
@@ -1088,8 +1036,8 @@ struct NavItemView: View {
           isLocked
             ? Color.clear
             : (isSelected
-              ? OmiColors.backgroundSecondary
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.75) : Color.clear))
+              ? Ink.rowFillHover
+              : (isHovered ? Ink.rowFill : Color.clear))
         )
     )
     .onTapGesture {
@@ -1112,7 +1060,7 @@ struct NavItemView: View {
   private func lockIcon(size: CGFloat) -> some View {
     Image(systemName: isLockHovered ? "lock.open.fill" : "lock.fill")
       .scaledFont(size: size)
-      .foregroundColor(isLockHovered ? OmiColors.accent : lockedColor)
+      .foregroundColor(isLockHovered ? Ink.primary : lockedColor)
       .padding(OmiSpacing.xxs)
       .contentShape(Rectangle())
       .onHover { hovering in
@@ -1154,9 +1102,9 @@ struct NavItemWithStatusView: View {
   /// Icon color based on state
   private var iconColor: Color {
     if isOn {
-      return isSelected ? OmiColors.textPrimary : OmiColors.textTertiary
+      return isSelected ? Ink.primary : Ink.secondary
     } else {
-      return OmiColors.error
+      return Ink.errorRed
     }
   }
 
@@ -1191,7 +1139,7 @@ struct NavItemWithStatusView: View {
         // Status indicator when collapsed and off
         if isCollapsed && !isOn && !isToggling && !isPageLoading {
           Circle()
-            .fill(OmiColors.error)
+            .fill(Ink.errorRed)
             .frame(width: 6, height: 6)
             .offset(x: 3, y: -3)
         }
@@ -1206,7 +1154,7 @@ struct NavItemWithStatusView: View {
       if !isCollapsed {
         Text(label)
           .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
           .lineLimit(1)
           .fixedSize(horizontal: true, vertical: false)
 
@@ -1221,8 +1169,8 @@ struct NavItemWithStatusView: View {
       RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(
           isSelected
-            ? OmiColors.backgroundSecondary
-            : (isHovered ? OmiColors.backgroundTertiary.opacity(0.75) : Color.clear)
+            ? Ink.rowFillHover
+            : (isHovered ? Ink.rowFill : Color.clear)
         )
     )
     .onTapGesture {
@@ -1257,17 +1205,17 @@ struct SidebarToggle: View {
 
   var body: some View {
     ZStack(alignment: isOn ? .trailing : .leading) {
-      // Track - accent (white) when on, red when off
+      // Track — primary ink on, outlined wash off: "off" rests, it does not fail.
       Capsule()
-        .fill(isOn ? OmiColors.accent : OmiColors.error)
+        .fill(isOn ? Ink.primary : Ink.rowFillHover)
+        .overlay(Capsule().strokeBorder(isOn ? Color.clear : Ink.hairline, lineWidth: 1))
         .frame(width: width, height: height)
 
-      // Thumb - dark on the white track, white on the red track
+      // Thumb — the label ladder inverted on the filled track, the ink itself off it.
       Circle()
-        .fill(isOn ? OmiColors.backgroundPrimary : Color.white)
+        .fill(isOn ? Ink.surface : Ink.primary)
         .frame(width: circleSize, height: circleSize)
         .padding(padding)
-        .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
     }
     .omiAnimation(.easeInOut(duration: 0.15), value: isOn)
     .onTapGesture {
@@ -1338,17 +1286,17 @@ private struct SidebarAudioBar: View {
   }
 
   private var barColor: Color {
-    guard isActive else { return OmiColors.textTertiary.opacity(0.5) }
+    guard isActive else { return Ink.secondary.opacity(0.5) }
 
     let boostedLevel = min(1.0, pow(CGFloat(level), 0.5) * 2.0)
     if boostedLevel > 0.5 {
-      return OmiColors.accent
+      return Ink.primary
     } else if boostedLevel > 0.15 {
-      return OmiColors.textPrimary
+      return Ink.primary
     } else if boostedLevel > 0.02 {
-      return OmiColors.textSecondary
+      return Ink.secondary
     }
-    return OmiColors.textTertiary
+    return Ink.secondary
   }
 
   var body: some View {
@@ -1372,7 +1320,7 @@ struct SidebarRewindIcon: View {
       // Outer pulsing ring when active
       if isActive {
         Circle()
-          .stroke(OmiColors.accent.opacity(0.3), lineWidth: 2)
+          .stroke(Ink.primary.opacity(0.3), lineWidth: 2)
           .frame(width: iconSize, height: iconSize)
           .scaleEffect(isPulsing ? 1.4 : 1.0)
           .opacity(isPulsing ? 0 : 0.8)
@@ -1380,7 +1328,7 @@ struct SidebarRewindIcon: View {
 
       // Inner recording dot
       Circle()
-        .fill(isActive ? OmiColors.accent : OmiColors.error)
+        .fill(isActive ? Ink.primary : Ink.errorRed)
         .frame(width: isActive ? 10 : 8, height: isActive ? 10 : 8)
     }
     .frame(width: iconSize, height: iconSize)
@@ -1419,13 +1367,13 @@ struct BottomNavItemView: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: icon)
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .frame(width: iconWidth)
 
       if !isCollapsed {
         Text(label)
           .scaledFont(size: OmiType.body, weight: .regular)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
       }
@@ -1435,7 +1383,7 @@ struct BottomNavItemView: View {
     .contentShape(Rectangle())
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        .fill(isHovered ? Ink.rowFillHover : Color.clear)
     )
     .onTapGesture {
       log("SIDEBAR: BottomNavItem '\(label)' tapped at mouse position: \(NSEvent.mouseLocation)")
@@ -1510,12 +1458,11 @@ enum OmiDeviceImage {
 
 /// The thin, always-present left navigation rail for the redesigned app shell.
 /// Lives beside every page (not just Home) so you can move between Home, the
-/// memory/task surfaces, Focus, Insights, Rewind, and Apps without bouncing
-/// back through Home. Settings sits at the foot. Styled with the SB ink system
-/// so it matches the sign-in / onboarding aesthetic.
+/// memory/task surfaces and Apps without bouncing back through Home. Settings
+/// sits at the foot. Styled with the SB ink system so it matches the sign-in /
+/// onboarding aesthetic.
 struct AppNavRail: View {
   @Binding var selectedIndex: Int
-  @Environment(\.sbTheme) private var sb
   @State private var isExpanded = false
 
   /// Rail width at rest (icons only) and expanded (icons + labels).
@@ -1529,8 +1476,8 @@ struct AppNavRail: View {
   }
 
   /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
-  /// Rewind moved off the rail (it opens from a right-click on Capture), and
-  /// Insights/Focus are hidden from navigation. Each entry drives selectedIndex.
+  /// and Rewind moved off the rail (it opens from a right-click on Capture).
+  /// Each entry drives selectedIndex.
   private var items: [RailItem] {
     [
       RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
@@ -1566,12 +1513,11 @@ struct AppNavRail: View {
     .padding(.horizontal, 10)
     .frame(width: isExpanded ? Self.expandedWidth : Self.restWidth, alignment: .leading)
     .frame(maxHeight: .infinity, alignment: .top)
-    // Flat panel matching the content surface; floats over content when expanded.
-    .background(Color(red: 0.050, green: 0.052, blue: 0.059))
+    // No ground of its own — the shell's glass is under this. Expanded, the rail
+    // covers content, so it becomes real glass with the one ambient shadow.
+    .background { if isExpanded { Color.clear.glassFloatingBar(cornerRadius: PageGlass.cardRadius) } }
     .overlay(alignment: .trailing) {
-      if isExpanded {
-        Rectangle().fill(sb.ink(.w07)).frame(width: 1)
-      }
+      Rectangle().fill(Ink.separator).frame(width: 1).opacity(isExpanded ? 0 : 1)
     }
     .contentShape(Rectangle())
     .onHover { hovering in
@@ -1593,7 +1539,6 @@ private struct AppNavRailButton: View {
   let isExpanded: Bool
   let action: () -> Void
 
-  @Environment(\.sbTheme) private var sb
   @State private var isHovering = false
 
   var body: some View {
@@ -1610,14 +1555,12 @@ private struct AppNavRailButton: View {
             .fixedSize()
         }
       }
-      .foregroundStyle(isSelected || isHovering ? sb.ink : sb.ink(.w38))
+      .foregroundStyle(isSelected || isHovering ? Ink.primary : Ink.secondary)
       .frame(maxWidth: .infinity, alignment: .leading)
       .frame(height: 40)
-      .background(
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-          .fill(isSelected ? sb.ink(.w09) : (isHovering ? sb.ink(.w05) : Color.clear))
-      )
-      .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+      // A stadium, like every other pressable thing in this system.
+      .background(GlassPillBackground(isSelected: isSelected, isHovering: isHovering))
+      .contentShape(Capsule(style: .continuous))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }

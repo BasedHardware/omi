@@ -30,12 +30,11 @@ struct CaptureArchivePage: View {
       captureList
         .frame(minWidth: 280, idealWidth: 340, maxWidth: 420)
 
-      Divider().overlay(OmiColors.border.opacity(0.45))
+      Divider().overlay(Ink.separator.opacity(0.45))
 
       captureDetail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .background(OmiColors.backgroundPrimary)
     .task { await repository.loadInitial() }
     .task(id: pendingFocusToken) { await resolvePendingFocusIfNeeded() }
     .onAppear { registerAutomationActions() }
@@ -49,10 +48,10 @@ struct CaptureArchivePage: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Conversations")
             .scaledFont(size: OmiType.title, weight: .bold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
           Text("Omi-device captures")
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
         Spacer()
         Button {
@@ -107,7 +106,7 @@ struct CaptureArchivePage: View {
         .scrollContentBackground(.hidden)
       }
     }
-    .background(OmiColors.backgroundSecondary.opacity(0.6))
+    .background(Ink.rowFill)
   }
 
   @ViewBuilder
@@ -122,7 +121,7 @@ struct CaptureArchivePage: View {
             detailSection("Summary") {
               Text(capture.overview)
                 .scaledFont(size: OmiType.body)
-                .foregroundStyle(OmiColors.textSecondary)
+                .foregroundStyle(Ink.secondary)
                 .textSelection(.enabled)
             }
           }
@@ -140,13 +139,13 @@ struct CaptureArchivePage: View {
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "waveform")
           .scaledFont(size: 36, weight: .medium)
-          .foregroundStyle(OmiColors.textTertiary)
+          .foregroundStyle(Ink.secondary)
         Text("Select an Omi-device capture")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundStyle(OmiColors.textPrimary)
+          .foregroundStyle(Ink.primary)
         Text("Capture details, audio, and timestamped moments will appear here.")
           .scaledFont(size: OmiType.body)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
           .multilineTextAlignment(.center)
           .frame(maxWidth: 340)
       }
@@ -160,30 +159,30 @@ struct CaptureArchivePage: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           Text(capture.title)
             .scaledFont(size: OmiType.title, weight: .bold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
             .textSelection(.enabled)
           Text(capture.detailMetadata)
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
         Spacer()
         Button("Discuss in Chat") {
           navigation.discuss(.capture(id: capture.id, momentTimestamp: nil), using: chatProvider)
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
+        .tint(Ink.primary)
         .accessibilityLabel("Discuss this capture in Chat")
         .accessibilityIdentifier("chat-first-capture-discuss-\(capture.id)")
       }
       if let address = capture.geolocation?.address, !address.isEmpty {
         Label(address, systemImage: "mappin.and.ellipse")
           .scaledFont(size: OmiType.caption)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
       }
       if !capture.participantLabels.isEmpty {
         Label(capture.participantLabels.joined(separator: ", "), systemImage: "person.2")
           .scaledFont(size: OmiType.caption)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
       }
     }
   }
@@ -196,7 +195,7 @@ struct CaptureArchivePage: View {
           ProgressView()
           Text("Preparing audio")
             .scaledFont(size: OmiType.body)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
       } else if let resolution = playback.resolution {
         HStack(spacing: OmiSpacing.md) {
@@ -221,7 +220,7 @@ struct CaptureArchivePage: View {
           }
           Text(resolution.userFacingMessage)
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
       } else {
         Button("Prepare audio") {
@@ -243,15 +242,15 @@ struct CaptureArchivePage: View {
             HStack(alignment: .top, spacing: OmiSpacing.md) {
               Text(segment.shortTimestamp)
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundStyle(OmiColors.textSecondary)
+                .foregroundStyle(Ink.secondary)
                 .frame(width: 60, alignment: .leading)
               Text(segment.text)
                 .scaledFont(size: OmiType.body)
-                .foregroundStyle(OmiColors.textPrimary)
+                .foregroundStyle(Ink.primary)
                 .lineLimit(2)
               Spacer(minLength: 0)
               Image(systemName: "play.circle")
-                .foregroundStyle(OmiColors.textTertiary)
+                .foregroundStyle(Ink.secondary)
             }
             .padding(.vertical, OmiSpacing.xs)
             .contentShape(Rectangle())
@@ -272,7 +271,7 @@ struct CaptureArchivePage: View {
       if taskLinks.isEmpty {
         Text("No linked tasks or goals are available for this capture.")
           .scaledFont(size: OmiType.body)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
       } else {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           ForEach(taskLinks, id: \.self) { taskID in
@@ -298,13 +297,13 @@ struct CaptureArchivePage: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(title)
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
       content()
     }
     .padding(OmiSpacing.lg)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary.opacity(0.72))
+        .fill(Ink.rowFill)
     )
   }
 
@@ -312,13 +311,13 @@ struct CaptureArchivePage: View {
     VStack(spacing: OmiSpacing.md) {
       Image(systemName: "waveform")
         .scaledFont(size: 32, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
       Text("No Omi-device captures yet")
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
       Text("Meetings and moments captured by your Omi device will appear here.")
         .scaledFont(size: OmiType.body)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .multilineTextAlignment(.center)
         .frame(maxWidth: 280)
     }
@@ -329,15 +328,15 @@ struct CaptureArchivePage: View {
   private func unavailableState(message: String) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "arrow.triangle.2.circlepath")
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
       Text(message)
         .scaledFont(size: OmiType.caption)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
       Spacer(minLength: 0)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(OmiColors.backgroundTertiary.opacity(0.55))
+    .background(Ink.rowFillHover)
     .accessibilityIdentifier("chat-first-capture-unavailable")
   }
 
@@ -410,18 +409,18 @@ private struct CaptureArchiveRow: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(capture.title)
         .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .lineLimit(2)
       Text(capture.listMetadata)
         .scaledFont(size: OmiType.caption)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .lineLimit(1)
     }
     .padding(.vertical, OmiSpacing.xs)
     .padding(.horizontal, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
+        .fill(isSelected ? Ink.rowFillHover : Color.clear)
     )
   }
 }

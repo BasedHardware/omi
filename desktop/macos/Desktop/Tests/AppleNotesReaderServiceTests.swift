@@ -4,6 +4,13 @@ import XCTest
 @testable import Omi_Computer
 
 final class AppleNotesReaderServiceTests: XCTestCase {
+  func testPassiveStatusDoesNotReadTheNotesStore() async {
+    let status = await AppleNotesReaderService.shared.connectionStatus()
+    guard case .needsAccess(_, let reasonCode) = status else {
+      return XCTFail("Expected passive status to avoid reading Notes, got \(status)")
+    }
+    XCTAssertEqual(reasonCode, "user_initiated_read_required")
+  }
   func testClassifiesSqliteAuthorizationDeniedAsPermissionError() {
     let error = NSError(
       domain: "GRDB",
@@ -79,7 +86,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: 10,
-      selectedFolderPath: groupContainers.path
+      selectedFolderPath: groupContainers.path,
+      userInitiated: true
     )
 
     XCTAssertEqual(notes.count, 1)
@@ -140,7 +148,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     XCTAssertEqual(notes.count, 1)
@@ -156,7 +165,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: -1,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     XCTAssertTrue(notes.isEmpty)
@@ -169,7 +179,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     let notesContainer = try makeNotesContainerFixture(in: root, withSchema: true)
     let status = await AppleNotesReaderService.shared.connectionStatus(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     guard case .connected(let noteCount, _) = status else {
@@ -241,7 +252,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     _ = try DatabaseQueue(path: notesContainer.appendingPathComponent("NoteStore.sqlite").path)
     let status = await AppleNotesReaderService.shared.connectionStatus(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     guard case .error(let message, let reasonCode) = status else {

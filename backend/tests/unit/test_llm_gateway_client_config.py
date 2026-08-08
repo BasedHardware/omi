@@ -19,6 +19,7 @@ from utils.llm.gateway_client import (
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
+    GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
     should_route_features_through_gateway,
@@ -227,6 +228,28 @@ def test_memory_l2_gateway_mode_uses_luna_auto_lane_without_direct_fallback(monk
     assert legacy.calls == []
 
 
+def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, streaming=streaming, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("memory_l2", request_timeout=20.0)
+
+    assert captured == {
+        "lane_id": "omi:auto:memory-l2",
+        "streaming": False,
+        "options": {"request_timeout": 20.0},
+        "feature": "memory_l2",
+    }
+
+
 def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):
     legacy = FakeChatModel(name='legacy', calls=[])
 
@@ -248,7 +271,6 @@ def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypa
 
 
 def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
-    from utils.llm import gateway_serving
 
     request = httpx.Request('POST', 'http://gateway/v1/chat/completions')
     response = httpx.Response(503, request=request)
@@ -358,8 +380,10 @@ def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
 
     try:
         raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
-    except RuntimeError as exc:
+    except GatewayDirectModelSurfaceBlocked as exc:
         assert 'file_chat.openai_files' in str(exc)
+        assert exc.error_code == 'file_chat_gateway_blocked'
+        assert exc.surface == 'file_chat.openai_files'
     else:
         raise AssertionError('expected direct model surface to be blocked')
 

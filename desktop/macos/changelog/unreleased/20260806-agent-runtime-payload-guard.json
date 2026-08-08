@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat silently accepting every message on an install whose local AI runtime was incomplete — it now says so up front and points at the repair instead of failing each turn"
+}

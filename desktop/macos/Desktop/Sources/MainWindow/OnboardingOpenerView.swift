@@ -25,15 +25,15 @@ struct OnboardingOpenerView: View {
             .scaledToFit()
             .frame(width: 44, height: 44)
         }
+        // The greeting is the largest thing in the empty chat, so it takes the system's headline
+        // role rather than a serif face borrowed from the dark chrome.
         Text(opener.greeting)
-          .font(.system(size: 26, weight: .medium, design: .serif))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.stepHeadline, color: Ink.primary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
 
         Text(opener.subline)
-          .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.textSecondary)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -76,26 +76,26 @@ private struct OpenerStarterCard: View {
       HStack(spacing: OmiSpacing.md) {
         Image(systemName: icon)
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 22)
         Text(question)
-          .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          // A starter is a one-line prompt by construction; the row is a fixed-height list item,
+          // not a paragraph, so this truncation is the intended shape.
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: OmiSpacing.sm)
+        // Two rungs, so the chevron's rest state is the reading rung and hover promotes it —
+        // there is no third step to fade to on glass.
         Image(systemName: "chevron.right")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textTertiary.opacity(0.6))
+          .foregroundColor(isHovering ? Ink.primary : Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.lg)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundSecondary.opacity(0.55))
-      )
-      .contentShape(.rect(cornerRadius: 14))
+      .glassCard(cornerRadius: PageGlass.rowRadius, emphasized: isHovering)
+      .contentShape(.rect(cornerRadius: PageGlass.rowRadius))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }

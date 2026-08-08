@@ -24,6 +24,7 @@ from utils.subscription import (
     get_basic_plan_limits,
     get_paid_plan_definitions,
     get_plan_type_from_price_id,
+    is_purchasable_price_id,
     get_plan_limits,
     is_paid_plan,
     filter_plans_for_user,
@@ -66,12 +67,12 @@ router = APIRouter()
 
 
 class CreateCheckoutRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
 
 
 class UpgradeSubscriptionRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
 
 
@@ -517,12 +518,28 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
+def _validate_price_id(price_id: str) -> None:
+    """Reject a blank/whitespace-only or non-purchasable price_id before any Stripe call.
+
+    A valid checkout or upgrade target must be a currently-purchasable plan price. Legacy prices
+    (LEGACY_PRICE_MAP) are intentionally rejected here: they exist for existing subscribers'
+    renewals and webhook/subscription reconciliation, not as new purchase targets, so a caller
+    cannot select a hidden or deprecated price by posting its id directly. This is the boundary
+    check for the checkout and upgrade endpoints.
+    """
+    if not price_id or not price_id.strip():
+        raise HTTPException(status_code=400, detail="price_id is required")
+    if not is_purchasable_price_id(price_id):
+        raise HTTPException(status_code=400, detail="Unknown price_id")
+
+
 @router.post(
     '/v1/payments/checkout-session',
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    _validate_price_id(request.price_id)
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
     if not can_pay:
@@ -598,6 +615,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    _validate_price_id(request.price_id)
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
