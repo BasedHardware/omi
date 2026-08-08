@@ -151,6 +151,8 @@ def test_startup_bootstraps_read_only_state_tooling_contract() -> None:
 def test_startup_expands_the_gce_root_partition_before_state_or_docker_work() -> None:
     source = STARTUP.read_text(encoding="utf-8")
 
+    assert '[[ -r /sys/class/dmi/id/sys_vendor ]] || return 0' in source
+    assert '[[ "$system_vendor" == "Google" ]] || return 0' in source
     assert 'root_source="$(findmnt --noheadings --output SOURCE /)"' in source
     assert 'root_partition="$(readlink -f "$root_source")"' in source
     assert 'parent_name="$(lsblk --noheadings --output PKNAME "$root_partition"' in source

@@ -61,6 +61,7 @@ startup_fail() {
 }
 
 expand_root_filesystem() {
+  local system_vendor
   local root_source
   local root_partition
   local root_filesystem
@@ -72,9 +73,13 @@ expand_root_filesystem() {
   local growth_headroom=$((256 * 1024 * 1024))
   local tool
 
-  # Unit tests also execute this script on macOS. A real Agent VM always has
-  # Linux block-device inventory; non-Linux harnesses have nothing to grow.
-  [[ -d /sys/class/block ]] || return 0
+  # This mutates a partition table and therefore stays fenced to the GCE guest
+  # environment this startup script owns. Unit and container harnesses can
+  # expose host block devices that are neither accessible nor safe to inspect.
+  [[ -r /sys/class/dmi/id/sys_vendor ]] || return 0
+  IFS= read -r system_vendor < /sys/class/dmi/id/sys_vendor || return 0
+  [[ "$system_vendor" == "Google" ]] || return 0
+  [[ -d /sys/class/block ]] || startup_fail "GCE block-device inventory is unavailable"
   for tool in findmnt readlink lsblk blockdev growpart resize2fs tr; do
     command -v "$tool" >/dev/null 2>&1 || startup_fail "$tool is required to size the root filesystem"
   done
