@@ -1,11 +1,14 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
 from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
+import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
 
@@ -72,3 +75,24 @@ def get_focus_stats(
 ):
     date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_stats(uid, date=date)
+
+
+@router.get('/v1/screen-activity/summary', tags=['screen-activity'])
+def screen_activity_summary(
+    date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Aggregated per-app screen-activity summary (screenshots per app, first/last seen).
+
+    The desktop app captures screen-activity but it was only ever read back internally (MCP);
+    this exposes the aggregated view to the user's own first-party client. A bad date is 422.
+    """
+    date = validate_calendar_date(date)
+    start = end = None
+    if date:
+        start = datetime.strptime(date, '%Y-%m-%d')
+        # Inclusive same-day upper bound. get_screen_activity applies end_date as
+        # timestamp <= 'YYYY-MM-DD HH:MM:SS.999', so a next-day midnight end would leak the
+        # following day's first second into this privacy-sensitive single-day summary.
+        end = start.replace(hour=23, minute=59, second=59)
+    return screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
