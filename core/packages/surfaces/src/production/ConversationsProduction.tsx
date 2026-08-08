@@ -4,6 +4,7 @@ import { formatDate, formatDuration, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState, type ProductionConversationStore, type ProductionFolderStore } from "./conversation-fixtures.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
+import { ProductionFilterChips, ProductionSearchField, type ProductionFilterOption } from "./ProductionPrimitives.js";
 import "./conversations.css";
 
 type Locale = string;
@@ -306,6 +307,14 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
     }
     return [...groups.values()];
   }, [fixture, locale, visibleRows]);
+  const filterOptions = useMemo<ProductionFilterOption<ConversationFilter>[]>(() => [
+    { value: "all", label: t(locale, "conversations.all") },
+    { value: "starred", label: t(locale, "conversations.starred") },
+    ...folders.filter((folder) => !folder.isSystem).map((folder) => ({
+      value: `folder:${folder.id}` as const,
+      label: folder.name,
+    })),
+  ], [folders, locale]);
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
@@ -322,24 +331,9 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       {operationError && <div className="operation-error" role="alert">{operationError}</div>}
       {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state">{t(locale, "conversations.detailNotFound")}</p> : <>
         <div className="conversation-controls">
-          <label className="conversation-search">
-            <span className="conversation-search-icon" aria-hidden={true} />
-            <span className="visually-hidden">{t(locale, "conversations.filterSavedPlaceholder")}</span>
-            <input
-              type="search"
-              value={query}
-              placeholder={t(locale, "conversations.filterSavedPlaceholder")}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>
-        <div className="conversation-filter" aria-label={t(locale, "conversations.title")}>
-          <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>{t(locale, "conversations.all")}</button>
-          <button type="button" aria-pressed={filter === "starred"} onClick={() => setFilter("starred")}>{t(locale, "conversations.starred")}</button>
-          {folders.filter((folder) => !folder.isSystem).map((folder) => (
-            <button key={folder.id} type="button" aria-pressed={filter === `folder:${folder.id}`} onClick={() => setFilter(`folder:${folder.id}`)}>{folder.name}</button>
-          ))}
-        </div>
+        <ProductionFilterChips className="conversation-filter" label={t(locale, "conversations.title")} value={filter} options={filterOptions} onValueChange={setFilter} />
         {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "conversations.emptyBody")}</p> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
             <h2>{group.label}</h2>

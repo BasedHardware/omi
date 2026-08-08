@@ -75,7 +75,8 @@ test("conversation rows are compact, day-grouped, and only attribute safe source
   assert.match(source, /conversation-day-group/);
   assert.match(source, /dayLabel\(timestamp, locale, Boolean\(fixture\)\)/);
   assert.match(source, /filter === "starred" \? rows\.filter/);
-  assert.match(source, /aria-pressed=\{filter === "all"\}/);
+  assert.match(source, /\{ value: "all", label: t\(locale, "conversations\.all"\) \}/);
+  assert.match(source, /<ProductionFilterChips[^>]+value=\{filter\}[^>]+onValueChange=\{setFilter\}/);
   assert.match(source, /sourceAttribution\(conversation\.source, locale\)/);
   const attribution = source.match(/function sourceAttribution\([\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(attribution, /source\.trim\(\)\.toLowerCase\(\) === "omi"/);
@@ -91,6 +92,26 @@ test("conversation rows are compact, day-grouped, and only attribute safe source
   // bringing back a wall-clock fixture makes the relevant assertion fail;
   // reversing the visible star label makes the row action contradict its aria
   // label and the current starred state.
+});
+
+test("production controls share search and filter primitives and expose deterministic appearance selection", async () => {
+  const primitives = await read("src/production/ProductionPrimitives.tsx");
+  const conversations = await read("src/production/ConversationsProduction.tsx");
+  const memories = await read("src/production/MemoriesProduction.tsx");
+  const tasks = await read("src/production/TasksProduction.tsx");
+  const chrome = await read("src/production/ProductionChrome.tsx");
+  const entry = await read("src/production/main.tsx");
+  assert.match(primitives, /export function ProductionSearchField/);
+  assert.match(primitives, /type="search"/);
+  assert.match(primitives, /export function ProductionFilterChips/);
+  for (const source of [conversations, memories, tasks]) assert.match(source, /<ProductionSearchField/);
+  for (const source of [conversations, memories]) assert.match(source, /<ProductionFilterChips/);
+  assert.match(chrome, /<option value="system">/);
+  assert.match(chrome, /params\.set\("theme", selection\)/);
+  assert.match(entry, /themeNameFor\(platform, colorModeFor\(themeSelection\)\)/);
+  assert.match(entry, /platform === "mobile" \? "dark" : "light"/);
+  // red-proof: duplicating a route-local search field, removing the explicit
+  // system choice, or reversing either platform default fails this guard.
 });
 
 test("conversation links inherit production colors instead of browser defaults", async () => {

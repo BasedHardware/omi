@@ -7,7 +7,8 @@
  * production modes in Wave 0.
  */
 
-export type ThemeName = "mobileDark" | "desktopLightGlass";
+export type ThemeName = "mobileDark" | "mobileLight" | "desktopLightGlass" | "desktopDarkGlass";
+export type ColorMode = "light" | "dark";
 
 export type ColorTokens = {
   surface: {
@@ -163,6 +164,32 @@ const mobileDark: SemanticTheme = {
   },
 };
 
+/** Mobile keeps its established geometry in light mode; only semantic colour roles change. */
+const mobileLight: SemanticTheme = {
+  ...mobileDark,
+  name: "mobileLight",
+  colors: {
+    surface: {
+      canvas: "#F7F7F8",
+      raised: "#FFFFFF",
+      elevated: "#ECECF0",
+      scrim: "rgba(0, 0, 0, 0.16)",
+    },
+    content: {
+      primary: "#111216",
+      secondary: "rgba(17, 18, 22, 0.74)",
+      tertiary: "rgba(17, 18, 22, 0.52)",
+      inverse: "#FFFFFF",
+    },
+    accent: "#007AFF",
+    focus: "#007AFF",
+    border: "rgba(17, 18, 22, 0.12)",
+    danger: "#B42318",
+    success: "#27843A",
+    warning: "#B85C00",
+  },
+};
+
 const desktopLightGlass: SemanticTheme = {
   name: "desktopLightGlass",
   colors: {
@@ -230,10 +257,43 @@ const desktopLightGlass: SemanticTheme = {
   },
 };
 
+/** Desktop dark mode retains the glass geometry and interaction model of the Aqua default. */
+const desktopDarkGlass: SemanticTheme = {
+  ...desktopLightGlass,
+  name: "desktopDarkGlass",
+  colors: {
+    surface: {
+      canvas: "#0C1015",
+      raised: "rgba(31, 35, 42, 0.82)",
+      elevated: "rgba(48, 53, 62, 0.88)",
+      scrim: "rgba(0, 0, 0, 0.52)",
+    },
+    content: {
+      primary: "#F7F8FA",
+      secondary: "rgba(247, 248, 250, 0.78)",
+      tertiary: "rgba(247, 248, 250, 0.58)",
+      inverse: "#111318",
+    },
+    accent: "#0A84FF",
+    focus: "#0A84FF",
+    border: "rgba(255, 255, 255, 0.11)",
+    danger: "#FF453A",
+    success: "#30D158",
+    warning: "#FF9F0A",
+  },
+};
+
 export const SEMANTIC_TOKENS = {
   mobileDark,
+  mobileLight,
   desktopLightGlass,
+  desktopDarkGlass,
 } as const satisfies Record<ThemeName, SemanticTheme>;
+
+export function themeNameFor(platform: "mobile" | "desktop", mode: ColorMode): ThemeName {
+  if (platform === "mobile") return mode === "dark" ? "mobileDark" : "mobileLight";
+  return mode === "dark" ? "desktopDarkGlass" : "desktopLightGlass";
+}
 
 export function getTheme(name: ThemeName): SemanticTheme {
   return SEMANTIC_TOKENS[name];

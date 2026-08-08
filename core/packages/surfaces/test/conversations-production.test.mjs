@@ -9,7 +9,7 @@ const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("conversation discovery uses only available title, overview, star, and folder data", async () => {
   const source = await read("src/production/ConversationsProduction.tsx");
-  assert.match(source, /type="search"/);
+  assert.match(source, /<ProductionSearchField/);
   assert.match(source, /conversations\.filterSavedPlaceholder/);
   assert.match(source, /`\$\{row\.title\} \$\{row\.overview\}`/);
   assert.match(source, /filter === "starred" \? rows\.filter/);
