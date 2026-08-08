@@ -252,4 +252,12 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
     render: async () => { calls++; return { summary_text: "malformed-recomputed", citations: ["e1"] }; },
   }, options, new Map([[seed.rendered_from_digest, malformed]]));
   expect(calls).toBeGreaterThan(0);
+
+  calls = 0;
+  const extraField = { ...seed, raw: "must-never-survive-cache-validation" } as never;
+  const exactRenders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "exact-recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, extraField]]));
+  expect(calls).toBeGreaterThan(0);
+  expect(JSON.stringify(exactRenders)).not.toContain("must-never-survive-cache-validation");
 });

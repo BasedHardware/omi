@@ -42,6 +42,17 @@ const immutableClone = <Value>(value: Value): Value => deepFreezePlainJson(norma
 const samePolicy = (left: PolicyClass, right: PolicyClass): boolean =>
   left.subject_class === right.subject_class && left.sensitivity === right.sensitivity && left.capture_class === right.capture_class;
 const sameContent = (left: unknown, right: unknown): boolean => sha256CanonicalContent(left) === sha256CanonicalContent(right);
+const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
+};
+const renderNodeKeys = [
+  "owner_account_id", "graph_generation", "reader_projection_digest", "projection_authorization_digest",
+  "projected_content_digest", "node_id", "policy_partition_label", "render_generation", "summary_text",
+  "citations", "model_version", "rendered_from_digest", "rendered_from_manifest", "render_hash",
+  "effective_policy", "status", "failure", "stale", "source_language",
+] as const;
 const renderHash = (render: Pick<RenderNode,
   "owner_account_id" | "graph_generation" | "reader_projection_digest" | "projection_authorization_digest"
   | "projected_content_digest" | "node_id" | "rendered_from_digest" | "rendered_from_manifest"
@@ -75,6 +86,9 @@ const validatedCacheHit = (
   if (!candidate) return null;
   try {
     const cached = normalizePlainJson(candidate);
+    if (!hasExactKeys(cached, renderNodeKeys)
+      || !hasExactKeys(cached.rendered_from_manifest, ["live_member_revisions", "child_render_hashes"])
+      || !hasExactKeys(cached.effective_policy, ["subject_class", "sensitivity", "capture_class"])) return null;
     const citations = [...cached.citations];
     const canonicalCitations = [...new Set(citations)].sort();
     if (cached.owner_account_id !== expected.input.owner_account_id
