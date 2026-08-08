@@ -69,6 +69,7 @@ from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, Proc
 from database.memory_apply_store import CanonicalReviewResolutionConflict
 from database.memory_vector_metadata import canonical_memory_provider_id
 from utils.memory.canonical_memory_adapter import (
+    delete_default_canonical_memories,
     delete_all_canonical_memories,
     delete_canonical_memory,
     extraction_memory_id,
@@ -89,6 +90,7 @@ def _refresh_canonical_memory_adapter_runtime() -> None:
     globals().update(
         {
             "delete_all_canonical_memories": canonical_adapter.delete_all_canonical_memories,
+            "delete_default_canonical_memories": canonical_adapter.delete_default_canonical_memories,
             "delete_canonical_memory": canonical_adapter.delete_canonical_memory,
             "extraction_memory_id": canonical_adapter.extraction_memory_id,
             "purge_canonical_derived_user_data": canonical_adapter.purge_canonical_derived_user_data,
@@ -1323,6 +1325,47 @@ def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, cano
     assert len(kg_calls) == 1
     assert kg_calls[0][0] == uid
     assert set(kg_calls[0][1]) == set(memory_ids)
+
+
+def test_delete_default_canonical_memories_leaves_archive_untouched(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    default_payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id="conv-delete-default",
+        content="Default memory",
+    )
+    archive_payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id="conv-delete-archive",
+        content="Archive memory",
+    )
+    archive_payload["evidence"][0]["evidence_id"] = "ev_ws_j_delete_archive"
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter._run_immediate_privacy_cleanup",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.purge_stale_review_conflicts_for_memories",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
+        lambda *_args, **_kwargs: None,
+    )
+
+    default_id = write_canonical_extraction_memory(uid, default_payload, db_client=canonical_db)
+    archive_id = write_canonical_extraction_memory(uid, archive_payload, db_client=canonical_db)
+    canonical_db.docs[f"users/{uid}/memory_items/{archive_id}"]["tier"] = MemoryTier.archive.value
+
+    delete_default_canonical_memories(uid, db_client=canonical_db)
+
+    assert canonical_db.docs[f"users/{uid}/memory_items/{default_id}"]["status"] == MemoryItemStatus.tombstoned.value
+    assert canonical_db.docs[f"users/{uid}/memory_items/{archive_id}"]["status"] == MemoryItemStatus.active.value
 
 
 def test_delete_all_final_rescan_tombstones_concurrent_write(monkeypatch, canonical_db):

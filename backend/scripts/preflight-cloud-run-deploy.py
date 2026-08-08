@@ -374,9 +374,11 @@ def _actual_runtime_bindings(
 
 
 def _observed_binding(entry: dict[str, Any]) -> str:
-    if 'value' in entry:
-        return 'public literal'
     value_from = entry.get('valueFrom')
+    if 'value' in entry or value_from is None:
+        # Cloud Run omits `value` from describe output when the literal is the
+        # empty string, so an entry with no value source at all is still public.
+        return 'public literal'
     secret_ref = value_from.get('secretKeyRef') if isinstance(value_from, dict) else None
     secret_name = secret_ref.get('name') if isinstance(secret_ref, dict) else None
     if isinstance(secret_name, str) and secret_name:

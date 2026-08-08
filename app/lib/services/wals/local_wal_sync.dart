@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -787,6 +788,19 @@ class LocalWalSyncImpl implements LocalWalSync {
         await _saveWalsToFile();
         listener.onWalUpdated();
         break;
+      } on SyncOfflineQueueQuarantinedException {
+        // Cutover fence: leave WALs retryable and skip quietly until control allows drain.
+        DebugLogManager.logEvent('local_upload_cutover_quarantined', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
+        });
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
       } on SyncRecoveryWindowExceededException {
         // Clear the in-flight flag on the whole batch first: the members the
         // rejection does NOT prove too old stay `miss` and must not be left
@@ -807,9 +821,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       } catch (e) {
         print('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
+        if (!isTransientNetworkError(e)) {
+          resp.localUploadPermanentFailures++;
+          resp.localUploadPermanentError = e.toString();
+        }
         DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': batchesCompleted + batchesFailed,
           'filesInBatch': files.length,
+          'transient': isTransientNetworkError(e),
         });
         // Upload failed: clear the transient flag, leave status `miss` so the
         // batch is retried on the next sync.
@@ -827,6 +846,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     DebugLogManager.logEvent('local_upload_finished', {
       'batchesUploaded': batchesCompleted,
       'batchesFailed': batchesFailed,
+      'permanentFailures': resp.localUploadPermanentFailures,
       'corrupted': corruptedCount,
       'newConversations': resp.newConversationIds.length,
       'updatedConversations': resp.updatedConversationIds.length,
@@ -943,6 +963,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    } on SyncOfflineQueueQuarantinedException {
+      DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;

@@ -103,6 +103,10 @@ class TranscriptionRetryService: @unchecked Sendable {
   private func processRetryQueue() async {
     // Skip if user is signed out (tokens are cleared)
     guard await AuthState.shared.isSignedIn else { return }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      log("TranscriptionRetryService: deferred — account cutover offline upload gate closed")
+      return
+    }
     guard !isProcessing else {
       log("TranscriptionRetryService: Already processing, skipping")
       return

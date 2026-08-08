@@ -290,6 +290,24 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _batchStallReported = false;
   }
 
+  /// Soft-rearm liveness after the app returns to foreground (#4706).
+  ///
+  /// Wall-clock silence from timer suspension / screen lock must not force an
+  /// immediate Dart stop→start (that races the native `appBecameActive` rebuild
+  /// and also false-positives a healthy session). Reset the stall clock so the
+  /// periodic watchdog owns escalation only if frames still don't arrive.
+  @override
+  void probeStallAfterForeground() {
+    if (!_sessionActive || _interrupted) return;
+    if (_batchMode) {
+      _lastBatchProgressAt = _now();
+      _batchStallReported = false;
+      return;
+    }
+    _lastByteAt = _now();
+    _stallReported = false;
+  }
+
   void _clearCallbacks() {
     _onByteReceived = null;
     _onRecording = null;

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from database.users import get_agent_vm
 from services.agent_vm_lifecycle import reconcile_requested, request_vm_start
+from services.agent_vm_read import decide_agent_vm_read
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -67,20 +68,33 @@ def _is_usable_vm_ip(ip) -> bool:
     return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
 
 
+def _vm_info_from_decision(vm: dict[str, Any] | None, decision_status: str | None) -> dict[str, Any]:
+    if not vm:
+        return {"has_vm": False}
+    if decision_status == "ready":
+        return {"has_vm": True, "status": "ready"}
+    if decision_status == "updating":
+        return {"has_vm": True, "status": "updating"}
+    return {"has_vm": False, "status": decision_status}
+
+
 # --------------- endpoints ---------------
 
 
 @router.get("/v1/agent/vm-status", response_model=AgentVmInfo)
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
-    """Return the user's agent VM info from Firestore."""
+    """Return the user's agent VM info from Firestore.
+
+    Tools paths do not probe GCE (reconciler authority). They still refuse to
+    report eternal ``ready`` while reconciler demand/missing/lease state is
+    already recorded — that is the shared read contract with desktop status.
+    """
     vm = get_agent_vm(uid)
     logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
-    if not vm or vm.get("status") != "ready":
+    if not vm:
         return {"has_vm": False}
-    return {
-        "has_vm": True,
-        "status": vm.get("status"),
-    }
+    decision = decide_agent_vm_read(vm, usable_cached_ip=_is_usable_vm_ip(vm.get("ip")))
+    return _vm_info_from_decision(vm, decision.client_status)
 
 
 @router.post("/v1/agent/vm-ensure", response_model=AgentVmInfo)

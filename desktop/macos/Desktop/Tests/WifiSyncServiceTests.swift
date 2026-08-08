@@ -11,6 +11,9 @@ final class WifiSyncServiceTests: XCTestCase {
   private var wifiSync: WifiSyncService!
 
   override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+
     walDir = FileManager.default.temporaryDirectory
       .appendingPathComponent("wifi-sync-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: walDir, withIntermediateDirectories: true)
@@ -27,6 +30,7 @@ final class WifiSyncServiceTests: XCTestCase {
 
   override func tearDown() async throws {
     walService.uploadLocalFilesHandler = nil
+    AccountCutoverControlManager.shared.resetForTesting()
     try? FileManager.default.removeItem(at: walDir)
   }
 

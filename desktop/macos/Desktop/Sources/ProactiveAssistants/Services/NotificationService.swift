@@ -13,47 +13,17 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
-  case focusLost
-  case focusRegained
   case none
 
   var unSound: UNNotificationSound? {
     switch self {
     case .default:
       return .default
-    case .focusLost, .focusRegained:
-      // Custom sounds are played manually via NSSound (see playCustomSound)
-      // because UNNotificationSound(named:) can't find SPM-bundled resources.
-      return nil
     case .none:
       return nil
     }
   }
 
-  /// Play the custom sound manually from the SPM resource bundle.
-  func playCustomSound() {
-    let filename: String
-    switch self {
-    case .focusLost:
-      filename = "focus-lost"
-    case .focusRegained:
-      filename = "focus-regained"
-    default:
-      return
-    }
-
-    guard let url = Bundle.resourceBundle.url(forResource: filename, withExtension: "aiff") else {
-      log("NotificationSound: Could not find \(filename).aiff in bundle")
-      return
-    }
-
-    guard let sound = NSSound(contentsOf: url, byReference: true) else {
-      log("NotificationSound: Could not load sound from \(url)")
-      return
-    }
-
-    sound.play()
-  }
 }
 
 @MainActor
@@ -269,9 +239,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           surface: "system_notification"
         )
 
-        // If this is a screen capture reset notification, trigger the reset
-        if title == Self.screenCaptureResetTitle {
+        switch Self.openAction(assistantId: assistantId, title: title) {
+        case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .openSupportThread:
+          self.openSupportThread(source: "notification_click")
+        case .none:
+          break
         }
 
       case UNNotificationDismissActionIdentifier:
@@ -308,11 +282,48 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     completionHandler()
   }
 
+  /// What tapping a delivered banner does, beyond recording that it was tapped.
+  ///
+  /// Tapping a notification is a request to *see the thing it is about*. A banner whose tap only
+  /// fires analytics is worse than no banner: it interrupts, then refuses. This names the cases
+  /// where the app owes the user a destination.
+  enum OpenAction: Equatable {
+    /// Nothing to open — the notification's content was the whole message.
+    case none
+    /// The screen-recording repair, which is an action rather than a page.
+    case resetScreenCapture
+    /// The founder/support thread the reply arrived in.
+    case openSupportThread
+  }
+
+  /// Resolve the tap destination from the notification's provenance.
+  ///
+  /// Support replies are matched on `assistantId`, not on their display title, because the title is
+  /// user-visible copy: renaming the banner must not silently disconnect its tap. The
+  /// screen-capture case still matches on title only because that is how its own delivery gates
+  /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
+  /// change with its own suppression-state migration.
+  static func openAction(assistantId: String, title: String) -> OpenAction {
+    if assistantId == SupportThreadRoute.assistantId { return .openSupportThread }
+    if title == screenCaptureResetTitle { return .resetScreenCapture }
+    return .none
+  }
+
   /// Handle screen capture reset action from notification click or action button
   private func handleScreenCaptureResetAction(source: String) {
     log("Screen capture reset triggered from \(source)")
     AnalyticsManager.shared.screenCaptureResetClicked(source: source)
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+  }
+
+  /// Bring up the support thread the tapped reply belongs to.
+  ///
+  /// The window is revealed first because a banner can arrive with the main window closed, which is
+  /// exactly when a founder reply is worth surfacing. Non-`private` so a test can drive this
+  /// without a real `UNUserNotificationCenter` delivery.
+  func openSupportThread(source: String) {
+    log("Support thread open requested from \(source)")
+    SupportThreadRoute.open()
   }
 
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
@@ -499,8 +510,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         authorizationSnapshot: authorizationSnapshot
       ),
       taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
-      focusSuppressed: FocusStorage.shared.currentStatus == .focused
-        || ProactiveTaskInterruptionSettings.isFocusSuppressed,
+      focusSuppressed: ProactiveTaskInterruptionSettings.isFocusSuppressed,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       now: now,
       calendar: calendar
@@ -606,9 +616,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: assistantId,
       authorizationSnapshot: authorizationSnapshot
     )
-
-    // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
-    sound.playCustomSound()
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
     UserNotificationCallbackBridge.add(request) { [weak self] result in
