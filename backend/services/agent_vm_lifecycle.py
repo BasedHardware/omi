@@ -43,6 +43,7 @@ ACTIVE_BOOT_IMAGE_MIGRATION_STATES = frozenset(
 PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES = frozenset({"candidate_creating", "candidate_ready", "candidate_deleted"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
+_MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 _SERVICE_ACCOUNT = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
 
@@ -353,7 +354,8 @@ def _claim_vm_lease_txn(
     transaction: Any,
     deletion_ref: Any,
     user_ref: Any,
-    uid: str,
+    recovery_ref: Any | None,
+    recovery_migration_id: str | None,
     vm_name: str,
     auth_token: str,
     owner: str,
@@ -375,7 +377,20 @@ def _claim_vm_lease_txn(
     release_changed = release_id is not None and reconcile.get("releaseId") != release_id
     same_release = release_id is None or not release_changed
     if reconcile.get("state") == "quarantined" and same_release:
-        return False
+        recovery_snapshot = recovery_ref.get(transaction=transaction) if recovery_ref is not None else None
+        recovery = recovery_snapshot.to_dict() if recovery_snapshot is not None and recovery_snapshot.exists else None
+        recorded_instance_id = str(vm.get("instanceId") or "")
+        if (
+            not isinstance(recovery, dict)
+            or recovery_migration_id != reconcile.get("durableMigration")
+            or recovery.get("migrationId") != recovery_migration_id
+            or recovery.get("state") not in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+            or recovery.get("oldVmName") != vm_name
+            or recovery.get("oldAuthToken") != auth_token
+            or recovery.get("targetRelease") != release_id
+            or (recorded_instance_id and str(recovery.get("oldInstanceId") or "") != recorded_instance_id)
+        ):
+            return False
     if float(reconcile.get("retryAt", 0) or 0) > now and same_release:
         return False
     lease_raw = reconcile.get("lease")
@@ -403,16 +418,29 @@ def _claim_vm_lease_txn(
 
 
 def claim_vm_lease(
-    uid: str, vm_name: str, auth_token: str, owner: str, release_id: str | None = None, now: float | None = None
+    uid: str,
+    vm_name: str,
+    auth_token: str,
+    owner: str,
+    release_id: str | None = None,
+    recovery_migration_id: str | None = None,
+    now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
     client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
+    recovery_ref = (
+        user_ref.collection("agentVmMigrations").document(recovery_migration_id)
+        if isinstance(recovery_migration_id, str) and _MIGRATION_ID.fullmatch(recovery_migration_id)
+        else None
+    )
     return bool(
         _claim_vm_lease_txn(
             client.transaction(),
             client.collection("account_deletions").document(uid),
-            client.collection("users").document(uid),
-            uid,
+            user_ref,
+            recovery_ref,
+            recovery_migration_id,
             vm_name,
             auth_token,
             owner,

@@ -1254,7 +1254,10 @@ async def reconcile_one(
     quarantine_detail = str(reconcile_state.get("lastError") or "operator action required")
     if terminal_quarantine and not _active_migration_candidate(vm):
         return ReconcileResult(uid, "quarantined", quarantine_detail)
-    if not await asyncio.to_thread(claim_vm_lease, uid, vm_name, auth_token, owner, release.release_id):
+    recovery_migration_id = str(reconcile_state.get("durableMigration") or "") if terminal_quarantine else None
+    if not await asyncio.to_thread(
+        claim_vm_lease, uid, vm_name, auth_token, owner, release.release_id, recovery_migration_id
+    ):
         return ReconcileResult(uid, "busy")
     now = time.time()
     missing_cleanup_grace_seconds = (
