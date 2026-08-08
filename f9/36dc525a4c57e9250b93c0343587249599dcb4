@@ -1,0 +1,28 @@
+backend/database/candidates.py
+  s_d5c991760196be::t_c211ddda761c3a 304,309-311
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_d5c991760196be::t_c211ddda761c3a 430
+backend/models/action_item.py
+  s_d5c991760196be::t_c211ddda761c3a 110-114,156-157
+  s_d5c991760196be::t_53a7d417bd273d 158-159
+backend/utils/conversations/process_conversation.py
+  s_d5c991760196be::t_c211ddda761c3a 15
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_d5c991760196be::t_22dda003d94976 145-146,968-971
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f936dc525a4c57e9250b93c0343587249599dcb4",
+  "prompts": {},
+  "sessions": {
+    "s_d5c991760196be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe211-e7a6-7da1-a56d-8c51322635f8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

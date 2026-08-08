@@ -1,0 +1,42 @@
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_d5c991760196be::t_947efd1d8e3322 169,175,270,327
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  s_d5c991760196be::t_f29b87b806bf16 129
+  s_d5c991760196be::t_c6a9b841e3568e 19-23,126-128,130-141
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_d5c991760196be::t_c6a9b841e3568e 133-136,494-497,897
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_d5c991760196be::t_c6a9b841e3568e 45,288,561-562
+desktop/macos/Desktop/Tests/ConversationDetailAutomationStateTests.swift
+  s_d5c991760196be::t_c6a9b841e3568e 78-82,89
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_d5c991760196be::t_c6a9b841e3568e 325,327-338
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_d5c991760196be::t_c6a9b841e3568e 267,510,633-636
+desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  s_d5c991760196be::t_c6a9b841e3568e 66-67
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_d5c991760196be::t_c6a9b841e3568e 230-245,250-254
+  s_d5c991760196be::t_58d9c2111020d8 246-249
+desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
+  s_d5c991760196be::t_c6a9b841e3568e 145-147,386-396,496
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_d5c991760196be::t_37ed3ba15f6b60 134,171
+  s_d5c991760196be::t_c6a9b841e3568e 174-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bbe5eed3fbdd1a7f5c0037050d3023bccfeba154",
+  "prompts": {},
+  "sessions": {
+    "s_d5c991760196be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe211-e7a6-7da1-a56d-8c51322635f8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

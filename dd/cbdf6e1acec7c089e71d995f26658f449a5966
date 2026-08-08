@@ -1,0 +1,218 @@
+desktop/macos/Desktop/Tests/ConversationDetailAutomationStateTests.swift
+  s_1be2305e1b81fe::t_f585ea93007710 35-47
+  s_d5c991760196be::t_91ae5b0aff7087 7-11
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_1be2305e1b81fe::t_ddd6e48a349b74 2,4,363-365,380-381
+  s_1be2305e1b81fe::t_998bee94e39bec 96-97,115,168-170,172-177,179-181,270,275-277,279-280,296,329-340,349-350,352-354,356-362,366-377,379,382-393,395-407
+  s_1be2305e1b81fe::t_cbfe98cf90a56f 408-410
+  s_d5c991760196be::t_56fa5e11145f2d 171,178,269,278,295,328,351,355
+  s_d5c991760196be::t_65264447dc9667 378,394
+desktop/macos/changelog/unreleased/20260808-home-task-provenance.json
+  s_1be2305e1b81fe::t_fb655bca382d64 1-3
+backend/tests/unit/test_task_transcript_provenance.py
+  s_1be2305e1b81fe::t_153b50450a55bf 1-52
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_1be2305e1b81fe::t_e1b358fd7a9e92 719-734,760-780,1081-1099
+  s_d5c991760196be::t_91ae5b0aff7087 5-9,31-32,121-124,126-147,149-152,154-161,163
+  s_d5c991760196be::t_5a31b0b6f3a5c3 165,167-168,170,388,394,397,402
+plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 66
+docs/api-reference/app-client-openapi.json
+  s_6ee6c64dccc4f3::t_a80c04c791bc8f 439-445,10384-10395,10421-10433,10449
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_1be2305e1b81fe::t_cf727fc93c16a4 34,44
+backend/utils/conversations/transcript_for_llm.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 11,33-59
+  s_1be2305e1b81fe::t_90614ec2485ef0 60-71
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_1be2305e1b81fe::t_ddd6e48a349b74 281-282
+  s_1be2305e1b81fe::t_43c7db6ffada1f 287,289,517-522
+  s_1be2305e1b81fe::t_af62689b49eb7e 523-525
+app/lib/backend/schema/gen/task_intelligence_wire.g.dart
+  s_1be2305e1b81fe::t_b90ec176382f7e 43,48-49,54,59-60,67,72-73,81,86-87
+app/lib/backend/schema/gen/action_items_folders_wire.g.dart
+  s_1be2305e1b81fe::t_37cc51e2945cb2 15,20-21,26,31-32,39,44-45,53,58-59
+desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  s_1be2305e1b81fe::t_511926247e2b74 10,23,33-42,47,66,83
+  s_1be2305e1b81fe::t_a6aababe53fbac 11-16
+  s_1be2305e1b81fe::t_b5a9caf554583e 26,44,64-65,69,86
+backend/models/structured.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 39
+backend/utils/task_intelligence/conversation_capture.py
+  s_1be2305e1b81fe::t_67311111719d05 57-78,86,92-96,103,112-117
+  s_1be2305e1b81fe::t_21617618dea400 123-124
+  s_1be2305e1b81fe::t_90614ec2485ef0 108-111,145-153,234,239
+  s_1be2305e1b81fe::t_9c81e553318e30 125-127
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_1be2305e1b81fe::t_03c5631d61bf7c 44,50,95-99,102,105,110,126-129,150,278,317-325
+  s_1be2305e1b81fe::t_04d4a6e05d7d99 124-125
+  s_1be2305e1b81fe::t_16fcca2db34ae1 326-328
+  s_1be2305e1b81fe::t_457f5a521d3c55 113
+  s_1be2305e1b81fe::t_507923a9c79226 122-123
+  s_1be2305e1b81fe::t_ddd6e48a349b74 91,112,114-116
+backend/utils/conversations/process_conversation.py
+  s_1be2305e1b81fe::t_90614ec2485ef0 263,1301,1317
+  s_1be2305e1b81fe::t_42f35a3336c2ee 280,317
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+  s_1be2305e1b81fe::t_9ef42719dc8c2b 371-372,421,423-429,434,445,454,471
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_1be2305e1b81fe::t_3e625a251a6945 93,97-98,143,150,155-159,200-201
+  s_1be2305e1b81fe::t_c697f7c879ad14 369,372
+backend/models/action_item.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 56-57,67-68
+backend/utils/llm/conversation_processing.py
+  s_1be2305e1b81fe::t_90614ec2485ef0 896
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_1be2305e1b81fe::t_b0234c8ebd17cc 398-399,401
+desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  s_6ee6c64dccc4f3::t_d3a3ff9f88a50d 157,174,193,198,211,1900,1905-1906,1911,1916-1917,1924,1929-1930,1934,1936,1941-1942
+app/lib/backend/schema/gen/conversation_wire.g.dart
+  s_1be2305e1b81fe::t_eee7e5c08d2434 102,119,138,158
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_1be2305e1b81fe::t_439b5d9ec43c1e 102-116
+  s_1be2305e1b81fe::t_cf727fc93c16a4 36,46,52,119-136,162,195,236,283-289,303,316,712
+  s_1be2305e1b81fe::t_ddd6e48a349b74 4-6,10-11
+  s_1be2305e1b81fe::t_bb11e956bfe4b9 117-118
+  s_1be2305e1b81fe::t_8c5bd247864344 399,412,428-437,447,457-460,464,473,475,530,532,565,569,584-586,597-600,666,703-710
+  s_1be2305e1b81fe::t_9ff103f336b2e3 711
+  s_1be2305e1b81fe::t_2a21e0f1d67582 713
+  s_d5c991760196be::t_56fa5e11145f2d 253-256
+  s_d5c991760196be::t_89bd8b5cae6455 257
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_1be2305e1b81fe::t_b0234c8ebd17cc 76-89,157-175,183-186,190-191,395,398,403
+  s_d5c991760196be::t_ebd49e9bdad20f 130-132,135-139
+  s_d5c991760196be::t_56fa5e11145f2d 176-182,187-189
+backend/models/structured_extraction.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 25-28,41
+backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
+  s_1be2305e1b81fe::t_44ee53e12c749a 237
+desktop/windows/src/renderer/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_f76fefa7c6823c 71,1676,1681
+web/admin/lib/services/omi-api/omiApi.generated.ts
+  s_1be2305e1b81fe::t_be465fa1049619 71,1676,1681
+web/app/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_f9c0d93eff6751 71,1676,1681
+web/personas-open-source/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_b17c7b0bcd8922 71,1676,1681
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
+  s_768c88a02ae202::t_bffc8c79835925 78
+  s_768c88a02ae202::t_a0103d06db68b8 147
+  s_768c88a02ae202::t_2c89a6c242cfc6 16,28-31,33,35,37-38,63-64,67-74,93,136-137,149,180,190
+  s_768c88a02ae202::t_eb005f0cd1fee1 144-146
+  s_768c88a02ae202::t_97cda8be816dad 98,172,185,194-195
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_768c88a02ae202::t_88468440f1ec2d 189,192-197,201-204,208-211,221,223-225,228-229,234,237,242,248,250-252,260-261
+  s_768c88a02ae202::t_be4975d3956e4b 179-188,190-191,198-200,205-207,212-213,222,226-227,230-231
+  s_6ee6c64dccc4f3::t_38480473197a77 68,77
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 76
+  s_6ee6c64dccc4f3::t_dfd9c4cfc40a76 47-48,55-63,65
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 54,64
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_768c88a02ae202::t_168668fda332a6 16
+  s_768c88a02ae202::t_4135b5d9ec8f6e 57-59,378-379,394-399,476-480
+  s_768c88a02ae202::t_c74d2d6b4c7c9a 481-482
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 22
+desktop/macos/e2e/flows/rewind.yaml
+  s_768c88a02ae202::t_f6ba36fe45f63c 30-31,46,68,86-87
+  s_768c88a02ae202::t_eb005f0cd1fee1 56
+desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
+  s_768c88a02ae202::t_e588182fc13458 85,92,149-150,224-225,369-371,390-394,404-405,413-414,417,423-424,460-462,464-466,468-469,472-475,477-481,483-484,486-488,491-502,504,511
+  s_768c88a02ae202::t_70270b8d2a0896 25,28-30,83-84,89-90,206,210-211,222,226,238,240,290,293,365,386-389,395-397,399-403,412,416,418-422,431,463
+  s_768c88a02ae202::t_676ceb62932088 398
+  s_768c88a02ae202::t_168668fda332a6 186
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  s_569f1df936cc22::t_66c73c2942d684 58
+  s_768c88a02ae202::t_559688758bee19 40
+  s_768c88a02ae202::t_168668fda332a6 82
+  s_768c88a02ae202::t_676ceb62932088 19-36,50-57,95
+  s_768c88a02ae202::t_4275eb798fe0d7 17-18,37-39
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_569f1df936cc22::t_14a86c011ad030 342
+  s_768c88a02ae202::t_4775a77e74f289 218,220-221,223,228,232-260
+  s_768c88a02ae202::t_c02d5306ee2fa4 217,219,222,224,226,230,261-263,327-341
+  s_768c88a02ae202::t_438d170102bf6c 225,227,229,231
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_768c88a02ae202::t_7ed4205ccafa17 2969,2975-2978
+  s_768c88a02ae202::t_cdbc83862117e9 2943
+  s_768c88a02ae202::t_e55bde9f61fbfe 2970-2974
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_768c88a02ae202::t_64041fa0dce635 2,196-203,208-213,298-299,764,900-901
+  s_768c88a02ae202::t_8384f65fcaaa90 148-149
+  s_6ee6c64dccc4f3::t_7f83da8d0497e8 214
+  s_768c88a02ae202::t_eb005f0cd1fee1 902-905
+  s_768c88a02ae202::t_ff8a8673eba144 825-827
+  s_768c88a02ae202::t_ec78afb112aebf 296-297,581-582,584,636,646,658,769-770,898-899,906
+  s_768c88a02ae202::t_a0103d06db68b8 490,894
+  s_768c88a02ae202::t_da2a374ef3f49f 907
+desktop/macos/changelog/unreleased/20260807-rewind-all-time-timeline.json
+  s_768c88a02ae202::t_676ceb62932088 2
+  s_768c88a02ae202::t_01e157a63f8d94 1,3
+desktop/macos/Desktop/Tests/RewindHistoryReachTests.swift
+  s_768c88a02ae202::t_b424f7cfae80ab 5-6
+.github/failure-classes/FC-hosted-control-window-drag-ownership.json
+  s_6ee6c64dccc4f3::t_e7a26d13ce954f 1-18
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_6ee6c64dccc4f3::t_d99714939dbf91 270,304,309,311-312,332
+  s_6ee6c64dccc4f3::t_38480473197a77 33,36,169,171,219,228,242,264,269,272,277-278,281,283,286-287,297-298,306,320,331
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 80,167-168,170,218,225-227,229-241,243-245,257-259,263,265,267-268,273-276,284-285,288-289,302-303,308,329-330,334,336-337
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 34-35
+  s_6ee6c64dccc4f3::t_dc172be06c0d9f 260-262,266,271,279-280,282,290-296,300-301,305,307,310,313-319,321-328,333,335
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 37,84-87,246-256,299
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_6ee6c64dccc4f3::t_38480473197a77 94,104,131,259
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 108,125-127,132-140
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 95,103,110,122,124,128-130,258
+  s_6ee6c64dccc4f3::t_6b5f2274e1a33c 109
+  s_6ee6c64dccc4f3::t_6b37bb2f87db34 111-121,123
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 107,225
+desktop/macos/e2e/flows/conversation-detail.yaml
+  s_d5c991760196be::t_91ae5b0aff7087 4,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ddcbdf6e1acec7c089e71d995f26658f449a5966",
+  "prompts": {},
+  "sessions": {
+    "s_1be2305e1b81fe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7b-ffaf-7d13-8b30-95513dcf6929",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_768c88a02ae202": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf5c-1a56-7530-81a8-4d8c09e07356",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_d5c991760196be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe211-e7a6-7da1-a56d-8c51322635f8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
