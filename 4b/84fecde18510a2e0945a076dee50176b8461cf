@@ -1,0 +1,37 @@
+backend/routers/mcp_sse.py
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 161-163,166-171,1472
+  s_ed40b9a2e1490d::t_b3c06398d5404c 164-165
+desktop/macos/Desktop/Tests/MemoryBankConnectorTests.swift
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 62-68,142-163
+docs/doc/developer/mcp/introduction.mdx
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 43-46
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 170-171,174-175,186-187,189,192-194
+  s_ed40b9a2e1490d::t_6d567b3ae576e5 195,1128,1133,1142,1145,1160
+desktop/macos/Desktop/Sources/Integrations/AgentContextSkillInstaller.swift
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 1-63
+desktop/macos/Desktop/Sources/MemoryBankConnector.swift
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 65,67-70,73-74,85-104
+  s_ed40b9a2e1490d::t_e73ddaaa5dabc5 105-107
+desktop/macos/changelog/unreleased/20260808-agent-context-connectors.json
+  s_ed40b9a2e1490d::t_b3c06398d5404c 1-3
+backend/tests/unit/test_mcp_data_endpoints.py
+  s_ed40b9a2e1490d::t_b3c06398d5404c 277
+  s_ed40b9a2e1490d::t_8ee3e70d130e29 261-276,278-281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4b84fecde18510a2e0945a076dee50176b8461cf",
+  "prompts": {},
+  "sessions": {
+    "s_ed40b9a2e1490d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe2ef-5607-7de0-9f1e-72f56f644841",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
