@@ -59,6 +59,8 @@ type PlainJson = null | boolean | number | string | readonly PlainJson[] | { rea
 
 export interface ApplicationRecallGenerationDigests {
   readonly authorization_generation_digest: string;
+  /** Adapter-owned record of the exact validated produced-render set. */
+  readonly synthesized_projection_generation_digest: string;
   readonly durable_generation_digest: string;
   readonly overlay_generation_digest: string;
   readonly declared_generation_digest: string;
@@ -357,6 +359,7 @@ const parsePageRequest = (request: ApplicationSynthesizedPageRequest): Readonly<
 
 const GENERATION_KEYS = Object.freeze([
   "authorization_generation_digest",
+  "synthesized_projection_generation_digest",
   "durable_generation_digest",
   "overlay_generation_digest",
   "declared_generation_digest",
@@ -463,10 +466,7 @@ interface CoherentGenerationSignature extends ApplicationRecallGenerationDigests
   readonly coverage_canonical: string;
 }
 
-interface GenerationSignature extends CoherentGenerationSignature {
-  /** Canonical digest of the exact owner-bound produced-render set. */
-  readonly synthesized_projection_generation_digest: string;
-}
+type GenerationSignature = CoherentGenerationSignature;
 
 const buildGenerationSignature = (
   input: ApplicationGrantProjectedTreeInputSnapshot,
@@ -542,6 +542,17 @@ interface AuthorizedRenderedCandidate {
   };
 }
 
+interface AuthorizedProducedRender {
+  readonly render: RenderNode;
+  readonly envelope: OwnerBoundSynthesizedProjectionEnvelope;
+  readonly candidate_ref: string;
+}
+
+interface AuthorizedProducedRenderManifest {
+  readonly renders: readonly AuthorizedProducedRender[];
+  readonly synthesized_projection_generation_digest: string;
+}
+
 /** Preserve RenderNode identity while rejecting hostile arrays and lookalikes. */
 const snapshotProducedRenders = (input: unknown): readonly RenderNode[] => {
   if (!Array.isArray(input) || isProxy(input) || Object.getPrototypeOf(input) !== Array.prototype) {
@@ -575,13 +586,25 @@ const snapshotProducedRenders = (input: unknown): readonly RenderNode[] => {
   return Object.freeze(renders);
 };
 
-const buildAuthorizedRenderedCandidates = (
+const synthesizedProjectionGenerationDigest = (
+  renders: readonly AuthorizedProducedRender[],
+): string => {
+  const identities = renders.map(({ render, envelope }) => ({
+    node_id: envelope.node_id,
+    render_generation: envelope.render_generation,
+    render_hash: envelope.render_hash,
+    model_version: render.model_version,
+  })).sort((left, right) => compareStrings(canonicalPlainJson(left), canonicalPlainJson(right)));
+  return sha256CanonicalContent({ version: "application-produced-render-set-v1", identities });
+};
+
+const buildAuthorizedProducedRenderManifest = (
+  projected: ApplicationGrantProjectedTreeInputSnapshot,
   input: unknown,
-  read: AuthorizedCoherentRead,
-): readonly AuthorizedRenderedCandidate[] => {
+): Readonly<AuthorizedProducedRenderManifest> => {
   const renders = snapshotProducedRenders(input);
-  const candidates = renders.map((render): AuthorizedRenderedCandidate => {
-    const envelope = buildOwnerBoundSynthesizedProjection(read.projected, render);
+  const authorized = renders.map((render): AuthorizedProducedRender => {
+    const envelope = buildOwnerBoundSynthesizedProjection(projected, render);
     if (parseSynthesizedText(envelope.synthesized_summary) === null
       || envelope.citations.length === 0
       || !INTERNAL_REF.test(envelope.node_id)
@@ -591,6 +614,48 @@ const buildAuthorizedRenderedCandidates = (
       return fail("owner-bound render lacks grounded synthesis provenance");
     }
     const candidateRef = `render:${envelope.render_hash}`;
+    return Object.freeze({ render, envelope, candidate_ref: candidateRef });
+  });
+  if (!uniqueStrings(authorized.map(({ envelope }) => envelope.node_id))) {
+    return fail("produced renders require unique node authority");
+  }
+  if (!uniqueStrings(authorized.map(({ candidate_ref: candidateRef }) => candidateRef))) {
+    return fail("produced renders require unique candidate identities");
+  }
+  return Object.freeze({
+    renders: Object.freeze(authorized),
+    synthesized_projection_generation_digest: synthesizedProjectionGenerationDigest(authorized),
+  });
+};
+
+/**
+ * Computes the adapter's exact produced-render-set generation receipt for a
+ * branded authorized projection. This validates the same owner/evidence
+ * boundary as application read, but returns no envelope and grants no read
+ * authority. Application read always recomputes and cross-checks the receipt.
+ */
+export const computeApplicationSynthesizedProjectionGenerationDigest = (
+  projected: ApplicationGrantProjectedTreeInputSnapshot,
+  renders: readonly RenderNode[],
+): string => {
+  if (!isApplicationGrantProjectedTreeInput(projected)) {
+    return fail("generation digest requires a branded authorized projection");
+  }
+  return buildAuthorizedProducedRenderManifest(projected, renders)
+    .synthesized_projection_generation_digest;
+};
+
+interface AuthorizedRenderedSet {
+  readonly candidates: readonly AuthorizedRenderedCandidate[];
+  readonly synthesized_projection_generation_digest: string;
+}
+
+const buildAuthorizedRenderedCandidates = (
+  input: unknown,
+  read: AuthorizedCoherentRead,
+): Readonly<AuthorizedRenderedSet> => {
+  const manifest = buildAuthorizedProducedRenderManifest(read.projected, input);
+  const candidates = manifest.renders.map(({ render, envelope, candidate_ref: candidateRef }): AuthorizedRenderedCandidate => {
     const nodeRef = `node:${sha256CanonicalContent(envelope.node_id)}`;
     return Object.freeze({
       envelope,
@@ -617,7 +682,10 @@ const buildAuthorizedRenderedCandidates = (
       }),
     });
   });
-  return Object.freeze(candidates);
+  return Object.freeze({
+    candidates: Object.freeze(candidates),
+    synthesized_projection_generation_digest: manifest.synthesized_projection_generation_digest,
+  });
 };
 
 const toKernelCandidate = (candidate: AuthorizedRenderedCandidate): AuthorizedRecallCandidate => Object.freeze({
@@ -642,18 +710,6 @@ const mergeCandidates = (
     return winner;
   });
   return Object.freeze(winners);
-};
-
-const synthesizedProjectionGenerationDigest = (
-  candidates: readonly AuthorizedRenderedCandidate[],
-): string => {
-  const identities = candidates.map((candidate) => ({
-    node_id: candidate.envelope.node_id,
-    render_generation: candidate.envelope.render_generation,
-    render_hash: candidate.envelope.render_hash,
-    model_version: candidate.synthesis_provenance.synthesis_version,
-  })).sort((left, right) => compareStrings(canonicalPlainJson(left), canonicalPlainJson(right)));
-  return sha256CanonicalContent({ version: "application-produced-render-set-v1", identities });
 };
 
 const collectForbiddenRefs = (
@@ -798,11 +854,14 @@ const canonicalOwnedJson = (value: PlainJson): string => {
   return `{${members.join(",")}}`;
 };
 
-interface LoadedApplicationRead {
+interface CoherentApplicationRead {
   readonly read: AuthorizedCoherentRead;
   readonly completeness: RecallCompletenessResult;
   readonly signature: Readonly<GenerationSignature>;
   readonly snapshot_attestation: Readonly<ApplicationReadSnapshotAttestation>;
+}
+
+interface LoadedApplicationRead extends CoherentApplicationRead {
   readonly winners: readonly AuthorizedRenderedCandidate[];
 }
 
@@ -830,10 +889,9 @@ interface PageSlice {
 const buildSnapshotAttestation = (
   read: AuthorizedCoherentRead,
   coverage: RecallCompletenessInput,
-  synthesizedGenerationDigest: string,
 ): Readonly<ApplicationReadSnapshotAttestation> => Object.freeze({
   ...read.coherent.read_coordinates,
-  synthesized_projection_generation_digest: synthesizedGenerationDigest,
+  synthesized_projection_generation_digest: read.signature.synthesized_projection_generation_digest,
   projected_content_digest: read.signature.projected_content_digest,
   durable_generation_digest: read.signature.durable_generation_digest,
   overlay_generation_digest: read.signature.overlay_generation_digest,
@@ -851,9 +909,9 @@ const buildReadAttestation = (
   last_visible_key: lastVisibleKey,
 });
 
-const loadInternalApplicationRead = (
+const loadCoherentApplicationRead = (
   ports: SnapshottedPorts,
-): LoadedApplicationRead => {
+): CoherentApplicationRead => {
   const read = loadAuthorizedCoherentRead(ports);
   const completeness = computeRecallCompleteness(read.coherent.coverage);
   if (parseRecallFrontier(completeness.frontiers.declared_frontier) === null
@@ -871,39 +929,50 @@ const loadInternalApplicationRead = (
     return fail("accepted and STM synthesized search requires a produced-render boundary");
   }
 
-  const durableRaw = Reflect.apply(ports.loadDurableRenders, undefined, [read.projected]);
-  const durable = buildAuthorizedRenderedCandidates(durableRaw, read);
-  const winners = mergeCandidates(durable);
-  const synthesizedGenerationDigest = synthesizedProjectionGenerationDigest(durable);
-  const signature: Readonly<GenerationSignature> = Object.freeze({
-    ...read.signature,
-    synthesized_projection_generation_digest: synthesizedGenerationDigest,
-  });
-  const snapshotAttestation = buildSnapshotAttestation(read, read.coherent.coverage, synthesizedGenerationDigest);
   return Object.freeze({
     read,
     completeness,
-    signature,
-    snapshot_attestation: snapshotAttestation,
-    winners,
+    signature: read.signature,
+    snapshot_attestation: buildSnapshotAttestation(read, read.coherent.coverage),
   });
 };
+
+const validateDurableApplicationRead = (
+  coherent: CoherentApplicationRead,
+  ports: SnapshottedPorts,
+): LoadedApplicationRead => {
+  const durableRaw = Reflect.apply(ports.loadDurableRenders, undefined, [coherent.read.projected]);
+  const durable = buildAuthorizedRenderedCandidates(durableRaw, coherent.read);
+  if (durable.synthesized_projection_generation_digest
+    !== coherent.signature.synthesized_projection_generation_digest) {
+    return fail("coherent synthesized projection generation disagrees with exact produced render set");
+  }
+  const winners = mergeCandidates(durable.candidates);
+  return Object.freeze({ ...coherent, winners });
+};
+
+const loadInternalApplicationRead = (
+  ports: SnapshottedPorts,
+): LoadedApplicationRead => validateDurableApplicationRead(loadCoherentApplicationRead(ports), ports);
 
 const prepareApplicationRead = (
   request: ApplicationSynthesizedPageRequest,
   ports: SnapshottedPorts,
 ): PreparedApplicationRead => {
-  const loaded = loadInternalApplicationRead(ports);
+  const coherent = loadCoherentApplicationRead(ports);
   let afterVisibleKey: string | null = null;
   if (request.cursor !== null) {
-    // Verification is bound to the derived produced-render-set digest. Codec
-    // errors intentionally retain their own public invalid-cursor type.
-    const verified = Reflect.apply(ports.verifyCursor, undefined, [request.cursor, loaded.snapshot_attestation]);
+    // Verification binds the adapter's coherent produced-render-set receipt
+    // before any render or candidate work. The receipt is recomputed and
+    // cross-checked immediately below; codec errors retain their own public
+    // invalid-cursor type.
+    const verified = Reflect.apply(ports.verifyCursor, undefined, [request.cursor, coherent.snapshot_attestation]);
     if (typeof verified !== "string" || !STABLE_VISIBLE_KEY.test(verified)) {
       return fail("cursor verifier returned an invalid stable visible key");
     }
     afterVisibleKey = verified;
   }
+  const loaded = validateDurableApplicationRead(coherent, ports);
   return Object.freeze({ ...loaded, after_visible_key: afterVisibleKey });
 };
 

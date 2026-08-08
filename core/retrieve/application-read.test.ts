@@ -17,6 +17,7 @@ import {
 
 import {
   ApplicationReadInvalidatedError,
+  computeApplicationSynthesizedProjectionGenerationDigest,
   readApplicationSynthesizedPage,
   readApplicationSynthesizedPageWithAttestation,
   type ApplicationReadCoherentCoordinates,
@@ -69,6 +70,7 @@ const project = (
 
 const generations = (suffix = "a"): ApplicationRecallGenerationDigests => ({
   authorization_generation_digest: digest(`authorization:${suffix}`),
+  synthesized_projection_generation_digest: digest(`synthesized:${suffix}`),
   durable_generation_digest: digest(`durable:${suffix}`),
   overlay_generation_digest: digest(`overlay:${suffix}`),
   declared_generation_digest: digest(`declared:${suffix}`),
@@ -123,10 +125,15 @@ const loadConfig = (options: {
   timestamp?: number;
 } = {}): LoadConfig => {
   const graph = options.graph ?? snapshot();
-  const generation = options.generation ?? generations();
+  const projected = project(graph);
+  const generation = {
+    ...(options.generation ?? generations()),
+    synthesized_projection_generation_digest:
+      computeApplicationSynthesizedProjectionGenerationDigest(projected, []),
+  };
   return {
     graph,
-    projected: project(graph),
+    projected,
     generations: generation,
     coverage: options.coverage ?? completeCoverage(),
     coordinates: coordinates(generation, options.coordinateSuffix, options.timestamp),
@@ -161,7 +168,20 @@ const withProducedRenders = async (
     schema_version: "schema-v1",
   });
   const byNode = new Map(renders.map((render) => [render.node_id, render]));
-  return { ...config, renders: selectedNodes.map((node) => byNode.get(node.node_id)!) };
+  const selectedRenders = selectedNodes.map((node) => byNode.get(node.node_id)!);
+  return {
+    ...config,
+    generations: {
+      ...config.generations,
+      // Citationless renders are intentionally retained only for the negative
+      // produced-authority reproducer below; the public precompute helper must
+      // and does reject them.
+      synthesized_projection_generation_digest: citations.length === 0
+        ? config.generations.synthesized_projection_generation_digest
+        : computeApplicationSynthesizedProjectionGenerationDigest(config.projected, selectedRenders),
+    },
+    renders: selectedRenders,
+  };
 };
 
 const canonicalVisibleTuple = (render: RenderNode): string => JSON.stringify([
@@ -375,6 +395,24 @@ describe("production-neutral application synthesized read", () => {
     }
   });
 
+  test("rejects independently produced authority for the same node before recall merge", async () => {
+    const base = loadConfig();
+    const first = await withProducedRenders(base, ["First independently produced render"]);
+    const second = await withProducedRenders(base, ["Second independently produced render"]);
+    const firstRender = first.renders[0]!;
+    const secondRender = second.renders[0]!;
+    expect(firstRender).not.toBe(secondRender);
+    expect(firstRender.node_id).toBe(secondRender.node_id);
+    expect(firstRender.render_hash).not.toBe(secondRender.render_hash);
+
+    const fixture = harness({
+      loads: [{ ...base, renders: [firstRender, secondRender] }],
+    });
+    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports))
+      .rejects.toThrow("unique node authority");
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
   test("keeps accepted and STM completeness-only until they have a produced-render boundary", async () => {
     const limited = loadConfig({ coverage: completeCoverage({
       accepted: { state: "pending", searched_frontier: null },
@@ -460,9 +498,7 @@ describe("production-neutral application synthesized read", () => {
     const base = loadConfig({ coordinateSuffix: "stable" });
     const first = await withProducedRenders(base, ["First render set"]);
     const replacement = await withProducedRenders(base, ["Replacement render set"]);
-    const sets = [first.renders, replacement.renders, replacement.renders, replacement.renders];
-    let durableCall = 0;
-    const fixture = harness({ loads: [base], durable: () => sets[durableCall++]! });
+    const fixture = harness({ loads: [first, replacement, replacement, replacement] });
     const result = await parsed(fixture);
     expect(result.page.items.map((item) => String(item.text))).toEqual(["Replacement render set"]);
     expect(fixture.counters.durable).toBe(4);
@@ -473,9 +509,7 @@ describe("production-neutral application synthesized read", () => {
     const base = loadConfig({ coordinateSuffix: "stable" });
     const first = await withProducedRenders(base, ["Same summary"], ["e1"], "render-model-v1");
     const second = await withProducedRenders(base, ["Same summary"], ["e1"], "render-model-v2");
-    const sets = [first.renders, second.renders, first.renders, second.renders];
-    let durableCall = 0;
-    const fixture = harness({ loads: [base], durable: () => sets[durableCall++]! });
+    const fixture = harness({ loads: [first, second, first, second] });
     await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadInvalidatedError);
     expect(fixture.counters.durable).toBe(4);
     expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
@@ -524,7 +558,7 @@ describe("production-neutral application synthesized read", () => {
     expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
   });
 
-  test("verifies a raw cursor after deriving its owner-bound produced-render attestation", async () => {
+  test("verifies a raw cursor from the coherent receipt before any render or candidate work", async () => {
     const config = await withProducedRenders(loadConfig(), ["Cursor-bound"]);
     const expected = expectedVisibleKey(config.renders[0]!);
     const fixture = harness({
@@ -537,7 +571,7 @@ describe("production-neutral application synthesized read", () => {
       },
     });
     await parsed(fixture, { limit: 1, cursor: "cursor.valid" });
-    expect(fixture.sequence.slice(0, 4)).toEqual(["resolve", "coherent", "durable", "verify"]);
+    expect(fixture.sequence.slice(0, 4)).toEqual(["resolve", "coherent", "verify", "durable"]);
 
     const invalid = new TestInvalidCursorError();
     const rejected = harness({ loads: [config], verify: () => { throw invalid; } });
@@ -547,8 +581,28 @@ describe("production-neutral application synthesized read", () => {
     } catch (error) {
       expect(error).toBe(invalid);
     }
-    expect(rejected.counters.durable).toBe(1);
+    expect(rejected.counters.durable).toBe(0);
     expect(outwardCounts(rejected.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("rejects a false coherent render-set receipt after cursor verification and before outward work", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Digest-bound"]);
+    const wrong = {
+      ...config,
+      generations: {
+        ...config.generations,
+        synthesized_projection_generation_digest: digest("wrong-produced-render-set"),
+      },
+    };
+    const fixture = harness({
+      loads: [wrong],
+      verify: () => expectedVisibleKey(config.renders[0]!),
+    });
+    await expect(readApplicationSynthesizedPage({ limit: 1, cursor: "cursor.valid" }, fixture.ports))
+      .rejects.toThrow("coherent synthesized projection generation disagrees");
+    expect(fixture.sequence.slice(0, 4)).toEqual(["resolve", "coherent", "verify", "durable"]);
+    expect(fixture.counters.durable).toBe(1);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
   });
 
   test("requires dedicated fixed-format keyed visible, item, citation, and trace handles", async () => {
