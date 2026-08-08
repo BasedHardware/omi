@@ -192,6 +192,9 @@ importers:
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@omi-core/dev-recall-stub':
+        specifier: workspace:*
+        version: link:../dev-recall-stub
       '@omi-core/domain':
         specifier: workspace:*
         version: link:../domain

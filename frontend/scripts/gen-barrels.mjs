@@ -13,6 +13,7 @@ const BARRELS = [
   ["contracts/src/index.ts", ["", "bridge", "domain"]],
   ["packages/adapters-legacy/src/index.ts", [""]],
   ["packages/adapters-platform/src/index.ts", [""]],
+  ["packages/dev-recall-stub/src/index.ts", [""]],
   ["packages/domain/src/index.ts", [""]],
   ["packages/bridge-web/src/index.ts", [""]],
   ["packages/testkit/src/index.ts", [""]],
