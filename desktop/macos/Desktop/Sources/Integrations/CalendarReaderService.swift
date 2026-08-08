@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Models
 
-struct CalendarEvent: Identifiable {
+struct CalendarEvent: Identifiable, Sendable {
   let id: String
   let summary: String
   let startTime: String
@@ -234,9 +234,15 @@ actor CalendarReaderService {
   ) async throws
     -> [CalendarEvent]
   {
-    if userInitiated {
+if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
+    let oauth = GoogleOAuthConnectionManager.shared
+    if oauth.hasGrants() {
+      return try await readEventsViaOAuth(
+        manager: oauth, daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+    }
+
     await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack,
@@ -245,6 +251,62 @@ actor CalendarReaderService {
       userInitiated: userInitiated
     )
     return events.sorted { $0.startTime > $1.startTime }
+  }
+
+  private func readEventsViaOAuth(
+    manager: GoogleOAuthConnectionManager,
+    daysBack: Int,
+    daysForward: Int,
+    maxResults: Int
+  ) async throws -> [CalendarEvent] {
+    let grants = manager.activeConnections()
+    guard !grants.isEmpty else { throw CalendarReaderError.sessionExpired }
+    var merged: [String: CalendarEvent] = [:]
+    var successfulReads = false
+    var firstFailure: CalendarReaderError?
+    for grant in grants {
+      do {
+        let token = try await manager.accessToken(account: grant.account)
+        let events = try await GoogleOAuthCalendarReader.readEvents(
+          token: token, daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+        successfulReads = true
+        for event in events {
+          merged[event.id] = event
+        }
+      } catch let error as GoogleOAuthReaderError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.calendarError(from: error)
+      } catch let error as GoogleOAuthError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.calendarError(from: error)
+      } catch {
+        firstFailure = firstFailure ?? .networkError(error.localizedDescription)
+      }
+    }
+    if successfulReads {
+      return Array(
+        merged.values.sorted { $0.startTime > $1.startTime }.prefix(maxResults))
+    }
+    throw firstFailure ?? CalendarReaderError.sessionExpired
+  }
+
+  private static func calendarError(from error: Error) -> CalendarReaderError {
+    switch error {
+    case GoogleOAuthReaderError.reconnectRequired:
+      return .sessionExpired
+    case GoogleOAuthReaderError.http(let status):
+      return .networkError("Google returned HTTP \(status)")
+    case GoogleOAuthReaderError.network(let detail):
+      return .networkError(detail)
+    case GoogleOAuthError.reconnectRequired, GoogleOAuthError.invalidGrant:
+      return .sessionExpired
+    default:
+      return .networkError(error.localizedDescription)
+    }
   }
 
   /// Lightweight functional probe — does the integration actually work right now?
@@ -259,20 +321,24 @@ actor CalendarReaderService {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     do {
-      await APIKeyService.shared.waitForKeys()
-      _ = try fetchCalendarViaCookies(
-        daysBack: 1,
-        daysForward: 1,
-        maxResults: 1,
-        userInitiated: userInitiated
-      )
+let manager = GoogleOAuthConnectionManager.shared
+      if manager.hasGrants() {
+        _ = try await readEventsViaOAuth(
+          manager: manager, daysBack: 1, daysForward: 1, maxResults: 1)
+      } else {
+        await APIKeyService.shared.waitForKeys()
+        _ = try fetchCalendarViaCookies(
+          daysBack: 1,
+          daysForward: 1,
+          maxResults: 1,
+          userInitiated: userInitiated
+        )
+      }
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
-      case .notSignedIn, .noBrowserFound:
+      case .notSignedIn, .noBrowserFound, .sessionExpired:
         return .needsSignIn(message: error.errorDescription ?? "Sign into Google to connect.")
-      case .sessionExpired:
-        return .needsSignIn(message: error.errorDescription ?? "Your Google session expired.")
       default:
         return .error(message: error.errorDescription ?? "Couldn't verify the connection.")
       }
@@ -340,7 +406,7 @@ actor CalendarReaderService {
     for attempt in 1...maxAttempts {
       do {
         if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+          || UserDefaults.standard.bool(forKey: .forceSynthesisFail)
         {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
@@ -531,10 +597,11 @@ actor CalendarReaderService {
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    let browserConfigs = BrowserGoogleSession.configsForPython(
-      logPrefix: "CalendarReaderService",
-      userInitiated: userInitiated
-    )
+let browserConfigs = GmailSelectionStore.filter(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "CalendarReaderService",
+        userInitiated: userInitiated
+      ))
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound

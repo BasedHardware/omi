@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import Sparkle
 import SwiftUI
@@ -7,6 +8,150 @@ import WebKit
 extension SettingsContentView {
   var gmailReaderSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Google OAuth accounts
+      settingsCard(settingId: "advanced.gmail.oauth") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            Image(systemName: "person.crop.circle.badge.plus")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+              .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Google accounts")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+              Text(googleOAuthSummary)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.tertiary)
+            }
+
+            Spacer()
+
+            Button(action: {
+              Task { await connectGoogleOAuth() }
+            }) {
+              if isConnectingGoogleOAuth {
+                ProgressView()
+                  .scaleEffect(0.7)
+                  .frame(width: 90, height: 22)
+              } else {
+                Text(googleOAuthAccounts.isEmpty ? "Connect" : "Add account")
+                  .scaledFont(size: OmiType.body, weight: .medium)
+              }
+            }
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            .disabled(isConnectingGoogleOAuth)
+
+            if !(GoogleOAuth.clientId ?? "").isEmpty {
+              Button("Edit") {
+                promptGoogleOAuthClientId()
+              }
+              .buttonStyle(.plain)
+              .foregroundColor(Ink.secondary)
+            }
+          }
+
+          if let googleOAuthMessage {
+            Text(googleOAuthMessage)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.errorRed)
+          }
+
+          if (GoogleOAuth.clientId ?? "").isEmpty {
+            Text(
+              "First connect asks for a Google OAuth client ID — create one "
+                + "of type \"Desktop app\" in Google Cloud Console and enable "
+                + "the Gmail API and Google Calendar API."
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.tertiary)
+          }
+
+          // account is optional on pre-fix grants; index-based identity keeps
+          // the row list stable even if two legacy grants both lack an email.
+          ForEach(Array(googleOAuthAccounts.enumerated()), id: \.offset) { _, account in
+            HStack(spacing: OmiSpacing.md) {
+              Image(systemName: "envelope")
+                .foregroundColor(Ink.secondary)
+                .frame(width: 16, height: 16)
+              Text(account.account ?? "Connected account")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.primary)
+              if account.needsReconnect {
+                Text("Reconnect needed")
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.errorRed)
+              }
+              Spacer()
+              if !account.needsReconnect,
+                account.account != GoogleOAuthConnectionManager.shared.primaryConnection()?.account
+              {
+                Button("Use for reads") {
+                  _ = GoogleOAuthConnectionManager.shared.selectPrimaryAccount(account.account ?? "")
+                  loadGoogleOAuthAccounts()
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Ink.secondary)
+              }
+              Button(action: {
+                Task {
+                  if account.needsReconnect {
+                    // "Reconnect" must re-run the consent flow, not revoke
+                    // and delete the stored grant.
+                    await connectGoogleOAuth()
+                  } else {
+                    await disconnectGoogleOAuth(account.account)
+                  }
+                }
+              }) {
+                Text(account.needsReconnect ? "Reconnect" : "Disconnect")
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+              }
+              .buttonStyle(.plain)
+              .foregroundColor(Ink.secondary)
+            }
+          }
+        }
+      }
+
+      // Email account selection
+      settingsCard(settingId: "advanced.gmail.account") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.crop.circle.badge.checkmark")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Email account")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text(gmailAccountSummary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.tertiary)
+          }
+
+          Spacer()
+
+          Button(action: {
+            Task { await probeGmailAccounts() }
+          }) {
+            if isProbingGmailAccounts {
+              ProgressView()
+                .scaleEffect(0.7)
+                .frame(width: 70, height: 22)
+            } else {
+              Text("Choose…")
+                .scaledFont(size: OmiType.body, weight: .medium)
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(isProbingGmailAccounts)
+        }
+      }
+
       // Read Gmail button
       settingsCard(settingId: "advanced.gmail.read") {
         HStack(spacing: OmiSpacing.lg) {
@@ -107,18 +252,144 @@ extension SettingsContentView {
         }
       }
     }
+    .sheet(isPresented: $showingGmailAccountPicker) {
+      GmailAccountPickerView(
+        accounts: gmailAccounts,
+        selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+        onSelect: { cookiePath, label in
+          selectGmailAccount(cookiePath, label: label)
+        },
+        onCancel: { showingGmailAccountPicker = false }
+      )
+    }
+    .onAppear {
+      loadGoogleOAuthAccounts()
+    }
+  }
+
+  var gmailAccountSummary: String {
+    let label = GmailSelectionStore.selectedAccountLabel
+    return label.isEmpty ? "Automatic — first readable browser account" : label
+  }
+
+  func probeGmailAccounts() async {
+    guard !isProbingGmailAccounts else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    guard let accounts = try? await GmailAccountProbe.availableAccounts(), !accounts.isEmpty else {
+      return
+    }
+    gmailAccounts = accounts
+    showingGmailAccountPicker = true
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    gmailReadGeneration += 1
+  }
+
+  var googleOAuthSummary: String {
+    if googleOAuthAccounts.isEmpty {
+      return "Connect Gmail and Calendar over OAuth — no browser cookies."
+    }
+    let activeCount = googleOAuthAccounts.filter { !$0.needsReconnect }.count
+    let storedCount = googleOAuthAccounts.count
+    if !googleOAuthIsVerified {
+      return "\(storedCount) account\(storedCount == 1 ? "" : "s") stored — verifying Gmail and Calendar."
+    }
+    return activeCount == 1
+      ? "1 account verified — Gmail and Calendar read through OAuth."
+      : "\(activeCount) accounts verified — Gmail and Calendar read through OAuth."
+  }
+
+  func loadGoogleOAuthAccounts() {
+    googleOAuthAccounts = GoogleOAuthConnectionManager.shared.connections()
+    googleOAuthIsVerified = false
+    guard !googleOAuthAccounts.isEmpty else { return }
+    googleOAuthIsVerifying = true
+    Task {
+      let gmail = await GmailReaderService.shared.verifyConnection()
+      let calendar = await CalendarReaderService.shared.verifyConnection()
+      await MainActor.run {
+        googleOAuthIsVerifying = false
+        googleOAuthIsVerified = if case .connected = gmail, case .connected = calendar { true } else { false }
+        googleOAuthAccounts = GoogleOAuthConnectionManager.shared.connections()
+      }
+    }
+  }
+
+  func connectGoogleOAuth() async {
+    if (GoogleOAuth.clientId ?? "").isEmpty {
+      promptGoogleOAuthClientId()
+      guard let clientId = GoogleOAuth.clientId, !clientId.isEmpty else {
+        return
+      }
+    }
+    isConnectingGoogleOAuth = true
+    defer {
+      isConnectingGoogleOAuth = false
+      loadGoogleOAuthAccounts()
+    }
+    do {
+      _ = try await GoogleOAuthConnectionManager.shared.connect()
+      googleOAuthMessage = nil
+    } catch {
+      googleOAuthMessage = error.localizedDescription
+    }
+  }
+
+  func disconnectGoogleOAuth(_ account: String?) async {
+    defer { loadGoogleOAuthAccounts() }
+    do {
+      try await GoogleOAuthConnectionManager.shared.disconnect(account: account)
+      googleOAuthMessage = nil
+    } catch {
+      googleOAuthMessage = error.localizedDescription
+    }
+  }
+
+  func promptGoogleOAuthClientId() {
+    let alert = NSAlert()
+    alert.messageText = "Google OAuth client ID"
+    alert.informativeText =
+      "Create an OAuth client of type \"Desktop app\" in Google Cloud "
+      + "Console, enable the Gmail API and Google Calendar API, and paste "
+      + "the client ID here. The client secret is optional — Google's newer "
+      + "Desktop app clients require it at the token endpoint."
+    let idField = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
+    idField.placeholderString = "Client ID"
+    let secretField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
+    secretField.placeholderString = "Client secret (optional)"
+    let stack = NSStackView(views: [idField, secretField])
+    stack.orientation = .vertical
+    stack.spacing = 8
+    alert.accessoryView = stack
+    alert.addButton(withTitle: "Connect")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    let trimmedID = idField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedID.isEmpty else { return }
+    GoogleOAuth.clientId = trimmedID
+    let trimmedSecret = secretField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    GoogleOAuth.clientSecret = trimmedSecret.isEmpty ? nil : trimmedSecret
   }
 
   func readGmail() async {
+    let readGeneration = gmailReadGeneration
     isReadingGmail = true
     gmailReadError = nil
     gmailMemoriesSaved = 0
 
     do {
-      let emails = try await GmailReaderService.shared.readRecentEmails(
+let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 50,
         userInitiated: true
       )
+      guard readGeneration == gmailReadGeneration else {
+        isReadingGmail = false
+        return
+      }
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
@@ -126,6 +397,11 @@ extension SettingsContentView {
       if !emails.isEmpty {
         isSavingGmailMemories = true
         let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        guard readGeneration == gmailReadGeneration else {
+          isSavingGmailMemories = false
+          isReadingGmail = false
+          return
+        }
         gmailMemoriesSaved = result.saved
         isSavingGmailMemories = false
       }

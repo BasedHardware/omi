@@ -67,6 +67,21 @@ struct OnboardingDataSourcesStepView: View {
           await coordinator.startBackgroundInsightsIfNeeded()
         }
       }
+      .sheet(
+        isPresented: $coordinator.showingGmailAccountPicker,
+        onDismiss: {
+          coordinator.cancelGmailAccountSelection()
+        }
+      ) {
+        GmailAccountPickerView(
+          accounts: coordinator.gmailAccounts,
+          selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+          onSelect: { cookiePath, label in
+            coordinator.selectGmailAccount(cookiePath, label: label)
+          },
+          onCancel: { coordinator.cancelGmailAccountSelection() }
+        )
+      }
     }
   }
 
@@ -101,8 +116,15 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.gmailInsightsFinished,
-        scanDeferred: coordinator.gmailInsightsDeferred,
-        scanFailed: coordinator.gmailInsightsFailed
+scanDeferred: coordinator.gmailInsightsDeferred,
+        scanFailed: coordinator.gmailInsightsFailed,
+        actionTitle: "Choose account",
+        action: {
+          Task {
+            await coordinator.loadGmailAccounts()
+            coordinator.showingGmailAccountPicker = true
+          }
+        }
       )
       listDivider
 
