@@ -134,7 +134,20 @@ jobs:
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+        env:
+          PR_BODY_FILE: /tmp/main-push-commit-body.txt
+        run: |
+          # On main pushes there is no PR body. GitHub folds the PR description
+          # into the merge commit message (fetch-depth: 0 gives us the full
+          # commit), so pass that through --pr-body-file instead of skipping the
+          # body-requiring checks. Without this, product-invariants cannot see
+          # the citations the merge commit carries and every main-push Hygiene
+          # run reports them as missing (see #9744). Fail-closed is preserved:
+          # a direct push whose message omits required invariant IDs still fails.
+          git log -1 --format=%B HEAD > "$PR_BODY_FILE"
+          python3 .github/scripts/run_checks.py --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --pr-body-file "$PR_BODY_FILE"
 
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
