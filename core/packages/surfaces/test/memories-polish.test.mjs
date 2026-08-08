@@ -36,13 +36,14 @@ test("shared chrome exposes platform hierarchy without fake destinations", async
   const styles = await read("src/production/styles.css");
   assert.match(source, /aria-hidden="true" focusable="false"/);
   assert.match(source, /active === "conversations" \|\| active === "memories"/);
-  assert.match(source, /<span aria-disabled="true"><ChromeIcon name="home"/);
+  assert.match(source, /href=\{href\("home"\)\}/);
+  assert.match(source, /aria-current=\{active === "home" \? "page" : undefined\}/);
   assert.match(source, /<span aria-disabled="true"><ChromeIcon name="apps"/);
   assert.match(styles, /html\[data-platform="desktop"\].*production-nav:first-child/);
   assert.match(styles, /html\[data-platform="mobile"\].*production-nav:last-child/);
   assert.match(styles, /env\(safe-area-inset-bottom/);
   assert.match(styles, /focus-visible/);
   assert.doesNotMatch(styles, /@media\s*\(/);
-  // red-proof: replacing disabled spans with links would advertise unsupported
-  // routes; dropping the nested active rule leaves Memories with no mobile tab.
+  // red-proof: Home is a supported query surface, while placeholder links stay
+  // disabled; dropping the nested active rule leaves Memories with no mobile tab.
 });

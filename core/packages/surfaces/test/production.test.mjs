@@ -108,12 +108,14 @@ test("production chrome preserves QA context while clearing fixture selection", 
   assert.match(source, /params\.delete\("state"\)/);
   assert.match(source, /params\.get\("platform"\)|location\.search/);
   assert.match(source, /href\("tasks"\)/);
+  assert.match(source, /href\("home"\)/);
+  assert.match(source, /active === "home" \? "page"/);
   assert.match(source, /active === "tasks" \? "page"/);
   assert.match(source, /export function ProductionLibrarySegment/);
   // red-proof: route links must not strand mobile/platform/profile QA on the
   // prior fixture, while profile remains available for the bridge shell. A
-  // Tasks route must also identify itself in both navs without inheriting the
-  // Library-only segmented rail.
+  // Home and Tasks must identify themselves in both navs without inheriting
+  // the Library-only segmented rail.
 });
 
 test("desktop glass chrome keeps the reference hierarchy without changing mobile navigation", async () => {

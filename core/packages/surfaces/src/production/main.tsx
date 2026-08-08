@@ -8,6 +8,7 @@ import { ConversationsStore, FoldersStore, MemoriesStore, TasksStore } from "@om
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
+import { HomeProduction } from "./HomeProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
@@ -16,11 +17,13 @@ import "./styles.css";
 const query = new URLSearchParams(location.search);
 const requestedRoute = query.get("route");
 const requestedQa = query.get("qa");
-const route: "memories" | "conversations" | "tasks" = requestedRoute === "tasks" || requestedQa === "tasks"
+const route: "home" | "memories" | "conversations" | "tasks" = requestedRoute === "tasks" || requestedQa === "tasks"
   ? "tasks"
   : requestedRoute === "conversations" || requestedQa === "conversations" || requestedQa === "conversation-detail"
     ? "conversations"
-    : "memories";
+    : requestedRoute === "memories" || requestedQa === "memories"
+      ? "memories"
+      : "home";
 const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
@@ -95,8 +98,11 @@ if (query.get("lab") === "1") {
     ? fixtureValue as TaskFixtureState
     : undefined;
   const detailId = query.get("conversation") ?? (requestedQa === "conversation-detail" && conversationFixture ? fixtureConversationDetailId(conversationFixture) : undefined);
+  const homeFixture = requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
-  if (taskFixture) {
+  if (homeFixture) {
+    root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
+  } else if (taskFixture) {
     root.render(<StrictMode><TasksProduction store={fixtureTaskStore(taskFixture)} fixture={taskFixture} locale={locale} translate={translateTasks} now={TASK_FIXED_NOW} onReady={() => emitReady(`fixture:${taskFixture}`)} /></StrictMode>);
   } else if (conversationFixture) {
     root.render(<StrictMode><ConversationsProduction store={fixtureConversationStore(conversationFixture, requestedQa === "conversation-detail")} foldersStore={fixtureFolderStore()} fixture={conversationFixture} detailId={detailId} locale={locale} onReady={() => emitReady(`fixture:${conversationFixture}`)} /></StrictMode>);
@@ -111,7 +117,15 @@ if (query.get("lab") === "1") {
       try {
         const bridge = await openWebStorageBridge(profile);
         const http = bridgeHttpClient();
-        if (route === "tasks") {
+        if (route === "home") {
+          const env = realEnv();
+          const [memories, conversations] = await Promise.all([
+            MemoriesStore.open(bridge, env, http),
+            ConversationsStore.open(bridge, env, http),
+          ]);
+          await Promise.allSettled([memories.refresh(), conversations.refresh()]);
+          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+        } else if (route === "tasks") {
           const env = realEnv();
           const store = await TasksStore.open(bridge, env, http);
           root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge")} /></StrictMode>);
