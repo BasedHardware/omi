@@ -4,6 +4,7 @@ import {
   InvalidMcpCursorError,
   MAX_MCP_CURSOR_ENCODED_BYTES,
   asOpaqueVisibleKeyset,
+  isInvalidMcpCursorError,
   issueMcpCursor,
   readAfterMcpCursorValidation,
   verifyMcpCursor,
@@ -101,6 +102,65 @@ const decodedPayload = (cursor: string): Record<string, unknown> => {
 };
 
 describe("MCP signed keyset cursor", () => {
+  test("invalid-cursor classification requires the module-private constructor brand", () => {
+    class ConstructedSubclass extends InvalidMcpCursorError {}
+
+    const genuine = new InvalidMcpCursorError();
+    const constructedSubclass = new ConstructedSubclass();
+    const prototypeSpoof = Object.create(InvalidMcpCursorError.prototype) as unknown;
+    const subclassPrototypeSpoof = Object.create(ConstructedSubclass.prototype) as unknown;
+    const rewrittenPrototype = Object.setPrototypeOf(
+      new Error("prototype spoof"),
+      InvalidMcpCursorError.prototype,
+    );
+    const codeOnly = { code: "invalid_cursor" };
+
+    let accessorCalls = 0;
+    const accessorShape = {};
+    Object.defineProperty(accessorShape, "code", {
+      enumerable: true,
+      get() {
+        accessorCalls += 1;
+        return "invalid_cursor";
+      },
+    });
+
+    let proxyTrapCalls = 0;
+    const proxyShape = new Proxy(genuine, {
+      get() {
+        proxyTrapCalls += 1;
+        return "invalid_cursor";
+      },
+      getPrototypeOf() {
+        proxyTrapCalls += 1;
+        return InvalidMcpCursorError.prototype;
+      },
+      ownKeys() {
+        proxyTrapCalls += 1;
+        return [];
+      },
+    });
+
+    expect(isInvalidMcpCursorError(genuine)).toBeTrue();
+    // A real subclass invocation runs the base constructor and receives the
+    // same private brand; merely borrowing either prototype does not.
+    expect(isInvalidMcpCursorError(constructedSubclass)).toBeTrue();
+    for (const spoof of [
+      prototypeSpoof,
+      subclassPrototypeSpoof,
+      rewrittenPrototype,
+      codeOnly,
+      accessorShape,
+      proxyShape,
+      null,
+      "invalid_cursor",
+    ]) {
+      expect(isInvalidMcpCursorError(spoof)).toBeFalse();
+    }
+    expect(accessorCalls).toBe(0);
+    expect(proxyTrapCalls).toBe(0);
+  });
+
   test("round-trips deterministically with issued/expiry time and an opaque continuation key", () => {
     const first = issue();
     const second = issue();

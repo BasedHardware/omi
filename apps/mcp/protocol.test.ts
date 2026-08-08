@@ -638,20 +638,27 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
   });
 
   test("U1 maps only readPage InvalidMcpCursorError failures to the uniform invalid-cursor response", async () => {
+    class ConstructedSubclass extends InvalidMcpCursorError {}
     const first = fixture({ readPageError: new InvalidMcpCursorError() });
     const second = fixture({ readPageError: new InvalidMcpCursorError() });
+    const subclass = fixture({ readPageError: new ConstructedSubclass() });
     const firstResponse = await createMcpProtocolHandler(first.ports).handleHttp(
       callRequest({ cursor: "well-shaped-but-invalid-a" }, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }),
     );
     const secondResponse = await createMcpProtocolHandler(second.ports).handleHttp(
       callRequest({ cursor: "well-shaped-but-invalid-b" }, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }),
     );
+    const subclassResponse = await createMcpProtocolHandler(subclass.ports).handleHttp(
+      callRequest({ cursor: "well-shaped-but-invalid-subclass" }, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }),
+    );
 
     expect(firstResponse.status).toBe(400);
     expect(errorCode(firstResponse)).toBe(-32602);
     expect(rpcBody(firstResponse)).toEqual(rpcBody(secondResponse));
+    expect(rpcBody(firstResponse)).toEqual(rpcBody(subclassResponse));
     expect(first.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
     expect(second.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    expect(subclass.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
   });
 
   test("U1b keeps non-cursor readPage failures internal", async () => {
@@ -663,6 +670,58 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(response.status).toBe(200);
     expect(errorCode(response)).toBe(-32603);
     expect(failure.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
+  });
+
+  test("U1c keeps invalid-cursor lookalikes internal without executing accessors or proxy traps", async () => {
+    class ConstructedSubclass extends InvalidMcpCursorError {}
+
+    const rewrittenPrototype = Object.setPrototypeOf(
+      new Error("prototype spoof"),
+      InvalidMcpCursorError.prototype,
+    );
+    let accessorCalls = 0;
+    const accessorShape = {};
+    Object.defineProperty(accessorShape, "code", {
+      enumerable: true,
+      get() {
+        accessorCalls += 1;
+        return "invalid_cursor";
+      },
+    });
+    let proxyTrapCalls = 0;
+    const proxyShape = new Proxy(new InvalidMcpCursorError(), {
+      get() {
+        proxyTrapCalls += 1;
+        return "invalid_cursor";
+      },
+      getPrototypeOf() {
+        proxyTrapCalls += 1;
+        return InvalidMcpCursorError.prototype;
+      },
+      ownKeys() {
+        proxyTrapCalls += 1;
+        return [];
+      },
+    });
+
+    for (const spoof of [
+      Object.create(InvalidMcpCursorError.prototype),
+      { code: "invalid_cursor" },
+      rewrittenPrototype,
+      Object.create(ConstructedSubclass.prototype),
+      accessorShape,
+      proxyShape,
+    ]) {
+      const failure = fixture({ readPageError: spoof });
+      const response = await createMcpProtocolHandler(failure.ports).handleHttp(
+        callRequest({ cursor: "well-shaped-cursor" }),
+      );
+      expect(response.status).toBe(200);
+      expect(errorCode(response)).toBe(-32603);
+      expect(failure.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    }
+    expect(accessorCalls).toBe(0);
+    expect(proxyTrapCalls).toBe(0);
   });
 
   test("U2 rejects credential extras, including auth-time cursor state, before authorization", async () => {

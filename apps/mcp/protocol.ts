@@ -1,6 +1,6 @@
 import { isProxy } from "node:util/types";
 
-import { InvalidMcpCursorError } from "./cursor";
+import { isInvalidMcpCursorError } from "./cursor";
 
 /**
  * Stateless MCP 2026-07-28 HTTP/JSON-RPC seam.
@@ -293,7 +293,7 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
       limit: call.limit,
     });
   } catch (caught) {
-    if (caught instanceof InvalidMcpCursorError) {
+    if (isInvalidMcpCursorError(caught)) {
       return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
     }
     return rpcHttp(200, error(rpc.id, -32603, "Internal error"));

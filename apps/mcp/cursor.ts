@@ -95,6 +95,8 @@ export interface McpCursorClaims {
   readonly bindings: Readonly<McpCursorBindings>;
 }
 
+const invalidMcpCursorErrorBrand = new WeakSet<object>();
+
 /** Every client-controlled cursor failure intentionally has one public shape. */
 export class InvalidMcpCursorError extends Error {
   readonly code = "invalid_cursor" as const;
@@ -102,7 +104,18 @@ export class InvalidMcpCursorError extends Error {
   constructor() {
     super("invalid cursor");
     this.name = "InvalidMcpCursorError";
+    invalidMcpCursorErrorBrand.add(this);
   }
+}
+
+/**
+ * Classify only errors that actually ran this module's constructor. Prototype,
+ * property, accessor, and proxy lookalikes cannot forge the private brand.
+ */
+export function isInvalidMcpCursorError(value: unknown): value is InvalidMcpCursorError {
+  return typeof value === "object"
+    && value !== null
+    && invalidMcpCursorErrorBrand.has(value);
 }
 
 interface CursorPayload {
