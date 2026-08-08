@@ -26,6 +26,22 @@ import {
   parseRecallTraceJson,
   parseRecallTraceRef,
 } from "../dist/recall/trace.js";
+import {
+  isTrustedWriteAccepted,
+  isWritableDomain,
+  mintWriteId,
+  parseWriteId,
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  WRITABLE_DOMAINS,
+  WRITE_ERRORS,
+  WRITE_ID_ENTROPY_BYTES,
+  WRITE_ID_PATTERN,
+  WRITE_OPS_PATH_PATTERN,
+  WRITE_REFUSAL_OUTCOMES,
+  WRITE_REFUSALS,
+  writeOpsPath,
+} from "../dist/write/ops.js";
 
 test("ready item boundaries reject empty identifiers, text, and citations", () => {
   assert.equal(parseSynthesizedItemId("retrieval-node-v1:2a40f5"), "retrieval-node-v1:2a40f5");
@@ -320,3 +336,106 @@ function copyPropertyDescriptor(source) {
   }
   return copy;
 }
+
+// ── The write wire (COORD-write-path-rulings B1/B2/B4/B6) ───────────────────
+//
+// These tests close ONE of the three links that make the write seam real:
+//   module  <-> schema-of-record   (here)
+//   schema  <-> corpus             (core/scripts/check-wire-conformance.mjs)
+//   corpus  <-> both sides         (testkit + platform contract-tests)
+// Without the first link the schema-of-record file is a second source of
+// truth that can drift from the code it claims to describe, and a corpus
+// checked against a drifted schema proves nothing.
+
+test("the write-ops schema of record matches the module's own tables", async () => {
+  // red-proof: change any status or body byte in WRITE_REFUSALS (e.g. make
+  // stale_epoch 400) and this goes red. APPLIED AND OBSERVED RED.
+  const schema = JSON.parse(await readFile(new URL("../fixtures/write-ops-outcomes.json", import.meta.url), "utf8"));
+  assert.deepEqual(schema.writableDomains, [...WRITABLE_DOMAINS]);
+  assert.equal(schema.writeIdPattern, WRITE_ID_PATTERN.source);
+  assert.equal(schema.writeIdEntropyBytes, WRITE_ID_ENTROPY_BYTES);
+  assert.equal(schema.route, "/v1/{domain}/ops");
+
+  const declared = new Map(schema.outcomes.map((row) => [row.outcome, row]));
+  for (const outcome of WRITE_REFUSAL_OUTCOMES) {
+    const row = declared.get(outcome);
+    assert.ok(row, `refusal outcome ${outcome} is missing from the schema of record`);
+    assert.equal(row.kind, "refusal");
+    assert.equal(row.status, WRITE_REFUSALS[outcome].status);
+    assert.equal(row.body, WRITE_REFUSALS[outcome].body);
+  }
+  for (const [name, error] of Object.entries(WRITE_ERRORS)) {
+    const row = declared.get(name);
+    assert.ok(row, `error outcome ${name} is missing from the schema of record`);
+    assert.equal(row.kind, "error");
+    assert.equal(row.status, error.status);
+    assert.equal(row.body, error.body);
+  }
+  // Nothing in the schema that the module does not define.
+  const known = new Set([...WRITE_REFUSAL_OUTCOMES, ...Object.keys(WRITE_ERRORS), "accepted", "accepted_idempotent"]);
+  for (const row of schema.outcomes) assert.ok(known.has(row.outcome), `schema declares unknown outcome ${row.outcome}`);
+});
+
+test("a stale-epoch refusal is never byte-identical to conflict or gone", () => {
+  // red-proof: give stale_epoch the same body as WRITE_ERRORS.conflict and
+  // this goes red. APPLIED AND OBSERVED RED.
+  //
+  // Both are 409. A client branching on status alone cannot tell a straggler
+  // from a genuine concurrent edit, and would tell the user their saved edit
+  // conflicted when the fence simply refused it. The bodies are what separate
+  // them, so the bodies are what is asserted.
+  assert.equal(WRITE_REFUSALS.stale_epoch.status, WRITE_ERRORS.conflict.status);
+  assert.notEqual(WRITE_REFUSALS.stale_epoch.body, WRITE_ERRORS.conflict.body);
+  assert.notEqual(WRITE_REFUSALS.stale_epoch.body, WRITE_ERRORS.write_id_reuse.body);
+  assert.equal(readWriteRefusalOutcome(409, WRITE_REFUSALS.stale_epoch.body), "stale_epoch");
+  assert.equal(readWriteRefusalOutcome(409, WRITE_ERRORS.conflict.body), null);
+  assert.equal(readWriteRefusalOutcome(409, WRITE_ERRORS.write_id_reuse.body), null);
+  // 403 is shared by authorization and entitlement for the same reason.
+  assert.equal(readWriteRefusalOutcome(403, WRITE_REFUSALS.authorization.body), "authorization");
+  assert.equal(readWriteRefusalOutcome(403, WRITE_REFUSALS.entitlement.body), "entitlement");
+  // A right body under a wrong status is not a refusal class. A server that
+  // moved the status would otherwise keep passing.
+  assert.equal(readWriteRefusalOutcome(200, WRITE_REFUSALS.stale_epoch.body), null);
+});
+
+test("write_id is minted from caller entropy and never derived", () => {
+  // red-proof: relax the length check to `entropy.length < 1` and this goes
+  // red on the short-entropy case. APPLIED AND OBSERVED RED.
+  const entropy = new Uint8Array(WRITE_ID_ENTROPY_BYTES).fill(0xab);
+  const minted = mintWriteId(entropy);
+  assert.equal(minted, "ab".repeat(WRITE_ID_ENTROPY_BYTES));
+  assert.ok(minted !== null && WRITE_ID_PATTERN.test(minted));
+  assert.equal(mintWriteId(new Uint8Array(31)), null, "short entropy must not silently shrink the key space");
+  assert.equal(mintWriteId(new Uint8Array(33)), null);
+  assert.equal(mintWriteId(new Array(32).fill(1)), null, "a plain array is not a byte source");
+  // The grammar admits no word slug, which is what keeps backend:RISK-015
+  // satisfied without relying on anybody's discipline.
+  assert.equal(parseWriteId("edit-task-9f21-set-done"), null);
+  assert.equal(parseWriteId("AB".repeat(32)), null, "uppercase hex is a different string on the wire");
+});
+
+test("the route is built, never spelled", () => {
+  assert.equal(writeOpsPath("tasks"), "/v1/tasks/ops");
+  assert.ok(WRITE_OPS_PATH_PATTERN.test(writeOpsPath("tasks")));
+  assert.ok(!WRITE_OPS_PATH_PATTERN.test("/v1/tasks/ops/"));
+  assert.ok(!WRITE_OPS_PATH_PATTERN.test("/v1/tasks"));
+  assert.equal(isWritableDomain("memories"), false, "memories is read-only by ratified design");
+});
+
+test("every write-ops corpus row agrees with the envelope validator", async () => {
+  // red-proof: delete the `hasExactKeys(value, ENVELOPE_KEYS)` guard in
+  // isTrustedWriteOpEnvelope and the unknown-field row goes red.
+  // APPLIED AND OBSERVED RED.
+  const corpus = JSON.parse(await readFile(new URL("../fixtures/write-ops-conformance.json", import.meta.url), "utf8"));
+  assert.ok(corpus.length >= 16, "corpus shrank — an empty corpus must never read as a pass");
+  for (const row of corpus) {
+    assert.equal(
+      parseWriteOpEnvelopeJson(row.requestBody) !== null,
+      row.envelopeAccepted,
+      `${row.name}: envelope acceptance disagrees with the corpus`,
+    );
+    if (row.response.status === 200) {
+      assert.ok(isTrustedWriteAccepted(JSON.parse(row.response.body)), `${row.name}: success body rejected`);
+    }
+  }
+});

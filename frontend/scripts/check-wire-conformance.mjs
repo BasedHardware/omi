@@ -100,6 +100,59 @@ const WIRE_SEAMS = [
     // shared loader so both ends resolve the same files.
     consumptionEvidence: ["readRatifiedCorpus", "readRatifiedFixtureManifest"],
   },
+  {
+    /**
+     * The client-facing WRITE wire — `POST /v1/{domain}/ops`, ratified by
+     * COORD-write-path-rulings (B1/B2/B4/B6).
+     *
+     * A NEW SHARED WIRE MEANS A NEW ROW. This one exists because the two write
+     * spikes explicitly did not satisfy rule 15: they copied the client's op
+     * shape into their own test files instead of consuming a corpus of record,
+     * and their own memo says the first real landing must add the registry row
+     * and corpus. This is that row.
+     *
+     * SCHEMA OF RECORD vs MODULE. `write-ops-outcomes.json` enumerates every
+     * outcome the wire can answer with. It could drift from `src/write/ops.ts`
+     * and become a second source of truth, so the ratified package's own test
+     * ("the write-ops schema of record matches the module's own tables")
+     * asserts they are equal. Three links, each checked somewhere different:
+     * module <-> schema (that test), schema <-> corpus (here), corpus <-> both
+     * sides (the consumers below, plus the platform's).
+     *
+     * THE SERVER-SIDE CONSUMER IS NOT LISTED HERE, and that is deliberate. It
+     * is `platform/contract-tests/ratified-contracts.test.ts`, in a sibling
+     * repository. Reaching across `../../platform/` from this script would
+     * make `pnpm verify` in a core-only checkout fail on a missing sibling,
+     * which is a worse defect than the one it would catch. The platform's own
+     * L0 step runs that file, and it reads these bytes out of the INSTALLED
+     * tarball — a stronger consumption than a path this script could check.
+     */
+    name: "ratified-write-ops",
+    schemaOfRecord: "contracts/ratified/fixtures/write-ops-outcomes.json",
+    corpus: "contracts/ratified/fixtures/write-ops-conformance.json",
+    /** Every outcome the schema says this route can answer with. */
+    declaredFrames(schema) {
+      return (schema.outcomes ?? []).map((row) => ({
+        defName: row.outcome,
+        type: row.outcome,
+        // Every outcome is reachable the day the route lands. `emitted` exists
+        // for the listen protocol's reserved-frame case and has no analogue
+        // here; a write outcome nobody can produce would be a contract defect,
+        // not a reservation.
+        emitted: true,
+      }));
+    },
+    /** Every outcome the shared corpus actually exercises. */
+    corpusFrames(corpus) {
+      const types = new Set();
+      for (const row of corpus ?? []) {
+        if (typeof row?.wireOutcome === "string") types.add(row.wireOutcome);
+      }
+      return types;
+    },
+    consumers: ["packages/testkit/src/test/write-ops-conformance.test.ts"],
+    consumptionEvidence: ["readRatifiedCorpus", "readRatifiedWriteOpsSchema"],
+  },
 ];
 
 for (const seam of WIRE_SEAMS) {

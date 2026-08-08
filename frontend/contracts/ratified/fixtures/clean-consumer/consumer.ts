@@ -22,6 +22,19 @@ import {
   parseRecallTraceRef,
 } from "@omi-core/ratified-contracts/recall/trace";
 import type { RecallTraceV1 } from "@omi-core/ratified-contracts/recall/trace";
+import {
+  isTrustedWriteOpEnvelope,
+  isWritableDomain,
+  mintWriteId,
+  parseWriteId,
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  WRITE_ERRORS,
+  WRITE_ID_ENTROPY_BYTES,
+  WRITE_REFUSALS,
+  writeOpsPath,
+} from "@omi-core/ratified-contracts/write/ops";
+import type { WriteId, WriteOpEnvelope, WriteRefusalOutcome } from "@omi-core/ratified-contracts/write/ops";
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
@@ -224,3 +237,33 @@ export const consumerResult = {
   declaredContractVersionHeader: APP_CONTRACT_VERSION_HEADER,
   declaredContractFloorVersion: APP_CONTRACT_FLOOR_VERSION,
 } as const;
+
+// ── The write wire, exercised across the tarball boundary ──────────────────
+// A consumer that only typechecks proves the .d.ts parses. These lines prove
+// the shipped RUNTIME behaves, which is the half that has been wrong before.
+const mintedWriteId: WriteId | null = mintWriteId(new Uint8Array(WRITE_ID_ENTROPY_BYTES).fill(0x5a));
+if (mintedWriteId === null) throw new Error("minting from 32 bytes must succeed");
+if (parseWriteId("edit-task-set-done") !== null) throw new Error("a word slug must never parse as a write_id");
+if (isWritableDomain("memories")) throw new Error("memories is read-only by ratified design");
+if (writeOpsPath("tasks") !== "/v1/tasks/ops") throw new Error("route shape drifted");
+
+const staleEpochOutcome: WriteRefusalOutcome | null = readWriteRefusalOutcome(
+  WRITE_REFUSALS.stale_epoch.status,
+  WRITE_REFUSALS.stale_epoch.body,
+);
+if (staleEpochOutcome !== "stale_epoch") throw new Error("stale_epoch must be readable off the wire body");
+if (readWriteRefusalOutcome(WRITE_ERRORS.conflict.status, WRITE_ERRORS.conflict.body) !== null) {
+  throw new Error("conflict must never read as a refusal outcome — it is not one");
+}
+
+const sampleEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
+  JSON.stringify({
+    write_id: mintedWriteId,
+    account_epoch: 7,
+    domain: "tasks",
+    op: { op: "patch", record_id: "task-9f21", patch: { done: true } },
+  }),
+);
+if (sampleEnvelope === null || !isTrustedWriteOpEnvelope(sampleEnvelope)) {
+  throw new Error("a well-formed tasks envelope must parse");
+}
