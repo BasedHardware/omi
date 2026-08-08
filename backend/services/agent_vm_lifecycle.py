@@ -1854,16 +1854,11 @@ class GceAgentVmClient:
                 "source": state_disk_source,
             },
         ]
-        if source_clone_disk_source:
-            disks.append(
-                {
-                    "boot": False,
-                    "autoDelete": False,
-                    "deviceName": STATE_SOURCE_DEVICE_NAME,
-                    "mode": "READ_ONLY",
-                    "source": source_clone_disk_source,
-                }
-            )
+        # A legacy source clone is a full predecessor boot disk. Attaching it
+        # during power-on exposes duplicate root/EFI labels to systemd before
+        # the startup script can select the named migration device. The
+        # reconciler hot-attaches that read-only clone after the candidate is
+        # running; metadata tells startup to wait for that bounded handoff.
         body = {
             "name": vm_name,
             "machineType": machine_type,
