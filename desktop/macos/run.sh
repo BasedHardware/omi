@@ -77,6 +77,7 @@ Options (via environment variables):
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_AUTOMATION_UI_MODE=quiet    Window presentation for automation: quiet, interactive, or normal
   OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA override for the canonical atlas rollout gate
   OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
@@ -297,6 +298,7 @@ if [ "$LOCAL_PROFILE" = true ]; then
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+AUTOMATION_UI_MODE="$(derive_omi_automation_ui_mode "$IS_NAMED_BUNDLE" "${OMI_AUTOMATION_UI_MODE:-}")" || exit 2
 # An external harness may request an ownership proof for a detached `open`
 # launch. The token is passed as an app argument (and therefore visible in the
 # spawned process command) and copied into the owner-only launch signal. It is
@@ -307,6 +309,9 @@ if [[ -n "$DESKTOP_LAUNCH_TOKEN" && ! "$DESKTOP_LAUNCH_TOKEN" =~ ^[A-Za-z0-9_-]{
     exit 2
 fi
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
+if [ "$AUTOMATION_UI_MODE" != "normal" ]; then
+    AUTOMATION_ARGS+=("--automation-ui=$AUTOMATION_UI_MODE")
+fi
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
 fi
@@ -1381,6 +1386,7 @@ echo "App:      $APP_PATH"
 echo "API URL:  $EFFECTIVE_API_URL"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
     echo "Automation bridge: http://127.0.0.1:${AUTOMATION_PORT}"
+    echo "Automation UI:     $AUTOMATION_UI_MODE"
 fi
 echo "========================================"
 echo ""
@@ -1422,12 +1428,16 @@ if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
     # `-n` guarantees this invocation creates a process carrying the capability
     # token instead of focusing an existing instance of the same app.
     LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
-    if ! open -n ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+    OPEN_BACKGROUND_ARGS=()
+    [ "$AUTOMATION_UI_MODE" = "quiet" ] && OPEN_BACKGROUND_ARGS=(-g)
+    if ! open -n "${OPEN_BACKGROUND_ARGS[@]}" ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
     fi
 elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+    OPEN_BACKGROUND_ARGS=()
+    [ "$AUTOMATION_UI_MODE" = "quiet" ] && OPEN_BACKGROUND_ARGS=(-g)
+    if ! open "${OPEN_BACKGROUND_ARGS[@]}" ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
     fi

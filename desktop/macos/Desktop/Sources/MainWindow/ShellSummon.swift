@@ -144,6 +144,11 @@ enum ShellFrameMemory {
 /// Summoning, dismissing, and remembering — the live half, which owns the one shell window.
 @MainActor
 enum ShellSummon {
+  enum ToggleAction: Equatable {
+    case summon
+    case dismiss
+  }
+
   /// The shell window, once something has identified it. Weak: the window outlives nothing here, and
   /// a strong reference would keep a closed window alive past its scene.
   private static weak var knownShellWindow: NSWindow?
@@ -152,6 +157,10 @@ enum ShellSummon {
   private static var observers: [NSObjectProtocol] = []
   /// Whether a summon has ever put the shell on screen. The gate on restoring it for the user.
   private static var hasBeenShown = false
+  /// The frame captured while a native permission prompt or System Settings owns the user's
+  /// attention. This is deliberately separate from ordinary dismissal: returning from a permission
+  /// flow must restore the exact panel the user was looking at, not re-land it under the cursor.
+  private static var permissionSuspendedFrame: NSRect?
   /// Which window the Escape route and the frame observers are currently bound to.
   ///
   /// Both are per-window — `WindowEscapeKeyMonitor` matches on window identity and the notification
@@ -179,6 +188,14 @@ enum ShellSummon {
     let found = NSApp.windows.first(where: isShellWindow)
     knownShellWindow = found
     return found
+  }
+
+  /// The global launch shortcut is the one summon route that doubles as a dismissal gesture.
+  /// Miniaturised windows are not visible to the user, so the shortcut must restore them rather
+  /// than treat them as an already-open shell and order them out.
+  static func toggleAction(for window: NSWindow?) -> ToggleAction {
+    guard let window, window.isVisible, !window.isMiniaturized else { return .summon }
+    return .dismiss
   }
 
   // MARK: - Presentation
@@ -250,8 +267,41 @@ enum ShellSummon {
   /// and no obvious way to ask for one. Gated on the shell having been shown at least once, because
   /// the background update relaunch deliberately starts with it ordered out and must stay that way.
   static func restoreOnActivationIfNeeded() {
+    if permissionSuspendedFrame != nil {
+      restoreAfterPermissionPrompt()
+      return
+    }
     guard hasBeenShown, let window = shellWindow(), !window.isVisible else { return }
     summon()
+  }
+
+  /// Temporarily remove the main Omi surface before handing control to macOS permission UI.
+  ///
+  /// This does not deactivate the application: callers may be about to trigger an in-process
+  /// microphone/notification prompt, and AppKit needs Omi to remain the active owner of that prompt.
+  /// A second call while the flow is already suspended is intentionally a no-op.
+  @discardableResult
+  static func suspendForPermissionPrompt() -> Bool {
+    guard let window = shellWindow(), window.isVisible else { return false }
+    if permissionSuspendedFrame == nil {
+      permissionSuspendedFrame = window.frame
+      rememberFrame(of: window)
+    }
+    window.orderOut(nil)
+    return true
+  }
+
+  /// Restore a shell suspended for permission UI, preserving the frame and route it had before the
+  /// request. Safe to call from both a native prompt completion and app activation after System
+  /// Settings closes; the first call consumes the suspension.
+  static func restoreAfterPermissionPrompt() {
+    guard let frame = permissionSuspendedFrame else { return }
+    permissionSuspendedFrame = nil
+    guard let window = shellWindow() else { return }
+    applyPresentation(to: window)
+    window.setFrame(frame, display: true)
+    window.makeKeyAndOrderFront(nil)
+    hasBeenShown = true
   }
 
   /// Put the shell away and hand focus back to whatever the user was doing.

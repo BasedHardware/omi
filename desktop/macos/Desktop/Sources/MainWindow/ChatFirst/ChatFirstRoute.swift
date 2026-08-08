@@ -72,15 +72,16 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
   }
 
   /// Maps every legacy-compatible automation name to its mounted cohort route.
-  /// This is visibility-only: dispatch remains owned by `DesktopHomeView` so
-  /// callers retain the legacy adapter while the old shell is active.
+  /// Dashboard/Home are aliases for the canonical Chat surface: dispatch remains
+  /// owned by `DesktopHomeView`, but the cohort never mounts a second Dashboard
+  /// Home for either legacy name.
   static func automationVisibilityDestination(named target: String) -> ChatFirstRoute? {
     if let primary = primaryAutomationDestination(named: target) {
       return primary
     }
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
-    case "dashboard", "home": return .more(.dashboard)
+    case "dashboard", "home": return .chat
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
@@ -377,7 +378,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// No Chat-first route is represented by a legacy raw index internally.
   func selectLegacyDestination(_ item: SidebarNavItem) {
     switch item {
-    case .dashboard: selectMore(.dashboard)
+    case .dashboard: selectPrimary(.chat)
     case .conversations: selectPrimary(.conversations)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)

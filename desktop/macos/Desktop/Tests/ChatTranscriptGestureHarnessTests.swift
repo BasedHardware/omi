@@ -419,7 +419,7 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         styleMask: [.titled], backing: .buffered, defer: false)
       window.contentView = hostingView
 
-      window.orderFrontRegardless()
+      NonintrusiveTestWindow.orderIn(window)
       Self.pumpRunLoop(0.2)
       hostingView.layoutSubtreeIfNeeded()
       Self.pumpRunLoop(0.2)

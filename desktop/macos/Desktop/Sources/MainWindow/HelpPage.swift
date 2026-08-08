@@ -38,7 +38,12 @@ struct CrispWebView: NSViewRepresentable {
     let config = WKWebViewConfiguration()
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     let webView = WKWebView(frame: .zero, configuration: config)
-    webView.setValue(false, forKey: "drawsBackground")
+    // The Crisp document loads asynchronously. Keep its native view transparent during that
+    // interval so the shared PageGlassLane remains the only ground instead of flashing a white
+    // rectangle inside the glass panel.
+    webView.setValue(false, forKeyPath: "opaque")
+    webView.underPageBackgroundColor = .clear
+    webView.setValue(false, forKeyPath: "drawsBackground")
 
     var urlString = "https://go.crisp.chat/chat/embed/?website_id=\(websiteID)"
     if let email = AuthState.shared.userEmail,

@@ -1272,7 +1272,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
       chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
       "agent completion body must render markdown"
     )
-    XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
+    XCTAssertTrue(chatBubbleSource.contains("StableChatCardHeader("))
+    XCTAssertFalse(
+      chatBubbleSource.contains("private var collapseControl"),
+      "expanded cards must keep the persistent header disclosure instead of adding a second anchor"
+    )
     XCTAssertTrue(
       chatBubbleSource.contains("AgentTimelineOpenFeedback.shouldShowLinkOut("),
       "cards must gate link-out with shared policy"
@@ -1429,6 +1433,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
       ChatContinuityInvariants.agentPreviewText(prompt: "", output: "  only output  "),
       "only output"
     )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Delegated: Address the review comments",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      ""
+    )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Research agent",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      "Address the review comments"
+    )
   }
 
   func testAgentCompletionCardsUsePromptPreviewHelper() throws {
@@ -1445,12 +1465,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output)"),
+      bubble.contains("ChatContinuityInvariants.agentCardPreviewText(")
+        && bubble.contains("prompt: promptSnippet")
+        && bubble.contains("output: output"),
       "AgentCompletionCard header must preview promptSnippet, not raw output"
     )
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output)"),
+      bubble.contains("prompt: summary.prompt")
+        && bubble.contains("output: summary.output"),
       "BackgroundAgentCard header must preview prompt, not raw output"
+    )
+
+    XCTAssertTrue(
+      bubble.contains("HStack(alignment: .top, spacing: OmiSpacing.xxs)")
+        && bubble.contains(".frame(width: 18, height: 18, alignment: .center)")
+        && bubble.contains(".frame(width: 28, height: 28)"),
+      "agent card headers must keep status, text hierarchy, and trailing controls top-aligned"
     )
     XCTAssertTrue(
       floating.contains("ChatContinuityInvariants.agentPreviewText(")

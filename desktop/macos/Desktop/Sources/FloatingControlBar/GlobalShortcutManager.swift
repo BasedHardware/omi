@@ -346,11 +346,14 @@ class GlobalShortcutManager: @unchecked Sendable {
   private func openOmiFromShortcut() {
     NSLog("GlobalShortcutManager: Open Omi shortcut detected")
     DispatchQueue.main.async {
-      // Typing moved to the main app: the shortcut opens Omi itself
+      // Typing moved to the main app: when hidden, the shortcut opens Omi itself
       // instead of the floating bar's typed input panel — and lands straight in
-      // the chat surface (the one continuous thread), not the resting hero.
-      AppDelegate.summonWindowTarget()?.openMainAppWindow()
-      NotificationCenter.default.post(name: .navigateToChat, object: nil)
+      // the chat surface (the one continuous thread), not the resting hero. When
+      // the shell is already visible, the same shortcut dismisses it instead.
+      guard let appDelegate = AppDelegate.summonWindowTarget() else { return }
+      if appDelegate.toggleMainAppWindow() == .summon {
+        NotificationCenter.default.post(name: .navigateToChat, object: nil)
+      }
     }
   }
 

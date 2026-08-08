@@ -29,6 +29,11 @@ struct QueryAnswerThread: View {
   /// Re-sends the question that failed, through the host's one send — never a second send path. The
   /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
+  /// Enables the sampled Chat-first inline entity controls without giving this thread a second
+  /// provider, transcript, or lifecycle owner.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+
+  @State private var didReportChatFirstTranscriptPage = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -61,12 +66,13 @@ struct QueryAnswerThread: View {
         // `ChatMessagesView` keeps its rows eagerly mounted on purpose — a lazy
         // stack re-estimates off-screen rich-Markdown heights and hands AppKit
         // the wrong anchor mid-gesture — so how many rows are mounted is the
-        // whole cost. It picks the compact window automatically only for a
-        // caller that passes a chat-first block context, and this surface has
-        // none, so Home was silently mounting the 500-row default into a panel
+        // whole cost. It picks the compact window automatically for a caller
+        // that passes a chat-first block context; the ordinary QueryShellHome
+        // path has none, so it used to mount the 500-row default into a panel
         // 460 pt tall: 910 ms and 607 native views for 400 messages, against
         // 114 ms and 84 for the same transcript compact. `Show older messages`
         // is already the way back to the rest of it.
+        chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
         // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
@@ -122,6 +128,25 @@ struct QueryAnswerThread: View {
       }
     }
     .accessibilityIdentifier("query-shell-answer")
+    .onAppear { reportChatFirstTranscriptPageIfReady() }
+    .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in
+      reportChatFirstTranscriptPageIfReady()
+    }
+    .onDisappear {
+      didReportChatFirstTranscriptPage = false
+      chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+    }
+  }
+
+  /// Prompt materialization is visible-chat gated: the coordinator may run only after the one
+  /// mounted transcript has its first page, and leaving answer mode immediately makes it inert.
+  private func reportChatFirstTranscriptPageIfReady() {
+    guard !didReportChatFirstTranscriptPage,
+      chatFirstRichBlockContext != nil,
+      chatProvider.isMainChatJournalFirstPageReady
+    else { return }
+    didReportChatFirstTranscriptPage = true
+    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
   /// Where the newest answer came from. Only the latest assistant turn, because a strip that

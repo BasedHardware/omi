@@ -18,9 +18,9 @@
 //  looks wrong — which is exactly how a surface documented as glass ships opaque.
 //
 //  It is a function of one `Kind` rather than the same four statements written out in every window, for
-//  the same reason `InkGlass` reduced the surface itself to functions of one `Bool`: it puts "a glass
-//  window really is transparent" inside reach of a hermetic test and leaves each window with no chrome
-//  judgement of its own.
+//  the same reason `InkGlass` reduced the surface itself to functions of one `Bool`: it puts each
+//  window's ground and shadow contract inside reach of a hermetic test and leaves each window with no
+//  chrome judgement of its own.
 //
 
 import AppKit
@@ -53,7 +53,7 @@ package enum WindowGlass {
     case summoned
   }
 
-  /// **Whether AppKit draws the window's own shadow**, which is the one property the two kinds disagree
+  /// **Whether AppKit draws the window's own shadow**, which is the property the window kinds disagree
   /// about and the one that is wrong in a way people can see.
   ///
   /// A floating panel draws a broad, diffuse ambient shadow *inside* its own bounds

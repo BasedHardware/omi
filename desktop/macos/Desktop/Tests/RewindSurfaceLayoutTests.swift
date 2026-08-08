@@ -7,10 +7,8 @@ import XCTest
 
 /// Rewind's two objects, held where they are arithmetic rather than a screenshot.
 ///
-/// The claim that matters is a pair of widths that deliberately disagree: the header is on the lane
-/// every other route's panel takes, and the player is **not**, because the track under it maps a
-/// pointer's x to a capture timestamp and the lane's 900 pt reading clamp would throw away more than
-/// half of that resolution on a wide window.
+/// The claim that matters is that every Rewind glass panel shares the lane used by the rest of the
+/// chat-first shell.
 @MainActor
 final class RewindSurfaceLayoutTests: XCTestCase {
 
@@ -39,44 +37,22 @@ final class RewindSurfaceLayoutTests: XCTestCase {
     }
   }
 
-  // MARK: - The player is not
+  // MARK: - The player shares the lane
 
-  /// The player keeps the page's margin and drops the *reading* clamp. Below the clamp the two are
-  /// one number and the panels line up exactly; past it the player keeps the width the ruler needs.
-  func testThePlayerKeepsThePageMarginAndDropsTheReadingClamp() {
+  func testThePlayerUsesTheSharedLaneAtEveryWindowWidth() {
     for available in Self.widths {
       let player = RewindSurfaceLayout.playerWidth(for: available)
       XCTAssertEqual(
         player,
-        available - ChatComposerLayout.pageMargin * 2,
+        RewindSurfaceLayout.headerWidth(for: available),
         accuracy: 0.01,
-        "the player is the page's own margin — the same one the lane is measured from")
-      XCTAssertGreaterThanOrEqual(
-        player, RewindSurfaceLayout.headerWidth(for: available),
-        "the scrubber may never be narrower than the bar above it")
+        "the player and header share one lane")
     }
   }
 
-  func testTheTwoPanelsShareALeadingEdgeUntilTheReadingClampBinds() {
-    let clampBinds = ChatComposerLayout.contentLaneMaxWidth + ChatComposerLayout.pageMargin * 2
-
-    XCTAssertTrue(RewindSurfaceLayout.edgesCoincide(availableWidth: clampBinds - 40))
-    XCTAssertTrue(RewindSurfaceLayout.edgesCoincide(availableWidth: clampBinds))
-    XCTAssertFalse(
-      RewindSurfaceLayout.edgesCoincide(availableWidth: clampBinds + 40),
-      "past the clamp the header stays a readable bar and the player takes the room")
-  }
-
-  /// The number the choice is actually about. On the window sizes this app is used at, putting the
-  /// track on the reading lane would cost it most of its horizontal resolution — and the track
-  /// resolves a scrub by mapping x onto the day, so those points are seconds the user cannot hit.
-  func testTheReadingLaneWouldCostTheTrackMostOfItsScrubResolution() {
-    for available in [1_920, 3_440] as [CGFloat] {
-      let lane = RewindSurfaceLayout.headerWidth(for: available)
-      let player = RewindSurfaceLayout.playerWidth(for: available)
-      XCTAssertGreaterThan(
-        player, lane * 1.5,
-        "at \(available) pt the lane keeps under two thirds of the track's width")
+  func testTheTwoPanelsAlwaysShareALeadingEdge() {
+    for available in Self.widths {
+      XCTAssertTrue(RewindSurfaceLayout.edgesCoincide(availableWidth: available))
     }
   }
 
@@ -121,9 +97,7 @@ final class RewindSurfaceLayoutTests: XCTestCase {
     }
     XCTAssertEqual(placedHeader.width, header, accuracy: 0.5)
     XCTAssertEqual(placedPlayer.width, player, accuracy: 0.5)
-    XCTAssertGreaterThan(
-      placedPlayer.width, placedHeader.width,
-      "at 1,400 pt the lane clamps and the player does not")
+    XCTAssertEqual(placedPlayer.width, placedHeader.width, accuracy: 0.5)
     XCTAssertEqual(placedHeader.height, headerHeight, accuracy: 0.5)
     XCTAssertEqual(
       placedPlayer.height,

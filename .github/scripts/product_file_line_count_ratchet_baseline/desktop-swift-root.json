@@ -2,10 +2,10 @@
   "files": {
     "desktop/macos/Desktop/Sources/AuthService.swift": 2844,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4430,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4492,
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": 1515,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1575,
-    "desktop/macos/Desktop/Sources/OmiApp.swift": 1555
+    "desktop/macos/Desktop/Sources/OmiApp.swift": 1584
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls. +32 keeps the durable accepted-deletion cleanup journal and owner-bound VM/sync drain inside the fenced sign-out commit so cleanup resumes after restart and credentials or owner visibility cannot change first (SCA-280).",

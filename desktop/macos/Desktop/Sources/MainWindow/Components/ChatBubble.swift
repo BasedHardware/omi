@@ -631,6 +631,91 @@ struct ChatBubble: View {
   }
 }
 
+/// Shared geometry for expandable timeline cards. Optional link-out actions
+/// always retain their slot so status, text, and disclosure anchors never move
+/// as agent availability changes.
+private struct StableChatCardHeader<Identity: View, Content: View>: View {
+  let isExpanded: Bool
+  let showsDisclosure: Bool
+  let horizontalPadding: CGFloat
+  let verticalPadding: CGFloat
+  let minimumHeight: CGFloat?
+  let onToggle: (() -> Void)?
+  let onOpen: (() -> Void)?
+  let identity: Identity
+  let content: Content
+
+  init(
+    isExpanded: Bool = false,
+    showsDisclosure: Bool,
+    horizontalPadding: CGFloat = OmiSpacing.md,
+    verticalPadding: CGFloat = OmiSpacing.sm,
+    minimumHeight: CGFloat? = nil,
+    onToggle: (() -> Void)? = nil,
+    onOpen: (() -> Void)? = nil,
+    @ViewBuilder identity: @escaping () -> Identity,
+    @ViewBuilder content: @escaping () -> Content
+  ) {
+    self.isExpanded = isExpanded
+    self.showsDisclosure = showsDisclosure
+    self.horizontalPadding = horizontalPadding
+    self.verticalPadding = verticalPadding
+    self.minimumHeight = minimumHeight
+    self.onToggle = onToggle
+    self.onOpen = onOpen
+    self.identity = identity()
+    self.content = content()
+  }
+
+  var body: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.xxs) {
+      Button(action: { onToggle?() }) {
+        HStack(alignment: .top, spacing: OmiSpacing.sm) {
+          identity
+            .frame(width: 18, height: 18, alignment: .center)
+          content
+            .frame(maxWidth: .infinity, alignment: .leading)
+          Group {
+            if showsDisclosure {
+              Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .scaledFont(size: OmiType.micro)
+                .foregroundColor(Ink.secondary)
+            } else {
+              Color.clear
+            }
+          }
+          .frame(width: 18, height: 18, alignment: .center)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .allowsHitTesting(onToggle != nil)
+
+      Group {
+        if let onOpen {
+          Button(action: onOpen) {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else {
+          Color.clear
+        }
+      }
+      .frame(width: 28, height: 28)
+    }
+    .padding(.horizontal, horizontalPadding)
+    .padding(.vertical, verticalPadding)
+    .frame(minHeight: minimumHeight)
+    .textSelection(.disabled)
+  }
+}
+
 private struct BackgroundAgentSummaryCard: View {
   let summary: BackgroundAgentSummary
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
@@ -646,52 +731,49 @@ private struct BackgroundAgentSummaryCard: View {
     )
   }
 
+  private var openAction: (() -> Void)? {
+    shouldShowLinkOut ? { openAgent() } : nil
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Button(action: toggleExpanded) {
-          HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.listeningGreen)
-            Text("Background agent")
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(Ink.secondary)
-            Text(ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output))
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-              .truncationMode(.tail)
-            Spacer(minLength: 4)
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
+      StableChatCardHeader(
+        isExpanded: isExpanded,
+        showsDisclosure: true,
+        onToggle: toggleExpanded,
+        onOpen: openAction
+      ) {
+        Image(systemName: "checkmark.circle.fill")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.listeningGreen)
+      } content: {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Background agent")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+          if !isExpanded,
+            !ChatContinuityInvariants.agentCardPreviewText(
+              title: "Background agent",
+              prompt: summary.prompt,
+              output: summary.output
+            ).isEmpty
+          {
+            Text(
+              ChatContinuityInvariants.agentCardPreviewText(
+                title: "Background agent",
+                prompt: summary.prompt,
+                output: summary.output
+              )
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
           }
-          .padding(.leading, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-
-        if shouldShowLinkOut {
-          Button(action: openAgent) {
-            Image(systemName: "arrow.up.forward.app")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
-              .padding(.trailing, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .help("Open agent")
-        } else {
-          Color.clear.frame(width: 12)
         }
       }
-      // Truncated header snippets must not inherit SelectionOverlay — long agent
-      // output under lineLimit(1) can thrash GraphHost layout updates.
-      .textSelection(.disabled)
 
       if isExpanded || showUnavailable {
         Divider()
@@ -709,9 +791,6 @@ private struct BackgroundAgentSummaryCard: View {
               .foregroundColor(Ink.secondary)
               .textSelection(.disabled)
           }
-          if isExpanded {
-            collapseControl
-          }
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
@@ -725,22 +804,6 @@ private struct BackgroundAgentSummaryCard: View {
         isExpanded = true
       }
     }
-  }
-
-  private var collapseControl: some View {
-    Button(action: toggleExpanded) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Spacer(minLength: 0)
-        Text("Collapse")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-        Image(systemName: "chevron.up")
-          .scaledFont(size: OmiType.micro)
-      }
-      .foregroundColor(Ink.secondary)
-      .padding(.top, OmiSpacing.hairline)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
   }
 
   private func toggleExpanded() {
@@ -776,10 +839,17 @@ struct AgentSpawnCard: View {
     )
   }
 
+  private var openAction: (() -> Void)? {
+    shouldShowLinkOut ? { openAgent() } : nil
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: OmiSpacing.xxs) {
-        HStack(spacing: OmiSpacing.sm) {
+      StableChatCardHeader(
+        showsDisclosure: false,
+        onOpen: openAction
+      ) {
+        Group {
           if provider.rendersProviderMark {
             AgentProviderLogoMark(
               provider: provider,
@@ -791,36 +861,33 @@ struct AgentSpawnCard: View {
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
           }
+        }
+      } content: {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(title.isEmpty ? "Background agent" : title)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-          Text(objective)
+            .foregroundColor(Ink.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+          if !ChatContinuityInvariants.agentCardPreviewText(
+            title: title,
+            prompt: objective,
+            output: ""
+          ).isEmpty {
+            Text(
+              ChatContinuityInvariants.agentCardPreviewText(
+                title: title,
+                prompt: objective,
+                output: ""
+              )
+            )
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
-            .lineLimit(1)
+            .lineLimit(2)
             .truncationMode(.tail)
-          Spacer(minLength: 4)
-        }
-        .padding(.leading, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-
-        if shouldShowLinkOut {
-          Button(action: openAgent) {
-            Image(systemName: "arrow.up.forward.app")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
-              .padding(.trailing, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .contentShape(Rectangle())
           }
-          .buttonStyle(.plain)
-          .help("Open agent")
-        } else {
-          Color.clear.frame(width: 12)
         }
       }
-      .textSelection(.disabled)
 
       if showUnavailable {
         Divider()
@@ -865,52 +932,49 @@ struct AgentCompletionCard: View {
     )
   }
 
+  private var openAction: (() -> Void)? {
+    shouldShowLinkOut ? { openAgent() } : nil
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Button(action: toggleExpanded) {
-          HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: statusIconName)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(statusColor)
-            Text(title.isEmpty ? "Background agent" : title)
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(Ink.secondary)
-            Text(ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output))
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-              .truncationMode(.tail)
-            Spacer(minLength: 4)
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
+      StableChatCardHeader(
+        isExpanded: isExpanded,
+        showsDisclosure: true,
+        onToggle: toggleExpanded,
+        onOpen: openAction
+      ) {
+        Image(systemName: statusIconName)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(statusColor)
+      } content: {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text(title.isEmpty ? "Background agent" : title)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+          if !isExpanded,
+            !ChatContinuityInvariants.agentCardPreviewText(
+              title: title,
+              prompt: promptSnippet,
+              output: output
+            ).isEmpty
+          {
+            Text(
+              ChatContinuityInvariants.agentCardPreviewText(
+                title: title,
+                prompt: promptSnippet,
+                output: output
+              )
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
           }
-          .padding(.leading, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-
-        if shouldShowLinkOut {
-          Button(action: openAgent) {
-            Image(systemName: "arrow.up.forward.app")
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.secondary)
-              .padding(.trailing, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .help("Open agent")
-        } else {
-          Color.clear.frame(width: 12)
         }
       }
-      // Truncated header snippets must not inherit SelectionOverlay — long agent
-      // output under lineLimit(1) can thrash GraphHost layout updates.
-      .textSelection(.disabled)
 
       if isExpanded || showUnavailable {
         Divider()
@@ -930,9 +994,6 @@ struct AgentCompletionCard: View {
               .foregroundColor(Ink.secondary)
               .textSelection(.disabled)
           }
-          if isExpanded {
-            collapseControl
-          }
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
@@ -946,22 +1007,6 @@ struct AgentCompletionCard: View {
         isExpanded = true
       }
     }
-  }
-
-  private var collapseControl: some View {
-    Button(action: toggleExpanded) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Spacer(minLength: 0)
-        Text("Collapse")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-        Image(systemName: "chevron.up")
-          .scaledFont(size: OmiType.micro)
-      }
-      .foregroundColor(Ink.secondary)
-      .padding(.top, OmiSpacing.hairline)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
   }
 
   private func toggleExpanded() {
@@ -1400,75 +1445,53 @@ struct ToolCallsGroup: View {
   }
 
   private var header: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Button(action: {
+    StableChatCardHeader(
+      isExpanded: isExpanded,
+      showsDisclosure: true,
+      horizontalPadding: OmiSpacing.sm,
+      verticalPadding: compact ? 0 : OmiSpacing.xs,
+      minimumHeight: compact ? 34 : nil,
+      onToggle: {
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isExpanded.toggle()
         }
-      }) {
-        HStack(spacing: compact ? 7 : 6) {
-          statusIcon(for: aggregateStatus, size: 12)
-
-          Text(currentToolName)
-            .scaledFont(size: OmiType.caption, weight: compact ? .semibold : .regular)
-            .foregroundColor(Ink.secondary)
-            .lineLimit(1)
-
-          if let summary = currentToolSummary, !summary.isEmpty {
-            Text(summary)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-              .truncationMode(.middle)
-          }
-
-          if calls.count > 1 {
-            Text(compact ? "· \(calls.count) steps" : "·")
-              .scaledFont(size: compact ? 11 : 12)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-            if !compact {
-              Text("\(calls.count) steps")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-            }
-          }
-
-          Spacer(minLength: compact ? 0 : 4)
-
-          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .scaledFont(size: OmiType.micro)
-            .foregroundColor(Ink.secondary)
-        }
-        .padding(.leading, OmiSpacing.sm)
-        .padding(.vertical, compact ? 0 : OmiSpacing.xs)
-        .frame(height: compact ? 34 : nil)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .textSelection(.disabled)
-
-      if canOpenSpawnedAgent {
-        Button(action: {
+      },
+      onOpen: canOpenSpawnedAgent
+        ? {
           openSpawnedAgent { succeeded in
             if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
               showUnavailable = true
             }
           }
-        }) {
-          Image(systemName: "arrow.up.forward.app")
-            .scaledFont(size: OmiType.micro)
+        } : nil
+    ) {
+      statusIcon(for: aggregateStatus, size: 12)
+    } content: {
+      HStack(spacing: compact ? 7 : 6) {
+        Text(currentToolName)
+          .scaledFont(size: OmiType.caption, weight: compact ? .semibold : .regular)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(1)
+
+        if let summary = currentToolSummary, !summary.isEmpty {
+          Text(summary)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
-            .padding(.trailing, OmiSpacing.sm)
-            .padding(.vertical, compact ? 0 : OmiSpacing.xs)
-            .frame(height: compact ? 34 : nil)
-            .contentShape(Rectangle())
+            .lineLimit(1)
+            .truncationMode(.middle)
         }
-        .buttonStyle(.plain)
-        .help("Open agent")
-      } else {
-        Color.clear.frame(width: 10)
+
+        if calls.count > 1 {
+          Text(compact ? "· \(calls.count) steps" : "·")
+            .scaledFont(size: compact ? 11 : 12)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+          if !compact {
+            Text("\(calls.count) steps")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+        }
       }
     }
   }
@@ -1551,74 +1574,51 @@ struct ToolCallCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       // Compact header row
-      HStack(spacing: OmiSpacing.xxs) {
-        Button(action: {
-          if hasExpandableContent {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isExpanded.toggle()
-            }
-          }
-        }) {
-          HStack(spacing: OmiSpacing.xs) {
-            // Status indicator — uses the shared statusIcon helper so
-            // .slow / .stalled / .failed render the same way here as in
-            // the group header.
-            statusIcon(for: status, size: 12)
-
-            // Tool name
-            Text(ChatContentBlock.displayName(for: name))
-              .scaledFont(size: OmiType.caption, design: .monospaced)
-              .foregroundColor(Ink.secondary)
-
-            // Inline argument summary
-            if let summary = input?.summary {
-              Text("·")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Text(summary)
-                .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(Ink.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            }
-
-            Spacer(minLength: 4)
-
-            // Expand chevron
+      StableChatCardHeader(
+        isExpanded: isExpanded,
+        showsDisclosure: hasExpandableContent,
+        horizontalPadding: OmiSpacing.sm,
+        verticalPadding: OmiSpacing.xs,
+        onToggle: hasExpandableContent
+          ? {
             if hasExpandableContent {
-              Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .scaledFont(size: OmiType.micro)
-                .foregroundColor(Ink.secondary)
+              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+                isExpanded.toggle()
+              }
             }
-          }
-          .padding(.leading, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xs)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!hasExpandableContent)
-
-        if canOpenSpawnedAgent {
-          Button(action: {
+          } : nil,
+        onOpen: canOpenSpawnedAgent
+          ? {
             openSpawnedAgent { succeeded in
               if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
                 showUnavailable = true
               }
             }
-          }) {
-            Image(systemName: "arrow.up.forward.app")
-              .scaledFont(size: OmiType.micro)
+          } : nil
+      ) {
+        // Status indicator — uses the shared statusIcon helper so
+        // .slow / .stalled / .failed render the same way here as in
+        // the group header.
+        statusIcon(for: status, size: 12)
+      } content: {
+        HStack(spacing: OmiSpacing.xs) {
+          // Tool name
+          Text(ChatContentBlock.displayName(for: name))
+            .scaledFont(size: OmiType.caption, design: .monospaced)
+            .foregroundColor(Ink.secondary)
+
+          // Inline argument summary
+          if let summary = input?.summary {
+            Text("·")
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
-              .padding(.trailing, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.xs)
-              .contentShape(Rectangle())
+
+            Text(summary)
+              .scaledFont(size: OmiType.caption, design: .monospaced)
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+              .truncationMode(.middle)
           }
-          .buttonStyle(.plain)
-          .help("Open agent")
-        } else {
-          Color.clear.frame(width: 10)
         }
       }
 

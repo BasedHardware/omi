@@ -16,6 +16,54 @@ final class ShellSummonTests: XCTestCase {
   private let laptop = NSRect(x: 0, y: 0, width: 1512, height: 900)
   private let studio = NSRect(x: 1512, y: -200, width: 2560, height: 1440)
 
+  // MARK: - Global launch toggle
+
+  @MainActor
+  func testGlobalLaunchToggleSummonsAHiddenShell() {
+    let window = makeShellWindow()
+
+    XCTAssertFalse(window.isVisible)
+    XCTAssertEqual(ShellSummon.toggleAction(for: window), .summon)
+  }
+
+  @MainActor
+  func testGlobalLaunchToggleDismissesAVisibleShell() {
+    let window = makeShellWindow()
+    NonintrusiveTestWindow.orderIn(window)
+    defer { window.orderOut(nil) }
+
+    XCTAssertTrue(window.isVisible)
+    XCTAssertEqual(ShellSummon.toggleAction(for: window), .dismiss)
+  }
+
+  @MainActor
+  func testPermissionSuspensionRestoresTheVisibleShellWithoutRepositioningIt() {
+    let window = makeShellWindow()
+    window.title = OMIApp.currentWindowTitle
+    let placed = NSRect(x: 220, y: 140, width: 960, height: 700)
+    window.setFrame(placed, display: false)
+    NonintrusiveTestWindow.orderIn(window, preserveFrame: true)
+    let captured = window.frame
+    defer { window.orderOut(nil) }
+
+    XCTAssertTrue(ShellSummon.suspendForPermissionPrompt())
+    XCTAssertFalse(window.isVisible)
+
+    ShellSummon.restoreAfterPermissionPrompt()
+
+    XCTAssertTrue(window.isVisible)
+    XCTAssertEqual(window.frame, captured, "permission UI must not re-center the user's shell")
+  }
+
+  @MainActor
+  func testPermissionSuspensionDoesNotReopenAnAlreadyHiddenShell() {
+    let window = makeShellWindow()
+    window.title = OMIApp.currentWindowTitle
+    window.orderOut(nil)
+
+    XCTAssertFalse(ShellSummon.suspendForPermissionPrompt())
+  }
+
   // MARK: - Landing
 
   /// The first summon on a display centres the panel there. Not top-left, not wherever the previous

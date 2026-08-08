@@ -32,6 +32,16 @@ enum ChatContinuityInvariants {
     return output.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  /// Keep compact agent cards from repeating the objective when a generated
+  /// title already embeds it (for example, "Delegated: <objective>").
+  static func agentCardPreviewText(title: String, prompt: String, output: String) -> String {
+    let preview = agentPreviewText(prompt: prompt, output: output)
+    guard !preview.isEmpty else { return "" }
+    let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let normalizedPreview = preview.lowercased()
+    return normalizedTitle.hasSuffix(normalizedPreview) ? "" : preview
+  }
+
   /// Floating/notch viewport may only surface resources owned by viewport message ids.
   /// Historical timeline resources outside the cursor must not appear as orphans.
   static func resourcesBelongingToMessages(

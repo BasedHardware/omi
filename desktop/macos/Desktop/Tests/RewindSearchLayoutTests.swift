@@ -37,6 +37,17 @@ final class RewindSearchLayoutTests: XCTestCase {
       "a card under the minimum has no room to say anything before it truncates")
   }
 
+  func testTheSharedRewindLaneReflowsItsGridWithoutChangingTheThreeColumnContract() {
+    let lane = TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400)
+    let card = RewindSearchLayout.cardWidth(panelWidth: lane)
+    let gutters = RewindSearchLayout.cardGutter * CGFloat(RewindSearchLayout.resultColumns - 1)
+    XCTAssertEqual(
+      card * CGFloat(RewindSearchLayout.resultColumns) + gutters,
+      RewindSearchLayout.contentWidth(panelWidth: lane),
+      accuracy: 0.001)
+    XCTAssertGreaterThan(card, RewindSearchLayout.cardWidth(), "the widened lane has room for readable cards")
+  }
+
   func testNarrowingThePanelEventuallyClipsACard() {
     // The claim the minimum exists to make: it is a real boundary, not decoration.
     XCTAssertLessThan(RewindSearchLayout.cardWidth(panelWidth: 480), RewindSearchLayout.minimumCardWidth)

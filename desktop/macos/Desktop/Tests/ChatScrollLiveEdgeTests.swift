@@ -214,7 +214,7 @@ final class UserScrollDetectorTests: XCTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
       styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = scrollView
-    window.orderFrontRegardless()
+    NonintrusiveTestWindow.orderIn(window)
     defer {
       window.orderOut(nil)
       window.contentView = nil

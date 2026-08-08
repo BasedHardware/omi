@@ -123,6 +123,15 @@ final class SettingsGlassChromeTests: XCTestCase {
     }
   }
 
+  /// Crisp is remote content, so its native view must stay transparent while the document is loading;
+  /// otherwise the shared glass lane briefly flashes an opaque white sheet on every Help visit.
+  func testHelpWebViewDoesNotFlashOpaqueWhiteWhileLoading() throws {
+    let helpSource = try XCTUnwrap(
+      try restyledSources().first(where: { $0.0 == "MainWindow/HelpPage.swift" })?.1)
+    XCTAssertTrue(helpSource.contains("webView.setValue(false, forKey: \"opaque\")"))
+    XCTAssertTrue(helpSource.contains("webView.underPageBackgroundColor = .clear"))
+  }
+
   // MARK: - Helpers
 
   /// Every source file this restyle covers, read off disk.

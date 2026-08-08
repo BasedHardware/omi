@@ -31,6 +31,7 @@ struct RewindSearchResultsPanel: View {
   /// The total number of screenshots behind those groups, for the count the header reports.
   let totalScreenshots: Int
   @Binding var selectedIndex: Int
+  var panelWidth: CGFloat = RewindSearchLayout.panelWidth
   /// The room the page has left for the body. See `RewindSearchLayout.resultsBodyHeight` — inside a
   /// tab this, and not the reference's ceiling, is usually what bounds the panel.
   var availableBodyHeight: CGFloat = .infinity
@@ -116,7 +117,7 @@ struct RewindSearchResultsPanel: View {
         }
       }
     }
-    .frame(width: RewindSearchLayout.panelWidth, alignment: .top)
+    .frame(width: panelWidth, alignment: .top)
     .onPreferenceChange(RewindSearchPanelHeightKey.self) { contentHeight = $0 }
   }
 
@@ -214,7 +215,7 @@ struct RewindSearchResultsPanel: View {
     .padding(.horizontal, RewindSearchLayout.panelPaddingHorizontal)
     .padding(.top, InkLayout.rhythm[3])
     .padding(.bottom, RewindSearchLayout.panelPaddingVertical)
-    .frame(width: RewindSearchLayout.panelWidth, alignment: .leading)
+    .frame(width: panelWidth, alignment: .leading)
   }
 
   /// **The `RESULTS` header is only drawn when something is above it to be separated from.**
@@ -238,11 +239,15 @@ struct RewindSearchResultsPanel: View {
       RewindSearchEmptyNote(
         query.isEmpty ? "Nothing captured matches that yet." : "No screens match “\(query)”.")
     } else {
-      LazyVGrid(columns: Self.columns, alignment: .leading, spacing: InkLayout.rhythm[3]) {
+      LazyVGrid(
+        columns: Self.columns(panelWidth: panelWidth), alignment: .leading,
+        spacing: InkLayout.rhythm[3]
+      ) {
         ForEach(Array(visibleGroups.enumerated()), id: \.element.id) { index, group in
           RewindSearchResultCard(
             group: group,
             query: query,
+            panelWidth: panelWidth,
             isSelected: selectedIndex == index
           ) {
             selectedIndex = index
@@ -259,12 +264,14 @@ struct RewindSearchResultsPanel: View {
   /// Fixed-width columns, not adaptive: the panel is a known width, so the card width is arithmetic
   /// (`RewindSearchLayout.cardWidth`) that a test can hold. An adaptive grid would quietly become two
   /// or four across after a padding change and nothing would say so.
-  static let columns: [GridItem] = Array(
-    repeating: GridItem(
-      .fixed(RewindSearchLayout.cardWidth()),
-      spacing: RewindSearchLayout.cardGutter,
-      alignment: .topLeading),
-    count: RewindSearchLayout.resultColumns)
+  static func columns(panelWidth: CGFloat = RewindSearchLayout.panelWidth) -> [GridItem] {
+    Array(
+      repeating: GridItem(
+        .fixed(RewindSearchLayout.cardWidth(panelWidth: panelWidth)),
+        spacing: RewindSearchLayout.cardGutter,
+        alignment: .topLeading),
+      count: RewindSearchLayout.resultColumns)
+  }
 }
 
 extension RewindSearchResultsPanel {
@@ -288,6 +295,7 @@ struct RewindSearchResultsSurface: View {
   let query: String
   let totalScreenshots: Int
   @Binding var selectedIndex: Int
+  var panelWidth: CGFloat = RewindSearchLayout.panelWidth
   var onOpen: (Int) -> Void = { _ in }
 
   var body: some View {
@@ -297,6 +305,7 @@ struct RewindSearchResultsSurface: View {
         query: query,
         totalScreenshots: totalScreenshots,
         selectedIndex: $selectedIndex,
+        panelWidth: panelWidth,
         availableBodyHeight: max(
           0,
           proxy.size.height - RewindSearchLayout.panelHeaderHeight - RewindSearchLayout.panelGap

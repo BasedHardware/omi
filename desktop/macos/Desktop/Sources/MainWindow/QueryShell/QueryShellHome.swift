@@ -43,6 +43,13 @@ struct QueryShellHome: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   var taskChatCoordinator: TaskChatCoordinator? = nil
+  /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
+  /// preference is enabled. This is presentation-only; capability sampling and rich-block access
+  /// remain owned by `ChatFirstShell`.
+  var forceModernPresentation: Bool = false
+  /// Non-nil only for the sampled Chat-first main-chat surface. It enables the existing inline entity
+  /// controls without creating another provider or transcript.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @Binding var selectedIndex: Int
 
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
@@ -81,8 +88,12 @@ struct QueryShellHome: View {
   /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
   @State private var caretClaims = 0
 
+  private var usesLegacyPresentation: Bool {
+    useLegacyHomeDesign && !forceModernPresentation
+  }
+
   var body: some View {
-    if useLegacyHomeDesign {
+    if usesLegacyPresentation {
       DashboardPage(
         viewModel: viewModel,
         homeStatusStore: homeStatusStore,
@@ -192,20 +203,20 @@ struct QueryShellHome: View {
     // the bridge refuses it here instead — keyed on the stage mode this surface never publishes.
     // See `DesktopAutomationActionRegistry.registerBuiltins`.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
-      guard !useLegacyHomeDesign else { return }
+      guard !usesLegacyPresentation else { return }
       showAnswer()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
-      guard !useLegacyHomeDesign else { return }
+      guard !usesLegacyPresentation else { return }
       showResults()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
-      guard !useLegacyHomeDesign, let query = note.userInfo?["query"] as? String else { return }
+      guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
       chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
-      guard !useLegacyHomeDesign, let path = note.userInfo?["path"] as? String else { return }
+      guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
       stageAttachments([URL(fileURLWithPath: path)])
     }
     // Escape leaves answer mode before the shell's own Escape handler navigates anywhere, because the
@@ -282,7 +293,8 @@ struct QueryShellHome: View {
         chatProvider: chatProvider,
         onOpenConversation: openConversation,
         onOpenMemories: openMemories,
-        onRetry: retry
+        onRetry: retry,
+        chatFirstRichBlockContext: chatFirstRichBlockContext
       )
     }
   }

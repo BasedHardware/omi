@@ -769,7 +769,7 @@ struct DesktopHomeView: View {
 
     let settingsSectionRaw = notification.userInfo?["settingsSection"] as? String
     let settingId = notification.userInfo?["highlightedSettingId"] as? String
-    let activateApp = notification.userInfo?["activateApp"] as? Bool ?? true
+    let activateApp = notification.userInfo?["activateApp"] as? Bool ?? false
 
     if activateApp {
       NSApp.activate()
@@ -807,9 +807,11 @@ struct DesktopHomeView: View {
   private func handleAutomationPresentationCommand(
     _ command: DesktopAutomationPresentationCommand
   ) {
-    NSApp.activate()
-    if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-      window.makeKeyAndOrderFront(nil)
+    if DesktopAutomationWindowPresentation.currentMode != .quiet {
+      NSApp.activate()
+      if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+        window.makeKeyAndOrderFront(nil)
+      }
     }
     navigateToLegacyDestination(.apps)
     reportAutomationState()

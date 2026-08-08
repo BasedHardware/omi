@@ -46,7 +46,8 @@ final class RewindThumbnailLoader {
   /// Longest edge asked of the decoder. A card is `cardWidth` (≈231 pt) across and Retina draws it at
   /// 2×, so 480 px is the size the picture is actually shown at. Asking for more than the file holds
   /// costs nothing — `kCGImageSourceThumbnailMaxPixelSize` is a ceiling, not a target.
-  static let maxPixelSize = Int((RewindSearchLayout.cardWidth() * 2).rounded())
+  static let maxPixelSize = Int(
+    (RewindSearchLayout.cardWidth(panelWidth: ChatComposerLayout.contentLaneMaxWidth) * 2).rounded())
 
   /// Roughly 60 decoded cards. A 480 px thumbnail is ~1.2 MB decoded, so this is ~72 MB — enough that
   /// scrolling a page of results and coming back is free, and bounded so a long session cannot grow
@@ -171,6 +172,7 @@ struct RewindSearchWell: View {
 struct RewindSearchResultCard: View {
   let group: SearchResultGroup
   let query: String
+  var panelWidth: CGFloat = RewindSearchLayout.panelWidth
   /// Whether the keyboard is on this card. Drawn as weight, never as hue.
   var isSelected: Bool = false
   var onOpen: () -> Void = {}
@@ -225,7 +227,7 @@ struct RewindSearchResultCard: View {
           .fixedSize()
       }
     }
-    .frame(width: RewindSearchLayout.cardWidth(), alignment: .leading)
+    .frame(width: RewindSearchLayout.cardWidth(panelWidth: panelWidth), alignment: .leading)
   }
 
   /// The card read aloud. The snippet is left out because the title and source already name the card;

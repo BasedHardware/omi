@@ -163,12 +163,23 @@ final class DesktopChatDriftGuardTests: XCTestCase {
 
   func testChatFirstShellUsesModernTopNavigation() throws {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
+    let queryHomeSource = try sourceFile("MainWindow/QueryShell/QueryShellHome.swift")
+    let answerThreadSource = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern
+    // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
+    // visible-transcript lifecycle remain threaded through the shared answer view.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
-    XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("case .chat:\n      QueryShellHome("))
+    XCTAssertFalse(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("forceModernPresentation: true"))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
+    XCTAssertTrue(queryHomeSource.contains("forceModernPresentation"))
+    XCTAssertTrue(queryHomeSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(answerThreadSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(answerThreadSource.contains("chatTranscriptFirstPageDidLoad()"))
+    XCTAssertTrue(answerThreadSource.contains("chatTranscriptDidDisappear()"))
     XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
     XCTAssertFalse(shellSource.contains("\n      ChatPage("))
     XCTAssertTrue(dashboardSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))

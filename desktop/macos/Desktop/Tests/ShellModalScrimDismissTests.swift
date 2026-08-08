@@ -105,8 +105,8 @@ final class ShellModalScrimDismissTests: XCTestCase {
   ///
   /// A synthetic click rather than a call to the closure, because the thing under test is whether the
   /// scrim's barrier is under the pointer at that point — which is a fact about the mounted view
-  /// tree, not about the closure. `orderFrontRegardless` matches the transcript gesture harness: a
-  /// test process is never the active application, and the window must not need to be.
+  /// tree, not about the closure. The test-only presenter keeps that real window composited without
+  /// covering or intercepting the user's desktop.
   private func click(at point: CGPoint, on view: some View) {
     let size = Self.hostSize
     let host = NSHostingView(rootView: view)
@@ -115,7 +115,7 @@ final class ShellModalScrimDismissTests: XCTestCase {
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = host
-    window.orderFrontRegardless()
+    NonintrusiveTestWindow.orderIn(window)
     defer {
       window.orderOut(nil)
       window.contentView = nil

@@ -8,14 +8,11 @@ import XCTest
 /// Guards that the main window really is **the desktop with panels on it**, and that removing its
 /// chrome removed nothing a user needs.
 ///
-/// This file replaces `ShellGlassGroundTests`, which asserted the opposite shape: that an
-/// `InkGlassView` was installed as the window's `contentView` so the whole window was one slab of
-/// glass. That was the right guard for the bug it was written for — a SwiftUI `.background { … }` is
-/// laid out inside the hosting view's safe area, and `.hiddenTitleBar` reports
-/// `safeAreaInsets.top == 32`, so the ground began 32 pt down and the top strip showed the backdrop
-/// straight through — and it is the wrong guard for the product, which wants no ground at all. The
-/// claims below are the ones that are true now, and the two safety ones are new: hiding the traffic
-/// lights is only acceptable if closing, minimising and moving all survive it.
+/// This file replaces `ShellGlassGroundTests`, which asserted that an `InkGlassView` was installed as
+/// the window's `contentView` so the whole window was one slab of glass. That was the right guard for
+/// the earlier safe-area seam, but the shell's current contract is a white AppKit ground with panel
+/// styling inside it. The claims below are the ones that are true now, and the two safety ones are new:
+/// hiding the traffic lights is only acceptable if closing, minimising and moving all survive it.
 @MainActor
 final class ShellWindowChromeTests: XCTestCase {
 
@@ -34,13 +31,8 @@ final class ShellWindowChromeTests: XCTestCase {
 
   // MARK: - No ground
 
-  /// The claim the ground tests used to make, inverted: **nothing is installed between the window and
-  /// the desktop.**
-  ///
   /// The window keeps the view it was given, and it composites — `isOpaque = false` with a clear
-  /// background — so a pixel no panel covers is the user's wallpaper. Either half alone is the same
-  /// defect: an opaque window cannot show the desktop through it, and a window that paints its own
-  /// `backgroundColor` slips a sheet in front of it.
+  /// background — so a pixel no panel covers is the user's wallpaper.
   func testTheWindowHasNoGroundAndCompositesTheDesktopThrough() throws {
     let window = makeWindow()
     let hosted = try XCTUnwrap(window.contentView)
@@ -65,8 +57,8 @@ final class ShellWindowChromeTests: XCTestCase {
 
   // MARK: - The chrome that went, and what replaced it
 
-  /// The three coloured circles are gone. On a window with no frame behind them they hung on the
-  /// wallpaper attached to nothing, which reads as a fault rather than as controls.
+  /// The three coloured circles are gone. On a window with no frame behind them they hung attached to
+  /// nothing, which reads as a fault rather than as controls.
   func testTheStandardWindowButtonsAreHidden() throws {
     let window = makeWindow()
 
@@ -187,26 +179,23 @@ final class ShellWindowChromeTests: XCTestCase {
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
   }
 
-  /// The shell wears its own glass, not the titled window's — **in both presentations.** The
-  /// difference is one property and it is the most visible thing on the screen: AppKit's frame shadow
-  /// on a window that is a transparent rectangle around inset panels draws a hard rounded edge around
-  /// empty air, which reads as a second sheet of glass laid over the wallpaper.
+  /// The shell wears its own glass, not the titled window's — **in both presentations.** The window is
+  /// transparent while the inset panels retain their own glass and ambient shadows.
   ///
-  /// Anchored was `.titled` while the window had a full-bleed ground, and kept it after the ground was
-  /// retired. That is the defect this asserts is gone: onboarding is a card floating on the desktop,
-  /// so its window may no more draw a frame than the summoned shell's may.
+  /// Anchored was `.titled` while the window had a full-bleed glass ground, and kept it after the
+  /// ground was retired. The current mapping keeps the shell's visible depth cue with its panel surfaces.
   func testTheShellWearsGlassThatLeavesTheShadowToItsPanelsInBothPresentations() {
     XCTAssertEqual(ShellWindowChrome.glassKind, .summoned)
     XCTAssertFalse(
       WindowGlass.drawsSystemShadow(ShellWindowChrome.glassKind),
-      "the panels inside draw their own ambient shadow; AppKit's would trace the transparent frame")
+      "the panels inside draw their own ambient shadow; the shell does not add an outer frame shadow")
     XCTAssertTrue(
       WindowGlass.hasTitlebar(ShellWindowChrome.glassKind),
       "the transparent title bar is one of the shell's two drag handles, and ⌘W routes from the mask")
   }
 
   /// …and `dress` really applies it, in both presentations. The mapping above is a value; this is the
-  /// window, and a first run that ordered a system shadow onto the desktop is the reason the value
+  /// window, and a first run that ordered a system shadow around the white shell is the reason the value
   /// alone is not enough of a claim.
   func testNeitherPresentationLetsAppKitDrawTheWindowsOwnShadow() {
     for presentation in ShellWindowChrome.Presentation.allCases {
@@ -216,9 +205,8 @@ final class ShellWindowChromeTests: XCTestCase {
       XCTAssertFalse(
         window.hasShadow,
         """
-        \(presentation) leaves AppKit drawing the window's frame shadow. The window is transparent \
-        and the panels inside it carry `InkGlassShadow.ambient`, so this traces a rounded rectangle \
-        around empty desktop — the "second sheet of glass" a first-run screen shipped with.
+        \(presentation) leaves AppKit drawing the window's frame shadow. The panels inside it carry \
+        `InkGlassShadow.ambient`, so the shell must not add a second outer frame shadow.
         """)
       XCTAssertFalse(window.isOpaque, "\(presentation) must stay transparent for the desktop to show")
     }

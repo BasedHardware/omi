@@ -312,6 +312,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     BundleEnvironment.loadIfNeeded()
 
     DesktopAutomationBridge.shared.startIfNeeded()
+    DesktopAutomationWindowPresentation.installIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
@@ -620,6 +621,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       if restoreMainWindowAfterUpdateRelaunch == false {
         window.orderOut(nil)
         log("AppDelegate: Shell suppressed after background update relaunch")
+      } else if DesktopAutomationWindowPresentation.currentMode != .normal {
+        DesktopAutomationWindowPresentation.applyLaunchMode(to: window)
+        log(
+          "AppDelegate: Shell launched in \(DesktopAutomationWindowPresentation.currentMode.rawValue) automation presentation"
+        )
       } else {
         NSApp.activate()
         ShellSummon.summon(alwaysPlace: true)
@@ -760,6 +766,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
           // Bring app to front and summon the shell onto the display the cursor is on.
+          DesktopAutomationWindowPresentation.revealForUser()
           NSApp.activate()
           ShellSummon.summon()
           // Post notification to navigate to Rewind
@@ -1038,9 +1045,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   /// Bring the main Omi window to the front, creating it if needed. Shared by
-  /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
-  /// shortcut, and the floating bar's "Continue in Omi" affordance.
+  /// the menu-bar "Open Omi" item, the auth callback, and the floating bar's
+  /// "Continue in Omi" affordance. The Dock callback summons directly, while
+  /// the global Open Omi shortcut uses `toggleMainAppWindow()` so it can also
+  /// dismiss the shell.
   @MainActor func openMainAppWindow() {
+    DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
     NSApp.activate(ignoringOtherApps: true)
@@ -1066,6 +1076,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     if !foundWindow {
       log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }
+  }
+
+  /// Toggle the main shell for the global Open Omi shortcut. Other entry points intentionally use
+  /// `openMainAppWindow()` (or direct summon for the Dock) because menu-bar, Dock, Continue-in-Omi,
+  /// and auth flows are open/focus actions even when the shell is already visible.
+  @MainActor func toggleMainAppWindow() -> ShellSummon.ToggleAction {
+    if DesktopAutomationWindowPresentation.revealForUser() {
+      openMainAppWindow()
+      return .summon
+    }
+    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow())
+    switch action {
+    case .summon:
+      openMainAppWindow()
+    case .dismiss:
+      ShellSummon.dismiss()
+    }
+    return action
   }
 
   /// A summon can come from any Space and any display, and can outlive the launch pass that dressed
@@ -1227,6 +1255,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     // The Dock icon is the guaranteed way back to a shell you put away with Escape or ⌘W — the
     // reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
+    DesktopAutomationWindowPresentation.revealForUser()
     guard MainActor.assumeIsolated({ ShellSummon.summon() }) else { return true }
     sender.activate(ignoringOtherApps: true)
     log("AppDelegate: Summoned the shell from a dock click (wasVisible=\(flag))")

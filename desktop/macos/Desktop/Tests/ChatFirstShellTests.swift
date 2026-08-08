@@ -91,18 +91,45 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
-  func testEscapeReturnsToChatFromSecondaryRoutesAndRemainsUnhandledOnChat() throws {
+  func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {
     let suiteName = "ChatFirstShellTests.escape-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
-    navigation.selectPrimary(.tasks)
+    for route: ChatFirstRoute in [.tasks, .more(.settings)] {
+      switch route {
+      case .more(let page): navigation.selectMore(page)
+      default: navigation.selectPrimary(route)
+      }
 
-    XCTAssertTrue(navigation.handleEscapeNavigation())
-    XCTAssertEqual(navigation.route, .chat)
+      XCTAssertTrue(navigation.handleEscapeNavigation(), route.stableName)
+      XCTAssertEqual(navigation.route, .chat, route.stableName)
+    }
     XCTAssertFalse(navigation.handleEscapeNavigation())
     XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testSettingsRouteMountsSectionNavigationAndContentInTheSameDestination() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/ChatFirst/ChatFirstShell.swift")
+    // omi-test-quality: source-inspection -- static contract: SwiftUI settings composition wiring
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let moreDestination = try XCTUnwrap(
+      source.components(separatedBy: "private func moreDestination").last
+    )
+    let settingsTail = try XCTUnwrap(
+      moreDestination.components(separatedBy: "case .settings:").dropFirst().first
+    )
+    let settingsDestination = try XCTUnwrap(
+      settingsTail.components(separatedBy: "/// Existing Dashboard").first
+    )
+
+    XCTAssertTrue(settingsDestination.contains("SettingsSidebar("))
+    XCTAssertTrue(settingsDestination.contains("SettingsPage("))
+    XCTAssertTrue(settingsDestination.contains("navigation.handleEscapeNavigation()"))
   }
 
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
@@ -187,10 +214,10 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(navigation.pendingFocus)
 
     // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted (Home is
-    // the only chat). A second legacy selection still has to re-route, so the coverage moves to a
-    // destination that still exists rather than being dropped.
+    // the only chat). Legacy dashboard callbacks now re-enter that canonical Chat route rather than
+    // selecting a second dashboard presentation.
     navigation.selectLegacyDestination(.dashboard)
-    XCTAssertEqual(navigation.route, .more(.dashboard))
+    XCTAssertEqual(navigation.route, .chat)
   }
 
   func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() throws {
@@ -309,7 +336,8 @@ final class ChatFirstShellTests: XCTestCase {
   func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
-    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .more(.dashboard))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .chat)
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "dashboard"), .chat)
 
     XCTAssertTrue(
       DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
@@ -447,6 +475,29 @@ final class ChatFirstShellTests: XCTestCase {
         chatFirstRoute: .chat,
         lastPublishedMode: nil),
       "before DashboardPage reports, the honest answer is 'not known', not 'hub'")
+  }
+
+  func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
+    let wrapped: [ChatFirstRoute] = [
+      .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.permissions), .more(.help), .more(.settings),
+    ]
+    let selfContained: [ChatFirstRoute] = [.chat, .more(.dashboard), .more(.rewind)]
+
+    for route in wrapped {
+      XCTAssertTrue(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
+      XCTAssertNotEqual(
+        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
+        SidebarNavItem.dashboard.rawValue,
+        route.stableName)
+      XCTAssertNotEqual(
+        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
+        SidebarNavItem.rewind.rawValue,
+        route.stableName)
+    }
+    for route in selfContained {
+      XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
+    }
   }
 
   /// Only the two routes that mount `DashboardPage` have a stage. Navigating away publishes `nil`

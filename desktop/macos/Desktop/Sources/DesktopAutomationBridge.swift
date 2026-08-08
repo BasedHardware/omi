@@ -9,6 +9,8 @@ enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
   static let portPrefix = "--automation-port="
   static let captureRootPrefix = "--automation-capture-root="
+  static let uiPresentationPrefix = "--automation-ui="
+  static let uiPresentationEnvironmentKey = "OMI_AUTOMATION_UI_MODE"
   static let defaultPort: UInt16 = 47777
   static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
   static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
@@ -60,6 +62,28 @@ enum DesktopAutomationLaunchOptions {
     }
 
     return defaultPort
+  }
+
+  static var uiPresentationMode: DesktopAutomationUIPresentationMode {
+    uiPresentationMode(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment)
+  }
+
+  static func uiPresentationMode(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> DesktopAutomationUIPresentationMode {
+    guard allowsLocalAutomation else { return .normal }
+    for argument in arguments where argument.hasPrefix(uiPresentationPrefix) {
+      let rawValue = String(argument.dropFirst(uiPresentationPrefix.count)).lowercased()
+      return DesktopAutomationUIPresentationMode(rawValue: rawValue) ?? .normal
+    }
+    let rawValue = environment[uiPresentationEnvironmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    return rawValue.flatMap(DesktopAutomationUIPresentationMode.init(rawValue:)) ?? .normal
   }
 
   static var token: String {
@@ -733,6 +757,43 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    register(
+      name: "set_automation_ui_presentation",
+      summary:
+        "Park automation windows quietly, reveal them briefly for Accessibility, or restore normal user presentation",
+      params: ["mode", "activate"],
+      category: "app_control",
+      surfaces: ["app"],
+      safety: "local_ui_state",
+      sideEffects: ["changes non-production window placement and input handling"],
+      examples: [
+        "./scripts/omi-ctl ui quiet",
+        "./scripts/omi-ctl ui interactive --activate",
+        "./scripts/omi-ctl ui normal --activate",
+      ]
+    ) { params in
+      // This registry is reachable only through DesktopAutomationBridge, whose listener cannot start
+      // for production-family or published-preview bundles. Keep the handler itself exercisable in a
+      // hermetic test instead of duplicating the bridge's stronger process boundary here.
+      guard let requested = params["mode"]?.lowercased() else {
+        return [
+          "mode": DesktopAutomationWindowPresentation.currentMode.rawValue,
+          "available_modes": DesktopAutomationUIPresentationMode.allCases.map(\.rawValue).joined(
+            separator: ","),
+        ]
+      }
+      guard let mode = DesktopAutomationUIPresentationMode(rawValue: requested) else {
+        throw DesktopAutomationActionError.invalidParams(
+          "mode must be normal, quiet, or interactive")
+      }
+      let activate = boolParam(params["activate"], default: false)
+      let previous = DesktopAutomationWindowPresentation.setMode(mode, activate: activate)
+      return [
+        "previous_mode": previous.rawValue,
+        "mode": DesktopAutomationWindowPresentation.currentMode.rawValue,
+        "activated": activate ? "true" : "false",
+      ]
+    }
     // The five cursor-free Home-stage drivers, together because they share a failure mode:
     // see DesktopAutomationHomeStageActions.swift.
     registerHomeStageActions()
@@ -4157,16 +4218,16 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   }
 
   private func dispatchNavigation(_ payload: DesktopAutomationNavigationRequest) async throws {
-    await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    let activateApp = DesktopAutomationNavigationDelivery.resolvesActivation(
+      explicit: payload.activateApp)
+    await activateMainWindowIfNeeded(activateApp)
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationNavigateRequested,
         object: nil,
-        userInfo: [
-          "target": payload.target,
-          "settingsSection": payload.settingsSection as Any,
-          "highlightedSettingId": payload.highlightedSettingId as Any,
-        ]
+        userInfo: DesktopAutomationNavigationDelivery.userInfo(
+          for: payload,
+          activateApp: activateApp)
       )
     }
   }
@@ -4187,7 +4248,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   }
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
-    await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    await activateMainWindowIfNeeded(
+      DesktopAutomationNavigationDelivery.resolvesActivation(explicit: payload.activateApp))
     try await ensureConversationsTabVisibleForAutomation()
     await requestAutomationConversationOpen(
       conversationId: payload.conversationId,

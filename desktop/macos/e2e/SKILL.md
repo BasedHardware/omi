@@ -63,6 +63,13 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+The typed `omi-harness` keeps bridge and visual runs in the action-controlled
+`quiet` presentation and restores the prior mode in teardown. AX snapshots and
+semantic `press` actions remain quiet and cursor-free. An explicit coordinate
+`click` temporarily requests `interactive` with activation in the bottom-right
+corner, then returns to `quiet` in a `finally` path. Older bundles that do not
+expose `set_automation_ui_presentation` continue with a recorded warning.
+
 For a background-agent/voice regression, use the read-only cross-surface probe after
 the child run reaches a terminal state:
 ```bash

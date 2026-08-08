@@ -107,9 +107,22 @@ struct ChatFirstShell: View {
 
   @ViewBuilder
   private var destination: some View {
+    if ChatFirstPageGlassLanePolicy.shouldWrap(navigation.route) {
+      PageGlassLane(
+        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route)
+      ) {
+        routeDestination
+      }
+    } else {
+      routeDestination
+    }
+  }
+
+  @ViewBuilder
+  private var routeDestination: some View {
     switch navigation.route {
     case .chat:
-      DashboardPage(
+      QueryShellHome(
         viewModel: viewModelContainer.dashboardViewModel,
         homeStatusStore: viewModelContainer.homeStatusStore,
         appState: appState,
@@ -117,6 +130,7 @@ struct ChatFirstShell: View {
         chatProvider: viewModelContainer.chatProvider,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         taskChatCoordinator: viewModelContainer.taskChatCoordinator,
+        forceModernPresentation: true,
         chatFirstRichBlockContext: richBlockContext,
         selectedIndex: legacySelectionBinding
       )
@@ -276,7 +290,9 @@ struct ChatFirstShell: View {
   private func moreDestination(_ page: ChatFirstMorePage) -> some View {
     switch page {
     case .dashboard:
-      DashboardPage(
+      // Keep the persisted legacy route as a compatibility alias, but render the canonical modern
+      // Home surface so a dashboard deep link can never introduce a second chat/composer/transcript.
+      QueryShellHome(
         viewModel: viewModelContainer.dashboardViewModel,
         homeStatusStore: viewModelContainer.homeStatusStore,
         appState: appState,
@@ -284,9 +300,8 @@ struct ChatFirstShell: View {
         chatProvider: viewModelContainer.chatProvider,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         taskChatCoordinator: viewModelContainer.taskChatCoordinator,
-        onOpenPrimaryChat: {
-          navigation.selectPrimary(.chat)
-        },
+        forceModernPresentation: true,
+        chatFirstRichBlockContext: richBlockContext,
         selectedIndex: legacySelectionBinding
       )
     case .rewind:
@@ -303,12 +318,21 @@ struct ChatFirstShell: View {
     case .help:
       HelpPage()
     case .settings:
-      SettingsPage(
-        appState: appState,
-        selectedSection: $selectedSettingsSection,
-        highlightedSettingId: $highlightedSettingID,
-        chatProvider: viewModelContainer.chatProvider
-      )
+      HStack(spacing: 0) {
+        SettingsSidebar(
+          selectedSection: $selectedSettingsSection,
+          highlightedSettingId: $highlightedSettingID,
+          onBack: {
+            _ = navigation.handleEscapeNavigation()
+          }
+        )
+        SettingsPage(
+          appState: appState,
+          selectedSection: $selectedSettingsSection,
+          highlightedSettingId: $highlightedSettingID,
+          chatProvider: viewModelContainer.chatProvider
+        )
+      }
     }
   }
 
@@ -341,6 +365,36 @@ struct ChatFirstShell: View {
       case .help: return .help
       case .settings: return .settings
       }
+    }
+  }
+}
+
+/// Chat-first keeps Home and Rewind as self-contained surfaces. All other mounted destinations
+/// receive the existing shared lane exactly once at the shell boundary.
+enum ChatFirstPageGlassLanePolicy {
+  static func shouldWrap(_ route: ChatFirstRoute) -> Bool {
+    switch route {
+    case .chat, .more(.dashboard), .more(.rewind):
+      return false
+    case .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.permissions), .more(.help), .more(.settings):
+      return true
+    }
+  }
+
+  /// `PageGlassLane` uses this legacy index only to select its shared-panel branch. Goals has no
+  /// legacy sidebar item, so its closest existing non-owning list-page index is used.
+  static func pageGlassLaneIndex(for route: ChatFirstRoute) -> Int {
+    switch route {
+    case .chat, .more(.dashboard): return SidebarNavItem.dashboard.rawValue
+    case .conversations: return SidebarNavItem.conversations.rawValue
+    case .tasks, .goals: return SidebarNavItem.tasks.rawValue
+    case .memories: return SidebarNavItem.memories.rawValue
+    case .more(.rewind): return SidebarNavItem.rewind.rawValue
+    case .more(.apps): return SidebarNavItem.apps.rawValue
+    case .more(.permissions): return SidebarNavItem.permissions.rawValue
+    case .more(.help): return SidebarNavItem.help.rawValue
+    case .more(.settings): return SidebarNavItem.settings.rawValue
     }
   }
 }

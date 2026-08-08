@@ -319,7 +319,7 @@ Fast path (skips web login and sidebar click-through):
      tmp/desktop-auth.json "/Applications/omi-<feature>.app"   # clears stale Keychain; UD→KC migrate
    ./scripts/omi-settings-seed.sh com.omi.omi-<feature>        # replay shortcuts/settings
    ```
-2. **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events). Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once via distinct `OMI_AUTOMATION_PORT` (default 47777).
+2. **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events). Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once via distinct `OMI_AUTOMATION_PORT` (default 47777). Navigation stays backgrounded unless `--show` is passed.
    - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
    - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.

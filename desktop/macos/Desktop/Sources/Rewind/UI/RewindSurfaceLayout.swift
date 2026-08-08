@@ -22,19 +22,12 @@
 //  value — so they are welded onto one surface. A `panelGap` between a picture and its own scrubber
 //  would say the scrubber belongs to something else.
 //
-//  ## The player is deliberately not on the lane
+//  ## One lane, all the way down
 //
-//  `contentLaneWidth` is `min(ChatComposerLayout.contentLaneMaxWidth, available − 2·pageMargin)`, and
-//  the 900 in it is a **measure**: the width past which a column of reading type stops being readable.
-//  The player holds no column of type. It holds a picture that wants the room, and a track that maps a
-//  pointer's x to a capture timestamp by binary search (`RewindTrackNSView.instant(atX:)`), so every
-//  point taken off its width is resolution taken off the scrub — on a wide window the reading clamp
-//  would throw away more than half of it and damage the feature to serve the styling.
-//
-//  So the player keeps the page's own margin and drops the reading clamp. Below
-//  `contentLaneMaxWidth + 2·pageMargin` the two widths are the same number and the two panels share a
-//  leading edge exactly (`edgesCoincide`); above it the header stays a bar and the player takes the
-//  glass the ruler needs.
+//  The player used to drop the reading clamp on wide windows to give the scrubber more pixels. That
+//  made Rewind the only destination whose lower glass moved past the shared top-bar edge, and the
+//  result looked like a second, unrelated window. The timeline is still fully usable at the shared
+//  lane width, so every Rewind panel now uses the same readable lane as the navigation and query bar.
 //
 //  Brand: nothing here picks a colour at all — the surface is `InkGlass`'s (INV-UI-1).
 //
@@ -69,16 +62,12 @@ enum RewindSurfaceLayout {
     TopNavigationLayoutMetrics.contentLaneWidth(for: availableWidth)
   }
 
-  /// The player's width: the page's margin, without the reading clamp. See the file header.
+  /// The player's width: the same lane as the header and every other destination.
   static func playerWidth(for availableWidth: CGFloat) -> CGFloat {
-    max(0, availableWidth - ChatComposerLayout.pageMargin * 2)
+    headerWidth(for: availableWidth)
   }
 
   /// Whether the two panels share a leading edge at this window width.
-  ///
-  /// True on any window narrow enough that the reading clamp is not what is binding, which is the
-  /// common case and the one the composition is tuned for. A value rather than a remark, so "they
-  /// line up until the lane runs out of room" is a claim a test can hold.
   static func edgesCoincide(availableWidth: CGFloat) -> Bool {
     abs(playerWidth(for: availableWidth) - headerWidth(for: availableWidth)) < 0.5
   }

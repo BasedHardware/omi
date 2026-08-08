@@ -39,6 +39,7 @@ extension AppState {
   }
 
   func openAutomationPreferences() {
+    ShellSummon.suspendForPermissionPrompt()
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
     {
@@ -53,11 +54,15 @@ extension AppState {
 
       if authorizationStatus == .notDetermined {
         // First time - show the system prompt
+        let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
         NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
           reason: "launch_disabled_error",
           previousStatus: "notDetermined"
         ) { [weak self] _ in
-          MainActor.assumeIsolated { self?.checkNotificationPermission() }
+          MainActor.assumeIsolated {
+            if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
+            self?.checkNotificationPermission()
+          }
         }
       } else if authorizationStatus == .denied {
         // Previously denied - open System Settings so user can enable manually

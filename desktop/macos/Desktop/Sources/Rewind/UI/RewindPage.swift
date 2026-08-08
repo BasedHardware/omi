@@ -101,8 +101,8 @@ struct RewindPage: View {
       } else if let error = viewModel.errorMessage {
         errorView(error)
       } else {
-        // Two objects on the desktop: a header on the shared lane, and a player wide enough to scrub.
-        // Every width is `RewindSurfaceLayout`'s — see that file for why they are not the same lane.
+        // Rewind is two glass objects with one shared lane. Keeping the lower player aligned with the
+        // header prevents the route from reading like a differently-sized window.
         GeometryReader { proxy in
           let header = RewindSurfaceLayout.headerWidth(for: proxy.size.width)
           let player = RewindSurfaceLayout.playerWidth(for: proxy.size.width)
@@ -127,7 +127,7 @@ struct RewindPage: View {
                   timelineWithSearch.rewindPlayerPanel(width: player)
                 } else {
                   // Already two panels of its own, with its own gap under the bar.
-                  fullScreenResultsView
+                  fullScreenResultsView(width: header)
                 }
               } else if viewModel.screenshots.isEmpty {
                 emptyState.rewindPlayerPanel(width: player)
@@ -478,12 +478,13 @@ struct RewindPage: View {
   /// The panel owns its own grid, filter block, height clamp and scrolling
   /// (`RewindSearchResultsPanel`); the page keeps only what is genuinely the page's — which group is
   /// selected, and what opening one does.
-  private var fullScreenResultsView: some View {
+  private func fullScreenResultsView(width: CGFloat) -> some View {
     RewindSearchResultsSurface(
       groups: viewModel.groupedSearchResults,
       query: viewModel.activeSearchQuery ?? "",
       totalScreenshots: viewModel.totalScreenshotCount,
-      selectedIndex: $selectedGroupIndex
+      selectedIndex: $selectedGroupIndex,
+      panelWidth: width
     ) { groupIndex in
       // Set the screenshots to this group's screenshots for timeline navigation
       selectedGroupIndex = groupIndex

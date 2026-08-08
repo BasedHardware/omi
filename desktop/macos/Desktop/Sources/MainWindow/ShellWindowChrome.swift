@@ -38,8 +38,8 @@
 //
 //  ## The two presentations, and why there are two
 //
-//  A surface with no ground and no chrome is not a managed application window any more; it is a thing
-//  you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you were
+//  A surface with no visible chrome is not a conventional managed application window any more; it is a
+//  thing you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you were
 //  reading and *stays* in front of it. `ShellSummon` owns where it lands.
 //
 //  ## Why it does not hide itself when it loses focus

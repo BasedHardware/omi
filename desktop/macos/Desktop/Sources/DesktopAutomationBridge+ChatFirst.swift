@@ -13,6 +13,27 @@ struct DesktopAutomationNavigationRequest: Codable {
   let waitForVisibility: Bool?
 }
 
+/// The single handoff from the HTTP bridge into the mounted SwiftUI shell. Keeping activation in the
+/// same value as the route prevents a cursor-free request from silently defaulting back to foreground
+/// activation when it crosses NotificationCenter.
+enum DesktopAutomationNavigationDelivery {
+  static func resolvesActivation(explicit: Bool?) -> Bool {
+    explicit ?? false
+  }
+
+  static func userInfo(
+    for payload: DesktopAutomationNavigationRequest,
+    activateApp: Bool
+  ) -> [String: Any] {
+    [
+      "target": payload.target,
+      "settingsSection": payload.settingsSection as Any,
+      "highlightedSettingId": payload.highlightedSettingId as Any,
+      "activateApp": activateApp,
+    ]
+  }
+}
+
 /// Selects whether `/navigate` measures command acknowledgement or waits for
 /// the destination view to mount. The default remains the historical mounted
 /// visibility contract; responsiveness probes explicitly opt into the faster
