@@ -529,10 +529,14 @@ class TestCallbackTemplateRendering:
             code="test-auth-code",
             state="test-state",
             redirect_uri="omi-computer://auth/callback",
+            redirect_url="omi-computer://auth/callback?code=test-auth-code&state=test-state",
         )
 
         assert 'omi-computer://auth/callback' in html
         assert "omi://auth/callback" not in html  # hardcoded value must not appear
+        assert 'href="omi-computer://auth/callback?code=test-auth-code&amp;state=test-state"' in html
+        assert 'const redirectUrl = "omi-computer://auth/callback?code=test-auth-code\\u0026state=test-state"' in html
+        assert 'window.location.assign(redirectUrl);' in html
 
     def test_template_json_escapes_redirect_uri(self):
         """Verify redirect_uri is JSON-escaped in the template (XSS prevention)."""
@@ -548,6 +552,7 @@ class TestCallbackTemplateRendering:
             code='test</script><script>alert(1)',
             state='test-state',
             redirect_uri='omi-computer://auth/callback',
+            redirect_url='omi-computer://auth/callback?code=test-auth-code',
         )
 
         assert '</script><script>' not in html
@@ -565,9 +570,38 @@ class TestCallbackTemplateRendering:
         html = template.render(
             code="test-code",
             state="test-state",
+            redirect_url="omi://auth/callback?code=test-code&state=test-state",
         )
 
         assert 'omi://auth/callback' in html
+
+    def test_template_manual_link_is_usable_without_javascript(self):
+        """Native callback URL is present in HTML before script execution."""
+        pytest.importorskip("jinja2")
+        from jinja2 import Environment, FileSystemLoader
+        import pathlib
+
+        templates_dir = pathlib.Path(__file__).parent.parent.parent / "templates"
+        env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
+        template = env.get_template("auth_callback.html")
+
+        html = template.render(
+            code="test-code",
+            state="test-state",
+            redirect_uri="omi://auth/callback",
+            redirect_url="omi://auth/callback?code=test-code&state=test-state",
+        )
+
+        assert 'href="omi://auth/callback?code=test-code&amp;state=test-state"' in html
+
+
+def test_build_callback_redirect_url_preserves_query_and_fragment():
+    from routers.auth import _build_callback_redirect_url
+
+    assert (
+        _build_callback_redirect_url("omi://auth/callback?source=mobile#complete", "test-code", "test-state")
+        == "omi://auth/callback?source=mobile&code=test-code&state=test-state#complete"
+    )
 
 
 class TestCallbackEndpoints:
@@ -609,6 +643,9 @@ class TestCallbackEndpoints:
             assert stored['code_challenge_method'] == 'S256'
             assert 'credentials' in stored
             assert ttl == 300
+            callback_context = mock_templates.TemplateResponse.call_args.args[2]
+            assert callback_context['redirect_url'].startswith('omi-computer://auth/callback?code=')
+            assert callback_context['redirect_url'].endswith('&state=test-state')
 
     def test_callback_defaults_redirect_uri_when_missing_from_session(self):
         """When session has no redirect_uri, callback falls back to default."""
@@ -637,6 +674,9 @@ class TestCallbackEndpoints:
             stored = json.loads(mock_set_code.call_args[0][1])
             assert stored['redirect_uri'] == _DEFAULT_MOBILE_REDIRECT
             assert stored['code_challenge'] == _PKCE_CHALLENGE
+            callback_context = mock_templates.TemplateResponse.call_args.args[2]
+            assert callback_context['redirect_url'].startswith('omi://auth/callback?code=')
+            assert callback_context['redirect_url'].endswith('&state=test-state')
 
 
 class TestTokenEdgeCases:
