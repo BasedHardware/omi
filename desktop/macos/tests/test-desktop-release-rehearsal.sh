@@ -16,16 +16,17 @@ set -e
 [[ "$invalid_status" -ne 0 ]]
 [[ "$invalid_output" == *"must be 24 lowercase hexadecimal characters"* ]]
 
-! rg -n -- '--request[[:space:]]+POST|gh[[:space:]]+release|gh[[:space:]]+workflow[[:space:]]+run' "$REHEARSAL"
-rg -q '\[\[ "\$provider_status" == "failed" \]\]' "$REHEARSAL"
-rg -Fq 'storage[.]googleapis[.]com/codemagic-build-artifacts' "$REHEARSAL"
-rg -q 'expected exactly one failed Codemagic step' "$REHEARSAL"
-rg -q 'expected exactly one \$artifact_name artifact' "$REHEARSAL"
-rg -q -- '--expected-bundle-id com.omi.computer-macos.beta' "$REHEARSAL"
-rg -q -- '--expected-feed-url.*identity=beta' "$REHEARSAL"
-rg -q -- '--expected-python-api-url.*api.omiapi.com' "$REHEARSAL"
-rg -q 'CODEMAGIC_API_TOKEN.*unsupported characters' "$REHEARSAL"
-rg -q 'artifact_name="Omi.app.zip"' "$REHEARSAL"
-rg -q 'audit-desktop-bundle-deps.sh' "$REHEARSAL"
+! grep -En -- '--request[[:space:]]+POST|gh[[:space:]]+release|gh[[:space:]]+workflow[[:space:]]+run' "$REHEARSAL"
+grep -Eq '\[\[ "\$provider_status" == "failed" \]\]' "$REHEARSAL"
+grep -Fq 'storage[.]googleapis[.]com/codemagic-build-artifacts' "$REHEARSAL"
+grep -Eq 'expected exactly one failed Codemagic step' "$REHEARSAL"
+grep -Eq 'expected exactly one \$artifact_name artifact' "$REHEARSAL"
+grep -Eq -- '--expected-bundle-id com.omi.computer-macos.beta' "$REHEARSAL"
+grep -Eq -- '--expected-feed-url.*identity=beta' "$REHEARSAL"
+grep -Eq -- '--expected-python-api-url.*api.omiapi.com' "$REHEARSAL"
+grep -Eq 'CODEMAGIC_API_TOKEN.*unsupported characters' "$REHEARSAL"
+grep -Eq 'artifact_name="Omi.app.zip"' "$REHEARSAL"
+grep -Eq 'audit-desktop-bundle-deps.sh' "$REHEARSAL"
+grep -Fq '10#$clean_timeout_seconds' "$REHEARSAL"
 
 echo "PASS: desktop release rehearsal is manual, fail-closed, and non-publishing"

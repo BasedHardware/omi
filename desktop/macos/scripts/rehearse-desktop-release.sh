@@ -145,11 +145,14 @@ echo "Provider failure: $failed_step_name"
 if [[ "$RUN_CLEAN_BUILD" == true ]]; then
   clean_scratch="$OUTPUT_DIR/swift-release"
   clean_timeout_seconds="${OMI_RELEASE_REHEARSAL_CLEAN_TIMEOUT_SECONDS:-2700}"
-  [[ "$clean_timeout_seconds" =~ ^[0-9]+$ && "$clean_timeout_seconds" -ge 60 ]] \
+  [[ "$clean_timeout_seconds" =~ ^[0-9]+$ ]] \
+    || fail "OMI_RELEASE_REHEARSAL_CLEAN_TIMEOUT_SECONDS must be an integer of at least 60"
+  clean_timeout_decimal=$((10#$clean_timeout_seconds))
+  (( clean_timeout_decimal >= 60 )) \
     || fail "OMI_RELEASE_REHEARSAL_CLEAN_TIMEOUT_SECONDS must be an integer of at least 60"
   mkdir -p "$clean_scratch"
   echo "== Clean local release compile"
-  python3 - "$MACOS_DIR" "$clean_scratch" "$clean_timeout_seconds" 2>&1 <<'PY' | tee "$OUTPUT_DIR/clean-release-build.log"
+  python3 - "$MACOS_DIR" "$clean_scratch" "$clean_timeout_decimal" 2>&1 <<'PY' | tee "$OUTPUT_DIR/clean-release-build.log"
 import os
 import signal
 import subprocess

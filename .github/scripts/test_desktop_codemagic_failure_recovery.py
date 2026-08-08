@@ -77,6 +77,12 @@ class RecoveryTests(unittest.TestCase):
             b"PASS: identity\nFAIL: agent tool manifest missing\n"
             b"ERROR: token=super-secret\nFAIL: Authorization: Bearer bearer-secret\n"
             b"ERROR: API key: api-secret\nWARN: client_secret=client-secret-value\n"
+            b"ERROR: RELEASE_SECRET=release-secret-value\n"
+            b"WARN: GITHUB_TOKEN=github-token-value\n"
+            b"FAIL: SIGNING_KEY='quoted signing key'\n"
+            b"WARN: AWS_SECRET_ACCESS_KEY=aws-secret-value\n"
+            b"ERROR: Cookie: session=session-secret; csrf=csrf-secret\n"
+            b"WARN: Set-Cookie: auth=set-cookie-secret; Secure; HttpOnly\n"
             b"FAIL: https://example.test/callback?access_token=query-secret&mode=test\n"
         )
         capsule = RECOVERY.build_capsule(
@@ -96,6 +102,12 @@ class RecoveryTests(unittest.TestCase):
                 "FAIL: Authorization: <redacted>",
                 "ERROR: API key: <redacted>",
                 "WARN: client_secret=<redacted>",
+                "ERROR: RELEASE_SECRET=<redacted>",
+                "WARN: GITHUB_TOKEN=<redacted>",
+                "FAIL: SIGNING_KEY=<redacted>",
+                "WARN: AWS_SECRET_ACCESS_KEY=<redacted>",
+                "ERROR: Cookie: <redacted>",
+                "WARN: Set-Cookie: <redacted>",
                 "FAIL: https://example.test/callback?access_token=<redacted>&mode=test",
             ],
         )
@@ -103,6 +115,13 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn("bearer-secret", json.dumps(capsule))
         self.assertNotIn("api-secret", json.dumps(capsule))
         self.assertNotIn("client-secret-value", json.dumps(capsule))
+        self.assertNotIn("release-secret-value", json.dumps(capsule))
+        self.assertNotIn("github-token-value", json.dumps(capsule))
+        self.assertNotIn("quoted signing key", json.dumps(capsule))
+        self.assertNotIn("aws-secret-value", json.dumps(capsule))
+        self.assertNotIn("session-secret", json.dumps(capsule))
+        self.assertNotIn("csrf-secret", json.dumps(capsule))
+        self.assertNotIn("set-cookie-secret", json.dumps(capsule))
         self.assertNotIn("query-secret", json.dumps(capsule))
 
     def test_provider_only_failure_does_not_prescribe_local_rehearsal(self) -> None:
