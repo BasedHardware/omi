@@ -706,7 +706,14 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  // Omi-button actions are user-configurable; when disabled, single/double-tap
+  // and device-button voice commands are ignored. This gate intentionally does
+  // NOT apply to interactive onboarding, which must still receive button events.
+  bool get _omiButtonActionsDisabled =>
+      _recordingDevice?.type == DeviceType.omi && !SharedPreferencesUtil().omiButtonActionsEnabled;
+
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    if (_omiButtonActionsDisabled) return;
     if (data.isEmpty) {
       Logger.debug("voice frames is empty");
       return;
@@ -775,6 +782,10 @@ class CaptureController extends ChangeNotifier
             return;
           }
         }
+
+        // Omi button actions are disabled by the user: skip action handling but
+        // onboarding (handled above) still receives button events regardless.
+        if (_omiButtonActionsDisabled) return;
 
         // double tap
         if (buttonState == 2) {

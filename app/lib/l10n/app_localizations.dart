@@ -1017,6 +1017,12 @@ abstract class AppLocalizations {
   /// **'Automatically sync offline recordings when your device connects'**
   String get autoSyncDescription;
 
+  /// Toggle in device settings that controls whether the mobile app responds to Omi button actions
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Button Actions'**
+  String get omiButtonActions;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:

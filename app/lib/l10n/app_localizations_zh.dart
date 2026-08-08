@@ -431,6 +431,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSyncDescription => '设备连接时自动同步离线录音';
 
   @override
+  String get omiButtonActions => 'Omi 按钮操作';
+
+  @override
   String get deviceSettings => '设备设置';
 
   @override

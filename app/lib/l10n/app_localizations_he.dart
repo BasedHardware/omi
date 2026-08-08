@@ -435,6 +435,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
+  String get omiButtonActions => 'פעולות כפתור Omi';
+
+  @override
   String get deviceSettings => 'הגדרות המכשיר';
 
   @override
