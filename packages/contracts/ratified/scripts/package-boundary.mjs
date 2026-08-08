@@ -19,22 +19,24 @@ const provenance = JSON.parse(provenanceBytes);
  * 0.3.0 added the write wire and was `additive`: one new export subpath
  * (`./write/ops`) and two fixture corpora, removing and narrowing nothing.
  *
- * 0.4.0 is `breaking`, declared over-cautiously and on purpose. It changes
- * `WRITE_ERRORS.maintenance.body` from a fixed string to `null`, because the
- * 503 body is under a live escalation to fable
- * (data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md §1) and a
- * ratified contract must not fix a byte string that a pending ruling may move.
- * Narrowing a type is `breaking` by §1's own rules, and "when in doubt, it is
- * breaking" settles the rest.
+ * 0.4.0 was `breaking`: it retracted `WRITE_ERRORS.maintenance.body` to `null`
+ * because the 503 body was under escalation to fable and a ratified contract
+ * must not fix a byte string a pending ruling may move.
+ *
+ * 0.5.0 is `breaking`. Fable ruled (COORD-fable-rulings-wave2 W1) and the body
+ * is now ratified — but `WRITE_ERRORS.maintenance` is REMOVED rather than
+ * refilled, and the value lands in a new `WRITE_AVAILABILITY` table with its own
+ * reader. Removing anything is `breaking` by §1's rules, and the removal is the
+ * point: the ruling's binding condition is that the fifth value is an
+ * AVAILABILITY SIGNAL, not a fifth authorization outcome, and leaving it beside
+ * the request-errors would have encoded in code the framing the ruling refused.
  *
  * §8's breaking-bump discipline, satisfied rather than waved:
- *   - WHAT DATA WRITTEN UNDER 0.4.0 MEANS TO A CLIENT ON 0.3.0: nothing. This
- *     is a REQUEST-shape and error-table contract; no data is persisted in any
- *     shape it defines, and the change removes a constant rather than altering
- *     a payload.
- *   - IS IT IRREVERSIBLE? No. Nothing adopted 0.3.0 — it was pushed to
- *     core/foundation and no consumer ever vendored it, so there is no client
- *     in the field and rollback is a re-vendor.
+ *   - WHAT DATA WRITTEN UNDER 0.5.0 MEANS TO A CLIENT ON 0.4.0: nothing. This is
+ *     a REQUEST-shape and outcome-table contract; no data is persisted in any
+ *     shape it defines.
+ *   - IS IT IRREVERSIBLE? No. 0.4.0 is adopted only on the platform trunk, with
+ *     no client in the field, so rollback is a re-vendor.
  */
 const COMPATIBILITY_CLASS = "breaking";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
@@ -89,7 +91,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.4.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.5.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");

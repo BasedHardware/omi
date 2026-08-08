@@ -34,6 +34,7 @@ import { classifyStatus } from "@omi-core/kernel";
 import {
   isWritableDomain,
   parseWriteId,
+  readWriteAvailabilitySignal,
   readWriteRefusalOutcome,
   writeOpsPath,
   type WritableDomain,
@@ -145,8 +146,40 @@ export function classifyWriteOpsResponse(response: HttpResponse, detail: string)
   if (body !== undefined && response.status === 409 && body === '{"error":"write_id_reuse"}') {
     return { kind: "permanent", reason: "validation", detail };
   }
-  // 503 maintenance is backpressure. `classifyStatus` already maps 5xx to
-  // retryable, which is correct here; the surface-level maintenance notice is
-  // a separate concern owned by the shell (ADR-007), not a taxonomy kind.
+  // `control_unavailable` is BACKPRESSURE and classifies `retryable`: the op
+  // stays queued, is never dead-lettered, and nothing was recorded server-side.
+  // `classifyStatus` maps 503 to retryable already, so the taxonomy answer is
+  // the same either way — which is exactly why the signal must ALSO be readable
+  // separately, below. Collapsing it into `permanent` would be the failure
+  // COORD-fable-rulings-wave2 W1 rejected: a migration window turned into a
+  // permanent lost edit.
   return classifyStatus(response, detail);
+}
+
+/**
+ * Did the server say it cannot decide about this account right now?
+ *
+ * Separate from `classifyWriteOpsResponse` because the two answer different
+ * questions and only one of them is in the `WriteFailure` taxonomy. The failure
+ * kind is `retryable` — keep the op, retry with backoff — and that is correct
+ * but INCOMPLETE. `COORD-fable-rulings-wave2` W1 signed this value precisely
+ * because it carries a client behaviour a plain 503 cannot instruct: **refresh
+ * control state, then drain the op wherever authority actually lives.**
+ *
+ * The case that makes the difference concrete is rollback. `backend:ADR-007` §6
+ * restores legacy authority, so an op retried in place goes to a platform that
+ * will never accept it, for the length of the incident, while its real home is
+ * legacy. A binding that ignores this returns a correct-looking retry loop that
+ * cannot ever succeed.
+ *
+ * There is deliberately NO new `WriteFailure` kind for it. Adding one changes
+ * what a person is told on the dead-letter surface, and that is above this
+ * lane's bar — and unnecessary, because the op is not dead-lettered at all. The
+ * control-state refresh belongs to the shell binding that owns ADR-007's
+ * control path, and this predicate is how that binding learns it is needed.
+ */
+export function isControlUnavailable(response: HttpResponse): boolean {
+  const body = response.text;
+  if (body === undefined) return false;
+  return readWriteAvailabilitySignal(response.status, body) === "control_unavailable";
 }

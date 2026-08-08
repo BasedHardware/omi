@@ -40,6 +40,10 @@ import {
   WRITE_OPS_PATH_PATTERN,
   WRITE_REFUSAL_OUTCOMES,
   WRITE_REFUSALS,
+  WRITE_AVAILABILITY,
+  WRITE_AVAILABILITY_SIGNALS,
+  CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  readWriteAvailabilitySignal,
   writeOpsPath,
 } from "../dist/write/ops.js";
 
@@ -369,23 +373,31 @@ test("the write-ops schema of record matches the module's own tables", async () 
     assert.ok(row, `error outcome ${name} is missing from the schema of record`);
     assert.equal(row.kind, "error");
     assert.equal(row.status, error.status);
-    // A null body is a DECLARED non-ratification, not a gap. The schema must say
-    // so explicitly and must record what the serving side emits today, so "we
-    // have not ratified this" can never be confused with "nobody looked".
     assert.equal(row.body, error.body, `${name} body`);
-    assert.equal(row.bodyRatified, error.body !== null, `${name} bodyRatified`);
-    if (error.body === null) {
-      assert.equal(typeof row.servingSideBody, "string", `${name} must record the serving side's current spelling`);
-      assert.ok(row.note.includes("escalation"), `${name} must name why its body is unratified`);
-    }
   }
-  // The 503 body is under escalation to fable and this contract must not fix it.
-  // red-proof: give WRITE_ERRORS.maintenance a string body and this goes red.
-  // APPLIED AND OBSERVED RED.
-  assert.equal(WRITE_ERRORS.maintenance.body, null);
-  assert.equal(WRITE_ERRORS.maintenance.status, 503);
+  for (const signal of WRITE_AVAILABILITY_SIGNALS) {
+    const row = declared.get(signal);
+    assert.ok(row, `availability signal ${signal} is missing from the schema of record`);
+    // The KIND is the ruling. COORD-fable-rulings-wave2 W1 binds this contract to
+    // record the fifth value as an availability signal and not as a fifth
+    // authorization outcome, so "availability" is asserted, not assumed.
+    // red-proof: change this row's kind to "refusal" in the schema and this goes
+    // red. APPLIED AND OBSERVED RED.
+    assert.equal(row.kind, "availability", `${signal} must not be recorded as a refusal`);
+    assert.equal(row.status, WRITE_AVAILABILITY[signal].status);
+    assert.equal(row.body, WRITE_AVAILABILITY[signal].body);
+    assert.equal(row.retryAfterSeconds, WRITE_AVAILABILITY[signal].retryAfterSeconds);
+  }
+  // `maintenance` is gone from the request-error table on purpose.
+  assert.equal("maintenance" in WRITE_ERRORS, false);
   // Nothing in the schema that the module does not define.
-  const known = new Set([...WRITE_REFUSAL_OUTCOMES, ...Object.keys(WRITE_ERRORS), "accepted", "accepted_idempotent"]);
+  const known = new Set([
+    ...WRITE_REFUSAL_OUTCOMES,
+    ...Object.keys(WRITE_ERRORS),
+    ...WRITE_AVAILABILITY_SIGNALS,
+    "accepted",
+    "accepted_idempotent",
+  ]);
   for (const row of schema.outcomes) assert.ok(known.has(row.outcome), `schema declares unknown outcome ${row.outcome}`);
 });
 
@@ -409,6 +421,33 @@ test("a stale-epoch refusal is never byte-identical to conflict or gone", () => 
   // A right body under a wrong status is not a refusal class. A server that
   // moved the status would otherwise keep passing.
   assert.equal(readWriteRefusalOutcome(200, WRITE_REFUSALS.stale_epoch.body), null);
+});
+
+test("control_unavailable is readable, and is NOT one of the four refusal outcomes", () => {
+  // COORD-fable-rulings-wave2 W1's binding condition, expressed as two readers
+  // rather than as a comment. A single five-valued reader would be the framing
+  // the ruling refused, in the form a future caller actually reads.
+  //
+  // red-proof: add control_unavailable to WRITE_REFUSAL_OUTCOMES/WRITE_REFUSALS
+  // so the refusal reader answers it, and this goes red.
+  // APPLIED AND OBSERVED RED.
+  const wire = WRITE_AVAILABILITY.control_unavailable;
+  assert.equal(readWriteAvailabilitySignal(wire.status, wire.body), "control_unavailable");
+  assert.equal(readWriteRefusalOutcome(wire.status, wire.body), null);
+  assert.equal(WRITE_REFUSAL_OUTCOMES.length, 4, "ADR-010 §3's four authorization outcomes stay four");
+  assert.ok(!WRITE_REFUSAL_OUTCOMES.includes("control_unavailable"));
+
+  // The conditions the ruling made load-bearing: fixed body, fixed retry-after,
+  // and no account state anywhere in it.
+  assert.equal(wire.retryAfterSeconds, CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS);
+  assert.equal(wire.retryAfterSeconds, 60);
+  assert.equal(wire.body.includes("epoch"), false, "the active epoch is never returned");
+  assert.equal(wire.status, 503);
+  // And it must not collide with any refusal body — the collapse onto stale_epoch
+  // is the one that would turn a migration window into a permanent lost edit.
+  for (const outcome of WRITE_REFUSAL_OUTCOMES) {
+    assert.notEqual(wire.body, WRITE_REFUSALS[outcome].body);
+  }
 });
 
 test("write_id is minted from caller entropy and never derived", () => {
