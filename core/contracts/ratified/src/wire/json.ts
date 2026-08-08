@@ -36,7 +36,7 @@ function detachJsonData(value: unknown): unknown {
       const key = String(index);
       const descriptor = descriptors[key];
       if (!isJsonDataDescriptor(descriptor)) throw new TypeError("invalid JSON array entry");
-      Object.defineProperty(detached, key, { ...descriptor, value: detachJsonData(descriptor.value) });
+      defineDetachedDataProperty(detached, key, detachJsonData(descriptor.value));
     }
     return detached;
   }
@@ -46,9 +46,19 @@ function detachJsonData(value: unknown): unknown {
     if (typeof key !== "string") throw new TypeError("invalid JSON object key");
     const descriptor = descriptors[key];
     if (!isJsonDataDescriptor(descriptor)) throw new TypeError("invalid JSON object property");
-    Object.defineProperty(detached, key, { ...descriptor, value: detachJsonData(descriptor.value) });
+    defineDetachedDataProperty(detached, key, detachJsonData(descriptor.value));
   }
   return detached;
+}
+
+/** ToPropertyDescriptor cannot probe inherited get/set on this null-prototype record. */
+function defineDetachedDataProperty(target: object, key: string, value: unknown): void {
+  const descriptor = Object.create(null) as PropertyDescriptor;
+  descriptor.value = value;
+  descriptor.enumerable = true;
+  descriptor.configurable = true;
+  descriptor.writable = true;
+  Object.defineProperty(target, key, descriptor);
 }
 
 /**

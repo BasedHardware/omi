@@ -23,8 +23,8 @@
   "inputs": [
     {
       "path": "fixtures/clean-consumer/conformance.mjs",
-      "sha256": "1eff03cc31d1f3bd8b3ea8e7210323d2e9feae8427841821042ba546a484de1e",
-      "bytes": 4344
+      "sha256": "bde155f1f552b3b1e1a04392c08aa2f1e7b588cec1255317da4b3c4348f480e0",
+      "bytes": 5272
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "eefaff1b90fe4cb0797738d0757fd4f21f8c51d59ccd07e90c6f833657cd2367",
-      "bytes": 4071
+      "sha256": "bb492a450eebb21d2da3f2c7c719793a948213b96997f0fbdf8e680b2976400b",
+      "bytes": 4134
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -128,13 +128,13 @@
     },
     {
       "path": "src/wire/json.ts",
-      "sha256": "6b0b67ae280c81f27b3e7d9cf6c725294dc48c817c03d0f58a480ff7bbe3945c",
-      "bytes": 5369
+      "sha256": "ce1bc985ae476270cab3715393d22851eab9b0572da7c5ad3cf12fdb9253fa77",
+      "bytes": 5747
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "1faf7b0c0698694fa6339bf1f6473c8327e4c2b853572a685d6640f84451e79e",
-      "bytes": 11085
+      "sha256": "cc64a26bd4523114d19ee8a2653fd5097efe7cc97c87ed7ed0fd91c60749c854",
+      "bytes": 12114
     },
     {
       "path": "tsconfig.base.json",
@@ -147,5 +147,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "9fff749ca05182bbdac72c344d9d4248468c978de7b7bacce426a65824cefd4f"
+  "sourceDigest": "81ad79497254690762d0555435388803d9be0dd5b7f1c29d308f31bfa29bc218"
 }

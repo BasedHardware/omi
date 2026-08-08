@@ -41,7 +41,8 @@ uses either an ordinary terminal-complete window or an ordinary paginated-more c
 Untrusted wire input must enter through the bounded canonical raw-JSON parsers. They reject
 malformed, oversized, noncanonical, and duplicate-key payloads before validating the contract.
 Canonical verification first copies parsed objects and arrays by descriptor into a null-prototype
-graph, so inherited `toJSON` or omitted-optional-field getters cannot execute.
+graph using null-prototype property-descriptor records, so inherited `toJSON`, `get`/`set`, or
+omitted-optional-field getters cannot execute.
 The exported object predicates are only for already-parsed trusted JSON data; they reject deep
 nonplain graphs and accessors, but JavaScript cannot inspect a hostile `Proxy` without possible
 trap execution.

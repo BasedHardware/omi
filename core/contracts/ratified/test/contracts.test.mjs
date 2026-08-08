@@ -179,7 +179,7 @@ test("raw trace parser and trusted predicate enforce data-only nested stages", a
   assert.equal(isTrustedRecallTraceData(new Proxy(structuredClone(trace), {})), false);
 });
 
-test("raw parsers never consult inherited toJSON or omitted optional fields", { concurrency: false }, async () => {
+test("raw parsers never consult inherited toJSON, descriptor, or optional-field getters", { concurrency: false }, async () => {
   const pageFixture = JSON.parse(await readFile(new URL("../fixtures/page-conformance.json", import.meta.url), "utf8"));
   const page = structuredClone(pageFixture.find((row) => row.safe).page);
   delete page.items[0].citations;
@@ -189,8 +189,11 @@ test("raw parsers never consult inherited toJSON or omitted optional fields", { 
   const traceRaw = JSON.stringify(trace);
   const originalToJSON = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
   const originalCitations = Object.getOwnPropertyDescriptor(Object.prototype, "citations");
+  const originalGet = Object.getOwnPropertyDescriptor(Object.prototype, "get");
+  const originalSet = Object.getOwnPropertyDescriptor(Object.prototype, "set");
   let toJSONGetterCalls = 0;
   let citationsGetterCalls = 0;
+  let descriptorGetterCalls = 0;
   let parsedPage;
   let parsedTrace;
 
@@ -203,17 +206,22 @@ test("raw parsers never consult inherited toJSON or omitted optional fields", { 
       configurable: true,
       get() { citationsGetterCalls += 1; return ["citation-v1:inherited"]; },
     });
+    definePrototypeGetter("get", () => { descriptorGetterCalls += 1; return undefined; });
+    definePrototypeGetter("set", () => { descriptorGetterCalls += 1; return undefined; });
     parsedPage = parseSynthesizedPageJson(pageRaw);
     parsedTrace = parseRecallTraceJson(traceRaw);
   } finally {
     restorePrototypeProperty("toJSON", originalToJSON);
     restorePrototypeProperty("citations", originalCitations);
+    restorePrototypeProperty("get", originalGet);
+    restorePrototypeProperty("set", originalSet);
   }
 
   assert.ok(parsedPage);
   assert.ok(parsedTrace);
   assert.equal(toJSONGetterCalls, 0);
   assert.equal(citationsGetterCalls, 0);
+  assert.equal(descriptorGetterCalls, 0);
 });
 
 function statusMatrixPage(row) {
@@ -251,6 +259,21 @@ function statusMatrixPage(row) {
 }
 
 function restorePrototypeProperty(name, descriptor) {
-  if (descriptor) Object.defineProperty(Object.prototype, name, descriptor);
-  else delete Object.prototype[name];
+  Reflect.deleteProperty(Object.prototype, name);
+  if (descriptor) Object.defineProperty(Object.prototype, name, copyPropertyDescriptor(descriptor));
+}
+
+function definePrototypeGetter(name, getter) {
+  const descriptor = Object.create(null);
+  descriptor.configurable = true;
+  descriptor.get = getter;
+  Object.defineProperty(Object.prototype, name, descriptor);
+}
+
+function copyPropertyDescriptor(source) {
+  const copy = Object.create(null);
+  for (const key of ["configurable", "enumerable", "value", "writable", "get", "set"]) {
+    if (Object.hasOwn(source, key)) copy[key] = source[key];
+  }
+  return copy;
 }

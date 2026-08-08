@@ -34,6 +34,8 @@ const canonicalPageRaw = JSON.stringify(canonicalPage);
 const canonicalTraceRaw = JSON.stringify(canonicalTrace);
 const originalToJSON = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
 const originalCitations = Object.getOwnPropertyDescriptor(Object.prototype, "citations");
+const originalGet = Object.getOwnPropertyDescriptor(Object.prototype, "get");
+const originalSet = Object.getOwnPropertyDescriptor(Object.prototype, "set");
 let inheritedGetterCalls = 0;
 let parsedPage;
 let parsedTrace;
@@ -46,11 +48,15 @@ try {
     configurable: true,
     get() { inheritedGetterCalls += 1; return ["citation-v1:inherited"]; },
   });
+  definePrototypeGetter("get", () => { inheritedGetterCalls += 1; return undefined; });
+  definePrototypeGetter("set", () => { inheritedGetterCalls += 1; return undefined; });
   parsedPage = parseSynthesizedPageJson(canonicalPageRaw);
   parsedTrace = parseRecallTraceJson(canonicalTraceRaw);
 } finally {
   restorePrototypeProperty("toJSON", originalToJSON);
   restorePrototypeProperty("citations", originalCitations);
+  restorePrototypeProperty("get", originalGet);
+  restorePrototypeProperty("set", originalSet);
 }
 assert.ok(parsedPage);
 assert.ok(parsedTrace);
@@ -61,8 +67,23 @@ async function fixture(name) {
 }
 
 function restorePrototypeProperty(name, descriptor) {
-  if (descriptor) Object.defineProperty(Object.prototype, name, descriptor);
-  else delete Object.prototype[name];
+  Reflect.deleteProperty(Object.prototype, name);
+  if (descriptor) Object.defineProperty(Object.prototype, name, copyPropertyDescriptor(descriptor));
+}
+
+function definePrototypeGetter(name, getter) {
+  const descriptor = Object.create(null);
+  descriptor.configurable = true;
+  descriptor.get = getter;
+  Object.defineProperty(Object.prototype, name, descriptor);
+}
+
+function copyPropertyDescriptor(source) {
+  const copy = Object.create(null);
+  for (const key of ["configurable", "enumerable", "value", "writable", "get", "set"]) {
+    if (Object.hasOwn(source, key)) copy[key] = source[key];
+  }
+  return copy;
 }
 
 function statusMatrixPage(row) {
