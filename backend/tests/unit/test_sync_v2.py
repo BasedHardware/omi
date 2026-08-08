@@ -1329,6 +1329,8 @@ class TestAsyncCoordinatorBehavioral:
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
+            'utils.account_cutover',
+            'utils.account_cutover.access',
             'utils.analytics',
             'utils.byok',
             'utils.client_device',
@@ -1368,6 +1370,9 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
+            return_value=False
+        )
         # Keep the outcome contract real; the coordinator tests exercise its
         # enum values while every heavyweight provider dependency stays stubbed.
         saved_modules['utils'] = prior_utils
@@ -3034,6 +3039,8 @@ class TestV2EndpointExecution:
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
+            'utils.account_cutover',
+            'utils.account_cutover.access',
             'utils.analytics',
             'utils.byok',
             'utils.client_device',
@@ -3073,6 +3080,9 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
+            return_value=False
+        )
         saved_modules['utils'] = prior_utils
         saved_modules['utils.sync'] = prior_utils_sync
         saved_modules['utils.stt'] = prior_utils_stt

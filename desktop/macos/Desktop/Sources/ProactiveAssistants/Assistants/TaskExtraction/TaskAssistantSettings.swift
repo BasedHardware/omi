@@ -326,14 +326,26 @@ class TaskAssistantSettings {
   }
 
   /// Interval between task extraction analyses in seconds
+  ///
+  /// A non-positive interval is not a schedule, and it is refused where it arrives rather than
+  /// papered over on every read. The old `value > 0 ? value : default` left the store holding a
+  /// number the app never honoured: a `0` synced down from the account read back as 600, the pane
+  /// painted 600, and the next `syncToServer()` pushed 600 — silently overwriting what the account
+  /// actually said. Normalising the write, and healing a value an older build already stored, keeps
+  /// stored state and reported state the same number.
   var extractionInterval: TimeInterval {
     get {
-      let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
-      return value > 0 ? value : defaultExtractionInterval
+      let stored = UserDefaults.standard.double(forKey: extractionIntervalKey)
+      guard stored > 0 else {
+        UserDefaults.standard.set(defaultExtractionInterval, forKey: extractionIntervalKey)
+        return defaultExtractionInterval
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-      log("Task extraction interval updated to \(newValue) seconds")
+      let interval = newValue > 0 ? newValue : defaultExtractionInterval
+      UserDefaults.standard.set(interval, forKey: extractionIntervalKey)
+      log("Task extraction interval updated to \(interval) seconds")
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

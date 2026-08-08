@@ -3243,5 +3243,11 @@
     "pinAsBaseline": "Закрепить как базовое",
     "unpinAsBaseline": "Открепить от базового",
     "baselineMemory": "Базовая память",
-    "alwaysInContext": "Всегда в контексте"
+    "alwaysInContext": "Всегда в контексте",
+    "accountCutoverUpdateRequiredTitle": "Требуется обновление",
+    "accountCutoverUpdateRequiredMessage": "Установите последнее приложение Omi, чтобы продолжить после миграции аккаунта.",
+    "accountCutoverMigrationInProgressTitle": "Идёт миграция",
+    "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
+    "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
+    "accountCutoverOpenStore": "Открыть магазин"
 }

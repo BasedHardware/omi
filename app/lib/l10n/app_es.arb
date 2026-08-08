@@ -3209,5 +3209,11 @@
     "pinAsBaseline": "Fijar como base",
     "unpinAsBaseline": "Dejar de fijar como base",
     "baselineMemory": "Memoria base",
-    "alwaysInContext": "Siempre en contexto"
+    "alwaysInContext": "Siempre en contexto",
+    "accountCutoverUpdateRequiredTitle": "Actualización requerida",
+    "accountCutoverUpdateRequiredMessage": "Instala la última app de Omi para continuar después de la migración de la cuenta.",
+    "accountCutoverMigrationInProgressTitle": "Migración en curso",
+    "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
+    "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
+    "accountCutoverOpenStore": "Abrir tienda"
 }

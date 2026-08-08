@@ -1,14 +1,23 @@
+import OmiTheme
 import SwiftUI
 
 /// Orbital ring loading animation for the onboarding file-indexing step.
 /// Renders a partial gradient arc that fills as `progress` increases,
 /// orbiting glow particles, and a breathing center pulse.
+///
+/// Every mark was `Color.white` on a near-black card, which on the light-pinned panel is the panel
+/// — the whole animation drew nothing. It is `Ink` throughout now, so it darkens on light glass and
+/// lightens on a dark mat from one set of values.
 struct OnboardingLoadingAnimation: View {
   /// 0.0 … 1.0
   var progress: Double
 
   var body: some View {
-    TimelineView(.animation) { timeline in
+    // `paused:` is what Reduce Motion means to a `TimelineView`: the schedule stops advancing, so
+    // the orbit and the breath hold still while `progress` — which is information, not motion —
+    // keeps redrawing the arc. A perpetual animation that ignores the setting is the one kind that
+    // can never be waited out.
+    TimelineView(.animation(paused: InkReduceMotion.isEnabled)) { timeline in
       let time = timeline.date.timeIntervalSinceReferenceDate
       Canvas { context, size in
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -18,8 +27,8 @@ struct OnboardingLoadingAnimation: View {
         let pulseScale = 0.15 + 0.08 * sin(time * 1.8)
         let pulseRadius = radius * pulseScale
         let pulseGradient = Gradient(colors: [
-          Color.white.opacity(0.4),
-          Color.white.opacity(0.0),
+          Ink.primary.opacity(0.4),
+          Ink.primary.opacity(0.0),
         ])
         let pulseShading = GraphicsContext.Shading.radialGradient(
           pulseGradient,
@@ -42,8 +51,12 @@ struct OnboardingLoadingAnimation: View {
           center: center, radius: radius,
           startAngle: .degrees(0), endAngle: .degrees(360),
           clockwise: false)
+        // `separator` and not the reading rung: this ring is the *unfilled* half of a progress
+        // readout, and `Ink.secondary` is `labelColor` at 0.80 — beside the `Ink.primary` arc drawn
+        // over it at 1.0 the two are the same mark, so the ring would read as already complete. The
+        // faint-line token is what a track is.
         context.stroke(
-          trackPath, with: .color(Color.white.opacity(0.12)),
+          trackPath, with: .color(Ink.separator),
           lineWidth: 3)
 
         // --- Orbital ring (filled arc) ---
@@ -56,8 +69,8 @@ struct OnboardingLoadingAnimation: View {
             endAngle: .degrees(-90 + arcEnd),
             clockwise: false)
           let arcGradient = Gradient(colors: [
-            Color.white,
-            Color.gray,
+            Ink.primary,
+            Ink.secondary,
           ])
           context.stroke(
             arcPath,
@@ -84,8 +97,8 @@ struct OnboardingLoadingAnimation: View {
           let glowSize = pSize * 3
           let glowRect = CGRect(x: px - glowSize, y: py - glowSize, width: glowSize * 2, height: glowSize * 2)
           let glowGradient = Gradient(colors: [
-            Color.gray.opacity(particleOpacities[i] * 0.5),
-            Color.gray.opacity(0),
+            Ink.secondary.opacity(particleOpacities[i] * 0.5),
+            Ink.secondary.opacity(0),
           ])
           context.fill(
             Circle().path(in: glowRect),
@@ -96,7 +109,7 @@ struct OnboardingLoadingAnimation: View {
           // Dot
           context.fill(
             Circle().path(in: pRect),
-            with: .color(.white.opacity(particleOpacities[i])))
+            with: .color(Ink.primary.opacity(particleOpacities[i])))
         }
       }
     }

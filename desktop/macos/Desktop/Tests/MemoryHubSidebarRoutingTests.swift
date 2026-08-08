@@ -31,6 +31,26 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(memoryDestinationRawValue, MemoryHubDestination.conversations.rawValue)
   }
 
+  /// The menu/keyboard route (`⌘2`, posted as `.navigateToSidebarItem`) resolves the hub view
+  /// through this, not through `applySidebarSelection` — it has no `inout` pair to hand over.
+  ///
+  /// Regression: the handler used to set only the rail index, so a menu item **labelled
+  /// "Conversations"** opened the hub on whichever view was last persisted. The hub's stored default
+  /// is `.memories` (`MemoryHubDestination.allCases` starts there), so out of the box `⌘2` opened
+  /// Memories. Naming a destination and landing on a different one is the failure this asserts is
+  /// gone.
+  func testAMenuCallerNamingConversationsResolvesConversationsNotTheRememberedView() {
+    XCTAssertEqual(MemoryHubDestination.destination(for: .conversations), .conversations)
+  }
+
+  /// The other half of the same contract: a caller that names a page outside the hub must not
+  /// disturb the hub's remembered view on its way past.
+  func testAMenuCallerNamingAPageOutsideTheHubResolvesNoHubView() {
+    XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
+    XCTAssertNil(MemoryHubDestination.destination(for: .rewind))
+    XCTAssertNil(MemoryHubDestination.destination(for: .settings))
+  }
+
   func testLegacyHomeDesignKeepsConversationsAsAStandalonePage() {
     XCTAssertEqual(
       MemoryHubDestination.presentation(
