@@ -9,7 +9,9 @@ import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
 import { HomeProduction } from "./HomeProduction.js";
+import { MemoriesPlatformProduction } from "./MemoriesPlatformProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
+import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFixtureState } from "./proposition-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
 import "./styles.css";
@@ -17,11 +19,14 @@ import "./styles.css";
 const query = new URLSearchParams(location.search);
 const requestedRoute = query.get("route");
 const requestedQa = query.get("qa");
+// The platform generation is a second *presentation* of Memories, not a second route:
+// `?qa=memories-platform` reviews it against fixtures, and generation selection for the
+// live path is FE-CORE's `resolveGenerationSelection`, never a URL guess.
 const route: "home" | "memories" | "conversations" | "tasks" = requestedRoute === "tasks" || requestedQa === "tasks"
   ? "tasks"
   : requestedRoute === "conversations" || requestedQa === "conversations" || requestedQa === "conversation-detail"
     ? "conversations"
-    : requestedRoute === "memories" || requestedQa === "memories"
+    : requestedRoute === "memories" || requestedQa === "memories" || requestedQa === "memories-platform"
       ? "memories"
       : "home";
 const requestedPlatform = query.get("platform");
@@ -121,9 +126,16 @@ if (query.get("lab") === "1") {
     ? fixtureValue as TaskFixtureState
     : undefined;
   const detailId = query.get("conversation") ?? (requestedQa === "conversation-detail" && conversationFixture ? fixtureConversationDetailId(conversationFixture) : undefined);
+  const propositionFixture = requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
+    ? fixtureValue as PropositionFixtureState
+    : undefined;
   const homeFixture = requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
-  if (homeFixture) {
+  if (propositionFixture) {
+    // `source` is required by the component, so a fixture render can never be mistaken
+    // for live account data — the badge is on screen at every width.
+    root.render(<StrictMode><MemoriesPlatformProduction store={fixturePropositionStore(propositionFixture)} source={{ kind: "fixture", fixture: propositionFixture }} locale={locale} onReady={() => emitReady(`fixture:${propositionFixture}`)} /></StrictMode>);
+  } else if (homeFixture) {
     root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {
     root.render(<StrictMode><TasksProduction store={fixtureTaskStore(taskFixture)} fixture={taskFixture} locale={locale} translate={translateTasks} now={TASK_FIXED_NOW} onReady={() => emitReady(`fixture:${taskFixture}`)} /></StrictMode>);

@@ -1,0 +1,244 @@
+/*
+ * Platform-generation Memories (propositions read model).
+ *
+ * Shares the production shell, header, notice and empty-state rules from styles.css and
+ * adds only what a proposition card needs. Token custom properties only — no raw colours
+ * outside the glass-fallback alphas the desktop panel already uses, and no @media queries
+ * (the house convention is html[data-platform="…"], so the shell can pin a platform).
+ */
+
+/*
+ * Where the rows came from. Deliberately NOT modelled on `.qa-label`, which styles.css
+ * hides at desktop width — a fixture render that looks like live data is the confusion
+ * this badge exists to prevent, so it is visible at every width and in both modes.
+ */
+.data-source-badge {
+  display: block;
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.data-source-badge.tone-fixture {
+  border-color: var(--warning);
+  color: var(--content-primary);
+}
+
+.data-source-badge.tone-live { border-color: var(--success); }
+
+html[data-platform="desktop"] .data-source-badge {
+  margin: 0 0 10px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.proposition-read-only-note {
+  margin: 0 0 var(--space-md);
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-body-line);
+}
+
+.proposition-controls {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin: 0 0 var(--space-md);
+}
+
+.proposition-search { flex: 1 1 auto; min-width: 0; }
+
+.completeness-notice {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.completeness-notice.tone-caution { border-color: var(--warning); }
+.completeness-notice.tone-warning { border-color: var(--danger); }
+
+/*
+ * A complete answer is the quiet case. Stating it at the same volume as "this projection
+ * is not authoritative" trains the reader to ignore the banner, which costs exactly the
+ * honesty the banner exists to provide.
+ */
+.completeness-notice.tone-neutral {
+  border-color: transparent;
+  padding: 0;
+  background: transparent;
+}
+
+.completeness-title { margin: 0; color: var(--content-primary); font-size: inherit; }
+
+.completeness-notice.tone-neutral .completeness-title {
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+}
+
+.completeness-reasons {
+  margin: var(--space-xs) 0 0;
+  padding-inline-start: var(--space-lg);
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-body-line);
+}
+
+.proposition-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.proposition-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, var(--radius-control));
+  background: var(--surface-raised);
+}
+
+.proposition-text {
+  margin: 0;
+  color: var(--content-primary);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
+}
+
+.proposition-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+}
+
+.proposition-footer:empty { display: none; }
+
+.proposition-lineage-toggle {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--content-secondary);
+  background: transparent;
+  font-size: var(--type-label-size);
+}
+
+.proposition-lineage {
+  display: grid;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-sm);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.proposition-lineage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+.proposition-lineage dt {
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+}
+
+.proposition-lineage dd {
+  margin: 0;
+  color: var(--content-secondary);
+  /* Digests are verification values: shown whole, never truncated into something
+     that looks authoritative but cannot be checked. */
+  font-family: ui-monospace, monospace;
+  font-size: var(--type-label-size);
+  overflow-wrap: anywhere;
+}
+
+.proposition-pagination {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-lg) 0 0;
+}
+
+.proposition-pagination:empty { display: none; }
+
+.proposition-load-more {
+  min-height: var(--min-tap-target);
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+}
+
+.proposition-load-more:disabled { opacity: .55; }
+
+.proposition-terminal {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+}
+
+.empty-state .empty-title {
+  margin: 0 0 var(--space-xs);
+  color: var(--content-secondary);
+  font-size: var(--type-body-size);
+}
+
+.proposition-lineage-toggle:focus-visible,
+.proposition-load-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+html[data-platform="desktop"] .proposition-list { gap: 8px; }
+
+html[data-platform="desktop"] .proposition-card {
+  padding: 14px 15px;
+  border: 1px solid rgba(42, 49, 58, .055);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .33);
+}
+
+html[data-platform="desktop"] .proposition-read-only-note,
+html[data-platform="desktop"] .completeness-notice {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+html[data-platform="desktop"] .completeness-notice {
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .46);
+}
+
+/* Specificity note: the desktop rule above outranks `.completeness-notice.tone-neutral`,
+   so the quiet case needs its own desktop-scoped rule or "Complete" shouts again. */
+html[data-platform="desktop"] .completeness-notice.tone-neutral {
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-platform="mobile"] .proposition-card { padding: var(--space-md) var(--space-md); }
+
+html[data-platform="mobile"] .proposition-lineage-toggle,
+html[data-platform="mobile"] .proposition-load-more {
+  min-height: var(--min-tap-target);
+}
+
+html[data-platform="mobile"] .proposition-lineage-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
