@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlparse
 
+from utils.object_store import get_object_store
 from .parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
 
 logger = logging.getLogger(__name__)
@@ -69,8 +70,6 @@ def _object_name(prefix: str, local_path: Path, root: Path) -> str:
 def _object_store():
     """The neutral object-store port (ADR-0032). Parity-pack export honors OBJECT_STORE_BACKEND like
     the rest of storage; the configured credentials/endpoint are shared with backend storage."""
-    from utils.object_store import get_object_store
-
     return get_object_store()
 
 

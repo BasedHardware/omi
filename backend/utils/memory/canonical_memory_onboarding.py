@@ -11,7 +11,7 @@ or global rollout gates.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections

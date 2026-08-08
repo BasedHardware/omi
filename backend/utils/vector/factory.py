@@ -28,7 +28,10 @@ def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
         with _lock:
             if _instance is None:
                 source = os.environ if env is None else env
-                backend = (source.get("VECTOR_STORE_BACKEND") or "pinecone").strip().lower()
+                # ``or "pinecone"`` twice (not just the getenv default) so an empty/whitespace
+                # value falls back to the documented Pinecone default too, matching the store and
+                # object-store factories (ADR-0032).
+                backend = (source.get("VECTOR_STORE_BACKEND") or "pinecone").strip().lower() or "pinecone"
                 if backend == "pinecone":
                     from utils.vector.adapters.pinecone import PineconeVectorStore
 

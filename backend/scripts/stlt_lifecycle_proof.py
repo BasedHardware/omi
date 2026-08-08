@@ -135,7 +135,7 @@ def _load_client(project: str) -> Any:
 def _control_write_ready(db_client: Any, uid: str) -> tuple[bool, str]:
     from utils.memory.canonical_activation import canonical_write_decision
 
-    decision = canonical_write_decision(uid, db_client=db_client)
+    decision = canonical_write_decision(uid)
     if decision.enabled:
         return True, "write_ready"
     return False, str(decision.reason)
@@ -181,7 +181,7 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
         conversation_id=None,
         is_locked=False,
     )
-    created = MemoryService(db_client=db_client).create_external_memory(
+    created = MemoryService().create_external_memory(
         uid=uid,
         memory_db=row,
         memory_system=MemorySystem.CANONICAL,
@@ -196,7 +196,7 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
 def _read_item(db_client: Any, *, uid: str, memory_id: str) -> Any:
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 
-    return read_canonical_memory_item(uid, memory_id, db_client=db_client)
+    return read_canonical_memory_item(uid, memory_id)
 
 
 def _process_one(db_client: Any, *, uid: str, memory_id: str) -> Any:
@@ -210,7 +210,7 @@ def _process_one(db_client: Any, *, uid: str, memory_id: str) -> Any:
         # No silent fabricate-on-failure: surface L2 errors to the proof result.
         return invoke_required_memory_processor(item, get_llm("memory_l2"))
 
-    return process_required_memory_item(uid, memory_id, db_client=db_client, processor=processor)
+    return process_required_memory_item(uid, memory_id, processor=processor)
 
 
 def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> list[str]:
@@ -244,7 +244,7 @@ def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> li
         confidence="high",
         rationale="stlt_lifecycle_proof item-scoped promote; memory_text matches processed content",
     )
-    control = read_control_state(uid, db_client=db_client)
+    control = read_control_state(uid)
     return apply_consolidation_decision(
         uid,
         decision=decision,
@@ -252,7 +252,6 @@ def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> li
         control=control,
         run_id=run_id,
         now=datetime.now(timezone.utc),
-        db_client=db_client,
     )
 
 
