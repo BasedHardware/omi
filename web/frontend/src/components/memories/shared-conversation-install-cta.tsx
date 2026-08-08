@@ -1,4 +1,7 @@
 import Image from 'next/image';
+import { getConversationSharePlatformLink } from '@/src/lib/conversation-share-platform-link.mjs';
+
+export { getConversationSharePlatformLink };
 
 interface SharedConversationInstallCtaProps {
   openInOmiHref: string;
@@ -49,22 +52,4 @@ export default function SharedConversationInstallCta({
       </div>
     </div>
   );
-}
-
-export function getConversationSharePlatformLink(
-  userAgent: string,
-  conversationId: string,
-): string {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  // iOS: custom scheme — Universal Links do not fire for same-domain taps on h.omi.me.
-  // Android: intent:// with Play Store fallback when the app is missing.
-  return isAndroid
-    ? `intent://h.omi.me/conversations/${conversationId}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
-        'https://play.google.com/store/apps/details?id=com.friend.ios',
-      )};end`
-    : isIOS
-    ? `omi://h.omi.me/conversations/${conversationId}`
-    : 'https://omi.me';
 }

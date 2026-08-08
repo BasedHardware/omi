@@ -1,21 +1,18 @@
-import SharedConversationInstallCta from '@/src/components/memories/shared-conversation-install-cta';
-
+/** Generic /memories group boundary — conversation-specific copy lives under [id]/not-found. */
 export default function NotFound() {
   return (
-    <div className="font-system-ui min-h-screen bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,rgba(88,28,135,0.2),transparent)]" />
+    <div className="font-system-ui min-h-screen bg-black">
       <section className="relative mx-auto max-w-screen-md px-6 py-24 text-center md:px-12 md:py-32">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
-          Shared from Omi
-        </p>
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">
-          This conversation isn&apos;t available
-        </h1>
+        <h1 className="text-2xl font-bold text-white sm:text-3xl">Page not found</h1>
         <p className="mx-auto mt-4 max-w-md text-base leading-7 text-gray-400">
-          The link may be private, expired, or removed. Download Omi to capture and share
-          your own conversations.
+          That page may have moved or no longer exists.
         </p>
-        <SharedConversationInstallCta openInOmiHref="https://omi.me" />
+        <a
+          href="https://omi.me"
+          className="mt-10 inline-block rounded-2xl bg-white px-10 py-4 text-lg font-semibold text-black transition-all duration-300 hover:translate-y-[-2px] hover:bg-gray-100"
+        >
+          Go to Omi
+        </a>
       </section>
     </div>
   );
