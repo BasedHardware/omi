@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Rewind's meaning-based search silently skipping everything captured recently, because newly recorded screens were never indexed for it"
-}

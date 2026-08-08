@@ -61,7 +61,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,parakeet
+          value: dg-nova-3,modulate-velma-2,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -73,6 +73,9 @@ environment_shared:
           value: '900'
           category: reliability
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'off'
+          category: rollout
+        ACCOUNT_CUTOVER_ENFORCEMENT:
           value: 'off'
           category: rollout
         DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -200,6 +203,9 @@ environment_shared:
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
+            value: 'off'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -265,6 +271,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -341,6 +350,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -431,6 +443,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:

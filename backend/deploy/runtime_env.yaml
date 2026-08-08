@@ -55,7 +55,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -68,6 +68,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -220,7 +223,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -298,7 +301,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -385,6 +388,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -512,6 +518,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -650,6 +659,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -783,6 +795,9 @@ environments:
               category: memory_rollout
               value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -995,7 +1010,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1008,6 +1023,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1165,7 +1183,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1266,6 +1284,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1409,6 +1430,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -1546,6 +1570,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -1680,6 +1707,9 @@ environments:
               category: memory_rollout
               value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:

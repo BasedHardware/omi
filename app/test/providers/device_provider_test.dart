@@ -56,6 +56,9 @@ void main() {
 
     expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(1));
     final connectedProperties = analytics.eventProperties[analytics.events.indexOf('Device Connected')];
+    expect(connectedProperties['id'], device.id);
+    expect(connectedProperties['name'], device.name);
+    expect(connectedProperties['firmwareRevision'], device.firmwareRevision);
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
@@ -147,7 +150,7 @@ void main() {
     expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
     expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
     expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
-    expect(sessionEvents.single, containsPair('reconnect_attempt_count', 0));
+    expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));
   });
 
   group('battery throttling', () {

@@ -1,0 +1,3 @@
+{
+  "change": "Added a fail-closed account migration maintenance and force-upgrade gate on the desktop home shell"
+}
