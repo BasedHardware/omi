@@ -53,3 +53,51 @@ describe('public proxy handler', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('public proxy upstream handling', () => {
+  it('caches a success but never an error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', { headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    const good = await GET(new Request('https://app.omi.me/api/proxy/public/v2/apps'));
+    expect(good.headers.get('Cache-Control')).toContain('max-age');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 503 })),
+    );
+    const bad = await GET(new Request('https://app.omi.me/api/proxy/public/v2/apps'));
+    // A cached 503 would outlive the outage that produced it.
+    expect(bad.headers.get('Cache-Control')).toBeNull();
+  });
+
+  it('bounds the wait on the backend rather than holding the connection open', async () => {
+    let sawSignal = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sawSignal = Boolean(init?.signal);
+        return new Response('{}', { headers: { 'content-type': 'application/json' } });
+      }),
+    );
+    await GET(new Request('https://app.omi.me/api/proxy/public/v2/apps'));
+    expect(sawSignal).toBe(true);
+  });
+
+  it('answers 502 when the backend times out instead of hanging', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted.', 'TimeoutError');
+      }),
+    );
+    const response = await GET(
+      new Request('https://app.omi.me/api/proxy/public/v2/apps'),
+    );
+    expect(response.status).toBe(502);
+  });
+});

@@ -26,6 +26,25 @@ export function isPublicProxyPath(path: string): boolean {
   return PUBLIC_PATH_PATTERNS.some((pattern) => pattern.test(path));
 }
 
+/**
+ * How long to wait on the backend before giving up.
+ *
+ * Without this a slow upstream holds a connection here open for as long as it
+ * likes, so backend latency becomes exhausted web-server connections. This is
+ * the one risk the hop actually adds: the endpoints below are already public on
+ * the API origin, so proxying them grants no access and offers no amplification
+ * over calling the backend directly, which is why there is no separate rate
+ * limit here.
+ */
+const UPSTREAM_TIMEOUT_MS = 10_000;
+
+/**
+ * Public catalogue data changes rarely, and every uncached request is a backend
+ * round trip on a page anyone can load. Only successful responses are cached —
+ * a cached error would outlive the outage that produced it.
+ */
+const SUCCESS_CACHE_CONTROL = 'public, max-age=60, stale-while-revalidate=300';
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const path = requestUrl.pathname.slice('/api/proxy/public/'.length);
@@ -38,15 +57,17 @@ export async function GET(request: Request) {
   const url = `${API_BASE_URL}/${path}${searchParams ? `?${searchParams}` : ''}`;
 
   try {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    const body = await response.text();
-    return new Response(body, {
-      status: response.status,
-      headers: {
-        'Content-Type':
-          response.headers.get('content-type') || 'application/json; charset=utf-8',
-      },
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
+    const body = await response.text();
+    const headers: Record<string, string> = {
+      'Content-Type':
+        response.headers.get('content-type') || 'application/json; charset=utf-8',
+    };
+    if (response.ok) headers['Cache-Control'] = SUCCESS_CACHE_CONTROL;
+    return new Response(body, { status: response.status, headers });
   } catch (error) {
     console.error('Public proxy error:', error);
     return moonshineJson({ error: 'Proxy request failed' }, { status: 502 });
