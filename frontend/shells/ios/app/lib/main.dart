@@ -54,6 +54,7 @@ class ProtoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Omi webview proto',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
       home: const SurfaceHost(),
     );
@@ -76,7 +77,6 @@ class _SurfaceHostState extends State<SurfaceHost>
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
-  String _status = 'loading';
   // loop mode: two servers so one run demonstrates origin-per-port isolation.
   LoopServer? _loopA, _loopB;
   int _loopPhase = 0;
@@ -176,7 +176,6 @@ class _SurfaceHostState extends State<SurfaceHost>
       })
       ..setNavigationDelegate(NavigationDelegate(
         onPageFinished: (url) {
-          setState(() => _status = 'ready (${_mode.name})');
           _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
           if (const bool.fromEnvironment('AUTODRIVE')) {
             unawaited(_autodrive());
@@ -193,7 +192,6 @@ class _SurfaceHostState extends State<SurfaceHost>
           }
         },
         onWebResourceError: (e) {
-          setState(() => _status = 'error: ${e.description}');
           _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
         },
       ));
@@ -609,36 +607,26 @@ class _SurfaceHostState extends State<SurfaceHost>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
-      // Full-screen surface; the shell keeps only a thin status strip so we can
-      // see load state and mode without leaving the app.
+      // Shell-level inset ownership: SafeArea keeps the WKWebView out of the
+      // status bar and home indicator. The removed diagnostic strip previously
+      // occupied that layout space; without it the shell must claim MediaQuery
+      // padding here. Do not push iOS-only CSS padding into the shared surface.
       body: SafeArea(
-        top: false,
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: Stack(children: [
-                WebViewWidget(controller: _controller),
-                // Contract-gate error surface: shown when a bundle was refused
-                // before navigation (the webview behind it keeps the last good
-                // bundle — rollback is "do nothing").
-                if (_blocked != null)
-                  Container(
-                    color: const Color(0xE61C0B0B),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.all(24),
-                    child: Text('UPDATE BLOCKED\n\n$_blocked',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A))),
-                  ),
-              ]),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: const Color(0xFF14141A),
-              child: Text('shell: $_status · contract $kBridgeContractVersion',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF8E8E93))),
-            ),
+            WebViewWidget(controller: _controller),
+            // Contract-gate error surface: shown when a bundle was refused
+            // before navigation (the webview behind it keeps the last good
+            // bundle — rollback is "do nothing").
+            if (_blocked != null)
+              Container(
+                color: const Color(0xE61C0B0B),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(24),
+                child: Text('UPDATE BLOCKED\n\n$_blocked',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A))),
+              ),
           ],
         ),
       ),
