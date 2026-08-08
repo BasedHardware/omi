@@ -12,6 +12,12 @@ import { HomeProduction } from "./HomeProduction.js";
 import { MemoriesPlatformProduction } from "./MemoriesPlatformProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
 import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFixtureState } from "./proposition-fixtures.js";
+import { ChatProduction } from "./ChatProduction.js";
+import { SettingsProduction } from "./SettingsProduction.js";
+import { ListenProduction } from "./ListenProduction.js";
+import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
+import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
+import { LISTEN_FIXTURE_STATES, fixtureListenStore, type ListenFixtureState } from "./listen-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
 import "./styles.css";
@@ -129,12 +135,30 @@ if (query.get("lab") === "1") {
   const propositionFixture = requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
     ? fixtureValue as PropositionFixtureState
     : undefined;
+  // Chat, Settings and Listen are fixture-only tonight: board ruling PR-7 sanctions
+  // building them against ports, and no ratified backend serves them. Each renders the
+  // data-source badge, so a reviewer can never mistake one for live account data.
+  const chatFixture = requestedQa === "chat" && CHAT_FIXTURE_STATES.includes(fixtureValue as ChatFixtureState)
+    ? fixtureValue as ChatFixtureState
+    : undefined;
+  const settingsFixture = requestedQa === "settings" && SETTINGS_FIXTURE_STATES.includes(fixtureValue as SettingsFixtureState)
+    ? fixtureValue as SettingsFixtureState
+    : undefined;
+  const listenFixture = requestedQa === "listen" && LISTEN_FIXTURE_STATES.includes(fixtureValue as ListenFixtureState)
+    ? fixtureValue as ListenFixtureState
+    : undefined;
   const homeFixture = requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
   if (propositionFixture) {
     // `source` is required by the component, so a fixture render can never be mistaken
     // for live account data — the badge is on screen at every width.
     root.render(<StrictMode><MemoriesPlatformProduction store={fixturePropositionStore(propositionFixture)} source={{ kind: "fixture", fixture: propositionFixture }} locale={locale} onReady={() => emitReady(`fixture:${propositionFixture}`)} /></StrictMode>);
+  } else if (chatFixture) {
+    root.render(<StrictMode><ChatProduction store={fixtureChatStore(chatFixture)} fixture={chatFixture} locale={locale} onReady={() => emitReady(`fixture:${chatFixture}`)} /></StrictMode>);
+  } else if (settingsFixture) {
+    root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
+  } else if (listenFixture) {
+    root.render(<StrictMode><ListenProduction store={fixtureListenStore(listenFixture)} fixture={listenFixture} locale={locale} onReady={() => emitReady(`fixture:${listenFixture}`)} /></StrictMode>);
   } else if (homeFixture) {
     root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {

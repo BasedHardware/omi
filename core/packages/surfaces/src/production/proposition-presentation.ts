@@ -36,8 +36,6 @@ export type LineageLabelKey = CatalogKey<
   | "memoriesPlatform.outputDigest"
 >;
 
-export type DataSourceLabelKey = CatalogKey<"dataSource.fixture" | "dataSource.live">;
-
 /**
  * Every rendering decision for the platform-generation Memories surface.
  *
@@ -198,23 +196,4 @@ export function filterLoadedPropositions(
   const needle = query.trim().toLocaleLowerCase(locale);
   if (!needle) return items;
   return items.filter((item) => item.text.toLocaleLowerCase(locale).includes(needle));
-}
-
-/**
- * Where the rows on screen came from. David must never have to guess whether he is
- * looking at his own data or at a review corpus, so this is rendered as visible copy at
- * every width — not as a QA-only label that desktop CSS hides.
- */
-export type SurfaceDataSource =
-  | { readonly kind: "fixture"; readonly fixture: string }
-  | { readonly kind: "live"; readonly origin: string };
-
-export function dataSourceBadge(source: SurfaceDataSource): {
-  readonly labelKey: DataSourceLabelKey;
-  readonly detail: string;
-  readonly tone: "fixture" | "live";
-} {
-  return source.kind === "fixture"
-    ? { labelKey: "dataSource.fixture", detail: source.fixture, tone: "fixture" }
-    : { labelKey: "dataSource.live", detail: source.origin, tone: "live" };
 }
