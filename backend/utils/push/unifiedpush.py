@@ -29,7 +29,7 @@ import httpx
 
 import database.notifications as notification_db
 from database.notifications import UnifiedPushEndpoint
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, push_crypto_executor, run_blocking
 from utils.http_client import get_ntfy_client
 from utils.push import webpush_encryption
 from utils.push.base import PushMessage
@@ -144,7 +144,14 @@ def _send_one_sync(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[
 
 async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
     try:
-        body, headers = _encode_for(endpoint, plaintext)
+        if endpoint.p256dh and endpoint.auth:
+            # RFC 8291 encryption is CPU-bound (P-256 keygen + ECDH + AES): offload it so a fan-out
+            # (asyncio.gather over N endpoints) never runs the crypto on the event loop, and cap the
+            # in-flight crypto at push_crypto_executor's worker count rather than one job per recipient.
+            body, headers = await run_blocking(push_crypto_executor, _encode_for, endpoint, plaintext)
+        else:
+            # Plaintext fallback (pre-encryption client): trivial, no reason to bounce off the loop.
+            body, headers = _encode_for(endpoint, plaintext)
     except ValueError as e:
         logger.error('UnifiedPush skipping endpoint with an invalid key set %s: %s', endpoint.url, e)
         return None

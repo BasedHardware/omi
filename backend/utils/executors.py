@@ -74,6 +74,10 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# WebPush RFC 8291 encryption (P-256 keygen + ECDH + AES) is CPU-bound; on async fan-out paths it is
+# offloaded here so it never blocks the event loop, and the bounded worker count caps how many
+# recipients are encrypted at once (a daily-summary broadcast to N endpoints cannot spawn N crypto jobs).
+push_crypto_executor = MonitoredThreadPoolExecutor(name="push_crypto", max_workers=8, thread_name_prefix="push_crypto")
 
 _ALL_EXECUTORS = [
     critical_executor,
@@ -85,6 +89,7 @@ _ALL_EXECUTORS = [
     postprocess_executor,
     cleanup_executor,
     storage_executor,
+    push_crypto_executor,
 ]
 
 
