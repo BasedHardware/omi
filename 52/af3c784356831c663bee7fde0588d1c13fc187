@@ -1,0 +1,98 @@
+backend/utils/conversations/process_conversation.py
+  s_1be2305e1b81fe::t_90614ec2485ef0 15,263,1301,1317
+  s_1be2305e1b81fe::t_42f35a3336c2ee 280,317
+backend/utils/llm/conversation_processing.py
+  s_1be2305e1b81fe::t_90614ec2485ef0 896
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_1be2305e1b81fe::t_cbfe98cf90a56f 402-404
+  s_1be2305e1b81fe::t_ddd6e48a349b74 2,4,357-359,374-375
+  s_1be2305e1b81fe::t_998bee94e39bec 96-97,115,168-179,267,272-276,291,323-335,344-356,360-373,376-401
+desktop/macos/Desktop/Tests/ConversationDetailAutomationStateTests.swift
+  s_1be2305e1b81fe::t_f585ea93007710 30-42
+desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  s_6ee6c64dccc4f3::t_d3a3ff9f88a50d 157,174,193,198,211,1900,1905-1906,1911,1916-1917,1924,1929-1930,1934,1936,1941-1942
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_1be2305e1b81fe::t_ddd6e48a349b74 281-282
+  s_1be2305e1b81fe::t_43c7db6ffada1f 287,289,517-522
+  s_1be2305e1b81fe::t_af62689b49eb7e 523-525
+docs/api-reference/app-client-openapi.json
+  s_6ee6c64dccc4f3::t_a80c04c791bc8f 272-278,10217-10228,10254-10275
+backend/models/action_item.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 55-57,67-68
+backend/models/structured.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 39
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_1be2305e1b81fe::t_2a21e0f1d67582 708
+  s_1be2305e1b81fe::t_ddd6e48a349b74 4-6,10-11
+  s_1be2305e1b81fe::t_439b5d9ec43c1e 102-116
+  s_1be2305e1b81fe::t_cf727fc93c16a4 36,46,52,119-136,162,195,236,278-284,298,311,707
+  s_1be2305e1b81fe::t_8c5bd247864344 394,407,423-432,442,452-455,459,468,470,525,527,560,564,579-581,592-595,661,698-705
+  s_1be2305e1b81fe::t_bb11e956bfe4b9 117-118
+  s_1be2305e1b81fe::t_9ff103f336b2e3 706
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_1be2305e1b81fe::t_b0234c8ebd17cc 76-89,149-174,378,381,386
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_1be2305e1b81fe::t_cf727fc93c16a4 34,44
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+  s_1be2305e1b81fe::t_9ef42719dc8c2b 371-372,421,423-429,434,445,454,471
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_1be2305e1b81fe::t_e1b358fd7a9e92 744-759,785-805,1106-1124
+desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  s_1be2305e1b81fe::t_a6aababe53fbac 11-16
+  s_1be2305e1b81fe::t_b5a9caf554583e 26,44,64-65,69,86
+  s_1be2305e1b81fe::t_511926247e2b74 10,23,33-42,47,66,83
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_1be2305e1b81fe::t_b0234c8ebd17cc 398-399,401
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_1be2305e1b81fe::t_03c5631d61bf7c 44,50,95-99,102,105,110,126-129,150,278,317-325
+  s_1be2305e1b81fe::t_04d4a6e05d7d99 124-125
+  s_1be2305e1b81fe::t_507923a9c79226 122-123
+  s_1be2305e1b81fe::t_457f5a521d3c55 113
+  s_1be2305e1b81fe::t_16fcca2db34ae1 326-328
+  s_1be2305e1b81fe::t_ddd6e48a349b74 91,112,114-116
+backend/tests/unit/test_task_transcript_provenance.py
+  s_1be2305e1b81fe::t_153b50450a55bf 1-52
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_1be2305e1b81fe::t_c697f7c879ad14 369,372
+  s_1be2305e1b81fe::t_3e625a251a6945 93,97-98,143,150,155-159,200-201
+backend/utils/conversations/transcript_for_llm.py
+  s_1be2305e1b81fe::t_90614ec2485ef0 60-71
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 11,33-59
+backend/utils/task_intelligence/conversation_capture.py
+  s_1be2305e1b81fe::t_67311111719d05 57-78,86,92-96,103,112-117
+  s_1be2305e1b81fe::t_9c81e553318e30 125-127
+  s_1be2305e1b81fe::t_90614ec2485ef0 108-111,145-153,234,239
+  s_1be2305e1b81fe::t_21617618dea400 123-124
+desktop/macos/changelog/unreleased/20260808-home-task-provenance.json
+  s_1be2305e1b81fe::t_fb655bca382d64 1-3
+plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 66
+backend/models/structured_extraction.py
+  s_1be2305e1b81fe::t_ad5ff616ccca1f 25-28,41
+backend/tests/unit/test_llm_gateway_chat_extraction_pilot.py
+  s_1be2305e1b81fe::t_44204f5b70ac77 237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "52af3c784356831c663bee7fde0588d1c13fc187",
+  "prompts": {},
+  "sessions": {
+    "s_1be2305e1b81fe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7b-ffaf-7d13-8b30-95513dcf6929",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
