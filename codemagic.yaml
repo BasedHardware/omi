@@ -2451,7 +2451,7 @@ workflows:
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
-          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
           if [ -f "$NODE_BUNDLE_PATH" ]; then
             codesign --force --options runtime --timestamp \
               --sign "$SIGN_IDENTITY" \
