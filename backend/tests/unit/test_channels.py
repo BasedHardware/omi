@@ -548,6 +548,51 @@ def test_a_stale_processing_claim_is_reclaimed_instead_of_dropped():
     assert stored['received_at'] == now
 
 
+def test_a_legacy_claim_is_dated_by_received_at_not_treated_as_expired():
+    """Events written before leases existed must not all become reclaimable at once.
+
+    A pre-lease document has no `lease_expires_at`. Reading that as "expired"
+    would let a second handler take an event the first picked up seconds before
+    this deployed, and the user gets the reply twice. `received_at` dates it.
+    """
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    ref = client.collection('channel_webhook_events').document(channels_db._event_id('telegram', 'legacy-1'))
+    ref.create(
+        {
+            'channel': 'telegram',
+            'provider_event_id': 'legacy-1',
+            'status': 'processing',
+            'received_at': now,
+            'updated_at': now,
+        }
+    )
+
+    # Still inside the window the lease would have covered: leave it alone.
+    fresh = now + channels_db.WEBHOOK_PROCESSING_LEASE / 2
+    created, existing = channels_db.claim_webhook_event(
+        'telegram', 'legacy-1', now=fresh, firestore_client=client
+    )
+    assert not created
+    assert existing['status'] == 'processing'
+
+    # Past it, the claim is genuinely abandoned and can be reclaimed.
+    stale = now + channels_db.WEBHOOK_PROCESSING_LEASE
+    created, _ = channels_db.claim_webhook_event('telegram', 'legacy-1', now=stale, firestore_client=client)
+    assert created
+
+
+def test_an_undatable_claim_is_reclaimable_rather_than_held_forever():
+    """No lease and no received_at: nothing can date it, so it must not stick."""
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    ref = client.collection('channel_webhook_events').document(channels_db._event_id('sms', 'orphan-1'))
+    ref.create({'channel': 'sms', 'provider_event_id': 'orphan-1', 'status': 'processing'})
+
+    created, _ = channels_db.claim_webhook_event('sms', 'orphan-1', now=now, firestore_client=client)
+    assert created
+
+
 def test_a_failed_claim_is_released_for_immediate_retry_but_a_ready_reply_is_kept():
     client = MockFirestore()
     now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)

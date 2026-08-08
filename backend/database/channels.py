@@ -297,13 +297,29 @@ def revoke_binding(
 
 
 def _webhook_claim_is_stale(event: Dict[str, Any], now: datetime) -> bool:
+    """Whether a claim can be taken from whoever holds it.
+
+    A claim written before leases existed has no `lease_expires_at`. Reading
+    that as "expired" would make every such event reclaimable the instant this
+    deploys, including one a handler picked up seconds earlier — two handlers
+    on the same event means the user gets the reply twice. Its `received_at`
+    dates it just as well, so the lease is derived from that instead, and only
+    a genuinely old claim is reclaimed.
+    """
     status = event.get('status')
     if status not in WEBHOOK_RECLAIMABLE_STATUSES:
         return False
     if status == 'failed':
         return True
     lease_expires_at = event.get('lease_expires_at')
-    return not isinstance(lease_expires_at, datetime) or lease_expires_at <= now
+    if not isinstance(lease_expires_at, datetime):
+        received_at = event.get('received_at')
+        if not isinstance(received_at, datetime):
+            # Neither field is usable, so nothing can date this claim. Leaving
+            # it held forever is the failure this lease exists to end.
+            return True
+        lease_expires_at = received_at + WEBHOOK_PROCESSING_LEASE
+    return lease_expires_at <= now
 
 
 def claim_webhook_event(
