@@ -145,6 +145,41 @@ class CheckWorkflowTests(unittest.TestCase):
             f"guard missed the app-token-after-create-pr ordering: {errors}",
         )
 
+    def test_rejects_an_app_token_step_from_a_different_job(self):
+        """MUTATION: app-token minted in job A, create-pull-request in job B still
+        references steps.app-token.outputs.token — that step output is out of scope
+        for the PR-creation job, so the checkable contract is unproven."""
+        cross_job = """
+name: Sync Docs
+on:
+  push:
+    branches: [main]
+jobs:
+  mint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+  sync:
+    runs-on: ubuntu-latest
+    needs: mint
+    steps:
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: main
+      - name: Auto-merge PR
+        run: |
+          gh pr merge --merge --delete-branch --admin "$PR_URL"
+"""
+        errors = self._errors_for(cross_job)
+        self.assertTrue(
+            any("same job" in error for error in errors),
+            f"guard missed the cross-job/out-of-scope app-token: {errors}",
+        )
+
     def test_ignores_a_commented_out_merge_line(self):
         commented = FIXED.replace(
             'gh pr merge --merge --delete-branch --admin "$PR_URL"',

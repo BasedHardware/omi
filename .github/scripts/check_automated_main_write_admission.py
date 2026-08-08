@@ -13,10 +13,11 @@ into `main` with no human in the loop. Two properties keep that path honest, and
 2. **The merge must stay revertible.** AGENTS.md ("Merge, never squash") keeps
    merge commits so a bad automated commit on `main` can be undone with
    `git revert -m 1`. A squashed automated merge removes that recovery.
-3. **The app token must exist before the PR opens.** A create-pull-request step
-   that references `steps.<app-token>.outputs.token` proves nothing if that
-   token step is declared later in the job — `steps` is populated top to
-   bottom, so the token is not yet available when the PR is created.
+3. **The app token must exist before the PR opens, in the same job.** A
+   create-pull-request step that references `steps.<app-token>.outputs.token`
+   proves nothing if that token step is declared later in the job — `steps` is
+   populated top to bottom — or if the token step lives in a different job,
+   where that expression is out of scope.
 
 Real instances this would have caught: #8325 (created and merged 4 seconds
 later, check list `skipping`/`skipping`, single-parent merge commit), plus
@@ -72,24 +73,57 @@ def _create_pr_token(step: str) -> str | None:
 
 
 def _step_blocks(text: str) -> list[tuple[str, int]]:
-    """Split a workflow into its `- ` list-entry blocks.
+    """Split a YAML fragment into its `- ` list-entry blocks.
 
-    Returns (block text, block start offset) pairs, where each block runs from
-    its leading `- ` entry up to (but not including) the next one. The start
-    offsets order the blocks exactly as GitHub Actions runs the steps.
+    Returns (block text, block index) pairs. Indices order the blocks exactly as
+    GitHub Actions runs the steps within that list.
     """
     matches = list(re.finditer(r"(?m)^(?=\s*-\s)", text))
     blocks: list[tuple[str, int]] = []
     for index, match in enumerate(matches):
         start = match.start()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        blocks.append((text[start:end], start))
+        blocks.append((text[start:end], index))
     return blocks
 
 
-def _app_token_step_ids(text: str) -> set[str]:
+def _job_steps_lists(text: str) -> list[list[tuple[str, int]]]:
+    """Group step blocks by the job that owns them.
+
+    GitHub Actions `steps.<id>.outputs` is job-scoped. A token minted in job A
+    is not available to create-pull-request in job B, even when the expression
+    literally says `steps.app-token.outputs.token`.
+    """
+    lists: list[list[tuple[str, int]]] = []
+    for steps_match in re.finditer(r"(?m)^(?P<indent>[ \t]*)steps:\s*(?:#.*)?$", text):
+        indent = steps_match.group("indent")
+        start = steps_match.end()
+        rest = text[start:]
+        end_rel = len(rest)
+        for line_match in re.finditer(r"(?m)^([ \t]*)\S", rest):
+            if line_match.start() == 0:
+                continue
+            line_indent = line_match.group(1)
+            if len(line_indent) <= len(indent):
+                end_rel = line_match.start()
+                break
+        section = rest[:end_rel]
+        blocks: list[tuple[str, int]] = []
+        for block, index in _step_blocks(section):
+            first_line = next((line for line in block.splitlines() if line.strip()), "")
+            first_indent = len(first_line) - len(first_line.lstrip())
+            # Direct children of `steps:` are more indented than `steps:` itself.
+            if first_indent <= len(indent):
+                continue
+            blocks.append((block, index))
+        if blocks:
+            lists.append(blocks)
+    return lists
+
+
+def _app_token_step_ids(step_blocks: list[tuple[str, int]]) -> set[str]:
     step_ids: set[str] = set()
-    for step, _ in _step_blocks(text):
+    for step, _ in step_blocks:
         if APP_TOKEN_ACTION not in step:
             continue
         match = re.search(r"(?m)^\s*id:\s*([A-Za-z0-9_-]+)\s*$", step)
@@ -98,15 +132,10 @@ def _app_token_step_ids(text: str) -> set[str]:
     return step_ids
 
 
-def _app_token_step_offsets(text: str) -> dict[str, int]:
-    """Map app-token step id -> index of that step's block in `_step_blocks`.
-
-    `steps` is populated top to bottom, so a step that references another
-    step's output must come after it in the job. Comparing block indices (not
-    character offsets) keeps the check independent of file length.
-    """
+def _app_token_step_offsets(step_blocks: list[tuple[str, int]]) -> dict[str, int]:
+    """Map app-token step id -> index within the same job's steps list."""
     offsets: dict[str, int] = {}
-    for index, (step, _) in enumerate(_step_blocks(text)):
+    for index, (step, _) in enumerate(step_blocks):
         if APP_TOKEN_ACTION not in step:
             continue
         match = re.search(r"(?m)^\s*id:\s*([A-Za-z0-9_-]+)\s*$", step)
@@ -115,15 +144,16 @@ def _app_token_step_offsets(text: str) -> dict[str, int]:
     return offsets
 
 
-def check_workflow(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8")
-    rel = path.relative_to(ROOT)
-    errors: list[str] = []
+def _check_create_pr_job(rel: Path, step_blocks: list[tuple[str, int]]) -> list[str]:
+    """Validate app-token admission for one job that opens a self-merged PR."""
+    create_pr_steps = [(step, index) for index, (step, _) in enumerate(step_blocks) if CREATE_PR_ACTION in step]
+    if not create_pr_steps:
+        return []
 
-    create_pr_steps = [(step, index) for index, (step, _) in enumerate(_step_blocks(text)) if CREATE_PR_ACTION in step]
+    errors: list[str] = []
     create_pr_tokens = [_create_pr_token(step) for step, _ in create_pr_steps]
-    app_token_step_ids = _app_token_step_ids(text)
-    app_token_offsets = _app_token_step_offsets(text)
+    app_token_step_ids = _app_token_step_ids(step_blocks)
+    app_token_offsets = _app_token_step_offsets(step_blocks)
 
     if any(
         token is not None
@@ -142,28 +172,40 @@ def check_workflow(path: Path) -> list[str]:
             f"pull_request checks fire (#10535)."
         )
     elif any(
-        not (match := APP_TOKEN_OUTPUT.fullmatch(token or '')) or match.group(1) not in app_token_step_ids
+        not (match := APP_TOKEN_OUTPUT.fullmatch(token or "")) or match.group(1) not in app_token_step_ids
         for token in create_pr_tokens
     ):
         errors.append(
             f"{rel}: opens its own auto-merged PR with a token that is not an output of an "
-            f"{APP_TOKEN_ACTION} step, so the checkable app-identity contract is not proven (#10535)."
+            f"{APP_TOKEN_ACTION} step in the same job as {CREATE_PR_ACTION}, so the checkable "
+            f"app-identity contract is not proven (#10535)."
         )
     elif any(
-        not (match := APP_TOKEN_OUTPUT.fullmatch(token or ''))
+        not (match := APP_TOKEN_OUTPUT.fullmatch(token or ""))
         or app_token_offsets.get(match.group(1), -1) > pr_offset
         for token, (_, pr_offset) in zip(create_pr_tokens, create_pr_steps)
     ):
         errors.append(
             f"{rel}: references an {APP_TOKEN_ACTION} step that is declared after the "
-            f"{CREATE_PR_ACTION} step, so the app token is not yet available when the PR is "
-            f"opened and the checkable app-identity contract is not proven (#10535)."
+            f"{CREATE_PR_ACTION} step in the same job, so the app token is not yet available "
+            f"when the PR is opened and the checkable app-identity contract is not proven (#10535)."
         )
     if not app_token_step_ids:
         errors.append(
-            f"{rel}: opens its own auto-merged PR without an {APP_TOKEN_ACTION} step, "
-            f"so the PR cannot run pull_request checks (#10535)."
+            f"{rel}: opens its own auto-merged PR without an {APP_TOKEN_ACTION} step in the "
+            f"same job as {CREATE_PR_ACTION}, so the PR cannot run pull_request checks (#10535)."
         )
+
+    return errors
+
+
+def check_workflow(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    rel = path.relative_to(ROOT)
+    errors: list[str] = []
+
+    for step_blocks in _job_steps_lists(text):
+        errors.extend(_check_create_pr_job(rel, step_blocks))
 
     for line in text.splitlines():
         stripped = line.strip()
