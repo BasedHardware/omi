@@ -267,6 +267,7 @@ def _state_startup_environment(
         "AGENT_VM_STATE_SOURCE_DEVICE": bash_path(source_device, cwd=ROOT),
         "AGENT_VM_STATE_MOUNT": bash_path(state_mount, cwd=ROOT),
         "AGENT_VM_STATE_SOURCE_MOUNT": bash_path(source_mount, cwd=ROOT),
+        "AGENT_VM_STATE_DEVICE_WAIT_SECONDS": "1",
         "MIGRATION_MODE": "metadata",
         "STATE_REQUIRED_MODE": "required",
         "STATE_SOURCE_REQUIRED_MODE": "required",
@@ -459,7 +460,34 @@ def test_startup_fails_closed_when_required_legacy_source_device_is_missing(tmp_
     result = _run_state_startup(environment)
 
     assert result.returncode != 0
-    assert "required legacy state source device is missing" in result.stderr
+    assert "required legacy state source device is missing after bounded wait" in result.stderr
+
+
+def test_startup_waits_for_a_late_attached_legacy_source_device(tmp_path: Path) -> None:
+    environment, state_mount, _, log = _state_startup_environment(tmp_path)
+    source_device = Path(environment["AGENT_VM_STATE_SOURCE_DEVICE"])
+    source_device.unlink()
+    environment["AGENT_VM_STATE_DEVICE_WAIT_SECONDS"] = "3"
+    _write_fake_command(
+        Path(environment["OMI_TEST_FAKE_BIN"]),
+        "sleep",
+        "printf 'state_wait_sleep %s\\n' \"$*\" >> \"$COMMAND_LOG\"\n" "touch \"$STATE_SOURCE_DEVICE\"",
+    )
+    result = _run_state_startup(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text(encoding="utf-8").splitlines().count("state_wait_sleep 1") == 1
+    assert (state_mount / "state-receipt.json").is_file()
+
+
+def test_startup_parses_device_wait_timeout_as_decimal(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    environment["AGENT_VM_STATE_DEVICE_WAIT_SECONDS"] = "08"
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (state_mount / "state-receipt.json").is_file()
 
 
 def test_startup_allows_an_explicitly_optional_legacy_source_to_be_absent(tmp_path: Path) -> None:
