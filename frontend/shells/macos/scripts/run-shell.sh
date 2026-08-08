@@ -29,7 +29,33 @@ if [[ ! "$acceptance_wait_timeout" =~ ^[0-9]+$ ]] || (( acceptance_wait_timeout 
 fi
 app="$out/${app_name}.app"
 executable="$app/Contents/MacOS/$app_name"
-pkill -f -x "$executable" 2>/dev/null || true
+# Truncate the run log HERE, not at launch. HOW-TO-RUN.md tells people to grep
+# this file for the ACCEPTANCE verdict. If this script exits before the launch
+# line — a busy port, a failed build, a bad env var — the PREVIOUS run's
+# "status=PASS" is still sitting in it and reads as today's evidence. That
+# already happened once: a run that died in this very preamble was reported as
+# "acceptance FAILED (exit 1) — ACCEPTANCE ... status=PASS", pairing this run's
+# failure with the last run's verdict. An empty file is honest; a stale one is not.
+[[ -d "$out" ]] && { : > "$out/${app_name}.run.log"; } 2>/dev/null || true
+# Free THIS PORT only — never every instance of this executable.
+#
+# This was `pkill -f -x "$executable"`, and it silently destroyed the thing the
+# launcher exists to produce. dev-stack.sh runs the shell twice from one build
+# dir: a windowed app on 5290, then a headless acceptance probe on 5293. Same
+# $executable, so the probe's first act was to kill the window a moment after
+# reporting it "running" — then the probe exited on OMI_ACCEPTANCE_EXIT. Every
+# summary line was true in isolation (the window did serve 2 reads before it
+# died) and the net result was no app at all.
+#
+# The intent here is only ever "free the port I am about to bind", so scope it
+# to that port, and still only to our own executable — never a stranger's.
+# `|| true` is required, not defensive: `set -o pipefail` is on, and lsof exits 1
+# when nothing holds the port — the common case — so the assignment would take
+# that status and `set -e` would abort the script before it printed anything.
+port_pid="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+if [[ -n "$port_pid" ]] && [[ "$(ps -o comm= -p "$port_pid" 2>/dev/null)" == "$executable" ]]; then
+  kill "$port_pid" 2>/dev/null || true
+fi
 # Port may still be held briefly after kill; wait for free so relaunch binds 5290.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
