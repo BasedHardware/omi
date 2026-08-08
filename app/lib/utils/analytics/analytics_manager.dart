@@ -1037,12 +1037,14 @@ class AnalyticsManager {
     track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
   }
 
-  void calendarFilterApplied(DateTime selectedDate) {
+  void calendarFilterApplied(DateTime startDate, DateTime endDate) {
     track(
       'Calendar Filter Applied',
       properties: {
-        'selected_date': selectedDate.toIso8601String(),
-        'days_ago': DateTime.now().difference(selectedDate).inDays,
+        'start_date': startDate.toIso8601String(),
+        'end_date': endDate.toIso8601String(),
+        'range_days': endDate.difference(startDate).inDays,
+        'days_ago': DateTime.now().difference(startDate).inDays,
       },
     );
   }

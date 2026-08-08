@@ -144,7 +144,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   // folder-tab chips would hide on empty filtered results, leaving no way to
   // clear filters short of restarting the app.
   bool _hasActiveFilter(ConversationProvider provider) {
-    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedDate != null;
+    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
   Widget _buildNoConversationsHero(BuildContext context) {
@@ -308,7 +308,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                  final hasCalendarFilter = convoProvider.selectedDate != null;
+                  final hasCalendarFilter = convoProvider.selectedStartDate != null;
                   final prefs = SharedPreferencesUtil();
                   if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());
