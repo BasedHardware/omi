@@ -1248,15 +1248,14 @@ async def reconcile_one(
     start_requested = bool(reconcile_state.get("startRequested"))
     start_requested_at = reconcile_state.get("startRequestedAt") if start_requested else None
     observed_start_request_at = float(start_requested_at) if isinstance(start_requested_at, (int, float)) else None
-    if (
-        reconcile_state.get("state") == "quarantined"
-        and reconcile_state.get("releaseId") == release.release_id
-        and not isinstance(active_migration, Mapping)
-    ):
-        return ReconcileResult(uid, "quarantined", str(reconcile_state.get("lastError") or "operator action required"))
+    terminal_quarantine = reconcile_state.get("state") == "quarantined" and (
+        reconcile_state.get("releaseId") == release.release_id and not isinstance(active_migration, Mapping)
+    )
+    quarantine_detail = str(reconcile_state.get("lastError") or "operator action required")
+    if terminal_quarantine and not _active_migration_candidate(vm):
+        return ReconcileResult(uid, "quarantined", quarantine_detail)
     if not await asyncio.to_thread(claim_vm_lease, uid, vm_name, auth_token, owner, release.release_id):
         return ReconcileResult(uid, "busy")
-
     now = time.time()
     missing_cleanup_grace_seconds = (
         _missing_cleanup_grace_seconds() if missing_cleanup_grace_seconds is None else missing_cleanup_grace_seconds
@@ -1337,10 +1336,12 @@ async def reconcile_one(
                     observed_instance_id,
                     durable_migration_id,
                 )
-        if (
-            isinstance(durable_migration, Mapping)
-            and durable_migration.get("state") in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
-        ):
+        recoverable_migration = isinstance(durable_migration, Mapping) and (
+            durable_migration.get("state") in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+        )
+        if terminal_quarantine and not recoverable_migration:
+            return ReconcileResult(uid, "quarantined", quarantine_detail)
+        if recoverable_migration and isinstance(durable_migration, Mapping):
             soak_seconds = durable_migration.get("soakSeconds")
             if not isinstance(soak_seconds, int) or soak_seconds < 60:
                 raise RuntimeError("durable boot-image migration journal has an invalid soak period")
@@ -1450,7 +1451,6 @@ async def reconcile_one(
                 ):
                     return ReconcileResult(uid, "stale", "owner lease lost while deferring drain")
                 return ReconcileResult(uid, "deferred", f"{active} active session(s)")
-
         status = str(instance.get("status") or "UNKNOWN")
         if not reasons and status in {"TERMINATED", "STOPPED"} and not start_requested:
             if not await _update_reconcile(
@@ -1485,7 +1485,6 @@ async def reconcile_one(
             status = "TERMINATED"
         if status not in {"TERMINATED", "STOPPED"} and reasons:
             raise RuntimeError(f"provider status {status}")
-
         if reasons:
             latest = await api.get_instance(vm_name)
             if latest is None:

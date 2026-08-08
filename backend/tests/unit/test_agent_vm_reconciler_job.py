@@ -1646,7 +1646,12 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
                 "zone": "us-central1-a",
                 "status": "stopped",
                 "authToken": "old-token",
-                "reconcile": {"durableMigration": migration_id},
+                "reconcile": {
+                    "state": "quarantined",
+                    "releaseId": RELEASE.release_id,
+                    "lastError": "RuntimeError",
+                    "durableMigration": migration_id,
+                },
             },
             RELEASE,
             owner="worker",
@@ -1657,6 +1662,41 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
 
     assert result.state == "migrated"
     assert cutovers and cutovers[-1]["instanceId"] == "candidate-id"
+
+
+def test_terminal_quarantine_with_stale_durable_marker_stays_fail_closed(monkeypatch):
+    migration_id = "7" * 24
+
+    class StaleJournalApi(FakeApi):
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {"id": "old-id", "status": "TERMINATED"}
+
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", StaleJournalApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_boot_image_migration", lambda *_args: None)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "dev-user",
+            {
+                "vmName": "omi-agent-user",
+                "zone": "us-central1-a",
+                "status": "ready",
+                "authToken": "old-token",
+                "reconcile": {
+                    "state": "quarantined",
+                    "releaseId": RELEASE.release_id,
+                    "lastError": "RuntimeError",
+                    "durableMigration": migration_id,
+                },
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result == reconciler.ReconcileResult("dev-user", "quarantined", "RuntimeError")
 
 
 def test_boot_image_migration_never_creates_for_an_active_session(monkeypatch):
