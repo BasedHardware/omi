@@ -4,6 +4,7 @@
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-005)
 // domain-pending(DIV-DOMX-006)
 import { isProxy } from "node:util/types";
 
@@ -25,6 +26,12 @@ import {
   type ApplicationMemoryReadAuthorizationRequest,
   type ApplicationProjectionLoad,
 } from "./authorization-boundary";
+import { sha256CanonicalContent } from "./content-digest";
+import {
+  buildOwnerBoundSynthesizedProjection,
+  type OwnerBoundSynthesizedProjectionEnvelope,
+  type SynthesizedCitation,
+} from "./projection-boundary";
 import {
   buildContentSafeRecallTrace,
   computeRecallCompleteness,
@@ -36,60 +43,19 @@ import {
   type RecallCompletenessInput,
   type RecallCompletenessResult,
 } from "./recall-integrity";
+import { isProducedRenderNode, type RenderNode } from "./render";
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const INTERNAL_REF = /^[\x21-\x7e]{1,512}$/;
+const ITEM_REF = /^mem1_[a-f0-9]{64}$/;
+const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
 const STABLE_VISIBLE_KEY = /^vk1_[a-f0-9]{64}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
 const SYNTHESIS_VERSION = /^[\x21-\x7e]{1,128}$/;
 const MAX_PAGE_LIMIT = 100;
 const MAX_CURSOR_CODE_UNITS = 4_096;
-export const MAX_APPLICATION_OVERLAY_ITEMS = 1_000;
-export const MAX_APPLICATION_OVERLAY_BYTES = 2_000_000;
 
 type PlainJson = null | boolean | number | string | readonly PlainJson[] | { readonly [key: string]: PlainJson };
-type CandidateSource = "durable" | "overlay";
-
-export interface ApplicationSynthesisProvenance {
-  readonly synthesis_version: string;
-  readonly input_digest: string;
-  readonly output_digest: string;
-}
-
-/**
- * Internal, already-synthesized and already-grounded input. Every coordinate
- * in this record is server-private; only keyed codec results may reach the
- * ratified page DTO.
- */
-export interface ApplicationSynthesizedCandidateRecord {
-  readonly owner_account_id: string;
-  readonly projection_authorization_digest: string;
-  readonly reader_projection_digest: string;
-  readonly authorization_generation_digest: string;
-  readonly projection_generation_digest: string;
-  readonly projected_content_digest: string;
-  readonly durable_generation_digest: string;
-  readonly overlay_generation_digest: string;
-  readonly declared_generation_digest: string;
-  readonly accepted_generation_digest: string;
-  readonly stm_generation_digest: string;
-  readonly candidate_ref: string;
-  readonly dedupe_ref: string;
-  readonly dedupe_rank: number;
-  readonly order_key: string;
-  readonly stable_visible_key: string;
-  readonly origin: "durable" | "stm" | "accepted_unprocessed";
-  readonly frontier: string;
-  readonly supersedes_refs: readonly string[];
-  readonly effective_policy: {
-    readonly subject_class: string;
-    readonly sensitivity: string;
-    readonly capture_class: string;
-  };
-  readonly synthesized_text: string;
-  readonly citation_provenance_ids: readonly string[];
-  readonly synthesis_provenance: ApplicationSynthesisProvenance | null;
-}
 
 export interface ApplicationRecallGenerationDigests {
   readonly authorization_generation_digest: string;
@@ -122,16 +88,13 @@ export interface ApplicationReadCoherentCoordinates {
   readonly read_timestamp_epoch_seconds: number;
 }
 
-export interface ApplicationRecallOverlayLoad {
-  readonly max_items: number;
-  readonly max_bytes: number;
-  readonly candidates: readonly ApplicationSynthesizedCandidateRecord[];
-}
-
 /** One adapter-owned coherent read; this file does not define a production store. */
 export interface ApplicationRecallCoherentLoad {
   readonly projection_load: ApplicationProjectionLoad;
-  readonly overlay: ApplicationRecallOverlayLoad;
+  /**
+   * Accepted/STM state is completeness-only until those sources have the same
+   * unforgeable produced-render boundary as durable material.
+   */
   readonly coverage: RecallCompletenessInput;
   readonly generations: ApplicationRecallGenerationDigests;
   readonly read_coordinates: ApplicationReadCoherentCoordinates;
@@ -171,13 +134,20 @@ export interface ApplicationSynthesizedPageResult {
 export interface ApplicationReadPorts {
   /** Resolves current credential/grant state and a zero-argument coherent loader. */
   readonly resolveAttempt: () => ApplicationReadAuthorizationAttempt;
-  /** Receives exactly the branded authorized projection, and no request authority. */
-  readonly loadDurableCandidates: (
+  /**
+   * Receives exactly the branded authorized projection, and no request
+   * authority. Every returned value must be a module-branded RenderNode
+   * produced by the existing render boundary; clones and structural lookalikes
+   * are rejected before projection.
+   */
+  readonly loadDurableRenders: (
     input: ApplicationGrantProjectedTreeInputSnapshot,
   ) => unknown;
+  /** Keyed digest of the canonical [version, order key, candidate ref] tuple. */
+  readonly encodeVisibleKey: (canonicalSortTuple: string) => unknown;
   /** Reader-scoped keyed codecs. Raw internal coordinates are never accepted as output. */
   readonly encodeItemRef: (candidateRef: string) => unknown;
-  readonly encodeCitationRef: (provenanceId: string) => unknown;
+  readonly encodeCitationRef: (canonicalEvidenceClosure: string) => unknown;
   readonly encodeTraceRef: (internalRef: string) => unknown;
   /** Verifies all protocol replay bindings against this exact coherent snapshot. */
   readonly verifyCursor: (cursor: string, attestation: ApplicationReadSnapshotAttestation) => unknown;
@@ -324,7 +294,8 @@ const callbackValue = (descriptor: PropertyDescriptor | undefined): ((...args: n
 
 interface SnapshottedPorts {
   readonly resolveAttempt: ApplicationReadPorts["resolveAttempt"];
-  readonly loadDurableCandidates: ApplicationReadPorts["loadDurableCandidates"];
+  readonly loadDurableRenders: ApplicationReadPorts["loadDurableRenders"];
+  readonly encodeVisibleKey: ApplicationReadPorts["encodeVisibleKey"];
   readonly encodeItemRef: ApplicationReadPorts["encodeItemRef"];
   readonly encodeCitationRef: ApplicationReadPorts["encodeCitationRef"];
   readonly encodeTraceRef: ApplicationReadPorts["encodeTraceRef"];
@@ -336,7 +307,8 @@ interface SnapshottedPorts {
 const snapshotPorts = (ports: ApplicationReadPorts): SnapshottedPorts => {
   const descriptors = exactDescriptors(ports, [
     "resolveAttempt",
-    "loadDurableCandidates",
+    "loadDurableRenders",
+    "encodeVisibleKey",
     "encodeItemRef",
     "encodeCitationRef",
     "encodeTraceRef",
@@ -346,7 +318,8 @@ const snapshotPorts = (ports: ApplicationReadPorts): SnapshottedPorts => {
   ]);
   return Object.freeze({
     resolveAttempt: callbackValue(descriptors.resolveAttempt) as ApplicationReadPorts["resolveAttempt"],
-    loadDurableCandidates: callbackValue(descriptors.loadDurableCandidates) as ApplicationReadPorts["loadDurableCandidates"],
+    loadDurableRenders: callbackValue(descriptors.loadDurableRenders) as ApplicationReadPorts["loadDurableRenders"],
+    encodeVisibleKey: callbackValue(descriptors.encodeVisibleKey) as ApplicationReadPorts["encodeVisibleKey"],
     encodeItemRef: callbackValue(descriptors.encodeItemRef) as ApplicationReadPorts["encodeItemRef"],
     encodeCitationRef: callbackValue(descriptors.encodeCitationRef) as ApplicationReadPorts["encodeCitationRef"],
     encodeTraceRef: callbackValue(descriptors.encodeTraceRef) as ApplicationReadPorts["encodeTraceRef"],
@@ -406,11 +379,6 @@ const parseGenerations = (value: PlainJson): Readonly<ApplicationRecallGeneratio
 
 interface ParsedCoherentLoad {
   readonly projection_load: ApplicationProjectionLoad;
-  readonly overlay: {
-    readonly max_items: number;
-    readonly max_bytes: number;
-    readonly candidates: readonly PlainJson[];
-  };
   readonly coverage: RecallCompletenessInput;
   readonly generations: Readonly<ApplicationRecallGenerationDigests>;
   readonly read_coordinates: Readonly<ApplicationReadCoherentCoordinates>;
@@ -454,16 +422,9 @@ const parseReadCoordinates = (value: PlainJson): Readonly<ApplicationReadCoheren
 
 const parseCoherentLoad = (input: unknown): ParsedCoherentLoad => {
   const value = detachPlainJsonStrict(input);
-  if (!exactRecord(value, ["projection_load", "overlay", "coverage", "generations", "read_coordinates"])
-    || !exactRecord(value.overlay, ["max_items", "max_bytes", "candidates"])
-    || typeof value.overlay.max_items !== "number" || !Number.isSafeInteger(value.overlay.max_items)
-    || value.overlay.max_items < 1 || value.overlay.max_items > MAX_APPLICATION_OVERLAY_ITEMS
-    || typeof value.overlay.max_bytes !== "number" || !Number.isSafeInteger(value.overlay.max_bytes)
-    || value.overlay.max_bytes < 1 || value.overlay.max_bytes > MAX_APPLICATION_OVERLAY_BYTES
-    || !Array.isArray(value.overlay.candidates)
-    || value.overlay.candidates.length > value.overlay.max_items) return fail("coherent load has an invalid overlay bound");
-  const encodedOverlayBytes = Buffer.byteLength(canonicalPlainJson(value.overlay.candidates), "utf8");
-  if (encodedOverlayBytes > value.overlay.max_bytes) return fail("coherent load exceeds its overlay byte bound");
+  if (!exactRecord(value, ["projection_load", "coverage", "generations", "read_coordinates"])) {
+    return fail("coherent load has an invalid exact shape");
+  }
   if (!isRecord(value.projection_load) || !isRecord(value.coverage)) return fail("coherent load has an invalid shape");
   const generations = parseGenerations(value.generations);
   const readCoordinates = parseReadCoordinates(value.read_coordinates);
@@ -472,11 +433,6 @@ const parseCoherentLoad = (input: unknown): ParsedCoherentLoad => {
   }
   return Object.freeze({
     projection_load: value.projection_load as unknown as ApplicationProjectionLoad,
-    overlay: Object.freeze({
-      max_items: value.overlay.max_items,
-      max_bytes: value.overlay.max_bytes,
-      candidates: value.overlay.candidates,
-    }),
     coverage: value.coverage as unknown as RecallCompletenessInput,
     generations,
     read_coordinates: readCoordinates,
@@ -498,7 +454,7 @@ const parseAuthorizationAttempt = (input: unknown): ParsedAuthorizationAttempt =
   });
 };
 
-interface GenerationSignature extends ApplicationRecallGenerationDigests {
+interface CoherentGenerationSignature extends ApplicationRecallGenerationDigests {
   readonly projection_authorization_digest: string;
   readonly reader_projection_digest: string;
   readonly projection_generation_digest: string;
@@ -507,12 +463,17 @@ interface GenerationSignature extends ApplicationRecallGenerationDigests {
   readonly coverage_canonical: string;
 }
 
+interface GenerationSignature extends CoherentGenerationSignature {
+  /** Canonical digest of the exact owner-bound produced-render set. */
+  readonly synthesized_projection_generation_digest: string;
+}
+
 const buildGenerationSignature = (
   input: ApplicationGrantProjectedTreeInputSnapshot,
   generations: ApplicationRecallGenerationDigests,
   readCoordinates: Readonly<ApplicationReadCoherentCoordinates>,
   coverage: RecallCompletenessInput,
-): Readonly<GenerationSignature> => {
+): Readonly<CoherentGenerationSignature> => {
   const projectionGeneration = input.graph_generation;
   const fields = [
     input.projection_authorization_digest,
@@ -538,7 +499,7 @@ interface AuthorizedCoherentRead {
   readonly authorization_request: ApplicationMemoryReadAuthorizationRequest;
   readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
   readonly coherent: ParsedCoherentLoad;
-  readonly signature: Readonly<GenerationSignature>;
+  readonly signature: Readonly<CoherentGenerationSignature>;
 }
 
 const loadAuthorizedCoherentRead = (ports: SnapshottedPorts): AuthorizedCoherentRead => {
@@ -563,155 +524,103 @@ const loadAuthorizedCoherentRead = (ports: SnapshottedPorts): AuthorizedCoherent
   });
 };
 
-const CANDIDATE_KEYS = Object.freeze([
-  "owner_account_id",
-  "projection_authorization_digest",
-  "reader_projection_digest",
-  "authorization_generation_digest",
-  "projection_generation_digest",
-  "projected_content_digest",
-  "durable_generation_digest",
-  "overlay_generation_digest",
-  "declared_generation_digest",
-  "accepted_generation_digest",
-  "stm_generation_digest",
-  "candidate_ref",
-  "dedupe_ref",
-  "dedupe_rank",
-  "order_key",
-  "stable_visible_key",
-  "origin",
-  "frontier",
-  "supersedes_refs",
-  "effective_policy",
-  "synthesized_text",
-  "citation_provenance_ids",
-  "synthesis_provenance",
-] as const satisfies readonly (keyof ApplicationSynthesizedCandidateRecord)[]);
-
-const policyIsGeneric = (value: PlainJson): value is {
-  readonly subject_class: "generic";
-  readonly sensitivity: "generic";
-  readonly capture_class: "generic";
-} => exactRecord(value, ["subject_class", "sensitivity", "capture_class"])
-  && typeof value.subject_class === "string"
-  && typeof value.sensitivity === "string"
-  && typeof value.capture_class === "string"
-  && value.subject_class === "generic"
-  && value.sensitivity === "generic"
-  && value.capture_class === "generic";
-
-const parseProvenance = (value: PlainJson): ApplicationSynthesisProvenance | null => {
-  if (value === null) return null;
-  if (!exactRecord(value, ["synthesis_version", "input_digest", "output_digest"])
-    || typeof value.synthesis_version !== "string" || !SYNTHESIS_VERSION.test(value.synthesis_version)
-    || typeof value.input_digest !== "string" || parseSha256Digest(value.input_digest) === null
-    || typeof value.output_digest !== "string" || parseSha256Digest(value.output_digest) === null) {
-    return fail("candidate synthesis provenance is invalid");
-  }
-  return Object.freeze({
-    synthesis_version: value.synthesis_version,
-    input_digest: value.input_digest,
-    output_digest: value.output_digest,
-  });
-};
-
-const candidateBindingMatches = (value: { readonly [key: string]: PlainJson }, signature: GenerationSignature): boolean =>
-  value.projection_authorization_digest === signature.projection_authorization_digest
-  && value.reader_projection_digest === signature.reader_projection_digest
-  && value.authorization_generation_digest === signature.authorization_generation_digest
-  && value.projection_generation_digest === signature.projection_generation_digest
-  && value.projected_content_digest === signature.projected_content_digest
-  && value.durable_generation_digest === signature.durable_generation_digest
-  && value.overlay_generation_digest === signature.overlay_generation_digest
-  && value.declared_generation_digest === signature.declared_generation_digest
-  && value.accepted_generation_digest === signature.accepted_generation_digest
-  && value.stm_generation_digest === signature.stm_generation_digest;
-
-const parseCandidate = (
-  value: PlainJson,
-  source: CandidateSource,
-  read: AuthorizedCoherentRead,
-): ApplicationSynthesizedCandidateRecord | null => {
-  if (!exactRecord(value, CANDIDATE_KEYS)) return fail("candidate has an invalid exact shape");
-  if (typeof value.owner_account_id !== "string" || value.owner_account_id !== read.projected.owner_account_id) {
-    return fail("candidate owner binding mismatch");
-  }
-  if (!candidateBindingMatches(value, read.signature)) return fail("candidate generation binding mismatch");
-  const origin = value.origin;
-  if (origin !== "durable" && origin !== "stm" && origin !== "accepted_unprocessed") {
-    return fail("candidate origin is invalid");
-  }
-  if ((source === "durable" && origin !== "durable") || (source === "overlay" && origin === "durable")) {
-    return fail("candidate source and origin disagree");
-  }
-  if (!exactRecord(value.effective_policy, ["subject_class", "sensitivity", "capture_class"])
-    || typeof value.effective_policy.subject_class !== "string"
-    || typeof value.effective_policy.sensitivity !== "string"
-    || typeof value.effective_policy.capture_class !== "string") return fail("candidate policy is invalid");
-  if (!INTERNAL_REF.test(typeof value.candidate_ref === "string" ? value.candidate_ref : "")
-    || !INTERNAL_REF.test(typeof value.dedupe_ref === "string" ? value.dedupe_ref : "")
-    || !INTERNAL_REF.test(typeof value.order_key === "string" ? value.order_key : "")
-    || !STABLE_VISIBLE_KEY.test(typeof value.stable_visible_key === "string" ? value.stable_visible_key : "")
-    || !INTERNAL_REF.test(typeof value.frontier === "string" ? value.frontier : "")
-    || typeof value.dedupe_rank !== "number" || !Number.isSafeInteger(value.dedupe_rank)
-    || !Array.isArray(value.supersedes_refs) || !value.supersedes_refs.every((ref) => typeof ref === "string" && INTERNAL_REF.test(ref))
-    || !uniqueStrings(value.supersedes_refs as string[])
-    || value.supersedes_refs.includes(value.candidate_ref)
-    || typeof value.synthesized_text !== "string" || parseSynthesizedText(value.synthesized_text) === null
-    || !Array.isArray(value.citation_provenance_ids)
-    || !value.citation_provenance_ids.every((ref) => typeof ref === "string" && INTERNAL_REF.test(ref))
-    || !uniqueStrings(value.citation_provenance_ids as string[])) return fail("candidate values are invalid");
-  const provenance = parseProvenance(value.synthesis_provenance);
-
-  // A well-formed, correctly bound non-generic record is outside this reader's
-  // projection. It cannot participate in dedupe, supersession, paging or trace.
-  if (!policyIsGeneric(value.effective_policy)) return null;
-
-  const candidate: ApplicationSynthesizedCandidateRecord = {
-    owner_account_id: value.owner_account_id,
-    projection_authorization_digest: value.projection_authorization_digest as string,
-    reader_projection_digest: value.reader_projection_digest as string,
-    authorization_generation_digest: value.authorization_generation_digest as string,
-    projection_generation_digest: value.projection_generation_digest as string,
-    projected_content_digest: value.projected_content_digest as string,
-    durable_generation_digest: value.durable_generation_digest as string,
-    overlay_generation_digest: value.overlay_generation_digest as string,
-    declared_generation_digest: value.declared_generation_digest as string,
-    accepted_generation_digest: value.accepted_generation_digest as string,
-    stm_generation_digest: value.stm_generation_digest as string,
-    candidate_ref: value.candidate_ref as string,
-    dedupe_ref: value.dedupe_ref as string,
-    dedupe_rank: value.dedupe_rank,
-    order_key: value.order_key as string,
-    stable_visible_key: value.stable_visible_key as string,
-    origin,
-    frontier: value.frontier as string,
-    supersedes_refs: Object.freeze([...(value.supersedes_refs as string[])].sort(compareStrings)),
-    effective_policy: Object.freeze({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }),
-    synthesized_text: value.synthesized_text,
-    citation_provenance_ids: Object.freeze([...(value.citation_provenance_ids as string[])].sort(compareStrings)),
-    synthesis_provenance: provenance,
+interface AuthorizedRenderedCandidate {
+  readonly envelope: OwnerBoundSynthesizedProjectionEnvelope;
+  readonly candidate_ref: string;
+  readonly dedupe_ref: string;
+  readonly dedupe_rank: number;
+  readonly order_key: string;
+  readonly origin: "durable";
+  readonly frontier: string;
+  readonly supersedes_refs: readonly string[];
+  readonly synthesized_text: string;
+  readonly citations: readonly SynthesizedCitation[];
+  readonly synthesis_provenance: {
+    readonly synthesis_version: string;
+    readonly input_digest: string;
+    readonly output_digest: string;
   };
-  return Object.freeze(candidate);
-};
+}
 
-const parseCandidateArray = (
-  input: unknown,
-  source: CandidateSource,
-  read: AuthorizedCoherentRead,
-): readonly ApplicationSynthesizedCandidateRecord[] => {
-  const value = source === "overlay" ? input as PlainJson : detachPlainJsonStrict(input);
-  if (!Array.isArray(value)) return fail("candidate port must return an array");
-  const output: ApplicationSynthesizedCandidateRecord[] = [];
-  for (const item of value) {
-    const parsed = parseCandidate(item, source, read);
-    if (parsed) output.push(parsed);
+/** Preserve RenderNode identity while rejecting hostile arrays and lookalikes. */
+const snapshotProducedRenders = (input: unknown): readonly RenderNode[] => {
+  if (!Array.isArray(input) || isProxy(input) || Object.getPrototypeOf(input) !== Array.prototype) {
+    return fail("durable render port must return a plain array");
   }
-  return Object.freeze(output);
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  const descriptorRecord = descriptors as unknown as Record<PropertyKey, PropertyDescriptor>;
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.some((key) => typeof key !== "string")) return fail("durable render array rejects symbols");
+  const indexKeys = (keys as string[]).filter((key) => key !== "length");
+  const lengthDescriptor = descriptorRecord.length;
+  if (!lengthDescriptor || !Object.hasOwn(lengthDescriptor, "value") || lengthDescriptor.value !== input.length) {
+    return fail("durable render array has an invalid length descriptor");
+  }
+  if (indexKeys.length !== input.length || indexKeys.some((key, index) => key !== String(index))) {
+    return fail("durable render array rejects sparse or decorated values");
+  }
+  const renders: RenderNode[] = [];
+  for (const key of indexKeys) {
+    const descriptor = descriptorRecord[key];
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, "value")) {
+      return fail("durable render array rejects accessors");
+    }
+    const render = descriptor.value;
+    if (isProxy(render) || !isProducedRenderNode(render)) {
+      return fail("durable render port requires produced RenderNode identities");
+    }
+    renders.push(render);
+  }
+  if (new Set(renders).size !== renders.length) return fail("durable render port rejects aliases");
+  return Object.freeze(renders);
 };
 
-const toKernelCandidate = (candidate: ApplicationSynthesizedCandidateRecord): AuthorizedRecallCandidate => Object.freeze({
+const buildAuthorizedRenderedCandidates = (
+  input: unknown,
+  read: AuthorizedCoherentRead,
+): readonly AuthorizedRenderedCandidate[] => {
+  const renders = snapshotProducedRenders(input);
+  const candidates = renders.map((render): AuthorizedRenderedCandidate => {
+    const envelope = buildOwnerBoundSynthesizedProjection(read.projected, render);
+    if (parseSynthesizedText(envelope.synthesized_summary) === null
+      || envelope.citations.length === 0
+      || !INTERNAL_REF.test(envelope.node_id)
+      || !SYNTHESIS_VERSION.test(render.model_version)
+      || parseSha256Digest(envelope.render_hash) === null
+      || parseSha256Digest(envelope.rendered_from_digest) === null) {
+      return fail("owner-bound render lacks grounded synthesis provenance");
+    }
+    const candidateRef = `render:${envelope.render_hash}`;
+    const nodeRef = `node:${sha256CanonicalContent(envelope.node_id)}`;
+    return Object.freeze({
+      envelope,
+      candidate_ref: candidateRef,
+      dedupe_ref: nodeRef,
+      dedupe_rank: 0,
+      // Hermetic QA/default-fixture ordering only: preserve the existing
+      // produced render node-id order. This makes no production ranking-policy
+      // claim.
+      order_key: envelope.node_id,
+      origin: "durable",
+      // Hermetic QA/default-fixture frontier only. A production retrieval
+      // policy must supply its separately ratified durable frontier semantics.
+      frontier: read.signature.durable_generation_digest,
+      supersedes_refs: Object.freeze([]),
+      synthesized_text: envelope.synthesized_summary,
+      citations: envelope.citations,
+      synthesis_provenance: Object.freeze({
+        synthesis_version: render.model_version,
+        input_digest: envelope.rendered_from_digest,
+        // The projection boundary recomputes render_hash over the exact
+        // summary text and rejects any mismatch before this point.
+        output_digest: envelope.render_hash,
+      }),
+    });
+  });
+  return Object.freeze(candidates);
+};
+
+const toKernelCandidate = (candidate: AuthorizedRenderedCandidate): AuthorizedRecallCandidate => Object.freeze({
   candidate_ref: candidate.candidate_ref,
   dedupe_ref: candidate.dedupe_ref,
   dedupe_rank: candidate.dedupe_rank,
@@ -721,62 +630,36 @@ const toKernelCandidate = (candidate: ApplicationSynthesizedCandidateRecord): Au
   supersedes_refs: candidate.supersedes_refs,
 });
 
-const assertOverlayFrontiers = (
-  candidates: readonly ApplicationSynthesizedCandidateRecord[],
-  completeness: RecallCompletenessResult,
-): void => {
-  for (const candidate of candidates) {
-    const searched = candidate.origin === "stm"
-      ? completeness.frontiers.newest_stm_frontier_searched
-      : completeness.frontiers.newest_accepted_frontier_searched;
-    if (searched === null || candidate.frontier !== searched) return fail("overlay candidate lies outside its searched frontier");
-  }
-};
-
 const mergeCandidates = (
-  durable: readonly ApplicationSynthesizedCandidateRecord[],
-  overlay: readonly ApplicationSynthesizedCandidateRecord[],
-): readonly ApplicationSynthesizedCandidateRecord[] => {
-  const all = [...durable, ...overlay];
-  const merged = mergeAuthorizedRecallCandidates(all.map(toKernelCandidate));
-  const byRef = new Map(all.map((candidate) => [candidate.candidate_ref, candidate]));
-  if (byRef.size !== all.length) return fail("candidate references must be unique");
+  durable: readonly AuthorizedRenderedCandidate[],
+): readonly AuthorizedRenderedCandidate[] => {
+  const merged = mergeAuthorizedRecallCandidates(durable.map(toKernelCandidate));
+  const byRef = new Map(durable.map((candidate) => [candidate.candidate_ref, candidate]));
+  if (byRef.size !== durable.length) return fail("produced renders require unique identities");
   const winners = merged.map((candidate) => {
     const winner = byRef.get(candidate.candidate_ref);
     if (!winner) return fail("recall kernel returned an unknown candidate");
     return winner;
   });
-  const stableKeys = winners.map((candidate) => candidate.stable_visible_key);
-  if (!uniqueStrings(stableKeys)) return fail("visible winners require unique stable keys");
   return Object.freeze(winners);
 };
 
-interface PageSlice {
-  readonly eligible: readonly ApplicationSynthesizedCandidateRecord[];
-  readonly selected: readonly ApplicationSynthesizedCandidateRecord[];
-  readonly hasMore: boolean;
-}
-
-const pageCandidates = (
-  winners: readonly ApplicationSynthesizedCandidateRecord[],
-  afterVisibleKey: string | null,
-  limit: number,
-): PageSlice => {
-  let start = 0;
-  if (afterVisibleKey !== null) {
-    const index = winners.findIndex((candidate) => candidate.stable_visible_key === afterVisibleKey);
-    if (index < 0) return fail("received an invalid after-visible key");
-    start = index + 1;
-  }
-  const selected = Object.freeze(winners.slice(start, start + limit));
-  const hasMore = selected.length > 0 && start + selected.length < winners.length;
-  return Object.freeze({ eligible: winners, selected, hasMore });
+const synthesizedProjectionGenerationDigest = (
+  candidates: readonly AuthorizedRenderedCandidate[],
+): string => {
+  const identities = candidates.map((candidate) => ({
+    node_id: candidate.envelope.node_id,
+    render_generation: candidate.envelope.render_generation,
+    render_hash: candidate.envelope.render_hash,
+    model_version: candidate.synthesis_provenance.synthesis_version,
+  })).sort((left, right) => compareStrings(canonicalPlainJson(left), canonicalPlainJson(right)));
+  return sha256CanonicalContent({ version: "application-produced-render-set-v1", identities });
 };
 
 const collectForbiddenRefs = (
   authorization: ApplicationMemoryReadAuthorizationRequest,
   projected: ApplicationGrantProjectedTreeInputSnapshot,
-  candidates: readonly ApplicationSynthesizedCandidateRecord[],
+  candidates: readonly AuthorizedRenderedCandidate[],
 ): ReadonlySet<string> => {
   const refs = new Set<string>();
   const add = (value: unknown): void => { if (typeof value === "string" && value.length > 0) refs.add(value); };
@@ -788,24 +671,19 @@ const collectForbiddenRefs = (
   add(authorization.persisted_grant?.app_id);
   add(authorization.persisted_grant?.key_id);
   for (const candidate of candidates) {
-    add(candidate.owner_account_id);
-    add(candidate.projection_authorization_digest);
-    add(candidate.reader_projection_digest);
-    add(candidate.authorization_generation_digest);
-    add(candidate.projection_generation_digest);
-    add(candidate.projected_content_digest);
-    add(candidate.durable_generation_digest);
-    add(candidate.overlay_generation_digest);
-    add(candidate.declared_generation_digest);
-    add(candidate.accepted_generation_digest);
-    add(candidate.stm_generation_digest);
     add(candidate.candidate_ref);
     add(candidate.dedupe_ref);
     add(candidate.order_key);
-    add(candidate.stable_visible_key);
     add(candidate.frontier);
-    for (const ref of candidate.supersedes_refs) add(ref);
-    for (const ref of candidate.citation_provenance_ids) add(ref);
+    for (const value of Object.values(candidate.envelope)) {
+      if (typeof value === "string") add(value);
+    }
+    for (const citation of candidate.citations) {
+      add(citation.evidence_id);
+      add(citation.event_revision_id);
+      add(citation.capture_session_id);
+      for (const revision of citation.claim_revision_ids) add(revision);
+    }
   }
   const visit = (value: unknown, field = ""): void => {
     if (value === null || typeof value !== "object") return;
@@ -828,16 +706,25 @@ const leaksForbiddenRef = (value: string, forbidden: ReadonlySet<string>): boole
   return false;
 };
 
+const opaqueVisibleKey = (value: unknown, forbidden: ReadonlySet<string>): `vk1_${string}` => {
+  if (typeof value !== "string" || !STABLE_VISIBLE_KEY.test(value) || leaksForbiddenRef(value, forbidden)) {
+    return fail("visible-key codec returned a raw or invalid keyed digest");
+  }
+  return value as `vk1_${string}`;
+};
+
 const opaqueItemRef = (value: unknown, forbidden: ReadonlySet<string>): string => {
-  if (typeof value !== "string" || parseSynthesizedItemId(value) === null || leaksForbiddenRef(value, forbidden)) {
-    return fail("item codec returned a raw or invalid reference");
+  if (typeof value !== "string" || !ITEM_REF.test(value)
+    || parseSynthesizedItemId(value) === null || leaksForbiddenRef(value, forbidden)) {
+    return fail("item codec returned a raw or invalid keyed digest");
   }
   return value;
 };
 
 const opaqueCitationRef = (value: unknown, forbidden: ReadonlySet<string>): string => {
-  if (typeof value !== "string" || parseCitationRef(value) === null || leaksForbiddenRef(value, forbidden)) {
-    return fail("citation codec returned a raw or invalid reference");
+  if (typeof value !== "string" || !CITATION_REF.test(value)
+    || parseCitationRef(value) === null || leaksForbiddenRef(value, forbidden)) {
+    return fail("citation codec returned a raw or invalid keyed digest");
   }
   return value;
 };
@@ -911,19 +798,42 @@ const canonicalOwnedJson = (value: PlainJson): string => {
   return `{${members.join(",")}}`;
 };
 
-interface PreparedApplicationPage {
+interface LoadedApplicationRead {
+  readonly read: AuthorizedCoherentRead;
+  readonly completeness: RecallCompletenessResult;
+  readonly signature: Readonly<GenerationSignature>;
+  readonly snapshot_attestation: Readonly<ApplicationReadSnapshotAttestation>;
+  readonly winners: readonly AuthorizedRenderedCandidate[];
+}
+
+interface PreparedApplicationRead extends LoadedApplicationRead {
+  readonly after_visible_key: string | null;
+}
+
+interface FinalizedApplicationPage {
   readonly page: PlainJson;
   readonly trace: ContentSafeRecallTrace;
-  readonly signature: Readonly<GenerationSignature>;
   readonly attestation: Readonly<ApplicationReadAttestation>;
+}
+
+interface VisibleRenderedCandidate {
+  readonly candidate: AuthorizedRenderedCandidate;
+  readonly visible_key: `vk1_${string}`;
+}
+
+interface PageSlice {
+  readonly eligible: readonly VisibleRenderedCandidate[];
+  readonly selected: readonly VisibleRenderedCandidate[];
+  readonly hasMore: boolean;
 }
 
 const buildSnapshotAttestation = (
   read: AuthorizedCoherentRead,
   coverage: RecallCompletenessInput,
+  synthesizedGenerationDigest: string,
 ): Readonly<ApplicationReadSnapshotAttestation> => Object.freeze({
   ...read.coherent.read_coordinates,
-  synthesized_projection_generation_digest: read.signature.projection_generation_digest,
+  synthesized_projection_generation_digest: synthesizedGenerationDigest,
   projected_content_digest: read.signature.projected_content_digest,
   durable_generation_digest: read.signature.durable_generation_digest,
   overlay_generation_digest: read.signature.overlay_generation_digest,
@@ -941,10 +851,9 @@ const buildReadAttestation = (
   last_visible_key: lastVisibleKey,
 });
 
-const buildPreparedApplicationPage = (
-  request: ApplicationSynthesizedPageRequest,
+const loadInternalApplicationRead = (
   ports: SnapshottedPorts,
-): PreparedApplicationPage => {
+): LoadedApplicationRead => {
   const read = loadAuthorizedCoherentRead(ports);
   const completeness = computeRecallCompleteness(read.coherent.coverage);
   if (parseRecallFrontier(completeness.frontiers.declared_frontier) === null
@@ -954,45 +863,123 @@ const buildPreparedApplicationPage = (
       && parseRecallFrontier(completeness.frontiers.newest_stm_frontier_searched) === null)) {
     return fail("completeness contains an invalid public frontier");
   }
+  // Accepted/STM positive synthesis has no produced-render authority boundary
+  // yet. Until one is ratified, those sources may report honest no-eligible or
+  // limitation states, but cannot claim a synthesized searched frontier.
+  if (completeness.frontiers.newest_accepted_frontier_searched !== null
+    || completeness.frontiers.newest_stm_frontier_searched !== null) {
+    return fail("accepted and STM synthesized search requires a produced-render boundary");
+  }
 
-  const snapshotAttestation = buildSnapshotAttestation(read, read.coherent.coverage);
+  const durableRaw = Reflect.apply(ports.loadDurableRenders, undefined, [read.projected]);
+  const durable = buildAuthorizedRenderedCandidates(durableRaw, read);
+  const winners = mergeCandidates(durable);
+  const synthesizedGenerationDigest = synthesizedProjectionGenerationDigest(durable);
+  const signature: Readonly<GenerationSignature> = Object.freeze({
+    ...read.signature,
+    synthesized_projection_generation_digest: synthesizedGenerationDigest,
+  });
+  const snapshotAttestation = buildSnapshotAttestation(read, read.coherent.coverage, synthesizedGenerationDigest);
+  return Object.freeze({
+    read,
+    completeness,
+    signature,
+    snapshot_attestation: snapshotAttestation,
+    winners,
+  });
+};
+
+const prepareApplicationRead = (
+  request: ApplicationSynthesizedPageRequest,
+  ports: SnapshottedPorts,
+): PreparedApplicationRead => {
+  const loaded = loadInternalApplicationRead(ports);
   let afterVisibleKey: string | null = null;
   if (request.cursor !== null) {
-    // Codec errors intentionally propagate with their own public invalid-cursor
-    // type. A nonthrowing malformed codec result fails closed here.
-    const verified = Reflect.apply(ports.verifyCursor, undefined, [request.cursor, snapshotAttestation]);
+    // Verification is bound to the derived produced-render-set digest. Codec
+    // errors intentionally retain their own public invalid-cursor type.
+    const verified = Reflect.apply(ports.verifyCursor, undefined, [request.cursor, loaded.snapshot_attestation]);
     if (typeof verified !== "string" || !STABLE_VISIBLE_KEY.test(verified)) {
       return fail("cursor verifier returned an invalid stable visible key");
     }
     afterVisibleKey = verified;
   }
+  return Object.freeze({ ...loaded, after_visible_key: afterVisibleKey });
+};
 
-  const loadDurableCandidates = ports.loadDurableCandidates;
-  const durableRaw = Reflect.apply(loadDurableCandidates, undefined, [read.projected]);
-  const durable = parseCandidateArray(durableRaw, "durable", read);
-  const overlay = parseCandidateArray(read.coherent.overlay.candidates, "overlay", read);
-  assertOverlayFrontiers(overlay, completeness);
-  const winners = mergeCandidates(durable, overlay);
-  const page = pageCandidates(winners, afterVisibleKey, request.limit);
-  const forbidden = collectForbiddenRefs(read.authorization_request, read.projected, winners);
-  const lastVisibleKey = page.selected.at(-1)?.stable_visible_key ?? null;
+const attachVisibleKeys = (
+  winners: readonly AuthorizedRenderedCandidate[],
+  forbidden: ReadonlySet<string>,
+  ports: SnapshottedPorts,
+): readonly VisibleRenderedCandidate[] => {
+  const output = winners.map((candidate): VisibleRenderedCandidate => {
+    // These are exactly the two coordinates used by the recall kernel's final
+    // post-dedupe ordering. Only their keyed digest becomes pagination state.
+    const sortTuple = canonicalPlainJson(["application-visible-order-v1", candidate.order_key, candidate.candidate_ref]);
+    const encoded = Reflect.apply(ports.encodeVisibleKey, undefined, [sortTuple]);
+    return Object.freeze({ candidate, visible_key: opaqueVisibleKey(encoded, forbidden) });
+  });
+  const keys = output.map((candidate) => candidate.visible_key);
+  if (!uniqueStrings(keys)) return fail("visible-key codec returned duplicate keyed digests");
+  return Object.freeze(output);
+};
+
+const pageCandidates = (
+  winners: readonly VisibleRenderedCandidate[],
+  afterVisibleKey: string | null,
+  limit: number,
+): PageSlice => {
+  let start = 0;
+  if (afterVisibleKey !== null) {
+    const index = winners.findIndex((candidate) => candidate.visible_key === afterVisibleKey);
+    if (index < 0) return fail("received an invalid after-visible key");
+    start = index + 1;
+  }
+  const selected = Object.freeze(winners.slice(start, start + limit));
+  const hasMore = selected.length > 0 && start + selected.length < winners.length;
+  return Object.freeze({ eligible: winners, selected, hasMore });
+};
+
+const canonicalCitationClosure = (citation: SynthesizedCitation): string => canonicalPlainJson([
+  "application-citation-closure-v1",
+  citation.evidence_id,
+  citation.event_revision_id,
+  citation.capture_session_id,
+  [...citation.claim_revision_ids],
+]);
+
+/** Called only after the final authorization/coherence signature matches. */
+const finalizeApplicationPage = (
+  prepared: PreparedApplicationRead,
+  request: ApplicationSynthesizedPageRequest,
+  ports: SnapshottedPorts,
+): FinalizedApplicationPage => {
+  const { read, completeness, snapshot_attestation: snapshotAttestation, after_visible_key: afterVisibleKey } = prepared;
+  const forbidden = collectForbiddenRefs(read.authorization_request, read.projected, prepared.winners);
+  const visibleWinners = attachVisibleKeys(prepared.winners, forbidden, ports);
+  const page = pageCandidates(visibleWinners, afterVisibleKey, request.limit);
+  const lastVisibleKey = page.selected.at(-1)?.visible_key ?? null;
   const attestation = buildReadAttestation(snapshotAttestation, lastVisibleKey);
 
   const items: PlainJson[] = [];
-  for (const candidate of page.selected) {
+  for (const visible of page.selected) {
+    const candidate = visible.candidate;
     const itemId = opaqueItemRef(Reflect.apply(ports.encodeItemRef, undefined, [candidate.candidate_ref]), forbidden);
-    const citations = candidate.citation_provenance_ids.map((provenanceId) =>
-      opaqueCitationRef(Reflect.apply(ports.encodeCitationRef, undefined, [provenanceId]), forbidden));
+    const citations = candidate.citations.map((citation) => opaqueCitationRef(
+      Reflect.apply(ports.encodeCitationRef, undefined, [canonicalCitationClosure(citation)]),
+      forbidden,
+    ));
+    if (citations.length === 0) return fail("positive synthesized items require grounded citations");
     if (!uniqueStrings(citations)) return fail("citation codec returned duplicate references");
     const item: Record<string, PlainJson> = {
       id: itemId,
       text: candidate.synthesized_text,
-    };
-    if (citations.length > 0) item.citations = citations;
-    if (candidate.synthesis_provenance !== null) item.provenance = {
-      synthesisVersion: candidate.synthesis_provenance.synthesis_version,
-      inputDigest: candidate.synthesis_provenance.input_digest,
-      outputDigest: candidate.synthesis_provenance.output_digest,
+      citations,
+      provenance: {
+        synthesisVersion: candidate.synthesis_provenance.synthesis_version,
+        inputDigest: candidate.synthesis_provenance.input_digest,
+        outputDigest: candidate.synthesis_provenance.output_digest,
+      },
     };
     items.push(item);
   }
@@ -1015,15 +1002,16 @@ const buildPreparedApplicationPage = (
   };
 
   const traceByCandidate = new Map<string, `tr1_${string}`>();
-  for (const candidate of page.eligible) {
+  for (const visible of page.eligible) {
+    const candidate = visible.candidate;
     traceByCandidate.set(candidate.candidate_ref, opaqueTraceRef(
       Reflect.apply(ports.encodeTraceRef, undefined, [`candidate:${candidate.candidate_ref}`]),
       forbidden,
     ));
   }
   if (new Set(traceByCandidate.values()).size !== traceByCandidate.size) return fail("trace codec returned duplicate candidate references");
-  const eligibleTraceRefs = page.eligible.map((candidate) => traceByCandidate.get(candidate.candidate_ref)!);
-  const selectedTraceRefs = page.selected.map((candidate) => traceByCandidate.get(candidate.candidate_ref)!);
+  const eligibleTraceRefs = page.eligible.map(({ candidate }) => traceByCandidate.get(candidate.candidate_ref)!);
+  const selectedTraceRefs = page.selected.map(({ candidate }) => traceByCandidate.get(candidate.candidate_ref)!);
   const rootTraceSeed = `attempt:${read.signature.projection_authorization_digest}:${read.signature.projected_content_digest}:${afterVisibleKey ?? "start"}:${request.limit}`;
   const rootTraceRef = opaqueTraceRef(Reflect.apply(ports.encodeTraceRef, undefined, [rootTraceSeed]), forbidden);
   const freshness = read.coherent.coverage.projection_freshness;
@@ -1052,13 +1040,13 @@ const buildPreparedApplicationPage = (
   return Object.freeze({
     page: ownNullJson(pageData),
     trace,
-    signature: read.signature,
     attestation,
   });
 };
 
 const signaturesEqual = (left: GenerationSignature, right: GenerationSignature): boolean =>
-  left.projection_authorization_digest === right.projection_authorization_digest
+  left.synthesized_projection_generation_digest === right.synthesized_projection_generation_digest
+  && left.projection_authorization_digest === right.projection_authorization_digest
   && left.reader_projection_digest === right.reader_projection_digest
   && left.authorization_generation_digest === right.authorization_generation_digest
   && left.projection_generation_digest === right.projection_generation_digest
@@ -1069,11 +1057,13 @@ const signaturesEqual = (left: GenerationSignature, right: GenerationSignature):
   && left.accepted_generation_digest === right.accepted_generation_digest
   && left.stm_generation_digest === right.stm_generation_digest
   && left.coverage_canonical === right.coverage_canonical
-  && READ_COORDINATE_DIGEST_KEYS.every((key) => left.read_coordinates[key] === right.read_coordinates[key]);
+  && READ_COORDINATE_DIGEST_KEYS.every((key) => left.read_coordinates[key] === right.read_coordinates[key])
+  && left.read_coordinates.read_timestamp_epoch_seconds === right.read_coordinates.read_timestamp_epoch_seconds;
 
 /**
- * Production-neutral application read core. It accepts only injected,
- * pre-synthesized candidate ports and returns canonical ratified JSON bytes.
+ * Production-neutral application read core. It accepts only module-branded
+ * produced renders, revalidates their owner/evidence closure, and returns
+ * canonical ratified JSON bytes without running synthesis or a model.
  */
 export const readApplicationSynthesizedPageWithAttestation = async (
   request: ApplicationSynthesizedPageRequest,
@@ -1082,23 +1072,26 @@ export const readApplicationSynthesizedPageWithAttestation = async (
   const pageRequest = parsePageRequest(request);
   const ports = snapshotPorts(suppliedPorts);
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const prepared = buildPreparedApplicationPage(pageRequest, ports);
+    const prepared = prepareApplicationRead(pageRequest, ports);
 
     // The second load crosses the identical authorization boundary. A final
     // denial propagates before bytes or trace are emitted.
-    const revalidated = loadAuthorizedCoherentRead(ports);
+    const revalidated = loadInternalApplicationRead(ports);
     if (!signaturesEqual(prepared.signature, revalidated.signature)) {
       if (attempt === 0) continue;
       throw new ApplicationReadInvalidatedError();
     }
 
-    const canonical = canonicalOwnedJson(prepared.page);
+    // No visible-key/item/citation/trace codec, cursor issuer, or trace sink is
+    // invoked until this exact final authorization/coherence fence succeeds.
+    const finalized = finalizeApplicationPage(prepared, pageRequest, ports);
+    const canonical = canonicalOwnedJson(finalized.page);
     const parsedPage = parseSynthesizedPageJson(canonical);
     if (parsedPage === null) {
       throw new ApplicationReadContractMismatchError();
     }
-    await emitRecallTraceSafely(prepared.trace, ports.traceSink);
-    return Object.freeze({ canonical_json: canonical, attestation: prepared.attestation });
+    await emitRecallTraceSafely(finalized.trace, ports.traceSink);
+    return Object.freeze({ canonical_json: canonical, attestation: finalized.attestation });
   }
   throw new ApplicationReadInvalidatedError();
 };

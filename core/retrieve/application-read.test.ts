@@ -4,11 +4,16 @@
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-005)
 // domain-pending(DIV-DOMX-006)
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
-import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
+import {
+  parseCitationRef,
+  parseSynthesizedItemId,
+  parseSynthesizedPageJson,
+} from "@omi-core/ratified-contracts/projections/synthesized";
 
 import {
   ApplicationReadInvalidatedError,
@@ -17,7 +22,6 @@ import {
   type ApplicationReadCoherentCoordinates,
   type ApplicationReadPorts,
   type ApplicationRecallGenerationDigests,
-  type ApplicationSynthesizedCandidateRecord,
 } from "./application-read";
 import {
   ApplicationReadDenied,
@@ -26,13 +30,13 @@ import {
   type ApplicationMemoryReadAuthorizationRequest,
 } from "./authorization-boundary";
 import type { ContentSafeRecallTrace, RecallCompletenessInput } from "./recall-integrity";
+import { renderStructuralTree, type RenderNode } from "./render";
+import { buildDeterministicAnchors } from "./tree";
 import { snapshot } from "./tree.fixture";
 import type { GraphSnapshot } from "./index";
 
 const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
-const visibleKey = (value: string): string => `vk1_${digest(value)}`;
 const DECLARED_FRONTIER = "frontier-v1:declared";
-const STM_FRONTIER = "frontier-v1:stm";
 
 const authorization = (): ApplicationMemoryReadAuthorizationRequest => ({
   owner_account_id: "owner",
@@ -75,6 +79,7 @@ const generations = (suffix = "a"): ApplicationRecallGenerationDigests => ({
 const coordinates = (
   generation: ApplicationRecallGenerationDigests,
   suffix = "a",
+  timestamp = 1_800_000_000,
 ): ApplicationReadCoherentCoordinates => ({
   owner_identity_digest: digest(`owner-identity:${suffix}`),
   application_identity_digest: digest(`application-identity:${suffix}`),
@@ -89,7 +94,7 @@ const coordinates = (
   query_digest: digest(`query:${suffix}`),
   source_digest: digest(`source:${suffix}`),
   read_mode_digest: digest(`read-mode:${suffix}`),
-  read_timestamp_epoch_seconds: 1_800_000_000,
+  read_timestamp_epoch_seconds: timestamp,
 });
 
 const completeCoverage = (overrides: Partial<RecallCompletenessInput> = {}): RecallCompletenessInput => ({
@@ -101,62 +106,13 @@ const completeCoverage = (overrides: Partial<RecallCompletenessInput> = {}): Rec
   ...overrides,
 });
 
-type CandidateOverrides = Partial<ApplicationSynthesizedCandidateRecord>;
-
-const candidate = (
-  input: ApplicationGrantProjectedTreeInputSnapshot,
-  generation: ApplicationRecallGenerationDigests,
-  origin: ApplicationSynthesizedCandidateRecord["origin"],
-  ref: string,
-  overrides: CandidateOverrides = {},
-): ApplicationSynthesizedCandidateRecord => ({
-  owner_account_id: input.owner_account_id,
-  projection_authorization_digest: input.projection_authorization_digest,
-  reader_projection_digest: input.reader_projection_digest,
-  authorization_generation_digest: generation.authorization_generation_digest,
-  projection_generation_digest: input.graph_generation,
-  projected_content_digest: input.projected_content_digest,
-  durable_generation_digest: generation.durable_generation_digest,
-  overlay_generation_digest: generation.overlay_generation_digest,
-  declared_generation_digest: generation.declared_generation_digest,
-  accepted_generation_digest: generation.accepted_generation_digest,
-  stm_generation_digest: generation.stm_generation_digest,
-  candidate_ref: `candidate:${ref}`,
-  dedupe_ref: `dedupe:${ref}`,
-  dedupe_rank: 1,
-  order_key: `order:${ref}`,
-  stable_visible_key: visibleKey(ref),
-  origin,
-  frontier: origin === "stm" ? STM_FRONTIER
-    : origin === "accepted_unprocessed" ? DECLARED_FRONTIER
-      : generation.durable_generation_digest,
-  supersedes_refs: [],
-  effective_policy: { subject_class: "generic", sensitivity: "generic", capture_class: "generic" },
-  synthesized_text: `Synthesized ${ref}`,
-  citation_provenance_ids: [`provenance:${ref}`],
-  synthesis_provenance: {
-    synthesis_version: "synthesis-v1",
-    input_digest: digest(`input:${ref}`),
-    output_digest: digest(`output:${ref}`),
-  },
-  ...overrides,
-});
-
-interface CandidateSpec {
-  readonly origin: ApplicationSynthesizedCandidateRecord["origin"];
-  readonly ref: string;
-  readonly overrides?: CandidateOverrides;
-}
-
 interface LoadConfig {
   readonly graph: GraphSnapshot;
   readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
   readonly generations: ApplicationRecallGenerationDigests;
   readonly coverage: RecallCompletenessInput;
   readonly coordinates: ApplicationReadCoherentCoordinates;
-  readonly overlay: (input: ApplicationGrantProjectedTreeInputSnapshot, generation: ApplicationRecallGenerationDigests) => unknown;
-  readonly maxItems: number;
-  readonly maxBytes: number;
+  readonly renders: readonly RenderNode[];
 }
 
 const loadConfig = (options: {
@@ -164,33 +120,65 @@ const loadConfig = (options: {
   generation?: ApplicationRecallGenerationDigests;
   coverage?: RecallCompletenessInput;
   coordinateSuffix?: string;
-  overlaySpecs?: readonly CandidateSpec[];
-  overlay?: LoadConfig["overlay"];
-  maxItems?: number;
-  maxBytes?: number;
+  timestamp?: number;
 } = {}): LoadConfig => {
   const graph = options.graph ?? snapshot();
-  const projected = project(graph);
   const generation = options.generation ?? generations();
-  const specs = options.overlaySpecs ?? [];
   return {
     graph,
-    projected,
+    projected: project(graph),
     generations: generation,
     coverage: options.coverage ?? completeCoverage(),
-    coordinates: coordinates(generation, options.coordinateSuffix),
-    overlay: options.overlay ?? ((input, current) => specs.map((spec) =>
-      candidate(input, current, spec.origin, spec.ref, spec.overrides))),
-    maxItems: options.maxItems ?? 100,
-    maxBytes: options.maxBytes ?? 500_000,
+    coordinates: coordinates(generation, options.coordinateSuffix, options.timestamp),
+    renders: [],
   };
 };
+
+const withProducedRenders = async (
+  config: LoadConfig,
+  summaries: readonly string[],
+  citations: readonly string[] = ["e1"],
+  modelVersion = "render-model-v1",
+): Promise<LoadConfig> => {
+  if (summaries.length === 0) return config;
+  const tree = buildDeterministicAnchors(config.projected);
+  const selectedNodes = [...tree.nodes].sort((left, right) => left.node_id.localeCompare(right.node_id)).slice(0, summaries.length);
+  if (selectedNodes.length !== summaries.length) throw new Error("test requested more renders than structural nodes");
+  const summaryByNode = new Map(selectedNodes.map((node, index) => [node.node_id, summaries[index]!]));
+  const renders = await renderStructuralTree(tree, config.projected, {
+    render: async (request) => {
+      const nodeId = (request.input as { node: { node_id: string } }).node.node_id;
+      return {
+        summary_text: summaryByNode.get(nodeId) ?? `Unused summary ${nodeId}`,
+        citations: [...citations],
+      };
+    },
+  }, {
+    strategy: "application-read-qa",
+    model_version: modelVersion,
+    prompt_version: "prompt-v1",
+    policy_version: "policy-v1",
+    schema_version: "schema-v1",
+  });
+  const byNode = new Map(renders.map((render) => [render.node_id, render]));
+  return { ...config, renders: selectedNodes.map((node) => byNode.get(node.node_id)!) };
+};
+
+const canonicalVisibleTuple = (render: RenderNode): string => JSON.stringify([
+  "application-visible-order-v1",
+  render.node_id,
+  `render:${render.render_hash}`,
+]);
+
+const expectedVisibleKey = (render: RenderNode): string =>
+  `vk1_${digest(`visible-key:${canonicalVisibleTuple(render)}`)}`;
 
 interface Counters {
   resolve: number;
   coherent: number;
   durable: number;
   verify: number;
+  visible: number;
   item: number;
   citation: number;
   traceCodec: number;
@@ -202,6 +190,8 @@ interface Harness {
   readonly ports: ApplicationReadPorts;
   readonly counters: Counters;
   readonly traceInputs: ContentSafeRecallTrace[];
+  readonly visibleInputs: string[];
+  readonly citationInputs: string[];
   readonly issueInputs: Array<{ key: string; attestation: unknown }>;
   readonly verifyInputs: Array<{ cursor: string; attestation: unknown }>;
   readonly sequence: string[];
@@ -210,10 +200,10 @@ interface Harness {
 const harness = (options: {
   loads?: readonly LoadConfig[];
   authorizations?: readonly ApplicationMemoryReadAuthorizationRequest[];
-  durableSpecs?: readonly CandidateSpec[];
   durable?: (input: ApplicationGrantProjectedTreeInputSnapshot, config: LoadConfig) => unknown;
   verify?: ApplicationReadPorts["verifyCursor"];
   issue?: ApplicationReadPorts["issueCursor"];
+  visibleCodec?: ApplicationReadPorts["encodeVisibleKey"];
   itemCodec?: ApplicationReadPorts["encodeItemRef"];
   citationCodec?: ApplicationReadPorts["encodeCitationRef"];
   traceCodec?: ApplicationReadPorts["encodeTraceRef"];
@@ -221,11 +211,13 @@ const harness = (options: {
 } = {}): Harness => {
   const loads = options.loads ?? [loadConfig()];
   const authorizations = options.authorizations ?? [authorization()];
-  const durableSpecs = options.durableSpecs ?? [];
   const counters: Counters = {
-    resolve: 0, coherent: 0, durable: 0, verify: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0,
+    resolve: 0, coherent: 0, durable: 0, verify: 0, visible: 0,
+    item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0,
   };
   const traceInputs: ContentSafeRecallTrace[] = [];
+  const visibleInputs: string[] = [];
+  const citationInputs: string[] = [];
   const issueInputs: Array<{ key: string; attestation: unknown }> = [];
   const verifyInputs: Array<{ cursor: string; attestation: unknown }> = [];
   const sequence: string[] = [];
@@ -248,23 +240,17 @@ const harness = (options: {
               snapshot: structuredClone(current.graph),
               options: { account_timezone: "UTC" },
             },
-            overlay: {
-              max_items: current.maxItems,
-              max_bytes: current.maxBytes,
-              candidates: current.overlay(current.projected, current.generations),
-            },
             coverage: structuredClone(current.coverage),
             generations: { ...current.generations },
             read_coordinates: { ...current.coordinates },
-          } as never;
+          };
         },
       };
     },
-    loadDurableCandidates: (input) => {
+    loadDurableRenders: (input) => {
       sequence.push("durable");
       counters.durable++;
-      if (options.durable) return options.durable(input, current);
-      return durableSpecs.map((spec) => candidate(input, current.generations, spec.origin, spec.ref, spec.overrides));
+      return options.durable ? options.durable(input, current) : [...current.renders];
     },
     verifyCursor: (cursor, attestation) => {
       sequence.push("verify");
@@ -275,19 +261,30 @@ const harness = (options: {
       if (!key) throw new TestInvalidCursorError();
       return key;
     },
+    encodeVisibleKey: (tuple) => {
+      sequence.push("visible");
+      counters.visible++;
+      visibleInputs.push(tuple);
+      return options.visibleCodec ? options.visibleCodec(tuple) : `vk1_${digest(`visible-key:${tuple}`)}`;
+    },
     encodeItemRef: (ref) => {
+      sequence.push("item");
       counters.item++;
       return options.itemCodec ? options.itemCodec(ref) : `mem1_${digest(`item-key:${ref}`)}`;
     },
-    encodeCitationRef: (ref) => {
+    encodeCitationRef: (closure) => {
+      sequence.push("citation");
       counters.citation++;
-      return options.citationCodec ? options.citationCodec(ref) : `cit1_${digest(`citation-key:${ref}`)}`;
+      citationInputs.push(closure);
+      return options.citationCodec ? options.citationCodec(closure) : `cit1_${digest(`citation-key:${closure}`)}`;
     },
     encodeTraceRef: (ref) => {
+      sequence.push("trace");
       counters.traceCodec++;
       return options.traceCodec ? options.traceCodec(ref) : `tr1_${digest(`trace-key:${ref}`)}`;
     },
     issueCursor: (key, attestation) => {
+      sequence.push("issue");
       counters.issue++;
       issueInputs.push({ key, attestation });
       if (options.issue) return options.issue(key, attestation);
@@ -296,12 +293,13 @@ const harness = (options: {
       return cursor;
     },
     traceSink: async (trace) => {
+      sequence.push("sink");
       counters.sink++;
       traceInputs.push(structuredClone(trace));
       if (options.sink) await options.sink(trace);
     },
   };
-  return { ports, counters, traceInputs, issueInputs, verifyInputs, sequence };
+  return { ports, counters, traceInputs, visibleInputs, citationInputs, issueInputs, verifyInputs, sequence };
 };
 
 class TestInvalidCursorError extends Error {
@@ -321,76 +319,84 @@ const parsed = async (fixture: Harness, request: { limit: number; cursor: string
   return { raw, page: page! };
 };
 
+const outwardCounts = (counters: Counters) => ({
+  visible: counters.visible,
+  item: counters.item,
+  citation: counters.citation,
+  traceCodec: counters.traceCodec,
+  issue: counters.issue,
+  sink: counters.sink,
+});
+
 describe("production-neutral application synthesized read", () => {
-  test("durable miss still returns an authorized STM hit", async () => {
-    const fixture = harness({
-      loads: [loadConfig({
-        coverage: completeCoverage({ stm: { state: "searched", searched_frontier: STM_FRONTIER } }),
-        overlaySpecs: [{ origin: "stm", ref: "stm-hit" }],
-      })],
-    });
+  test("projects only produced renders with grounded evidence closure and exact derived provenance", async () => {
+    const config = await withProducedRenders(loadConfig(), ["A grounded synthesized summary."]);
+    const render = config.renders[0]!;
+    const fixture = harness({ loads: [config] });
     const result = await parsed(fixture);
-    expect(result.page.items.map((item) => String(item.text))).toEqual(["Synthesized stm-hit"]);
-    expect(result.page.absence).toBeNull();
-    expect(String(result.page.completeness.frontiers.newestSearchedStmFrontier)).toBe(STM_FRONTIER);
-    expect(fixture.counters.durable).toBe(1);
-  });
+    const item = result.page.items[0]!;
 
-  test("durable miss still returns accepted-unprocessed material", async () => {
-    const fixture = harness({
-      loads: [loadConfig({
-        coverage: completeCoverage({ accepted: { state: "searched", searched_frontier: DECLARED_FRONTIER } }),
-        overlaySpecs: [{ origin: "accepted_unprocessed", ref: "accepted-hit" }],
-      })],
+    expect(String(item.text)).toBe("A grounded synthesized summary.");
+    expect(item.citations?.length).toBe(1);
+    expect(item.provenance as unknown).toEqual({
+      synthesisVersion: render.model_version,
+      inputDigest: render.rendered_from_digest,
+      outputDigest: render.render_hash!,
     });
-    const result = await parsed(fixture);
-    expect(result.page.items.map((item) => String(item.text))).toEqual(["Synthesized accepted-hit"]);
-    expect(String(result.page.completeness.frontiers.newestSearchedAcceptedFrontier)).toBe(DECLARED_FRONTIER);
+    expect(fixture.citationInputs).toEqual([
+      JSON.stringify(["application-citation-closure-v1", "e1", "event", "capture", ["a"]]),
+    ]);
+    expect(fixture.traceInputs[0]!.outcome).toBe("grounded");
+    expect(fixture.traceInputs[0]!.stages.cited.length).toBe(1);
+    expect(fixture.traceInputs[0]!.stages.grounded.length).toBe(1);
+    for (const rawId of [render.node_id, "e1", "event", "capture"]) expect(result.raw).not.toContain(rawId);
   });
 
-  test("merges permutations with deterministic dedupe, supersession, and cursor paging", async () => {
-    const specs: CandidateSpec[] = [
-      { origin: "durable", ref: "durable", overrides: { dedupe_ref: "dedupe:same", dedupe_rank: 3, order_key: "order:020" } },
-      { origin: "durable", ref: "loser", overrides: { dedupe_ref: "dedupe:same", dedupe_rank: 2, order_key: "order:001" } },
-      { origin: "durable", ref: "precursor", overrides: { dedupe_ref: "dedupe:precursor", order_key: "order:000" } },
-      { origin: "durable", ref: "successor", overrides: {
-        dedupe_ref: "dedupe:successor", order_key: "order:010", supersedes_refs: ["candidate:precursor"],
-      } },
-      { origin: "durable", ref: "tail", overrides: { order_key: "order:030" } },
+  test("rejects cloned, forged, cross-snapshot, and citationless renders before outward work", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Produced"]);
+    const produced = config.renders[0]!;
+    const otherGraph = snapshot();
+    otherGraph.claims = otherGraph.claims.map((entry) => entry.revision_id === "a"
+      ? { ...entry, claim: { ...entry.claim, predicate: "changed" } }
+      : entry);
+    const other = await withProducedRenders(loadConfig({ graph: otherGraph }), ["Other snapshot"]);
+    const citationless = await withProducedRenders(loadConfig(), ["Ungrounded"], []);
+    const attacks: unknown[] = [
+      structuredClone(produced),
+      { ...produced },
+      other.renders[0],
+      citationless.renders[0],
     ];
-    const forward = harness({ durableSpecs: specs });
-    const reverse = harness({ durableSpecs: [...specs].reverse() });
-    const firstForward = await parsed(forward, { limit: 2, cursor: null });
-    const firstReverse = await parsed(reverse, { limit: 2, cursor: null });
-    expect(firstForward.raw).toBe(firstReverse.raw);
-    expect(firstForward.page.items.map((item) => String(item.text))).toEqual(["Synthesized successor", "Synthesized durable"]);
-    expect(firstForward.page.window.hasMore).toBe(true);
-    expect(forward.counters.issue).toBe(1);
 
-    const second = await parsed(forward, { limit: 2, cursor: firstForward.page.window.nextCursor });
-    expect(second.page.items.map((item) => String(item.text))).toEqual(["Synthesized tail"]);
-    expect(second.page.window).toEqual({ status: "complete", complete: true, hasMore: false, nextCursor: null });
-    expect(forward.counters.verify).toBe(1);
+    for (const attack of attacks) {
+      const fixture = harness({ loads: [config], durable: () => [attack] });
+      await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow();
+      expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+    }
   });
 
-  test("maps complete, incomplete, degraded, and partial kernel states without claiming global absence", async () => {
-    const cases: readonly [RecallCompletenessInput, string, readonly string[]][] = [
-      [completeCoverage(), "complete", []],
-      [completeCoverage({ accepted: { state: "pending", searched_frontier: null } }), "incomplete", ["accepted_work_pending"]],
-      [completeCoverage({
-        accepted: { state: "unavailable", searched_frontier: null },
-        stm: { state: "unavailable", searched_frontier: null },
-        projection_freshness: "unavailable",
-      }), "degraded", ["projection_unavailable"]],
-      [completeCoverage({ intentional_bounds: ["source_bound"] }), "partial", ["source_bound"]],
-    ];
-    for (const [coverage, status, reasons] of cases) {
-      const result = await parsed(harness({ loads: [loadConfig({ coverage })] }));
-      expect(result.page.items).toEqual([]);
-      expect(result.page.absence).toEqual({ kind: "query_gap" });
-      expect(String(result.page.completeness.status)).toBe(status);
-      expect(result.page.completeness.reasons.map(String)).toEqual([...reasons]);
-      expect(result.page.window.status).toBe(status === "complete" ? "complete" : "incomplete");
+  test("keeps accepted and STM completeness-only until they have a produced-render boundary", async () => {
+    const limited = loadConfig({ coverage: completeCoverage({
+      accepted: { state: "pending", searched_frontier: null },
+      stm: { state: "unavailable", searched_frontier: null },
+      intentional_bounds: ["source_bound"],
+    }) });
+    const result = await parsed(harness({ loads: [limited] }));
+    expect(result.page.items).toEqual([]);
+    expect(result.page.absence).toEqual({ kind: "query_gap" });
+    expect(String(result.page.completeness.status)).toBe("degraded");
+    expect(result.page.completeness.reasons.map(String)).toEqual([
+      "accepted_work_pending", "projection_unavailable", "source_bound",
+    ]);
+
+    for (const coverage of [
+      completeCoverage({ accepted: { state: "searched", searched_frontier: DECLARED_FRONTIER } }),
+      completeCoverage({ stm: { state: "searched", searched_frontier: "frontier-v1:stm" } }),
+    ]) {
+      const fixture = harness({ loads: [loadConfig({ coverage })] });
+      await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow("produced-render boundary");
+      expect(fixture.counters.durable).toBe(0);
+      expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
     }
   });
 
@@ -406,17 +412,164 @@ describe("production-neutral application synthesized read", () => {
         intentional_bounds: ["source_bound"],
       }), "degraded", ["accepted_work_pending", "projection_unavailable", "source_bound"]],
     ];
-
     for (const [coverage, status, reasons] of cases) {
       const result = await parsed(harness({ loads: [loadConfig({ coverage })] }));
       expect(String(result.page.completeness.status)).toBe(status);
       expect(result.page.completeness.reasons.map(String)).toEqual([...reasons]);
       expect(result.page.window).toEqual({ status: "incomplete", complete: false, hasMore: false, nextCursor: null });
-      expect(result.page.absence).toEqual({ kind: "query_gap" });
     }
   });
 
-  test("scope, grant, owner, app, and key denials perform zero coherent, synthesis, codec, cursor, and trace work", async () => {
+  test("derives deterministic pagination solely from post-dedupe server-keyed sort tuples", async () => {
+    const config = await withProducedRenders(loadConfig(), ["First", "Second", "Third"]);
+    const forward = harness({ loads: [config] });
+    const reverse = harness({ loads: [config], durable: () => [...config.renders].reverse() });
+    const firstForward = await parsed(forward, { limit: 2, cursor: null });
+    const firstReverse = await parsed(reverse, { limit: 2, cursor: null });
+    expect(firstForward.raw).toBe(firstReverse.raw);
+    expect(firstForward.page.items.map((item) => String(item.text))).toEqual(["First", "Second"]);
+    expect(forward.issueInputs).toHaveLength(1);
+    expect(forward.issueInputs[0]!.key).toBe(expectedVisibleKey(config.renders[1]!));
+    expect(forward.visibleInputs).toEqual(config.renders.map(canonicalVisibleTuple));
+
+    const nextCursor = firstForward.page.window.nextCursor;
+    expect(typeof nextCursor).toBe("string");
+    const second = await parsed(forward, { limit: 2, cursor: nextCursor });
+    expect(second.page.items.map((item) => String(item.text))).toEqual(["Third"]);
+    expect(second.page.window).toEqual({ status: "complete", complete: true, hasMore: false, nextCursor: null });
+    for (const render of config.renders) {
+      expect(String(nextCursor)).not.toContain(render.node_id);
+      expect(JSON.stringify(forward.issueInputs)).not.toContain(render.node_id);
+    }
+  });
+
+  test("the exact produced-render set is order-independent across the final fence", async () => {
+    const config = await withProducedRenders(loadConfig(), ["One", "Two", "Three"]);
+    let durableCall = 0;
+    const fixture = harness({
+      loads: [config],
+      durable: () => durableCall++ % 2 === 0 ? [...config.renders] : [...config.renders].reverse(),
+    });
+    const result = await parsed(fixture);
+    expect(result.page.items.map((item) => String(item.text))).toEqual(["One", "Two", "Three"]);
+    expect(fixture.counters.durable).toBe(2);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 3, item: 3, citation: 3, traceCodec: 4, issue: 0, sink: 1 });
+  });
+
+  test("a render-set-only change retries, then emits only the stable replacement set", async () => {
+    const base = loadConfig({ coordinateSuffix: "stable" });
+    const first = await withProducedRenders(base, ["First render set"]);
+    const replacement = await withProducedRenders(base, ["Replacement render set"]);
+    const sets = [first.renders, replacement.renders, replacement.renders, replacement.renders];
+    let durableCall = 0;
+    const fixture = harness({ loads: [base], durable: () => sets[durableCall++]! });
+    const result = await parsed(fixture);
+    expect(result.page.items.map((item) => String(item.text))).toEqual(["Replacement render set"]);
+    expect(fixture.counters.durable).toBe(4);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 1, item: 1, citation: 1, traceCodec: 2, issue: 0, sink: 1 });
+  });
+
+  test("model-version-only render-set churn invalidates with zero outward work", async () => {
+    const base = loadConfig({ coordinateSuffix: "stable" });
+    const first = await withProducedRenders(base, ["Same summary"], ["e1"], "render-model-v1");
+    const second = await withProducedRenders(base, ["Same summary"], ["e1"], "render-model-v2");
+    const sets = [first.renders, second.renders, first.renders, second.renders];
+    let durableCall = 0;
+    const fixture = harness({ loads: [base], durable: () => sets[durableCall++]! });
+    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadInvalidatedError);
+    expect(fixture.counters.durable).toBe(4);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("a retried invalidated attempt performs outward work only once after the stable fence", async () => {
+    const a = await withProducedRenders(loadConfig({ generation: generations("a"), coordinateSuffix: "stable" }), ["Stable after retry"]);
+    const b = await withProducedRenders(loadConfig({ generation: generations("b"), coordinateSuffix: "stable" }), ["Stable after retry"]);
+    const fixture = harness({ loads: [a, b, b, b] });
+    const result = await parsed(fixture);
+    expect(result.page.items.map((item) => String(item.text))).toEqual(["Stable after retry"]);
+    expect(fixture.counters.resolve).toBe(4);
+    expect(fixture.counters.coherent).toBe(4);
+    expect(fixture.counters.durable).toBe(4);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 1, item: 1, citation: 1, traceCodec: 2, issue: 0, sink: 1 });
+    expect(fixture.sequence.indexOf("visible")).toBeGreaterThan(fixture.sequence.lastIndexOf("coherent"));
+  });
+
+  test("double invalidation is externally silent", async () => {
+    const configs: LoadConfig[] = [];
+    for (const suffix of ["a", "b", "c", "d"]) {
+      configs.push(await withProducedRenders(loadConfig({ generation: generations(suffix), coordinateSuffix: "stable" }), [`Render ${suffix}`]));
+    }
+    const fixture = harness({ loads: configs });
+    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadInvalidatedError);
+    expect(fixture.counters.durable).toBe(4);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("timestamp-only drift invalidates twice and remains externally silent", async () => {
+    const first = await withProducedRenders(loadConfig({ coordinateSuffix: "stable", timestamp: 100 }), ["Timestamp-bound"]);
+    const second = { ...first, coordinates: { ...first.coordinates, read_timestamp_epoch_seconds: 101 } };
+    const fixture = harness({ loads: [first, second, first, second] });
+    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadInvalidatedError);
+    expect(fixture.counters.durable).toBe(4);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("final revocation returns no bytes and performs no outward work", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Revoked"]);
+    const revoked = authorization();
+    revoked.persisted_grant = { ...revoked.persisted_grant!, enabled: false };
+    const fixture = harness({ loads: [config], authorizations: [authorization(), revoked] });
+    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadDenied);
+    expect(fixture.counters.durable).toBe(1);
+    expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("verifies a raw cursor after deriving its owner-bound produced-render attestation", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Cursor-bound"]);
+    const expected = expectedVisibleKey(config.renders[0]!);
+    const fixture = harness({
+      loads: [config],
+      verify: (cursor, attestation) => {
+        expect(cursor).toBe("cursor.valid");
+        expect(Object.isFrozen(attestation)).toBe(true);
+        expect(Object.isFrozen(attestation.coverage)).toBe(true);
+        return expected;
+      },
+    });
+    await parsed(fixture, { limit: 1, cursor: "cursor.valid" });
+    expect(fixture.sequence.slice(0, 4)).toEqual(["resolve", "coherent", "durable", "verify"]);
+
+    const invalid = new TestInvalidCursorError();
+    const rejected = harness({ loads: [config], verify: () => { throw invalid; } });
+    try {
+      await readApplicationSynthesizedPage({ limit: 1, cursor: "cursor.invalid" }, rejected.ports);
+      throw new Error("expected cursor failure");
+    } catch (error) {
+      expect(error).toBe(invalid);
+    }
+    expect(rejected.counters.durable).toBe(1);
+    expect(outwardCounts(rejected.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
+  });
+
+  test("requires dedicated fixed-format keyed visible, item, citation, and trace handles", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Strict handles"]);
+    expect(parseSynthesizedItemId("arbitrary-item-sentinel")).not.toBeNull();
+    expect(parseCitationRef("arbitrary-citation-sentinel")).not.toBeNull();
+
+    const cases: readonly [Partial<Parameters<typeof harness>[0]>, string][] = [
+      [{ visibleCodec: (tuple: string) => tuple }, "visible-key codec"],
+      [{ itemCodec: () => "arbitrary-item-sentinel" }, "item codec"],
+      [{ citationCodec: () => "arbitrary-citation-sentinel" }, "citation codec"],
+      [{ traceCodec: () => "arbitrary-trace-sentinel" }, "trace codec"],
+    ];
+    for (const [ports, message] of cases) {
+      const fixture = harness({ loads: [config], ...ports });
+      await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow(message);
+      expect(fixture.counters.sink).toBe(0);
+    }
+  });
+
+  test("scope, grant, owner, app, and key denials perform zero read or outward work", async () => {
     const base = authorization();
     const denied: ApplicationMemoryReadAuthorizationRequest[] = [
       { ...base, credential: { ...base.credential, scopes: [] } },
@@ -429,313 +582,92 @@ describe("production-neutral application synthesized read", () => {
     for (const request of denied) {
       const fixture = harness({ authorizations: [request] });
       await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadDenied);
-      expect(fixture.counters).toEqual({
-        resolve: 1, coherent: 0, durable: 0, verify: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0,
-      });
+      expect(fixture.counters.resolve).toBe(1);
+      expect(fixture.counters.coherent).toBe(0);
+      expect(fixture.counters.durable).toBe(0);
+      expect(fixture.counters.verify).toBe(0);
+      expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
     }
   });
 
-  test("well-formed private and unknown policy candidates are byte- and trace-noninterfering", async () => {
-    const visible: CandidateSpec[] = [
-      { origin: "durable", ref: "first", overrides: { order_key: "order:001" } },
-      { origin: "durable", ref: "second", overrides: { order_key: "order:002" } },
-    ];
-    const absent = harness({ durableSpecs: visible });
-    const hidden = harness({
-      durableSpecs: visible,
-      loads: [loadConfig({ overlaySpecs: [
-        { origin: "stm", ref: "raw-hidden-sentinel", overrides: {
-          effective_policy: { subject_class: "generic", sensitivity: "private", capture_class: "generic" },
-          synthesized_text: "RAW-HIDDEN-SENTINEL",
-          citation_provenance_ids: ["RAW-HIDDEN-SENTINEL"],
-        } },
-        { origin: "accepted_unprocessed", ref: "unknown-hidden", overrides: {
-          effective_policy: { subject_class: "mystery", sensitivity: "generic", capture_class: "generic" },
-        } },
-      ] })],
-    });
-    const absentResult = await parsed(absent, { limit: 1, cursor: null });
-    const hiddenResult = await parsed(hidden, { limit: 1, cursor: null });
-    expect(hiddenResult.raw).toBe(absentResult.raw);
-    expect(hidden.issueInputs).toEqual(absent.issueInputs);
-    expect(hidden.traceInputs).toEqual(absent.traceInputs);
-    expect(hiddenResult.raw).not.toContain("RAW-HIDDEN-SENTINEL");
-    expect(JSON.stringify(hidden.traceInputs)).not.toContain("RAW-HIDDEN-SENTINEL");
+  test("request input is exactly limit and cursor and cannot inject renders, text, citations, or order", async () => {
+    const fixture = harness();
+    for (const extra of ["renders", "synthesized_text", "citations", "order_key"]) {
+      await expect(readApplicationSynthesizedPage({ limit: 1, cursor: null, [extra]: "attacker" } as never, fixture.ports)).rejects.toThrow(TypeError);
+    }
+    expect(fixture.counters.resolve).toBe(0);
   });
 
-  test("malformed, cross-owner, wrong-generation, and raw-ref codec outputs fail closed", async () => {
-    const malformedCases: Array<(input: ApplicationGrantProjectedTreeInputSnapshot, generation: ApplicationRecallGenerationDigests) => unknown> = [
-      (input, generation) => [{ ...candidate(input, generation, "stm", "extra"), raw_query: "secret" }],
-      (input, generation) => [{ ...candidate(input, generation, "stm", "owner"), owner_account_id: "owner:b" }],
-      (input, generation) => [{ ...candidate(input, generation, "stm", "generation"), overlay_generation_digest: digest("wrong") }],
-    ];
-    for (const overlay of malformedCases) {
-      const fixture = harness({ loads: [loadConfig({
-        coverage: completeCoverage({ stm: { state: "searched", searched_frontier: STM_FRONTIER } }), overlay,
-      })] });
+  test("rejects hostile produced-render arrays without invoking accessors", async () => {
+    const config = await withProducedRenders(loadConfig(), ["Array-safe"]);
+    const render = config.renders[0]!;
+    let getterCalls = 0;
+    const getterArray: unknown[] = [];
+    Object.defineProperty(getterArray, "0", {
+      enumerable: true,
+      get: () => { getterCalls++; return render; },
+    });
+    Object.defineProperty(getterArray, "length", { value: 1, writable: true });
+    const sparse = new Array(2);
+    sparse[0] = render;
+    const decorated = [render];
+    Object.defineProperty(decorated, "extra", { enumerable: true, value: render });
+    for (const value of [getterArray, sparse, decorated, [render, render], new Proxy([render], {})]) {
+      const fixture = harness({ loads: [config], durable: () => value });
       await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow(TypeError);
-      expect(fixture.counters.sink).toBe(0);
+      expect(outwardCounts(fixture.counters)).toEqual({ visible: 0, item: 0, citation: 0, traceCodec: 0, issue: 0, sink: 0 });
     }
-
-    const rawItem = harness({
-      durableSpecs: [{ origin: "durable", ref: "raw-item" }],
-      itemCodec: (ref) => ref,
-    });
-    await expect(readApplicationSynthesizedPage(firstPage, rawItem.ports)).rejects.toThrow("raw or invalid");
-    const rawCitation = harness({
-      durableSpecs: [{ origin: "durable", ref: "raw-citation" }],
-      citationCodec: (ref) => `opaque:${ref}`,
-    });
-    await expect(readApplicationSynthesizedPage(firstPage, rawCitation.ports)).rejects.toThrow("raw or invalid");
+    expect(getterCalls).toBe(0);
   });
 
-  test("retries once on graph/frontier generation change and succeeds from one stable snapshot", async () => {
-    const a = loadConfig({ generation: generations("a"), coordinateSuffix: "stable" });
-    const changedGraph = snapshot();
-    changedGraph.claims = changedGraph.claims.map((entry) => entry.revision_id === "a"
-      ? { ...entry, claim: { ...entry.claim, predicate: "changed" } }
-      : entry);
-    const b = loadConfig({ graph: changedGraph, generation: generations("b"), coordinateSuffix: "stable" });
-    const fixture = harness({
-      loads: [a, b, b, b],
-      durableSpecs: [{ origin: "durable", ref: "stable-after-retry" }],
-    });
-    const result = await parsed(fixture);
-    expect(result.page.items.map((item) => String(item.text))).toEqual(["Synthesized stable-after-retry"]);
-    expect(fixture.counters.resolve).toBe(4);
-    expect(fixture.counters.coherent).toBe(4);
-    expect(fixture.counters.durable).toBe(2);
-    expect(fixture.counters.sink).toBe(1);
-  });
-
-  test("throws a typed invalidated error when the fence changes twice", async () => {
-    const configs = ["a", "b", "c", "d"].map((suffix) => loadConfig({
-      generation: generations(suffix), coordinateSuffix: "stable",
-    }));
-    const fixture = harness({ loads: configs, durableSpecs: [{ origin: "durable", ref: "never-emitted" }] });
-    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadInvalidatedError);
-    expect(fixture.counters.durable).toBe(2);
-    expect(fixture.counters.sink).toBe(0);
-  });
-
-  test("final revocation returns no bytes or trace", async () => {
-    const revoked = authorization();
-    revoked.persisted_grant = { ...revoked.persisted_grant!, enabled: false };
-    const fixture = harness({
-      authorizations: [authorization(), revoked],
-      durableSpecs: [{ origin: "durable", ref: "revoked" }],
-    });
-    await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toBeInstanceOf(ApplicationReadDenied);
-    expect(fixture.counters.durable).toBe(1);
-    expect(fixture.counters.sink).toBe(0);
-  });
-
-  test("verifies raw cursors after authorization/coherent attestation and before candidate loading", async () => {
-    const expected = visibleKey("cursor-before-durable");
-    const invalid = new TestInvalidCursorError();
-    const fixture = harness({
-      durableSpecs: [{ origin: "durable", ref: "cursor-before-durable" }],
-      verify: (cursor, attestation) => {
-        expect(cursor).toBe("cursor.valid");
-        expect(Object.isFrozen(attestation)).toBe(true);
-        expect(Object.isFrozen(attestation.coverage)).toBe(true);
-        return expected;
-      },
-    });
-    await parsed(fixture, { limit: 1, cursor: "cursor.valid" });
-    expect(fixture.sequence.slice(0, 4)).toEqual(["resolve", "coherent", "verify", "durable"]);
-
-    const rejected = harness({
-      durableSpecs: [{ origin: "durable", ref: "never-loaded" }],
-      verify: () => { throw invalid; },
-    });
-    try {
-      await readApplicationSynthesizedPage({ limit: 1, cursor: "cursor.invalid" }, rejected.ports);
-      throw new Error("expected cursor failure");
-    } catch (error) {
-      expect(error).toBe(invalid);
-    }
-    expect(rejected.counters.durable).toBe(0);
-  });
-
-  test("issues a cursor only for a nonempty continuation and never for terminal or empty pages", async () => {
-    const continuation = harness({ durableSpecs: [
-      { origin: "durable", ref: "one", overrides: { order_key: "order:001" } },
-      { origin: "durable", ref: "two", overrides: { order_key: "order:002" } },
-    ] });
-    await parsed(continuation, { limit: 1, cursor: null });
-    expect(continuation.counters.issue).toBe(1);
-    expect(continuation.issueInputs[0]!.key).toBe(visibleKey("one"));
-
-    const terminal = harness({ durableSpecs: [{ origin: "durable", ref: "only" }] });
-    await parsed(terminal, { limit: 1, cursor: null });
-    expect(terminal.counters.issue).toBe(0);
-    const empty = harness();
-    await parsed(empty, { limit: 1, cursor: null });
-    expect(empty.counters.issue).toBe(0);
-  });
-
-  test("returns a frozen provider-neutral attestation without placing it in page bytes", async () => {
-    const fixture = harness({ durableSpecs: [{ origin: "durable", ref: "attested" }] });
+  test("returns a frozen provider-neutral attestation without placing read coordinates in page bytes", async () => {
+    const config = await withProducedRenders(loadConfig({ timestamp: 1234 }), ["Attested"]);
+    const fixture = harness({ loads: [config] });
     const result = await readApplicationSynthesizedPageWithAttestation(firstPage, fixture.ports);
     expect(parseSynthesizedPageJson(result.canonical_json)).not.toBeNull();
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.attestation)).toBe(true);
     expect(Object.isFrozen(result.attestation.coverage)).toBe(true);
-    expect(result.attestation.last_visible_key).toBe(visibleKey("attested"));
+    expect(result.attestation.last_visible_key).toBe(expectedVisibleKey(config.renders[0]!));
+    expect(result.attestation.read_timestamp_epoch_seconds).toBe(1234);
     expect(result.attestation.synthesized_projection_generation_digest).toMatch(/^[a-f0-9]{64}$/);
-    for (const key of ["owner_identity_digest", "grant_state_digest", "query_digest", "read_timestamp_epoch_seconds"]) {
-      expect(result.canonical_json).not.toContain(String(result.attestation[key as keyof typeof result.attestation]));
+    expect(result.attestation.synthesized_projection_generation_digest).not.toBe(config.projected.graph_generation);
+    for (const key of ["owner_identity_digest", "grant_state_digest", "query_digest", "read_timestamp_epoch_seconds"] as const) {
+      expect(result.canonical_json).not.toContain(String(result.attestation[key]));
     }
   });
 
   test("trace sink sync and async failures cannot change canonical result", async () => {
-    const baseline = await parsed(harness({ durableSpecs: [{ origin: "durable", ref: "trace-safe" }] }));
-    const sync = await parsed(harness({
-      durableSpecs: [{ origin: "durable", ref: "trace-safe" }], sink: () => { throw new Error("sync sink"); },
-    }));
+    const config = await withProducedRenders(loadConfig(), ["Trace safe"]);
+    const baseline = await parsed(harness({ loads: [config] }));
+    const sync = await parsed(harness({ loads: [config], sink: () => { throw new Error("sync sink"); } }));
     const asyncFailure = await parsed(harness({
-      durableSpecs: [{ origin: "durable", ref: "trace-safe" }], sink: async () => { throw new Error("async sink"); },
+      loads: [config], sink: async () => { throw new Error("async sink"); },
     }));
     expect(sync.raw).toBe(baseline.raw);
     expect(asyncFailure.raw).toBe(baseline.raw);
   });
 
-  test("raw internal sentinel strings are absent from both canonical page and emitted trace", async () => {
-    const raw = "RAW-QUERY-EVIDENCE-EVENT-SOURCE-CREDENTIAL-SECRET";
-    const fixture = harness({
-      durableSpecs: [{ origin: "durable", ref: raw, overrides: {
-        dedupe_ref: raw,
-        order_key: raw,
-        frontier: raw,
-        citation_provenance_ids: [raw],
-        synthesized_text: "Allowed synthesized presentation",
-      } }],
-    });
-    const result = await parsed(fixture);
-    expect(result.raw).not.toContain(raw);
-    expect(JSON.stringify(fixture.traceInputs)).not.toContain(raw);
-  });
-
-  test("rejects getter, proxy, class, symbol, nonenumerable, extra, sparse, alias, and TOCTOU shapes", async () => {
-    const baseConfig = loadConfig({
-      coverage: completeCoverage({ stm: { state: "searched", searched_frontier: STM_FRONTIER } }),
-      overlaySpecs: [{ origin: "stm", ref: "shape" }],
-    });
-    const baseCandidate = candidate(baseConfig.projected, baseConfig.generations, "stm", "shape");
-    let getterCalls = 0;
-    const getterCandidate = { ...baseCandidate } as Record<string, unknown>;
-    Object.defineProperty(getterCandidate, "candidate_ref", {
-      enumerable: true,
-      get: () => { getterCalls++; return "candidate:attacker"; },
-    });
-    class CandidateClass { constructor(readonly value: unknown) {} }
-    const symbolCandidate = { ...baseCandidate } as Record<PropertyKey, unknown>;
-    symbolCandidate[Symbol("secret")] = "raw";
-    const hiddenCandidate = { ...baseCandidate };
-    Object.defineProperty(hiddenCandidate, "raw_secret", { enumerable: false, value: "raw" });
-    const extraCandidate = { ...baseCandidate, raw_query: "raw" };
-    const decorated = [baseCandidate];
-    Object.defineProperty(decorated, "4294967295", { enumerable: true, value: "raw" });
-    const sparse = new Array(2);
-    sparse[0] = baseCandidate;
-    const alias = [baseCandidate, baseCandidate];
-    const proxy = new Proxy(baseCandidate, {
-      ownKeys: (target) => Reflect.ownKeys(target),
-      getOwnPropertyDescriptor: (target, key) => Reflect.getOwnPropertyDescriptor(target, key),
-    });
-    const attacks: unknown[] = [
-      getterCandidate,
-      new CandidateClass(baseCandidate),
-      symbolCandidate,
-      hiddenCandidate,
-      extraCandidate,
-      proxy,
-    ];
-    for (const attack of attacks) {
-      const fixture = harness({ loads: [loadConfig({
-        coverage: baseConfig.coverage,
-        overlay: () => [attack],
-      })] });
-      await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow(TypeError);
-    }
-    for (const arrayAttack of [decorated, sparse, alias]) {
-      const fixture = harness({ loads: [loadConfig({
-        coverage: baseConfig.coverage,
-        overlay: () => arrayAttack,
-      })] });
-      await expect(readApplicationSynthesizedPage(firstPage, fixture.ports)).rejects.toThrow(TypeError);
-    }
-    expect(getterCalls).toBe(0);
-
-    let requestGetterCalls = 0;
-    const hostileRequest = { cursor: null } as Record<string, unknown>;
-    Object.defineProperty(hostileRequest, "limit", {
-      enumerable: true,
-      get: () => { requestGetterCalls++; return 1; },
-    });
-    const requestFixture = harness();
-    await expect(readApplicationSynthesizedPage(hostileRequest as never, requestFixture.ports)).rejects.toThrow(TypeError);
-    expect(requestGetterCalls).toBe(0);
-    expect(requestFixture.counters.resolve).toBe(0);
-
-    const mutable = candidate(baseConfig.projected, baseConfig.generations, "stm", "detached");
-    const fixture = harness({ loads: [loadConfig({
-      coverage: baseConfig.coverage,
-      overlay: () => [mutable],
-    })] });
-    const promise = readApplicationSynthesizedPage(firstPage, fixture.ports);
-    (mutable as { synthesized_text: string }).synthesized_text = "mutated after load";
-    const result = await promise;
-    expect(result).toContain("Synthesized detached");
-    expect(result).not.toContain("mutated after load");
-  });
-
-  test("rejects hostile ports, attempt descriptors, and coherent loaders without invoking accessors", async () => {
-    const portsFixture = harness();
+  test("hostile callback records and coherent loaders fail without accessor execution", async () => {
+    const fixture = harness();
     let portGetterCalls = 0;
-    const getterPorts = { ...portsFixture.ports } as Record<string, unknown>;
+    const getterPorts = { ...fixture.ports } as Record<string, unknown>;
     Object.defineProperty(getterPorts, "issueCursor", {
       enumerable: true,
-      get: () => { portGetterCalls++; return portsFixture.ports.issueCursor; },
+      get: () => { portGetterCalls++; return fixture.ports.issueCursor; },
     });
     await expect(readApplicationSynthesizedPage(firstPage, getterPorts as unknown as ApplicationReadPorts)).rejects.toThrow(TypeError);
-    await expect(readApplicationSynthesizedPage(
-      firstPage,
-      new Proxy({ ...portsFixture.ports }, {}) as ApplicationReadPorts,
-    )).rejects.toThrow(TypeError);
     expect(portGetterCalls).toBe(0);
-    expect(portsFixture.counters.resolve).toBe(0);
-
-    let attemptGetterCalls = 0;
-    const attemptFixture = harness();
-    const attemptPorts: ApplicationReadPorts = {
-      ...attemptFixture.ports,
-      resolveAttempt: () => {
-        const value = { authorization_request: authorization() } as Record<string, unknown>;
-        Object.defineProperty(value, "load_coherent", {
-          enumerable: true,
-          get: () => { attemptGetterCalls++; return () => ({}); },
-        });
-        return value as never;
-      },
-    };
-    await expect(readApplicationSynthesizedPage(firstPage, attemptPorts)).rejects.toThrow(TypeError);
-    expect(attemptGetterCalls).toBe(0);
-    expect(attemptFixture.counters.coherent).toBe(0);
-    expect(attemptFixture.counters.durable).toBe(0);
+    expect(fixture.counters.resolve).toBe(0);
 
     let coherentGetterCalls = 0;
-    const coherentFixture = harness();
-    const coherentPorts: ApplicationReadPorts = {
-      ...coherentFixture.ports,
+    const hostile: ApplicationReadPorts = {
+      ...fixture.ports,
       resolveAttempt: () => ({
         authorization_request: authorization(),
         load_coherent: () => {
-          const value = {
-            projection_load: {}, coverage: {}, generations: {}, read_coordinates: {},
-          } as Record<string, unknown>;
-          Object.defineProperty(value, "overlay", {
+          const value = { projection_load: {}, coverage: {}, generations: {} } as Record<string, unknown>;
+          Object.defineProperty(value, "read_coordinates", {
             enumerable: true,
             get: () => { coherentGetterCalls++; return {}; },
           });
@@ -743,39 +675,7 @@ describe("production-neutral application synthesized read", () => {
         },
       }),
     };
-    await expect(readApplicationSynthesizedPage(firstPage, coherentPorts)).rejects.toThrow(TypeError);
+    await expect(readApplicationSynthesizedPage(firstPage, hostile)).rejects.toThrow(TypeError);
     expect(coherentGetterCalls).toBe(0);
-    expect(coherentFixture.counters.durable).toBe(0);
-
-    const proxyCoherentFixture = harness();
-    const proxyCoherentPorts: ApplicationReadPorts = {
-      ...proxyCoherentFixture.ports,
-      resolveAttempt: () => ({
-        authorization_request: authorization(),
-        load_coherent: () => new Proxy({}, {}) as never,
-      }),
-    };
-    await expect(readApplicationSynthesizedPage(firstPage, proxyCoherentPorts)).rejects.toThrow(TypeError);
-    expect(proxyCoherentFixture.counters.durable).toBe(0);
-  });
-
-  test("rejects bounded overlay over-return and invalid synthesis digests", async () => {
-    const overItems = harness({ loads: [loadConfig({
-      maxItems: 1,
-      overlay: (input, generation) => [
-        candidate(input, generation, "stm", "one"),
-        candidate(input, generation, "stm", "two"),
-      ],
-    })] });
-    await expect(readApplicationSynthesizedPage(firstPage, overItems.ports)).rejects.toThrow("overlay bound");
-
-    const badDigest = harness({ durableSpecs: [{ origin: "durable", ref: "bad-digest", overrides: {
-      synthesis_provenance: {
-        synthesis_version: "v1",
-        input_digest: "A".repeat(64),
-        output_digest: digest("output"),
-      },
-    } }] });
-    await expect(readApplicationSynthesizedPage(firstPage, badDigest.ports)).rejects.toThrow("provenance");
   });
 });
