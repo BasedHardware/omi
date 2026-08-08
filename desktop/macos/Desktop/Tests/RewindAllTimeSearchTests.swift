@@ -80,12 +80,14 @@ final class RewindAllTimeSearchTests: XCTestCase {
   }
 
   @discardableResult
-  private func insert(daysAgo: Int, text: String, embedding: Data? = nil) async throws -> Screenshot {
+  private func insert(
+    daysAgo: Int, text: String, appName: String = "AllTimeTest", embedding: Data? = nil
+  ) async throws -> Screenshot {
     let stamp = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()))
     let inserted = try await RewindDatabase.shared.insertScreenshot(
       Screenshot(
         timestamp: stamp,
-        appName: "AllTimeTest",
+        appName: appName,
         videoChunkPath: "alltime/\(daysAgo).mp4",
         frameOffset: 0,
         ocrText: text,
@@ -211,5 +213,131 @@ final class RewindAllTimeSearchTests: XCTestCase {
   func testCapturedDayStartsIsEmptyWhenNothingWasEverCaptured() async throws {
     let days = try await RewindDatabase.shared.capturedDayStarts()
     XCTAssertTrue(days.isEmpty, "an account with no capture must report no captured days, not a walk to 1970")
+  }
+
+  // MARK: - The continuous timeline reaches retained history
+
+  func testHistorySurveyPublishesGlobalBoundsWithoutReplacingTheVisibleWindow() async throws {
+    let newest = try await insert(daysAgo: 0, text: "newest day")
+    try await insert(daysAgo: 2, text: "middle day")
+    let oldest = try await insert(daysAgo: 9, text: "oldest day")
+
+    let viewModel = await MainActor.run { RewindViewModel() }
+    await viewModel.surveyCapturedHistory(attempts: 1)
+    let snapshot = await MainActor.run {
+      (dayCount: viewModel.capturedDays.count, range: viewModel.historyRange, count: viewModel.screenshots.count)
+    }
+
+    XCTAssertEqual(snapshot.dayCount, 3)
+    XCTAssertEqual(
+      snapshot.count, 0, "surveying bounds must not replace the current viewport with a fixed all-time sample")
+    XCTAssertLessThan(snapshot.range?.lowerBound ?? .infinity, oldest.timestamp.timeIntervalSince1970)
+    XCTAssertGreaterThan(snapshot.range?.upperBound ?? -.infinity, newest.timestamp.timeIntervalSince1970)
+  }
+
+  func testPanningReloadsOnlyTheRequestedContinuousWindow() async throws {
+    let newest = try await insert(daysAgo: 0, text: "newest day")
+    let middle = try await insert(daysAgo: 2, text: "middle day")
+    let oldest = try await insert(daysAgo: 9, text: "oldest day")
+    let viewModel = await MainActor.run { RewindViewModel() }
+    await viewModel.surveyCapturedHistory(attempts: 1)
+
+    await viewModel.loadTimelineWindow(
+      from: middle.timestamp.addingTimeInterval(-3600).timeIntervalSince1970,
+      to: middle.timestamp.addingTimeInterval(3600).timeIntervalSince1970)
+    var text = await MainActor.run { viewModel.screenshots.compactMap(\.ocrText) }
+    XCTAssertEqual(text, ["middle day"])
+
+    await viewModel.loadTimelineWindow(
+      from: oldest.timestamp.addingTimeInterval(-3600).timeIntervalSince1970,
+      to: oldest.timestamp.addingTimeInterval(3600).timeIntervalSince1970)
+    text = await MainActor.run { viewModel.screenshots.compactMap(\.ocrText) }
+    XCTAssertEqual(text, ["oldest day"], "panning back must query the older viewport without a day transition")
+
+    await viewModel.loadTimelineWindow(
+      from: newest.timestamp.addingTimeInterval(-3600).timeIntervalSince1970,
+      to: newest.timestamp.addingTimeInterval(3600).timeIntervalSince1970)
+    text = await MainActor.run { viewModel.screenshots.compactMap(\.ocrText) }
+    XCTAssertEqual(text, ["newest day"])
+  }
+
+  func testTimelineLoadCannotReplaceSearchResultsThatStartWhileItsQueryIsInFlight() async throws {
+    let queryStarted = expectation(description: "timeline query started")
+    let releaseQuery = AsyncStream<Void>.makeStream()
+    let staleTimelineFrame = Screenshot(
+      timestamp: Date(timeIntervalSince1970: 200), appName: "Timeline", imagePath: "timeline.jpg")
+    let searchFrame = Screenshot(
+      timestamp: Date(timeIntervalSince1970: 300), appName: "Search", imagePath: "search.jpg")
+    let viewModel = await MainActor.run {
+      RewindViewModel { _, _, _, _ in
+        queryStarted.fulfill()
+        for await _ in releaseQuery.stream { break }
+        return [staleTimelineFrame]
+      }
+    }
+
+    let load = Task {
+      await viewModel.loadTimelineWindow(from: 100, to: 400)
+    }
+    await fulfillment(of: [queryStarted])
+    await MainActor.run {
+      viewModel.activeSearchQuery = "needle"
+      viewModel.screenshots = [searchFrame]
+    }
+    releaseQuery.continuation.yield()
+    await load.value
+
+    let visible = await MainActor.run { viewModel.screenshots }
+    XCTAssertEqual(visible, [searchFrame], "an older timeline read must not overwrite the active search source")
+  }
+
+  func testAppFilterIsAppliedBeforeTimelineSampling() async throws {
+    let now = Date()
+    for offset in 0..<12 {
+      _ = try await RewindDatabase.shared.insertScreenshot(
+        Screenshot(
+          timestamp: now.addingTimeInterval(Double(offset)),
+          appName: "BusyApp",
+          videoChunkPath: "busy/\(offset).mp4",
+          frameOffset: 0,
+          ocrText: "busy \(offset)",
+          isIndexed: true))
+    }
+    for offset in 0..<3 {
+      _ = try await RewindDatabase.shared.insertScreenshot(
+        Screenshot(
+          timestamp: now.addingTimeInterval(Double(offset) + 0.5),
+          appName: "SparseApp",
+          videoChunkPath: "sparse/\(offset).mp4",
+          frameOffset: 0,
+          ocrText: "sparse \(offset)",
+          isIndexed: true))
+    }
+
+    let sample = try await RewindDatabase.shared.getScreenshotsSampled(
+      from: now.addingTimeInterval(-1),
+      to: now.addingTimeInterval(20),
+      targetCount: 3,
+      appFilter: "SparseApp")
+
+    XCTAssertEqual(sample.count, 3)
+    XCTAssertTrue(sample.allSatisfy { $0.appName == "SparseApp" })
+  }
+
+  func testBoundedAllTimeSampleIncludesTheOldestAndNewestCapture() async throws {
+    for offset in (0..<10).reversed() {
+      try await insert(daysAgo: offset, text: "day \(offset)")
+    }
+    let calendar = Calendar.current
+    let start = calendar.startOfDay(
+      for: try XCTUnwrap(calendar.date(byAdding: .day, value: -10, to: Date())))
+    let end = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: Date()))
+
+    let sample = try await RewindDatabase.shared.getScreenshotsSampled(
+      from: start, to: end, targetCount: 3)
+
+    XCTAssertEqual(sample.count, 3)
+    XCTAssertEqual(sample.first?.ocrText, "day 9", "the all-time range must retain its oldest end")
+    XCTAssertEqual(sample.last?.ocrText, "day 0", "the all-time range must retain its live/newest end")
   }
 }

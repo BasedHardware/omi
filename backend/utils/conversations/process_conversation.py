@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from database import redis_db
 from database.auth import get_user_name
-from utils.conversations.transcript_for_llm import conversation_transcript_for_llm
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -259,7 +259,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        transcript_text = conversation_transcript_for_llm(uid, main_conv, people)
+        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -276,7 +276,7 @@ def _get_structured(
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
-                    transcript_text,
+                    action_items_transcript,
                     conv_started_at,
                     language_code,
                     tz_str,
@@ -313,7 +313,7 @@ def _get_structured(
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
-                transcript_text,
+                action_items_transcript,
                 conv_started_at,
                 language_code,
                 tz_str,
@@ -1295,7 +1295,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+    if conversation_capture.process_conversation_before_legacy(uid, conversation):
         return
 
     action_items_data: List[Dict[str, Any]] = []
@@ -1311,7 +1311,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
-            **conversation_capture.canonical_fields(action_item, conversation.id),
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
         }
         action_items_data.append(action_item_data)
 

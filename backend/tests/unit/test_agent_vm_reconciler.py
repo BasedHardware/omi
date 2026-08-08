@@ -327,13 +327,7 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
         "mode": "READ_WRITE",
         "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-state-test",
     }
-    assert body["disks"][2] == {
-        "boot": False,
-        "autoDelete": True,
-        "deviceName": "omi-agent-state-source",
-        "mode": "READ_ONLY",
-        "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
-    }
+    assert len(body["disks"]) == 2
     assert metadata["omi-agent-state-required"] == "true"
     assert metadata["omi-agent-state-source-required"] == "true"
 
@@ -390,6 +384,41 @@ async def test_state_disk_compute_mutations_use_named_devices_and_identity_fence
         "users": [],
     }
     assert await client.delete_disk("omi-agent-state-test", "disk-id", "migration-id", "state", "b" * 20)
+
+
+@pytest.mark.asyncio
+async def test_gce_operation_wait_allows_normal_instance_delete_latency(monkeypatch):
+    calls = 0
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    class Response:
+        def __init__(self, status: str) -> None:
+            self.status = status
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"status": self.status}
+
+    class Client(GceAgentVmClient):
+        async def request(self, method: str, url: str, body=None):
+            nonlocal calls
+            del method, url, body
+            calls += 1
+            return Response("DONE" if calls == 61 else "RUNNING")
+
+    monkeypatch.setattr(lifecycle.asyncio, "sleep", no_sleep)
+    await Client("project").wait_operation(
+        {
+            "name": "operation-id",
+            "selfLink": "https://compute.googleapis.com/compute/v1/projects/project/zones/us-central1-a/operations/operation-id",
+        }
+    )
+
+    assert calls == 61
 
 
 @pytest.mark.asyncio

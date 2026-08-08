@@ -30,7 +30,10 @@ operations_role="projects/${project}/roles/${operations_role_id}"
 # below still constrain Disk and Instance resources to omi-agent-* names.
 # Creating an already-labeled disk checks both compute.disks.create and
 # compute.disks.setLabels against the target Disk resource.
-permissions="compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.setLabels,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+# Changing an attachment's auto-delete flag checks both
+# compute.instances.setDiskAutoDelete on the VM and compute.disks.update on
+# the attached state disk, so both remain inside their name-scoped bindings.
+permissions="compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.setLabels,compute.disks.update,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
 subnetwork_role_id="omiAgentVmReconcilerSubnetwork"
 subnetwork_role="projects/${project}/roles/${subnetwork_role_id}"
 subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"

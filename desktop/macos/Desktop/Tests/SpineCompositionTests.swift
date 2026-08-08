@@ -73,6 +73,20 @@ final class SpineCompositionTests: XCTestCase {
       videoChunkPath: nil, frameOffset: nil)
   }
 
+  private func task(_ id: String, _ text: String, at when: Date, from conversationID: String?) -> SpineTask {
+    SpineTask(
+      task: TaskActionItem(
+        id: id,
+        description: text,
+        completed: false,
+        createdAt: when,
+        conversationId: conversationID,
+        source: conversationID == nil ? "manual" : "conversation"
+      ),
+      sourceConversationTitle: conversationID == nil ? nil : "Source conversation"
+    )
+  }
+
   // MARK: - Attachment
 
   func testMemoriesAndFramesAttachToTheConversationTheyBelongTo() {
@@ -130,6 +144,32 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(
       days[0].rows.filter { $0.kind == .memories && !$0.isAttached }.count, 2,
       "the memory row plus the day's brain-map card")
+  }
+
+  func testTasksAttachToTheirConversationAndRemainStandaloneWithoutOne() {
+    let start = date(6, 20)
+    let days = SpineComposer.compose(
+      conversations: [conversation(id: "c1", start: start)],
+      memories: [],
+      tasks: [
+        task("attached", "Send the proposal", at: date(6, 20, 4), from: "c1"),
+        task("manual", "Buy coffee", at: date(6, 22), from: nil),
+      ],
+      screen: [:],
+      calendar: calendar
+    )
+
+    guard let conversationIndex = days[0].rows.firstIndex(where: { $0.kind == .conversations }),
+      case .conversation(let summary) = days[0].rows[conversationIndex].content
+    else { return XCTFail("the conversation is in the day") }
+    XCTAssertEqual(summary.taskCount, 1)
+    XCTAssertEqual(days[0].rows[conversationIndex + 1].kind, .tasks)
+    XCTAssertTrue(days[0].rows[conversationIndex + 1].isAttached)
+    XCTAssertTrue(days[0].rows.contains { $0.id == "task:manual" && !$0.isAttached })
+    XCTAssertEqual(days[0].taskCount, 2)
+
+    let tasksOnly = SpineComposer.filter(days, kind: .tasks, query: "")
+    XCTAssertTrue(tasksOnly[0].rows.allSatisfy { $0.kind == .tasks && !$0.isAttached })
   }
 
   /// The attachment merge walks two newest-first runs at once. A frame newer than the newest
@@ -335,13 +375,15 @@ final class SpineCompositionTests: XCTestCase {
     let summary = SpineConversation(
       conversation: conversation(id: "c1", start: date(6, 20), minutes: 8),
       memoryCount: 2,
+      taskCount: 1,
       momentCount: 6
     )
-    XCTAssertEqual(summary.subtitle, "8m 0s · 2 memories · 6 screen moments")
+    XCTAssertEqual(summary.subtitle, "8m 0s · 2 memories · 1 task · 6 screen moments")
 
     let bare = SpineConversation(
       conversation: conversation(id: "c2", start: date(6, 20), minutes: 3),
       memoryCount: 0,
+      taskCount: 0,
       momentCount: 0
     )
     XCTAssertEqual(bare.subtitle, "3m 0s")

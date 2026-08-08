@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-hosted-control-window-drag-ownership",
+  "violated_contract": "A pointer gesture over hosted application content must have one owner: an ordinary click belongs to the control beneath it, a window drag belongs to the shell, and a native drag control keeps its own gesture. AppKit background dragging cannot enforce that boundary because it hit-tests SwiftUI controls as their transparent hosting view.",
+  "canonical_prevention": "Classify shell clicks and window drags in one thresholded coordinator before hosted button tracking begins, and give native drag controls a typed opt-out from shell movement.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift",
+    "desktop/macos/Desktop/Tests/RewindTrackTests.swift"
+  ],
+  "evidence_prs": [
+    11117
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/**",
+    "desktop/macos/Desktop/Sources/Rewind/UI/**"
+  ],
+  "status": "open"
+}

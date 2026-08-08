@@ -1288,8 +1288,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: da8bbe1
-      resolved-ref: da8bbe15e5c596b01b07d62cce5e6ac97e8ee00f
+      ref: bb5355c
+      resolved-ref: bb5355cc126517dd936396b70d91f9dc7eb30129
       url: "https://github.com/mdmohsin7/intl_country_data.git"
     source: git
     version: "1.2.9"
@@ -1776,6 +1776,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
+  phone_numbers_parser:
+    dependency: "direct main"
+    description:
+      name: phone_numbers_parser
+      sha256: f0d669e9bb3def72b479ee034a42ddc2eecb5d39af9e598459d6f1c489bb19c7
+      url: "https://pub.dev"
+    source: hosted
+    version: "9.0.25"
   photo_view:
     dependency: "direct main"
     description:

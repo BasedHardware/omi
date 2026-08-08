@@ -46,6 +46,7 @@ ACTIVE_BOOT_IMAGE_MIGRATION_STATES = frozenset(
 PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES = frozenset({"candidate_creating", "candidate_ready", "candidate_deleted"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
+_MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 _SERVICE_ACCOUNT = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
 
@@ -341,7 +342,8 @@ def _claim_vm_lease_txn(
     tx: Any,
     deletion_path: str,
     user_path: str,
-    uid: str,
+    recovery_path: str | None,
+    recovery_migration_id: str | None,
     vm_name: str,
     auth_token: str,
     owner: str,
@@ -363,7 +365,20 @@ def _claim_vm_lease_txn(
     release_changed = release_id is not None and reconcile.get("releaseId") != release_id
     same_release = release_id is None or not release_changed
     if reconcile.get("state") == "quarantined" and same_release:
-        return False
+        recovery_snapshot = tx.get(recovery_path) if recovery_path is not None else None
+        recovery = recovery_snapshot.to_dict() if recovery_snapshot is not None and recovery_snapshot.exists else None
+        recorded_instance_id = str(vm.get("instanceId") or "")
+        if (
+            not isinstance(recovery, dict)
+            or recovery_migration_id != reconcile.get("durableMigration")
+            or recovery.get("migrationId") != recovery_migration_id
+            or recovery.get("state") not in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+            or recovery.get("oldVmName") != vm_name
+            or recovery.get("oldAuthToken") != auth_token
+            or recovery.get("targetRelease") != release_id
+            or (recorded_instance_id and str(recovery.get("oldInstanceId") or "") != recorded_instance_id)
+        ):
+            return False
     if float(reconcile.get("retryAt", 0) or 0) > now and same_release:
         return False
     lease_raw = reconcile.get("lease")
@@ -391,16 +406,28 @@ def _claim_vm_lease_txn(
 
 
 def claim_vm_lease(
-    uid: str, vm_name: str, auth_token: str, owner: str, release_id: str | None = None, now: float | None = None
+    uid: str,
+    vm_name: str,
+    auth_token: str,
+    owner: str,
+    release_id: str | None = None,
+    recovery_migration_id: str | None = None,
+    now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
+    recovery_path = (
+        f"users/{uid}/agentVmMigrations/{recovery_migration_id}"
+        if isinstance(recovery_migration_id, str) and _MIGRATION_ID.fullmatch(recovery_migration_id)
+        else None
+    )
     return bool(
         _store().run_transaction(
             lambda tx: _claim_vm_lease_txn(
                 tx,
                 f"account_deletions/{uid}",
                 f"users/{uid}",
-                uid,
+                recovery_path,
+                recovery_migration_id,
                 vm_name,
                 auth_token,
                 owner,
@@ -657,6 +684,7 @@ def _migration_matches(
     owner: str,
     now: float,
     instance_id: str | None = None,
+    allow_drain_requested: bool = False,
 ) -> bool:
     """Validate the active pointer and reconciler lease for a migration CAS."""
     reconcile = vm.get("reconcile")
@@ -667,7 +695,7 @@ def _migration_matches(
         or vm.get("authToken") != auth_token
         or (instance_id is not None and str(vm.get("instanceId") or "") != instance_id)
         or bool(reconcile.get("startRequested"))
-        or bool(reconcile.get("drainRequested"))
+        or (bool(reconcile.get("drainRequested")) and not allow_drain_requested)
     ):
         return False
     lease = reconcile.get("lease")
@@ -723,11 +751,37 @@ def _begin_boot_image_migration_txn(
         return None
     snapshot = tx.get(user_path)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    existing = tx.get(migration_path)
+    current = existing.to_dict() if existing.exists else None
+    durable_migration_id = migration.get("migrationId")
+    reconcile = vm.get("reconcile") if isinstance(vm, dict) else None
+    existing_matches = isinstance(current, dict) and (
+        current.get("oldVmName") == vm_name
+        and current.get("oldAuthToken") == auth_token
+        and current.get("oldInstanceId") == migration.get("oldInstanceId")
+        and current.get("candidateVmName") == migration.get("candidateVmName")
+        and current.get("targetRelease") == migration.get("targetRelease")
+    )
+    recovering_pre_cutover = (
+        existing_matches
+        and isinstance(current, dict)
+        and isinstance(reconcile, Mapping)
+        and reconcile.get("durableMigration") == durable_migration_id
+        and current.get("migrationId") == durable_migration_id
+        and current.get("state") in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+        and current.get("candidateAuthToken") == migration.get("candidateAuthToken")
+        and current.get("targetBootImage") == migration.get("targetBootImage")
+    )
     if not isinstance(vm, dict) or not _migration_matches(
-        vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now
+        vm,
+        vm_name=vm_name,
+        zone=zone,
+        auth_token=auth_token,
+        owner=owner,
+        now=now,
+        allow_drain_requested=recovering_pre_cutover,
     ):
         return None
-    durable_migration_id = migration.get("migrationId")
     old_instance_id = str(migration.get("oldInstanceId") or "")
     if not isinstance(durable_migration_id, str) or not durable_migration_id or not old_instance_id:
         return None
@@ -736,17 +790,22 @@ def _begin_boot_image_migration_txn(
         return None
     if str(vm.get("status") or "") not in {"stopped", "ready"}:
         return None
-    existing = tx.get(migration_path)
     if existing.exists:
-        current = existing.to_dict() or {}
-        if not (
-            current.get("oldVmName") == vm_name
-            and current.get("oldAuthToken") == auth_token
-            and current.get("oldInstanceId") == migration.get("oldInstanceId")
-            and current.get("candidateVmName") == migration.get("candidateVmName")
-            and current.get("targetRelease") == migration.get("targetRelease")
-        ):
+        if not existing_matches:
             return None
+        assert isinstance(current, dict)
+        if recovering_pre_cutover:
+            # Atomically exchange the crash-retained drain marker for the
+            # migration state. Both block new admission, while later journal
+            # transitions continue to reject unrelated drain requests.
+            tx.update(
+                user_path,
+                {
+                    "agentVm.reconcile.state": "migration_claimed",
+                    "agentVm.reconcile.drainRequested": sentinels.DELETE,
+                    "agentVm.reconcile.drainRequestedAt": sentinels.DELETE,
+                },
+            )
         # A terminal candidate cleanup is explicitly retryable.  Reuse the
         # durable candidate name/token but remove its old provider identity so
         # the next creation can be recorded under the same fenced journal.
@@ -1511,7 +1570,7 @@ class GceAgentVmClient:
             url = (
                 f"https://compute.googleapis.com/compute/v1/projects/{self.project}/zones/{self.zone}/operations/{name}"
             )
-        for _ in range(60):
+        for _ in range(150):
             await asyncio.sleep(2)
             response = await self.request("GET", url)
             response.raise_for_status()
@@ -1762,16 +1821,11 @@ class GceAgentVmClient:
                 "source": state_disk_source,
             },
         ]
-        if source_clone_disk_source:
-            disks.append(
-                {
-                    "boot": False,
-                    "autoDelete": True,
-                    "deviceName": STATE_SOURCE_DEVICE_NAME,
-                    "mode": "READ_ONLY",
-                    "source": source_clone_disk_source,
-                }
-            )
+        # A legacy source clone is a full predecessor boot disk. Attaching it
+        # during power-on exposes duplicate root/EFI labels to systemd before
+        # the startup script can select the named migration device. The
+        # reconciler hot-attaches that read-only clone after the candidate is
+        # running; metadata tells startup to wait for that bounded handoff.
         body = {
             "name": vm_name,
             "machineType": machine_type,
