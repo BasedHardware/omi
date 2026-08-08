@@ -4,37 +4,20 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-
-import firebase_admin
-from firebase_admin import auth, credentials, firestore
 import logging
-
-logger = logging.getLogger(__name__)
 
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Initialize Firebase Admin SDK
-try:
-    if os.getenv('SERVICE_ACCOUNT_JSON'):
-        # This path is for Modal environment
-        service_account_info = os.environ["SERVICE_ACCOUNT_JSON"]
-        cred = credentials.Certificate(
-            eval(service_account_info) if service_account_info.startswith('{') else service_account_info
-        )
-    else:
-        # This path is for local development, GOOGLE_APPLICATION_CREDENTIALS should be set
-        cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    logger.error(
-        "Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set for local dev or SERVICE_ACCOUNT_JSON for Modal."
-    )
-    logger.error(e)
-    sys.exit(1)
+from database.store import get_document_store
+from database import auth as auth_db
+
+logger = logging.getLogger(__name__)
 
 
-db = firestore.client()
+def _store():
+    # The port's factory owns client selection via STORAGE_BACKEND; no manual init needed.
+    return get_document_store()
 
 
 def get_user_usage(uid: str) -> tuple[str, dict | None]:
@@ -48,8 +31,7 @@ def get_user_usage(uid: str) -> tuple[str, dict | None]:
         start_of_hour_24_hours_ago = time_24_hours_ago.replace(minute=0, second=0, microsecond=0)
         start_doc_id = start_of_hour_24_hours_ago.strftime('%Y-%m-%d-%H')
 
-        hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage')
-        docs = hourly_usage_ref.where('id', '>=', start_doc_id).stream()
+        docs = _store().query(f'users/{uid}/hourly_usage', filters=[('id', '>=', start_doc_id)])
 
         # Store all fetched hourly data, keyed by doc ID (e.g. '2023-01-01-15')
         hourly_docs_data = {doc.id: doc.to_dict() for doc in docs}
@@ -121,8 +103,7 @@ def main():
             logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
         logger.info("Fetching list of all users from Firestore...")
-        users_ref = db.collection('users')
-        all_uids = [user.id for user in users_ref.stream()]
+        all_uids = _store().list_ids('users')
         uids_to_process = [uid for uid in all_uids if uid not in ignore_uids]
         logger.info(f"Found {len(uids_to_process)} users to process.")
 
@@ -160,21 +141,26 @@ def main():
     logger.info(f"\nFound {len(all_user_usage)} users with recent usage. Fetching their emails...")
     uids_with_usage = [uid for uid, usage in all_user_usage]
     user_emails = {}
-    # get_users can take a list of up to 100 identifiers
-    for i in range(0, len(uids_with_usage), 100):
-        chunk = uids_with_usage[i : i + 100]
+
+    # Resolve emails through the auth boundary (database.auth), which is backend-neutral to the
+    # storage port. The neutral AuthProvider port exposes only a single-uid ``get_user_profile``
+    # (no batch verb — and the OIDC adapter could not batch anyway), so instead of resolving one
+    # uid at a time on a single thread we fan the lookups out with bounded concurrency, mirroring
+    # the usage-calculation step above.
+    def _resolve_email(uid: str) -> tuple[str, str]:
         try:
-            get_users_result = auth.get_users([auth.UidIdentifier(uid) for uid in chunk])
-            for user in get_users_result.users:
-                user_emails[user.uid] = user.email or 'N/A'
-            for user_identifier in get_users_result.not_found:
-                logger.warning(f"Warning: User with UID {user_identifier.uid} not found in Firebase Auth.")
-                user_emails[user_identifier.uid] = 'Not Found'
+            user = auth_db.get_user_from_uid(uid)
+            if user:
+                return uid, (user.get('email') or 'N/A')
+            logger.warning(f"Warning: User with UID {uid} not found in the auth provider.")
+            return uid, 'Not Found'
         except Exception as e:
-            logger.error(f"Error fetching users batch: {e}")
-            for uid in chunk:
-                if uid not in user_emails:
-                    user_emails[uid] = "Error fetching email"
+            logger.error(f"Error fetching user {uid}: {e}")
+            return uid, 'Error fetching email'
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        for uid, email in executor.map(_resolve_email, uids_with_usage):
+            user_emails[uid] = email
 
     # Write results to CSV
     try:

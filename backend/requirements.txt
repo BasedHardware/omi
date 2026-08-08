@@ -17,6 +17,7 @@ audioread==3.0.1
 av==12.0.0
 backoff==2.2.1
 blinker==1.8.2
+boto3==1.35.36
 CacheControl==0.14.0
 cachetools==5.5.0
 certifi==2024.7.4
@@ -73,6 +74,7 @@ grpclib==0.4.7
 h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
+http-ece==1.2.1
 httpcore==1.0.9
 httplib2==0.32.0
 httptools==0.6.1
@@ -114,6 +116,7 @@ MarkupSafe==2.1.5
 marshmallow==3.26.2
 matplotlib-inline==0.1.7
 mdurl==0.1.2
+mongomock==4.3.0
 monotonic==1.6
 more-itertools==10.5.0
 mplcursors==0.5.3
@@ -162,6 +165,7 @@ pydub==0.25.1
 Pygments==2.20.0
 PyJWT==2.13.0
 pyright==1.1.403
+pymongo==4.10.1
 pynndescent==0.5.13
 PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
 pyparsing==3.1.2

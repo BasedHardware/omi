@@ -55,21 +55,19 @@ def apply_with_control_refresh(
 def fetch_active_legacy_rows(
     uid: str,
     *,
-    db_client: Any,
     reader: Callable[..., List[Dict[str, Any]]],
     is_active: Callable[[Dict[str, Any]], bool],
     scan_page_size: int,
 ) -> List[Dict[str, Any]]:
-    """Page a raw legacy reader before applying its in-process active filter."""
+    """Page a raw legacy reader before applying its in-process active filter.
+
+    The reader resolves its own storage through the neutral store port; the on-prem port
+    retired the ``db_client``/``firestore_client`` handle (ADR-0028), so nothing is threaded here.
+    """
     rows: List[Dict[str, Any]] = []
     offset = 0
     while True:
-        try:
-            page = reader(uid, limit=scan_page_size, offset=offset, firestore_client=db_client)
-        except TypeError as exc:
-            if "firestore_client" not in str(exc):
-                raise
-            page = reader(uid, limit=scan_page_size, offset=offset)
+        page = reader(uid, limit=scan_page_size, offset=offset)
         if not page:
             break
         rows.extend(row for row in page if is_active(row))

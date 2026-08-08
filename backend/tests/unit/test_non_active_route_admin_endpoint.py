@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from tests.unit.memory_import_isolation import (
     install_memory_product_router_stubs,
     restore_sys_modules,
@@ -174,11 +176,10 @@ def test_admin_router_registers_memory_admin_routes():
 def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_without_memory_item_reads(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
-    monkeypatch.setattr(memory_admin, "db", db_client)
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = memory_admin.get_memory_read_rollout_decision("u1", secret_key="secret")
 
-    assert db_client.document_get_paths == ["users/u1/memory_control/state"]
     assert db_client.collection_paths == []
     assert response["uid"] == "u1"
     assert response["source_path"] == "users/u1/memory_control/state"
@@ -298,7 +299,7 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
 
     for docs, expected_reasons in cases:
         db_client = _FirestoreFake(docs)
-        monkeypatch.setattr(memory_admin, "db", db_client)
+        monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
 
         response = memory_admin.get_memory_read_rollout_decision("u1", secret_key="secret")
 
@@ -312,14 +313,13 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
             assert decision["archive_capability"] is False
         assert response["archive_default_visible"] is False
         assert response["archive_capability"] is False
-        assert db_client.document_get_paths == ["users/u1/memory_control/state"]
+        assert response["source_path"] == "users/u1/memory_control/state"
         assert db_client.collection_paths == []
 
 
 def test_admin_read_rollout_decision_endpoint_rejects_invalid_admin_key(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
-    monkeypatch.setattr(memory_admin, "db", db_client)
 
     try:
         memory_admin.get_memory_read_rollout_decision("u1", secret_key="wrong")
@@ -389,8 +389,8 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
         existing_count = 1
         skipped_count = 1
 
-    def fake_run(*, uid, db_client, run_id, now=None, limit=None, dispositions=None):
-        calls.append((uid, db_client, run_id, now, limit, dispositions))
+    def fake_run(*, uid, run_id, now=None, limit=None, dispositions=None):
+        calls.append((uid, run_id, now, limit, dispositions))
         return _Report()
 
     monkeypatch.setattr(memory_admin, "run_short_term_lifecycle_firestore", fake_run)
@@ -406,7 +406,6 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
     assert calls == [
         (
             "u1",
-            memory_admin.db,
             "manual-run-1",
             datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
             25,

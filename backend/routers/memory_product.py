@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from database._client import db
 from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
 from models.memory_product import (
@@ -69,7 +68,7 @@ def _policy_payload(policy: MemoryAccessPolicy) -> dict:
 
 
 def _write_vector_repair_purge_outbox_records(records: list[dict]) -> list[dict]:
-    return write_vector_repair_purge_outbox_records(db_client=db, records=records)
+    return write_vector_repair_purge_outbox_records(records=records)
 
 
 def _global_read_gate_observability(gate) -> dict:
@@ -82,7 +81,7 @@ def _global_read_gate_observability(gate) -> dict:
 
 
 def _require_product_authorization(context: ProductAuthorizationContext):
-    decision = authorize_memory_product_memory_route(context, db_client=db)
+    decision = authorize_memory_product_memory_route(context)
     if not decision.allowed:
         raise HTTPException(status_code=decision.status_code, detail=decision.observability)
     return decision
@@ -114,7 +113,6 @@ def search_product_memory(
         response = fetch_default_product_memory_search(
             uid=uid,
             query=query,
-            db_client=db,
             policy=policy,
             now=_current_time(),
             limit=limit,
@@ -165,7 +163,6 @@ def search_vector_memory(
         response = fetch_default_vector_memory_search(
             uid=uid,
             query=query,
-            db_client=db,
             policy=policy,
             vector_query=vector_query if callable(vector_query) else None,
             repair_purge_outbox_writer=(
@@ -222,7 +219,6 @@ def search_archive_memory(
         response = fetch_archive_product_memory_search(
             uid=uid,
             query=query,
-            db_client=db,
             policy=policy,
             now=_current_time(),
             limit=limit,
@@ -242,7 +238,6 @@ def search_archive_memory(
 
 __all__ = [
     "MEMORY_GLOBAL_READ_GATE_PATH",
-    "db",
     "fetch_archive_product_memory_search",
     "fetch_default_product_memory_search",
     "router",

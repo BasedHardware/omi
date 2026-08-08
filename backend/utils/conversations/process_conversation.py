@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
-import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
@@ -874,11 +873,11 @@ def _canonical_conversation_write_payload(
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
+    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
     """Canonical-cohort extraction with one atomic source replacement."""
     source = source_for_conversation(conversation)
-    memory_service = MemoryService(db_client=db_client)
+    memory_service = MemoryService()
 
     language = users_db.get_user_language_preference(uid)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
@@ -1055,7 +1054,6 @@ def _extract_memories_canonical(
                         *memory_refs,
                     ],
                 ),
-                firestore_client=db_client,
             )
         except Exception:
             record_fallback(
@@ -1074,10 +1072,9 @@ def _extract_memories_inner(
     uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
-        db_client = getattr(db_client_module, 'db', None)
         if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
+            MemoryService().ensure_canonical_mutation_ready(uid)
+            return _extract_memories_canonical(uid, conversation, parity_capture=parity_capture)
 
         if parity_capture is None:
             # Preserve the direct legacy helper shape used by non-live callers

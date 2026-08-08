@@ -12,7 +12,6 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.notifications as notification_db
 import database.vector_db as vector_db
-from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -159,9 +158,9 @@ def get_memories_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        service = MemoryService(db_client=firestore_db)
+        service = MemoryService()
         if start_dt or end_dt:
             # Date filters present: scan raw canonical pages and apply the date
             # bounds before paginating, mirroring the legacy DB path which pushes
@@ -213,7 +212,6 @@ def get_memories_tool(
         uid=uid,
         limit=limit,
         offset=offset,
-        db_client=firestore_db,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("✅ get_memories_tool - using memory default chat memory list results")
@@ -351,9 +349,9 @@ def search_memories_tool(
         logger.warning(f"search_memories_tool - timezone lookup failed, formatting dates in UTC: {tz_error}")
         display_tz = timezone.utc
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = MemoryService().search(uid, query, limit=limit)
         if not matches:
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
@@ -374,7 +372,6 @@ def search_memories_tool(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=firestore_db,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("✅ search_memories_tool - using memory default chat memory results")

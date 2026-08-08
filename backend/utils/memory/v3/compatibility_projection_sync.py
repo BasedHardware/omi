@@ -11,10 +11,9 @@ idempotent even when the state document is unavailable.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, cast
+from typing import Any, Dict, Optional, cast
 
-from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
-
+from database.store import get_document_store
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, RESTRICTED_SENSITIVITY_LABELS
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
@@ -25,6 +24,10 @@ from utils.memory.v3.projection_reader_contract import (
 )
 
 ProjectionPayload = Dict[str, Any]
+
+
+def _store():
+    return get_document_store()
 
 
 class CompatibilityProjectionSyncError(RuntimeError):
@@ -155,46 +158,22 @@ def _has_restricted_sensitivity(item: MemoryItem) -> bool:
     return bool(set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
 
 
-def _run_transaction(db_client: Any, callback: Callable[..., bool], *args: Any) -> bool:
-    transaction = db_client.transaction()
-    if transaction.__class__.__module__.startswith("google.cloud.firestore"):
-        wrapped = cast(Callable[..., bool], _firestore_transactional(callback))
-        return wrapped(transaction, *args)
-
-    if hasattr(transaction, "_begin"):
-        transaction._begin()
-    try:
-        result = callback(transaction, *args)
-        if hasattr(transaction, "_commit"):
-            transaction._commit()
-        return result
-    except Exception:
-        if hasattr(transaction, "_rollback"):
-            transaction._rollback()
-        raise
-    finally:
-        if hasattr(transaction, "_clean_up"):
-            transaction._clean_up()
-
-
 def _upsert_projection_transaction(
     transaction: Any,
-    db_client: Any,
     item: MemoryItem,
     expected_account_generation: int,
 ) -> bool:
     if item.account_generation != expected_account_generation:
         raise CompatibilityProjectionSyncError("compatibility_projection_generation_mismatch")
     paths = MemoryCollections(uid=item.uid)
-    state_ref = db_client.document(paths.v3_compatibility_projection_state)
-    state = _snapshot_payload(state_ref.get(transaction=transaction))
+    state = _snapshot_payload(transaction.get(paths.v3_compatibility_projection_state))
     fences = _validated_projection_fences(
         uid=item.uid,
         account_generation=expected_account_generation,
         state=state,
     )
     payload = _projection_item_payload(item, fences=fences)
-    transaction.set(db_client.document(_item_path(item.uid, item.memory_id)), payload)
+    transaction.set(_item_path(item.uid, item.memory_id), payload)
     return True
 
 
@@ -202,7 +181,6 @@ def upsert_v3_compatibility_projection_item(
     item: MemoryItem,
     *,
     expected_account_generation: int,
-    db_client: Any,
 ) -> bool:
     """Idempotently project one authoritative, privacy-eligible memory item."""
     if _has_restricted_sensitivity(item):
@@ -210,34 +188,27 @@ def upsert_v3_compatibility_projection_item(
             item.uid,
             item.memory_id,
             expected_account_generation=expected_account_generation,
-            db_client=db_client,
         )
-    return _run_transaction(
-        db_client,
-        _upsert_projection_transaction,
-        db_client,
-        item,
-        expected_account_generation,
+    return _store().run_transaction(
+        lambda transaction: _upsert_projection_transaction(transaction, item, expected_account_generation)
     )
 
 
 def _delete_projection_transaction(
     transaction: Any,
-    db_client: Any,
     uid: str,
     memory_id: str,
     expected_account_generation: int,
 ) -> bool:
     paths = MemoryCollections(uid=uid)
-    state_ref = db_client.document(paths.v3_compatibility_projection_state)
-    state = _snapshot_payload(state_ref.get(transaction=transaction))
+    state = _snapshot_payload(transaction.get(paths.v3_compatibility_projection_state))
     if state is not None:
         _validated_projection_fences(
             uid=uid,
             account_generation=expected_account_generation,
             state=state,
         )
-    transaction.delete(db_client.document(_item_path(uid, memory_id)))
+    transaction.delete(_item_path(uid, memory_id))
     return True
 
 
@@ -246,18 +217,14 @@ def delete_v3_compatibility_projection_item(
     memory_id: str,
     *,
     expected_account_generation: int,
-    db_client: Any,
 ) -> bool:
     """Idempotently remove one compatibility row, including on privacy paths."""
     if not uid.strip() or not memory_id.strip():
         raise CompatibilityProjectionSyncError("compatibility_projection_identity_missing")
-    return _run_transaction(
-        db_client,
-        _delete_projection_transaction,
-        db_client,
-        uid,
-        memory_id,
-        expected_account_generation,
+    return _store().run_transaction(
+        lambda transaction: _delete_projection_transaction(
+            transaction, uid, memory_id, expected_account_generation
+        )
     )
 
 

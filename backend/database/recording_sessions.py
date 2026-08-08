@@ -12,10 +12,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
-from google.cloud import firestore
-
 from database import conversations as conversations_db
-from database._client import get_firestore_client
+from database.store import get_document_store
 
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
 CONVERSATIONS_COLLECTION = 'conversations'
@@ -52,21 +50,21 @@ class RecordingSessionEvent(TypedDict):
     discard_reason: str | None
 
 
+def _store():
+    """The configured document store (``STORAGE_BACKEND`` seam, ADR-0002/0004). Tests patch this."""
+    return get_document_store()
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _client(firestore_client: Any = None) -> Any:
-    return firestore_client if firestore_client is not None else get_firestore_client()
+def _session_path(uid: str, recording_session_id: str) -> str:
+    return f'users/{uid}/{RECORDING_SESSIONS_COLLECTION}/{recording_session_id}'
 
 
-def _session_ref(client: Any, uid: str, recording_session_id: str) -> Any:
-    return (
-        client.collection('users')
-        .document(uid)
-        .collection(RECORDING_SESSIONS_COLLECTION)
-        .document(recording_session_id)
-    )
+def _conversation_path(uid: str, conversation_id: str) -> str:
+    return f'users/{uid}/{CONVERSATIONS_COLLECTION}/{conversation_id}'
 
 
 def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflict: bool) -> RecordingSessionBinding:
@@ -81,15 +79,15 @@ def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflic
 
 
 def _create_or_get_recording_session_txn(
-    transaction: Any,
-    session_ref: Any,
+    tx: Any,
+    session_path: str,
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
     now: datetime,
 ) -> RecordingSessionBinding:
-    snapshot = session_ref.get(transaction=transaction)
-    if getattr(snapshot, 'exists', False):
+    snapshot = tx.get(session_path)
+    if snapshot.exists:
         current = snapshot.to_dict() or {}
         if current.get('uid') != uid or current.get('recording_session_id') != recording_session_id:
             raise ValueError('recording session identity does not match its document binding')
@@ -110,7 +108,7 @@ def _create_or_get_recording_session_txn(
         'created_at': now,
         'updated_at': now,
     }
-    transaction.create(session_ref, session)
+    tx.set(session_path, session)
     return _binding(session, recording_session_id, mapping_conflict=False)
 
 
@@ -118,36 +116,33 @@ def create_or_get_recording_session(
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
-    *,
-    firestore_client: Any = None,
 ) -> RecordingSessionBinding:
     """Atomically bind a session to exactly one canonical conversation ID."""
     if not uid or not recording_session_id or not proposed_conversation_id:
         raise ValueError('uid, recording_session_id, and proposed_conversation_id are required')
-    client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_create_or_get_recording_session_txn)
-    return transactional(
-        transaction,
-        _session_ref(client, uid, recording_session_id),
-        uid,
-        recording_session_id,
-        proposed_conversation_id,
-        _now(),
+    session_path = _session_path(uid, recording_session_id)
+    now = _now()
+    return _store().run_transaction(
+        lambda tx: _create_or_get_recording_session_txn(
+            tx,
+            session_path,
+            uid,
+            recording_session_id,
+            proposed_conversation_id,
+            now,
+        )
     )
 
 
 def get_recording_session(
     uid: str,
     recording_session_id: str,
-    *,
-    firestore_client: Any = None,
 ) -> RecordingSessionBinding | None:
     """Read the canonical binding without proposing or mutating an identity."""
     if not uid or not recording_session_id:
         raise ValueError('uid and recording_session_id are required')
-    snapshot = _session_ref(_client(firestore_client), uid, recording_session_id).get()
-    if not getattr(snapshot, 'exists', False):
+    snapshot = _store().get(_session_path(uid, recording_session_id))
+    if not snapshot.exists:
         return None
     data = snapshot.to_dict() or {}
     if data.get('uid') != uid or data.get('recording_session_id') != recording_session_id:
@@ -159,8 +154,6 @@ def tombstone_and_delete_empty_conversation(
     uid: str,
     conversation_id: str,
     recording_session_id: str | None,
-    *,
-    firestore_client: Any = None,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -169,17 +162,12 @@ def tombstone_and_delete_empty_conversation(
     this transaction when a late content write wins, preventing cleanup from
     deleting user data based on a stale empty read.
     """
-    client = _client(firestore_client)
-    conversation_ref = (
-        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
-    )
-    session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
+    conversation_path = _conversation_path(uid, conversation_id)
+    session_path = _session_path(uid, recording_session_id) if recording_session_id else None
 
-    @firestore.transactional
-    def _delete_empty(transaction: Any) -> bool:
-        snapshot = conversation_ref.get(transaction=transaction)
-        if not getattr(snapshot, 'exists', False):
+    def _delete_empty(tx: Any) -> bool:
+        snapshot = tx.get(conversation_path)
+        if not snapshot.exists:
             return False
         conversation = snapshot.to_dict() or {}
         if (
@@ -189,9 +177,10 @@ def tombstone_and_delete_empty_conversation(
         ):
             return False
 
-        if session_ref is not None:
-            session_snapshot = session_ref.get(transaction=transaction)
-            if getattr(session_snapshot, 'exists', False):
+        # All reads precede any write: read the bound session before deleting.
+        if session_path is not None:
+            session_snapshot = tx.get(session_path)
+            if session_snapshot.exists:
                 session = session_snapshot.to_dict() or {}
                 if (
                     session.get('uid') == uid
@@ -200,30 +189,30 @@ def tombstone_and_delete_empty_conversation(
                 ):
                     phase = str(session.get('lifecycle_phase') or 'in_progress')
                     if phase not in _TERMINAL_PHASES:
-                        transaction.update(
-                            session_ref,
+                        tx.update(
+                            session_path,
                             {
                                 'lifecycle_phase': 'discarded',
                                 'lifecycle_sequence': int(session.get('lifecycle_sequence') or 0) + 1,
                                 'updated_at': _now(),
                             },
                         )
-        transaction.delete(conversation_ref)
+        tx.delete(conversation_path)
         return True
 
-    return _delete_empty(transaction)
+    return _store().run_transaction(_delete_empty)
 
 
 def _record_lifecycle_event_txn(
-    transaction: Any,
-    session_ref: Any,
+    tx: Any,
+    session_path: str,
     recording_session_id: str,
     conversation_id: str,
     phase: RecordingPhase,
     now: datetime,
 ) -> RecordingSessionEvent:
-    snapshot = session_ref.get(transaction=transaction)
-    if not getattr(snapshot, 'exists', False):
+    snapshot = tx.get(session_path)
+    if not snapshot.exists:
         return {
             'recording_session_id': recording_session_id,
             'conversation_id': conversation_id,
@@ -280,8 +269,8 @@ def _record_lifecycle_event_txn(
         }
 
     next_sequence = sequence + 1
-    transaction.update(
-        session_ref,
+    tx.update(
+        session_path,
         {'lifecycle_phase': phase, 'lifecycle_sequence': next_sequence, 'updated_at': now},
     )
     return {
@@ -300,20 +289,19 @@ def record_lifecycle_event(
     recording_session_id: str,
     conversation_id: str,
     phase: RecordingPhase,
-    *,
-    firestore_client: Any = None,
 ) -> RecordingSessionEvent:
     """Append a monotonic lifecycle envelope, rejecting stale or misbound events."""
     if phase not in _PHASE_ORDER:
         raise ValueError(f'unsupported recording lifecycle phase: {phase}')
-    client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_record_lifecycle_event_txn)
-    return transactional(
-        transaction,
-        _session_ref(client, uid, recording_session_id),
-        recording_session_id,
-        conversation_id,
-        phase,
-        _now(),
+    session_path = _session_path(uid, recording_session_id)
+    now = _now()
+    return _store().run_transaction(
+        lambda tx: _record_lifecycle_event_txn(
+            tx,
+            session_path,
+            recording_session_id,
+            conversation_id,
+            phase,
+            now,
+        )
     )

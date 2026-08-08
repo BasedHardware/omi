@@ -13,10 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from google.api_core.exceptions import AlreadyExists, Conflict
-
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
+from database.store.errors import AlreadyExists
 from utils.memory.default_read_rollout import (
     DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
     normalize_default_read_rollout_decision,
@@ -109,13 +109,16 @@ def _existing_snapshot_payload(*, uid: str, snapshot: Any) -> object:
         raise CanonicalMemoryOnboardingValidationError(uid=uid, reason='control_state_read_failed') from None
 
 
-def _reconcile_user(db_client: Any, *, uid: str) -> CanonicalMemoryOnboardingUserResult:
+def _store():
+    return get_document_store()
+
+
+def _reconcile_user(*, uid: str) -> CanonicalMemoryOnboardingUserResult:
     if not uid.strip():
         raise ValueError('canonical cohort contains a blank uid')
 
     path = _control_state_path(uid)
-    control_ref = db_client.document(path)
-    snapshot = control_ref.get()
+    snapshot = _store().get(path)
     if getattr(snapshot, 'exists', False) is True:
         payload = _existing_snapshot_payload(uid=uid, snapshot=snapshot)
         _validate_existing_control_state(uid=uid, path=path, payload=payload)
@@ -123,11 +126,11 @@ def _reconcile_user(db_client: Any, *, uid: str) -> CanonicalMemoryOnboardingUse
 
     payload = _safe_onboarding_payload(uid)
     try:
-        # Firestore create is an atomic exists=false compare-and-create.  Never
-        # use merge/set here: a concurrent rollout writer must win unchanged.
-        control_ref.create(payload)
-    except (AlreadyExists, Conflict):
-        raced_snapshot = control_ref.get()
+        # create is an atomic exists=false compare-and-create (store port). Never use merge/set here:
+        # a concurrent rollout writer must win unchanged.
+        _store().create(path, payload)
+    except AlreadyExists:
+        raced_snapshot = _store().get(path)
         raced_payload = _existing_snapshot_payload(uid=uid, snapshot=raced_snapshot)
         _validate_existing_control_state(uid=uid, path=path, payload=raced_payload)
         return CanonicalMemoryOnboardingUserResult(uid=uid, action='preserved', control_state_path=path)
@@ -135,9 +138,7 @@ def _reconcile_user(db_client: Any, *, uid: str) -> CanonicalMemoryOnboardingUse
     return CanonicalMemoryOnboardingUserResult(uid=uid, action='created', control_state_path=path)
 
 
-def reconcile_canonical_memory_onboarding(
-    db_client: Any,
-) -> CanonicalMemoryOnboardingReport:
+def reconcile_canonical_memory_onboarding() -> CanonicalMemoryOnboardingReport:
     """Ensure inert control state exists for every canonical cohort UID.
 
     Membership always comes from ``list_canonical_cohort_uids()`` so a scheduler
@@ -147,7 +148,7 @@ def reconcile_canonical_memory_onboarding(
     uids = list_canonical_cohort_uids()
     if any(not uid.strip() for uid in uids):
         raise ValueError('canonical cohort contains a blank uid')
-    results = tuple(_reconcile_user(db_client, uid=uid) for uid in sorted(set(uids)))
+    results = tuple(_reconcile_user(uid=uid) for uid in sorted(set(uids)))
     return CanonicalMemoryOnboardingReport(users=results)
 
 

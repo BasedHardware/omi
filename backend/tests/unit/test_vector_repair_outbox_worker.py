@@ -1,14 +1,7 @@
 from datetime import datetime, timezone
 import json
-import sys
-import types
 
-google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
-cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-firestore_stub = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
-firestore_stub.transactional = lambda func: func
-google_stub.cloud = cloud_stub
-cloud_stub.firestore = firestore_stub
+import pytest
 
 from database.memory_vector_repair_pinecone_adapter import (
     VECTOR_REPAIR_PINECONE_NAMESPACE,
@@ -16,6 +9,7 @@ from database.memory_vector_repair_pinecone_adapter import (
     make_pinecone_vector_deleter,
     make_pinecone_vector_repairer,
 )
+import database.memory_vector_repair_outbox_worker as worker_module
 from database.memory_vector_metadata import (
     build_canonical_memory_vector_delete_filter,
     canonical_memory_provider_id,
@@ -27,6 +21,7 @@ from database.memory_vector_repair_outbox_worker import (
     process_vector_repair_purge_outbox_records,
     run_vector_repair_outbox_worker_tick,
 )
+from tests.store_fakes import FakeDocumentStore
 
 
 def _record(**overrides):
@@ -82,107 +77,66 @@ class _Updates:
         self.patches.append((record["record_id"], dict(patch)))
 
 
-class _FakeSnapshot:
-    def __init__(self, path, data):
-        self.reference = _FakeDocumentReference(path, None)
-        self.id = path.rsplit("/", 1)[-1]
-        self.exists = data is not None
-        self._data = dict(data) if data is not None else None
+class _FakeFirestore(FakeDocumentStore):
+    """Neutral document store the tests seed and assert on via ``.store``.
 
-    def to_dict(self):
-        return dict(self._data) if self._data is not None else None
+    Preserves the original ``{path: data}`` seeding and ``db.store[path]``
+    assertions while running the module against the storage port instead of a
+    Firestore-shaped fake.
+    """
 
-
-class _FakeDocumentReference:
-    def __init__(self, path, store):
-        self.path = path
-        self._store = store
-
-    def get(self, transaction=None):
-        if transaction is not None and hasattr(transaction, "read_paths"):
-            transaction.read_paths.append(self.path)
-        return _FakeSnapshot(self.path, self._store.get(self.path))
-
-    def update(self, patch):
-        self._store[self.path].update(dict(patch))
-
-    def set(self, data):
-        self._store[self.path] = dict(data)
-
-
-class _FakeQuery:
-    def __init__(self, store, collection_path, filters=None, limit_count=None):
-        self._store = store
-        self._collection_path = collection_path
-        self._filters = filters or []
-        self._limit_count = limit_count
-
-    def where(self, *args, **kwargs):
-        field, op, value = args
-        return _FakeQuery(self._store, self._collection_path, self._filters + [(field, op, value)], self._limit_count)
-
-    def limit(self, limit_count):
-        return _FakeQuery(self._store, self._collection_path, self._filters, limit_count)
-
-    def stream(self):
-        matches = []
-        prefix = f"{self._collection_path}/"
-        for path, data in sorted(self._store.items()):
-            if not path.startswith(prefix):
-                continue
-            if all(self._matches(data, field, op, value) for field, op, value in self._filters):
-                matches.append(_FakeSnapshot(path, data))
-        return matches[: self._limit_count]
-
-    @staticmethod
-    def _matches(data, field, op, value):
-        if op == "==":
-            return data.get(field) == value
-        if op == "<=":
-            field_value = data.get(field)
-            return field_value is not None and field_value <= value
-        raise AssertionError(f"unexpected op {op}")
-
-
-class _FakeFirestore:
     def __init__(self, docs=None):
-        self.store = dict(docs or {})
+        super().__init__(backing=dict(docs or {}))
 
-    def collection(self, path):
-        return _FakeQuery(self.store, path)
-
-    def document(self, path):
-        return _FakeDocumentReference(path, self.store)
+    @property
+    def store(self):
+        return self._docs
 
 
-class _FakeTransaction:
-    def __init__(self, db):
-        self._db = db
-        self.read_paths = []
-        self.update_paths = []
+class _RecordingTransaction:
+    """Wraps the fake store's transaction to record read/write op ordering."""
 
-    def get(self, doc_ref):
-        self.read_paths.append(doc_ref.path)
-        return doc_ref.get(transaction=self)
+    def __init__(self, store, log):
+        self._store = store
+        self._log = log
 
-    def update(self, doc_ref, patch):
-        self.update_paths.append(doc_ref.path)
-        doc_ref.update(patch)
+    def get(self, path):
+        self._log.append(("get", path))
+        return self._store.get(path)
+
+    def set(self, path, data, *, merge=False):
+        self._log.append(("set", path))
+        self._store.set(path, data, merge=merge)
+
+    def update(self, path, data):
+        self._log.append(("update", path))
+        self._store.update(path, data)
+
+    def delete(self, path):
+        self._log.append(("delete", path))
+        self._store.delete(path)
 
 
-class _FakeTransactionalFirestore(_FakeFirestore):
+class _SpyTransactionStore(_FakeFirestore):
+    """Records that claims run through ``run_transaction`` and their op ordering."""
+
     def __init__(self, docs=None):
         super().__init__(docs)
-        self.transactions = []
+        self.transaction_count = 0
+        self.tx_log = []
 
-    def transaction(self):
-        transaction = _FakeTransaction(self)
-        self.transactions.append(transaction)
-        return transaction
+    def run_transaction(self, fn, *, attempts=3):
+        self.transaction_count += 1
+        return fn(_RecordingTransaction(self, self.tx_log))
+
+
+def _install_store(monkeypatch, db):
+    monkeypatch.setattr(worker_module, "_store", lambda: db)
+    return db
 
 
 class TestWorkerCore:
-    def test_worker_tick_disabled_config_does_not_lease_or_call_side_effects(self):
+    def test_worker_tick_disabled_config_does_not_lease_or_call_side_effects(self, monkeypatch):
         calls = []
         db = _FakeFirestore(
             {
@@ -193,9 +147,9 @@ class TestWorkerCore:
                 )
             }
         )
+        _install_store(monkeypatch, db)
 
         result = run_vector_repair_outbox_worker_tick(
-            db_client=db,
             uid="u1",
             config=VectorRepairOutboxWorkerTickConfig(enabled=False, worker_id="worker-disabled"),
             authoritative_item_loader=lambda record: calls.append("loader"),
@@ -219,7 +173,7 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/available"]["status"] == "pending"
         assert calls == []
 
-    def test_worker_tick_enabled_leases_processes_and_acks_delete_or_repair(self):
+    def test_worker_tick_enabled_leases_processes_and_acks_delete_or_repair(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         db = _FakeFirestore(
             {
@@ -243,9 +197,9 @@ class TestWorkerCore:
         )
         deleted = []
         repaired = []
+        _install_store(monkeypatch, db)
 
         result = run_vector_repair_outbox_worker_tick(
-            db_client=db,
             uid="u1",
             config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
             authoritative_item_loader=lambda record: _live_item(memory_id=record["memory_id"]),
@@ -272,15 +226,15 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/repair"]["status"] == "completed"
         assert db.store["users/u1/memory_outbox/repair"]["action"] == "repair"
 
-    def test_worker_tick_lease_failure_returns_deterministic_error_before_actions(self):
-        class _FailingLeaseFirestore(_FakeFirestore):
-            def collection(self, path):
-                raise RuntimeError(f"lease failed for {path}")
+    def test_worker_tick_lease_failure_returns_deterministic_error_before_actions(self, monkeypatch):
+        class _FailingLeaseStore(_FakeFirestore):
+            def query(self, collection, **kwargs):
+                raise RuntimeError(f"lease failed for {collection}")
 
         calls = []
+        _install_store(monkeypatch, _FailingLeaseStore())
 
         result = run_vector_repair_outbox_worker_tick(
-            db_client=_FailingLeaseFirestore(),
             uid="u1",
             config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a"),
             authoritative_item_loader=lambda record: calls.append("loader"),
@@ -295,21 +249,15 @@ class TestWorkerCore:
         assert result["errors"] == [{"stage": "lease", "error": "lease failed for users/u1/memory_outbox"}]
         assert calls == []
 
-    def test_worker_tick_ack_failure_is_counted_after_single_adapter_side_effect(self):
-        class _FailingAckDocumentReference(_FakeDocumentReference):
-            def update(self, patch):
-                if self.path.endswith("/dup-a") and patch.get("status") != "in_progress":
-                    raise RuntimeError(f"ack failed for {self.path}")
-                super().update(patch)
-
-        class _FailingAckFirestore(_FakeFirestore):
-            def document(self, path):
-                if path.endswith("/dup-a"):
-                    return _FailingAckDocumentReference(path, self.store)
-                return super().document(path)
+    def test_worker_tick_ack_failure_is_counted_after_single_adapter_side_effect(self, monkeypatch):
+        class _FailingAckStore(_FakeFirestore):
+            def update(self, path, data):
+                if path.endswith("/dup-a") and data.get("status") != "in_progress":
+                    raise RuntimeError(f"ack failed for {path}")
+                super().update(path, data)
 
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-        db = _FailingAckFirestore(
+        db = _FailingAckStore(
             {
                 "users/u1/memory_outbox/dup-a": _record(
                     record_id="dup-a",
@@ -326,9 +274,9 @@ class TestWorkerCore:
             }
         )
         repaired = []
+        _install_store(monkeypatch, db)
 
         result = run_vector_repair_outbox_worker_tick(
-            db_client=db,
             uid="u1",
             config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
             authoritative_item_loader=lambda record: _live_item(),
@@ -348,7 +296,9 @@ class TestWorkerCore:
             {"stage": "ack", "record_id": "dup-a", "error": "ack failed for users/u1/memory_outbox/dup-a"},
         ]
 
-    def test_firestore_reader_leases_only_available_pending_vector_repair_records_and_ack_updates_path(self):
+    def test_firestore_reader_leases_only_available_pending_vector_repair_records_and_ack_updates_path(
+        self, monkeypatch
+    ):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         available = now.isoformat()
         future = datetime(2026, 6, 19, 12, 5, tzinfo=timezone.utc).isoformat()
@@ -369,9 +319,9 @@ class TestWorkerCore:
                 ),
             }
         )
+        _install_store(monkeypatch, db)
 
         leased = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-a",
             limit=10,
@@ -385,7 +335,6 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/available"]["lease_owner"] == "worker-a"
 
         ack_vector_repair_purge_outbox_record(
-            db_client=db,
             record=leased[0],
             patch={"status": "completed", "action": "repair"},
             now=now,
@@ -395,7 +344,7 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/available"]["action"] == "repair"
         assert db.store["users/u1/memory_outbox/available"]["updated_at"] == now.isoformat()
 
-    def test_firestore_reader_reclaims_expired_in_progress_lease_after_expiry_only(self):
+    def test_firestore_reader_reclaims_expired_in_progress_lease_after_expiry_only(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         before_expiry = datetime(2026, 6, 19, 11, 59, tzinfo=timezone.utc)
         after_expiry = datetime(2026, 6, 19, 12, 1, tzinfo=timezone.utc)
@@ -412,9 +361,9 @@ class TestWorkerCore:
                 )
             }
         )
+        _install_store(monkeypatch, db)
 
         not_yet = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-a",
             limit=10,
@@ -422,7 +371,6 @@ class TestWorkerCore:
             now=before_expiry,
         )
         reclaimed = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-b",
             limit=10,
@@ -437,7 +385,7 @@ class TestWorkerCore:
         assert db.store[path]["lease_owner"] == "worker-b"
         assert db.store[path]["leased_at"] == after_expiry.isoformat()
 
-    def test_firestore_reader_never_reclaims_completed_or_dead_letter_records(self):
+    def test_firestore_reader_never_reclaims_completed_or_dead_letter_records(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         expired = datetime(2026, 6, 19, 11, 0, tzinfo=timezone.utc).isoformat()
         db = _FakeFirestore(
@@ -456,9 +404,9 @@ class TestWorkerCore:
                 ),
             }
         )
+        _install_store(monkeypatch, db)
 
         leased = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-a",
             limit=10,
@@ -470,15 +418,15 @@ class TestWorkerCore:
         assert db.store["users/u1/memory_outbox/completed"]["status"] == "completed"
         assert db.store["users/u1/memory_outbox/dead"]["status"] == "dead_letter"
 
-    def test_firestore_reader_claim_uses_transaction_when_client_supports_it(self):
+    def test_firestore_reader_claim_uses_transaction_when_client_supports_it(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         path = "users/u1/memory_outbox/transactional"
-        db = _FakeTransactionalFirestore(
+        db = _SpyTransactionStore(
             {path: _record(record_id="transactional", outbox_path=path, available_at=now.isoformat())}
         )
+        _install_store(monkeypatch, db)
 
         leased = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-txn",
             limit=1,
@@ -487,20 +435,19 @@ class TestWorkerCore:
         )
 
         assert [record["record_id"] for record in leased] == ["transactional"]
-        assert len(db.transactions) == 1
-        assert db.transactions[0].read_paths == [path]
-        assert db.transactions[0].update_paths == [path]
+        assert db.transaction_count == 1
+        assert db.tx_log == [("get", path), ("update", path)]
         assert db.store[path]["status"] == "in_progress"
         assert db.store[path]["lease_owner"] == "worker-txn"
 
-    def test_duplicate_lease_after_claim_does_not_duplicate_worker_action(self):
+    def test_duplicate_lease_after_claim_does_not_duplicate_worker_action(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         path = "users/u1/memory_outbox/dup"
         db = _FakeFirestore({path: _record(record_id="dup", outbox_path=path, available_at=now.isoformat())})
         deleted = []
+        _install_store(monkeypatch, db)
 
         first_lease = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-a",
             limit=10,
@@ -508,7 +455,6 @@ class TestWorkerCore:
             now=now,
         )
         second_lease = lease_vector_repair_purge_outbox_records(
-            db_client=db,
             uid="u1",
             worker_id="worker-b",
             limit=10,
@@ -529,14 +475,15 @@ class TestWorkerCore:
         assert deleted == ["vec-1"]
         assert result["processed_count"] == 1
 
-    def test_ack_writer_failure_propagates_deterministically(self):
-        class _FailingFirestore(_FakeFirestore):
-            def document(self, path):
+    def test_ack_writer_failure_propagates_deterministically(self, monkeypatch):
+        class _FailingWriteStore(_FakeFirestore):
+            def update(self, path, data):
                 raise RuntimeError(f"write failed for {path}")
+
+        _install_store(monkeypatch, _FailingWriteStore())
 
         try:
             ack_vector_repair_purge_outbox_record(
-                db_client=_FailingFirestore(),
                 record=_record(record_id="bad", outbox_path="users/u1/memory_outbox/bad"),
                 patch={"status": "dead_letter"},
             )
@@ -809,7 +756,6 @@ class TestEntrypoint:
 
         exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
             env={},
-            db_client=object(),
             authoritative_item_loader=lambda record: calls.append("load"),
             vector_deleter=lambda record: calls.append("delete"),
             vector_repairer=lambda record, item: calls.append("repair"),
@@ -839,7 +785,6 @@ class TestEntrypoint:
 
         exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
             env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "yes"},
-            db_client=object(),
             authoritative_item_loader=lambda record: calls.append("load"),
             vector_deleter=lambda record: calls.append("delete"),
             vector_repairer=lambda record, item: calls.append("repair"),
@@ -862,7 +807,6 @@ class TestEntrypoint:
 
         exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
             env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true", "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1"},
-            db_client=object(),
             authoritative_item_loader=lambda record: calls.append("load"),
             vector_deleter=lambda record: calls.append("delete"),
             vector_repairer=lambda record, item: calls.append("repair"),
@@ -897,7 +841,6 @@ class TestEntrypoint:
                 "errors": [],
             }
 
-        db = object()
         loader = object()
         deleter = object()
         repairer = object()
@@ -910,7 +853,6 @@ class TestEntrypoint:
                 "MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS": "90",
                 "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS": "4",
             },
-            db_client=db,
             authoritative_item_loader=loader,
             vector_deleter=deleter,
             vector_repairer=repairer,
@@ -919,7 +861,7 @@ class TestEntrypoint:
         )
 
         assert exit_code == 0
-        assert captured["db_client"] is db
+        assert "db_client" not in captured
         assert captured["uid"] == "u1"
         assert captured["config"].enabled is True
         assert captured["config"].worker_id == "worker-a"
@@ -954,7 +896,6 @@ class TestEntrypoint:
                 "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
                 "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
             },
-            db_client=object(),
             authoritative_item_loader=lambda record: None,
             vector_deleter=lambda record: None,
             vector_repairer=lambda record, item: None,
@@ -992,7 +933,6 @@ class TestEntrypoint:
         printer = TestEntrypoint._Printer()
         calls = []
         deps = entrypoint.VectorRepairOutboxProductionDependencies(
-            db_client=object(),
             authoritative_item_loader=object(),
             vector_deleter=object(),
             vector_repairer=object(),
@@ -1062,6 +1002,66 @@ class TestEntrypoint:
             }
         ]
 
+    def test_dependency_builder_requires_pinecone_creds_only_for_pinecone_backend(self):
+        """Backend selection (ADR-0033) gates Pinecone secret validation.
+
+        Default/pinecone: Pinecone creds are mandatory. Neutral qdrant on-prem: the enabled
+        worker must build without unused Pinecone creds, wiring delete/upsert through the
+        VectorStore port instead.
+        """
+        from types import SimpleNamespace
+
+        class _FakeStore:
+            def delete_by_filter(self, namespace, filter):
+                return None
+
+            def upsert(self, namespace, vectors):
+                return None
+
+        fake_modules = {
+            "utils.vector": SimpleNamespace(get_vector_store=lambda env=None: _FakeStore()),
+            "database._client": SimpleNamespace(db=SimpleNamespace()),
+            "utils.llm.clients": SimpleNamespace(embeddings=SimpleNamespace(embed_query=lambda text: [0.0])),
+        }
+
+        def _loader(name):
+            return fake_modules[name]
+
+        # pinecone backend (implicit default) still requires the Pinecone key.
+        with pytest.raises(ValueError, match="PINECONE_API_KEY is required"):
+            entrypoint.build_vector_repair_outbox_production_dependencies(
+                {"OPENAI_API_KEY": "x"}, module_loader=_loader
+            )
+
+        # qdrant backend builds without any Pinecone creds (but with its own QDRANT_URL).
+        deps = entrypoint.build_vector_repair_outbox_production_dependencies(
+            {"VECTOR_STORE_BACKEND": "qdrant", "QDRANT_URL": "http://qdrant:6333", "OPENAI_API_KEY": "x"},
+            module_loader=_loader,
+        )
+        assert deps.vector_deleter is not None
+        assert deps.vector_repairer is not None
+        assert deps.authoritative_item_loader is not None
+
+        # qdrant without QDRANT_URL fails fast here, before any record is leased (not lazily in the
+        # adapter after leasing).
+        with pytest.raises(ValueError, match="QDRANT_URL is required"):
+            entrypoint.build_vector_repair_outbox_production_dependencies(
+                {"VECTOR_STORE_BACKEND": "qdrant", "OPENAI_API_KEY": "x"},
+                module_loader=_loader,
+            )
+
+        # On-prem embeddings endpoint configured (OMI_EMBEDDINGS_BASE_URL): the cloud OPENAI_API_KEY
+        # is NOT required — the documented Qdrant + OpenAI-compatible embeddings path must start.
+        deps = entrypoint.build_vector_repair_outbox_production_dependencies(
+            {
+                "VECTOR_STORE_BACKEND": "qdrant",
+                "QDRANT_URL": "http://qdrant:6333",
+                "OMI_EMBEDDINGS_BASE_URL": "http://tei:8080/v1",
+            },
+            module_loader=_loader,
+        )
+        assert deps.vector_repairer is not None
+
     def test_http_shim_disabled_post_fails_closed_without_dependency_initialization(self):
         calls = []
         app = entrypoint.create_vector_repair_outbox_worker_app(
@@ -1106,7 +1106,6 @@ class TestEntrypoint:
     def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary(self):
         calls = []
         deps = entrypoint.VectorRepairOutboxProductionDependencies(
-            db_client=object(),
             authoritative_item_loader=object(),
             vector_deleter=object(),
             vector_repairer=object(),
@@ -1145,7 +1144,7 @@ class TestEntrypoint:
 
         assert calls[0][0] == "deps"
         assert calls[1][0] == "tick"
-        assert calls[1][1]["db_client"] is deps.db_client
+        assert calls[1][1]["authoritative_item_loader"] is deps.authoritative_item_loader
         assert response["config_valid"] is True
         assert response["actions"] == [{"record_id": "rec-http", "idempotency_key": "idem-http", "action": "repair"}]
 
@@ -1241,25 +1240,22 @@ class TestEntrypoint:
             def document(self, path):
                 return Document(path)
 
-        class Index:
-            def delete(self, **kwargs):
-                calls.append(("delete", kwargs))
+        class Store:
+            # Port-shaped seam: the worker routes the repair adapter's delete/upsert through the
+            # neutral vector-store port (ADR-0033). Record the same {filter/vectors, namespace} shape.
+            def delete_by_filter(self, namespace, filter):
+                calls.append(("delete", {"filter": filter, "namespace": namespace}))
                 return {"deleted": 1}
 
-            def upsert(self, **kwargs):
-                calls.append(("upsert", kwargs))
-                return {"upserted": 1}
+            def upsert(self, namespace, records):
+                calls.append(("upsert", {"vectors": records, "namespace": namespace}))
+                return len(records)
 
-        class PineconeClient:
-            def __init__(self, api_key):
-                calls.append(("pinecone", api_key))
-
-            def Index(self, name):
-                calls.append(("index", name))
-                return Index()
-
-        class PineconeModule:
-            Pinecone = PineconeClient
+        class VectorModule:
+            @staticmethod
+            def get_vector_store(env=None):
+                calls.append(("get_vector_store", env))
+                return Store()
 
         class ClientModule:
             db = DB()
@@ -1274,20 +1270,21 @@ class TestEntrypoint:
 
         def module_loader(name):
             calls.append(("import", name))
-            if name == "pinecone":
-                return PineconeModule
+            if name == "utils.vector":
+                return VectorModule
             if name == "database._client":
                 return ClientModule
             if name == "utils.llm.clients":
                 return LlmClientsModule
             raise AssertionError(name)
 
+        env = {
+            "PINECONE_API_KEY": "pc-key",
+            "PINECONE_INDEX_NAME": "memory-index",
+            "OPENAI_API_KEY": "openai-key",
+        }
         deps = entrypoint.build_vector_repair_outbox_production_dependencies(
-            {
-                "PINECONE_API_KEY": "pc-key",
-                "PINECONE_INDEX_NAME": "memory-index",
-                "OPENAI_API_KEY": "openai-key",
-            },
+            env,
             module_loader=module_loader,
         )
 
@@ -1295,8 +1292,11 @@ class TestEntrypoint:
         deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
-        assert ("pinecone", "pc-key") in calls
-        assert ("index", "memory-index") in calls
+        # Backend selection must read the SAME env the entrypoint validated deps against, so the
+        # validated backend and the constructed store never diverge (validate one source / build
+        # from another).
+        assert ("get_vector_store", env) in calls
+        assert ("import", "utils.vector") in calls
         assert ("get", "users/u1/memory_items/mem1") in calls
         assert (
             calls.count(

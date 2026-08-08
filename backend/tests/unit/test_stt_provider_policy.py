@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from config.stt_provider_policy import (
+    APPROVED_STREAMING_PARAKEET_MODELS,
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
@@ -74,13 +75,46 @@ def test_deepgram_token_is_admissible_while_either_deployment_serves_the_surface
     assert not model_is_enabled('dg-nova-3', STTServingSurface.PRERECORDED)
 
 
-def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
+def test_parakeet_capability_tracks_the_model_selected_for_each_surface(monkeypatch):
+    # Default (no deployment override): the real-time model is English-only.
+    monkeypatch.delenv('PARAKEET_STREAM_MODEL', raising=False)
     assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
     assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
     assert parakeet_supports_language(STTServingSurface.PTT, 'en')
     assert not parakeet_supports_language(STTServingSurface.PTT, 'multi')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'multi')
+
+
+def test_streaming_multilingual_model_enables_its_locales(monkeypatch):
+    """On-prem deploying the multilingual NIM model makes real-time STT serve its languages."""
+    monkeypatch.setenv('PARAKEET_STREAM_MODEL', 'nvidia/parakeet-1-1b-rnnt-multilingual')
+    for lang in ('en', 'es', 'it', 'fr', 'de', 'pt', 'ja', 'multi'):
+        assert parakeet_supports_language(STTServingSurface.STREAMING, lang), lang
+        assert parakeet_supports_language(STTServingSurface.PTT, lang), lang
+    # A language outside the 25-language set is still rejected.
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'zu')
+    # Prerecorded is unaffected by the streaming override (own model).
+    assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
+
+
+def test_unknown_stream_model_falls_back_to_english_only_default(monkeypatch):
+    """A typo/unapproved value must not silently disable or widen the surface."""
+    monkeypatch.setenv('PARAKEET_STREAM_MODEL', 'nvidia/not-a-real-model')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
+
+
+def test_parakeet_serving_pod_stream_model_allow_list_matches_policy():
+    """Static drift guard: the isolated Parakeet image carries a mirror of the code-owned
+    streaming allow-list (it cannot import ``config``). The routing policy falls back silently
+    for an unrecognized value, so the pod fails fast on the same set to avoid serving a model
+    routing does not expect. Keep the two definitions identical."""
+    transcribe_py = (Path(__file__).resolve().parents[2] / 'parakeet' / 'transcribe.py').read_text(encoding='utf-8')
+    for model in APPROVED_STREAMING_PARAKEET_MODELS:
+        assert model in transcribe_py, f'{model} missing from parakeet/transcribe.py APPROVED_STREAM_MODELS'
+    # The mirror must not list a model the policy does not approve.
+    assert "APPROVED_STREAM_MODELS" in transcribe_py
 
 
 @pytest.mark.parametrize('values_path', PARAKEET_VALUES_FILES)

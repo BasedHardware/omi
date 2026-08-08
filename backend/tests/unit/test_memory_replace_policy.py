@@ -160,7 +160,7 @@ def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
 
     # Intercept the MemoryService created inside _extract_memories_canonical
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
 
     monkeypatch.setattr(
         pc,
@@ -198,7 +198,7 @@ def test_canonical_reextract_valid_empty_replaces_existing_source_state(monkeypa
     from models.structured import Structured
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(pc, "extract_canonical_l1_memory_candidates", MagicMock(return_value=[]))
     monkeypatch.setattr(
         pc,
@@ -235,7 +235,7 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -280,7 +280,7 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
         ValueError,
         match="evidence without a unique source binding",
     ):
-        pc._extract_memories_canonical("uid-quote-grounding", conversation, db_client=MagicMock())
+        pc._extract_memories_canonical("uid-quote-grounding", conversation)
 
     mock_service.replace_conversation_memories.assert_not_called()
 
@@ -320,7 +320,7 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -359,7 +359,7 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
         ],
     )
 
-    result = pc._extract_memories_canonical("uid-subject", conversation, db_client=MagicMock())
+    result = pc._extract_memories_canonical("uid-subject", conversation)
 
     assert result.count == 1
     replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -377,7 +377,7 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -419,7 +419,6 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     result = pc._extract_memories_canonical(
         "uid-contact-name",
         conversation,
-        db_client=MagicMock(),
     )
 
     assert result.count == 1
@@ -438,7 +437,7 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -477,7 +476,7 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
         ],
     )
 
-    result = pc._extract_memories_canonical("uid-spoofed-speaker", conversation, db_client=MagicMock())
+    result = pc._extract_memories_canonical("uid-spoofed-speaker", conversation)
 
     assert result.count == 1
     replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -495,7 +494,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(
         pc,
         "extract_canonical_l1_memory_candidates",
@@ -536,7 +535,6 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
     result = pc._extract_memories_canonical(
         "uid-source-speaker-subject",
         conversation,
-        db_client=MagicMock(),
     )
 
     assert result.count == 1
@@ -566,7 +564,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     from utils.llm.working_observations import MAX_WORKING_OBSERVATION_ITEMS
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
     candidates = [
@@ -610,7 +608,6 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     result = pc._extract_memories_canonical(
         "uid-dense-capture",
         conversation,
-        db_client=MagicMock(),
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]
@@ -629,7 +626,7 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     from models.transcript_segment import TranscriptSegment
 
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
     monkeypatch.setattr(
         pc,
@@ -699,7 +696,6 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     result = pc._extract_memories_canonical(
         "uid-subject-aware-dedup",
         conversation,
-        db_client=MagicMock(),
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]

@@ -76,6 +76,8 @@ def _import_isolation():
     restore_sys_modules(saved)
 
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from models.memory_apply import MemoryControlState, memory_content_hash
 from models.memory_evidence import (
     ArtifactPreservationState,
@@ -101,6 +103,22 @@ from utils.memory.memory_system import MemorySystem
 # captured_at, and the short_term "expires_at must be after captured_at" invariant started
 # failing on its own — with no code change — once the wall clock passed that date.
 NOW = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0, microsecond=0)
+
+
+# Post-D1 (ADR-0022/ADR-0028) the canonical adapters, required processor, and TTL lifecycle
+# read/write exclusively through the ``_store`` seam (``get_document_store()``); they no longer
+# accept an injected Firestore-shaped ``db_client``. The Firestore-shaped fakes below survive only
+# as a ``.docs`` backing dict that tests seed and inspect. A ``FakeDocumentStore`` wraps that same
+# dict and is bound to the seam by the autouse fixture, so seeded data and writes stay consistent.
+# The holder is rebound each time a fake db is constructed.
+_DOC_STORE_HOLDER: dict = {}
+
+
+def _bind_document_store_backing(docs) -> None:
+    _DOC_STORE_HOLDER["store"] = FakeDocumentStore(backing=docs)
+
+
+_bind_document_store_backing({})
 
 
 class _Snapshot:
@@ -251,6 +269,7 @@ class _Db:
             ).model_dump(mode="json")
         }
         self.transaction_obj = _Transaction(self)
+        _bind_document_store_backing(self.docs)
 
     def document(self, path):
         return _Document(self, path)
@@ -268,6 +287,7 @@ class _PromotionFakeDb(_Db):
     def __init__(self, docs=None):
         self.docs = dict(docs or {})
         self.transaction_obj = _Transaction(self)
+        _bind_document_store_backing(self.docs)
 
 
 def _canonical_db_with_control(uid: str = "uid-canonical") -> _PromotionFakeDb:
@@ -301,7 +321,7 @@ def _seed_canonical_short_term(
     _set_canonical(monkeypatch, uid)
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
     payload["evidence"][0]["evidence_id"] = f"ev_{conversation_id}"
-    return write_canonical_extraction_memory(uid, payload, db_client=db)
+    return write_canonical_extraction_memory(uid, payload)
 
 
 def _set_canonical(monkeypatch, uid: str) -> None:
@@ -330,7 +350,6 @@ def _write_required(monkeypatch, uid: str, db: _Db, memory_id: str, content: str
     return write_canonical_extraction_memory(
         uid,
         _required_payload(memory_id, content),
-        db_client=db,
     )
 
 
@@ -338,7 +357,6 @@ def _process(uid: str, memory_id: str, db: _Db, *, content: str):
     return process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content=content,
             subject_entity_id="user",
@@ -356,6 +374,10 @@ def _clear_cohort(monkeypatch):
 
     _load_runtime()
     clear_canonical_cohort(monkeypatch)
+    monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.review_queue._store", lambda: _DOC_STORE_HOLDER["store"])
 
 
 def test_required_submission_is_visible_pending_short_term_but_not_default_memory(
@@ -383,8 +405,8 @@ def test_required_submission_is_visible_pending_short_term_but_not_default_memor
     }
     assert all(doc["payload"]["item_revision"] == stored["item_revision"] for doc in outbox)
     assert all(doc["payload"]["content_hash"] == stored["content_hash"] for doc in outbox)
-    assert read_canonical_memories(uid, db_client=db) == []
-    pending = read_canonical_memories(uid, db_client=db, include_pending_processing=True)
+    assert read_canonical_memories(uid) == []
+    pending = read_canonical_memories(uid, include_pending_processing=True)
     assert [memory.id for memory in pending] == [memory_id]
 
 
@@ -411,12 +433,11 @@ def test_required_processor_resolves_unknown_api_subject_and_infers_person_kind(
         "Sarah prefers early flights.",
         manually_added=False,
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
 
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content="Sarah prefers early flights.",
             subject_entity_id="person:sarah",
@@ -470,13 +491,12 @@ def test_required_processor_cannot_replace_known_manual_third_party_subject(
             "subject_kind": "person",
         }
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     before = dict(db.docs[f"users/{uid}/memory_items/{memory_id}"])
 
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content="The user prefers early flights.",
             subject_entity_id="user",
@@ -509,28 +529,24 @@ def test_required_processing_failures_back_off_then_quarantine_and_new_revision_
     first = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=poison,
         now=NOW,
     )
     deferred = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=poison,
         now=NOW + timedelta(minutes=1),
     )
     second = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=poison,
         now=NOW + timedelta(minutes=5),
     )
     terminal = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=poison,
         now=NOW + timedelta(minutes=15),
     )
@@ -547,11 +563,10 @@ def test_required_processing_failures_back_off_then_quarantine_and_new_revision_
     assert stored["promotion"]["attempt_count"] == 3
     assert calls == 3
 
-    update_canonical_memory_content(uid, memory_id, "Remember coffee instead.", db_client=db)
+    update_canonical_memory_content(uid, memory_id, "Remember coffee instead.")
     recovered = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="The user prefers coffee."),
         now=NOW + timedelta(days=100),
     )
@@ -579,7 +594,6 @@ def test_required_processing_scan_skips_backoff_rows_without_exceeding_call_budg
 
     first_report = run_required_memory_processing(
         uid,
-        db_client=db,
         processor=poison,
         now=NOW,
     )
@@ -591,7 +605,6 @@ def test_required_processing_scan_skips_backoff_rows_without_exceeding_call_budg
 
     second_report = run_required_memory_processing(
         uid,
-        db_client=db,
         processor=normalize,
         now=NOW + timedelta(minutes=1),
     )
@@ -617,7 +630,6 @@ def test_required_processing_lease_blocks_overlapping_llm_invocation(monkeypatch
         nested_result = process_required_memory_item(
             uid,
             memory_id,
-            db_client=db,
             processor=nested_processor,
             now=NOW,
         )
@@ -626,7 +638,6 @@ def test_required_processing_lease_blocks_overlapping_llm_invocation(monkeypatch
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=outer_processor,
         now=NOW,
     )
@@ -649,7 +660,6 @@ def test_required_processing_preserves_original_expiry_and_receipt_time(monkeypa
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
         now=captured_at - timedelta(days=10),
     )
@@ -667,13 +677,12 @@ def test_inflight_processor_cannot_overwrite_newer_user_edit(monkeypatch):
     memory_id = _write_required(monkeypatch, uid, db, "manual-edit", "Old preference")
 
     def edit_then_return(_item):
-        update_canonical_memory_content(uid, memory_id, "New preference", db_client=db)
+        update_canonical_memory_content(uid, memory_id, "New preference")
         return ProcessedRequiredMemory(content="Stale normalized preference")
 
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=edit_then_return,
         now=NOW,
     )
@@ -690,13 +699,12 @@ def test_negative_user_review_is_authoritative_during_processing_race(monkeypatc
     memory_id = _write_required(monkeypatch, uid, db, "manual-review", "Do not keep this")
 
     def reject_then_return(_item):
-        update_canonical_memory_review(uid, memory_id, False, db_client=db)
+        update_canonical_memory_review(uid, memory_id, False)
         return ProcessedRequiredMemory(content="Stale normalized preference")
 
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=reject_then_return,
         now=NOW,
     )
@@ -762,12 +770,11 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
         )
         report = run_canonical_short_term_ttl_lifecycle(
             uid,
-            db_client=db,
             now=NOW,
             run_id="run-expiry",
         )
 
-    assert read_canonical_memories(uid, db_client=db, now=NOW) == []
+    assert read_canonical_memories(uid, now=NOW) == []
     assert report.lifecycle_created_count == 1
     assert report.lifecycle_terminal_count == 1
     settled = db.docs[f"users/{uid}/memory_items/{item.memory_id}"]
@@ -782,3 +789,45 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
         "projection_sync": "delete",
         "vector_sync": "delete",
     }
+
+
+def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch):
+    uid = "uid-canonical-read-clock"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    memory_id = _seed_canonical_short_term(
+        db,
+        uid=uid,
+        conversation_id="conv-read-clock",
+        content="Time-bounded note",
+        monkeypatch=monkeypatch,
+    )
+    path = f"users/{uid}/memory_items/{memory_id}"
+    read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
+    db.docs[path] |= {
+        "captured_at": (read_time - timedelta(days=1)).isoformat(),
+        "updated_at": (read_time - timedelta(days=1)).isoformat(),
+        "expires_at": (read_time + timedelta(hours=1)).isoformat(),
+    }
+
+    visible = read_canonical_memories(uid, now=read_time)
+    expired = read_canonical_memories(uid, now=read_time + timedelta(hours=1))
+
+    assert [memory.id for memory in visible] == [memory_id]
+    assert expired == []
+
+
+def test_memory_control_state_coerces_naive_firestore_timestamps():
+    naive = datetime(2026, 6, 1, 12, 0, 0)
+    control = MemoryControlState(
+        uid="uid-canonical",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=1,
+        last_promotion_run_at=naive,
+        updated_at=naive,
+    )
+    assert control.last_promotion_run_at is not None
+    assert control.last_promotion_run_at.tzinfo == timezone.utc
+    assert control.updated_at.tzinfo == timezone.utc
+    assert control.last_promotion_run_at == datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)

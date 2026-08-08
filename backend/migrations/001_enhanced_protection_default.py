@@ -1,5 +1,3 @@
-import firebase_admin
-from firebase_admin import credentials, firestore
 import sys
 import os
 import argparse
@@ -8,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from database.store import get_document_store
 from database import users as users_db
 from database import conversations as conversations_db
 from database import memories as memories_db
@@ -16,19 +15,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK
-# IMPORTANT: Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
-# to the path of your service account key file before running this script.
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
 
-
-db = firestore.client()
+def _store():
+    return get_document_store()
 
 
 def load_ignore_uids(filepath: str) -> set:
@@ -113,8 +102,7 @@ def main():
         logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
     logger.info("Fetching list of users to migrate...")
-    users_ref = db.collection('users')
-    all_users = users_ref.stream()
+    all_users = _store().query('users')
 
     users_to_migrate = []
     total_user_count = 0

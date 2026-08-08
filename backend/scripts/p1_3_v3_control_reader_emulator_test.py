@@ -103,7 +103,7 @@ def _write_fixture(db: firestore.Client, case: ProofCase) -> None:
 
 def _assert_case(db: firestore.Client, case: ProofCase) -> None:
     _write_fixture(db, case)
-    result = read_v3_control(uid=UID, db_client=db)
+    result = read_v3_control(uid=UID)
     decision = decide_v3_control_route(case.request, result)
     assert result.source_path == CONTROL_PATH, case.case_id
     assert decision.route_family == case.route_family, (case.case_id, decision)

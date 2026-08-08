@@ -1604,82 +1604,77 @@ class TestDesktopUpdatePolicyEndpoint:
 
 
 class TestDesktopUpdatePolicyDatabase:
-    def _mock_doc(self, exists=True, data=None):
-        doc = MagicMock()
-        doc.exists = exists
-        doc.to_dict.return_value = data or {}
-        return doc
+    @pytest.fixture
+    def store(self, monkeypatch):
+        import database.desktop_update_policy as policy_db
+        from tests.store_fakes import FakeDocumentStore
 
-    def test_missing_doc_returns_inactive_default(self):
-        doc = self._mock_doc(exists=False)
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
-        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+        fake = FakeDocumentStore()
+        monkeypatch.setattr(policy_db, "_store", lambda: fake)
+        return fake
+
+    def _seed(self, store, data):
+        store.set("desktop_update_policy/current", data)
+
+    def test_missing_doc_returns_inactive_default(self, store):
+        policy = get_desktop_update_policy(current_build=11400)
 
         assert policy["active"] is False
         assert policy["severity"] == "none"
         assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
 
-    def test_invalid_policy_download_url_uses_stable_manual_download_path(self):
-        doc = self._mock_doc(
-            data={
+    def test_invalid_policy_download_url_uses_stable_manual_download_path(self, store):
+        self._seed(
+            store,
+            {
                 "active": True,
                 "severity": "required",
                 "download_url": "file:///Applications/Omi.app",
-            }
+            },
         )
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
 
-        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+        policy = get_desktop_update_policy(current_build=11400)
 
         assert policy["active"] is True
         assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
 
-    def test_required_policy_applies_through_maximum_build(self):
-        doc = self._mock_doc(
-            data={
+    def test_required_policy_applies_through_maximum_build(self, store):
+        self._seed(
+            store,
+            {
                 "id": "force-old-desktop",
                 "active": True,
                 "severity": "required",
                 "maximum_build_number": 11507,
                 "title": "Update required",
                 "can_dismiss": False,
-            }
+            },
         )
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
-        policy = get_desktop_update_policy(current_build=11507, firestore_client=mock_db)
+        policy = get_desktop_update_policy(current_build=11507)
 
         assert policy["id"] == "force-old-desktop"
         assert policy["active"] is True
         assert policy["severity"] == "required"
         assert policy["can_dismiss"] is False
 
-    def test_policy_suppressed_above_maximum_build(self):
-        doc = self._mock_doc(data={"active": True, "severity": "required", "maximum_build_number": 11507})
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
-        policy = get_desktop_update_policy(current_build=11508, firestore_client=mock_db)
+    def test_policy_suppressed_above_maximum_build(self, store):
+        self._seed(store, {"active": True, "severity": "required", "maximum_build_number": 11507})
+        policy = get_desktop_update_policy(current_build=11508)
 
         assert policy["active"] is False
         assert policy["severity"] == "none"
 
-    def test_policy_accepts_legacy_minimum_build_alias(self):
-        doc = self._mock_doc(data={"active": True, "severity": "required", "minimum_build_number": 11507})
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
-        policy = get_desktop_update_policy(current_build=11507, firestore_client=mock_db)
+    def test_policy_accepts_legacy_minimum_build_alias(self, store):
+        self._seed(store, {"active": True, "severity": "required", "minimum_build_number": 11507})
+        policy = get_desktop_update_policy(current_build=11507)
 
         assert policy["active"] is True
         assert policy["maximum_build_number"] == 11507
         assert "minimum_build_number" not in policy
 
-    def test_policy_suppressed_for_other_platforms(self):
-        doc = self._mock_doc(data={"active": True, "severity": "banner", "platforms": ["windows"]})
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.get.return_value = doc
-        policy = get_desktop_update_policy(current_build=11400, platform="macos", firestore_client=mock_db)
+    def test_policy_suppressed_for_other_platforms(self, store):
+        self._seed(store, {"active": True, "severity": "banner", "platforms": ["windows"]})
+        policy = get_desktop_update_policy(current_build=11400, platform="macos")
 
         assert policy["active"] is False
 

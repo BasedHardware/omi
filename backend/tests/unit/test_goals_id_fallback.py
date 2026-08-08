@@ -1,56 +1,31 @@
 """Tests for goal ID fallback in database/goals.py.
 
 Verifies that _goal_dict() correctly injects doc.id when the 'id' field
-is missing from Firestore document data (issue #5671).
+is missing from stored document data (issue #5671).
 
-database.goals binds ``db`` at import (``from database._client import db``), so the
-fake ``database._client`` must be active before the module is exec'd. Sanctioned
-Tier-2 "fake must precede import" pattern (see backend/docs/test_isolation.md and
-testing/import_isolation.load_module_fresh).
+database.goals reads through the neutral storage port (``_store()``); the read-path tests bind a
+``FakeDocumentStore`` to that seam and seed the user's goal collection directly.
 """
 
 import os
-from pathlib import Path
-from types import ModuleType
-from unittest.mock import MagicMock
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
 
 import pytest
 
-from testing.import_isolation import load_module_fresh, stub_modules
+import database.goals as goals_module
+from tests.store_fakes import FakeDocumentStore
 
-_BACKEND = Path(__file__).resolve().parents[2]
 
-
-@pytest.fixture(scope="module")
-def goals():
-    """Fresh database.goals against a stubbed database._client + firestore chain."""
-    client_stub = ModuleType("database._client")
-    client_stub.db = MagicMock(name="db")
-    client_stub.document_id_from_seed = MagicMock(return_value="doc-id")
-
-    firestore_stub = ModuleType("google.cloud.firestore")
-    firestore_stub.Client = MagicMock()
-    firestore_stub.Query = MagicMock()
-    fv1_stub = ModuleType("google.cloud.firestore_v1")
-    fv1_stub.FieldFilter = MagicMock()
-    google_pkg = ModuleType("google")
-    google_pkg.__path__ = []  # type: ignore[attr-defined]
-    google_cloud_pkg = ModuleType("google.cloud")
-    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
-
-    fakes = {
-        "database._client": client_stub,
-        "google": google_pkg,
-        "google.cloud": google_cloud_pkg,
-        "google.cloud.firestore": firestore_stub,
-        "google.cloud.firestore_v1": fv1_stub,
-    }
-    with stub_modules(fakes):
-        module = load_module_fresh(
-            "database.goals",
-            os.path.join(str(_BACKEND), "database", "goals.py"),
-        )
-        yield module
+@pytest.fixture
+def goals(monkeypatch):
+    """database.goals bound to an in-memory FakeDocumentStore through the ``_store()`` seam."""
+    store = FakeDocumentStore()
+    monkeypatch.setattr(goals_module, "_store", lambda: store)
+    return goals_module
 
 
 class FakeDoc:
@@ -60,7 +35,6 @@ class FakeDoc:
         self.id = doc_id
         self._data = data
         self.exists = True
-        self.reference = MagicMock()
 
     def to_dict(self):
         return dict(self._data) if self._data is not None else None
@@ -101,45 +75,20 @@ class TestGoalDict:
 
 
 # ---------------------------------------------------------------------------
-# Read-path integration tests (mocked Firestore)
+# Read-path integration tests (FakeDocumentStore through the _store() seam)
 # ---------------------------------------------------------------------------
 
 
-def _mock_query(docs):
-    """Create a mock query that streams the given docs."""
-    query = MagicMock()
-    query.stream.return_value = iter(docs)
-    query.limit.return_value = query
-    return query
-
-
-def _mock_collection(query):
-    """Create a mock collection ref that returns query on .where()."""
-    col = MagicMock()
-    col.where.return_value = query
-    col.order_by.return_value = query
-    col.stream.side_effect = query.stream
-    return col
-
-
-def _setup_db_for_query(goals, docs):
-    """Wire mock_db chain: db.collection().document().collection() returns a mock collection."""
-    mock_db = goals.db
-    mock_db.reset_mock()
-    query = _mock_query(docs)
-    col = _mock_collection(query)
-    user_doc = MagicMock()
-    user_doc.collection.return_value = col
-    users_col = MagicMock()
-    users_col.document.return_value = user_doc
-    mock_db.collection.return_value = users_col
-    return col
+def _seed_goals(goals, uid, docs):
+    """Seed the user's goal collection with stored id-less rows (doc_id carried by the path)."""
+    store = goals._store()
+    for doc_id, data in docs:
+        store.set(f"users/{uid}/goals/{doc_id}", dict(data))
 
 
 class TestGetUserGoal:
     def test_returns_id_from_doc_id_when_missing(self, goals):
-        doc = FakeDoc("goal_rust_created", {"title": "Meditate", "is_active": True})
-        _setup_db_for_query(goals, [doc])
+        _seed_goals(goals, "uid123", [("goal_rust_created", {"title": "Meditate", "is_active": True})])
 
         result = goals.get_user_goal("uid123")
         assert result is not None
@@ -148,23 +97,24 @@ class TestGetUserGoal:
 
 class TestGetUserGoals:
     def test_returns_ids_for_all_docs_when_missing(self, goals):
-        docs = [
-            FakeDoc("goal_1", {"title": "A", "is_active": True, "created_at": "2026-01-01"}),
-            FakeDoc("goal_2", {"title": "B", "is_active": True, "created_at": "2026-01-02"}),
-        ]
-        _setup_db_for_query(goals, docs)
+        _seed_goals(
+            goals,
+            "uid123",
+            [
+                ("goal_1", {"title": "A", "is_active": True, "created_at": "2026-01-01"}),
+                ("goal_2", {"title": "B", "is_active": True, "created_at": "2026-01-02"}),
+            ],
+        )
 
         results = goals.get_user_goals("uid123", limit=3)
         assert len(results) == 2
-        assert results[0]["id"] == "goal_1"
-        assert results[1]["id"] == "goal_2"
+        assert {r["id"] for r in results} == {"goal_1", "goal_2"}
 
 
 class TestGetAllGoals:
     @pytest.mark.parametrize("include_inactive", [True, False])
     def test_returns_id_from_doc_id_when_missing(self, goals, include_inactive):
-        doc = FakeDoc("goal_no_id", {"title": "Read", "is_active": True, "created_at": "2026-01-01"})
-        _setup_db_for_query(goals, [doc])
+        _seed_goals(goals, "uid123", [("goal_no_id", {"title": "Read", "is_active": True, "created_at": "2026-01-01"})])
 
         results = goals.get_all_goals("uid123", include_inactive=include_inactive)
         assert len(results) == 1

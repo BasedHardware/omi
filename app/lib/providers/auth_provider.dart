@@ -13,6 +13,7 @@ import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -56,6 +57,44 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void _initializeAuthListeners() {
+    // The session-expiration subscription is auth-backend agnostic and must run
+    // in BOTH modes. An OIDC session rejected after refresh (backend 401 that
+    // could not be recovered) fires the same expiration event as Firebase; if we
+    // skipped it under OIDC the home shell + in-memory user data would stay
+    // active on a dead session. Only the Firebase auth/id-token STREAM listeners
+    // below are Firebase-specific and skipped under OIDC.
+    _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
+      _requiresReauthentication = true;
+      _sessionExpirationGeneration++;
+      user = null;
+      authToken = null;
+      // The session is provably dead: drop the cutover owner so the fail-closed gate stops treating
+      // anyone as the authenticated product owner. Auth-backend agnostic (Firebase + OIDC) — under
+      // OIDC there is no authState stream to clear it, and under Firebase the id-token stream may not
+      // re-fire if the User object lingers after a revoked/expired token.
+      unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(null));
+      final rootContext = globalNavigatorKey.currentContext;
+      if (rootContext != null && rootContext.mounted) {
+        clearAllUserState(rootContext);
+      }
+      notifyListeners();
+    });
+
+    // OIDC (ADR-0038): there is no Firebase session. Attaching the Firebase
+    // auth/id-token stream listeners would clear the stored OIDC token on the
+    // perpetual `user==null` branch of idTokenChanges, forcing re-login on every
+    // restart. The OIDC session lives in SharedPreferences (OidcAuthService) and
+    // refreshes via getAuthHeader.
+    if (Env.useOidc) {
+      // OIDC (ADR-0038) has no Firebase authState stream to bind the cutover owner (the Firebase
+      // path below does that at line ~110), and the main.dart bootstrap only binds from a Firebase
+      // currentUser — so on a warm start with a restored OIDC session, bind the owner here or the
+      // fail-closed gate never learns it and blocks product traffic indefinitely.
+      if (OidcAuthService.instance.hasStoredSession()) {
+        unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(SharedPreferencesUtil().uid));
+      }
+      return;
+    }
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
@@ -104,21 +143,14 @@ class AuthenticationProvider extends BaseProvider {
         }
         notifyListeners();
       });
-      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
-        _requiresReauthentication = true;
-        _sessionExpirationGeneration++;
-        user = null;
-        authToken = null;
-        final rootContext = globalNavigatorKey.currentContext;
-        if (rootContext != null && rootContext.mounted) {
-          clearAllUserState(rootContext);
-        }
-        notifyListeners();
-      });
     });
   }
 
   bool isSignedIn() {
+    // OIDC (ADR-0038): there is no Firebase user; the session is the stored token.
+    if (Env.useOidc) {
+      return OidcAuthService.instance.hasStoredSession();
+    }
     return !_requiresReauthentication && _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
   }
 
@@ -193,6 +225,44 @@ class AuthenticationProvider extends BaseProvider {
       }
       setLoadingState(false);
     }
+  }
+
+  /// Additive OIDC login (ADR-0038), active only when AUTH_BACKEND=oidc.
+  /// `OidcAuthService.login()` writes authToken+uid to SharedPreferences; here
+  /// we only mirror the tail of `_signIn` (analytics, notify, advance onboarding).
+  Future<void> onOidcSignIn(Function() onSignIn) async {
+    if (loading) return;
+    setLoadingState(true);
+    try {
+      final outcome = await OidcAuthService.instance.login();
+      if (outcome.ok) {
+        // Reset AuthService's expired/refresh state. If a previous OIDC session
+        // expired, `_sessionExpired` is still latched and refreshIdToken() would
+        // short-circuit to MissingUser, leaving this fresh login unusable.
+        AuthService.instance.markAuthenticatedUser(outcome.uid!);
+        // Bind the cutover owner to the freshly authenticated OIDC uid (parity with the Firebase
+        // authStateChanges path); the fail-closed gate blocks product traffic until it resolves.
+        unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(outcome.uid));
+        authToken = SharedPreferencesUtil().authToken;
+        _requiresReauthentication = false;
+        NotificationService.instance.saveNotificationToken();
+        PlatformManager.instance.analytics.identify();
+        notifyListeners();
+        onSignIn();
+      } else {
+        Logger.debug('OIDC sign in failed: ${outcome.error}');
+        AppSnackbar.showSnackbarError(
+          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+        );
+      }
+    } catch (e, stackTrace) {
+      Logger.debug('OIDC sign in error: $e');
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+      );
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    }
+    setLoadingState(false);
   }
 
   Future<String?> _getIdToken() async {

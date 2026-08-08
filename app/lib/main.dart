@@ -122,6 +122,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+/// The authenticated account-cutover owner for the active auth backend, or null when there is no
+/// non-anonymous session. Under OIDC (ADR-0038) there is no Firebase `currentUser`, so the owner is
+/// the restored session's uid (the `sub` claim in SharedPreferences); under Firebase it is the
+/// non-anonymous `currentUser.uid`.
+String? _authenticatedCutoverOwner() {
+  if (Env.useOidc) {
+    final uid = SharedPreferencesUtil().uid;
+    return uid.isNotEmpty ? uid : null;
+  }
+  final user = FirebaseAuth.instance.currentUser;
+  return (user != null && !user.isAnonymous) ? user.uid : null;
+}
+
 Future _init() async {
   // Env
   if (F.env == Environment.prod) {
@@ -152,8 +165,8 @@ Future _init() async {
   await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
-  // Register FCM background message handler
-  if (PlatformManager().isFCMSupported) {
+  // Register FCM background message handler (only when the FCM notification backend is selected).
+  if (Env.useFcmNotifications && PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 
@@ -174,10 +187,11 @@ Future _init() async {
       await AuthService.instance.restoreOnboardingState();
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
-    // Anonymous Firebase sessions are not cutover product owners.
-    final bootstrapUser = FirebaseAuth.instance.currentUser;
-    if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
-      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid);
+    // Anonymous Firebase sessions are not cutover product owners; under OIDC there is no Firebase
+    // currentUser, so the owner comes from the restored OIDC session instead.
+    final bootstrapOwner = _authenticatedCutoverOwner();
+    if (bootstrapOwner != null) {
+      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapOwner);
     }
   }
   initOpus(await opus_flutter.load());
@@ -262,8 +276,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     // Apply fresh cutover control before waking WAL recovery so a stale
     // legacy/allow projection cannot admit one offline upload.
-    final resumeUser = FirebaseAuth.instance.currentUser;
-    final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    final resumeOwner = _authenticatedCutoverOwner();
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());

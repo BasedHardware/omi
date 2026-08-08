@@ -10,7 +10,7 @@ from typing import Any, Optional, cast
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 
 from database import knowledge_graph as kg_db
-from database._client import db as default_db_client
+from database import document_store
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryLayer
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
@@ -19,8 +19,8 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 logger = logging.getLogger(__name__)
 
 
-def _current_memory_is_user_rejected(uid: str, memory_id: str, *, db_client: Any) -> bool:
-    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+def _current_memory_is_user_rejected(uid: str, memory_id: str) -> bool:
+    snapshot = document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
     if not getattr(snapshot, "exists", False):
         return False
     payload = snapshot.to_dict()
@@ -30,9 +30,10 @@ def _current_memory_is_user_rejected(uid: str, memory_id: str, *, db_client: Any
     return isinstance(promotion, dict) and promotion.get("user_review") is False
 
 
-def _remove_rejected_kg_projection(uid: str, memory_id: str, *, db_client: Any) -> None:
-    kg_db.prune_memory_citations_from_kg(uid, [memory_id], db_client=db_client)
-    db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(
+def _remove_rejected_kg_projection(uid: str, memory_id: str) -> None:
+    kg_db.prune_memory_citations_from_kg(uid, [memory_id])
+    document_store.set_document(
+        f"{MemoryCollections(uid=uid).memory_items}/{memory_id}",
         {"kg_extracted": False},
         merge=True,
     )
@@ -68,12 +69,10 @@ def _content_for_kg_extraction(item: MemoryItem) -> str:
     return content
 
 
-def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: Any = None) -> bool:
-    client: Any = db_client if db_client is not None else default_db_client
+def set_canonical_memory_kg_extracted(uid: str, memory_id: str) -> bool:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    ref = client.document(path)
     try:
-        ref.update({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
+        document_store.update_document(path, {"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
         return True
     except FirestoreNotFound:
         logger.warning(
@@ -84,14 +83,11 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: An
 
 
 def set_canonical_memory_kg_extracted_without_touching_updated_at(
-    uid: str, memory_id: str, *, db_client: Any = None
-) -> bool:
+    uid: str, memory_id: str) -> bool:
     """Mark KG extraction complete without changing the product-memory timestamp."""
-    client: Any = db_client if db_client is not None else default_db_client
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    ref = client.document(path)
     try:
-        ref.update({"kg_extracted": True})
+        document_store.update_document(path, {"kg_extracted": True})
         return True
     except FirestoreNotFound:
         logger.warning(
@@ -106,12 +102,10 @@ def extract_kg_for_promoted_memory(
     item: MemoryItem,
     *,
     user_name: str = "User",
-    db_client: Any = None,
     preserve_item_updated_at: bool = False,
 ) -> CanonicalKgPromotionResult:
     """Extract KG nodes/edges for a newly promoted long_term memory."""
-    client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalKgPromotionResult(skipped_reason="not_canonical_cohort")
     if item.tier != MemoryLayer.long_term:
         return CanonicalKgPromotionResult(skipped_reason="not_long_term")
@@ -131,7 +125,6 @@ def extract_kg_for_promoted_memory(
             content_for_kg,
             item.memory_id,
             user_name=user_name,
-            db_client=client,
             strict_parse=True,
         )
     except Exception:
@@ -139,16 +132,15 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="exception")
     if result is None:
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="extractor_failed")
-    race_check_enabled = db_client is not None
-    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=client):
-        _remove_rejected_kg_projection(uid, item.memory_id, db_client=client)
+    if _current_memory_is_user_rejected(uid, item.memory_id):
+        _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     if preserve_item_updated_at:
-        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=client)
+        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id)
     else:
-        set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=client)
-    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=client):
-        _remove_rejected_kg_projection(uid, item.memory_id, db_client=client)
+        set_canonical_memory_kg_extracted(uid, item.memory_id)
+    if _current_memory_is_user_rejected(uid, item.memory_id):
+        _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     node_count = len(result.get("nodes") or [])
     edge_count = len(result.get("edges") or [])

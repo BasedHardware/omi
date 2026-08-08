@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
 
 import database.task_recommendations as recommendation_db
@@ -44,161 +43,39 @@ from utils.task_intelligence import recommendations
 from utils.task_intelligence.fixture_runner import validate_ranking_selection
 from utils.task_intelligence import live_recommendation_judgment
 from scripts import task_recommendation_live_eval
+from tests.store_fakes import FakeDocumentStore
 
 NOW = datetime(2026, 7, 9, 12, tzinfo=timezone.utc)
 ROOT = Path(__file__).resolve().parents[2]
 RANKING_FIXTURE = Path(__file__).parent / 'fixtures' / 'task_intelligence' / 'ranking_v2.json'
 
 
-class FakeSnapshot:
-    def __init__(self, database, path, payload=None):
-        self.database = database
-        self.path = path
-        self._payload = deepcopy(payload)
-        self.exists = payload is not None
-        self.id = path[-1]
-        self.reference = FakeDocument(database, path)
-
-    def to_dict(self):
-        return deepcopy(self._payload)
+def _control_doc_path(uid: str = 'u1') -> str:
+    return (
+        f'users/{uid}/{recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION}/'
+        f'{recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
+    )
 
 
-class FakeDocument:
-    def __init__(self, database, path):
-        self.database = database
-        self.path = path
-
-    @property
-    def id(self):
-        return self.path[-1]
-
-    def collection(self, name):
-        return FakeCollection(self.database, (*self.path, name))
-
-    def get(self, transaction=None):
-        if transaction is not None:
-            transaction.read()
-        return FakeSnapshot(self.database, self.path, self.database.rows.get(self.path))
-
-    def set(self, payload):
-        self.database.rows[self.path] = deepcopy(payload)
-
-    def create(self, payload):
-        if self.path in self.database.rows:
-            raise AlreadyExists('already exists')
-        self.set(payload)
-
-    def update(self, patch):
-        self.database.rows[self.path].update(deepcopy(patch))
-
-    def delete(self):
-        self.database.rows.pop(self.path, None)
-
-
-class FakeCollection:
-    def __init__(self, database, path, filters=(), query_limit=None):
-        self.database = database
-        self.path = path
-        self.filters = filters
-        self.query_limit = query_limit
-
-    def document(self, name):
-        return FakeDocument(self.database, (*self.path, name))
-
-    def where(self, *args, filter=None):
-        if filter is not None:
-            condition = (filter.field_path, filter.op_string, filter.value)
-        else:
-            condition = (args[0], args[1], args[2])
-        return FakeCollection(self.database, self.path, (*self.filters, condition), self.query_limit)
-
-    def limit(self, value):
-        return FakeCollection(self.database, self.path, self.filters, value)
-
-    def stream(self):
-        rows = []
-        expected_length = len(self.path) + 1
-        for path, payload in self.database.rows.items():
-            if path[: len(self.path)] != self.path or len(path) != expected_length:
-                continue
-            if all(self._matches(payload.get(field), operator, value) for field, operator, value in self.filters):
-                rows.append(FakeSnapshot(self.database, path, payload))
-        rows.sort(key=lambda snapshot: snapshot.id)
-        return rows[: self.query_limit] if self.query_limit is not None else rows
-
-    @staticmethod
-    def _matches(actual, operator, expected):
-        if operator == '==':
-            return actual == expected
-        if operator == '>':
-            return actual is not None and actual > expected
-        if operator == '<=':
-            return actual is not None and actual <= expected
-        raise AssertionError(f'unsupported fake query operator: {operator}')
-
-
-class FakeBatch:
-    def __init__(self):
-        self.operations = []
-
-    def set(self, ref, payload):
-        self.operations.append((ref, payload))
-
-    def delete(self, ref):
-        self.operations.append((ref, None))
-
-    def commit(self):
-        for ref, payload in self.operations:
-            ref.delete() if payload is None else ref.set(payload)
-
-
-class FakeFirestore:
-    def __init__(self):
-        self.rows = {}
-
-    def collection(self, name):
-        return FakeCollection(self, (name,))
-
-    def batch(self):
-        return FakeBatch()
-
-    def transaction(self):
-        return FakeTransaction()
-
-
-class FakeTransaction:
-    def __init__(self):
-        self.has_written = False
-
-    def read(self):
-        if self.has_written:
-            raise AssertionError('Firestore transactions require all reads before writes')
-
-    def set(self, ref, payload):
-        self.has_written = True
-        ref.set(payload)
-
-    def delete(self, ref):
-        self.has_written = True
-        ref.delete()
+def _paths_in(store, collection: str) -> list[str]:
+    """Full logical paths of stored docs whose containing collection leaf == ``collection``."""
+    return [path for path in store._docs if path.rsplit('/', 1)[0].rsplit('/', 1)[-1] == collection]
 
 
 @pytest.fixture
 def fake_firestore(monkeypatch):
-    monkeypatch.setattr(
-        recommendation_db.firestore,
-        'transactional',
-        lambda function: lambda transaction: function(transaction),
+    """Neutral in-memory ``DocumentStore`` injected at the ``_store`` seam (WP2, ADR-0002).
+
+    Replaces the former hand-rolled Firestore snapshot/transaction fake: the module now talks to
+    the backend-neutral storage port, so the reshaped tests drive its real read/write and
+    transactional logic through ``FakeDocumentStore``.
+    """
+    fake = FakeDocumentStore()
+    fake.set(
+        _control_doc_path(),
+        TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='python'),
     )
-    fake = FakeFirestore()
-    fake.rows[
-        (
-            'users',
-            'u1',
-            recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
-            recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
-        )
-    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0,).model_dump(mode='python')
+    monkeypatch.setattr(recommendation_db, '_store', lambda: fake)
     return fake
 
 
@@ -1460,25 +1337,20 @@ def test_dev_deploy_smoke_uid_is_admitted_by_the_projection_store(fake_firestore
     """
 
     fake_db = fake_firestore
-    fake_db.rows[
-        (
-            'users',
-            WHAT_MATTERS_NOW_SMOKE_UID,
-            recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
-            recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
-        )
-    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='python')
+    fake_db.set(
+        _control_doc_path(WHAT_MATTERS_NOW_SMOKE_UID),
+        TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='python'),
+    )
 
     projection = recommendations.evaluate(
         WHAT_MATTERS_NOW_SMOKE_UID,
         EvaluationRequest(),
         judgment=RecordedJudgment([]),
         now=NOW,
-        firestore_client=fake_db,
     )
 
     assert projection.recommendations == []
-    assert any(path[1] == WHAT_MATTERS_NOW_SMOKE_UID for path in fake_db.rows)
+    assert any(WHAT_MATTERS_NOW_SMOKE_UID in path for path in fake_db._docs)
 
 
 def test_database_module_has_attribution_join_and_no_raw_content_fields():
@@ -1502,7 +1374,6 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         ),
         idempotency_key='shown-1',
         now=NOW,
-        firestore_client=fake_db,
     )
     assert created
     feedback_request = FeedbackCreate(
@@ -1517,11 +1388,10 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         idempotency_key='feedback-click-1',
         now=NOW,
         override_expires_at=NOW + timedelta(days=1),
-        firestore_client=fake_db,
     )
-    override_paths = [path for path in fake_db.rows if path[-2] == recommendation_db.ATTENTION_OVERRIDES_COLLECTION]
+    override_paths = _paths_in(fake_db, recommendation_db.ATTENTION_OVERRIDES_COLLECTION)
     assert first_created and len(override_paths) == 1
-    del fake_db.rows[override_paths[0]]
+    fake_db.delete(override_paths[0])
 
     replay, replay_created = recommendation_db.create_feedback(
         'u1',
@@ -1529,11 +1399,10 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         idempotency_key='feedback-click-1',
         now=NOW + timedelta(minutes=1),
         override_expires_at=NOW + timedelta(days=1),
-        firestore_client=fake_db,
     )
     assert replay.feedback_id == first.feedback_id
     assert not replay_created
-    assert len([path for path in fake_db.rows if path[-2] == recommendation_db.ATTENTION_OVERRIDES_COLLECTION]) == 1
+    assert len(_paths_in(fake_db, recommendation_db.ATTENTION_OVERRIDES_COLLECTION)) == 1
 
     outcome_request = OutcomeCreate(
         attribution_chain_id=first.attribution_chain_id,
@@ -1546,14 +1415,12 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         outcome_request,
         idempotency_key='outcome-1',
         now=NOW,
-        firestore_client=fake_db,
     )
     outcome_replay, outcome_replay_created = recommendation_db.create_outcome(
         'u1',
         outcome_request,
         idempotency_key='outcome-1',
         now=NOW + timedelta(minutes=1),
-        firestore_client=fake_db,
     )
     assert outcome_created and not outcome_replay_created
     assert outcome_replay.outcome_id == outcome.outcome_id
@@ -1563,7 +1430,6 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
             outcome_request.model_copy(update={'attribution_chain_id': 'attr-unknown'}),
             idempotency_key='outcome-unknown',
             now=NOW,
-            firestore_client=fake_db,
         )
     with pytest.raises(recommendation_db.IdempotencyConflictError, match='does not match'):
         recommendation_db.create_outcome(
@@ -1571,25 +1437,22 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
             outcome_request.model_copy(update={'subject_id': 'another-task'}),
             idempotency_key='outcome-wrong-subject',
             now=NOW,
-            firestore_client=fake_db,
         )
 
 
 def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore, monkeypatch):
     set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
-    control_path = (
-        'users',
-        'u1',
-        recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
-        recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
-    )
+    control_path = _control_doc_path()
 
     def set_generation(generation: int) -> None:
-        fake_db.rows[control_path] = TaskWorkflowControl(
-            workflow_mode=TaskWorkflowMode.read,
-            account_generation=generation,
-        ).model_dump(mode='python')
+        fake_db.set(
+            control_path,
+            TaskWorkflowControl(
+                workflow_mode=TaskWorkflowMode.read,
+                account_generation=generation,
+            ).model_dump(mode='python'),
+        )
 
     request = InterventionCreate(
         surface=InterventionSurface.suggested,
@@ -1605,7 +1468,6 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
         idempotency_key='same-click',
         account_generation=7,
         now=NOW,
-        firestore_client=fake_db,
     )
     old_snapshot = NormalizedContextSnapshot(
         device_id='device-1',
@@ -1613,7 +1475,7 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
         generated_at=NOW + timedelta(minutes=2),
         expires_at=NOW + timedelta(minutes=10),
     )
-    recommendation_db.replace_context_snapshot('u1', old_snapshot, account_generation=7, firestore_client=fake_db)
+    recommendation_db.replace_context_snapshot('u1', old_snapshot, account_generation=7)
 
     set_generation(8)
     new_intervention, _ = recommendation_db.create_intervention(
@@ -1622,13 +1484,10 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
         idempotency_key='same-click',
         account_generation=8,
         now=NOW,
-        firestore_client=fake_db,
     )
     assert new_intervention.intervention_id != old_intervention.intervention_id
     assert (
-        recommendation_db.get_intervention(
-            'u1', old_intervention.intervention_id, account_generation=8, firestore_client=fake_db
-        )
+        recommendation_db.get_intervention('u1', old_intervention.intervention_id, account_generation=8)
         is None
     )
     with pytest.raises(recommendation_db.InterventionNotFoundError):
@@ -1644,7 +1503,6 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
             now=NOW,
             override_expires_at=NOW + timedelta(days=1),
             account_generation=8,
-            firestore_client=fake_db,
         )
     new_snapshot = old_snapshot.model_copy(
         update={
@@ -1653,11 +1511,9 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
             'expires_at': NOW + timedelta(minutes=5),
         }
     )
-    recommendation_db.replace_context_snapshot('u1', new_snapshot, account_generation=8, firestore_client=fake_db)
+    recommendation_db.replace_context_snapshot('u1', new_snapshot, account_generation=8)
     assert (
-        recommendation_db.get_context_snapshot(
-            'u1', 'device-1', now=NOW, account_generation=8, firestore_client=fake_db
-        )
+        recommendation_db.get_context_snapshot('u1', 'device-1', now=NOW, account_generation=8)
         == new_snapshot
     )
 
@@ -1676,7 +1532,6 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
             projection=stale_projection,
             decisions=[],
             account_generation=7,
-            firestore_client=fake_db,
         )
     with pytest.raises(recommendation_db.RecommendationGenerationMismatchError):
         recommendation_db.get_projection(
@@ -1684,13 +1539,15 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
             device_scope='device-1',
             now=NOW,
             account_generation=7,
-            firestore_client=fake_db,
         )
-    assert not [path for path in fake_db.rows if path[-2] == recommendation_db.PROJECTIONS_COLLECTION]
-    fake_db.rows[control_path] = TaskWorkflowControl(
-        workflow_mode=TaskWorkflowMode.off,
-        account_generation=8,
-    ).model_dump(mode='python')
+    assert not _paths_in(fake_db, recommendation_db.PROJECTIONS_COLLECTION)
+    fake_db.set(
+        control_path,
+        TaskWorkflowControl(
+            workflow_mode=TaskWorkflowMode.off,
+            account_generation=8,
+        ).model_dump(mode='python'),
+    )
     persisted_mode_projection = stale_projection.model_copy(
         update={
             'evaluation_id': 'generation-8-evaluation',
@@ -1705,7 +1562,6 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
             projection=persisted_mode_projection,
             decisions=[],
             account_generation=8,
-            firestore_client=fake_db,
         )
         == persisted_mode_projection
     )
@@ -1736,29 +1592,18 @@ def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_f
     )
     other_device = first.model_copy(update={'device_id': 'device-2', 'snapshot_id': 'context-other'})
 
-    receipt_one = recommendation_db.replace_context_snapshot('u1', first, firestore_client=fake_db)
-    receipt_two = recommendation_db.replace_context_snapshot('u1', second, firestore_client=fake_db)
-    recommendation_db.replace_context_snapshot('u1', other_device, firestore_client=fake_db)
-    delayed_replay = recommendation_db.replace_context_snapshot('u1', first, firestore_client=fake_db)
+    receipt_one = recommendation_db.replace_context_snapshot('u1', first)
+    receipt_two = recommendation_db.replace_context_snapshot('u1', second)
+    recommendation_db.replace_context_snapshot('u1', other_device)
+    delayed_replay = recommendation_db.replace_context_snapshot('u1', first)
 
     assert not receipt_one.replaced and receipt_two.replaced and delayed_replay == receipt_one
-    assert len([path for path in fake_db.rows if path[-2] == recommendation_db.SNAPSHOT_RECEIPTS_COLLECTION]) == 3
+    assert len(_paths_in(fake_db, recommendation_db.SNAPSHOT_RECEIPTS_COLLECTION)) == 3
     with pytest.raises(recommendation_db.StaleSnapshotError):
-        recommendation_db.replace_context_snapshot('u1', first, idempotency_key='stale-retry', firestore_client=fake_db)
-    assert (
-        recommendation_db.get_context_snapshot('u1', 'device-1', now=NOW, firestore_client=fake_db).snapshot_id
-        == 'context-v2'
-    )
-    assert (
-        recommendation_db.get_context_snapshot('u1', 'device-2', now=NOW, firestore_client=fake_db).snapshot_id
-        == 'context-other'
-    )
-    assert (
-        recommendation_db.get_context_snapshot(
-            'u1', 'device-1', now=NOW + timedelta(minutes=7), firestore_client=fake_db
-        )
-        is None
-    )
+        recommendation_db.replace_context_snapshot('u1', first, idempotency_key='stale-retry')
+    assert recommendation_db.get_context_snapshot('u1', 'device-1', now=NOW).snapshot_id == 'context-v2'
+    assert recommendation_db.get_context_snapshot('u1', 'device-2', now=NOW).snapshot_id == 'context-other'
+    assert recommendation_db.get_context_snapshot('u1', 'device-1', now=NOW + timedelta(minutes=7)) is None
 
 
 def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_firestore, monkeypatch):
@@ -1812,16 +1657,13 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
         device_scope='device-1',
         projection=projection,
         decisions=[decision],
-        firestore_client=fake_db,
     )
-    cached = recommendation_db.get_projection('u1', device_scope='device-1', now=NOW, firestore_client=fake_db)
-    intervention = recommendation_db.get_intervention('u1', 'intervention-1', firestore_client=fake_db)
+    cached = recommendation_db.get_projection('u1', device_scope='device-1', now=NOW)
+    intervention = recommendation_db.get_intervention('u1', 'intervention-1')
     assert cached == projection
     assert intervention['subject_id'] == 'task-1'
     assert intervention['attribution_chain_id'].startswith('attr_')
-    first_created_at = recommendation_db.get_intervention('u1', 'intervention-1', firestore_client=fake_db)[
-        'created_at'
-    ]
+    first_created_at = recommendation_db.get_intervention('u1', 'intervention-1')['created_at']
     refreshed = projection.model_copy(
         update={'generated_at': NOW + timedelta(minutes=31), 'expires_at': NOW + timedelta(minutes=61)}
     )
@@ -1830,16 +1672,10 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
         device_scope='device-1',
         projection=refreshed,
         decisions=[decision.model_copy(update={'expires_at': refreshed.expires_at})],
-        firestore_client=fake_db,
     )
+    assert recommendation_db.get_intervention('u1', 'intervention-1')['created_at'] == first_created_at
     assert (
-        recommendation_db.get_intervention('u1', 'intervention-1', firestore_client=fake_db)['created_at']
-        == first_created_at
-    )
-    assert (
-        recommendation_db.get_evaluation_projection(
-            'u1', 'evaluation-1', device_scope='device-1', now=NOW, firestore_client=fake_db
-        )
+        recommendation_db.get_evaluation_projection('u1', 'evaluation-1', device_scope='device-1', now=NOW)
         == refreshed
     )
     second_projection = projection.model_copy(
@@ -1857,12 +1693,11 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
         device_scope='device-1',
         projection=second_projection,
         decisions=[],
-        firestore_client=fake_db,
     )
-    assert recommendation_db.get_decisions('u1', 'evaluation-1', device_scope='device-1', firestore_client=fake_db) == [
+    assert recommendation_db.get_decisions('u1', 'evaluation-1', device_scope='device-1') == [
         decision.model_copy(update={'expires_at': refreshed.expires_at})
     ]
-    decision_paths = [path for path in fake_db.rows if path[-2] == recommendation_db.DECISIONS_COLLECTION]
+    decision_paths = _paths_in(fake_db, recommendation_db.DECISIONS_COLLECTION)
     assert len(decision_paths) == 2
 
 
@@ -1879,15 +1714,12 @@ def test_firestore_same_material_publication_returns_one_winner(fake_firestore, 
     competing = first.model_copy(update={'output_version': 'output-competing'})
 
     first_result = recommendation_db.save_projection(
-        'u1', device_scope='device-1', projection=first, decisions=[], firestore_client=fake_firestore
+        'u1', device_scope='device-1', projection=first, decisions=[]
     )
     competing_result = recommendation_db.save_projection(
-        'u1', device_scope='device-1', projection=competing, decisions=[], firestore_client=fake_firestore
+        'u1', device_scope='device-1', projection=competing, decisions=[]
     )
 
     assert first_result == first
     assert competing_result == first
-    assert (
-        recommendation_db.get_projection('u1', device_scope='device-1', now=NOW, firestore_client=fake_firestore)
-        == first
-    )
+    assert recommendation_db.get_projection('u1', device_scope='device-1', now=NOW) == first

@@ -8,14 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, cast
 
-from google.cloud.firestore_v1 import FieldFilter
-
+from database import document_store
 from database.firestore_index_registry import (
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
@@ -25,11 +25,14 @@ SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT = 100
 FIRESTORE_IN_QUERY_MAX_VALUES = 30
 
 
+def _store() -> Any:
+    return get_document_store()
+
+
 def fetch_default_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -46,7 +49,7 @@ def fetch_default_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     results = query_default_product_memory_items(query, items, policy=policy, now=now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
@@ -66,7 +69,6 @@ def fetch_archive_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -81,7 +83,7 @@ def fetch_archive_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     results = query_archive_product_memory_items(query, items, policy=policy, now=now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
@@ -99,12 +101,12 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
+def fetch_authoritative_product_memory_items(uid: str) -> List[MemoryItem]:
     """Load and coerce all authoritative memory product memory item docs for one user."""
 
     collection_path = MemoryCollections(uid=uid).memory_items
     items: List[MemoryItem] = []
-    for snapshot in db_client.collection(collection_path).stream():
+    for snapshot in document_store.stream_collection(collection_path):
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
@@ -118,21 +120,18 @@ def fetch_authoritative_product_memory_items_for_source(
     uid: str,
     source_id: str,
     *,
-    db_client: Any,
     page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
 ) -> List[MemoryItem]:
     """Load one complete source cohort through the indexed, cursor-paged boundary."""
 
     if not source_id or not source_id.strip():
         raise ValueError('source_id must not be blank')
-    query = CONVERSATION_SOURCE_MEMORY_QUERY.build(
-        db_client.collection(MemoryCollections(uid=uid).memory_items),
-        {'source_id': source_id},
-        field_filter_factory=FieldFilter,
-    ).order_by('__name__')
+    collection_path = MemoryCollections(uid=uid).memory_items
+    filters = _neutral_filters(CONVERSATION_SOURCE_MEMORY_QUERY, {'source_id': source_id})
     return _fetch_authoritative_memory_query_pages(
         uid,
-        query=query,
+        collection=collection_path,
+        filters=filters,
         page_size=page_size,
     )
 
@@ -141,7 +140,6 @@ def fetch_authoritative_superseded_memory_items_for_targets(
     uid: str,
     target_memory_ids: Iterable[str],
     *,
-    db_client: Any,
     page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
 ) -> List[MemoryItem]:
     """Load superseded aliases of target rows, including the pre-canonical edge."""
@@ -152,7 +150,7 @@ def fetch_authoritative_superseded_memory_items_for_targets(
     if not normalized_target_ids:
         return []
 
-    collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
+    collection_path = MemoryCollections(uid=uid).memory_items
     items_by_id: Dict[str, MemoryItem] = {}
     for offset in range(0, len(normalized_target_ids), FIRESTORE_IN_QUERY_MAX_VALUES):
         target_chunk = normalized_target_ids[offset : offset + FIRESTORE_IN_QUERY_MAX_VALUES]
@@ -160,47 +158,66 @@ def fetch_authoritative_superseded_memory_items_for_targets(
             SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
             SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
         ):
-            query = spec.build(
-                collection,
+            filters = _neutral_filters(
+                spec,
                 {
                     'status': MemoryItemStatus.superseded.value,
                     'target_memory_ids': target_chunk,
                 },
-                field_filter_factory=FieldFilter,
-            ).order_by('__name__')
+            )
             for item in _fetch_authoritative_memory_query_pages(
                 uid,
-                query=query,
+                collection=collection_path,
+                filters=filters,
                 page_size=page_size,
             ):
                 items_by_id[item.memory_id] = item
     return sorted(items_by_id.values(), key=lambda item: item.memory_id)
 
 
+def _neutral_filters(spec: Any, values: Dict[str, Any]) -> List[tuple]:
+    """Resolve a registered query spec's declared filters into neutral ``(field, op, value)`` tuples.
+
+    Mirrors ``FirestoreQuerySpec.build``'s value resolution, but targets the storage port instead of a
+    raw Firestore collection so the same indexed shape runs on Firestore or Mongo (ADR-0022/0028).
+    """
+
+    filters: List[tuple] = []
+    for query_filter in spec.filters:
+        try:
+            value = values[query_filter.value_name]
+        except KeyError as exc:
+            raise ValueError(f'{spec.identifier} requires {query_filter.value_name!r}') from exc
+        filters.append((query_filter.field_path, query_filter.operator, value))
+    return filters
+
+
 def _fetch_authoritative_memory_query_pages(
     uid: str,
     *,
-    query: Any,
+    collection: str,
+    filters: List[tuple],
     page_size: int,
 ) -> List[MemoryItem]:
     if page_size < 1 or page_size > SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT:
         raise ValueError(f'page_size must be between 1 and {SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT}')
 
     items: List[MemoryItem] = []
-    cursor: Any = None
+    offset = 0
     while True:
-        page_query = query.start_after(cursor) if cursor is not None else query
-        snapshots = list(page_query.limit(page_size).stream())
-        for snapshot in snapshots:
-            raw_payload: object = snapshot.to_dict()
+        # No explicit order_by: the port returns documents in document-name order (the portable
+        # equivalent of Firestore's implicit ``__name__`` ordering), so offset paging is stable.
+        page = _store().query(collection, filters=filters, limit=page_size, offset=offset)
+        for record in page:
+            raw_payload: object = record.to_dict()
             payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
             item = MemoryItem.model_validate(payload)
             if item.uid != uid:
                 raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
             items.append(item)
-        if len(snapshots) < page_size:
+        if len(page) < page_size:
             break
-        cursor = snapshots[-1]
+        offset += page_size
     return items
 
 

@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
-from database._client import db as firestore_db
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
 from utils.memory.memory_system import MemorySystem
@@ -44,9 +43,9 @@ def _run_rebuild_knowledge_graph(uid: str, memories: MemoryPayloads, user_name: 
 
 
 def _is_assertion_backed_graph_account(uid: str) -> bool:
-    if pin_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
+    if pin_memory_system(uid) == MemorySystem.CANONICAL:
         return True
-    return kg_db.has_stored_memory_graph_assertions(uid, db_client=firestore_db)
+    return kg_db.has_stored_memory_graph_assertions(uid)
 
 
 def _require_legacy_graph_mutation(uid: str) -> None:

@@ -5,9 +5,6 @@ LIFECYCLE: permanent
 
 from __future__ import annotations
 
-from typing import Any
-
-from database._client import db as default_db_client
 from database.memories import get_non_filtered_memories
 from utils.memory.legacy_backfill import (
     LegacyReader,
@@ -22,14 +19,15 @@ from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryRep
 def inventory_legacy_user(
     uid: str,
     *,
-    db_client: Any = None,
     get_non_filtered_memories_fn: LegacyReader = get_non_filtered_memories,
 ) -> LegacyBackfillInventoryReport:
-    """Return counts and token proxies without logging or returning memory content."""
-    client: Any = db_client if db_client is not None else default_db_client
+    """Return counts and token proxies without logging or returning memory content.
+
+    Storage is resolved through the neutral store port inside the readers; the on-prem port
+    retired the raw ``db_client`` handle (ADR-0028), so none is threaded here.
+    """
     legacy_rows = fetch_active_legacy_memories(
         uid,
-        db_client=client,
         get_non_filtered_memories_fn=get_non_filtered_memories_fn,
     )
     eligible_rows = [row for row in legacy_rows if row_content(row)]

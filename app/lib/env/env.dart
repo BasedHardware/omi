@@ -72,6 +72,27 @@ abstract class Env {
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
+
+  /// Auth client backend, symmetric to the server's AUTH_BACKEND (ADR-0038).
+  /// 'firebase' (default) keeps the existing Google/Apple flow untouched;
+  /// 'oidc' enables the additive OIDC (Authorization Code + PKCE) login.
+  static String get authBackend => _instance.authBackend ?? 'firebase';
+
+  static bool get useOidc => authBackend == 'oidc';
+
+  static String? get oidcIssuer => _instance.oidcIssuer;
+
+  static String? get oidcClientId => _instance.oidcClientId;
+
+  static String? get oidcRedirectScheme => _instance.oidcRedirectScheme;
+
+  /// Client notification delivery backend, symmetric to the server's NOTIFICATIONS_BACKEND (ADR-0011).
+  /// 'fcm' (default) keeps Firebase Cloud Messaging / APNs remote push untouched; 'local' uses
+  /// local-only notifications (awesome_notifications) with no remote push and no FirebaseMessaging at
+  /// runtime — for a Firebase-push-free on-prem deployment.
+  static String get notificationsBackend => _instance.notificationsBackend ?? 'fcm';
+
+  static bool get useFcmNotifications => notificationsBackend == 'fcm';
 }
 
 abstract class EnvFields {
@@ -96,4 +117,14 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
+
+  String? get authBackend;
+
+  String? get oidcIssuer;
+
+  String? get oidcClientId;
+
+  String? get oidcRedirectScheme;
+
+  String? get notificationsBackend;
 }

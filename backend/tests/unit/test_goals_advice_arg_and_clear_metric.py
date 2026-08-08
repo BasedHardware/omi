@@ -91,81 +91,60 @@ def _goal_doc(metric_aliases=None):
     }
 
 
-def _fake_client_with_goal(doc_data, *, updated_store=None):
-    """Fake Firestore client wired to the _goal_ref chain + update capture."""
-    client = MagicMock()
-    chain = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    snapshot = MagicMock()
-    snapshot.exists = True
-    snapshot.to_dict.return_value = doc_data
-    chain.get.return_value = snapshot
-    return client, chain
+def _seed_goal(monkeypatch, doc_data):
+    """Seed the goal doc in a neutral FakeDocumentStore and route the module's seam through it.
+
+    update_goal persists via ``_store().update(goal_path, patch)`` (ADR-0028); the store applies the
+    patch and later reads see it, so the tests assert on the resulting stored document.
+    """
+    from tests.store_fakes import FakeDocumentStore
+
+    store = FakeDocumentStore()
+    store.set(goals_db._goal_path("u1", "goal_1"), doc_data)
+    monkeypatch.setattr(goals_db, "_store", lambda: store)
+    return store
 
 
-def test_clear_metric_nulls_legacy_aliases_in_stored_patch():
+def test_clear_metric_nulls_legacy_aliases_in_stored_patch(monkeypatch):
     """clear_metric=True must null the numeric aliases so the metric stays cleared."""
-    client, chain = _fake_client_with_goal(_goal_doc())
-    # get_goal_by_id (called after update) must read the *updated* doc; wire it to return
-    # a snapshot of whatever update() wrote so we assert the stored shape.
-    stored = {}
+    store = _seed_goal(monkeypatch, _goal_doc())
 
-    def _fake_update(patch):
-        stored.update(patch)
+    goals_db.update_goal("u1", "goal_1", {"clear_metric": True})
 
-    chain.update.side_effect = _fake_update
-    chain.get.side_effect = [
-        MagicMock(exists=True, to_dict=lambda: _goal_doc()),
-        MagicMock(exists=True, to_dict=lambda: {**_goal_doc(), **stored}),
-    ]
-
-    goals_db.update_goal("u1", "goal_1", {"clear_metric": True}, firestore_client=client)
-
+    stored = store.get(goals_db._goal_path("u1", "goal_1")).to_dict()
     assert stored["metric"] is None
     for key in ("goal_type", "current_value", "target_value", "min_value", "max_value", "unit"):
         assert stored[key] is None, f"{key} should be nulled on clear, got {stored[key]}"
 
 
-def test_metric_null_explicitly_also_clears_aliases():
+def test_metric_null_explicitly_also_clears_aliases(monkeypatch):
     """Sending metric: null must behave like clear_metric (no stale alias resurrection)."""
-    client, chain = _fake_client_with_goal(_goal_doc())
-    stored = {}
-    chain.update.side_effect = lambda patch: stored.update(patch)
-    chain.get.side_effect = [
-        MagicMock(exists=True, to_dict=lambda: _goal_doc()),
-        MagicMock(exists=True, to_dict=lambda: {**_goal_doc(), **stored}),
-    ]
+    store = _seed_goal(monkeypatch, _goal_doc())
 
-    goals_db.update_goal("u1", "goal_1", {"metric": None}, firestore_client=client)
+    goals_db.update_goal("u1", "goal_1", {"metric": None})
 
+    stored = store.get(goals_db._goal_path("u1", "goal_1")).to_dict()
     assert stored["metric"] is None
     assert stored["goal_type"] is None
     assert stored["current_value"] is None
 
 
-def test_metric_update_still_writes_aliases():
+def test_metric_update_still_writes_aliases(monkeypatch):
     """Updating a metric (not clearing) must keep writing the released aliases."""
-    client, chain = _fake_client_with_goal(_goal_doc())
-    stored = {}
-    chain.update.side_effect = lambda patch: stored.update(patch)
-    chain.get.side_effect = [
-        MagicMock(exists=True, to_dict=lambda: _goal_doc()),
-        MagicMock(exists=True, to_dict=lambda: {**_goal_doc(), **stored}),
-    ]
+    store = _seed_goal(monkeypatch, _goal_doc())
 
-    goals_db.update_goal(
-        "u1", "goal_1", {"metric": {"type": "numeric", "current": 5.0, "target": 10.0}}, firestore_client=client
-    )
+    goals_db.update_goal("u1", "goal_1", {"metric": {"type": "numeric", "current": 5.0, "target": 10.0}})
 
+    stored = store.get(goals_db._goal_path("u1", "goal_1")).to_dict()
     assert stored["metric"]["current"] == 5.0
     assert stored["current_value"] == 5.0
     assert stored["target_value"] == 10.0
 
 
-def test_update_goal_missing_returns_none():
-    doc = MagicMock()
-    doc.exists = False
-    client = MagicMock()
-    chain = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    chain.get.return_value = doc
+def test_update_goal_missing_returns_none(monkeypatch):
+    from tests.store_fakes import FakeDocumentStore
 
-    assert goals_db.update_goal("u1", "missing", {"title": "x"}, firestore_client=client) is None
+    store = FakeDocumentStore()  # no goal seeded -> missing
+    monkeypatch.setattr(goals_db, "_store", lambda: store)
+
+    assert goals_db.update_goal("u1", "missing", {"title": "x"}) is None

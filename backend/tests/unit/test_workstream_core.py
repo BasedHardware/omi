@@ -1,5 +1,5 @@
+from collections.abc import MutableMapping
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 
@@ -9,6 +9,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
+from tests.store_fakes import FakeDocumentStore
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.goal import (
@@ -34,145 +35,74 @@ from models.workstream import (
 from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
 
 
-class FakeSnapshot:
-    def __init__(self, database, path, data=None):
-        self.database = database
-        self.path = path
-        self.id = path[-1]
-        self._data = deepcopy(data)
-        self.exists = data is not None
-        self.reference = FakeRef(database, path)
-
-    def to_dict(self):
-        return deepcopy(self._data)
-
-
-class FakeRef:
-    def __init__(self, database, path):
-        self.database = database
-        self.path = path
-        self.id = path[-1]
-
-    def collection(self, name):
-        return FakeCollection(self.database, (*self.path, name))
-
-    def get(self, transaction=None):
-        return FakeSnapshot(self.database, self.path, self.database.rows.get(self.path))
-
-    def create(self, payload):
-        if self.path in self.database.rows:
-            raise RuntimeError('already exists')
-        self.database.rows[self.path] = deepcopy(payload)
-
-    def set(self, payload, merge=False):
-        if merge and self.path in self.database.rows:
-            self.database.rows[self.path].update(deepcopy(payload))
-        else:
-            self.database.rows[self.path] = deepcopy(payload)
-
-    def update(self, patch):
-        if self.path not in self.database.rows:
-            raise RuntimeError('missing row')
-        self.database.rows[self.path].update(deepcopy(patch))
-
-    def delete(self):
-        self.database.rows.pop(self.path, None)
-
-
-class FakeQuery:
-    def __init__(self, database, path, filters=None, order=None, limit_value=None):
-        self.database = database
-        self.path = path
-        self.filters = list(filters or [])
-        self.order = order
-        self.limit_value = limit_value
-
-    def where(self, filter):
-        field, operator, value = filter.field_path, filter.op_string, filter.value
-        return FakeQuery(
-            self.database, self.path, [*self.filters, (field, operator, value)], self.order, self.limit_value
-        )
-
-    def order_by(self, field, direction=None):
-        return FakeQuery(self.database, self.path, self.filters, (field, direction), self.limit_value)
-
-    def limit(self, value):
-        return FakeQuery(self.database, self.path, self.filters, self.order, value)
-
-    def stream(self, transaction=None):
-        rows = []
-        expected_length = len(self.path) + 1
-        for path, payload in self.database.rows.items():
-            if len(path) != expected_length or path[:-1] != self.path:
-                continue
-            if all(self._matches(payload.get(field), operator, value) for field, operator, value in self.filters):
-                rows.append(FakeSnapshot(self.database, path, payload))
-        if self.order is not None:
-            field, direction = self.order
-            reverse = str(direction).endswith('DESCENDING')
-            rows.sort(key=lambda snapshot: snapshot.to_dict().get(field, 0), reverse=reverse)
-        return iter(rows[: self.limit_value] if self.limit_value is not None else rows)
-
-    @staticmethod
-    def _matches(actual, operator, expected):
-        if operator == '==':
-            return actual == expected
-        if operator == '>':
-            return actual is not None and actual > expected
-        raise AssertionError(f'unsupported fake filter: {operator}')
-
-
-class FakeCollection(FakeQuery):
-    def document(self, name=None):
-        if name is None:
-            name = f'auto-{len(self.database.rows) + 1}'
-        return FakeRef(self.database, (*self.path, name))
-
-
-class FakeTransaction:
-    def __init__(self, database):
-        self.database = database
-        self.lock = database.lock
-
-    def create(self, ref, payload):
-        ref.create(payload)
-
-    def set(self, ref, payload):
-        ref.set(payload)
-
-    def update(self, ref, patch):
-        ref.update(patch)
-
-
 class FakeDB:
+    """Rows + lock container shared by every domain module's ``FakeDocumentStore`` in these tests.
+
+    action_items, goals and workstreams are all on the storage port; there is no Firestore-shaped
+    fake anymore. Tests seed and assert against the tuple-keyed ``rows`` directly, and each module
+    reaches the same rows through a ``_LockedRowsStore`` bound to this dict and lock."""
+
     def __init__(self):
         self.rows = {}
         self.lock = RLock()
 
-    def collection(self, name):
-        return FakeCollection(self, (name,))
 
-    def transaction(self):
-        return FakeTransaction(self)
+class _PathRowsView(MutableMapping):
+    """Path-string view over FakeDB's tuple-keyed ``rows`` so a ``FakeDocumentStore`` (which the
+    migrated ``action_items`` reads through) shares the exact same data the unmigrated Firestore
+    fake serves to ``goals``/``workstreams``. ``'a/b/c'`` <-> ``('a', 'b', 'c')``."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    @staticmethod
+    def _key(path):
+        return tuple(path.split('/'))
+
+    def __getitem__(self, path):
+        return self._rows[self._key(path)]
+
+    def __setitem__(self, path, value):
+        self._rows[self._key(path)] = value
+
+    def __delitem__(self, path):
+        del self._rows[self._key(path)]
+
+    def __iter__(self):
+        return ('/'.join(key) for key in self._rows)
+
+    def __len__(self):
+        return len(self._rows)
+
+    def __contains__(self, path):
+        return self._key(path) in self._rows
+
+
+class _LockedRowsStore(FakeDocumentStore):
+    """``FakeDocumentStore`` bound to FakeDB's rows and lock. Serializing ``run_transaction`` on a
+    single shared lock preserves the cross-module write ordering the pre-port
+    ``@firestore.transactional`` + lock provided, so the goal-detach race stays deterministic now
+    that ``action_items``, ``goals`` and ``workstreams`` all read through the storage port."""
+
+    def __init__(self, database):
+        super().__init__(backing=_PathRowsView(database.rows))
+        self._db_lock = database.lock
+
+    def run_transaction(self, fn, *, attempts=3):
+        with self._db_lock:
+            return super().run_transaction(fn, attempts=attempts)
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
     set_canonical_cohort(monkeypatch, 'u1')
     database = FakeDB()
-
-    def transactional(function):
-        def run(transaction):
-            with transaction.lock:
-                return function(transaction)
-
-        return run
-
-    monkeypatch.setattr(goals_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(workstreams_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(recurrence_inbox_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(action_items_db, 'db', database)
+    # action_items, goals and workstreams are all on the storage port: back their store with one
+    # shared rows dict + lock so every module reads and writes the same documents.
+    shared_store = _LockedRowsStore(database)
+    monkeypatch.setattr(action_items_db, '_store', lambda: shared_store)
+    monkeypatch.setattr(goals_db, '_store', lambda: shared_store)
+    monkeypatch.setattr(workstreams_db, '_store', lambda: shared_store)
     return database
 
 
@@ -186,7 +116,6 @@ def create_goal(fake_db, goal_id, *, status='background', focus_rank=None):
             'status': status,
             'focus_rank': focus_rank,
         },
-        firestore_client=fake_db,
     )
     fake_db.rows[('users', 'u1', 'goals', goal_id)]['account_generation'] = 3
     return result
@@ -205,7 +134,7 @@ def test_goal_contract_supports_qualitative_outcomes_and_never_evicts_on_create(
     for index in range(7):
         create_goal(fake_db, f'g{index}')
 
-    goals = goals_db.get_all_goals('u1', include_inactive=True, firestore_client=fake_db)
+    goals = goals_db.get_all_goals('u1', include_inactive=True)
     assert len(goals) == 7
     assert {goal['status'] for goal in goals} == {'background'}
     assert all(goal['is_active'] for goal in goals)
@@ -223,25 +152,24 @@ def test_canonical_goal_create_is_generation_scoped_and_idempotent(fake_db):
     }
 
     first = goals_db.create_goal_idempotent(
-        'u1', request, idempotency_key='create-occurrence', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='create-occurrence', account_generation=3
     )
     replay = goals_db.create_goal_idempotent(
-        'u1', request, idempotency_key='create-occurrence', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='create-occurrence', account_generation=3
     )
 
     assert replay == first
-    assert len(goals_db.get_all_goals('u1', include_inactive=True, firestore_client=fake_db)) == 1
+    assert len(goals_db.get_all_goals('u1', include_inactive=True)) == 1
     with pytest.raises(goals_db.GoalConflictError, match='different content'):
         goals_db.create_goal_idempotent(
             'u1',
             {**request, 'title': 'Different goal'},
             idempotency_key='create-occurrence',
             account_generation=3,
-            firestore_client=fake_db,
         )
     with pytest.raises(goals_db.GoalConflictError, match='generation mismatch'):
         goals_db.create_goal_idempotent(
-            'u1', request, idempotency_key='another-occurrence', account_generation=4, firestore_client=fake_db
+            'u1', request, idempotency_key='another-occurrence', account_generation=4
         )
 
 
@@ -256,12 +184,11 @@ def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
             idempotency_key=f'focus-{index}',
             account_generation=3,
             focus_rank=index,
-            firestore_client=fake_db,
         )
 
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.focus_goal(
-            'u1', 'g5', idempotency_key='focus-overflow', account_generation=3, firestore_client=fake_db
+            'u1', 'g5', idempotency_key='focus-overflow', account_generation=3
         )
 
     focused = goals_db.focus_goal(
@@ -271,13 +198,12 @@ def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
         account_generation=3,
         replacement_goal_id='g0',
         focus_rank=0,
-        firestore_client=fake_db,
     )
-    all_goals = goals_db.get_all_goals('u1', include_inactive=True, firestore_client=fake_db)
+    all_goals = goals_db.get_all_goals('u1', include_inactive=True)
     assert focused['status'] == 'focused'
     assert len(all_goals) == 6
     assert len([goal for goal in all_goals if goal['status'] == 'focused']) == 5
-    assert goals_db.get_goal_by_id('u1', 'g0', firestore_client=fake_db)['status'] == 'background'
+    assert goals_db.get_goal_by_id('u1', 'g0')['status'] == 'background'
 
 
 def test_canonical_goal_mutations_are_cohort_and_generation_fenced(fake_db, monkeypatch):
@@ -285,14 +211,14 @@ def test_canonical_goal_mutations_are_cohort_and_generation_fenced(fake_db, monk
     clear_canonical_cohort(monkeypatch)
     seed_control(fake_db)
     with pytest.raises(goals_db.GoalConflictError):
-        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
+        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3)
 
     set_canonical_cohort(monkeypatch, 'u1')
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(goals_db.GoalConflictError):
-        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
-    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
-    replay = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
+        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3)
+    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4)
+    replay = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4)
     assert replay == first
 
 
@@ -320,7 +246,6 @@ def test_goal_lifecycle_disposition_detaches_without_deleting_dependents(fake_db
         relationship_disposition=GoalRelationshipDisposition.detach,
         idempotency_key='detach-g1',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
     assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['goal_id'] is None
@@ -341,11 +266,10 @@ def test_goal_lifecycle_retain_keeps_historical_relationships(fake_db):
         relationship_disposition=GoalRelationshipDisposition.retain,
         idempotency_key='retain-g1',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
     assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['goal_id'] == 'g1'
-    assert goals_db.get_goal_by_id('u1', 'g1', firestore_client=fake_db)['status'] == 'achieved'
+    assert goals_db.get_goal_by_id('u1', 'g1')['status'] == 'achieved'
 
 
 def test_task_relationship_validation_and_goal_detach_share_the_write_transaction(fake_db):
@@ -376,7 +300,6 @@ def test_task_relationship_validation_and_goal_detach_share_the_write_transactio
             relationship_disposition=GoalRelationshipDisposition.detach,
             idempotency_key='race-detach',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -398,7 +321,6 @@ def test_goal_progress_journal_is_append_only_idempotent_and_metric_optional(fak
         GoalProgressEventCreate(kind='evidence', summary='Customer confirmed launch', evidence_refs=[evidence]),
         idempotency_key='event-1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     replay = goals_db.append_goal_progress_event(
         'u1',
@@ -406,7 +328,6 @@ def test_goal_progress_journal_is_append_only_idempotent_and_metric_optional(fak
         GoalProgressEventCreate(kind='evidence', summary='Customer confirmed launch', evidence_refs=[evidence]),
         idempotency_key='event-1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.append_goal_progress_event(
@@ -415,7 +336,6 @@ def test_goal_progress_journal_is_append_only_idempotent_and_metric_optional(fak
             GoalProgressEventCreate(kind='milestone', summary='A different event'),
             idempotency_key='event-1',
             account_generation=3,
-            firestore_client=fake_db,
         )
     second = goals_db.append_goal_progress_event(
         'u1',
@@ -427,12 +347,11 @@ def test_goal_progress_journal_is_append_only_idempotent_and_metric_optional(fak
         ),
         idempotency_key='event-2',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
     assert first.event_id == replay.event_id
     assert (first.sequence, second.sequence) == (1, 2)
-    assert goals_db.get_goal_by_id('u1', 'g1', firestore_client=fake_db)['metric']['current'] == 4
+    assert goals_db.get_goal_by_id('u1', 'g1')['metric']['current'] == 4
 
 
 def seed_task(fake_db, task_id='t1', goal_id=None):
@@ -454,13 +373,13 @@ def test_explicit_task_intent_reuses_one_workstream_across_idempotency_keys(fake
     request = TaskOriginWorkIntent(task_id='t1')
 
     first = workstreams_db.resolve_work_intent(
-        'u1', request, idempotency_key='first-click', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='first-click', account_generation=3
     )
     replay = workstreams_db.resolve_work_intent(
-        'u1', request, idempotency_key='first-click', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='first-click', account_generation=3
     )
     second_key = workstreams_db.resolve_work_intent(
-        'u1', request, idempotency_key='second-click', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='second-click', account_generation=3
     )
 
     assert first.workstream_id == replay.workstream_id == second_key.workstream_id
@@ -486,7 +405,6 @@ def test_explicit_task_intent_rejects_existing_task_workstream_goal_mismatch(fak
             TaskOriginWorkIntent(task_id='t1'),
             idempotency_key='mismatch',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
 
@@ -503,7 +421,7 @@ def test_goal_origin_intent_atomically_creates_anchor_task_and_workstream(fake_d
     receipts = list(
         ThreadPoolExecutor(max_workers=2).map(
             lambda _: workstreams_db.resolve_work_intent(
-                'u1', request, idempotency_key='goal-click', account_generation=3, firestore_client=fake_db
+                'u1', request, idempotency_key='goal-click', account_generation=3
             ),
             range(2),
         )
@@ -551,8 +469,8 @@ def test_workstream_candidate_acceptance_is_atomic_and_idempotent(fake_db):
     )
     fake_db.rows[('users', 'u1', 'candidates', 'cand-1')] = candidate.model_dump(mode='python')
 
-    first = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
-    second = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
+    first = workstreams_db.resolve_workstream_candidate('u1', candidate, 3)
+    second = workstreams_db.resolve_workstream_candidate('u1', candidate, 3)
 
     assert first.workstream_id == second.workstream_id
     assert first.task_id == second.task_id
@@ -584,8 +502,20 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3
     }
 
 
-def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
-    seed_control(fake_db, generation=3)
+def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(monkeypatch):
+    store = FakeDocumentStore()
+    monkeypatch.setattr(recurrence_inbox_db, '_store', lambda: store)
+    # u1 is a canonical task-intelligence user in this scenario; the cohort gate reads a frozen
+    # env-derived set at import, so patch the entitlement check the module imported.
+    monkeypatch.setattr(recurrence_inbox_db, 'is_canonical_memory_user', lambda uid: True)
+
+    def seed_control(generation):
+        store.set(
+            'users/u1/task_intelligence_control/state',
+            {'workflow_mode': 'read', 'account_generation': generation},
+        )
+
+    seed_control(generation=3)
     now = datetime.now(timezone.utc)
     signal = CanonicalRecurrenceSignal(
         signal_id='observation-1',
@@ -600,24 +530,19 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
         last_seen_at=now,
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-    first = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=3, firestore_client=fake_db)
+    first = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=3)
     replay = recurrence_inbox_db.enqueue_recurrence_signal(
         'u1',
         signal.model_copy(update={'signal_id': 'observation-2'}),
         account_generation=3,
-        firestore_client=fake_db,
     )
-    seed_control(fake_db, generation=4)
-    next_generation = recurrence_inbox_db.enqueue_recurrence_signal(
-        'u1', signal, account_generation=4, firestore_client=fake_db
-    )
+    seed_control(generation=4)
+    next_generation = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=4)
 
     assert replay.receipt_id == first.receipt_id
     assert replay.signal.signal_id == 'observation-1'
     assert next_generation.receipt_id != first.receipt_id
-    assert recurrence_inbox_db.list_pending_recurrence_receipts(
-        'u1', account_generation=3, firestore_client=fake_db
-    ) == [replay]
+    assert recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3) == [replay]
 
     with pytest.raises(recurrence_inbox_db.RecurrenceGenerationMismatchError):
         recurrence_inbox_db.complete_recurrence_receipt(
@@ -625,11 +550,8 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
             first.receipt_id,
             outcome=RecurrenceOutcomeKind.candidate_created,
             account_generation=3,
-            firestore_client=fake_db,
         )
-    assert recurrence_inbox_db.list_pending_recurrence_receipts(
-        'u1', account_generation=3, firestore_client=fake_db
-    ) == [replay]
+    assert recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3) == [replay]
 
 
 def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuity(fake_db):
@@ -642,7 +564,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         WorkstreamEventCreate(kind='user_note', summary='Draft pricing changed', evidence_refs=[local_ref]),
         idempotency_key='note-1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     replay = workstreams_db.append_workstream_event(
         'u1',
@@ -650,7 +571,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         WorkstreamEventCreate(kind='user_note', summary='Draft pricing changed', evidence_refs=[local_ref]),
         idempotency_key='note-1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     fake_db.rows[('users', 'u1', 'workstreams', 'closed-race')] = {
         **fake_db.rows[('users', 'u1', 'workstreams', 'w1')],
@@ -664,7 +584,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
             WorkstreamEventCreate(kind='system', summary='Late association'),
             idempotency_key='late-association',
             account_generation=3,
-            firestore_client=fake_db,
             required_status=WorkstreamStatus.open,
         )
     v1 = workstreams_db.create_artifact_descriptor(
@@ -681,7 +600,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ),
         idempotency_key='artifact-v1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     v2 = workstreams_db.create_artifact_descriptor(
         'u1',
@@ -698,7 +616,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ),
         idempotency_key='artifact-v2',
         account_generation=3,
-        firestore_client=fake_db,
     )
     awaiting_review = workstreams_db.transition_artifact_status(
         'u1',
@@ -707,7 +624,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ArtifactStatusTransitionRequest(status='awaiting_review'),
         idempotency_key='artifact-v2-awaiting',
         account_generation=3,
-        firestore_client=fake_db,
     )
     approved = workstreams_db.transition_artifact_status(
         'u1',
@@ -716,7 +632,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ArtifactStatusTransitionRequest(status='approved'),
         idempotency_key='artifact-v2-approved',
         account_generation=3,
-        firestore_client=fake_db,
     )
     delivered = workstreams_db.transition_artifact_status(
         'u1',
@@ -725,7 +640,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ArtifactStatusTransitionRequest(status='delivered'),
         idempotency_key='artifact-v2-delivered',
         account_generation=3,
-        firestore_client=fake_db,
     )
     replay_v2 = workstreams_db.create_artifact_descriptor(
         'u1',
@@ -742,7 +656,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ),
         idempotency_key='artifact-v2-later-retry',
         account_generation=3,
-        firestore_client=fake_db,
     )
     checkpoint = workstreams_db.upsert_continuation_checkpoint(
         'u1',
@@ -755,7 +668,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ),
         idempotency_key='checkpoint-runtime-mac-1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     checkpoint_replay = workstreams_db.upsert_continuation_checkpoint(
         'u1',
@@ -768,7 +680,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
         ),
         idempotency_key='checkpoint-runtime-mac-1-retry',
         account_generation=3,
-        firestore_client=fake_db,
     )
     with pytest.raises(workstreams_db.WorkstreamConflictError, match='backwards'):
         workstreams_db.upsert_continuation_checkpoint(
@@ -781,7 +692,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
             ),
             idempotency_key='checkpoint-stale',
             account_generation=3,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamConflictError, match='different content'):
         workstreams_db.upsert_continuation_checkpoint(
@@ -794,7 +704,6 @@ def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuit
             ),
             idempotency_key='checkpoint-conflict',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
     assert first_event.event_id == replay.event_id
@@ -830,7 +739,6 @@ def test_artifact_and_checkpoint_reject_unreproducible_positions(fake_db):
             ),
             idempotency_key='missing-evidence',
             account_generation=3,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamConflictError):
         workstreams_db.upsert_continuation_checkpoint(
@@ -843,7 +751,6 @@ def test_artifact_and_checkpoint_reject_unreproducible_positions(fake_db):
             ),
             idempotency_key='future-checkpoint',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
     v1 = workstreams_db.create_artifact_descriptor(
@@ -858,7 +765,6 @@ def test_artifact_and_checkpoint_reject_unreproducible_positions(fake_db):
         ),
         idempotency_key='valid-v1',
         account_generation=3,
-        firestore_client=fake_db,
     )
     with pytest.raises(workstreams_db.WorkstreamConflictError):
         workstreams_db.create_artifact_descriptor(
@@ -874,7 +780,6 @@ def test_artifact_and_checkpoint_reject_unreproducible_positions(fake_db):
             ),
             idempotency_key='uncited-v2',
             account_generation=3,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamConflictError):
         workstreams_db.create_artifact_descriptor(
@@ -890,7 +795,6 @@ def test_artifact_and_checkpoint_reject_unreproducible_positions(fake_db):
             ),
             idempotency_key='invalid-v3',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
 
@@ -906,14 +810,13 @@ def test_concurrent_journal_appends_allocate_stable_unique_sequences(fake_db):
                 WorkstreamEventCreate(kind='user_note', summary=f'Update {index}'),
                 idempotency_key=f'event-{index}',
                 account_generation=3,
-                firestore_client=fake_db,
             ),
             range(20),
         )
     )
 
     assert sorted(event.sequence for event in events) == list(range(1, 21))
-    assert workstreams_db.get_workstream('u1', 'w1', firestore_client=fake_db).latest_event_sequence == 20
+    assert workstreams_db.get_workstream('u1', 'w1').latest_event_sequence == 20
 
 
 def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempotent(fake_db, monkeypatch):
@@ -927,7 +830,6 @@ def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempoten
             WorkstreamUpdate(current_state_summary='Blocked in shadow'),
             idempotency_key='update-1',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
     set_canonical_cohort(monkeypatch, 'u1')
@@ -939,7 +841,6 @@ def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempoten
             WorkstreamUpdate(current_state_summary='Stale generation'),
             idempotency_key='update-1',
             account_generation=3,
-            firestore_client=fake_db,
         )
 
     seed_workstream(fake_db, generation=4)
@@ -949,7 +850,6 @@ def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempoten
         WorkstreamUpdate(current_state_summary='Ready for review'),
         idempotency_key='update-2',
         account_generation=4,
-        firestore_client=fake_db,
     )
     replay = workstreams_db.update_workstream(
         'u1',
@@ -957,7 +857,6 @@ def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempoten
         WorkstreamUpdate(current_state_summary='Ready for review'),
         idempotency_key='update-2',
         account_generation=4,
-        firestore_client=fake_db,
     )
     assert replay == first
     with pytest.raises(workstreams_db.WorkstreamConflictError):
@@ -967,7 +866,6 @@ def test_workstream_mutations_are_cohort_generation_fenced_and_receipt_idempoten
             WorkstreamUpdate(current_state_summary='Different payload'),
             idempotency_key='update-2',
             account_generation=4,
-            firestore_client=fake_db,
         )
 
 
@@ -982,7 +880,6 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
             WorkstreamUpdate(current_state_summary='Cross-generation write'),
             idempotency_key='stale-ws-update',
             account_generation=4,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
         workstreams_db.append_workstream_event(
@@ -991,7 +888,6 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
             WorkstreamEventCreate(kind='user_note', summary='Cross-generation note'),
             idempotency_key='stale-ws-event',
             account_generation=4,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
         workstreams_db.create_artifact_descriptor(
@@ -1006,7 +902,6 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
             ),
             idempotency_key='stale-ws-artifact',
             account_generation=4,
-            firestore_client=fake_db,
         )
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
         workstreams_db.upsert_continuation_checkpoint(
@@ -1019,7 +914,6 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
             ),
             idempotency_key='stale-ws-checkpoint',
             account_generation=4,
-            firestore_client=fake_db,
         )
 
     seed_workstream(fake_db, generation=4)
@@ -1035,7 +929,6 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
         ),
         idempotency_key='matching-ws-artifact',
         account_generation=4,
-        firestore_client=fake_db,
     )
     fake_db.rows[('users', 'u1', 'workstreams', 'w1')]['account_generation'] = 3
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError, match='workstream account generation'):
@@ -1046,15 +939,14 @@ def test_workstream_mutations_reject_stored_workstream_generation_mismatch(fake_
             ArtifactStatusTransitionRequest(status='awaiting_review'),
             idempotency_key='stale-ws-transition',
             account_generation=4,
-            firestore_client=fake_db,
         )
 
 
 def test_workstream_reads_are_user_scoped(fake_db):
     seed_workstream(fake_db)
 
-    assert workstreams_db.get_workstream('u1', 'w1', firestore_client=fake_db) is not None
-    assert workstreams_db.get_workstream('another-user', 'w1', firestore_client=fake_db) is None
+    assert workstreams_db.get_workstream('u1', 'w1') is not None
+    assert workstreams_db.get_workstream('another-user', 'w1') is None
 
 
 def test_task_goal_link_import_is_idempotent_and_rejects_mismatches(fake_db):
@@ -1066,17 +958,16 @@ def test_task_goal_link_import_is_idempotent_and_rejects_mismatches(fake_db):
     request = TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}, {'task_id': 't2', 'goal_id': 'g1'}])
 
     first = workstreams_db.import_task_goal_links(
-        'u1', request, idempotency_key='import-1', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='import-1', account_generation=3
     )
     replay = workstreams_db.import_task_goal_links(
-        'u1', request, idempotency_key='import-1', account_generation=3, firestore_client=fake_db
+        'u1', request, idempotency_key='import-1', account_generation=3
     )
     second = workstreams_db.import_task_goal_links(
         'u1',
         TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}]),
         idempotency_key='import-2',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
     assert (first.imported, first.failed, first.failure_task_ids) == (1, 1, ['t2'])
@@ -1091,7 +982,6 @@ def test_task_goal_link_import_is_idempotent_and_rejects_mismatches(fake_db):
         TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}]),
         idempotency_key='import-3',
         account_generation=3,
-        firestore_client=fake_db,
     )
     assert (corrupt_existing.unchanged, corrupt_existing.failed) == (0, 1)
 
@@ -1104,16 +994,15 @@ def test_task_goal_link_import_resumes_partial_receipt_and_fences_payload_reuse(
     seed_task(fake_db, 't3')
     request = TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}, {'task_id': 't2', 'goal_id': 'g1'}])
     request_payload = request.model_dump(mode='json')
-    receipt_ref = workstreams_db._mutation_receipt_ref(
+    receipt_ref = workstreams_db._mutation_receipt_path(
         'u1',
         operation='task-goal-link-import',
         idempotency_key='resume-import',
         account_generation=3,
-        firestore_client=fake_db,
     )
     first_item_timestamp = datetime(2026, 7, 9, tzinfo=timezone.utc)
     fake_db.rows[('users', 'u1', 'action_items', 't1')]['updated_at'] = first_item_timestamp
-    fake_db.rows[receipt_ref.path] = {
+    fake_db.rows[tuple(receipt_ref.split('/'))] = {
         'request_hash': workstreams_db._mutation_hash(request_payload),
         'status': 'processing',
         'outcomes': {'0': 'imported'},
@@ -1126,20 +1015,18 @@ def test_task_goal_link_import_resumes_partial_receipt_and_fences_payload_reuse(
         request,
         idempotency_key='resume-import',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
     assert (report.imported, report.unchanged, report.failed) == (2, 0, 0)
     assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['updated_at'] == first_item_timestamp
     assert fake_db.rows[('users', 'u1', 'action_items', 't2')]['goal_id'] == 'g1'
-    assert fake_db.rows[receipt_ref.path]['status'] == 'complete'
+    assert fake_db.rows[tuple(receipt_ref.split('/'))]['status'] == 'complete'
     with pytest.raises(workstreams_db.WorkstreamConflictError):
         workstreams_db.import_task_goal_links(
             'u1',
             TaskGoalLinkImportRequest(links=[{'task_id': 't3', 'goal_id': 'g1'}]),
             idempotency_key='resume-import',
             account_generation=3,
-            firestore_client=fake_db,
         )
     assert fake_db.rows[('users', 'u1', 'action_items', 't3')]['goal_id'] is None
 
@@ -1156,10 +1043,9 @@ def test_goal_detail_aggregates_threads_tasks_and_progress_without_client_n_plus
         GoalProgressEventCreate(kind='milestone', summary='First draft complete'),
         idempotency_key='goal-detail-progress',
         account_generation=3,
-        firestore_client=fake_db,
     )
 
-    detail = workstreams_db.get_goal_detail('u1', 'g1', firestore_client=fake_db)
+    detail = workstreams_db.get_goal_detail('u1', 'g1')
 
     assert detail.goal.goal_id == 'g1'
     assert [thread.workstream_id for thread in detail.active_threads] == ['w1']

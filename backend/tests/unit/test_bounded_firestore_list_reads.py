@@ -1,4 +1,4 @@
-"""Bounded Firestore list reads for prod GET 504s (action-items / memories / KG).
+"""Bounded list reads for prod GET 504s (action-items / memories / KG).
 
 Regression coverage for Closes #10746: list paths must not full-collection stream.
 """
@@ -6,13 +6,14 @@ Regression coverage for Closes #10746: list paths must not full-collection strea
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+
+from tests.store_fakes import FakeDocumentStore
 
 
 def _item(
@@ -40,66 +41,9 @@ def _item(
     }
 
 
-class _FakeDoc:
-    def __init__(self, data: Dict[str, Any]):
-        self.id = data['id']
-        self._data = {k: v for k, v in data.items() if k != 'id'}
-
-    def to_dict(self):
-        return dict(self._data)
-
-
-class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None):
-        self._docs = docs
-        self._filters = list(filters or [])
-        self._limit = None
-
-    def where(self, *args, **kwargs):
-        filt = kwargs.get('filter') or (args[0] if args else None)
-        return _FakeQuery(self._docs, self._filters + [filt])
-
-    def order_by(self, *args, **kwargs):
-        return self
-
-    def limit(self, n: int):
-        q = _FakeQuery(self._docs, self._filters)
-        q._limit = n
-        return q
-
-    def stream(self):
-        docs = self._docs
-        for filt in self._filters:
-            # FieldFilter duck: .field_path / .op_string / .value
-            field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
-            op = getattr(filt, 'op_string', None) or getattr(filt, 'op', '==')
-            value = getattr(filt, 'value', None)
-            if field == 'completed' and op == '==':
-                docs = [d for d in docs if bool(d._data.get('completed')) is bool(value)]
-            elif field == 'conversation_id' and op == '==':
-                docs = [d for d in docs if d._data.get('conversation_id') == value]
-        if self._limit is not None:
-            docs = docs[: self._limit]
-        # yield copies so callers can mutate safely
-        for d in docs:
-            yield _FakeDoc({'id': d.id, **d._data})
-
-
-class _FakeCollection:
-    def __init__(self, docs: List[_FakeDoc]):
-        self._docs = docs
-
-    def document(self, uid: str):
-        return SimpleNamespace(collection=lambda name: _FakeQuery(self._docs))
-
-
-class _FakeDB:
-    def __init__(self, docs: List[_FakeDoc]):
-        self._coll = _FakeCollection(docs)
-
-    def collection(self, name: str):
-        assert name == 'users'
-        return self._coll
+def _seed(store: FakeDocumentStore, uid: str, items) -> None:
+    for item in items:
+        store._docs[f'users/{uid}/action_items/{item["id"]}'] = {k: v for k, v in item.items() if k != 'id'}
 
 
 @pytest.fixture
@@ -116,38 +60,22 @@ def ai_mod(monkeypatch):
     return ai, recorded, metrics
 
 
-@pytest.fixture
-def kg_module():
-    import database.knowledge_graph as kg
-
-    return kg
+def _bind_store(ai, monkeypatch) -> FakeDocumentStore:
+    store = FakeDocumentStore()
+    monkeypatch.setattr(ai, '_store', lambda: store)
+    return store
 
 
 def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
+    store = _bind_store(ai, monkeypatch)
     # Many completed docs first in storage order; actives must still lead the page.
-    docs = []
+    items = []
     for i in range(300):
-        docs.append(
-            _FakeDoc(
-                _item(
-                    f'c{i}',
-                    completed=True,
-                    created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                )
-            )
-        )
+        items.append(_item(f'c{i}', completed=True, created_at=datetime(2026, 1, 2, tzinfo=timezone.utc)))
     for i in range(5):
-        docs.append(
-            _FakeDoc(
-                _item(
-                    f'a{i}',
-                    completed=False,
-                    created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
-                )
-            )
-        )
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+        items.append(_item(f'a{i}', completed=False, created_at=datetime(2026, 1, 3, tzinfo=timezone.utc)))
+    _seed(store, 'uid', items)
 
     page = ai.get_action_items('uid', limit=10, offset=0)
     assert [x['id'] for x in page[:5]] == ['a0', 'a1', 'a2', 'a3', 'a4']
@@ -162,8 +90,8 @@ def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
 
 def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
-    docs = [_FakeDoc(_item(f'x{i}', completed=False)) for i in range(5000)]
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+    store = _bind_store(ai, monkeypatch)
+    _seed(store, 'uid', [_item(f'x{i}', completed=False) for i in range(5000)])
 
     page = ai.get_action_items('uid', limit=50, offset=0)
     assert len(page) == 50
@@ -173,16 +101,57 @@ def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):
 
 def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
-    docs = [
-        _FakeDoc(_item('del1', completed=False, deleted=True)),
-        _FakeDoc(_item('a1', completed=False)),
-        _FakeDoc(_item('c1', completed=True)),
-    ]
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+    store = _bind_store(ai, monkeypatch)
+    _seed(
+        store,
+        'uid',
+        [
+            _item('del1', completed=False, deleted=True),
+            _item('a1', completed=False),
+            _item('c1', completed=True),
+        ],
+    )
     page = ai.get_action_items('uid', limit=10, offset=0)
     ids = [x['id'] for x in page]
     assert 'del1' not in ids
     assert ids[0] == 'a1'
+
+
+def test_knowledge_graph_get_is_bounded(monkeypatch):
+    import database.knowledge_graph as kg
+    from tests.store_fakes import FakeDocumentStore
+
+    # Small caps make the bounded-scan behavior independent of the production constants.
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_NODES', 2)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_EDGES', 3)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_ASSERTIONS', 4)
+
+    captured: dict = {}
+
+    class _RecordingStore(FakeDocumentStore):
+        def query(self, collection, **kwargs):
+            captured[collection.rsplit('/', 1)[-1]] = kwargs.get('limit')
+            return super().query(collection, **kwargs)
+
+    fake = _RecordingStore()
+    # More nodes than the cap so the reader must bound the scan and mark the graph truncated.
+    for node_id in ('a', 'b', 'c'):
+        fake._docs[f'users/uid/knowledge_nodes/{node_id}'] = {'id': node_id, 'label': f'L{node_id}'}
+    # Distinct-key edges whose endpoints stay inside the bounded node page, so referential
+    # closure keeps them and the edge page fills to the cap.
+    fake._docs['users/uid/knowledge_edges/e0'] = {'id': 'e0', 'source_id': 'a', 'target_id': 'b', 'label': 'r0'}
+    fake._docs['users/uid/knowledge_edges/e1'] = {'id': 'e1', 'source_id': 'a', 'target_id': 'b', 'label': 'r1'}
+    fake._docs['users/uid/knowledge_edges/e2'] = {'id': 'e2', 'source_id': 'b', 'target_id': 'a', 'label': 'r0'}
+    monkeypatch.setattr(kg, '_store', lambda: fake)
+
+    graph = kg.get_knowledge_graph('uid')
+    assert len(graph['nodes']) == kg.MAX_KNOWLEDGE_GRAPH_NODES
+    assert len(graph['edges']) == kg.MAX_KNOWLEDGE_GRAPH_EDGES
+    assert graph['truncated'] is True
+    # The reader fetches exactly one past each cap to detect truncation without a count().
+    assert captured['knowledge_nodes'] == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
+    assert captured['knowledge_edges'] == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+    assert captured['memory_graph_assertions'] == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
 
 
 @pytest.mark.parametrize(
@@ -194,73 +163,55 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     ),
 )
 def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
-    kg_module,
+    monkeypatch,
     node_total,
     edge_total,
     expected_nodes,
     expected_edges,
     expected_truncated,
 ):
-    kg = kg_module
+    import database.knowledge_graph as kg
+    from tests.store_fakes import FakeDocumentStore
 
-    class _StreamColl:
-        def __init__(self, n, *, edge=False):
-            self.n = n
-            self.edge = edge
-            self.limit_n = None
-            self.order_fields = []
-            self.streamed = 0
+    # Migrated to the neutral storage port: the module now orders reads by document name
+    # (`_store().query(coll, order_by='__name__', limit=...)`) instead of a Firestore
+    # `.order_by(...).stream()` chain, and the FakeDocumentStore honors '__name__' as
+    # document-id order. Seeding N docs and asserting the bounded page + truncated flag against
+    # the store's ordered result is the behavioral equivalent of the retired stream-count and
+    # order_by-field assertions.
+    captured: dict = {}
 
-        def order_by(self, field_path, *args, **kwargs):
-            self.order_fields.append(field_path)
-            return self
+    class _RecordingStore(FakeDocumentStore):
+        def query(self, collection, **kwargs):
+            captured[collection.rsplit('/', 1)[-1]] = kwargs.get('limit')
+            return super().query(collection, **kwargs)
 
-        def limit(self, n):
-            self.limit_n = n
-            return self
+    fake = _RecordingStore()
+    # Deterministic document-id order ('n0','n1',...) keeps the two edge endpoints ('n0','n1')
+    # inside the bounded node page so referential closure fills the edge page to the cap.
+    for i in range(node_total):
+        fake._docs[f'users/uid/knowledge_nodes/n{i}'] = {'id': f'n{i}', 'label': f'L{i}'}
+    for i in range(edge_total):
+        fake._docs[f'users/uid/knowledge_edges/e{i}'] = {
+            'id': f'e{i}',
+            'source_id': 'n0',
+            'target_id': 'n1',
+            'label': f'L{i}',
+        }
+    monkeypatch.setattr(kg, '_store', lambda: fake)
 
-        def stream(self):
-            count = min(self.n, self.limit_n) if self.limit_n is not None else self.n
-            for i in range(count):
-                payload = (
-                    {
-                        'id': f'e{i}',
-                        'source_id': 'n0',
-                        'target_id': 'n1',
-                        'label': f'L{i}',
-                    }
-                    if self.edge
-                    else {'id': f'n{i}', 'label': f'L{i}'}
-                )
-                self.streamed += 1
-                yield SimpleNamespace(to_dict=lambda payload=payload: payload)
-
-    nodes = _StreamColl(node_total)
-    edges = _StreamColl(edge_total, edge=True)
-    assertions = _StreamColl(0)
-
-    collections = {
-        kg.knowledge_nodes_collection: nodes,
-        kg.knowledge_edges_collection: edges,
-        kg.memory_graph_assertions_collection: assertions,
-    }
-    user_ref = SimpleNamespace(collection=lambda name: collections[name])
-    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
-
-    graph = kg.get_knowledge_graph('uid', db_client=client)
+    graph = kg.get_knowledge_graph('uid')
     assert len(graph['nodes']) == expected_nodes
     assert len(graph['edges']) == expected_edges
     assert graph['node_count'] == expected_nodes
     assert graph['edge_count'] == expected_edges
     assert graph['truncated'] is expected_truncated
-    assert nodes.limit_n == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
-    assert edges.limit_n == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
-    assert assertions.limit_n == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
-    assert nodes.streamed <= kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
-    assert edges.streamed <= kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
-    assert nodes.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
-    assert edges.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
-    assert assertions.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
+    # Bounded reads: the reader fetches at most one row past each public cap, never the full
+    # collection (replaces the retired `limit_n == cap + 1` / stream-count call mechanics).
+    if node_total:
+        assert captured['knowledge_nodes'] == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
+    if edge_total:
+        assert captured['knowledge_edges'] == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
 
 
 def test_legacy_get_memories_no_first_page_5000_force():

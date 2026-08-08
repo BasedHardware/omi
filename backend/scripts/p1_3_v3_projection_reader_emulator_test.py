@@ -139,7 +139,7 @@ def _assert_failure(
     db: firestore.Client, reason: V3ProjectionFailureReason, request: V3ProjectionReadRequest | None = None
 ) -> None:
     try:
-        read_v3_compatibility_projection_page(db_client=db, request=request or _request())
+        read_v3_compatibility_projection_page(request=request or _request())
     except V3ProjectionReadError as exc:
         assert exc.reason == reason, (exc.reason, reason)
         return
@@ -149,7 +149,7 @@ def _assert_failure(
 def _assert_ready_empty(db: Any) -> None:
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(_state(empty_projection=True))
-    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(request=_request())
     assert page.items == []
     assert page.empty_projection is True
 
@@ -187,7 +187,7 @@ def _assert_exclusions(db: Any) -> None:
             "stale": _item("stale", now, short_term_stale=True),
         },
     )
-    page = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
+    page = read_v3_compatibility_projection_page(request=_request(limit=10))
     assert [item["id"] for item in page.items] == ["visible"]
 
 
@@ -206,8 +206,8 @@ def _assert_keyset(db: Any) -> None:
             "d": _item("d", t3),
         },
     )
-    first = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
-    second = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2, cursor=first.next_cursor))
+    first = read_v3_compatibility_projection_page(request=_request(limit=2))
+    second = read_v3_compatibility_projection_page(request=_request(limit=2, cursor=first.next_cursor))
     assert [item["id"] for item in first.items] == ["d", "c"]
     assert [item["id"] for item in second.items] == ["b", "a"]
     assert second.next_cursor is None

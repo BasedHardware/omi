@@ -104,44 +104,45 @@ _stub_module("database.action_items")
 # Import the module under test
 # ---------------------------------------------------------------------------
 import database.staged_tasks as staged_tasks_mod
+from tests.store_fakes import FakeDocumentStore
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers
 # ---------------------------------------------------------------------------
-@pytest.fixture(autouse=True)
-def _reset_mock():
-    mock_db.reset_mock()
-    yield
+def _seed(monkeypatch, uid, rows):
+    """Seed a FakeDocumentStore with staged tasks and wire the ``_store()`` seam.
+
+    ``rows`` is a list of (id, completed, relevance_score) tuples.
+    """
+    store = FakeDocumentStore()
+    for doc_id, completed, score in rows:
+        store.set(
+            f'users/{uid}/staged_tasks/{doc_id}',
+            {'completed': completed, 'relevance_score': score},
+        )
+    monkeypatch.setattr(staged_tasks_mod, '_store', lambda: store)
+    return store
 
 
-def _make_doc_snapshot(doc_id):
-    """Create a minimal mock Firestore document snapshot with just .id."""
-    snap = MagicMock()
-    snap.id = doc_id
-    return snap
+def _score(store, uid, doc_id):
+    return store.get(f'users/{uid}/staged_tasks/{doc_id}').to_dict()['relevance_score']
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 class TestBatchUpdateStagedScores:
-    """batch_update_staged_scores must skip IDs not present in Firestore."""
+    """batch_update_staged_scores must skip IDs not present in the active set."""
 
-    def test_skips_stale_ids(self):
+    def test_skips_stale_ids(self, monkeypatch):
         """Only existing active IDs should be updated; stale IDs must be silently skipped."""
-        col_mock = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
-
-        # .where(completed==False).select([]).stream() returns active docs only
-        # Server has task-1 and task-3 active; task-2 was deleted
-        col_mock.where.return_value.select.return_value.stream.return_value = [
-            _make_doc_snapshot("task-1"),
-            _make_doc_snapshot("task-3"),
-        ]
-
-        batch_mock = MagicMock()
-        mock_db.batch.return_value = batch_mock
+        # Server has task-1 and task-3 active; task-2 was deleted (absent).
+        store = _seed(
+            monkeypatch,
+            "uid-123",
+            [("task-1", False, 0.0), ("task-3", False, 0.0)],
+        )
 
         scores = [
             {"id": "task-1", "relevance_score": 0.9},
@@ -151,33 +152,23 @@ class TestBatchUpdateStagedScores:
 
         staged_tasks_mod.batch_update_staged_scores("uid-123", scores)
 
-        # batch.update should have been called exactly twice (task-1, task-3)
-        assert batch_mock.update.call_count == 2
-        updated_ids = [c.args[0] for c in batch_mock.update.call_args_list]
-        # Each ref is col_mock.document(id) — verify the document() calls
-        col_mock.document.assert_any_call("task-1")
-        col_mock.document.assert_any_call("task-3")
-        # task-2 should NOT appear
-        doc_calls = [c.args[0] for c in col_mock.document.call_args_list]
-        assert "task-2" not in doc_calls
+        # task-1 and task-3 got their new scores; the stale task-2 was never created.
+        assert _score(store, "uid-123", "task-1") == 0.9
+        assert _score(store, "uid-123", "task-3") == 0.1
+        assert not store.exists("users/uid-123/staged_tasks/task-2")
 
-    def test_empty_scores_no_firestore_calls(self):
-        """Empty scores list should return immediately without any Firestore reads."""
+    def test_empty_scores_no_writes(self, monkeypatch):
+        """Empty scores list should return immediately without touching the store."""
+        store = _seed(monkeypatch, "uid-123", [("task-1", False, 0.3)])
+
         staged_tasks_mod.batch_update_staged_scores("uid-123", [])
 
-        mock_db.batch.assert_not_called()
-        mock_db.collection.assert_not_called()
+        # Untouched: the pre-existing score is unchanged.
+        assert _score(store, "uid-123", "task-1") == 0.3
 
-    def test_all_stale_ids_no_batch_commit(self):
-        """If every ID in scores is stale, no batch operations should occur."""
-        col_mock = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
-
-        # Server has no active docs matching
-        col_mock.where.return_value.select.return_value.stream.return_value = []
-
-        batch_mock = MagicMock()
-        mock_db.batch.return_value = batch_mock
+    def test_all_stale_ids_no_writes(self, monkeypatch):
+        """If every ID in scores is stale, nothing is written."""
+        store = _seed(monkeypatch, "uid-123", [])  # no active docs
 
         scores = [
             {"id": "gone-1", "relevance_score": 0.9},
@@ -186,21 +177,15 @@ class TestBatchUpdateStagedScores:
 
         staged_tasks_mod.batch_update_staged_scores("uid-123", scores)
 
-        # No batch should be created (early return before db.batch())
-        mock_db.batch.assert_not_called()
+        assert store.list_ids("users/uid-123/staged_tasks") == []
 
-    def test_all_valid_ids_updates_all(self):
+    def test_all_valid_ids_updates_all(self, monkeypatch):
         """When all active IDs exist, all should be updated."""
-        col_mock = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
-
-        col_mock.where.return_value.select.return_value.stream.return_value = [
-            _make_doc_snapshot("t1"),
-            _make_doc_snapshot("t2"),
-        ]
-
-        batch_mock = MagicMock()
-        mock_db.batch.return_value = batch_mock
+        store = _seed(
+            monkeypatch,
+            "uid-456",
+            [("t1", False, 0.0), ("t2", False, 0.0)],
+        )
 
         scores = [
             {"id": "t1", "relevance_score": 0.8},
@@ -209,22 +194,18 @@ class TestBatchUpdateStagedScores:
 
         staged_tasks_mod.batch_update_staged_scores("uid-456", scores)
 
-        assert batch_mock.update.call_count == 2
-        batch_mock.commit.assert_called_once()
+        assert _score(store, "uid-456", "t1") == 0.8
+        assert _score(store, "uid-456", "t2") == 0.2
 
-    def test_skips_promoted_completed_ids(self):
-        """Promoted tasks (completed=True) should be excluded by the where filter."""
-        col_mock = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = col_mock
-
-        # Only task-1 is active; task-2 is promoted (completed=True) so the
-        # where(completed==False) query won't return it
-        col_mock.where.return_value.select.return_value.stream.return_value = [
-            _make_doc_snapshot("task-1"),
-        ]
-
-        batch_mock = MagicMock()
-        mock_db.batch.return_value = batch_mock
+    def test_skips_promoted_completed_ids(self, monkeypatch):
+        """Promoted tasks (completed=True) should be excluded by the completed filter."""
+        # task-1 is active; task-2 is promoted (completed=True) so the
+        # completed==False query won't return it.
+        store = _seed(
+            monkeypatch,
+            "uid-789",
+            [("task-1", False, 0.0), ("task-2", True, 0.0)],
+        )
 
         scores = [
             {"id": "task-1", "relevance_score": 0.9},
@@ -233,6 +214,6 @@ class TestBatchUpdateStagedScores:
 
         staged_tasks_mod.batch_update_staged_scores("uid-789", scores)
 
-        # Only task-1 should be updated
-        assert batch_mock.update.call_count == 1
-        col_mock.document.assert_called_once_with("task-1")
+        # Only task-1 was updated; the completed task-2 kept its original score.
+        assert _score(store, "uid-789", "task-1") == 0.9
+        assert _score(store, "uid-789", "task-2") == 0.0

@@ -793,50 +793,19 @@ class TestPhase4RuntimeBehavior:
 
     def test_save_trends_accepts_str(self):
         """database/trends.py save_trends accepts memory_id as str."""
-        import sys
-        from unittest.mock import MagicMock
+        from unittest.mock import patch
         from models.trend import Trend, TrendEnum, TrendType
+
+        import database.trends as trends_db_mod
+        from tests.store_fakes import FakeDocumentStore
 
         trends = [Trend(category=TrendEnum.company, topics=['Tesla'], type=TrendType.best)]
 
-        # Mock Firestore
-        mock_client = MagicMock()
-        saved = sys.modules.get('database._client')
-        saved_firebase_admin = sys.modules.get('firebase_admin')
-        saved_firebase_firestore = sys.modules.get('firebase_admin.firestore')
-        sys.modules['database._client'] = MagicMock(db=mock_client, document_id_from_seed=lambda s: f'id-{s}')
-        firebase_admin_stub = MagicMock()
-        firebase_firestore_stub = MagicMock()
-        firebase_firestore_stub.ArrayUnion = lambda values: values
-        firebase_admin_stub.firestore = firebase_firestore_stub
-        sys.modules['firebase_admin'] = firebase_admin_stub
-        sys.modules['firebase_admin.firestore'] = firebase_firestore_stub
-
-        try:
-            sys.modules.pop('database.trends', None)
-            import database.trends as trends_db_mod
-
-            mock_doc_ref = MagicMock()
-            mock_client.collection.return_value.document.return_value = mock_doc_ref
-            mock_doc_ref.collection.return_value.document.return_value = mock_doc_ref
-
+        store = FakeDocumentStore()
+        with patch.object(trends_db_mod, '_store', lambda: store):
             trends_db_mod.save_trends('conv-123', trends)
 
-            # Verify the string ID was used in the ArrayUnion call
-            mock_doc_ref.update.assert_called()
-            call_args = mock_doc_ref.update.call_args[0][0]
-            assert 'memory_ids' in call_args
-        finally:
-            if saved is None:
-                sys.modules.pop('database._client', None)
-            else:
-                sys.modules['database._client'] = saved
-            if saved_firebase_admin is None:
-                sys.modules.pop('firebase_admin', None)
-            else:
-                sys.modules['firebase_admin'] = saved_firebase_admin
-            if saved_firebase_firestore is None:
-                sys.modules.pop('firebase_admin.firestore', None)
-            else:
-                sys.modules['firebase_admin.firestore'] = saved_firebase_firestore
-            sys.modules.pop('database.trends', None)
+        # The string memory_id was appended to the topic's memory_ids via ArrayUnion.
+        topic_docs = [d for path, d in store._docs.items() if '/topics/' in path]
+        assert len(topic_docs) == 1
+        assert topic_docs[0]['memory_ids'] == ['conv-123']

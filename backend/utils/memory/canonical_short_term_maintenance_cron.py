@@ -17,7 +17,6 @@ from typing import Any, Optional, cast
 
 from pydantic import ValidationError
 
-from database._client import db as default_db_client
 from models.product_memory import MemoryItem
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize_validation_error
@@ -144,7 +143,6 @@ def _safe_maintenance_error(uid: str, exc: Exception) -> str:
 
 def run_canonical_short_term_maintenance_for_cohort(
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
     recurrence_signal_persister: Optional[Callable[..., int]] = None,
@@ -166,11 +164,10 @@ def run_canonical_short_term_maintenance_for_cohort(
         )
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
-    client = db_client if db_client is not None else default_db_client
     uids = list_canonical_cohort_uids()
     summary = CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=len(uids))
     try:
-        lifecycle = run_canonical_cohort_lifecycle(db_client=client)
+        lifecycle = run_canonical_cohort_lifecycle()
     except Exception as exc:
         message = f"canonical_cohort_lifecycle:{type(exc).__name__}"
         logger.warning("canonical_short_term_maintenance_cron: %s", message)
@@ -193,7 +190,6 @@ def run_canonical_short_term_maintenance_for_cohort(
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
-                db_client=client,
                 now=maintenance_now,
                 run_id=effective_run_id,
                 recurrence_signal_sink=recurrence_signal_persister,
@@ -263,7 +259,6 @@ def run_canonical_short_term_maintenance_for_cohort(
                 summary.recurrence_candidates_total += recurrence_signal_consumer(
                     uid,
                     report.consolidation.recurrence_signals,
-                    firestore_client=client,
                 )
             except Exception as exc:
                 message = f"uid={uid}: recurrence_consumer:{type(exc).__name__}"
@@ -295,8 +290,8 @@ def run_canonical_short_term_maintenance_for_cohort(
             graph_page_size = canonical_graph_backfill_page_size()
             graph_report = run_enrichment(
                 uid=uid,
-                # The database client is injected above; this is retained only
-                # for the CLI contract and is never used by this cron path.
+                # firestore_project is a CLI-contract argument only; on this cron path persistence
+                # goes through the neutral store port (db_client stays the default, unused).
                 firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
                 limit=graph_page_size,
                 apply=True,
@@ -304,7 +299,6 @@ def run_canonical_short_term_maintenance_for_cohort(
                 structured_only=False,
                 apply_limit=graph_page_size,
                 scan_limit=canonical_graph_backfill_scan_size(page_size=graph_page_size),
-                db_client=client,
             )
             graph_outcomes = graph_report.get("outcomes", {})
             summary.graph_enriched_total += int(graph_outcomes.get("committed", 0))
@@ -333,7 +327,6 @@ def run_canonical_short_term_maintenance_for_cohort(
 
 async def run_canonical_short_term_maintenance_cron(
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
     recurrence_signal_persister: Optional[Callable[..., int]] = None,
@@ -343,7 +336,6 @@ async def run_canonical_short_term_maintenance_cron(
     return await run_blocking(
         db_executor,
         run_canonical_short_term_maintenance_for_cohort,
-        db_client=db_client,
         now=now,
         run_id=run_id,
         recurrence_signal_persister=recurrence_signal_persister,

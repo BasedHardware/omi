@@ -12,8 +12,6 @@ Environment:
     GOOGLE_APPLICATION_CREDENTIALS: Path to Firebase service account key
 """
 
-import firebase_admin
-from firebase_admin import credentials, firestore
 import sys
 import os
 import argparse
@@ -23,30 +21,21 @@ import time
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from database.store import get_document_store
 from utils.stt.streaming import deepgram_nova3_multi_languages
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    pass
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
 
-db = firestore.client()
+def _store():
+    return get_document_store()
 
 
 def get_all_users():
     """Get all user documents with language and transcription_preferences fields."""
-    users_ref = db.collection('users')
-    return list(users_ref.stream())
+    return _store().query('users')
 
 
 def process_user(user_doc, dry_run=False):
@@ -72,10 +61,11 @@ def process_user(user_doc, dry_run=False):
         )
         return 'would_update'
 
-    db.collection('users').document(uid).update(
+    _store().update(
+        f'users/{uid}',
         {
             'transcription_preferences.single_language_mode': expected_single_language_mode,
-        }
+        },
     )
     return 'updated'
 

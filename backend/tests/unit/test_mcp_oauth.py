@@ -1,13 +1,10 @@
 import json
 import os
-from pathlib import Path
-from types import ModuleType
 
 import pytest
 
-from testing.import_isolation import load_module_fresh, stub_modules
-
-_BACKEND = Path(__file__).resolve().parents[2]
+import database.mcp_oauth as mcp_oauth_module
+from tests.store_fakes import FakeDocumentStore
 
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_ID'] = 'omi-chatgpt-prod'
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_SECRET'] = 'client-secret'
@@ -15,117 +12,24 @@ os.environ['MCP_OAUTH_CHATGPT_REDIRECT_URIS'] = 'https://chatgpt.com/connector_p
 os.environ['MCP_OAUTH_PUBLIC_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
 
 
-class _DocSnapshot:
-    def __init__(self, reference, data=None):
-        self.reference = reference
-        self.id = reference.id
-        self._data = data
-        self.exists = data is not None
-
-    def to_dict(self):
-        return dict(self._data or {})
-
-
-class _DocReference:
-    def __init__(self, collection, doc_id):
-        self._collection = collection
-        self.id = doc_id
-
-    def get(self, transaction=None):
-        return _DocSnapshot(self, self._collection._docs.get(self.id))
-
-    def set(self, data, merge=False):
-        if merge and self.id in self._collection._docs:
-            self._collection._docs[self.id].update(data)
-        else:
-            self._collection._docs[self.id] = dict(data)
-
-    def update(self, data):
-        self._collection._docs.setdefault(self.id, {}).update(data)
-
-    def delete(self):
-        self._collection._docs.pop(self.id, None)
-
-
-class _Query:
-    def __init__(self, collection, field, expected):
-        self._collection = collection
-        self._field = field
-        self._expected = expected
-
-    def stream(self):
-        for doc_id, data in self._collection._docs.items():
-            if data.get(self._field) == self._expected:
-                yield _DocSnapshot(_DocReference(self._collection, doc_id), data)
-
-
-class _Collection:
-    def __init__(self):
-        self._docs = {}
-
-    def document(self, doc_id):
-        return _DocReference(self, doc_id)
-
-    def where(self, field, op, expected):
-        assert op == '=='
-        return _Query(self, field, expected)
-
-
-class _DB:
-    def __init__(self):
-        self._collections = {}
-
-    def collection(self, name):
-        self._collections.setdefault(name, _Collection())
-        return self._collections[name]
-
-    def transaction(self):
-        return _Transaction()
-
-
-class _Transaction:
-    def update(self, ref, data):
-        ref.update(data)
-
-    def set(self, ref, data, merge=False):
-        ref.set(data, merge=merge)
-
-
 @pytest.fixture(scope="module", autouse=True)
 def _mcp_oauth_module():
-    """Load ``database.mcp_oauth`` fresh against a stubbed firestore chain.
+    """Drive the real ``database.mcp_oauth`` through the neutral storage port (WP2, ADR-0002).
 
-    ``database.mcp_oauth`` decorates its transaction helpers with
-    ``@firestore.transactional`` at import time. The real decorator requires a
-    live Firestore ``Transaction`` object (it reads ``_read_only`` /
-    ``_max_attempts`` and calls ``_commit``), which is incompatible with the
-    in-memory ``_Transaction`` these tests use. We therefore stub
-    ``google.cloud.firestore`` with an identity ``transactional`` and re-exec the
-    module via ``load_module_fresh`` so the decorator is a no-op, then swap ``db``
-    for the in-memory ``_DB``. The freshly loaded module is published as the
-    ``mcp_oauth`` global so the existing test bodies resolve to it unchanged. See
-    ``backend/docs/test_isolation.md`` (reserve ``stub_modules`` finder case).
+    The module now talks to the backend-neutral ``DocumentStore`` via its ``_store`` seam instead
+    of the raw Firestore client, so this fixture injects an in-memory ``FakeDocumentStore`` at that
+    seam (one shared store for the module — tests use distinct uids/clients, matching the previous
+    module-scoped ``_DB``). The module is published as the ``mcp_oauth`` global so the existing test
+    bodies resolve to it unchanged.
     """
-    google_pkg = ModuleType("google")
-    google_pkg.__path__ = []  # type: ignore[attr-defined]
-    google_cloud_pkg = ModuleType("google.cloud")
-    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
-    firestore_stub = ModuleType("google.cloud.firestore")
-    firestore_stub.transactional = lambda fn: fn
-
-    fakes = {
-        "google": google_pkg,
-        "google.cloud": google_cloud_pkg,
-        "google.cloud.firestore": firestore_stub,
-    }
-    with stub_modules(fakes):
-        module = load_module_fresh(
-            "database.mcp_oauth",
-            os.path.join(str(_BACKEND), "database", "mcp_oauth.py"),
-        )
-        module.db = _DB()
-        globals()["mcp_oauth"] = module
-        yield module
+    store = FakeDocumentStore()
+    original = mcp_oauth_module._store
+    mcp_oauth_module._store = lambda: store
+    globals()["mcp_oauth"] = mcp_oauth_module
+    try:
+        yield mcp_oauth_module
+    finally:
+        mcp_oauth_module._store = original
 
 
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
@@ -186,13 +90,13 @@ def test_consent_transaction_creates_grant_and_code_together():
     )
 
     assert grant['uid'] == uid
-    code_doc = mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code)).get()
+    code_doc = mcp_oauth._store().get(f'mcp_oauth_authorization_codes/{mcp_oauth.hash_secret(code)}')
     assert code_doc.to_dict()['grant_id'] == grant['id']
 
 
 def test_consent_transaction_rejects_deletion_marker_without_oauth_writes():
     uid = 'deleting-consent-user'
-    mcp_oauth.db.collection('account_deletions').document(uid).set({'wipe_status': 'pending'})
+    mcp_oauth._store().set(f'account_deletions/{uid}', {'wipe_status': 'pending'})
 
     with pytest.raises(mcp_oauth.AccountDeletionAccessBlocked):
         mcp_oauth.create_grant_and_authorization_code_if_allowed(
@@ -204,8 +108,8 @@ def test_consent_transaction_rejects_deletion_marker_without_oauth_writes():
             mcp_oauth.pkce_s256('d' * 64),
         )
 
-    assert all(doc['uid'] != uid for doc in mcp_oauth.db.collection('mcp_oauth_grants')._docs.values())
-    assert all(doc['uid'] != uid for doc in mcp_oauth.db.collection('mcp_oauth_authorization_codes')._docs.values())
+    assert all(doc.to_dict()['uid'] != uid for doc in mcp_oauth._store().query('mcp_oauth_grants'))
+    assert all(doc.to_dict()['uid'] != uid for doc in mcp_oauth._store().query('mcp_oauth_authorization_codes'))
 
 
 def test_public_client_uses_pkce_without_shared_secret():
@@ -266,9 +170,9 @@ def test_delete_user_oauth_credentials_removes_unconsumed_authorization_codes():
 
     mcp_oauth.delete_user_oauth_credentials('deleted-user')
 
-    codes = mcp_oauth.db.collection('mcp_oauth_authorization_codes')._docs
-    assert all(code['uid'] != 'deleted-user' for code in codes.values())
-    assert any(code['uid'] == 'other-user' for code in codes.values())
+    codes = [doc.to_dict() for doc in mcp_oauth._store().query('mcp_oauth_authorization_codes')]
+    assert all(code['uid'] != 'deleted-user' for code in codes)
+    assert any(code['uid'] == 'other-user' for code in codes)
 
 
 def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
@@ -364,10 +268,11 @@ def test_chatgpt_prod_redirect_prefix_rejects_bypass_attempts(monkeypatch):
 
 
 def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix():
-    collection = mcp_oauth.db.collection('mcp_oauth_clients')
-    original_docs = dict(collection._docs)
+    store = mcp_oauth._store()
+    client_path = 'mcp_oauth_clients/omi-chatgpt-prod'
     try:
-        collection.document('omi-chatgpt-prod').set(
+        store.set(
+            client_path,
             {
                 'id': 'omi-chatgpt-prod',
                 'name': 'ChatGPT',
@@ -376,7 +281,7 @@ def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix(
                 'allowed_scopes': mcp_oauth.SUPPORTED_SCOPES,
                 'token_endpoint_auth_method': 'none',
                 'client_secret_hash': '',
-            }
+            },
         )
 
         client = mcp_oauth.get_client('omi-chatgpt-prod')
@@ -390,7 +295,7 @@ def test_chatgpt_prod_configured_client_keeps_dynamic_connector_callback_prefix(
             client, 'https://chatgpt.com.evil.test/connector/oauth/new-custom-app-id'
         )
     finally:
-        collection._docs = original_docs
+        store.delete(client_path)
 
 
 def test_claude_prod_client_is_registered_for_cloud_connector_callback():

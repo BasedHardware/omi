@@ -1,0 +1,24 @@
+# Offline unit/contract test image = the WP0 backend image + additive test-only tooling.
+# Build the base first (`docker compose build` in this directory), then:
+#   docker build -t omi-onprem-backend-test -f Dockerfile.test .
+# The build needs internet (apt + helm download); the resulting image runs tests offline.
+FROM omi-onprem-backend:latest
+USER root
+
+# git + helm + jq + gettext-base(envsubst): a set of repo-root contract tests shell out to them
+# (changed-files scope, helm-rendered deployment contracts, the auto-dev backend scope step which
+# parses GitHub API proofs with jq, and the agent-vm startup-publisher test which renders the startup
+# script via envsubst). Without them those tests error out spuriously.
+RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates jq gettext-base \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://get.helm.sh/helm-v3.16.3-linux-amd64.tar.gz -o /tmp/helm.tgz \
+    && tar -xzf /tmp/helm.tgz -C /tmp && mv /tmp/linux-amd64/helm /usr/local/bin/helm \
+    && chmod +x /usr/local/bin/helm && rm -rf /tmp/helm.tgz /tmp/linux-amd64
+
+# The suite mounts the repo (owned by the host uid, not root); let root operate on it.
+RUN git config --system --add safe.directory '*'
+
+# Test-only Python deps not in the runtime image.
+RUN pip install --no-cache-dir aioresponses==0.7.8 fake-firestore==0.13.1 fakeredis==2.36.2 \
+    lupa==2.8 pytest-httpserver==1.1.5 werkzeug==3.1.8 pymongo==4.10.1 mongomock==4.3.0 \
+    boto3==1.35.36 http-ece==1.2.1

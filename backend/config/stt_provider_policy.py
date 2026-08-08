@@ -9,6 +9,7 @@ traffic contract, and regression coverage are ready.
 
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import Final, Mapping
 
@@ -154,6 +155,36 @@ PARAKEET_MODEL_BY_SURFACE: Final[Mapping[STTServingSurface, str]] = {
 }
 PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL: Final[Mapping[str, frozenset[str]]] = {
     'nvidia/parakeet-rnnt-1.1b': frozenset({'en'}),
+    # Self-hostable multilingual streaming model (NVIDIA NIM: parakeet-1-1b-rnnt-multilingual).
+    # 25-language universal-rnnt variant. Base codes only (the policy normalizes region tags).
+    'nvidia/parakeet-1-1b-rnnt-multilingual': frozenset(
+        {
+            'multi',
+            'en',
+            'es',
+            'ar',
+            'pt',
+            'fr',
+            'de',
+            'it',
+            'ja',
+            'ko',
+            'ru',
+            'hi',
+            'he',
+            'nb',
+            'nn',
+            'nl',
+            'cs',
+            'da',
+            'pl',
+            'sv',
+            'th',
+            'tr',
+            'bn',
+            'ta',
+        }
+    ),
     'nvidia/parakeet-tdt-0.6b-v3': frozenset(
         {
             'multi',
@@ -187,9 +218,42 @@ PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL: Final[Mapping[str, frozenset[str]]] = {
 }
 
 
+# The real-time (streaming/PTT) Parakeet model is deployment-selectable among the code-approved
+# options below. The default keeps the English-only model, so cloud behaviour is unchanged; an
+# on-prem deployment serving the multilingual NIM model sets PARAKEET_STREAM_MODEL to it and the
+# policy then reports that model's languages. The *set* of allowed models stays code-owned: an
+# unrecognized value falls back to the default rather than silently widening capabilities.
+STREAMING_PARAKEET_MODEL_ENV: Final = 'PARAKEET_STREAM_MODEL'
+_DEFAULT_STREAMING_PARAKEET_MODEL: Final = 'nvidia/parakeet-rnnt-1.1b'
+APPROVED_STREAMING_PARAKEET_MODELS: Final[frozenset[str]] = frozenset(
+    {
+        'nvidia/parakeet-rnnt-1.1b',
+        'nvidia/parakeet-1-1b-rnnt-multilingual',
+    }
+)
+_REALTIME_SURFACES: Final = frozenset({STTServingSurface.STREAMING, STTServingSurface.PTT})
+
+
+def streaming_parakeet_model() -> str:
+    """The deployed real-time Parakeet model. Deployments select among the code-approved models via
+    ``PARAKEET_STREAM_MODEL``; any other value falls back to the default so a typo cannot silently
+    disable or widen the surface."""
+    configured = os.getenv(STREAMING_PARAKEET_MODEL_ENV, '').strip()
+    if configured in APPROVED_STREAMING_PARAKEET_MODELS:
+        return configured
+    return _DEFAULT_STREAMING_PARAKEET_MODEL
+
+
+def deployed_parakeet_model(surface: STTServingSurface) -> str:
+    """The Parakeet model actually serving a surface (streaming/PTT are deployment-selectable)."""
+    if surface in _REALTIME_SURFACES:
+        return streaming_parakeet_model()
+    return PARAKEET_MODEL_BY_SURFACE[surface]
+
+
 def parakeet_supports_language(surface: STTServingSurface, language: str) -> bool:
     """Return whether the deployed Parakeet model supports a normalized language."""
-    model = PARAKEET_MODEL_BY_SURFACE[surface]
+    model = deployed_parakeet_model(surface)
     return language.strip().lower() in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
 
 

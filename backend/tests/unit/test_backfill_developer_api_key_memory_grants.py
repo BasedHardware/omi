@@ -16,12 +16,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import scripts.backfill_developer_api_key_memory_grants as backfill
+import database.memory_app_key_grants as memory_app_key_grants
 from database.memory_app_key_grants import (
     APP_KEY_MEMORY_GRANT_DOC_ID,
     APP_KEY_MEMORY_GRANTS_COLLECTION,
     DEVELOPER_API_CONSUMER,
     DEVELOPER_API_DEFAULT_APP_ID,
 )
+from tests.store_fakes import FakeDocumentStore
 
 BEFORE = backfill.SEEDING_LANDED_AT - timedelta(days=30)
 AFTER = backfill.SEEDING_LANDED_AT + timedelta(days=1)
@@ -134,7 +136,15 @@ _ABSENT = object()
 
 
 def _run(db, monkeypatch, capsys, argv):
-    monkeypatch.setattr(backfill, 'get_firestore_client', lambda: db)
+    # The script now resolves persistence through the neutral storage port (WP2/ADR-0028): it
+    # enumerates ``dev_api_keys`` via ``backfill._store().query(...)`` and the grant reader/writer
+    # go through ``database.memory_app_key_grants._store()``. Point BOTH seams at a FakeDocumentStore
+    # over the same path-keyed dict, then run the REAL script end-to-end — real enumeration, the real
+    # grant reader/writer, no db_client — so this exercises the actual production call path (rather
+    # than papering over a signature mismatch).
+    store_factory = lambda: FakeDocumentStore(backing=db.docs)  # noqa: E731
+    monkeypatch.setattr(memory_app_key_grants, '_store', store_factory)
+    monkeypatch.setattr(backfill, '_store', store_factory)
     monkeypatch.setattr('sys.argv', ['backfill_developer_api_key_memory_grants.py', *argv])
     backfill.main()
     return eval(capsys.readouterr().out.strip())  # the script prints a dict literal

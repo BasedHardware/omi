@@ -11,7 +11,6 @@ import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
 import database.memories as memory_db
-from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -267,10 +266,10 @@ def get_memories_via_integration(
     if not apps_utils.app_can_read_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
         memory_objects = memorydb_list_with_locked_preview(
-            MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+            MemoryService().read(uid, limit=limit, offset=offset)
         )
         memory_items: List[integration_models.MemoryItem] = []
         for memory in memory_objects:

@@ -13,6 +13,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -70,37 +71,54 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    final refreshResult = await AuthService.instance.refreshIdToken();
-    switch (refreshResult) {
-      case AuthTokenSuccess(:final token):
-        SharedPreferencesUtil().authToken = token;
-        break;
-      case AuthTokenTransientFailure():
-        if (expiry.isBefore(DateTime.now())) {
-          // Preserve a still-valid token during transient refresh trouble, but
-          // never reuse one whose expiration has already passed.
-          SharedPreferencesUtil().authToken = '';
+    if (Env.useOidc) {
+      // OIDC (ADR-0038): refresh through the OIDC provider, not Firebase.
+      final outcome = await OidcAuthService.instance.refresh();
+      if (!outcome.ok && expiry.isBefore(DateTime.now())) {
+        if (outcome.transient) {
+          // Refresh failed for a transient reason (e.g. network) and the cached token is already
+          // expired. Keep the session and signal a retryable failure instead of a terminal logout;
+          // the next attempt can succeed.
+          throw AuthTokenUnavailableException(const AuthTokenTransientFailure(failureClass: 'oidc_refresh_transient'));
         }
-        break;
-      case AuthTokenMissingUser():
-        throw AuthTokenUnavailableException(refreshResult);
-      case AuthTokenMissingToken():
-        if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
-            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
-          );
-        }
-        throw AuthTokenUnavailableException(refreshResult);
-      case AuthTokenTerminalFailure(:final code):
-        if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
-            AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
-          );
-        }
-        throw AuthTokenUnavailableException(refreshResult);
+        // Definitive failure (invalid/expired refresh token): drop it, forcing re-login.
+        SharedPreferencesUtil().authToken = '';
+      }
+      hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+      if (!hasAuthToken) throw AuthTokenUnavailableException(const AuthTokenMissingToken());
+    } else {
+      final refreshResult = await AuthService.instance.refreshIdToken();
+      switch (refreshResult) {
+        case AuthTokenSuccess(:final token):
+          SharedPreferencesUtil().authToken = token;
+          break;
+        case AuthTokenTransientFailure():
+          if (expiry.isBefore(DateTime.now())) {
+            // Preserve a still-valid token during transient refresh trouble, but
+            // never reuse one whose expiration has already passed.
+            SharedPreferencesUtil().authToken = '';
+          }
+          break;
+        case AuthTokenMissingUser():
+          throw AuthTokenUnavailableException(refreshResult);
+        case AuthTokenMissingToken():
+          if (expireTerminalSession) {
+            await AuthService.instance.expireSession(
+              const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
+            );
+          }
+          throw AuthTokenUnavailableException(refreshResult);
+        case AuthTokenTerminalFailure(:final code):
+          if (expireTerminalSession) {
+            await AuthService.instance.expireSession(
+              AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
+            );
+          }
+          throw AuthTokenUnavailableException(refreshResult);
+      }
+      hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+      if (!hasAuthToken) throw AuthTokenUnavailableException(refreshResult);
     }
-    hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
-    if (!hasAuthToken) throw AuthTokenUnavailableException(refreshResult);
   }
 
   if (!hasAuthToken) throw AuthTokenUnavailableException(const AuthTokenMissingToken());
@@ -286,7 +304,10 @@ Future<T> refreshAndReplayAfter401<T>({
 }) async {
   final service = authService ?? AuthService.instance;
   await disposeUnauthorizedResponse?.call(firstResponse);
-  final refresh = await service.refreshIdToken();
+  // 401 recovery: the backend rejected the token we just sent. Force a brand-new
+  // token — a cached-token fast-path would replay the rejected token and 401
+  // again. (Firebase already force-refreshes; this makes OIDC do the same.)
+  final refresh = await service.refreshIdToken(forceRefresh: true);
   switch (refresh) {
     case AuthTokenSuccess():
       late T replayed;

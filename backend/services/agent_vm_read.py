@@ -11,11 +11,13 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from google.cloud.firestore import transactional
-
-from database._client import get_firestore_client
+from database.store import get_document_store
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import DEFAULT_ZONE, RECONCILER_SCHEMA_VERSION, reconcile_requested
+
+
+def _store():
+    return get_document_store()
 
 
 def reconcile_lease_active(vm: Mapping[str, Any], now: float | None = None) -> bool:
@@ -187,23 +189,22 @@ def apply_agent_vm_read_decision(vm: Mapping[str, Any], decision: AgentVmReadDec
     return {**dict(vm), "status": decision.client_status}
 
 
-@transactional
 def _record_provider_missing_if_current_txn(
-    transaction: Any,
-    deletion_ref: Any,
-    user_ref: Any,
+    tx: Any,
+    deletion_path: str,
+    user_path: str,
     vm_name: str,
     zone: str,
     auth_token: str,
     now: float,
 ) -> bool:
     """Record a provider-confirmed 404 without erasing the owner pointer."""
-    deletion = deletion_ref.get(transaction=transaction)
+    deletion = tx.get(deletion_path)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
     status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
     if account_deletion_blocks_access(status):
         return False
-    snapshot = user_ref.get(transaction=transaction)
+    snapshot = tx.get(user_path)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if (
         not isinstance(vm, dict)
@@ -227,8 +228,8 @@ def _record_provider_missing_if_current_txn(
         return False
     missing_since = reconcile.get("missingSince")
     recorded_missing_since = float(missing_since) if isinstance(missing_since, (int, float)) else now
-    transaction.update(
-        user_ref,
+    tx.update(
+        user_path,
         {
             "agentVm.reconcile.state": "missing",
             "agentVm.reconcile.lastError": "GCE instance not found",
@@ -248,16 +249,17 @@ def record_provider_missing_if_current(
 ) -> bool:
     """Mark a provider-confirmed missing instance so provisioning can replace it."""
     now = time.time() if now is None else now
-    client = get_firestore_client()
     return bool(
-        _record_provider_missing_if_current_txn(
-            client.transaction(),
-            client.collection("account_deletions").document(uid),
-            client.collection("users").document(uid),
-            vm_name,
-            zone,
-            auth_token,
-            now,
+        _store().run_transaction(
+            lambda tx: _record_provider_missing_if_current_txn(
+                tx,
+                f"account_deletions/{uid}",
+                f"users/{uid}",
+                vm_name,
+                zone,
+                auth_token,
+                now,
+            )
         )
     )
 

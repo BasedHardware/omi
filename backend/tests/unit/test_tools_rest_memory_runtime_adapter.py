@@ -108,7 +108,6 @@ def test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision(monke
             'uid': 'uid-rest',
             'limit': 5000,
             'offset': 0,
-            'db_client': memory_services.firestore_db,
             'allow_legacy_safe_fallback': True,
         }
     ]
@@ -186,7 +185,6 @@ def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_deci
             'uid': 'uid-rest',
             'query': 'coffee',
             'limit': 20,
-            'db_client': memory_services.firestore_db,
             'allow_legacy_safe_fallback': True,
         }
     ]

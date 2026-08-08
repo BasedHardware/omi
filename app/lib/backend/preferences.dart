@@ -681,6 +681,11 @@ class SharedPreferencesUtil {
 
   set authToken(String value) => saveString('authToken', value);
 
+  // OIDC refresh token (ADR-0038); empty when AUTH_BACKEND=firebase.
+  String get oidcRefreshToken => getString('oidcRefreshToken');
+
+  set oidcRefreshToken(String value) => saveString('oidcRefreshToken', value);
+
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 
   set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
@@ -705,6 +710,7 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
     authToken = '';
+    oidcRefreshToken = '';
     tokenExpirationTime = 0;
     uid = '';
     email = '';

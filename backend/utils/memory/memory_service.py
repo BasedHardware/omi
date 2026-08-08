@@ -57,14 +57,14 @@ class ExternalMemoryWriteContext:
     legacy_write_detail: Any = None
 
 
-def _require_legacy_write_guard(uid: str, db_client: Any, *, consumer: str, operation: str) -> None:
-    write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
+def _require_legacy_write_guard(uid: str, *, consumer: str, operation: str) -> None:
+    write_guard = guard_legacy_memory_write(uid, consumer=consumer, operation=operation)
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
 
-def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client: Any) -> bool:
-    decision = canonical_write_decision(uid, db_client=db_client)
+def _canonical_external_write_enabled_or_fail_closed(uid: str) -> bool:
+    decision = canonical_write_decision(uid)
     if decision.enabled:
         return True
     if decision.fail_closed:
@@ -72,14 +72,12 @@ def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client: Any) -
     return False
 
 
-def _read_backend_or_fail_closed(
-    uid: str, *, db_client: Any, legacy: "LegacyMemoryBackend", canonical: "CanonicalMemoryBackend"
-):
+def _read_backend_or_fail_closed(uid: str, *, legacy: "LegacyMemoryBackend", canonical: "CanonicalMemoryBackend"):
     """Choose a read backend without ever reclassifying an enrolled user as legacy."""
 
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return legacy
-    if canonical_read_enabled(uid, db_client=db_client):
+    if canonical_read_enabled(uid):
         return canonical
     raise HTTPException(status_code=503, detail={"reason": "canonical_memory_not_ready", "memory_system": "canonical"})
 
@@ -87,14 +85,13 @@ def _read_backend_or_fail_closed(
 def resolve_external_memory_write_context(
     uid: str,
     *,
-    db_client: Any,
     memory_system: MemorySystem,
     consumer: str,
     operation: str,
 ) -> ExternalMemoryWriteContext:
-    if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid, db_client):
+    if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
         return ExternalMemoryWriteContext(memory_system=memory_system)
-    write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
+    write_guard = guard_legacy_memory_write(uid, consumer=consumer, operation=operation)
     return ExternalMemoryWriteContext(
         memory_system=MemorySystem.LEGACY,
         legacy_write_allowed=write_guard.allowed,
@@ -133,14 +130,14 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
     return memory.model_copy(update={"memory_tier": None})
 
 
-def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
+def fetch_memory_dict(uid: str, memory_id: str) -> MemoryPayload:
     """Fetch one memory by id with canonical/legacy routing and locked-memory paywall."""
-    if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
-        if not canonical_read_enabled(uid, db_client=db_client):
+    if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+        if not canonical_read_enabled(uid):
             raise HTTPException(
                 status_code=503, detail={"reason": "canonical_memory_not_ready", "memory_system": "canonical"}
             )
-        item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
+        item = read_canonical_memory_item(uid, memory_id)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         return memory_item_to_memorydb(item).dict()
@@ -283,11 +280,9 @@ def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List
     ]
 
 
-def _canonical_search_memories_mcp(
-    uid: str, query: str, *, limit: int = 5, db_client: Any = None
-) -> List[McpSearchPayload]:
+def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
     capped_limit = max(1, min(limit, 20))
-    items = search_canonical_memories(uid, query, limit=capped_limit, db_client=db_client)
+    items = search_canonical_memories(uid, query, limit=capped_limit)
     formatted: List[McpSearchPayload] = []
     for rank, item in enumerate(items):
         formatted.append(
@@ -374,9 +369,6 @@ class LegacyMemoryBackend:
 
 
 class CanonicalMemoryBackend:
-    def __init__(self, *, db_client: Any = None):
-        self._db_client = db_client
-
     def read(
         self,
         uid: str,
@@ -391,7 +383,6 @@ class CanonicalMemoryBackend:
             uid,
             limit=limit,
             offset=offset,
-            db_client=self._db_client,
             device_scope_request=device_scope_request,
             include_pending_processing=include_pending_processing,
             now=now,
@@ -404,7 +395,6 @@ class CanonicalMemoryBackend:
             uid,
             query,
             limit=limit,
-            db_client=self._db_client,
             device_scope_request=device_scope_request,
         )
         results: List[MemorySearchMatch] = []
@@ -416,10 +406,10 @@ class CanonicalMemoryBackend:
         return results
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
-        return write_canonical_external_memory(uid, data, db_client=self._db_client)
+        return write_canonical_external_memory(uid, data)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
-        update_canonical_memory_review(uid, memory_id, value, db_client=self._db_client)
+        update_canonical_memory_review(uid, memory_id, value)
 
     def update_product_fields(
         self,
@@ -434,7 +424,6 @@ class CanonicalMemoryBackend:
             memory_id,
             tags=tags,
             category=category,
-            db_client=self._db_client,
         )
         return memory_item_to_memorydb(item)
 
@@ -442,27 +431,26 @@ class CanonicalMemoryBackend:
         return [self.write(uid, item) for item in items]
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
-        item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)
+        item = update_canonical_memory_content(uid, memory_id, content)
         return memory_item_to_memorydb(item)
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
-        update_canonical_memory_visibility(uid, memory_id, visibility, db_client=self._db_client)
+        update_canonical_memory_visibility(uid, memory_id, visibility)
 
     def delete(self, uid: str, memory_id: str) -> None:
-        delete_canonical_memory(uid, memory_id, db_client=self._db_client)
+        delete_canonical_memory(uid, memory_id)
 
     def delete_all(self, uid: str) -> None:
-        delete_all_canonical_memories(uid, db_client=self._db_client)
+        delete_all_canonical_memories(uid)
 
     def delete_default(self, uid: str) -> None:
-        delete_default_canonical_memories(uid, db_client=self._db_client)
+        delete_default_canonical_memories(uid)
 
 
 class MemoryService:
-    def __init__(self, *, db_client: Any = None):
-        self._db_client = db_client
+    def __init__(self):
         self._legacy = LegacyMemoryBackend()
-        self._canonical = CanonicalMemoryBackend(db_client=db_client)
+        self._canonical = CanonicalMemoryBackend()
 
     def _resolve_mutation_backend(self, uid: str):
         """Return the only store a mutation may affect for this account.
@@ -472,7 +460,7 @@ class MemoryService:
         modify a legacy row. Legacy accounts retain their existing behavior.
         """
 
-        decision = canonical_write_decision(uid, db_client=self._db_client)
+        decision = canonical_write_decision(uid)
         if decision.memory_system != MemorySystem.CANONICAL:
             return self._legacy
         if decision.enabled:
@@ -501,7 +489,6 @@ class MemoryService:
     ) -> List[MemoryDB]:
         backend = _read_backend_or_fail_closed(
             uid,
-            db_client=self._db_client,
             legacy=self._legacy,
             canonical=self._canonical,
         )
@@ -555,7 +542,6 @@ class MemoryService:
     ) -> List[MemorySearchMatch]:
         backend = _read_backend_or_fail_closed(
             uid,
-            db_client=self._db_client,
             legacy=self._legacy,
             canonical=self._canonical,
         )
@@ -570,12 +556,11 @@ class MemoryService:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
         backend = _read_backend_or_fail_closed(
             uid,
-            db_client=self._db_client,
             legacy=self._legacy,
             canonical=self._canonical,
         )
         if backend is self._canonical:
-            return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
+            return _canonical_search_memories_mcp(uid, query, limit=limit)
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
@@ -621,7 +606,7 @@ class MemoryService:
         backend = self._resolve_mutation_backend(uid)
         if backend is self._legacy:
             return None
-        return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
+        return retract_conversation_sourced_memories(uid, conversation_id)
 
     def replace_conversation_memories(
         self,
@@ -636,7 +621,6 @@ class MemoryService:
             uid,
             conversation_id,
             items,
-            db_client=self._db_client,
         )
 
     def create_external_memory(
@@ -655,12 +639,10 @@ class MemoryService:
         ``require_canonical_promotion`` remains accepted for compatibility, but
         canonical external writes are always processed before durable admission.
         """
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             payload = required_processing_payload(memory_db.model_dump(mode="python"), source_surface=consumer)
             committed_id = self._canonical.write(uid, payload)
-            item = read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
+            item = read_canonical_memory_item(uid, committed_id or memory_db.id)
             if item is not None:
                 return memory_item_to_memorydb(item)
             logger.error(
@@ -670,7 +652,7 @@ class MemoryService:
             )
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
-        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        _require_legacy_write_guard(uid, consumer=consumer, operation=operation)
         memories_db.create_memory(uid, memory_write_payload(memory_db, MemoryApiExposure.LEGACY))
         if upsert_vector:
             try:
@@ -701,9 +683,7 @@ class MemoryService:
         require_canonical_promotion: bool = True,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             payloads = [
                 required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
                 for memory in memory_dbs
@@ -711,7 +691,7 @@ class MemoryService:
             committed_ids = self._canonical.write_batch(uid, payloads)
             results: List[MemoryDB] = []
             for memory_id in committed_ids:
-                item = read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+                item = read_canonical_memory_item(uid, memory_id)
                 if item is not None:
                     results.append(memory_item_to_memorydb(item))
                 else:
@@ -719,7 +699,7 @@ class MemoryService:
                     raise HTTPException(status_code=503, detail="Service temporarily unavailable")
             return results
 
-        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        _require_legacy_write_guard(uid, consumer=consumer, operation=operation)
         memories_db.save_memories(
             uid,
             [memory_write_payload(memory, MemoryApiExposure.LEGACY) for memory in memory_dbs],
@@ -753,16 +733,14 @@ class MemoryService:
         delete_vector: bool = True,
     ) -> None:
         """Delete external memory with legacy vector cleanup when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             try:
                 self._canonical.delete(uid, memory_id)
             except ValueError:
                 raise HTTPException(status_code=404, detail="Memory not found")
             return
 
-        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        _require_legacy_write_guard(uid, consumer=consumer, operation=operation)
         memory = memories_db.get_memory(uid, memory_id)
         if not memory:
             raise HTTPException(status_code=404, detail="Memory not found")
@@ -787,15 +765,13 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         """Update external memory content with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid, self._db_client
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             try:
                 return self._canonical.update_content(uid, memory_id, content)
             except ValueError:
                 raise HTTPException(status_code=404, detail="Memory not found")
 
-        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        _require_legacy_write_guard(uid, consumer=consumer, operation=operation)
         memory = memories_db.get_memory(uid, memory_id)
         if not memory:
             raise HTTPException(status_code=404, detail="Memory not found")

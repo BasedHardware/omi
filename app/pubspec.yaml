@@ -47,6 +47,9 @@ dependencies:
   # Auth
   google_sign_in: 6.2.2
   sign_in_with_apple: ^6.1.1
+  # OIDC client (ADR-0038) — additive; active only when AUTH_BACKEND=oidc.
+  flutter_appauth: ^8.0.1
+  flutter_secure_storage: ^9.2.2
 
   # Analytics and Support
   intercom_flutter: 9.4.22
@@ -82,6 +85,12 @@ dependencies:
   envied: 1.1.1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
+  # Self-hosted push (ADR-0011): UnifiedPush for a Firebase-free on-prem deployment (Android).
+  unifiedpush: ^6.2.0
+  # We own the WebPush key pair + decryption (ntfy is a text transport, so the connector's native
+  # auto-decrypt can't apply — see notification_service_unifiedpush.dart). Same reference impl the
+  # connector uses internally; declared direct because we import it.
+  webpush_encryption: ^1.0.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3

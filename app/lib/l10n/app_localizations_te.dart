@@ -1881,6 +1881,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get signInWithGoogle => 'Google తో సైన్ ఇన్ చేయండి';
 
   @override
+  String get signInWithSSO => 'SSO తో సైన్ ఇన్ చేయండి';
+
+  @override
   String get byContinuingAgree => 'కొనసాగడం ద్వారా, మీరు మా ';
 
   @override

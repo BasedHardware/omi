@@ -112,7 +112,6 @@ def associate_canonical_evidence(
     evidence: AssociationEvidence,
     *,
     account_generation: Optional[int] = None,
-    firestore_client: Any = None,
     retrieve_ids: Callable[..., list[str]] = query_workstream_association_candidates,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
     purge_stale: Callable[..., bool] = delete_workstream_association_vector,
@@ -137,9 +136,9 @@ def associate_canonical_evidence(
             telemetry(outcome.outcome)
         return outcome
 
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return finish(AssociationOutcome(outcome=AssociationOutcomeKind.not_canonical_cohort))
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
 
     target_generation = control.account_generation if account_generation is None else account_generation
     if target_generation != control.account_generation:
@@ -160,7 +159,6 @@ def associate_canonical_evidence(
             uid,
             workstream_id,
             account_generation=target_generation,
-            firestore_client=firestore_client,
         )
         if workstream is None or workstream.status != WorkstreamStatus.open:
             purge_stale(uid, workstream_id, account_generation=target_generation)
@@ -232,7 +230,6 @@ def associate_canonical_evidence(
         ),
         idempotency_key=_association_idempotency_key(evidence, judgment.workstream_id),
         account_generation=target_generation,
-        firestore_client=firestore_client,
         required_status=WorkstreamStatus.open,
     )
     return finish(
@@ -257,15 +254,14 @@ def consume_recurrence_signal(
     signal: CanonicalRecurrenceSignal,
     *,
     account_generation: int = 0,
-    firestore_client: Any = None,
     create_candidate: Callable[..., Any] = candidate_service.create_candidate,
 ) -> RecurrenceConsumptionOutcome:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return RecurrenceConsumptionOutcome(
             outcome=RecurrenceOutcomeKind.not_canonical_cohort,
             signal_id=signal.signal_id,
         )
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     if control.account_generation != account_generation:
         raise recurrence_inbox_db.RecurrenceGenerationMismatchError('account generation mismatch')
     if (
@@ -311,13 +307,12 @@ def persist_recurrence_signals_for_maintenance(
     uid: str,
     signals: Iterable[CanonicalRecurrenceSignal],
     *,
-    firestore_client: Any = None,
     enqueue: Callable[..., RecurrenceInboxReceipt] = recurrence_inbox_db.enqueue_recurrence_signal,
 ) -> int:
     """Durably hand off a consolidation batch before its memory watermark advances."""
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return 0
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     signal_list = list(signals)
 
     persisted = 0
@@ -327,7 +322,6 @@ def persist_recurrence_signals_for_maintenance(
                 uid,
                 signal,
                 account_generation=control.account_generation,
-                firestore_client=firestore_client,
             )
             persisted += 1
         except Exception:
@@ -346,20 +340,18 @@ def drain_recurrence_inbox_for_maintenance(
     uid: str,
     signals: Iterable[CanonicalRecurrenceSignal] = (),
     *,
-    firestore_client: Any = None,
     list_pending: Callable[..., list[RecurrenceInboxReceipt]] = recurrence_inbox_db.list_pending_recurrence_receipts,
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return 0
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
 
     created = 0
     receipts = list_pending(
         uid,
         account_generation=control.account_generation,
-        firestore_client=firestore_client,
     )
     for receipt in receipts:
         try:
@@ -367,14 +359,12 @@ def drain_recurrence_inbox_for_maintenance(
                 uid,
                 receipt.signal,
                 account_generation=receipt.account_generation,
-                firestore_client=firestore_client,
             )
             complete(
                 uid,
                 receipt.receipt_id,
                 outcome=result.outcome,
                 account_generation=receipt.account_generation,
-                firestore_client=firestore_client,
             )
             created += int(result.outcome == RecurrenceOutcomeKind.candidate_created)
         except recurrence_inbox_db.RecurrenceGenerationMismatchError:
@@ -385,7 +375,6 @@ def drain_recurrence_inbox_for_maintenance(
                 receipt.receipt_id,
                 error_code=type(exc).__name__,
                 account_generation=receipt.account_generation,
-                firestore_client=firestore_client,
             )
             record_fallback(
                 component='other',
@@ -401,7 +390,6 @@ def consume_recurrence_signals_for_maintenance(
     uid: str,
     signals: Iterable[CanonicalRecurrenceSignal],
     *,
-    firestore_client: Any = None,
     enqueue: Callable[..., RecurrenceInboxReceipt] = recurrence_inbox_db.enqueue_recurrence_signal,
     list_pending: Callable[..., list[RecurrenceInboxReceipt]] = recurrence_inbox_db.list_pending_recurrence_receipts,
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
@@ -410,12 +398,10 @@ def consume_recurrence_signals_for_maintenance(
     persist_recurrence_signals_for_maintenance(
         uid,
         signals,
-        firestore_client=firestore_client,
         enqueue=enqueue,
     )
     return drain_recurrence_inbox_for_maintenance(
         uid,
-        firestore_client=firestore_client,
         list_pending=list_pending,
         complete=complete,
         retry=retry,

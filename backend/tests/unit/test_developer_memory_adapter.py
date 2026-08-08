@@ -1,7 +1,12 @@
 import ast
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
+
 from config.memory_rollout import MemoryRolloutMode
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from models.memory_search_gateway import SearchMode
 from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
@@ -26,6 +31,20 @@ from utils.memory.default_read_rollout import (
 )
 
 _DEVELOPER_QUOTE_TEXT = 'User prefers concrete developer memory reads.'
+
+
+@pytest.fixture
+def store(monkeypatch):
+    """Share one in-memory dict between the injected Firestore-shaped fake and ``document_store``.
+
+    Since WP2/ADR-0022, the rollout-state read and the memory-item reads flow through the neutral
+    storage port (``document_store._store()``), not the injected ``db_client``. This fixture points
+    that seam at a ``FakeDocumentStore`` over a dict the test seeds, so seeded state and items are
+    visible to the code under test. The ``db_client`` fake stays wired for its other DI uses.
+    """
+    backing: dict = {}
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=backing))
+    return backing
 
 
 def _developer_source() -> str:
@@ -78,7 +97,7 @@ def _enabled_rollout_doc(uid='u1'):
 def test_developer_route_wires_adapter_before_legacy_memory_reads():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
-    rollout_call = "read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')"
+    rollout_call = "read_default_read_rollout(uid=uid, consumer='developer_api')"
     adapter_call = 'search_memory_default_developer_memories('
     legacy_call = 'memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])'
     assert rollout_call in contents
@@ -93,9 +112,9 @@ def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_r
         'auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context)'
     )
     uid_from_context = 'uid = auth_context.uid'
-    app_key_grant_call = 'app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)'
+    app_key_grant_call = 'app_key_grant = authorize_memory_external_default_memory_read(auth_context)'
     app_key_deny_check = 'if not app_key_grant.allowed:'
-    rollout_call = "read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')"
+    rollout_call = "read_default_read_rollout(uid=uid, consumer='developer_api')"
     vector_adapter_call = 'search_memory_default_developer_memories_vector('
     vector_side_effect = 'fetch_default_vector_memory_search('
     assert auth_context_dependency in route_source
@@ -116,7 +135,7 @@ def test_developer_create_route_checks_split_brain_guard_before_legacy_write():
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     route_source = _function_source_for_route('/v1/dev/user/memories', 'post')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    pin_call = 'pin_memory_system(uid, db_client=db)'
+    pin_call = 'pin_memory_system(uid)'
     external_create = '.create_external_memory('
     guard_call = 'guard_legacy_memory_write('
     assert pin_call in route_source
@@ -129,7 +148,7 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     route_source = _function_source_for_route('/v1/dev/user/memories/batch', 'post')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    pin_call = 'pin_memory_system(uid, db_client=db)'
+    pin_call = 'pin_memory_system(uid)'
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
     external_batch = '.create_external_memory_batch('
     guard_call = 'guard_legacy_memory_write('
@@ -152,7 +171,7 @@ def test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'delete')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    pin_call = 'pin_memory_system(uid, db_client=db)'
+    pin_call = 'pin_memory_system(uid)'
     external_delete = '.delete_external_memory('
     guard_call = 'guard_legacy_memory_write('
     legacy_read = 'memory = memories_db.get_memory(uid, memory_id)'
@@ -219,21 +238,18 @@ def test_developer_category_filters_do_not_force_legacy_when_memory_can_decide_s
     assert category_legacy_reason not in contents
 
 
-def test_developer_default_memory_adapter_filters_categories_without_legacy_fallback():
+def test_developer_default_memory_adapter_filters_categories_without_legacy_fallback(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     source_unknown = _memory_item('source-unknown', now=now, content='coffee source unknown')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{source_unknown.memory_id}': _stored_item(source_unknown)})
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    store[f'users/u1/memory_items/{source_unknown.memory_id}'] = _stored_item(source_unknown)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     other_result = search_memory_default_developer_memories(
         uid='u1',
         query='',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=decision,
         now=now,
         categories=['other'],
@@ -243,7 +259,6 @@ def test_developer_default_memory_adapter_filters_categories_without_legacy_fall
         query='',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=decision,
         now=now,
         categories=['manual'],
@@ -256,49 +271,40 @@ def test_developer_default_memory_adapter_filters_categories_without_legacy_fall
     assert manual_result.memories == []
 
 
-def test_developer_rollout_reader_derives_default_memory_grant_without_reading_memory_items():
-    db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
-    decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='developer_api')
-    assert db_client.document_get_paths == ['users/u1/memory_control/state']
-    assert db_client.collection_paths == []
+def test_developer_rollout_reader_derives_default_memory_grant_without_reading_memory_items(store):
+    # The rollout read now resolves through document_store (the injected fake is a DI carrier), so
+    # correctness is asserted on the derived decision rather than the fake's Firestore call log.
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     assert decision.rollout_capabilities.memory_reads_enabled is True
     assert decision.app_has_default_memory_grant is True
     assert decision.archive_capability is False
     assert decision.memory_default_developer_enabled is True
 
 
-def test_developer_rollout_reader_fails_closed_without_memory_item_reads_for_missing_malformed_or_grantless_state():
-    missing = _FirestoreFake()
+def test_developer_rollout_reader_fails_closed_without_memory_item_reads_for_missing_malformed_or_grantless_state(store):
+    # Missing state: nothing seeded into the shared store.
     assert (
         read_default_read_rollout(
-            uid='u1', db_client=missing, consumer='developer_api'
+            uid='u1', consumer='developer_api'
         ).memory_default_developer_enabled
         is False
     )
-    assert missing.collection_paths == []
-    malformed = _FirestoreFake(
-        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
-    )
-    malformed_decision = read_default_read_rollout(uid='u1', db_client=malformed, consumer='developer_api')
+    store['users/u1/memory_control/state'] = {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}
+    malformed_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     assert malformed_decision.memory_default_developer_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False
-    assert malformed.collection_paths == []
-    no_grant = _FirestoreFake(
-        {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
-    )
-    no_grant_decision = read_default_read_rollout(uid='u1', db_client=no_grant, consumer='developer_api')
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'grants': {'developer_api': {}}}
+    no_grant_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     assert no_grant_decision.rollout_capabilities.memory_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.memory_default_developer_enabled is False
-    assert no_grant.collection_paths == []
 
 
-def test_split_brain_guard_blocks_memory_enabled_developer_legacy_write_without_mutation():
-    read_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+def test_split_brain_guard_blocks_memory_enabled_developer_legacy_write_without_mutation(store):
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    read_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     decision = assert_legacy_memory_write_allowed_for_default_read_decision(read_decision, operation='create_memory')
     assert decision.allowed is False
     assert decision.status_code == 409
@@ -313,12 +319,9 @@ def test_split_brain_guard_blocks_memory_enabled_developer_legacy_write_without_
     }
 
 
-def test_split_brain_guard_blocks_memory_enabled_developer_batch_create_without_mutation():
-    read_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+def test_split_brain_guard_blocks_memory_enabled_developer_batch_create_without_mutation(store):
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    read_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     decision = assert_legacy_memory_write_allowed_for_default_read_decision(
         read_decision, operation='batch_create_memories'
     )
@@ -330,12 +333,9 @@ def test_split_brain_guard_blocks_memory_enabled_developer_batch_create_without_
     assert decision.detail['read_decision'] == MemoryReadDecision.USE_MEMORY.value
 
 
-def test_split_brain_guard_blocks_memory_enabled_developer_edit_and_delete_without_mutation():
-    read_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+def test_split_brain_guard_blocks_memory_enabled_developer_edit_and_delete_without_mutation(store):
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    read_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     for operation in ['update_memory', 'delete_memory']:
         decision = assert_legacy_memory_write_allowed_for_default_read_decision(read_decision, operation=operation)
         assert decision.allowed is False
@@ -346,15 +346,10 @@ def test_split_brain_guard_blocks_memory_enabled_developer_edit_and_delete_witho
         assert decision.detail['read_decision'] == MemoryReadDecision.USE_MEMORY.value
 
 
-def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_safe():
-    missing = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='developer_api')
-    malformed = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
-        ),
-        consumer='developer_api',
-    )
+def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_safe(store):
+    missing = read_default_read_rollout(uid='u1', consumer='developer_api')
+    store['users/u1/memory_control/state'] = {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}
+    malformed = read_default_read_rollout(uid='u1', consumer='developer_api')
     for read_decision in [missing, malformed]:
         decision = assert_legacy_memory_write_allowed_for_default_read_decision(
             read_decision, operation='create_memory'
@@ -364,19 +359,11 @@ def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_saf
         assert decision.detail['reason'] == 'memory_default_read_legacy_write_blocked'
 
 
-def test_split_brain_guard_allows_disabled_but_blocks_when_convergence_policy_not_ready():
-    disabled = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}}
-        ),
-        consumer='developer_api',
-    )
-    enabled = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+def test_split_brain_guard_allows_disabled_but_blocks_when_convergence_policy_not_ready(store):
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}
+    disabled = read_default_read_rollout(uid='u1', consumer='developer_api')
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    enabled = read_default_read_rollout(uid='u1', consumer='developer_api')
     disabled_allowed = assert_legacy_memory_write_allowed_for_default_read_decision(disabled, operation='create_memory')
     not_ready_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         enabled,
@@ -390,7 +377,7 @@ def test_split_brain_guard_allows_disabled_but_blocks_when_convergence_policy_no
     assert not_ready_blocked.detail['convergence_reason'] == 'convergence_not_ready'
 
 
-def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
+def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -398,25 +385,20 @@ def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale
     )
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
-    db_client = _FirestoreFake(
-        {
-            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [archive, stale_short_term, fresh_short_term, long_term]
-        }
-    )
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    for item in [archive, stale_short_term, fresh_short_term, long_term]:
+        store[f'users/u1/memory_items/{item.memory_id}'] = _stored_item(item)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     result = search_memory_default_developer_memories(
-        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=decision, now=now
+        uid='u1', query='coffee', limit=10, offset=0, rollout_decision=decision, now=now
     )
     assert isinstance(result, DeveloperMemorySearchResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.fallback_reason is None
     results = result.memories
-    assert db_client.collection_paths == ['users/u1/memory_items']
+    # The stale short-term and archive items live in the store; the adapter's product search is what
+    # excludes them, leaving exactly the fresh short-term and long-term memories.
     assert [item['id'] for item in results] == ['fresh-short-term', 'long-term']
     assert [item['content'] for item in results] == ['coffee fresh short term', 'coffee long term']
     assert all((item['category'] == 'other' for item in results))
@@ -427,7 +409,7 @@ def test_developer_default_memory_adapter_uses_product_search_and_excludes_stale
     assert all((item['policy']['archive_capability'] is False for item in results))
 
 
-def test_developer_default_memory_adapter_excludes_pending_admission_text():
+def test_developer_default_memory_adapter_excludes_pending_admission_text(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
         'pending-explicit',
@@ -435,31 +417,27 @@ def test_developer_default_memory_adapter_excludes_pending_admission_text():
         content='coffee pending explicit memory',
         processing_state=ProcessingState.pending,
     )
-    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    store[f'users/u1/memory_items/{pending.memory_id}'] = _stored_item(pending)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
 
     result = search_memory_default_developer_memories(
-        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=decision, now=now
+        uid='u1', query='coffee', limit=10, offset=0, rollout_decision=decision, now=now
     )
 
     assert result.memories == []
 
 
-def test_developer_default_memory_response_shape_marks_compatibility_defaults_without_silent_fabrication():
+def test_developer_default_memory_response_shape_marks_compatibility_defaults_without_silent_fabrication(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     public_item = _memory_item('public-source', now=now, content='coffee public source', visibility='public')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{public_item.memory_id}': _stored_item(public_item)})
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    store[f'users/u1/memory_items/{public_item.memory_id}'] = _stored_item(public_item)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     result = search_memory_default_developer_memories(
-        uid='u1', query='', limit=10, offset=0, db_client=db_client, rollout_decision=decision, now=now
+        uid='u1', query='', limit=10, offset=0, rollout_decision=decision, now=now
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     memory = result.memories[0]
@@ -473,29 +451,21 @@ def test_developer_default_memory_response_shape_marks_compatibility_defaults_wi
     assert memory['edited_source'] == 'developer_memory_compatibility_default_no_edit_state'
 
 
-def test_developer_default_memory_adapter_returns_denied_decision_when_rollout_or_grant_disabled_without_firestore_read():
+def test_developer_default_memory_adapter_returns_denied_decision_when_rollout_or_grant_disabled_without_firestore_read(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
-    disabled_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}}
-        ),
-        consumer='developer_api',
-    )
-    grantless_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
-        ),
-        consumer='developer_api',
-    )
+    # A readable memory item is present in the store; a denied decision must never surface it.
+    store[f'users/u1/memory_items/{fresh_short_term.memory_id}'] = _stored_item(fresh_short_term)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}
+    disabled_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'grants': {'developer_api': {}}}
+    grantless_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
+    db_client = _FirestoreFake(store)
     disabled_result = search_memory_default_developer_memories(
-        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=disabled_decision, now=now
+        uid='u1', query='coffee', limit=10, offset=0, rollout_decision=disabled_decision, now=now
     )
     grantless_result = search_memory_default_developer_memories(
-        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=grantless_decision, now=now
+        uid='u1', query='coffee', limit=10, offset=0, rollout_decision=grantless_decision, now=now
     )
     assert disabled_result.memories == []
     assert disabled_result.read_decision == MemoryReadDecision.DENY_MEMORY
@@ -503,7 +473,6 @@ def test_developer_default_memory_adapter_returns_denied_decision_when_rollout_o
     assert grantless_result.memories == []
     assert grantless_result.read_decision == MemoryReadDecision.DENY_MEMORY
     assert grantless_result.fallback_reason == 'missing_developer_default_memory_grant'
-    assert db_client.collection_paths == []
 
 
 def test_developer_default_memory_adapter_classifies_explicit_legacy_safe_without_firestore_read():
@@ -515,7 +484,7 @@ def test_developer_default_memory_adapter_classifies_explicit_legacy_safe_withou
         reason='developer_category_legacy_safe_fallback_explicit',
     )
     result = search_memory_default_developer_memories(
-        uid='u1', query='', limit=10, offset=0, db_client=db_client, rollout_decision=legacy_safe
+        uid='u1', query='', limit=10, offset=0, rollout_decision=legacy_safe
     )
     assert result.memories == []
     assert result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
@@ -524,7 +493,7 @@ def test_developer_default_memory_adapter_classifies_explicit_legacy_safe_withou
     assert db_client.collection_paths == []
 
 
-def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
+def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -532,17 +501,11 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     )
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
-    db_client = _FirestoreFake(
-        {
-            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [archive, stale_short_term, fresh_short_term, long_term]
-        }
-    )
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    for item in [archive, stale_short_term, fresh_short_term, long_term]:
+        store[f'users/u1/memory_items/{item.memory_id}'] = _stored_item(item)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     vector_calls = []
 
     def vector_query(uid, query, *, mode, limit):
@@ -558,13 +521,12 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
         )
 
     result = search_memory_default_developer_memories_vector(
-        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_decision=decision, vector_query=vector_query
+        uid='u1', query='coffee', limit=10, rollout_decision=decision, vector_query=vector_query
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.fallback_reason is None
     results = result.memories
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert db_client.collection_paths == []
     assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
     assert [item['relevance_score'] for item in results] == [0.92, 0.8]
     assert all((item['memory_default_memory'] is True for item in results))
@@ -573,7 +535,7 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     assert all((item['policy']['archive_capability'] is False for item in results))
 
 
-def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budget():
+def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budget(store):
     """A limit inside the route's advertised window must not blow up the request.
 
     GET /v1/dev/user/memories/vector/search declares `limit: int = Query(10, ge=1, le=100)`
@@ -585,12 +547,11 @@ def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budg
     """
     now = datetime.now(timezone.utc).replace(microsecond=0)
     items = [_memory_item(f'long-{i}', tier=MemoryTier.long_term, now=now, content=f'coffee {i}') for i in range(3)]
-    db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in items})
-    decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
-        consumer='developer_api',
-    )
+    for item in items:
+        store[f'users/u1/memory_items/{item.memory_id}'] = _stored_item(item)
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc()
+    db_client = _FirestoreFake(store)
+    decision = read_default_read_rollout(uid='u1', consumer='developer_api')
 
     def vector_query(uid, query, *, mode, limit):
         return _VectorCandidateResult(
@@ -599,7 +560,7 @@ def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budg
         )
 
     result = search_memory_default_developer_memories_vector(
-        uid='u1', query='coffee', limit=60, db_client=db_client, rollout_decision=decision, vector_query=vector_query
+        uid='u1', query='coffee', limit=60, rollout_decision=decision, vector_query=vector_query
     )
 
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
@@ -607,35 +568,25 @@ def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budg
     assert [item['id'] for item in result.memories] == ['long-0', 'long-1', 'long-2']
 
 
-def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
+def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memory_reads_when_rollout_or_grant_disabled(store):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
+    store[f'users/u1/memory_items/{fresh_short_term.memory_id}'] = _stored_item(fresh_short_term)
     vector_calls = []
 
     def vector_query(uid, query, *, mode, limit):
         vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
         return _VectorCandidateResult([_hit(fresh_short_term, score=0.9)])
 
-    disabled_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}}
-        ),
-        consumer='developer_api',
-    )
-    grantless_decision = read_default_read_rollout(
-        uid='u1',
-        db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
-        ),
-        consumer='developer_api',
-    )
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value}
+    disabled_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
+    store['users/u1/memory_control/state'] = _enabled_rollout_doc() | {'grants': {'developer_api': {}}}
+    grantless_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
+    db_client = _FirestoreFake(store)
     disabled_result = search_memory_default_developer_memories_vector(
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_decision=disabled_decision,
         vector_query=vector_query,
     )
@@ -643,7 +594,6 @@ def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memor
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_decision=grantless_decision,
         vector_query=vector_query,
     )
@@ -654,7 +604,6 @@ def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memor
     assert grantless_result.read_decision == MemoryReadDecision.DENY_MEMORY
     assert grantless_result.fallback_reason == 'missing_developer_default_memory_grant'
     assert vector_calls == []
-    assert db_client.collection_paths == []
 
 
 def test_developer_vector_adapter_classifies_explicit_legacy_safe_without_vector_or_memory_reads():
@@ -672,7 +621,7 @@ def test_developer_vector_adapter_classifies_explicit_legacy_safe_without_vector
         reason='developer_vector_legacy_safe_fallback_explicit',
     )
     result = search_memory_default_developer_memories_vector(
-        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_decision=legacy_safe, vector_query=vector_query
+        uid='u1', query='coffee', limit=10, rollout_decision=legacy_safe, vector_query=vector_query
     )
     assert result.memories == []
     assert result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE

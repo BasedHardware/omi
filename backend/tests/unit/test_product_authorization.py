@@ -20,21 +20,17 @@ class _Readers:
         self.archive_rollout = archive_rollout or default_rollout
         self.calls = []
 
-    def read_global(self, *, db_client):
-        self.calls.append(('global', db_client))
+    def read_global(self):
+        self.calls.append(('global',))
         return self.global_gate
 
-    def read_default(self, *, uid, db_client, consumer):
-        self.calls.append(('default', uid, db_client, consumer))
+    def read_default(self, *, uid, consumer):
+        self.calls.append(('default', uid, consumer))
         return self.default_rollout
 
-    def read_archive(self, *, uid, db_client, consumer):
-        self.calls.append(('archive', uid, db_client, consumer))
+    def read_archive(self, *, uid, consumer):
+        self.calls.append(('archive', uid, consumer))
         return self.archive_rollout
-
-
-class _Db:
-    pass
 
 
 def _capabilities(*, reads_enabled=True):
@@ -82,7 +78,6 @@ def test_default_product_authorization_denies_missing_rollout_before_default_pol
 
     decision = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid='u1', consumer='omi_chat', surface='product_default_search'),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
         read_archive_rollout=readers.read_archive,
@@ -93,8 +88,8 @@ def test_default_product_authorization_denies_missing_rollout_before_default_pol
     assert decision.reason == 'missing_rollout_state'
     assert decision.policy is None
     assert readers.calls == [
-        ('global', decision.db_client),
-        ('default', 'u1', decision.db_client, 'omi_chat'),
+        ('global',),
+        ('default', 'u1', 'omi_chat'),
     ]
 
 
@@ -110,7 +105,6 @@ def test_default_product_authorization_allows_enabled_granted_default_without_ar
             key_id='first-party-session',
             scopes=('memories.read',),
         ),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
         read_archive_rollout=readers.read_archive,
@@ -128,8 +122,8 @@ def test_default_product_authorization_allows_enabled_granted_default_without_ar
     }
     assert decision.observability['archive_default_visible'] is False
     assert readers.calls == [
-        ('global', decision.db_client),
-        ('default', 'u1', decision.db_client, 'omi_chat'),
+        ('global',),
+        ('default', 'u1', 'omi_chat'),
     ]
 
 
@@ -151,7 +145,6 @@ def test_archive_authorization_requires_explicit_request_and_persisted_archive_c
             explicit_archive_request=True,
             requires_archive_capability=True,
         ),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
         read_archive_rollout=readers.read_archive,
@@ -170,7 +163,6 @@ def test_archive_authorization_requires_explicit_request_and_persisted_archive_c
             explicit_archive_request=False,
             requires_archive_capability=True,
         ),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
         read_archive_rollout=readers.read_archive,
@@ -179,7 +171,7 @@ def test_archive_authorization_requires_explicit_request_and_persisted_archive_c
     assert persisted_capability_without_explicit_request.allowed is False
     assert persisted_capability_without_explicit_request.reason == 'missing_explicit_archive_request'
     assert persisted_capability_without_explicit_request.policy is None
-    assert readers.calls == [('global', persisted_capability_without_explicit_request.db_client)]
+    assert readers.calls == [('global',)]
 
 
 def test_archive_authorization_allows_only_when_explicit_and_persisted_capability_are_both_present():
@@ -193,7 +185,6 @@ def test_archive_authorization_allows_only_when_explicit_and_persisted_capabilit
             explicit_archive_request=True,
             requires_archive_capability=True,
         ),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
         read_archive_rollout=readers.read_archive,
@@ -210,7 +201,6 @@ def test_archive_authorization_allows_only_when_explicit_and_persisted_capabilit
 def test_malformed_global_or_control_state_fails_closed_with_deterministic_reason():
     malformed_global = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid='u1', consumer='omi_chat', surface='product_default_search'),
-        db_client=_Db(),
         read_global_gate=_Readers(
             global_gate=_global_gate(MemoryReadDecision.DENY_MEMORY, 'malformed_global_read_gate')
         ).read_global,
@@ -228,7 +218,6 @@ def test_malformed_global_or_control_state_fails_closed_with_deterministic_reaso
     )
     malformed_control = authorize_memory_product_memory_route(
         ProductAuthorizationContext(uid='u1', consumer='omi_chat', surface='product_default_search'),
-        db_client=_Db(),
         read_global_gate=readers.read_global,
         read_default_rollout=readers.read_default,
     )
@@ -378,14 +367,12 @@ class _GrantStateRead:
 def test_external_default_memory_composition_reads_stored_app_key_grant_and_allows_without_archive():
     calls = []
 
-    def read_grants(*, uid, db_client):
-        calls.append((uid, db_client))
+    def read_grants(*, uid):
+        calls.append(uid)
         return _GrantStateRead()
 
-    db_client = _Db()
     decision = authorize_memory_external_default_memory_read(
         _external_context(),
-        db_client=db_client,
         read_app_key_grants_state=read_grants,
     )
 
@@ -395,14 +382,13 @@ def test_external_default_memory_composition_reads_stored_app_key_grant_and_allo
     assert decision.policy.app_has_default_memory_grant is True
     assert decision.policy.archive_capability is False
     assert decision.observability['grant_state_reason'] == 'ok'
-    assert calls == [('u1', db_client)]
+    assert calls == ['u1']
 
 
 def test_external_default_memory_composition_denies_missing_scope_or_missing_stored_grant():
     wrong_scope = authorize_memory_external_default_memory_read(
         _external_context(scopes=('conversations.read',)),
-        db_client=_Db(),
-        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+        read_app_key_grants_state=lambda *, uid: _GrantStateRead(),
     )
     assert wrong_scope.allowed is False
     assert wrong_scope.reason == 'missing_authenticated_scope_memories.read'
@@ -410,8 +396,7 @@ def test_external_default_memory_composition_denies_missing_scope_or_missing_sto
 
     missing_grant = authorize_memory_external_default_memory_read(
         _external_context(key_id='missing-key'),
-        db_client=_Db(),
-        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+        read_app_key_grants_state=lambda *, uid: _GrantStateRead(),
     )
     assert missing_grant.allowed is False
     assert missing_grant.reason == 'missing_app_key_scope_grant'

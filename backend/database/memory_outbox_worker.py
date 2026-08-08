@@ -1,8 +1,13 @@
 """Bounded consumer for canonical memory projection and vector outbox events.
 
-The canonical Firestore item is always reloaded before an external projection
-write.  Event payloads carry only fences and intent; they are never used as a
-source of memory content.
+The canonical item is always reloaded before an external projection write.
+Event payloads carry only fences and intent; they are never used as a source of
+memory content.
+
+All persistence goes through the backend-neutral storage port
+(``database.store``); no storage SDK type crosses this module's boundary.
+Transactions use ``_store().run_transaction(fn)``: every ``fn(tx)`` performs all
+reads before any write.
 
 Side effects are injected deliberately.  The database layer cannot import the
 ``utils.memory`` adapters without reversing the backend import hierarchy, and
@@ -16,16 +21,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
 
-from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
-
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
-from database.firestore_index_registry import (
-    DUE_MEMORY_OUTBOX_QUERY,
-    EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
-)
 from database.memory_collections import MemoryCollections
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
+from database.store import get_document_store
 from models.memory_apply import (
     MemoryControlState,
     MemoryOutboxEvent,
@@ -62,6 +61,10 @@ _PROVIDER_REPAIR_REQUIRED_ERROR_CODES = frozenset(
         "vector_delete_failed",
     }
 )
+
+
+def _store():
+    return get_document_store()
 
 
 @dataclass(frozen=True)
@@ -151,7 +154,6 @@ class _ProcessingFailure(Exception):
 
 def run_canonical_memory_outbox_worker_tick(
     *,
-    db_client: Any,
     uid: str,
     config: CanonicalMemoryOutboxWorkerConfig,
     side_effects: CanonicalMemoryOutboxSideEffects,
@@ -159,10 +161,10 @@ def run_canonical_memory_outbox_worker_tick(
 ) -> Dict[str, Any]:
     """Lease, process, and settle at most ``config.limit`` normal outbox events.
 
-    This is the production integration seam.  It performs Firestore queries and
-    ownership-fenced transactions itself; a scheduler or Cloud Run job only
-    needs to supply a Firestore client, one uid, server-owned bounds, and strict
-    projection/vector adapters.
+    This is the production integration seam.  It performs storage-port queries
+    and ownership-fenced transactions itself; a scheduler or Cloud Run job only
+    needs to supply one uid, server-owned bounds, and strict projection/vector
+    adapters.
     """
 
     observed_now = _observed_now(now)
@@ -171,7 +173,6 @@ def run_canonical_memory_outbox_worker_tick(
 
     try:
         leases = lease_canonical_memory_outbox_events(
-            db_client=db_client,
             uid=uid,
             worker_id=config.worker_id,
             limit=config.limit,
@@ -187,14 +188,12 @@ def run_canonical_memory_outbox_worker_tick(
     for lease in leases:
         try:
             outcome = _process_leased_event(
-                db_client=db_client,
                 requested_uid=uid,
                 lease=lease,
                 side_effects=side_effects,
             )
         except _ProcessingFailure as exc:
             _settle_failure(
-                db_client=db_client,
                 lease=lease,
                 config=config,
                 error_code=exc.code,
@@ -204,7 +203,6 @@ def run_canonical_memory_outbox_worker_tick(
             continue
         except Exception:
             _settle_failure(
-                db_client=db_client,
                 lease=lease,
                 config=config,
                 error_code="processing_failed",
@@ -214,7 +212,6 @@ def run_canonical_memory_outbox_worker_tick(
             continue
 
         delivered = _ack_leased_event(
-            db_client=db_client,
             lease=lease,
             patch={
                 "status": MemoryOutboxStatus.delivered.value,
@@ -253,7 +250,6 @@ def run_canonical_memory_outbox_worker_tick(
 
 def lease_canonical_memory_outbox_events(
     *,
-    db_client: Any,
     uid: str,
     worker_id: str,
     limit: int = 25,
@@ -263,10 +259,9 @@ def lease_canonical_memory_outbox_events(
 ) -> List[LeasedMemoryOutboxEvent]:
     """Claim due normal events and expired normal-event leases.
 
-    Pending and retryable events use the existing ``status, available_at``
-    Firestore index.  Expired processing leases use the existing
-    ``event_type, status, lease_expires_at`` index.  Candidate scanning and
-    successful claims are both bounded.
+    Pending and retryable events use the ``status, available_at`` index.
+    Expired processing leases use the ``event_type, status, lease_expires_at``
+    index.  Candidate scanning and successful claims are both bounded.
     """
 
     observed_now = _observed_now(now)
@@ -282,28 +277,27 @@ def lease_canonical_memory_outbox_events(
         raise ValueError("lease_seconds must be positive")
 
     collection_path = MemoryCollections(uid=uid).memory_outbox
-    collection = db_client.collection(collection_path)
     snapshots: Dict[str, Any] = {}
 
     for status in _DUE_STATUSES:
-        query = DUE_MEMORY_OUTBOX_QUERY.build(
-            collection,
-            {"status": status, "available_at": observed_now},
-            field_filter_factory=FieldFilter,
-        ).limit(scan_limit)
-        _collect_supported_snapshots(snapshots, query.stream(), collection_path=collection_path)
+        due = _store().query(
+            collection_path,
+            filters=[("status", "==", status), ("available_at", "<=", observed_now)],
+            limit=scan_limit,
+        )
+        _collect_supported_snapshots(snapshots, due, collection_path=collection_path)
 
     for event_type in _SUPPORTED_EVENT_TYPES:
-        query = EXPIRED_MEMORY_OUTBOX_LEASE_QUERY.build(
-            collection,
-            {
-                "event_type": event_type,
-                "status": MemoryOutboxStatus.processing.value,
-                "lease_expires_at": observed_now,
-            },
-            field_filter_factory=FieldFilter,
-        ).limit(scan_limit)
-        _collect_supported_snapshots(snapshots, query.stream(), collection_path=collection_path)
+        expired = _store().query(
+            collection_path,
+            filters=[
+                ("event_type", "==", event_type),
+                ("status", "==", MemoryOutboxStatus.processing.value),
+                ("lease_expires_at", "<=", observed_now),
+            ],
+            limit=scan_limit,
+        )
+        _collect_supported_snapshots(snapshots, expired, collection_path=collection_path)
 
     ordered = sorted(snapshots.items(), key=lambda item: _candidate_sort_key(item[0], item[1]))
     lease_expires_at = observed_now + timedelta(seconds=lease_seconds)
@@ -311,14 +305,10 @@ def lease_canonical_memory_outbox_events(
     for path, _ in ordered:
         if len(claimed) >= limit:
             break
-        lease = _run_transaction(
-            db_client,
-            _claim_event_transaction,
-            db_client,
-            path,
-            worker_id,
-            observed_now,
-            lease_expires_at,
+        lease = _store().run_transaction(
+            lambda tx, claim_path=path: _claim_event_transaction(
+                tx, claim_path, worker_id, observed_now, lease_expires_at
+            )
         )
         if lease is not None:
             claimed.append(lease)
@@ -351,15 +341,13 @@ def _candidate_sort_key(path: str, snapshot: Any) -> Tuple[datetime, int, str]:
 
 def _claim_event_transaction(
     transaction: Any,
-    db_client: Any,
     path: str,
     worker_id: str,
     now: datetime,
     lease_expires_at: datetime,
 ) -> Optional[LeasedMemoryOutboxEvent]:
-    ref = db_client.document(path)
-    snapshot = ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+    snapshot = transaction.get(path)
+    if not snapshot.exists:
         return None
     raw = _snapshot_dict(snapshot)
     if not _is_claimable(raw, now=now):
@@ -367,7 +355,7 @@ def _claim_event_transaction(
 
     lease_epoch = _safe_nonnegative_int(raw.get("lease_epoch")) + 1
     transaction.update(
-        ref,
+        path,
         {
             "status": MemoryOutboxStatus.processing.value,
             "lease_owner": worker_id,
@@ -401,7 +389,6 @@ def _is_claimable(raw: Dict[str, Any], *, now: datetime) -> bool:
 
 def _process_leased_event(
     *,
-    db_client: Any,
     requested_uid: str,
     lease: LeasedMemoryOutboxEvent,
     side_effects: CanonicalMemoryOutboxSideEffects,
@@ -427,7 +414,7 @@ def _process_leased_event(
         raise _ProcessingFailure("invalid_event_action")
 
     if action == "barrier":
-        control = _load_control_state(db_client=db_client, uid=requested_uid)
+        control = _load_control_state(uid=requested_uid)
         if event.account_generation != control.account_generation:
             return _ProcessOutcome(settled_reason="stale_account_generation", stale=True, barrier=True)
         if event.source_generation != control.source_generation:
@@ -450,7 +437,6 @@ def _process_leased_event(
         raise _ProcessingFailure("invalid_event_fence")
 
     state = _load_authoritative_projection_state(
-        db_client=db_client,
         uid=requested_uid,
         memory_id=memory_id,
     )
@@ -467,7 +453,6 @@ def _process_leased_event(
         # idempotent projection also repairs an upsert whose item disappeared
         # before this worker acquired it.
         return _deliver_authoritative_projection_state(
-            db_client=db_client,
             event=event,
             side_effects=side_effects,
             uid=requested_uid,
@@ -489,7 +474,6 @@ def _process_leased_event(
         return _ProcessOutcome(settled_reason="stale_content_hash", stale=True)
 
     return _deliver_authoritative_projection_state(
-        db_client=db_client,
         event=event,
         side_effects=side_effects,
         uid=requested_uid,
@@ -501,7 +485,6 @@ def _process_leased_event(
 
 def _deliver_authoritative_projection_state(
     *,
-    db_client: Any,
     event: MemoryOutboxEvent,
     side_effects: CanonicalMemoryOutboxSideEffects,
     uid: str,
@@ -531,7 +514,6 @@ def _deliver_authoritative_projection_state(
         )
         try:
             observed_state = _load_authoritative_projection_state(
-                db_client=db_client,
                 uid=uid,
                 memory_id=memory_id,
             )
@@ -624,10 +606,10 @@ def _require_side_effect_success(callback: Callable[[], bool], *, error_code: st
         raise _ProcessingFailure(error_code)
 
 
-def _load_control_state(*, db_client: Any, uid: str) -> MemoryControlState:
+def _load_control_state(*, uid: str) -> MemoryControlState:
     path = MemoryCollections(uid=uid).memory_apply_control_state
-    snapshot = db_client.document(path).get()
-    if not getattr(snapshot, "exists", False):
+    snapshot = _store().get(path)
+    if not snapshot.exists:
         raise _ProcessingFailure("missing_control_state")
     try:
         return parse_snapshot_strict(MemoryControlState, snapshot)
@@ -635,10 +617,10 @@ def _load_control_state(*, db_client: Any, uid: str) -> MemoryControlState:
         raise _ProcessingFailure("invalid_control_state") from None
 
 
-def _load_memory_item(*, db_client: Any, uid: str, memory_id: str) -> Optional[MemoryItem]:
+def _load_memory_item(*, uid: str, memory_id: str) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = db_client.document(path).get()
-    if not getattr(snapshot, "exists", False):
+    snapshot = _store().get(path)
+    if not snapshot.exists:
         return None
     try:
         return parse_snapshot_strict(MemoryItem, snapshot)
@@ -648,13 +630,12 @@ def _load_memory_item(*, db_client: Any, uid: str, memory_id: str) -> Optional[M
 
 def _load_authoritative_projection_state(
     *,
-    db_client: Any,
     uid: str,
     memory_id: str,
 ) -> _AuthoritativeProjectionState:
-    deletion_fence = read_account_deletion_projection_fence(uid, db_client=db_client)
-    control = _load_control_state(db_client=db_client, uid=uid)
-    item = _load_memory_item(db_client=db_client, uid=uid, memory_id=memory_id)
+    deletion_fence = read_account_deletion_projection_fence(uid)
+    control = _load_control_state(uid=uid)
+    item = _load_memory_item(uid=uid, memory_id=memory_id)
     if item is not None and item.uid != uid:
         raise _ProcessingFailure("authoritative_item_uid_mismatch")
     return _AuthoritativeProjectionState(
@@ -666,7 +647,6 @@ def _load_authoritative_projection_state(
 
 def _settle_failure(
     *,
-    db_client: Any,
     lease: LeasedMemoryOutboxEvent,
     config: CanonicalMemoryOutboxWorkerConfig,
     error_code: str,
@@ -690,7 +670,7 @@ def _settle_failure(
     if not dead_letter:
         patch["available_at"] = now + _retry_delay(config=config, attempt_count=next_attempt_count)
 
-    acknowledged = _ack_leased_event(db_client=db_client, lease=lease, patch=patch)
+    acknowledged = _ack_leased_event(lease=lease, patch=patch)
     if not acknowledged:
         summary["ack_failed_count"] += 1
         summary["errors"].append(
@@ -715,20 +695,19 @@ def _settle_failure(
 
 def _ack_leased_event(
     *,
-    db_client: Any,
     lease: LeasedMemoryOutboxEvent,
     patch: Dict[str, Any],
 ) -> bool:
     try:
         return bool(
-            _run_transaction(
-                db_client,
-                _ack_event_transaction,
-                db_client,
-                lease.path,
-                lease.worker_id,
-                lease.lease_epoch,
-                patch,
+            _store().run_transaction(
+                lambda tx: _ack_event_transaction(
+                    tx,
+                    lease.path,
+                    lease.worker_id,
+                    lease.lease_epoch,
+                    patch,
+                )
             )
         )
     except Exception:
@@ -737,15 +716,13 @@ def _ack_leased_event(
 
 def _ack_event_transaction(
     transaction: Any,
-    db_client: Any,
     path: str,
     worker_id: str,
     lease_epoch: int,
     patch: Dict[str, Any],
 ) -> bool:
-    ref = db_client.document(path)
-    snapshot = ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+    snapshot = transaction.get(path)
+    if not snapshot.exists:
         return False
     raw = _snapshot_dict(snapshot)
     if (
@@ -754,7 +731,7 @@ def _ack_event_transaction(
         or _safe_nonnegative_int(raw.get("lease_epoch")) != lease_epoch
     ):
         return False
-    transaction.update(ref, dict(patch))
+    transaction.update(path, dict(patch))
     return True
 
 
@@ -765,28 +742,6 @@ def _retry_delay(*, config: CanonicalMemoryOutboxWorkerConfig, attempt_count: in
         config.base_backoff_seconds * (2**exponent),
     )
     return timedelta(seconds=delay_seconds)
-
-
-def _run_transaction(db_client: Any, callback: Callable[..., Any], *args: Any) -> Any:
-    transaction = db_client.transaction()
-    if transaction.__class__.__module__.startswith("google.cloud.firestore"):
-        wrapped = cast(Callable[..., Any], _firestore_transactional(callback))
-        return wrapped(transaction, *args)
-
-    if hasattr(transaction, "_begin"):
-        transaction._begin()
-    try:
-        result = callback(transaction, *args)
-        if hasattr(transaction, "_commit"):
-            transaction._commit()
-        return result
-    except Exception:
-        if hasattr(transaction, "_rollback"):
-            transaction._rollback()
-        raise
-    finally:
-        if hasattr(transaction, "_clean_up"):
-            transaction._clean_up()
 
 
 def _validate_tick_inputs(
@@ -835,8 +790,7 @@ def _snapshot_dict(snapshot: Any) -> Dict[str, Any]:
 
 
 def _snapshot_path(snapshot: Any, collection_path: str) -> str:
-    reference = getattr(snapshot, "reference", None)
-    path = getattr(reference, "path", None)
+    path = getattr(snapshot, "path", None)
     if isinstance(path, str) and path.strip():
         return path
     return f"{collection_path}/{snapshot.id}"

@@ -3192,5 +3192,6 @@
     "accountCutoverMigrationInProgressTitle": "Идёт миграция",
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
-    "accountCutoverOpenStore": "Открыть магазин"
+    "accountCutoverOpenStore": "Открыть магазин",
+    "signInWithSSO": "Влезте с SSO"
 }

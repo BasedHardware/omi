@@ -1,4 +1,4 @@
-"""Durable Firestore ledger for once-only sync processing and metering."""
+"""Durable ledger for once-only sync processing and metering (storage-port backed)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,24 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, cast
 
-from google.cloud import firestore
-
-from database._client import get_firestore_client
+from database.store import get_document_store
+from database.store.sentinels import ArrayUnion, DELETE
 
 LEDGER_RETENTION_DAYS = 45
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
+
+
+def _store():
+    return get_document_store()
+
+
+def _ledger_path(uid: str, content_id: str) -> str:
+    return f'users/{uid}/sync_content_ledger/{content_id}'
+
+
+def _existing(snapshot: Any) -> Dict[str, Any]:
+    """Neutral read → the document body, or an empty dict when it is absent."""
+    return cast(Dict[str, Any], snapshot.to_dict() or {}) if snapshot.exists else {}
 
 
 class SyncContentRunBindingOutcome(str, Enum):
@@ -37,10 +49,6 @@ class SyncContentRunBinding:
     @property
     def completed(self) -> bool:
         return self.outcome is SyncContentRunBindingOutcome.COMPLETED
-
-
-def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
-    return client.collection('users').document(uid).collection('sync_content_ledger').document(content_id)
 
 
 def _ledger_owner_matches(
@@ -104,9 +112,9 @@ def _processing_claim_updates(
 ) -> Dict[str, Any]:
     """Move a claim to processing without discarding valid retry checkpoints.
 
-    Only emit ``DELETE_FIELD`` for keys that already exist. Real Firestore no-ops
-    missing deletes, but hermetic fakes and sparse first-time claims should not
-    depend on that quirk for every admission.
+    Only emit ``DELETE`` for keys that already exist. Real backends no-op missing
+    deletes, but hermetic fakes and sparse first-time claims should not depend on
+    that quirk for every admission.
     """
     existing = existing or {}
     updates: Dict[str, Any] = {
@@ -118,27 +126,25 @@ def _processing_claim_updates(
     }
     for field in ('ledger_run_token', 'ledger_run_epoch'):
         if field in existing:
-            updates[field] = firestore.DELETE_FIELD
+            updates[field] = DELETE
     if clear_invalid_completion:
         # A malformed historical completion is not a retry checkpoint: keeping
         # its result/markers could recreate the false-completed state we are
         # explicitly repairing. Normal retryable claims preserve both fields.
         for field in ('result', 'partial_result', 'processed_segment_ids'):
             if field in existing:
-                updates[field] = firestore.DELETE_FIELD
+                updates[field] = DELETE
     return updates
 
 
-@firestore.transactional
-def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: datetime) -> Dict[str, Any]:
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+def _claim_transaction(tx: Any, path: str, job_id: str, lane: str, now: datetime) -> Dict[str, Any]:
+    existing = _existing(tx.get(path))
     if existing.get('status') == 'completed':
         result = existing.get('result')
         if is_valid_completed_sync_content_result(result):
             return {'outcome': 'completed', 'result': result}
-        transaction.set(
-            ref,
+        tx.set(
+            path,
             _processing_claim_updates(job_id, lane, now, existing=existing, clear_invalid_completion=True),
             merge=True,
         )
@@ -147,8 +153,8 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
         return {'outcome': 'owned'}
 
     if existing.get('status') == 'retryable':
-        transaction.set(
-            ref,
+        tx.set(
+            path,
             _processing_claim_updates(job_id, lane, now, existing=existing),
             merge=True,
         )
@@ -161,8 +167,8 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
         if (now - updated_at).total_seconds() < CLAIM_STALE_SECONDS:
             return {'outcome': 'busy'}
 
-    transaction.set(
-        ref,
+    tx.set(
+        path,
         _processing_claim_updates(job_id, lane, now, existing=existing),
         merge=True,
     )
@@ -174,18 +180,15 @@ def claim_sync_content(
     content_id: str,
     job_id: str,
     lane: str,
-    *,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _ledger_ref(client, uid, content_id)
-    return _claim_transaction(client.transaction(), ref, job_id, lane, datetime.now(timezone.utc))
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(lambda tx: _claim_transaction(tx, path, job_id, lane, now))
 
 
-@firestore.transactional
 def _bind_run_token_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     run_token: str,
     run_epoch: int,
@@ -198,8 +201,7 @@ def _bind_run_token_transaction(
     is returned rather than overwritten so the replacement can converge its
     Redis job state without re-running provider work.
     """
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     if existing.get('status') == 'completed':
         result = existing.get('result')
         if is_valid_completed_sync_content_result(result):
@@ -209,8 +211,8 @@ def _bind_run_token_transaction(
             )
         if existing.get('job_id') != job_id:
             return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
-        transaction.set(
-            ref,
+        tx.set(
+            path,
             {
                 **_processing_claim_updates(
                     job_id,
@@ -241,8 +243,8 @@ def _bind_run_token_transaction(
         if stored_token == run_token:
             return SyncContentRunBinding(SyncContentRunBindingOutcome.BOUND)
         return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
-    transaction.set(
-        ref,
+    tx.set(
+        path,
         {'ledger_run_token': run_token, 'ledger_run_epoch': run_epoch, 'updated_at': now},
         merge=True,
     )
@@ -255,18 +257,12 @@ def bind_sync_content_run_token(
     job_id: str,
     run_token: str,
     run_epoch: int,
-    *,
-    firestore_client: Any = None,
 ) -> SyncContentRunBinding:
     """Transactionally bind a live Redis run token to its ledger claim."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _bind_run_token_transaction(
-        client.transaction(),
-        _ledger_ref(client, uid, content_id),
-        job_id,
-        run_token,
-        run_epoch,
-        datetime.now(timezone.utc),
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _bind_run_token_transaction(tx, path, job_id, run_token, run_epoch, now)
     )
 
 
@@ -277,10 +273,9 @@ _SIDE_EFFECT_FIELDS = {
 }
 
 
-@firestore.transactional
 def _side_effect_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     tag: str,
     value: int,
@@ -288,14 +283,13 @@ def _side_effect_transaction(
     run_token: str | None = None,
     run_epoch: int | None = None,
 ) -> bool:
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     timestamp_field = _SIDE_EFFECT_FIELDS[tag]
     if existing.get(timestamp_field) is not None:
         return False
     if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
-    transaction.set(ref, {timestamp_field: now, f'{tag}_value': value, 'updated_at': now}, merge=True)
+    tx.set(path, {timestamp_field: now, f'{tag}_value': value, 'updated_at': now}, merge=True)
     return True
 
 
@@ -308,20 +302,13 @@ def try_mark_sync_content_side_effect(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
     if tag not in _SIDE_EFFECT_FIELDS:
         raise ValueError('unsupported sync content side-effect tag')
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _side_effect_transaction(
-        client.transaction(),
-        _ledger_ref(client, uid, content_id),
-        job_id,
-        tag,
-        value,
-        datetime.now(timezone.utc),
-        run_token,
-        run_epoch,
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _side_effect_transaction(tx, path, job_id, tag, value, now, run_token, run_epoch)
     )
 
 
@@ -333,7 +320,6 @@ def try_mark_sync_content_metered(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
     return try_mark_sync_content_side_effect(
         uid,
@@ -343,19 +329,14 @@ def try_mark_sync_content_metered(
         speech_ms,
         run_token=run_token,
         run_epoch=run_epoch,
-        firestore_client=firestore_client,
     )
 
 
 def get_processed_sync_segment_ids(
     uid: str,
     content_id: str,
-    *,
-    firestore_client: Any = None,
 ) -> set[str]:
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = _ledger_ref(client, uid, content_id).get()
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(_store().get(_ledger_path(uid, content_id)))
     values = existing.get('processed_segment_ids') or []
     return {value for value in values if isinstance(value, str)}
 
@@ -363,20 +344,15 @@ def get_processed_sync_segment_ids(
 def get_sync_content_partial_result(
     uid: str,
     content_id: str,
-    *,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = _ledger_ref(client, uid, content_id).get()
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(_store().get(_ledger_path(uid, content_id)))
     partial = existing.get('partial_result')
     return cast(Dict[str, Any], partial) if isinstance(partial, dict) else {}
 
 
-@firestore.transactional
 def _checkpoint_partial_result_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     partial_result: Dict[str, Any],
     now: datetime,
@@ -384,11 +360,10 @@ def _checkpoint_partial_result_transaction(
     run_epoch: int | None = None,
 ) -> bool:
     """Checkpoint only while the same ledger job still owns the content."""
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
-    transaction.set(ref, {'partial_result': partial_result, 'updated_at': now}, merge=True)
+    tx.set(path, {'partial_result': partial_result, 'updated_at': now}, merge=True)
     return True
 
 
@@ -400,42 +375,35 @@ def checkpoint_sync_content_partial_result(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
     """Atomically checkpoint a partial result for its current ledger owner."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _ledger_ref(client, uid, content_id)
-    return _checkpoint_partial_result_transaction(
-        client.transaction(),
-        ref,
-        job_id,
-        partial_result,
-        datetime.now(timezone.utc),
-        run_token,
-        run_epoch,
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _checkpoint_partial_result_transaction(
+            tx, path, job_id, partial_result, now, run_token, run_epoch
+        )
     )
 
 
-@firestore.transactional
 def _processed_segment_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     segment_id: str,
     now: datetime,
     run_token: str | None = None,
     run_epoch: int | None = None,
 ) -> bool:
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     processed = existing.get('processed_segment_ids') or []
     if segment_id in processed:
         return False
     if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
-    transaction.set(
-        ref,
-        {'processed_segment_ids': firestore.ArrayUnion([segment_id]), 'updated_at': now},
+    tx.set(
+        path,
+        {'processed_segment_ids': ArrayUnion([segment_id]), 'updated_at': now},
         merge=True,
     )
     return True
@@ -449,24 +417,17 @@ def add_processed_sync_segment_id(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _processed_segment_transaction(
-        client.transaction(),
-        _ledger_ref(client, uid, content_id),
-        job_id,
-        segment_id,
-        datetime.now(timezone.utc),
-        run_token,
-        run_epoch,
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _processed_segment_transaction(tx, path, job_id, segment_id, now, run_token, run_epoch)
     )
 
 
-@firestore.transactional
 def _mark_completed_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     result: Dict[str, Any],
     now: datetime,
@@ -480,12 +441,11 @@ def _mark_completed_transaction(
     # publish a malformed/partial result that later looks terminal.
     if not is_valid_completed_sync_content_result(result):
         return False
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
-    transaction.set(
-        ref,
+    tx.set(
+        path,
         {
             'status': 'completed',
             'result': result,
@@ -505,27 +465,18 @@ def mark_sync_content_completed(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _ledger_ref(client, uid, content_id)
+    path = _ledger_path(uid, content_id)
     now = datetime.now(timezone.utc)
-    return _mark_completed_transaction(
-        client.transaction(),
-        ref,
-        job_id,
-        result,
-        now,
-        run_token,
-        run_epoch,
+    return _store().run_transaction(
+        lambda tx: _mark_completed_transaction(tx, path, job_id, result, now, run_token, run_epoch)
     )
 
 
-@firestore.transactional
 def _release_claim_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     now: datetime,
     run_token: str | None = None,
@@ -535,20 +486,19 @@ def _release_claim_transaction(
 
     This must be transactional: a stale worker can otherwise read an old claim,
     let a newer upload acquire it, then overwrite that newer owner with a plain
-    Firestore ``set``. The transaction re-reads on contention and makes the
-    old release a no-op once ownership has changed.
+    ``set``. The transaction re-reads on contention and makes the old release a
+    no-op once ownership has changed.
     """
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     if existing.get('status') == 'completed' or not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
-    transaction.set(
-        ref,
+    tx.set(
+        path,
         {
             'status': 'retryable',
-            'job_id': firestore.DELETE_FIELD,
-            'ledger_run_token': firestore.DELETE_FIELD,
-            'ledger_run_epoch': firestore.DELETE_FIELD,
+            'job_id': DELETE,
+            'ledger_run_token': DELETE,
+            'ledger_run_epoch': DELETE,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -564,24 +514,18 @@ def release_sync_content_claim(
     *,
     run_token: str | None = None,
     run_epoch: int | None = None,
-    firestore_client: Any = None,
 ) -> bool:
     """Atomically free the matching retry claim, returning whether it changed."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _release_claim_transaction(
-        client.transaction(),
-        _ledger_ref(client, uid, content_id),
-        job_id,
-        datetime.now(timezone.utc),
-        run_token,
-        run_epoch,
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _release_claim_transaction(tx, path, job_id, now, run_token, run_epoch)
     )
 
 
-@firestore.transactional
 def _release_claim_after_job_retired_transaction(
-    transaction: Any,
-    ref: Any,
+    tx: Any,
+    path: str,
     job_id: str,
     now: datetime,
 ) -> bool:
@@ -592,17 +536,16 @@ def _release_claim_after_job_retired_transaction(
     expired the job entirely. The exact job-id comparison remains transactional
     so it cannot erase a newer upload's claim.
     """
-    snapshot = ref.get(transaction=transaction)
-    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    existing = _existing(tx.get(path))
     if existing.get('status') != 'processing' or existing.get('job_id') != job_id:
         return False
-    transaction.set(
-        ref,
+    tx.set(
+        path,
         {
             'status': 'retryable',
-            'job_id': firestore.DELETE_FIELD,
-            'ledger_run_token': firestore.DELETE_FIELD,
-            'ledger_run_epoch': firestore.DELETE_FIELD,
+            'job_id': DELETE,
+            'ledger_run_token': DELETE,
+            'ledger_run_epoch': DELETE,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -615,14 +558,10 @@ def release_sync_content_claim_after_job_retired(
     uid: str,
     content_id: str,
     job_id: str,
-    *,
-    firestore_client: Any = None,
 ) -> bool:
     """Free an exact retired job claim without treating it as a live worker write."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _release_claim_after_job_retired_transaction(
-        client.transaction(),
-        _ledger_ref(client, uid, content_id),
-        job_id,
-        datetime.now(timezone.utc),
+    path = _ledger_path(uid, content_id)
+    now = datetime.now(timezone.utc)
+    return _store().run_transaction(
+        lambda tx: _release_claim_after_job_retired_transaction(tx, path, job_id, now)
     )

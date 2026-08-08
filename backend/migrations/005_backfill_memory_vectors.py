@@ -17,8 +17,6 @@ Environment:
     OPENAI_API_KEY: OpenAI API key for embeddings
 """
 
-import firebase_admin
-from firebase_admin import credentials, firestore
 import sys
 import os
 import argparse
@@ -28,38 +26,27 @@ import time
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from database.store import get_document_store
 from database.vector_db import upsert_memory_vector, MEMORIES_NAMESPACE
 from models.memories import LEGACY_TO_NEW_CATEGORY
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    # App already initialized
-    pass
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
 
-db = firestore.client()
+def _store():
+    return get_document_store()
 
 
 def get_all_user_ids():
-    """Get all user IDs from Firestore."""
-    users_ref = db.collection('users')
-    return [doc.id for doc in users_ref.stream()]
+    """Get all user IDs from the datastore."""
+    return _store().list_ids('users')
 
 
 def get_user_memories(uid: str):
     """Get all memories for a user."""
-    memories_ref = db.collection('users').document(uid).collection('memories')
     memories = []
-    for doc in memories_ref.stream():
+    for doc in _store().query(f'users/{uid}/memories'):
         memory_data = doc.to_dict()
         memory_data['id'] = doc.id
         memories.append(memory_data)
@@ -82,9 +69,8 @@ def normalize_category(category: str) -> str:
 
 
 def update_memory_category(uid: str, memory_id: str, new_category: str):
-    """Update memory category in Firestore."""
-    memory_ref = db.collection('users').document(uid).collection('memories').document(memory_id)
-    memory_ref.update({'category': new_category})
+    """Update memory category in the datastore."""
+    _store().update(f'users/{uid}/memories/{memory_id}', {'category': new_category})
 
 
 def process_memory(uid: str, memory: dict, dry_run: bool = False) -> dict:

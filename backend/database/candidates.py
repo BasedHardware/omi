@@ -7,13 +7,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
 
-from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
-
 from config.canonical_memory_cohort import is_canonical_memory_user
+
 import database.action_items as action_items_db
-from database._client import db
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
+from database.store import Filter, get_document_store
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
 from models.candidate import (
     CandidateAction,
@@ -37,6 +35,10 @@ PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
 PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+
+
+def _store():
+    return get_document_store()
 
 
 class CandidateStoreError(RuntimeError):
@@ -96,43 +98,40 @@ def task_id_for_conversation_item(
     )
 
 
-def _candidate_ref(uid: str, candidate_id: str):
-    return db.collection('users').document(uid).collection(CANDIDATES_COLLECTION).document(candidate_id)
+def _candidates_collection_path(uid: str) -> str:
+    return f'users/{uid}/{CANDIDATES_COLLECTION}'
 
 
-def _task_ref(uid: str, task_id: str):
-    return db.collection('users').document(uid).collection(ACTION_ITEMS_COLLECTION).document(task_id)
+def _candidate_path(uid: str, candidate_id: str) -> str:
+    return f'users/{uid}/{CANDIDATES_COLLECTION}/{candidate_id}'
 
 
-def _integration_outbox_ref(uid: str, candidate_id: str):
-    return (
-        db.collection('users').document(uid).collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION).document(candidate_id)
-    )
+def _task_path(uid: str, task_id: str) -> str:
+    return f'users/{uid}/{ACTION_ITEMS_COLLECTION}/{task_id}'
 
 
-def _candidate_idempotency_alias_ref(uid: str, key_hash: str):
-    return db.collection('users').document(uid).collection(CANDIDATE_IDEMPOTENCY_ALIASES_COLLECTION).document(key_hash)
+def _integration_outbox_collection_path(uid: str) -> str:
+    return f'users/{uid}/{CANDIDATE_INTEGRATION_OUTBOX_COLLECTION}'
 
 
-def _candidate_pending_claim_ref(uid: str, semantic_claim_id: str):
-    return (
-        db.collection('users').document(uid).collection(CANDIDATE_PENDING_CLAIMS_COLLECTION).document(semantic_claim_id)
-    )
+def _integration_outbox_path(uid: str, candidate_id: str) -> str:
+    return f'users/{uid}/{CANDIDATE_INTEGRATION_OUTBOX_COLLECTION}/{candidate_id}'
 
 
-def _candidate_resolution_claim_ref(uid: str, candidate_id: str):
-    return (
-        db.collection('users').document(uid).collection(CANDIDATE_RESOLUTION_CLAIMS_COLLECTION).document(candidate_id)
-    )
+def _candidate_idempotency_alias_path(uid: str, key_hash: str) -> str:
+    return f'users/{uid}/{CANDIDATE_IDEMPOTENCY_ALIASES_COLLECTION}/{key_hash}'
 
 
-def _task_control_ref(uid: str):
-    return (
-        db.collection('users')
-        .document(uid)
-        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
-        .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
-    )
+def _candidate_pending_claim_path(uid: str, semantic_claim_id: str) -> str:
+    return f'users/{uid}/{CANDIDATE_PENDING_CLAIMS_COLLECTION}/{semantic_claim_id}'
+
+
+def _candidate_resolution_claim_path(uid: str, candidate_id: str) -> str:
+    return f'users/{uid}/{CANDIDATE_RESOLUTION_CLAIMS_COLLECTION}/{candidate_id}'
+
+
+def _task_control_path(uid: str) -> str:
+    return f'users/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
 
 
 def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
@@ -394,17 +393,17 @@ def create_candidate(
         idempotency_key=key_hash,
         created_at=now_value,
     )
-    ref = _candidate_ref(uid, candidate_id)
-    alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
-    semantic_claim_ref = _candidate_pending_claim_ref(uid, semantic_claim_id) if semantic_claim_id is not None else None
-    transaction = db.transaction()
+    candidate_path = _candidate_path(uid, candidate_id)
+    alias_path = _candidate_idempotency_alias_path(uid, key_hash)
+    semantic_claim_path = (
+        _candidate_pending_claim_path(uid, semantic_claim_id) if semantic_claim_id is not None else None
+    )
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
 
-        alias_snapshot = alias_ref.get(transaction=write_transaction)
+        alias_snapshot = write_transaction.get(alias_path)
         if alias_snapshot.exists:
             alias = _snapshot_dict(alias_snapshot)
             if alias.get('account_generation') != account_generation or alias.get('request_hash') != request_hash:
@@ -412,7 +411,7 @@ def create_candidate(
             aliased_candidate_id = alias.get('candidate_id')
             if not isinstance(aliased_candidate_id, str) or not aliased_candidate_id:
                 raise CandidateConflictError('candidate idempotency alias is malformed')
-            aliased_snapshot = _candidate_ref(uid, aliased_candidate_id).get(transaction=write_transaction)
+            aliased_snapshot = write_transaction.get(_candidate_path(uid, aliased_candidate_id))
             if not aliased_snapshot.exists:
                 raise CandidateConflictError('candidate idempotency alias target is missing')
             aliased = parse_snapshot_strict(CandidateRecord, aliased_snapshot)
@@ -420,7 +419,7 @@ def create_candidate(
                 raise CandidateConflictError('candidate idempotency alias generation mismatch')
             return aliased
 
-        snapshot = ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(candidate_path)
         if snapshot.exists:
             existing = parse_snapshot_strict(CandidateRecord, snapshot)
             if existing.account_generation != account_generation or existing.idempotency_key != key_hash:
@@ -429,7 +428,7 @@ def create_candidate(
             if existing_proposal != proposal:
                 raise CandidateConflictError('idempotency key was already used for a different proposal')
             write_transaction.set(
-                alias_ref,
+                alias_path,
                 {
                     'candidate_id': existing.candidate_id,
                     'request_hash': request_hash,
@@ -440,24 +439,24 @@ def create_candidate(
             return existing
 
         claimed_candidate: Optional[CandidateRecord] = None
-        claimed_ref = None
-        claimed_task_ref = None
+        claimed_path: Optional[str] = None
+        claimed_task_path: Optional[str] = None
         claimed_task: Optional[dict[str, Any]] = None
-        if semantic_claim_ref is not None:
-            claim_snapshot = semantic_claim_ref.get(transaction=write_transaction)
+        if semantic_claim_path is not None:
+            claim_snapshot = write_transaction.get(semantic_claim_path)
             if claim_snapshot.exists:
                 claim = _snapshot_dict(claim_snapshot)
                 claimed_candidate_id = claim.get('candidate_id')
                 if claim.get('account_generation') == account_generation and isinstance(claimed_candidate_id, str):
-                    claimed_ref = _candidate_ref(uid, claimed_candidate_id)
-                    claimed_snapshot = claimed_ref.get(transaction=write_transaction)
+                    claimed_path = _candidate_path(uid, claimed_candidate_id)
+                    claimed_snapshot = write_transaction.get(claimed_path)
                     if claimed_snapshot.exists:
                         candidate = parse_snapshot_strict(CandidateRecord, claimed_snapshot)
                         if candidate.account_generation == account_generation:
                             claimed_candidate = candidate
                             if candidate.status == CandidateStatus.accepted and candidate.result_task_id:
-                                claimed_task_ref = _task_ref(uid, candidate.result_task_id)
-                                claimed_task_snapshot = claimed_task_ref.get(transaction=write_transaction)
+                                claimed_task_path = _task_path(uid, candidate.result_task_id)
+                                claimed_task_snapshot = write_transaction.get(claimed_task_path)
                                 if claimed_task_snapshot.exists:
                                     claimed_task = _snapshot_dict(claimed_task_snapshot)
 
@@ -470,7 +469,7 @@ def create_candidate(
         reusable_active_accept = (
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.accepted
-            and claimed_task_ref is not None
+            and claimed_task_path is not None
             and _accepted_task_is_active(claimed_task, account_generation=account_generation)
             and claimed_task is not None
             and _accepted_task_matches_semantic_claim(claimed_task, claimed_candidate)
@@ -484,13 +483,13 @@ def create_candidate(
         if (
             claimed_candidate is not None
             and (reusable_pending or reusable_active_accept)
-            and claimed_ref is not None
-            and semantic_claim_ref is not None
+            and claimed_path is not None
+            and semantic_claim_path is not None
         ):
             merged = _merge_candidate_annotations(claimed_candidate, proposal)
             alias_payload['candidate_id'] = merged.candidate_id
             write_transaction.update(
-                claimed_ref,
+                claimed_path,
                 {
                     'capture_confidence': merged.capture_confidence,
                     'ownership_confidence': merged.ownership_confidence,
@@ -500,9 +499,9 @@ def create_candidate(
                     ],
                 },
             )
-            if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
+            if reusable_active_accept and claimed_task_path is not None and claimed_task is not None:
                 write_transaction.update(
-                    claimed_task_ref,
+                    claimed_task_path,
                     {
                         'capture_confidence': max(
                             _stored_confidence(claimed_task.get('capture_confidence')), merged.capture_confidence
@@ -514,9 +513,9 @@ def create_candidate(
                         'updated_at': now_value,
                     },
                 )
-            write_transaction.set(alias_ref, alias_payload)
+            write_transaction.set(alias_path, alias_payload)
             write_transaction.set(
-                semantic_claim_ref,
+                semantic_claim_path,
                 {
                     'candidate_id': merged.candidate_id,
                     'account_generation': account_generation,
@@ -526,11 +525,11 @@ def create_candidate(
             )
             return merged
 
-        write_transaction.set(ref, record.model_dump(mode='python', exclude_none=True))
-        write_transaction.set(alias_ref, alias_payload)
-        if semantic_claim_ref is not None:
+        write_transaction.set(candidate_path, record.model_dump(mode='python', exclude_none=True))
+        write_transaction.set(alias_path, alias_payload)
+        if semantic_claim_path is not None:
             write_transaction.set(
-                semantic_claim_ref,
+                semantic_claim_path,
                 {
                     'candidate_id': record.candidate_id,
                     'account_generation': account_generation,
@@ -540,11 +539,11 @@ def create_candidate(
             )
         return record
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
-    snapshot = _candidate_ref(uid, candidate_id).get()
+    snapshot = _store().get(_candidate_path(uid, candidate_id))
     if not snapshot.exists:
         return None
     return parse_snapshot_or_none(CandidateRecord, snapshot)
@@ -558,16 +557,20 @@ def list_candidates(
     limit: int = 100,
     offset: int = 0,
 ) -> list[CandidateRecord]:
-    query = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
+    filters: list[Filter] = []
     if status is not None:
-        query = query.where(filter=FieldFilter('status', '==', status.value))
+        filters.append(('status', '==', status.value))
     if account_generation is not None:
-        query = query.where(filter=FieldFilter('account_generation', '==', account_generation))
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-    if offset:
-        query = query.offset(offset)
-    query = query.limit(limit)
-    return parse_snapshots(CandidateRecord, query.stream())
+        filters.append(('account_generation', '==', account_generation))
+    docs = _store().query(
+        _candidates_collection_path(uid),
+        filters=filters,
+        order_by='created_at',
+        direction='desc',
+        limit=limit,
+        offset=offset or None,
+    )
+    return parse_snapshots(CandidateRecord, docs)
 
 
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
@@ -632,15 +635,13 @@ def resolve_task_candidate(
 ) -> CandidateResolutionReceipt:
     """Atomically accept a task Candidate and create/update exactly one task."""
 
-    candidate_ref = _candidate_ref(uid, candidate_id)
+    candidate_path = _candidate_path(uid, candidate_id)
     resolved_at = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        snapshot = candidate_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, snapshot)
@@ -658,7 +659,7 @@ def resolve_task_candidate(
             )
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
-        claim_snapshot = _candidate_resolution_claim_ref(uid, candidate_id).get(transaction=write_transaction)
+        claim_snapshot = write_transaction.get(_candidate_resolution_claim_path(uid, candidate_id))
         if claim_snapshot.exists and _claim_blocks_resolution(_snapshot_dict(claim_snapshot), now=resolved_at):
             raise CandidateConflictError('Candidate resolution is already claimed')
         if candidate.subject_kind == CandidateSubjectKind.workstream:
@@ -666,8 +667,8 @@ def resolve_task_candidate(
 
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)
-            task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_path = _task_path(uid, task_id)
+            task_snapshot = write_transaction.get(task_path)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
             try:
                 action_items_db.validate_task_relationship_in_transaction(
@@ -675,7 +676,6 @@ def resolve_task_candidate(
                     goal_id=candidate.goal_id,
                     workstream_id=candidate.workstream_id,
                     transaction=write_transaction,
-                    firestore_client=db,
                     account_generation=account_generation,
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
@@ -685,11 +685,11 @@ def resolve_task_candidate(
                 if existing_task.get('candidate_id') != candidate_id:
                     raise CandidateConflictError('deterministic task id collision')
             else:
-                write_transaction.set(task_ref, task_data)
+                write_transaction.set(task_path, task_data)
         else:
             task_id = cast(str, candidate.task_id)
-            task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_path = _task_path(uid, task_id)
+            task_snapshot = write_transaction.get(task_path)
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
@@ -710,14 +710,13 @@ def resolve_task_candidate(
                     goal_id=cast(Optional[str], final_goal_id),
                     workstream_id=cast(Optional[str], final_workstream_id),
                     transaction=write_transaction,
-                    firestore_client=db,
                     allow_ended_goal=(final_goal_id, final_workstream_id)
                     == (current_task.get('goal_id'), current_task.get('workstream_id')),
                     account_generation=account_generation,
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
-            write_transaction.update(task_ref, task_patch)
+            write_transaction.update(task_path, task_patch)
 
         candidate_patch = {
             'status': CandidateStatus.accepted.value,
@@ -725,10 +724,10 @@ def resolve_task_candidate(
             'result_task_id': task_id,
             'resolved_at': resolved_at,
         }
-        write_transaction.update(candidate_ref, candidate_patch)
+        write_transaction.update(candidate_path, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
             write_transaction.set(
-                _integration_outbox_ref(uid, candidate_id),
+                _integration_outbox_path(uid, candidate_id),
                 {
                     'outbox_id': candidate_id,
                     'candidate_id': candidate_id,
@@ -749,7 +748,7 @@ def resolve_task_candidate(
             resolved_at=resolved_at,
         )
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def claim_candidate_integration_dispatch(
@@ -762,23 +761,21 @@ def claim_candidate_integration_dispatch(
 ) -> Optional[str]:
     """Claim a durable accepted-task integration side effect for delivery."""
 
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    outbox_path = _integration_outbox_path(uid, candidate_id)
     claim_time = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        snapshot = outbox_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(outbox_path)
         if not snapshot.exists:
             return None
         payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         control = TaskWorkflowControl()
         if control_snapshot.exists:
             control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
-                outbox_ref,
+                outbox_path,
                 {
                     'status': 'suppressed',
                     'resolution_reason': 'account_generation_mismatch',
@@ -796,7 +793,7 @@ def claim_candidate_integration_dispatch(
                 return None
         lease_token = uuid4().hex
         write_transaction.update(
-            outbox_ref,
+            outbox_path,
             {
                 'status': 'processing',
                 'attempt_count': int(payload.get('attempt_count', 0)) + 1,
@@ -807,7 +804,7 @@ def claim_candidate_integration_dispatch(
         )
         return lease_token
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def complete_candidate_integration_dispatch(
@@ -820,22 +817,20 @@ def complete_candidate_integration_dispatch(
     now: Optional[datetime] = None,
 ) -> bool:
     completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    outbox_path = _integration_outbox_path(uid, candidate_id)
 
-    @firestore.transactional
     def apply(write_transaction):
-        snapshot = outbox_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(outbox_path)
         if not snapshot.exists:
             return False
         payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         control = TaskWorkflowControl()
         if control_snapshot.exists:
             control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
-                outbox_ref,
+                outbox_path,
                 {
                     'status': 'suppressed',
                     'resolution_reason': 'account_generation_mismatch',
@@ -846,7 +841,7 @@ def complete_candidate_integration_dispatch(
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
         write_transaction.update(
-            outbox_ref,
+            outbox_path,
             {
                 'status': 'completed' if succeeded else 'failed',
                 'completed_at': completion_time if succeeded else None,
@@ -856,7 +851,7 @@ def complete_candidate_integration_dispatch(
         )
         return True
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def list_candidate_integration_dispatches(
@@ -865,15 +860,15 @@ def list_candidate_integration_dispatches(
     account_generation: int,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    query = (
-        db.collection('users')
-        .document(uid)
-        .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
-        .where(filter=FieldFilter('account_generation', '==', account_generation))
-        .where(filter=FieldFilter('status', 'in', ['pending', 'failed', 'processing']))
-        .limit(limit)
+    docs = _store().query(
+        _integration_outbox_collection_path(uid),
+        filters=[
+            ('account_generation', '==', account_generation),
+            ('status', 'in', ['pending', 'failed', 'processing']),
+        ],
+        limit=limit,
     )
-    return [_snapshot_dict(snapshot) for snapshot in query.stream()]
+    return [_snapshot_dict(snapshot) for snapshot in docs]
 
 
 def resolve_candidate_without_mutation(
@@ -887,15 +882,13 @@ def resolve_candidate_without_mutation(
 ) -> CandidateResolutionReceipt:
     if status not in {CandidateStatus.rejected, CandidateStatus.expired}:
         raise ValueError('status must be rejected or expired')
-    candidate_ref = _candidate_ref(uid, candidate_id)
+    candidate_path = _candidate_path(uid, candidate_id)
     resolved_at = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        snapshot = candidate_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, snapshot)
@@ -911,11 +904,11 @@ def resolve_candidate_without_mutation(
             )
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
-        claim_snapshot = _candidate_resolution_claim_ref(uid, candidate_id).get(transaction=write_transaction)
+        claim_snapshot = write_transaction.get(_candidate_resolution_claim_path(uid, candidate_id))
         if claim_snapshot.exists and _claim_blocks_resolution(_snapshot_dict(claim_snapshot), now=resolved_at):
             raise CandidateConflictError('Candidate resolution is already claimed')
         write_transaction.update(
-            candidate_ref,
+            candidate_path,
             {'status': status.value, 'resolution_reason': reason or status.value, 'resolved_at': resolved_at},
         )
         return CandidateResolutionReceipt(
@@ -926,7 +919,7 @@ def resolve_candidate_without_mutation(
             resolved_at=resolved_at,
         )
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def reconcile_migrated_candidate(
@@ -946,15 +939,13 @@ def reconcile_migrated_candidate(
         raise ValueError('migration reconciliation requires terminal status')
     if status == CandidateStatus.accepted and not result_task_id:
         raise ValueError('accepted migration requires result_task_id')
-    candidate_ref = _candidate_ref(uid, candidate_id)
+    candidate_path = _candidate_path(uid, candidate_id)
     resolution_time = resolved_at or datetime.now(timezone.utc)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        snapshot = candidate_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(candidate_path)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, snapshot)
@@ -964,8 +955,8 @@ def reconcile_migrated_candidate(
             return candidate
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
-        claim_ref = _candidate_resolution_claim_ref(uid, candidate_id)
-        claim_snapshot = claim_ref.get(transaction=write_transaction)
+        claim_path = _candidate_resolution_claim_path(uid, candidate_id)
+        claim_snapshot = write_transaction.get(claim_path)
         active_claim = _snapshot_dict(claim_snapshot) if claim_snapshot.exists else {}
         if _claim_blocks_resolution(active_claim, now=resolution_time):
             if claim_token is None or active_claim.get('claim_token') != claim_token:
@@ -985,10 +976,10 @@ def reconcile_migrated_candidate(
         }
         if result_task_id:
             patch['result_task_id'] = result_task_id
-        write_transaction.update(candidate_ref, patch)
+        write_transaction.update(candidate_path, patch)
         if claim_token is not None:
             write_transaction.update(
-                claim_ref,
+                claim_path,
                 {
                     'status': 'consumed',
                     'consumed_at': resolution_time,
@@ -997,7 +988,7 @@ def reconcile_migrated_candidate(
             )
         return CandidateRecord.from_storage({**candidate.model_dump(mode='python'), **patch})
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def claim_candidate_for_legacy_promotion(
@@ -1011,18 +1002,16 @@ def claim_candidate_for_legacy_promotion(
 ) -> str:
     """Fence a pending Candidate before its legacy staged projection mutates task state."""
 
-    candidate_ref = _candidate_ref(uid, candidate_id)
-    claim_ref = _candidate_resolution_claim_ref(uid, candidate_id)
+    candidate_path = _candidate_path(uid, candidate_id)
+    claim_path = _candidate_resolution_claim_path(uid, candidate_id)
     claim_time = now or datetime.now(timezone.utc)
     claim_token = uuid4().hex
     lease_expires_at = claim_time + timedelta(seconds=lease_seconds)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        candidate_snapshot = candidate_ref.get(transaction=write_transaction)
+        candidate_snapshot = write_transaction.get(candidate_path)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
@@ -1030,7 +1019,7 @@ def claim_candidate_for_legacy_promotion(
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
-        claim_snapshot = claim_ref.get(transaction=write_transaction)
+        claim_snapshot = write_transaction.get(claim_path)
         if claim_snapshot.exists:
             claim = _snapshot_dict(claim_snapshot)
             if _claim_owner_is_active(claim, now=claim_time):
@@ -1042,7 +1031,7 @@ def claim_candidate_for_legacy_promotion(
                 if not isinstance(result_task_id, str) or not result_task_id:
                     raise CandidateConflictError('Candidate mutation claim has no reserved task')
                 write_transaction.update(
-                    claim_ref,
+                    claim_path,
                     {
                         'claim_token': claim_token,
                         'lease_expires_at': lease_expires_at,
@@ -1052,7 +1041,7 @@ def claim_candidate_for_legacy_promotion(
                 )
                 return claim_token
         write_transaction.set(
-            claim_ref,
+            claim_path,
             {
                 'candidate_id': candidate_id,
                 'claim_kind': 'legacy_promotion',
@@ -1067,7 +1056,7 @@ def claim_candidate_for_legacy_promotion(
         )
         return claim_token
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def begin_candidate_legacy_promotion(
@@ -1086,17 +1075,15 @@ def begin_candidate_legacy_promotion(
 
     if not result_task_id:
         raise ValueError('result_task_id is required')
-    candidate_ref = _candidate_ref(uid, candidate_id)
-    claim_ref = _candidate_resolution_claim_ref(uid, candidate_id)
+    candidate_path = _candidate_path(uid, candidate_id)
+    claim_path = _candidate_resolution_claim_path(uid, candidate_id)
     mutation_time = now or datetime.now(timezone.utc)
     lease_expires_at = mutation_time + timedelta(seconds=lease_seconds)
-    transaction = db.transaction()
 
-    @firestore.transactional
     def apply(write_transaction):
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = write_transaction.get(_task_control_path(uid))
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
-        candidate_snapshot = candidate_ref.get(transaction=write_transaction)
+        candidate_snapshot = write_transaction.get(candidate_path)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
@@ -1105,7 +1092,7 @@ def begin_candidate_legacy_promotion(
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
 
-        claim_snapshot = claim_ref.get(transaction=write_transaction)
+        claim_snapshot = write_transaction.get(claim_path)
         if not claim_snapshot.exists:
             raise CandidateConflictError('Candidate resolution claim is missing')
         claim = _snapshot_dict(claim_snapshot)
@@ -1127,7 +1114,7 @@ def begin_candidate_legacy_promotion(
         reserved_task_id = result_task_id
         reservation_kind = 'committed' if legacy_mutation_already_committed else 'create'
         if preferred_existing_task_id is not None and not legacy_mutation_already_committed:
-            preferred_snapshot = _task_ref(uid, preferred_existing_task_id).get(transaction=write_transaction)
+            preferred_snapshot = write_transaction.get(_task_path(uid, preferred_existing_task_id))
             preferred_task = _snapshot_dict(preferred_snapshot) if preferred_snapshot.exists else {}
             preferred_is_active = (
                 preferred_snapshot.exists
@@ -1140,7 +1127,7 @@ def begin_candidate_legacy_promotion(
                 reservation_kind = 'existing'
 
         write_transaction.update(
-            claim_ref,
+            claim_path,
             {
                 'phase': 'mutation_started',
                 'result_task_id': reserved_task_id,
@@ -1152,7 +1139,7 @@ def begin_candidate_legacy_promotion(
         )
         return LegacyPromotionReservation(task_id=reserved_task_id, kind=reservation_kind)
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 __all__ = [

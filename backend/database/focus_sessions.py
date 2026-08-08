@@ -8,17 +8,18 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, cast
 
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
-
-from ._client import db
+from database.store import Filter, get_document_store
 
 logger = logging.getLogger(__name__)
 
 
-def _user_col(uid: str, collection: str) -> Any:
-    """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+def _store():
+    return get_document_store()
+
+
+def _focus_sessions_col(uid: str) -> str:
+    """Logical path for the users/{uid}/focus_sessions collection."""
+    return f'users/{uid}/focus_sessions'
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -38,23 +39,29 @@ def create_focus_session(uid: str, status: str, app_or_site: str, description: s
         'created_at': now,
         'duration_seconds': kwargs.get('duration_seconds'),
     }
-    _user_col(uid, 'focus_sessions').document(session_id).set(doc)
+    _store().set(f'{_focus_sessions_col(uid)}/{session_id}', doc)
     return doc
 
 
 def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-    col = _user_col(uid, 'focus_sessions')
-    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
+    col = _focus_sessions_col(uid)
+    filters: List[Filter] = []
 
     if date:
         day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
         day_end = day_start + timedelta(days=1)
-        query = query.where(filter=FieldFilter('created_at', '>=', day_start))
-        query = query.where(filter=FieldFilter('created_at', '<', day_end))
+        filters.append(('created_at', '>=', day_start))
+        filters.append(('created_at', '<', day_end))
 
-    query = query.offset(offset).limit(limit)
     items: List[Dict[str, Any]] = []
-    for doc in query.stream():
+    for doc in _store().query(
+        col,
+        filters=filters or None,
+        order_by='created_at',
+        direction='desc',
+        offset=offset,
+        limit=limit,
+    ):
         data = _typed_doc(doc)
         data['id'] = doc.id
         items.append(data)
@@ -62,10 +69,10 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
 
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
-    ref = _user_col(uid, 'focus_sessions').document(session_id)
-    if not getattr(ref.get(), "exists", False):
+    path = f'{_focus_sessions_col(uid)}/{session_id}'
+    if not _store().get(path).exists:
         return False
-    ref.delete()
+    _store().delete(path)
     return True
 
 

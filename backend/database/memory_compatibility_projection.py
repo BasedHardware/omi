@@ -13,9 +13,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, NoReturn, cast
 
-from google.cloud import firestore
-
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
@@ -28,8 +27,13 @@ from utils.memory.v3.projection_reader_contract import (
     V3ProjectionState,
 )
 
+
+def _store():
+    return get_document_store()
+
+
 _MAX_LIMIT = 500
-_DOCUMENT_ID_ORDER = "__name__"
+_CREATED_AT_ORDER = "created_at"
 
 
 def _fail(reason: V3ProjectionFailureReason) -> NoReturn:
@@ -222,23 +226,13 @@ def _memory_payload(item: dict[str, Any], memory_id: str, state: V3ProjectionSta
     return payload
 
 
-def _apply_query_order(query: Any) -> Any:
-    try:
-        document_id_field = firestore.FieldPath.document_id()  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownVariableType]  # firestore.FieldPath absent from stubs; runtime-guarded by except fallback to "__name__"
-    except AttributeError:
-        document_id_field = _DOCUMENT_ID_ORDER
-    # Firestore serves this deterministic document-id tie-breaker from the
-    # built-in single-field created_at index. Do not declare it as a composite
-    # index: Firebase rejects that redundant declaration during deployment.
-    return query.order_by("created_at", direction=firestore.Query.DESCENDING).order_by(
-        document_id_field, direction=firestore.Query.DESCENDING
-    )
-
-
-def _apply_cursor(query: Any, cursor: V3ProjectionCursor | None) -> Any:
+def _cursor_start_after(cursor: V3ProjectionCursor | None) -> dict[str, Any] | None:
     if cursor is None:
-        return query
-    return query.start_after({"created_at": cursor.created_at, _DOCUMENT_ID_ORDER: cursor.memory_id})
+        return None
+    # Keyset cursor on created_at with a document-id tie-breaker: the neutral store applies the
+    # ``__name__`` tiebreak in the query direction (created_at DESC, id DESC), so ties never skip or
+    # duplicate a row across pages. Mirrors the prior Firestore ``start_after`` behavior.
+    return {"value": cursor.created_at, "id": cursor.memory_id}
 
 
 def _validate_request(request: V3ProjectionReadRequest) -> None:
@@ -248,17 +242,21 @@ def _validate_request(request: V3ProjectionReadRequest) -> None:
         _fail(V3ProjectionFailureReason.LIMIT_OUT_OF_RANGE)
 
 
-def read_v3_compatibility_projection_page(
-    *, db_client: firestore.Client, request: V3ProjectionReadRequest
-) -> V3ProjectionPage:
+def read_v3_compatibility_projection_page(*, request: V3ProjectionReadRequest) -> V3ProjectionPage:
     _validate_request(request)
     paths = MemoryCollections(uid=request.uid)
-    state_snapshot = db_client.document(paths.v3_compatibility_projection_state).get()  # type: ignore[reportUnknownMemberType]  # firestore DocumentReference.get stub has unknown transaction param
+    state_snapshot = _store().get(paths.v3_compatibility_projection_state)
     state = _validate_state(_as_dict(state_snapshot), request)
 
-    query = db_client.collection(paths.v3_compatibility_projection_items)
-    query = _apply_cursor(_apply_query_order(query), request.cursor)
-    snapshots = list(query.limit(request.limit + 1).stream())
+    # created_at DESC with a document-id tie-breaker served from the built-in single-field index;
+    # the neutral store applies the ``__name__`` tiebreak, so no composite index is required.
+    snapshots = _store().query(
+        paths.v3_compatibility_projection_items,
+        order_by=_CREATED_AT_ORDER,
+        direction="desc",
+        limit=request.limit + 1,
+        start_after=_cursor_start_after(request.cursor),
+    )
 
     items: list[dict[str, Any]] = []
     last_visible: tuple[datetime, str] | None = None

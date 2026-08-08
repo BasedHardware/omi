@@ -58,7 +58,7 @@ def merge():
         "delete_conversation_audio_files",
         "enqueue_conversation_artifact_build",
         "list_audio_chunks",
-        "_get_storage_client",
+        "_object_store",
         "private_cloud_sync_bucket",
         "_get_extension_for_path",
     ]:

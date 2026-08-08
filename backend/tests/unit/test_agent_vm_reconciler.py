@@ -63,41 +63,21 @@ def test_active_release_rejects_an_invalid_rollout_phase(monkeypatch):
         reconciler.load_active_release()
 
 
-def test_active_release_download_is_pinned_to_the_resolved_generation(monkeypatch):
-    calls: list[object] = []
+def test_active_release_read_goes_through_the_object_store(monkeypatch):
+    # The GCS generation-pin is a backend-specific optimization; on the neutral object-store
+    # port the release read is get_bytes(bucket, key), so the same code path serves GCS or S3.
+    captured: dict[str, str] = {}
 
-    class FakeBlob:
-        generation = None
-
-        def reload(self):
-            calls.append("reload")
-            self.generation = 1234
-
-        def download_as_bytes(self, **kwargs):
-            calls.append(kwargs)
+    class FakeObjectStore:
+        def get_bytes(self, bucket, key):
+            captured["bucket"] = bucket
+            captured["key"] = key
             return b"current"
 
-    blob = FakeBlob()
-
-    class FakeBucket:
-        def blob(self, name):
-            calls.append(("blob", name))
-            return blob
-
-    class FakeClient:
-        def bucket(self, name):
-            calls.append(("bucket", name))
-            return FakeBucket()
-
-    monkeypatch.setattr(reconciler.storage, "Client", FakeClient)
+    monkeypatch.setattr(reconciler, "get_object_store", lambda: FakeObjectStore())
 
     assert reconciler._read_gcs_uri("gs://release-bucket/agent-vm/releases/active.json") == b"current"
-    assert calls == [
-        ("bucket", "release-bucket"),
-        ("blob", "agent-vm/releases/active.json"),
-        "reload",
-        {"if_generation_match": 1234},
-    ]
+    assert captured == {"bucket": "release-bucket", "key": "agent-vm/releases/active.json"}
 
 
 def test_legacy_instance_is_drift_and_current_instance_is_not():

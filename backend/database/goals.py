@@ -7,14 +7,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
-from google.cloud import firestore
-
 from config.canonical_memory_cohort import is_canonical_memory_user
-from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
-from database import _client
 from database.read_boundary import parse_snapshot_strict, parse_snapshots
+from database.store import Filter, get_document_store
 from models.goal import (
     GoalMetric,
     GoalProgressEvent,
@@ -33,12 +30,16 @@ goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
 users_collection = 'users'
+action_items_collection = 'action_items'
+workstreams_collection = 'workstreams'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 MUTATION_RECEIPTS_COLLECTION = 'workflow_mutation_receipts'
-# Legacy test/call-site compatibility only; new persistence paths use _get_db().
-db = _client.db
+
+
+def _store():
+    return get_document_store()
 
 
 class GoalStoreError(RuntimeError):
@@ -53,37 +54,28 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
-def _get_db(firestore_client: Any = None) -> Any:
-    if firestore_client is not None:
-        return firestore_client
-    getter = getattr(_client, 'get_firestore_client', None)
-    return getter() if getter is not None else _client.db
+def _goal_path(uid: str, goal_id: str) -> str:
+    return f'{users_collection}/{uid}/{goals_collection}/{goal_id}'
 
 
-def _goal_ref(uid: str, goal_id: str, *, firestore_client: Any = None):
-    return (
-        _get_db(firestore_client)
-        .collection(users_collection)
-        .document(uid)
-        .collection(goals_collection)
-        .document(goal_id)
-    )
+def _goals_collection_path(uid: str) -> str:
+    return f'{users_collection}/{uid}/{goals_collection}'
 
 
-def goal_document_ref(uid: str, goal_id: str, *, firestore_client: Any = None):
-    """Shared transaction seam for workflow relationship validation."""
-
-    return _goal_ref(uid, goal_id, firestore_client=firestore_client)
+def _goal_events_path(uid: str, goal_id: str) -> str:
+    return f'{_goal_path(uid, goal_id)}/{goal_events_collection}'
 
 
-def _goal_control_ref(uid: str, *, firestore_client: Any):
-    return (
-        _get_db(firestore_client)
-        .collection(users_collection)
-        .document(uid)
-        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
-        .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
-    )
+def _goal_event_path(uid: str, goal_id: str, event_id: str) -> str:
+    return f'{_goal_events_path(uid, goal_id)}/{event_id}'
+
+
+def _goal_history_path(uid: str, goal_id: str) -> str:
+    return f'{_goal_path(uid, goal_id)}/{goal_history_collection}'
+
+
+def _goal_control_path(uid: str) -> str:
+    return f'{users_collection}/{uid}/{TASK_INTELLIGENCE_CONTROL_COLLECTION}/{TASK_INTELLIGENCE_CONTROL_DOCUMENT}'
 
 
 def _validate_canonical_write(snapshot: Any, *, uid: str, account_generation: int) -> None:
@@ -96,23 +88,16 @@ def _validate_canonical_write(snapshot: Any, *, uid: str, account_generation: in
         raise GoalConflictError('account generation mismatch')
 
 
-def _goal_mutation_receipt_ref(
+def _goal_mutation_receipt_path(
     uid: str,
     *,
     operation: str,
     idempotency_key: str,
     account_generation: int,
-    firestore_client: Any,
-):
+) -> str:
     raw = f'{uid}\x1f{account_generation}\x1f{operation}\x1f{idempotency_key}'.encode('utf-8')
     receipt_id = f'mutation_{hashlib.sha256(raw).hexdigest()[:32]}'
-    return (
-        _get_db(firestore_client)
-        .collection(users_collection)
-        .document(uid)
-        .collection(MUTATION_RECEIPTS_COLLECTION)
-        .document(receipt_id)
-    )
+    return f'{users_collection}/{uid}/{MUTATION_RECEIPTS_COLLECTION}/{receipt_id}'
 
 
 def _begin_goal_mutation(
@@ -123,42 +108,42 @@ def _begin_goal_mutation(
     idempotency_key: str,
     account_generation: int,
     request_payload: dict[str, Any],
-    firestore_client: Any,
-) -> tuple[Any, Optional[dict[str, Any]], str]:
-    control_snapshot = _goal_control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
+) -> tuple[str, Optional[dict[str, Any]], str]:
+    control_snapshot = write_transaction.get(_goal_control_path(uid))
     _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
-    receipt_ref = _goal_mutation_receipt_ref(
+    receipt_path = _goal_mutation_receipt_path(
         uid,
         operation=operation,
         idempotency_key=idempotency_key,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     request_hash = hashlib.sha256(
         json.dumps(request_payload, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
     ).hexdigest()
-    snapshot = receipt_ref.get(transaction=write_transaction)
+    snapshot = write_transaction.get(receipt_path)
     if not snapshot.exists:
-        return receipt_ref, None, request_hash
+        return receipt_path, None, request_hash
     receipt = _snapshot_dict(snapshot)
     if receipt.get('request_hash') != request_hash:
         raise GoalConflictError('idempotency key was reused with different content')
     result = receipt.get('result')
     if not isinstance(result, dict):
         raise GoalConflictError('idempotent goal mutation receipt is incomplete')
-    return receipt_ref, cast(dict[str, Any], result), request_hash
+    return receipt_path, cast(dict[str, Any], result), request_hash
 
 
 def _finish_goal_mutation(
     write_transaction: Any,
-    receipt_ref: Any,
+    receipt_path: str,
     *,
     request_hash: str,
     result: dict[str, Any],
     now: datetime,
 ) -> None:
-    write_transaction.create(
-        receipt_ref,
+    # The neutral transaction has no create(); the receipt path was read as absent above in the same
+    # transaction (reads precede writes), so a plain set is the create.
+    write_transaction.set(
+        receipt_path,
         {'request_hash': request_hash, 'result': result, 'created_at': now},
     )
 
@@ -302,17 +287,17 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
     return normalized
 
 
-def get_goal_by_id(uid: str, goal_id: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
-    snapshot = _goal_ref(uid, goal_id, firestore_client=firestore_client).get()
+def get_goal_by_id(uid: str, goal_id: str) -> Optional[Dict[str, Any]]:
+    snapshot = _store().get(_goal_path(uid, goal_id))
     if not snapshot.exists:
         return None
     return normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
 
 
-def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
+def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     """Released compatibility projection: focused first, otherwise oldest non-terminal goal."""
 
-    goals = get_user_goals(uid, limit=100, firestore_client=firestore_client)
+    goals = get_user_goals(uid, limit=100)
     if not goals:
         return None
     goals.sort(
@@ -325,10 +310,9 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
     return goals[0]
 
 
-def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
-    collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
+    docs = _store().query(_goals_collection_path(uid), filters=[('is_active', '==', True)], limit=limit)
+    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in docs]
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
     return goals[:limit]
@@ -337,12 +321,13 @@ def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) ->
 def get_all_goals(
     uid: str,
     include_inactive: bool = False,
-    *,
-    firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
-    collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    collection_path = _goals_collection_path(uid)
+    if include_inactive:
+        docs = _store().query(collection_path)
+    else:
+        docs = _store().query(collection_path, filters=[('is_active', '==', True)])
+    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in docs]
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)
@@ -353,26 +338,16 @@ def create_goal(
     uid: str,
     goal_data: Dict[str, Any],
     max_goals: int = DEFAULT_FOCUS_CAP,
-    *,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Create a goal without implicitly changing any other goal's lifecycle."""
 
     del max_goals  # Kept only for released call-site compatibility.
-    client = _get_db(firestore_client)
     now = datetime.now(timezone.utc)
     goal_id = str(goal_data.get('goal_id') or goal_data.get('id') or f'goal_{uuid4().hex[:12]}')
-    user_ref = client.collection(users_collection).document(uid)
-    goal_ref = user_ref.collection(goals_collection).document(goal_id)
-    transaction = client.transaction()
+    goal_path = _goal_path(uid, goal_id)
 
-    @firestore.transactional
     def create_in_generation(write_transaction):
-        control_snapshot = (
-            user_ref.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
-            .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
-            .get(transaction=write_transaction)
-        )
+        control_snapshot = write_transaction.get(_goal_control_path(uid))
         account_generation = (
             parse_snapshot_strict(TaskWorkflowControl, control_snapshot).account_generation
             if control_snapshot.exists
@@ -384,10 +359,10 @@ def create_goal(
             now=now,
             account_generation=account_generation,
         )
-        write_transaction.create(goal_ref, payload)
+        write_transaction.set(goal_path, payload)
         return normalize_goal_storage(payload, goal_id=goal_id)
 
-    return create_in_generation(transaction)
+    return _store().run_transaction(create_in_generation)
 
 
 def _new_goal_payload(
@@ -427,54 +402,46 @@ def create_goal_idempotent(
     *,
     idempotency_key: str,
     account_generation: int,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Create one canonical goal for a generation-scoped UI occurrence."""
 
-    client = _get_db(firestore_client)
-    transaction = client.transaction()
     now = datetime.now(timezone.utc)
     raw_goal_id = f'{uid}\x1f{account_generation}\x1fgoal-create\x1f{idempotency_key}'.encode('utf-8')
     goal_id = f'goal_{hashlib.sha256(raw_goal_id).hexdigest()[:12]}'
 
-    @firestore.transactional
     def apply(write_transaction):
-        receipt_ref, stored_result, request_hash = _begin_goal_mutation(
+        receipt_path, stored_result, request_hash = _begin_goal_mutation(
             write_transaction,
             uid=uid,
             operation='goal-create',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload=goal_data,
-            firestore_client=client,
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
         payload = _new_goal_payload(goal_data, goal_id=goal_id, now=now, account_generation=account_generation)
-        goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
-        write_transaction.create(goal_ref, payload)
+        write_transaction.set(_goal_path(uid, goal_id), payload)
         result = normalize_goal_storage(payload, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,
-            receipt_ref,
+            receipt_path,
             request_hash=request_hash,
             result=result,
             now=now,
         )
         return result
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def update_goal(
     uid: str,
     goal_id: str,
     updates: Dict[str, Any],
-    *,
-    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
-    ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
-    snapshot = ref.get()
+    goal_path = _goal_path(uid, goal_id)
+    snapshot = _store().get(goal_path)
     if not snapshot.exists:
         return None
     patch = dict(updates)
@@ -511,8 +478,8 @@ def update_goal(
         else:
             patch.update(_metric_aliases(metric))
     patch['updated_at'] = datetime.now(timezone.utc)
-    ref.update(patch)
-    return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
+    _store().update(goal_path, patch)
+    return get_goal_by_id(uid, goal_id)
 
 
 def focus_goal(
@@ -524,46 +491,43 @@ def focus_goal(
     replacement_goal_id: Optional[str] = None,
     focus_rank: Optional[int] = None,
     focus_cap: int = DEFAULT_FOCUS_CAP,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    client = _get_db(firestore_client)
-    target_ref = _goal_ref(uid, goal_id, firestore_client=client)
-    collection = client.collection(users_collection).document(uid).collection(goals_collection)
-    transaction = client.transaction()
+    goal_path = _goal_path(uid, goal_id)
+    collection_path = _goals_collection_path(uid)
     now = datetime.now(timezone.utc)
 
-    @firestore.transactional
     def apply(write_transaction):
-        receipt_ref, stored_result, request_hash = _begin_goal_mutation(
+        receipt_path, stored_result, request_hash = _begin_goal_mutation(
             write_transaction,
             uid=uid,
             operation=f'goal-focus:{goal_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload={'replacement_goal_id': replacement_goal_id, 'focus_rank': focus_rank},
-            firestore_client=client,
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
-        target_snapshot = target_ref.get(transaction=write_transaction)
+        target_snapshot = write_transaction.get(goal_path)
         if not target_snapshot.exists:
             raise GoalNotFoundError(goal_id)
         target = normalize_goal_storage(_goal_dict(target_snapshot), goal_id=goal_id)
         if target['status'] in {GoalStatus.achieved.value, GoalStatus.abandoned.value}:
             raise GoalConflictError('ended goals cannot be focused')
-        focused_snapshots = list(
-            collection.where(filter=FieldFilter('status', '==', GoalStatus.focused.value)).stream(
-                transaction=write_transaction
-            )
-        )
-        focused = [snapshot for snapshot in focused_snapshots if snapshot.id != goal_id]
+        # The focused set is a collection query, which the point-based store transaction cannot
+        # express. Read it at the top of the transaction (before any write) so the focus-cap and
+        # rank checks stay consistent with the write they guard.
+        focused = [
+            snapshot
+            for snapshot in _store().query(collection_path, filters=[('status', '==', GoalStatus.focused.value)])
+            if snapshot.id != goal_id
+        ]
         occupied = {
             rank for snapshot in focused for rank in [_goal_dict(snapshot).get('focus_rank')] if isinstance(rank, int)
         }
         if target['status'] == GoalStatus.focused.value and focus_rank in {None, target.get('focus_rank')}:
             _finish_goal_mutation(
                 write_transaction,
-                receipt_ref,
+                receipt_path,
                 request_hash=request_hash,
                 result=target,
                 now=now,
@@ -577,7 +541,7 @@ def focus_goal(
                 raise GoalConflictError('replacement_goal_id must name a focused goal')
             previous_rank = _goal_dict(replacement).get('focus_rank')
             write_transaction.update(
-                replacement.reference,
+                replacement.path,
                 {'status': GoalStatus.background.value, 'focus_rank': None, 'updated_at': now},
             )
             occupied.discard(int(previous_rank)) if isinstance(previous_rank, int) else None
@@ -592,18 +556,18 @@ def focus_goal(
             'is_active': True,
             'updated_at': now,
         }
-        write_transaction.update(target_ref, patch)
+        write_transaction.update(goal_path, patch)
         result = normalize_goal_storage({**target, **patch}, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,
-            receipt_ref,
+            receipt_path,
             request_hash=request_hash,
             result=result,
             now=now,
         )
         return result
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def unfocus_goal(
@@ -612,44 +576,39 @@ def unfocus_goal(
     *,
     idempotency_key: str,
     account_generation: int,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    client = _get_db(firestore_client)
-    goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
-    transaction = client.transaction()
+    goal_path = _goal_path(uid, goal_id)
     now = datetime.now(timezone.utc)
 
-    @firestore.transactional
     def apply(write_transaction):
-        receipt_ref, stored_result, request_hash = _begin_goal_mutation(
+        receipt_path, stored_result, request_hash = _begin_goal_mutation(
             write_transaction,
             uid=uid,
             operation=f'goal-unfocus:{goal_id}',
             idempotency_key=idempotency_key,
             account_generation=account_generation,
             request_payload={},
-            firestore_client=client,
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
-        snapshot = goal_ref.get(transaction=write_transaction)
+        snapshot = write_transaction.get(goal_path)
         if not snapshot.exists:
             raise GoalNotFoundError(goal_id)
         goal = normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
         if goal['status'] == GoalStatus.focused.value:
             patch = {'status': GoalStatus.background.value, 'focus_rank': None, 'updated_at': now}
-            write_transaction.update(goal_ref, patch)
+            write_transaction.update(goal_path, patch)
             goal = normalize_goal_storage({**goal, **patch}, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,
-            receipt_ref,
+            receipt_path,
             request_hash=request_hash,
             result=goal,
             now=now,
         )
         return goal
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def transition_goal_lifecycle(
@@ -660,18 +619,16 @@ def transition_goal_lifecycle(
     relationship_disposition: GoalRelationshipDisposition,
     idempotency_key: str,
     account_generation: int,
-    firestore_client: Any = None,
 ) -> Dict[str, Any]:
     if status not in {GoalStatus.paused, GoalStatus.achieved, GoalStatus.abandoned}:
         raise ValueError('invalid goal lifecycle target')
-    client = _get_db(firestore_client)
-    goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
-    transaction = client.transaction()
+    goal_path = _goal_path(uid, goal_id)
+    action_items_path = f'{users_collection}/{uid}/{action_items_collection}'
+    workstreams_path = f'{users_collection}/{uid}/{workstreams_collection}'
     now = datetime.now(timezone.utc)
 
-    @firestore.transactional
     def apply(write_transaction):
-        receipt_ref, stored_result, request_hash = _begin_goal_mutation(
+        receipt_path, stored_result, request_hash = _begin_goal_mutation(
             write_transaction,
             uid=uid,
             operation=f'goal-lifecycle:{goal_id}',
@@ -681,33 +638,24 @@ def transition_goal_lifecycle(
                 'status': status.value,
                 'relationship_disposition': relationship_disposition.value,
             },
-            firestore_client=client,
         )
         if stored_result is not None:
             return normalize_goal_storage(stored_result, goal_id=goal_id)
-        goal_snapshot = goal_ref.get(transaction=write_transaction)
+        goal_snapshot = write_transaction.get(goal_path)
         if not goal_snapshot.exists:
             raise GoalNotFoundError(goal_id)
         if relationship_disposition == GoalRelationshipDisposition.detach:
-            user_ref = client.collection(users_collection).document(uid)
-            task_snapshots = list(
-                user_ref.collection('action_items')
-                .where(filter=FieldFilter('goal_id', '==', goal_id))
-                .limit(450)
-                .stream(transaction=write_transaction)
-            )
-            workstream_snapshots = list(
-                user_ref.collection('workstreams')
-                .where(filter=FieldFilter('goal_id', '==', goal_id))
-                .limit(450)
-                .stream(transaction=write_transaction)
-            )
+            # The related-task/workstream sets are collection queries, which the point-based store
+            # transaction cannot express. Read them at the top of the transaction (before any write)
+            # so the detach stays consistent with the lifecycle write it guards.
+            task_snapshots = _store().query(action_items_path, filters=[('goal_id', '==', goal_id)], limit=450)
+            workstream_snapshots = _store().query(workstreams_path, filters=[('goal_id', '==', goal_id)], limit=450)
             if len(task_snapshots) + len(workstream_snapshots) >= 450:
                 raise GoalConflictError('too many relationships to detach atomically')
             for snapshot in task_snapshots:
-                write_transaction.update(snapshot.reference, {'goal_id': None, 'updated_at': now})
+                write_transaction.update(snapshot.path, {'goal_id': None, 'updated_at': now})
             for snapshot in workstream_snapshots:
-                write_transaction.update(snapshot.reference, {'goal_id': None, 'updated_at': now})
+                write_transaction.update(snapshot.path, {'goal_id': None, 'updated_at': now})
         patch = {
             'status': status.value,
             'focus_rank': None,
@@ -716,18 +664,18 @@ def transition_goal_lifecycle(
             'updated_at': now,
             'ended_at': now if status in {GoalStatus.achieved, GoalStatus.abandoned} else None,
         }
-        write_transaction.update(goal_ref, patch)
+        write_transaction.update(goal_path, patch)
         result = normalize_goal_storage({**_goal_dict(goal_snapshot), **patch}, goal_id=goal_id)
         _finish_goal_mutation(
             write_transaction,
-            receipt_ref,
+            receipt_path,
             request_hash=request_hash,
             result=result,
             now=now,
         )
         return result
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def _append_goal_progress_event(
@@ -737,28 +685,24 @@ def _append_goal_progress_event(
     *,
     idempotency_key: Optional[str],
     account_generation: Optional[int],
-    firestore_client: Any = None,
 ) -> GoalProgressEvent:
-    client = _get_db(firestore_client)
-    goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
-    transaction = client.transaction()
+    goal_path = _goal_path(uid, goal_id)
     now = datetime.now(timezone.utc)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
         else f'gpe_{uuid4().hex}'
     )
-    event_ref = goal_ref.collection(goal_events_collection).document(event_id)
+    event_path = _goal_event_path(uid, goal_id, event_id)
 
-    @firestore.transactional
     def apply(write_transaction):
         if account_generation is not None:
-            control_snapshot = _goal_control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+            control_snapshot = write_transaction.get(_goal_control_path(uid))
             _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
-        goal_snapshot = goal_ref.get(transaction=write_transaction)
+        goal_snapshot = write_transaction.get(goal_path)
         if not goal_snapshot.exists:
             raise GoalNotFoundError(goal_id)
-        existing = event_ref.get(transaction=write_transaction)
+        existing = write_transaction.get(event_path)
         if existing.exists:
             record = parse_snapshot_strict(GoalProgressEvent, existing)
             stored_proposal = GoalProgressEventCreate(
@@ -782,15 +726,15 @@ def _append_goal_progress_event(
             metric=event.metric,
             created_at=now,
         )
-        write_transaction.create(event_ref, record.model_dump(mode='python', exclude_none=True))
+        write_transaction.set(event_path, record.model_dump(mode='python', exclude_none=True))
         goal_patch: dict[str, Any] = {'latest_progress_sequence': sequence, 'updated_at': now}
         if event.metric is not None:
             goal_patch['metric'] = event.metric.model_dump(mode='python')
             goal_patch.update(_metric_aliases(event.metric))
-        write_transaction.update(goal_ref, goal_patch)
+        write_transaction.update(goal_path, goal_patch)
         return record
 
-    return apply(transaction)
+    return _store().run_transaction(apply)
 
 
 def append_goal_progress_event(
@@ -800,7 +744,6 @@ def append_goal_progress_event(
     *,
     idempotency_key: str,
     account_generation: int,
-    firestore_client: Any = None,
 ) -> GoalProgressEvent:
     return _append_goal_progress_event(
         uid,
@@ -808,7 +751,6 @@ def append_goal_progress_event(
         event,
         idempotency_key=idempotency_key,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
 
 
@@ -817,25 +759,22 @@ def list_goal_progress_events(
     goal_id: str,
     *,
     limit: int = 100,
-    firestore_client: Any = None,
 ) -> list[GoalProgressEvent]:
-    query = (
-        _goal_ref(uid, goal_id, firestore_client=firestore_client)
-        .collection(goal_events_collection)
-        .order_by('sequence', direction=firestore.Query.DESCENDING)
-        .limit(limit)
+    docs = _store().query(
+        _goal_events_path(uid, goal_id),
+        order_by='sequence',
+        direction='desc',
+        limit=limit,
     )
-    return parse_snapshots(GoalProgressEvent, query.stream())
+    return parse_snapshots(GoalProgressEvent, docs)
 
 
 def update_goal_progress(
     uid: str,
     goal_id: str,
     current_value: float,
-    *,
-    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
-    goal = get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
+    goal = get_goal_by_id(uid, goal_id)
     if goal is None:
         return None
     metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
@@ -850,23 +789,22 @@ def update_goal_progress(
         ),
         idempotency_key=None,
         account_generation=None,
-        firestore_client=firestore_client,
     )
-    save_goal_progress_history(uid, goal_id, current_value, firestore_client=firestore_client)
-    return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
+    save_goal_progress_history(uid, goal_id, current_value)
+    return get_goal_by_id(uid, goal_id)
 
 
 def save_goal_progress_history(
     uid: str,
     goal_id: str,
     value: float,
-    *,
-    firestore_client: Any = None,
 ) -> None:
     now = datetime.now(timezone.utc)
-    history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(now.strftime('%Y-%m-%d')).set(
-        {'date': now.strftime('%Y-%m-%d'), 'value': value, 'recorded_at': now}, merge=True
+    day = now.strftime('%Y-%m-%d')
+    _store().set(
+        f'{_goal_history_path(uid, goal_id)}/{day}',
+        {'date': day, 'value': value, 'recorded_at': now},
+        merge=True,
     )
 
 
@@ -874,28 +812,25 @@ def get_goal_history(
     uid: str,
     goal_id: str,
     days: int = 30,
-    *,
-    firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
-    query = (
-        _goal_ref(uid, goal_id, firestore_client=firestore_client)
-        .collection(goal_history_collection)
-        .order_by('date', direction=firestore.Query.DESCENDING)
-        .limit(days)
+    docs = _store().query(
+        _goal_history_path(uid, goal_id),
+        order_by='date',
+        direction='desc',
+        limit=days,
     )
-    return [
-        cast(Dict[str, Any], snapshot.to_dict()) for snapshot in query.stream() if isinstance(snapshot.to_dict(), dict)
-    ]
+    return [cast(Dict[str, Any], doc.to_dict()) for doc in docs if isinstance(doc.to_dict(), dict)]
 
 
-def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool:
+def delete_goal(uid: str, goal_id: str) -> bool:
     """Released DELETE compatibility: soft-abandon and retain relationships."""
 
-    ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
-    if not ref.get().exists:
+    goal_path = _goal_path(uid, goal_id)
+    if not _store().exists(goal_path):
         return False
     now = datetime.now(timezone.utc)
-    ref.update(
+    _store().update(
+        goal_path,
         {
             'status': GoalStatus.abandoned.value,
             'focus_rank': None,
@@ -903,7 +838,7 @@ def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool
             'relationship_disposition': GoalRelationshipDisposition.retain.value,
             'updated_at': now,
             'ended_at': now,
-        }
+        },
     )
     return True
 
@@ -915,6 +850,7 @@ __all__ = [
     'GoalStoreError',
     'append_goal_progress_event',
     'create_goal',
+    'create_goal_idempotent',
     'delete_goal',
     'ensure_released_goal_aliases',
     'focus_goal',
@@ -923,7 +859,6 @@ __all__ = [
     'get_goal_history',
     'get_user_goal',
     'get_user_goals',
-    'goal_document_ref',
     'list_goal_progress_events',
     'normalize_goal_storage',
     'save_goal_progress_history',

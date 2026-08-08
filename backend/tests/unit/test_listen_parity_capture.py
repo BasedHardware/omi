@@ -263,32 +263,19 @@ def test_export_target_resolves_uri_and_bucket_prefix():
 def test_export_cassette_file_uploads_under_prefix_without_logging_object_path(tmp_path, monkeypatch, caplog):
     from routers.listen import parity_pack_export as export_mod
     from routers.listen import parity_telemetry
+    from tests.object_store_fakes import FakeObjectStore
 
     cassette_dir = tmp_path / 'cassettes'
     cassette_dir.mkdir()
     cassette = cassette_dir / 'abc.json'
     cassette.write_text('{"ok":true}\n', encoding='utf-8')
 
-    uploaded = {}
-
-    class FakeBlob:
-        def upload_from_filename(self, filename, content_type=None):
-            uploaded['filename'] = filename
-            uploaded['content_type'] = content_type
-
-    class FakeBucket:
-        def blob(self, name):
-            uploaded['object'] = name
-            return FakeBlob()
-
-    class FakeClient:
-        def bucket(self, name):
-            uploaded['bucket'] = name
-            return FakeBucket()
-
+    # Parity export now goes through the object-store port (ADR-0032); the storage delta
+    # is the seam, upstream's telemetry lifecycle is asserted verbatim on top of it.
+    store = FakeObjectStore()
+    monkeypatch.setattr(export_mod, '_object_store', lambda: store)
     counter = _TelemetryCounter()
     monkeypatch.setattr(parity_telemetry, 'OMI_PARITY_PACK_CAPTURE_EVENTS_TOTAL', counter)
-    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
     caplog.set_level(logging.INFO)
     env = {
         'OMI_ENV_STAGE': 'dev',
@@ -296,9 +283,10 @@ def test_export_cassette_file_uploads_under_prefix_without_logging_object_path(t
         'OMI_PARITY_PACK_GCS_URI': 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0',
     }
     assert export_mod.export_cassette_file(cassette, environ=env) is True
-    assert uploaded['bucket'] == 'based-hardware-dev-omi-parity-pack-v0'
-    assert uploaded['object'] == 'parity-pack/v0/cassettes/abc.json'
-    assert uploaded['filename'] == str(cassette)
+    assert (
+        store.get_bytes('based-hardware-dev-omi-parity-pack-v0', 'parity-pack/v0/cassettes/abc.json')
+        == b'{"ok":true}\n'
+    )
     assert 'abc.json' not in caplog.text
     assert counter.events == [
         {'stage': 'export', 'outcome': 'attempted', 'reason_class': 'configured'},
@@ -309,22 +297,15 @@ def test_export_cassette_file_uploads_under_prefix_without_logging_object_path(t
 def test_export_cassette_file_emits_attempt_and_bounded_failure(tmp_path, monkeypatch, caplog):
     from routers.listen import parity_pack_export as export_mod
     from routers.listen import parity_telemetry
+    from tests.object_store_fakes import FakeObjectStore
 
-    class FakeBlob:
-        def upload_from_filename(self, *_args, **_kwargs):
+    class _RaisingObjectStore(FakeObjectStore):
+        def put_from_file(self, *_args, **_kwargs):
             raise PermissionError('private detail must not be emitted')
-
-    class FakeBucket:
-        def blob(self, _name):
-            return FakeBlob()
-
-    class FakeClient:
-        def bucket(self, _name):
-            return FakeBucket()
 
     counter = _TelemetryCounter()
     monkeypatch.setattr(parity_telemetry, 'OMI_PARITY_PACK_CAPTURE_EVENTS_TOTAL', counter)
-    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
+    monkeypatch.setattr(export_mod, '_object_store', lambda: _RaisingObjectStore())
     monkeypatch.setattr(export_mod, '_record_export_failure', lambda **_kwargs: None)
     caplog.set_level(logging.INFO)
     cassette_dir = tmp_path / 'cassettes'

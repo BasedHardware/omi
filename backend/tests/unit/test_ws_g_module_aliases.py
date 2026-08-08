@@ -238,7 +238,7 @@ def test_rollout_enabled_users_env_dual_read(monkeypatch, set_sequence, expected
     assert MemoryRolloutConfig.from_env().enabled_users == expected_enabled_users
 
 
-def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
+def test_rollout_env_flags_do_not_override_canonical_cohort(monkeypatch):
     from config.memory_rollout import MemoryRolloutConfig
     from utils.memory.memory_system import resolve_memory_system, MemorySystem
 
@@ -246,14 +246,17 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
 
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    monkeypatch.delenv("MEMORY_MODE", raising=False)
-    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
     set_canonical_cohort(monkeypatch, "cohort-user")
     monkeypatch.setenv("MEMORY_MODE", "read")
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
 
+    # The code cohort is the sole entitlement selector (ADR-0028 era, unified in fix(memory) 4570f1ce64):
+    # MEMORY_MODE / MEMORY_ENABLED_USERS never demote an enrolled cohort member to LEGACY, and never
+    # promote a rollout-flag user into CANONICAL. resolve_memory_system's contract states exactly this
+    # ("must never reinterpret an enrolled account as LEGACY"). So a cohort member stays canonical, and
+    # a rollout-only user stays legacy.
     assert MemoryRolloutConfig.from_env().enabled_users == {"rollout-user"}
-    assert resolve_memory_system("cohort-user") == MemorySystem.LEGACY
+    assert resolve_memory_system("cohort-user") == MemorySystem.CANONICAL
     assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
 
 

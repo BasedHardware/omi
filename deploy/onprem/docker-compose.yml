@@ -1,0 +1,363 @@
+# Omi self-host — WP0 baseline (offline, hermetic by construction).
+#
+# The `omi` network is `internal: true`: containers have NO route to the internet.
+# This IS the proof of "zero external calls" (ADR-0001): the core boots and serves
+# with no cloud, by construction. The build (which downloads liblc3, deps, the
+# emulator jar) runs on the daemon network, not on this service network, so it works.
+#
+# Verify (no host port on an internal network -> test from inside):
+#   docker compose up -d --build
+#   docker compose exec backend curl -fsS http://localhost:8080/v1/health   # {"status":"ok"}
+#   docker compose exec backend sh -c 'curl -m3 https://api.openai.com; echo exit=$?'  # must FAIL
+#
+# To curl from the host (accepts egress), add the override:
+#   docker compose -f docker-compose.yml -f docker-compose.expose.override.yml up -d
+
+name: omi-onprem
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [omi]
+    restart: unless-stopped
+
+  firestore-emulator:
+    build:
+      context: ../../
+      dockerfile: deploy/onprem/firestore-emulator/Dockerfile
+    healthcheck:
+      # the Firestore emulator answers 200 on / once it is ready
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks: [omi]
+    restart: unless-stopped
+
+  # Alternate storage backend (ADR-0002/0004). Opt-in via the `mongo` profile so the default
+  # on-prem baseline stays Firestore-only (ADR-0003). To use it:
+  #   STORAGE_BACKEND=mongo + MONGO_URI in backend.env, then:
+  #   docker compose --profile mongo up -d --build
+  # Single-node replica set: transactions (used by the deletion/speech-sample paths) require one.
+  mongo:
+    image: mongo:latest
+    profiles: ["mongo"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      # Initiate the one-member replica set on first probe, then report healthy once primary.
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval "try { rs.status() } catch (e) {
+          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }
+          db.hello().isWritablePrimary" | grep -q true
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks: [omi]
+    restart: unless-stopped
+
+  # Alternate object-store backend (ADR-0032/0004). Opt-in via the `objstore` profile so the default
+  # on-prem baseline stays GCS-shaped (ADR-0003). RustFS is one S3-compatible product; the S3 adapter
+  # is generic (MinIO/SeaweedFS/Ceph/AWS work the same by changing S3_ENDPOINT/credentials). To use it:
+  #   OBJECT_STORE_BACKEND=s3 + S3_ENDPOINT=http://rustfs:9000 + S3_ACCESS_KEY/S3_SECRET_KEY in backend.env,
+  #   then: docker compose --profile objstore up -d --build
+  # Buckets are provisioning (ADR-0032 §5): create them out-of-band before first use.
+  rustfs:
+    image: rustfs/rustfs:latest
+    profiles: ["objstore"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+    healthcheck:
+      # curl (no -f): any HTTP reply, incl. the 403 S3 AccessDenied, means the S3 API is serving.
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:9000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    networks: [omi]
+    restart: unless-stopped
+
+  # Self-hosted push server for UnifiedPush (ADR-0011). Opt-in via the `push` profile; the default
+  # baseline sends push over FCM. With PUSH_NOTIFICATION_BACKEND=unifiedpush the backend POSTs
+  # notifications to endpoints on this ntfy server, reached internally via
+  # UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80. The phone's UnifiedPush distributor (the ntfy app)
+  # subscribes to the SAME server on its host-facing URL (NTFY_BASE_URL). ntfy joins `edge` so its
+  # published port has host ingress for the device, and `omi` so the backend reaches it by name. To
+  # use it: set PUSH_NOTIFICATION_BACKEND=unifiedpush in backend.env, then:
+  #   docker compose --profile push up -d
+  # See SELFHOST_NOTES "Push notifications (UnifiedPush/ntfy)".
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    profiles: ["push"]
+    command: ["serve"]
+    environment:
+      # Public https URL the phone's UnifiedPush distributor uses (served by ntfy-proxy). It must be
+      # the address the DEVICE reaches (HOST_IP) and match the cert SAN. ntfy itself stays internal;
+      # the backend reaches it via UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80, so it needs no egress.
+      NTFY_BASE_URL: https://${HOST_IP:-localhost}:${NTFY_HTTPS_PORT:-8455}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/v1/health | grep -q '\"healthy\":true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for ntfy — the UnifiedPush distributor (ntfy app) refuses a
+  # cleartext server. Same posture as api-proxy/kc-proxy: ntfy stays internal (omi), only this proxy
+  # is on `edge` with host ingress. Uses the same self-signed certs (gen-dev-certs.sh, SAN=HOST_IP).
+  ntfy-proxy:
+    image: nginx:stable-alpine
+    profiles: ["push"]
+    depends_on: [ntfy]
+    ports:
+      - "${NTFY_HTTPS_PORT:-8455}:8443"
+    volumes:
+      - ./ntfy-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../../
+      dockerfile: backend/Dockerfile
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    env_file:
+      - ./backend.env
+    # create the temp dirs used at runtime (main.py does not create them), then start uvicorn
+    command:
+      - sh
+      - -c
+      - mkdir -p _temp _samples _segments _speech_profiles && exec uvicorn main:app --host 0.0.0.0 --port 8080 --loop uvloop
+    depends_on:
+      valkey:
+        condition: service_healthy
+      firestore-emulator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [omi]
+    restart: unless-stopped
+
+  # ---- Optional local inference (ADR-0035) — GPU services, opt-in via the `inference` profile.
+  # These are the in-repo GPU servers (STT / diarization / translation). LLM + embeddings are
+  # deliberately NOT here: they are an operator-provided OpenAI-compatible endpoint (Ollama/vLLM)
+  # pointed at via backend.env (OPENAI_BASE_URL / OMI_EMBEDDINGS_BASE_URL), typically a dedicated
+  # GPU host. To turn these on:
+  #   docker compose --profile inference up -d --build
+  # Requirements:
+  #   - NVIDIA Container Toolkit on the host (the `deploy.resources` GPU reservation below).
+  #   - Pre-provisioned models: the `omi` network is internal (no egress), so weights cannot be
+  #     downloaded at runtime. Populate the `inference-models` volume first — see SELFHOST_NOTES
+  #     "Local inference (WP5)". Point the backend at them in backend.env:
+  #       HOSTED_PARAKEET_API_URL=http://parakeet:8080
+  #       HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080
+  #       HOSTED_TRANSLATION_API_URL=http://nllb:8080   + TRANSLATION_SERVICE_MODELS=nllb
+  # STT gateway. DEFAULT = thin gateway to the whisper service (ADR-0037 default engine): in NIM mode
+  # main.py starts NO GPU worker / loads NO NeMo model, so this needs neither GPU nor the models volume;
+  # it just forwards to whisper (multilingual, 99 languages, commodity GPU).
+  #
+  # HIGH-PERFORMANCE DATACENTER ALTERNATIVE — Parakeet on NeMo (needs a GPU with Riva support + the
+  # models pre-provisioned into the volume). Swap the environment/volumes/devices for:
+  #   environment: { HF_HOME: /models/hf, PARAKEET_MODEL: nvidia/parakeet-tdt-0.6b-v3,
+  #                  PARAKEET_STREAM_MODEL: nvidia/parakeet-rnnt-1.1b,
+  #                  PARAKEET_STREAM_CAPACITY: "4", PARAKEET_STREAM_ALLOCATION_PERCENT: "100" }
+  #   volumes: [inference-models:/models] ; devices: ["nvidia.com/gpu=all"]
+  # (The image still ships the ~76GB NeMo base even as a gateway — a thin-gateway image is a tracked
+  # follow-up, like the diarizer slimming in D17.)
+  parakeet:
+    build:
+      context: ../../
+      # Base nvcr.io/nvidia/nemo:26.02 — run `docker login nvcr.io` (free NGC account) before building.
+      dockerfile: backend/parakeet/Dockerfile
+    profiles: ["inference"]
+    environment:
+      PARAKEET_INFERENCE_MODE: nim
+      NIM_INFERENCE_URL: http://whisper:8000   # gateway appends /v1/audio/transcriptions (no /v1 here)
+      NIM_LANGUAGE: auto                        # "auto" => omit language => whisper multilingual auto-detect
+      # Still REQUIRED by StreamAdmissionController.from_env even in NIM mode (parsed before the mode branch).
+      PARAKEET_STREAM_CAPACITY: "1"
+      PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [omi]
+    restart: unless-stopped
+
+  diarizer:
+    build:
+      context: ../../
+      dockerfile: backend/diarizer/Dockerfile
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+        # skip the ~3GB system CUDA 13.2 install: torch bundles its own cu12.8 runtime libraries,
+        # so on-prem needs only the host driver (via CDI). Halves the image (~24.8GB -> ~12.5GB).
+        INSTALL_SYSTEM_CUDA: "0"
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf
+    volumes:
+      - inference-models:/models
+    # GPU via CDI (recommended, Docker >=25, Default Runtime runc) — resolves the CDI device the
+    # same way `docker run --device nvidia.com/gpu=all` does. Legacy nvidia-runtime hosts instead
+    # want `deploy.resources.reservations.devices: [{driver: nvidia, count: all, capabilities: [gpu]}]`
+    # (needs `nvidia-ctk runtime configure` + daemon restart). See SELFHOST_NOTES "GPU passthrough".
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  nllb:
+    build:
+      # This Dockerfile COPYs main.py/requirements.txt from the context root, so the context is the
+      # service dir (unlike diarizer/parakeet, whose Dockerfiles COPY backend/<svc>/ from repo root).
+      context: ../../backend/nllb_translation
+      # Base nvidia/cuda:12.4.1-runtime — public, builds directly.
+      dockerfile: Dockerfile
+    profiles: ["inference"]
+    environment:
+      # CTranslate2 model dir (pre-provisioned into the volume; not baked into the image).
+      NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
+    volumes:
+      - inference-models:/models
+    # GPU via CDI — see the note on the diarizer service (legacy nvidia-runtime hosts use the
+    # deploy.resources form instead). CPU-only smoke: set CT2_DEVICE=cpu and drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  # Multilingual STT (faster-whisper / CTranslate2) — the ADR-0037 DEFAULT on-prem engine (99
+  # languages, commodity GPU incl. Blackwell/sm_120). It is an OpenAI-compatible ASR server; the
+  # backend reaches it through the parakeet gateway in NIM mode: set on the `parakeet` service
+  #   PARAKEET_INFERENCE_MODE=nim, NIM_INFERENCE_URL=http://whisper:8000, NIM_LANGUAGE=auto
+  # (the gateway appends /v1/audio/transcriptions, so NIM_INFERENCE_URL must NOT include /v1; and no
+  # NeMo is loaded in NIM mode — main.py only starts the GPU worker when mode != nim). The
+  # Parakeet-NeMo path stays available for datacenter GPUs; pick one per ADR-0037's matrix.
+  whisper:
+    build:
+      context: ../../backend/whisper
+      dockerfile: Dockerfile
+    profiles: ["inference"]
+    environment:
+      HF_HOME: /models/hf                 # model pre-provisioned into the volume (internal network = no egress)
+      WHISPER_MODEL: large-v3
+      WHISPER_COMPUTE_TYPE: int8_float16   # ~1.5GB on GPU; CTranslate2 mode validated on sm_120
+    volumes:
+      - inference-models:/models
+    # GPU via CDI — see the diarizer service note. CPU-only smoke: WHISPER_DEVICE=cpu + drop this stanza.
+    devices:
+      - "nvidia.com/gpu=all"
+    networks: [omi]
+    restart: unless-stopped
+
+  # On-prem OIDC issuer (ADR-0034/0038). Opt-in via the `auth` profile so the default baseline
+  # stays Firebase (ADR-0003). Keycloak is one OIDC provider; any compliant IdP works by pointing
+  # the backend's OIDC_ISSUER/OIDC_JWKS_URL and the app's OIDC_ISSUER at it.
+  #   docker compose --profile auth up -d
+  # TLS is mandatory for the deployed issuer (the mobile client refuses non-loopback http — see
+  # SELFHOST_NOTES §OIDC client). Provide a cert reachable at the hostname the DEVICE uses:
+  #   ./keycloak/certs/{kc.crt,kc.key}  (self-signed for testing, or your real cert)
+  # Realm is imported from the committed example (realm `omi` + public PKCE client `omi-app`).
+  # Issuer consistency (proven live): the token `iss` = KC_HOSTNAME; the backend must validate that
+  # same value. Set KC_HOSTNAME to the device-reachable https URL, and give the backend a
+  # backchannel JWKS URL it can reach on the internal net:
+  #   backend.env: OIDC_ISSUER=${KC_HOSTNAME}/realms/omi
+  #                OIDC_JWKS_URL=http://keycloak:8090/realms/omi/protocol/openid-connect/certs
+  # `--hostname-backchannel-dynamic=true` lets that internal http backchannel coexist with the
+  # fixed public https hostname.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    profiles: ["auth"]
+    command:
+      - start-dev
+      - --http-port=8090
+      - --proxy-headers=xforwarded
+      - --hostname=${KC_HOSTNAME:-https://localhost:8443}
+      # false: backchannel endpoints (token/userinfo/jwks in the discovery doc) use KC_HOSTNAME too,
+      # not a value derived from the proxy's X-Forwarded-Port. With `true` the mobile OIDC client's
+      # token exchange went to the proxy's INTERNAL port instead of the public issuer port. The
+      # backend is unaffected — it validates tokens with an explicit internal OIDC_JWKS_URL, not the
+      # discovery doc.
+      - --hostname-backchannel-dynamic=false
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
+    # http-only behind kc-proxy; no published ports (the backend + the proxy reach it via
+    # `keycloak:8090` on the internal net). TLS is terminated by kc-proxy below.
+    networks: [omi]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy in front of Keycloak (conf: keycloak/kc-proxy.conf). It publishes
+  # the public https issuer port; Keycloak stays http-only on the internal network. Point KC_HOSTNAME
+  # and the app/backend OIDC_ISSUER at this proxy's https URL.
+  kc-proxy:
+    image: nginx:stable-alpine
+    profiles: ["auth"]
+    depends_on: [keycloak]
+    # 8443 is the conventional https port; override KC_HTTPS_PORT if it collides on the host
+    # (then set KC_HOSTNAME to the same port, e.g. https://<ip>:8453).
+    ports:
+      - "${KC_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./keycloak/kc-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+  # TLS-terminating reverse proxy for the backend API (conf: api-proxy.conf). The mobile app sends
+  # the Bearer token to the API, so on-prem serves it over HTTPS (same posture as the OIDC issuer).
+  # Set the app's API_BASE_URL to https://<host>:${API_HTTPS_PORT}. Generate certs: ./gen-dev-certs.sh
+  api-proxy:
+    image: nginx:stable-alpine
+    profiles: ["auth"]
+    depends_on: [backend]
+    ports:
+      - "${API_HTTPS_PORT:-8444}:8443"
+    volumes:
+      - ./api-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/certs:ro
+    networks: [omi, edge]
+    restart: unless-stopped
+
+networks:
+  omi:
+    driver: bridge
+    internal: true
+  # Non-internal network for the TLS reverse proxies so their published ports have host ingress
+  # (the `omi` net is internal:true → no external routing). Proxies join both: `edge` for the
+  # device/host, `omi` to reach keycloak/backend by service name.
+  edge:
+    driver: bridge
+
+volumes:
+  # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
+  # out-of-band before first `--profile inference` run — the internal network has no egress.
+  inference-models:

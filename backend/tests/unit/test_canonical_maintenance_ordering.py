@@ -1,12 +1,13 @@
 """Canonical maintenance has one L2 mutation authority."""
 
 from datetime import datetime, timezone
-from unittest.mock import ANY, MagicMock, call, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.canonical_consolidation import ConsolidationReport
 from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
 from utils.memory.memory_system import MemorySystem
@@ -77,7 +78,6 @@ def test_maintenance_runs_normalization_ttl_and_one_l2_route_in_order():
     ):
         report = run_canonical_short_term_maintenance(
             uid,
-            db_client=MagicMock(),
             now=NOW,
             run_id="run-order",
         )
@@ -150,7 +150,6 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
         with pytest.raises(ValueError, match="malformed Short-term row"):
             run_canonical_short_term_maintenance(
                 uid,
-                db_client=MagicMock(),
                 now=NOW,
                 run_id="run-malformed",
             )
@@ -194,7 +193,6 @@ def test_blocked_l2_output_never_falls_through_to_generic_promotion():
     ):
         report = run_canonical_short_term_maintenance(
             uid,
-            db_client=MagicMock(),
             now=NOW,
             run_id="run-blocked",
         )
@@ -216,7 +214,6 @@ def test_noncanonical_user_is_a_noop():
     ):
         report = run_canonical_short_term_maintenance(
             "uid-legacy",
-            db_client=MagicMock(),
             now=NOW,
             run_id="run-legacy",
         )
@@ -229,8 +226,6 @@ def test_noncanonical_user_is_a_noop():
 
 def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations():
     uid = "uid-canonical"
-    client = MagicMock()
-    client.document.return_value.get.return_value.exists = False
     keyword_delete = MagicMock(return_value=True)
     assertion_delete = MagicMock()
     kg_prune = MagicMock(return_value=2)
@@ -252,6 +247,8 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
 
     with (
         patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        # No authoritative item at the memory path -> no pending-review to preserve.
+        patch("database.document_store._store", lambda: FakeDocumentStore(backing={})),
         patch(
             "utils.memory.short_term_promotion.run_required_memory_processing",
             return_value=RequiredMemoryProcessingReport(uid=uid),
@@ -285,7 +282,6 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
     ):
         report = run_canonical_short_term_maintenance(
             uid,
-            db_client=client,
             now=NOW,
             run_id="run-delete",
         )
@@ -297,22 +293,19 @@ def test_projection_delete_callback_invalidates_keyword_kg_and_review_citations(
         uid,
         "mem-retired",
         expected_account_generation=1,
-        db_client=client,
     )
-    keyword_delete.assert_called_once_with(uid, "mem-retired", db_client=client)
-    assertion_delete.assert_called_once_with(uid, "mem-retired", db_client=client)
-    kg_prune.assert_called_once_with(uid, ["mem-retired"], db_client=client)
+    keyword_delete.assert_called_once_with(uid, "mem-retired")
+    assertion_delete.assert_called_once_with(uid, "mem-retired")
+    kg_prune.assert_called_once_with(uid, ["mem-retired"])
     review_purge.assert_called_once_with(
         uid,
         ["mem-retired"],
         reason="memory_outbox_projection_deleted",
-        db_client=client,
     )
 
 
 def test_projection_delete_preserves_pending_review_for_active_review_archive():
     uid = "uid-canonical"
-    client = MagicMock()
     review_item = MemoryItem(
         memory_id="mem-review",
         uid=uid,
@@ -342,9 +335,9 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
         account_generation=1,
         promotion={"route": "review", "processing_status": "processed"},
     )
-    snapshot = client.document.return_value.get.return_value
-    snapshot.exists = True
-    snapshot.to_dict.return_value = review_item.model_dump(mode="python")
+    # Seed the authoritative item through the neutral storage port so the delete
+    # callback reads it back and preserves the pending review (ADR-0028: no raw client).
+    docs = {f"users/{uid}/memory_items/{review_item.memory_id}": review_item.model_dump(mode="python")}
     keyword_delete = MagicMock(return_value=True)
     assertion_delete = MagicMock()
     kg_prune = MagicMock(return_value=1)
@@ -366,6 +359,7 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
 
     with (
         patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("database.document_store._store", lambda: FakeDocumentStore(backing=docs)),
         patch(
             "utils.memory.short_term_promotion.run_required_memory_processing",
             return_value=RequiredMemoryProcessingReport(uid=uid),
@@ -399,7 +393,6 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
     ):
         report = run_canonical_short_term_maintenance(
             uid,
-            db_client=client,
             now=NOW,
             run_id="run-review-delete",
         )
@@ -411,11 +404,10 @@ def test_projection_delete_preserves_pending_review_for_active_review_archive():
         uid,
         review_item.memory_id,
         expected_account_generation=1,
-        db_client=client,
     )
-    keyword_delete.assert_called_once_with(uid, review_item.memory_id, db_client=client)
-    assertion_delete.assert_called_once_with(uid, review_item.memory_id, db_client=client)
-    kg_prune.assert_called_once_with(uid, [review_item.memory_id], db_client=client)
+    keyword_delete.assert_called_once_with(uid, review_item.memory_id)
+    assertion_delete.assert_called_once_with(uid, review_item.memory_id)
+    kg_prune.assert_called_once_with(uid, [review_item.memory_id])
     review_purge.assert_not_called()
 
 
@@ -477,7 +469,6 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
     ):
         report = run_canonical_short_term_maintenance(
             uid,
-            db_client=MagicMock(),
             now=NOW,
             run_id="run-retry",
         )
@@ -489,7 +480,6 @@ def test_projection_delete_failure_stays_retryable_and_does_not_partially_invali
         uid,
         "mem-retry",
         expected_account_generation=1,
-        db_client=ANY,
     )
     keyword_delete.assert_not_called()
     kg_prune.assert_not_called()

@@ -10,7 +10,7 @@ from database.memory_vector_repair_outbox_worker import (
     VectorRepairOutboxWorkerTickConfig,
     run_vector_repair_outbox_worker_tick,
 )
-from tests.unit.test_vector_repair_outbox_worker import _FakeFirestore, _live_item, _record
+from tests.unit.test_vector_repair_outbox_worker import _FakeFirestore, _install_store, _live_item, _record
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "backend" / "scripts" / "vector_repair_outbox_emulator_test.py"
@@ -157,7 +157,7 @@ class TestTelemetry:
             "error": "telemetry sink unavailable for vector_repair_outbox_worker_records_total",
         }
 
-    def test_worker_tick_telemetry_failure_does_not_mask_worker_cleanup_result(self):
+    def test_worker_tick_telemetry_failure_does_not_mask_worker_cleanup_result(self, monkeypatch):
         now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
         db = _FakeFirestore(
             {
@@ -169,9 +169,9 @@ class TestTelemetry:
                 )
             }
         )
+        _install_store(monkeypatch, db)
 
         result = run_vector_repair_outbox_worker_tick(
-            db_client=db,
             uid="u1",
             config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
             authoritative_item_loader=lambda record: _live_item(memory_id=record["memory_id"]),

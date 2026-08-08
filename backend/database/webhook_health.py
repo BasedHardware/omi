@@ -4,10 +4,15 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
-from database._client import db
 from database.redis_db import r
+from database.store import get_document_store
 
 logger = logging.getLogger(__name__)
+
+
+def _store():
+    return get_document_store()
+
 
 _HEALTH_TTL = 7 * 86400  # 7 days
 _CACHE_TTL = 60  # seconds — in-memory cache for disabled checks
@@ -285,15 +290,15 @@ def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
         _set_disabled_state(app_id, True)
     try:
         apps_collection = 'plugins_data'
-        app_ref = db.collection(apps_collection).document(app_id)
-        app_ref.update(
+        _store().update(
+            f'{apps_collection}/{app_id}',
             {
                 'disabled': True,
                 'disabled_reason': 'webhook_failures',
                 'disabled_at': datetime.now(timezone.utc).isoformat(),
                 'disabled_error': error[:200],
                 'disabled_failure_duration_hours': failure_hours,
-            }
+            },
         )
         logger.info(f'Auto-disabled app {app_id} in Firestore after {failure_hours}h of webhook failures')
     except Exception as e:

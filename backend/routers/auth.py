@@ -14,9 +14,9 @@ from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
-import firebase_admin.auth
+from utils.auth import get_auth_provider
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
-from utils.executors import critical_executor, run_blocking
+from utils.executors import auth_idp_executor, critical_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
@@ -1019,67 +1019,33 @@ async def _generate_custom_token(
     Works with any bundle ID - perfect for multiple developers
     """
     try:
-        # Get Firebase API Key from environment
-        firebase_api_key = os.getenv('FIREBASE_API_KEY')
-        if not firebase_api_key:
-            raise Exception("FIREBASE_API_KEY not configured")
+        # These verbs are Firebase-only (ADR-0034 §3): the IdP-credential exchange (signInWithIdp REST)
+        # + custom-token minting are proprietary and unnecessary under OIDC, so the adapter owns them.
+        adapter = get_auth_provider()
 
-        # Sign in with OAuth credential using Firebase Auth REST API
-        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+        # The signInWithIdp exchange is an outbound REST round-trip to the IdP with unpredictable
+        # latency. Run it on the dedicated external-I/O bulkhead, NOT critical_executor (8 workers,
+        # shared with token verification / rate-limit gates), so a slow IdP hop can't starve them.
+        firebase_uid = await run_blocking(
+            auth_idp_executor, adapter.exchange_idp_credential, provider, id_token, access_token
+        )
+        logger.info(f"Sign-in successful for {provider}, UID: {firebase_uid}")
 
-        # Prepare the postBody based on provider
-        if provider == 'google':
-            post_body = f'id_token={id_token}&providerId=google.com'
-            if access_token:
-                post_body += f'&access_token={access_token}'
-        elif provider == 'apple':
-            post_body = f'id_token={id_token}&providerId=apple.com'
-            if access_token:
-                post_body += f'&access_token={access_token}'
-        else:
-            raise Exception(f"Unsupported provider: {provider}")
-
-        payload = {
-            'postBody': post_body,
-            'requestUri': 'http://localhost',
-            'returnIdpCredential': True,
-            'returnSecureToken': True,
-        }
-
-        # Call Firebase Auth REST API to sign in
-        client = get_auth_client()
-        response = await client.post(sign_in_url, json=payload)
-
-        if response.status_code != 200:
-            logger.error(f"Firebase sign-in failed: {sanitize(response.text)}")
-            raise Exception(f"Firebase sign-in failed: status={response.status_code}")
-
-        result = response.json()
-        firebase_uid = result.get('localId')
-
-        if not firebase_uid:
-            raise Exception("No Firebase UID returned from sign-in")
-
-        logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
-
-        # Apple's id_token has no name and Firebase can't auto-populate it (unlike
-        # Google), so persist the first-auth name onto the Firebase user. Only set
-        # it when missing — Apple sends the name once, so later sign-ins pass None
-        # and an already-named account is never overwritten.
-        if display_name and not result.get('displayName'):
+        # Apple's id_token has no name and Firebase can't auto-populate it (unlike Google), so persist
+        # the first-auth name. Only set it when missing — Apple sends the name once, so later sign-ins
+        # pass None and an already-named account is never overwritten.
+        if display_name:
             try:
-                await run_blocking(
-                    critical_executor,
-                    lambda: firebase_admin.auth.update_user(firebase_uid, display_name=display_name),
-                )
-                logger.info(f"Set Firebase display_name for {provider} UID {firebase_uid}")
+                profile = await run_blocking(critical_executor, adapter.get_user_profile, firebase_uid)
+                if not profile.display_name:
+                    await run_blocking(
+                        critical_executor, adapter.update_user_profile, firebase_uid, display_name=display_name
+                    )
+                    logger.info(f"Set display_name for {provider} UID {firebase_uid}")
             except Exception as e:
-                logger.error(f"Failed to set Firebase display_name (non-fatal): {sanitize(str(e))}")
+                logger.error(f"Failed to set display_name (non-fatal): {sanitize(str(e))}")
 
-        # Create custom token for this UID
-        custom_token: object = firebase_admin.auth.create_custom_token(firebase_uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-
-        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else cast(str, custom_token)
+        return await run_blocking(critical_executor, adapter.mint_custom_token, firebase_uid)
 
     except Exception as e:
         logger.error(f"Error in _generate_custom_token: {sanitize(str(e))}")

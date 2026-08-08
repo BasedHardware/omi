@@ -15,8 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from google.cloud.firestore_v1 import transactional as _firestore_transactional
-
+from database import document_store
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from scripts.enroll_canonical_memory_user import build_user_control_state
@@ -99,65 +98,34 @@ def _is_scheduler_owned_write_control(*, uid: str, payload: dict[str, Any]) -> b
     )
 
 
-def _enroll_inert_user_for_writes_transaction(
-    transaction: Any,
-    control_ref: Any,
-    *,
-    uid: str,
-) -> bool:
-    snapshot = control_ref.get(transaction=transaction)
+def _enroll_inert_user_for_writes_txn(tx: Any, control_path: str, *, uid: str) -> bool:
+    snapshot = tx.get(control_path)
     if getattr(snapshot, "exists", False) is not True:
         raise RuntimeError("missing_onboarded_control_state")
     payload = snapshot.to_dict()
     if not isinstance(payload, dict):
         raise RuntimeError("malformed_onboarded_control_state")
     if payload == _inert_control_payload(uid):
-        transaction.set(control_ref, _write_control_payload(uid))
+        tx.set(control_path, _write_control_payload(uid))
         return True
     if _is_existing_write_or_read_control(uid=uid, payload=payload):
         return False
     raise RuntimeError("unsupported_canonical_rollout_state")
 
 
-def _enroll_inert_user_for_writes(*, uid: str, db_client: Any) -> bool:
+def _enroll_inert_user_for_writes(*, uid: str) -> bool:
     """Advance only the exact scheduler-created inert control state.
 
     A pre-existing rollout document is not an activation request.  Matching the
     complete inert payload makes the scheduler idempotent and ensures a manual,
     malformed, or already-progressed state is never silently overwritten.
     """
-    control_ref = db_client.document(MemoryCollections(uid=uid).memory_control_state)
-    if hasattr(db_client, "transaction"):
-        transaction = db_client.transaction()
-        if transaction.__class__.__module__.startswith("google.cloud.firestore"):
-            wrapped = _firestore_transactional(_enroll_inert_user_for_writes_transaction)
-            return wrapped(transaction, control_ref, uid=uid)
-        return _enroll_inert_user_for_writes_transaction(transaction, control_ref, uid=uid)
-
-    # Lightweight hermetic fakes without transactions use the same validation
-    # contract. Production Firestore always takes the transactional branch.
-    snapshot = control_ref.get()
-    if getattr(snapshot, "exists", False) is not True:
-        raise RuntimeError("missing_onboarded_control_state")
-    payload = snapshot.to_dict()
-    if not isinstance(payload, dict):
-        raise RuntimeError("malformed_onboarded_control_state")
-    if payload == _inert_control_payload(uid):
-        control_ref.set(_write_control_payload(uid))
-        return True
-    if _is_existing_write_or_read_control(uid=uid, payload=payload):
-        return False
-    raise RuntimeError("unsupported_canonical_rollout_state")
+    control_path = MemoryCollections(uid=uid).memory_control_state
+    return document_store.run_transaction(lambda tx: _enroll_inert_user_for_writes_txn(tx, control_path, uid=uid))
 
 
-def _reconcile_terminal_backfill_generation_transaction(
-    transaction: Any,
-    control_ref: Any,
-    *,
-    uid: str,
-    db_client: Any,
-) -> bool:
-    snapshot = control_ref.get(transaction=transaction)
+def _reconcile_terminal_backfill_generation_txn(tx: Any, control_path: str, *, uid: str) -> bool:
+    snapshot = tx.get(control_path)
     if getattr(snapshot, "exists", False) is not True:
         raise RuntimeError("missing_write_control_after_backfill")
     payload = snapshot.to_dict()
@@ -168,64 +136,36 @@ def _reconcile_terminal_backfill_generation_transaction(
         # rollout ceremony.  Updating either here could reopen a stale read.
         return False
     # The trusted state head and control write are in the same transaction. If
-    # either changes, Firestore retries the callback instead of committing a
+    # either changes, the store retries the callback instead of committing a
     # stale generation into the scheduler-owned control state. Read ownership
     # first so manual/read controls never depend on a scheduler-only head.
-    trusted = read_memory_v3_trusted_account_generation(
-        uid=uid,
-        db_client=db_client,
-        transaction=transaction,
-    )
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, tx=tx)
     account_generation = trusted.require_account_generation()
-    transaction.set(control_ref, _write_control_payload(uid, account_generation=account_generation))
+    tx.set(control_path, _write_control_payload(uid, account_generation=account_generation))
     return True
 
 
-def _reconcile_terminal_backfill_generation(*, uid: str, db_client: Any) -> bool:
+def _reconcile_terminal_backfill_generation(*, uid: str) -> bool:
     """Fence the scheduler-owned write control to the trusted post-backfill head."""
-    control_ref = db_client.document(MemoryCollections(uid=uid).memory_control_state)
-    if hasattr(db_client, "transaction"):
-        transaction = db_client.transaction()
-        if transaction.__class__.__module__.startswith("google.cloud.firestore"):
-            wrapped = _firestore_transactional(_reconcile_terminal_backfill_generation_transaction)
-            return wrapped(transaction, control_ref, uid=uid, db_client=db_client)
-        return _reconcile_terminal_backfill_generation_transaction(
-            transaction,
-            control_ref,
-            uid=uid,
-            db_client=db_client,
-        )
-
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
-    account_generation = trusted.require_account_generation()
-    snapshot = control_ref.get()
-    if getattr(snapshot, "exists", False) is not True:
-        raise RuntimeError("missing_write_control_after_backfill")
-    payload = snapshot.to_dict()
-    if not isinstance(payload, dict):
-        raise RuntimeError("malformed_write_control_after_backfill")
-    if not _is_scheduler_owned_write_control(uid=uid, payload=payload):
-        return False
-    control_ref.set(_write_control_payload(uid, account_generation=account_generation))
-    return True
+    control_path = MemoryCollections(uid=uid).memory_control_state
+    return document_store.run_transaction(
+        lambda tx: _reconcile_terminal_backfill_generation_txn(tx, control_path, uid=uid)
+    )
 
 
-def run_canonical_cohort_lifecycle(*, db_client: Any) -> CanonicalCohortLifecycleReport:
+def run_canonical_cohort_lifecycle() -> CanonicalCohortLifecycleReport:
     """Onboard, safely enroll, and stage one bounded page for the code cohort."""
-    onboarding = reconcile_canonical_memory_onboarding(db_client)
+    onboarding = reconcile_canonical_memory_onboarding()
     write_enrolled: list[str] = []
     preserved: list[str] = []
     for uid in list_canonical_cohort_uids():
-        if _enroll_inert_user_for_writes(uid=uid, db_client=db_client):
+        if _enroll_inert_user_for_writes(uid=uid):
             write_enrolled.append(uid)
         else:
             preserved.append(uid)
 
-    backfill = run_canonical_legacy_backfill_page(
-        config=CanonicalLegacyBackfillConfig(dry_run=False),
-        db_client=db_client,
-    )
-    checkpoint_store = FirestoreCheckpointStore(db_client)
+    backfill = run_canonical_legacy_backfill_page(config=CanonicalLegacyBackfillConfig(dry_run=False))
+    checkpoint_store = FirestoreCheckpointStore()
     backfill_ready = tuple(
         uid for uid in list_canonical_cohort_uids() if checkpoint_store.read(uid).state == MigrationState.read_ready
     )
@@ -236,7 +176,7 @@ def run_canonical_cohort_lifecycle(*, db_client: Any) -> CanonicalCohortLifecycl
     reconcile_errors: list[str] = []
     for uid in backfill_ready:
         try:
-            if _reconcile_terminal_backfill_generation(uid=uid, db_client=db_client):
+            if _reconcile_terminal_backfill_generation(uid=uid):
                 generation_reconciled.append(uid)
         except V3TrustedAccountGenerationReadError as exc:
             if exc.reason == V3AccountGenerationFailureReason.MISSING_STATE_HEAD:

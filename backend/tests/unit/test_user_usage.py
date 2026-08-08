@@ -6,6 +6,10 @@ NESTED map ({desktop_chat: {call_count, ...}}), whereas the Python backend write
 dotted keys ("chat.<model>.call_count"). The reader must count both, count the
 grand-total `desktop_chat` map only (not its `desktop_chat_*` per-account/realtime
 breakdowns, which would double-count), and exclude company-driven keys (conv_*, memories.*).
+
+These tests drive the neutral storage port (WP2, ADR-0002): they monkeypatch the module's
+``_store`` seam with an in-memory ``FakeDocumentStore`` and seed documents by their logical
+path, then assert on returned values — no Firestore call mechanics.
 """
 
 import os
@@ -22,77 +26,36 @@ os.environ.setdefault(
 from database import user_usage  # noqa: E402
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode  # noqa: E402
 from routers import users as users_router  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 @pytest.fixture
-def mock_db(monkeypatch):
-    db = MagicMock(name="db")
-    monkeypatch.setattr(user_usage, "db", db)
-    return db
+def store(monkeypatch):
+    fake = FakeDocumentStore()
+    monkeypatch.setattr(user_usage, "_store", lambda: fake)
+    return fake
 
 
-class _Snap:
-    def __init__(self, data, doc_id=None):
-        self._d = data
-        self.id = doc_id
-        self.exists = True
+def _setup_docs(monkeypatch, docs):
+    """Seed llm_usage docs under users/uid/llm_usage/{id} preserving literal field names.
 
-    def to_dict(self):
-        return self._d
-
-
-class _DocRef:
-    def __init__(self, doc_id, data):
-        self.id = doc_id
-        self._data = data
-
-    def get(self):
-        return _Snap(self._data, self.id)
-
-
-class _LlmUsageCollection:
-    """Firestore collection fake that actually applies the `__name__` range
-    filters the month query issues, so the first/last day of the month and the
-    adjacent months are exercised rather than assumed. `list_documents` raises:
-    the quota reader must never fall back to scanning the account's whole
-    llm_usage history."""
-
-    def __init__(self, docs, filters=()):
-        self._docs = docs
-        self._filters = filters
-
-    def document(self, doc_id):
-        return _DocRef(doc_id, self._docs.get(doc_id, {}))
-
-    def list_documents(self):
-        raise AssertionError("chat-quota reads must stay bounded to the current month")
-
-    def where(self, filter):
-        return _LlmUsageCollection(self._docs, (*self._filters, filter))
-
-    def stream(self):
-        def _match(doc_id):
-            for f in self._filters:
-                assert f.field_path == "__name__"  # Firestore's document-id sentinel
-                if f.op_string == ">=" and doc_id < f.value.id:
-                    return False
-                if f.op_string == "<" and doc_id >= f.value.id:
-                    return False
-            return True
-
-        return iter([_Snap(data, doc_id) for doc_id, data in self._docs.items() if _match(doc_id)])
-
-
-def _setup_docs(mock_db, docs):
-    mock_db.collection.return_value.document.return_value.collection.return_value = _LlmUsageCollection(docs)
+    llm_usage documents hold flat dotted field names ("chat.<model>.call_count") exactly as
+    Firestore's ``.set()`` stores them (dots literal, not field paths). We therefore inject a
+    raw path->data backing dict instead of going through ``store.set`` — whose dotted-key
+    semantics mirror ``.update()`` field paths and would nest those keys.
+    """
+    backing = {f"users/uid/llm_usage/{doc_id}": data for doc_id, data in docs.items()}
+    fake = FakeDocumentStore(backing=backing)
+    monkeypatch.setattr(user_usage, "_store", lambda: fake)
+    return fake
 
 
 NOW = datetime(2026, 6, 23, tzinfo=timezone.utc)
 
 
-def test_counts_nested_desktop_chat_plus_flat_backend_chat(mock_db):
+def test_counts_nested_desktop_chat_plus_flat_backend_chat(monkeypatch):
     _setup_docs(
-        mock_db,
+        monkeypatch,
         {
             "2026-06-23": {
                 "desktop_chat": {
@@ -120,11 +83,11 @@ def test_counts_nested_desktop_chat_plus_flat_backend_chat(mock_db):
     assert r["cost_usd"] == 1.5, r
 
 
-def test_realtime_ptt_included_via_grand_total(mock_db):
+def test_realtime_ptt_included_via_grand_total(monkeypatch):
     # A pure-PTT month: only realtime turns. record_llm_usage always bumps the grand-total
     # desktop_chat too, so it must be counted even with zero typed chat.
     _setup_docs(
-        mock_db,
+        monkeypatch,
         {
             "2026-06-10": {
                 "desktop_chat": {"call_count": 7, "cost_usd": 0.4},
@@ -135,17 +98,17 @@ def test_realtime_ptt_included_via_grand_total(mock_db):
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 7
 
 
-def test_only_proactive_counts_zero(mock_db):
-    _setup_docs(mock_db, {"2026-06-23": {"conv_apps.gpt-5.call_count": 100, "memories.gpt-4.call_count": 50}})
+def test_only_proactive_counts_zero(monkeypatch):
+    _setup_docs(monkeypatch, {"2026-06-23": {"conv_apps.gpt-5.call_count": 100, "memories.gpt-4.call_count": 50}})
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 0
 
 
-def test_month_read_is_bounded_to_the_current_month(mock_db, monkeypatch):
+def test_month_read_is_bounded_to_the_current_month(monkeypatch):
     # `enforce_chat_quota` calls this on every chat request. Reading the whole
     # llm_usage collection made the cost of asking a question grow with how long
     # the account had existed.
     _setup_docs(
-        mock_db,
+        monkeypatch,
         {
             "2025-06-23": {"desktop_chat": {"quota_questions": 500}},  # last year
             "2026-05-31": {"desktop_chat": {"quota_questions": 400}},  # day before the month
@@ -161,9 +124,9 @@ def test_month_read_is_bounded_to_the_current_month(mock_db, monkeypatch):
     assert observed == [(FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 2)]
 
 
-def test_december_month_read_stops_at_the_january_boundary(mock_db):
+def test_december_month_read_stops_at_the_january_boundary(monkeypatch):
     _setup_docs(
-        mock_db,
+        monkeypatch,
         {
             "2026-12-01": {"desktop_chat": {"quota_questions": 4}},
             "2026-12-31": {"desktop_chat": {"quota_questions": 6}},
@@ -175,15 +138,17 @@ def test_december_month_read_stops_at_the_january_boundary(mock_db):
     assert usage["reset_at"] == int(datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp())
 
 
-def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, monkeypatch):
-    docs = [
-        _Snap({'transcription_seconds': 15}),
-        _Snap({'transcription_seconds': 25}),
-    ]
-    query = MagicMock()
-    query.where.return_value = query
-    query.stream.return_value = iter(docs)
-    mock_db.collection.return_value.document.return_value.collection.return_value = query
+def test_monthly_usage_since_observes_every_scanned_hourly_document(store, monkeypatch):
+    # Both docs land in June 2026 with ids >= the start cursor, so the year/month/id filters
+    # select them; the read-metrics telemetry must observe the count of scanned documents.
+    store.set(
+        "users/uid/hourly_usage/2026-06-10-00",
+        {"year": 2026, "month": 6, "id": "2026-06-10-00", "transcription_seconds": 15},
+    )
+    store.set(
+        "users/uid/hourly_usage/2026-06-15-00",
+        {"year": 2026, "month": 6, "id": "2026-06-15-00", "transcription_seconds": 25},
+    )
 
     observed = []
     monkeypatch.setattr(user_usage, 'record_firestore_read', lambda *args: observed.append(args))
@@ -209,28 +174,10 @@ def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, mon
 # ---------------------------------------------------------------------------
 
 
-class _HourlyQuery:
-    """Firestore query fake that actually applies '==' filters (unlike a bare
-    MagicMock), because get_today_usage_stats now issues a fresh where-chain
-    per UTC calendar day inside a loop and the two chains must select disjoint
-    subsets of `docs` for this test to mean anything."""
-
-    def __init__(self, docs, filters=()):
-        self._docs = docs
-        self._filters = filters
-
-    def where(self, filter):
-        return _HourlyQuery(self._docs, (*self._filters, filter))
-
-    def stream(self):
-        def _match(doc):
-            return all(doc.get(f.field_path) == f.value for f in self._filters)
-
-        return iter([_Snap(d) for d in self._docs if _match(d)])
-
-
-def _setup_hourly_docs(mock_db, docs):
-    mock_db.collection.return_value.document.return_value.collection.return_value = _HourlyQuery(docs)
+def _setup_hourly_docs(store, docs):
+    for d in docs:
+        doc_id = f"{d['year']}-{d['month']:02d}-{d['day']:02d}-{d['hour']:02d}"
+        store.set(f"users/uid/hourly_usage/{doc_id}", d)
 
 
 # 8pm local time on LA-calendar-day June 23rd, which is already 3am UTC on June 24th.
@@ -249,8 +196,8 @@ _LA_HOURLY_DOCS = [
 ]
 
 
-def test_today_usage_local_day_spans_two_utc_dates_for_user_west_of_utc(mock_db):
-    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+def test_today_usage_local_day_spans_two_utc_dates_for_user_west_of_utc(store):
+    _setup_hourly_docs(store, _LA_HOURLY_DOCS)
 
     result = user_usage.get_current_user_usage('uid', 'today', tz_name='America/Los_Angeles', now=_LA_EVENING_NOW)
 
@@ -259,17 +206,17 @@ def test_today_usage_local_day_spans_two_utc_dates_for_user_west_of_utc(mock_db)
     assert result['today']['transcription_seconds'] == 900, result['today']
 
 
-def test_today_usage_without_timezone_still_falls_back_to_utc_day(mock_db):
+def test_today_usage_without_timezone_still_falls_back_to_utc_day(store):
     """No stored timezone -> unchanged UTC-day behavior (no regression for
     users who never granted notification permissions / have no time_zone)."""
-    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+    _setup_hourly_docs(store, _LA_HOURLY_DOCS)
 
     result = user_usage.get_current_user_usage('uid', 'today', tz_name=None, now=_LA_EVENING_NOW)
 
     assert result['today']['transcription_seconds'] == 300, result['today']
 
 
-def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monkeypatch):
+def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(store, monkeypatch):
     """Behavioural proof through the route the app actually calls.
 
     The two tests above exercise the helper directly and so can only be written against the
@@ -282,7 +229,7 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     this one test and trips the fast-unit duration guard.
     """
 
-    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+    _setup_hourly_docs(store, _LA_HOURLY_DOCS)
     monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: 'America/Los_Angeles')
 
     class _FrozenDatetime(datetime):
@@ -299,15 +246,16 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     assert result['today']['transcription_seconds'] == 900, result['today']
 
 
-def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monkeypatch):
-    query = MagicMock()
-    query.stream.return_value = iter(
-        [
-            _Snap({'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8}),
-            _Snap({'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16}),
-        ]
+def test_all_time_usage_builds_totals_and_history_from_one_stream(store, monkeypatch):
+    # Upstream #11062: get_current_user_usage('all_time') reads hourly_usage ONCE, building both the
+    # all-time total and the yearly history in a single pass. Exercised on the neutral store seam;
+    # the single-read (dedup) invariant is proved by record_firestore_read being called once with the
+    # document count (2), not by asserting the raw adapter's .stream() call.
+    store.set('users/uid/hourly_usage/2025-01-01-00', {'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8})
+    store.set(
+        'users/uid/hourly_usage/2026-01-01-00',
+        {'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16},
     )
-    mock_db.collection.return_value.document.return_value.collection.return_value = query
     record_read = MagicMock()
     monkeypatch.setattr(user_usage, 'record_firestore_read', record_read)
 
@@ -332,5 +280,4 @@ def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monke
             'memories_created': 0,
         },
     ]
-    query.stream.assert_called_once_with()
     record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)

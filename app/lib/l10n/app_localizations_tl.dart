@@ -1885,6 +1885,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get signInWithGoogle => 'Mag-sign in gamit ang Google';
 
   @override
+  String get signInWithSSO => 'Mag-sign in gamit ang SSO';
+
+  @override
   String get byContinuingAgree => 'Sa pagpapatuloy, sumasang-ayon ka sa aming ';
 
   @override

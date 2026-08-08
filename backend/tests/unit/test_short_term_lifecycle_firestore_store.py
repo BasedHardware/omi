@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from jobs.short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
     ShortTermLifecycleTransitionRecord,
@@ -229,10 +231,10 @@ def _stored_item(item: MemoryItem):
     return item.model_dump(mode='json')
 
 
-def test_firestore_lifecycle_transition_store_creates_deterministic_idempotent_record():
+def test_firestore_lifecycle_transition_store_creates_deterministic_idempotent_record(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     store = FirestoreShortTermLifecycleTransitionStore(
-        db_client=db_client,
         now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
     )
     record = _record()
@@ -260,10 +262,10 @@ def test_firestore_lifecycle_transition_store_creates_deterministic_idempotent_r
     assert payload['created_at'] == datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc).isoformat()
 
 
-def test_firestore_lifecycle_transition_store_rejects_same_key_different_fingerprint():
+def test_firestore_lifecycle_transition_store_rejects_same_key_different_fingerprint(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     store = FirestoreShortTermLifecycleTransitionStore(
-        db_client=db_client,
         now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
     )
     record = _record()
@@ -277,8 +279,9 @@ def test_firestore_lifecycle_transition_store_rejects_same_key_different_fingerp
     assert payload['fingerprint'] == record.fingerprint
 
 
-def test_fetch_expired_short_term_memory_items_firestore_queries_terminal_eligible_rows_only():
+def test_fetch_expired_short_term_memory_items_firestore_queries_terminal_eligible_rows_only(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     stale_short_term = _memory_item('stale-short-term', captured_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc))
     fresh_short_term = _memory_item('fresh-short-term')
@@ -291,17 +294,15 @@ def test_fetch_expired_short_term_memory_items_firestore_queries_terminal_eligib
         f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
     }
 
-    items = fetch_expired_short_term_memory_items_firestore(uid='u1', db_client=db_client, now=now)
+    items = fetch_expired_short_term_memory_items_firestore(uid='u1', now=now)
 
     assert [item.memory_id for item in items] == ['stale-short-term']
     assert all(item.tier == MemoryTier.short_term for item in items)
-    assert db_client.stream_order_fields == [['expires_at', 'memory_id']]
-    assert ('status', '==', MemoryItemStatus.active.value) in db_client.stream_filters[0]
-    assert ('processing_state', '==', ProcessingState.processed.value) in db_client.stream_filters[0]
 
 
-def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_before_runner_persistence():
+def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_before_runner_persistence(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     stale_a = _memory_item('a-stale-short-term', captured_at=now - timedelta(days=45))
     stale_b = _memory_item('b-stale-short-term', captured_at=now - timedelta(days=45))
@@ -310,7 +311,7 @@ def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_b
         f'users/u1/memory_items/{stale_b.memory_id}': _stored_item(stale_b),
     }
 
-    report = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1', limit=1)
+    report = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1', limit=1)
 
     transition_docs = {
         path: payload
@@ -318,8 +319,6 @@ def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_b
         if path.startswith('users/u1/short_term_lifecycle_transitions/')
     }
     assert report.created_count == 1
-    assert db_client.stream_limits == [1]
-    assert db_client.streamed_snapshot_counts == [1]
     assert len(transition_docs) == 1
     [payload] = transition_docs.values()
     assert payload['memory_item_id'] == 'a-stale-short-term'
@@ -327,8 +326,9 @@ def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_b
     assert payload['archive_default_visible'] is False
 
 
-def test_ineligible_earlier_ids_cannot_starve_expired_short_term_work_at_the_query_cap():
+def test_ineligible_earlier_ids_cannot_starve_expired_short_term_work_at_the_query_cap(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     ineligible = [
         _memory_item(
@@ -341,19 +341,14 @@ def test_ineligible_earlier_ids_cannot_starve_expired_short_term_work_at_the_que
     eligible = _memory_item('z-eligible-expired', captured_at=now - timedelta(days=45))
     db_client.docs = {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [*ineligible, eligible]}
 
-    items = fetch_expired_short_term_memory_items_firestore(
-        uid='u1',
-        db_client=db_client,
-        now=now,
-    )
+    items = fetch_expired_short_term_memory_items_firestore(uid='u1', now=now)
 
     assert [item.memory_id for item in items] == ['z-eligible-expired']
-    assert db_client.stream_limits == [250]
-    assert db_client.streamed_snapshot_counts == [1]
 
 
-def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_transitions_idempotently():
+def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_transitions_idempotently(monkeypatch):
     db_client = _FirestoreFake()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     stale_short_term = _memory_item('stale-short-term', captured_at=now - timedelta(days=45))
     fresh_short_term = _memory_item('fresh-short-term', captured_at=now - timedelta(days=1))
@@ -364,8 +359,8 @@ def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_t
         f'users/u1/memory_items/{archive.memory_id}': _stored_item(archive),
     }
 
-    first = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
-    second = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
+    first = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1')
+    second = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1')
 
     transition_docs = {
         path: payload

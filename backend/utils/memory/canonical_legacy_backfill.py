@@ -18,8 +18,8 @@ from dataclasses import asdict, dataclass
 from functools import partial
 from typing import Any, Optional
 
-from database._client import get_firestore_client
 from database.memory_collections import MemoryCollections
+from database.store import get_document_store
 from scripts.enroll_canonical_memory_user import build_user_control_state
 from utils.memory.bulk_legacy_backfill import (
     BulkMigrationConfig,
@@ -95,11 +95,14 @@ def _pending_uids(cohort_uids: tuple[str, ...], checkpoint_store: FirestoreCheck
     return [uid for uid in cohort_uids if checkpoint_store.read(uid).state != MigrationState.read_ready]
 
 
+def _store():
+    return get_document_store()
+
+
 def _cohort_enrollment_hook(
     uid: str,
     *,
     canonical_uids: frozenset[str],
-    db_client: Any,
 ) -> None:
     """Verify whitelist and existing write enrollment before staging.
 
@@ -117,7 +120,7 @@ def _cohort_enrollment_hook(
             "canonical legacy backfill is not the enrollment owner"
         )
     path = MemoryCollections(uid=uid).memory_control_state
-    snapshot = db_client.document(path).get()
+    snapshot = _store().get(path)
     if not getattr(snapshot, "exists", False):
         raise RuntimeError("missing_write_stage_enrollment_control")
     payload = snapshot.to_dict()
@@ -146,7 +149,7 @@ def _cohort_enrollment_hook(
     ):
         raise RuntimeError("write_stage_enrollment_control_not_ready")
 
-    decision = canonical_write_decision(uid, db_client=db_client)
+    decision = canonical_write_decision(uid)
     if not decision.enabled:
         raise RuntimeError(f"write_stage_enrollment_control_not_ready:{decision.reason}")
 
@@ -154,7 +157,6 @@ def _cohort_enrollment_hook(
 def run_canonical_legacy_backfill_page(
     *,
     config: CanonicalLegacyBackfillConfig = CanonicalLegacyBackfillConfig(),
-    db_client: Any = None,
 ) -> CanonicalLegacyBackfillPage:
     """Stage one resumable page for the currently whitelisted canonical users.
 
@@ -163,11 +165,10 @@ def run_canonical_legacy_backfill_page(
     checkpoint. The operation never accepts a caller-supplied UID list, so an
     admin override cannot widen its cohort.
     """
-    client = db_client if db_client is not None else get_firestore_client()
-    checkpoint_store = FirestoreCheckpointStore(client)
+    checkpoint_store = FirestoreCheckpointStore()
     cohort_uids, pending_uids = _cohort_uids_with_pending_checkpoints(checkpoint_store)
     selected_uids = tuple(pending_uids[: config.page_size])
-    enrollment_hook = partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids), db_client=client)
+    enrollment_hook = partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids))
     bulk_config = BulkMigrationConfig(
         dry_run=config.dry_run,
         max_users_per_run=config.page_size,
@@ -181,7 +182,7 @@ def run_canonical_legacy_backfill_page(
     def inventory_fn(uid: str):
         if not config.dry_run:
             enrollment_hook(uid)
-        return inventory_legacy_user(uid, db_client=client)
+        return inventory_legacy_user(uid)
 
     def backfill_fn(
         uid: str,
@@ -198,14 +199,13 @@ def run_canonical_legacy_backfill_page(
             max_rows=max_rows,
             continue_on_error=True,
             stop_requested=stop_requested,
-            db_client=client,
         )
 
     summary = run_bulk_migration(
         selected_uids,
         config=bulk_config,
         inventory_fn=inventory_fn,
-        pause_fn=lambda: read_global_pause(client),
+        pause_fn=lambda: read_global_pause(),
         checkpoint_store=None if config.dry_run else checkpoint_store,
         enroll_fn=None if config.dry_run else enrollment_hook,
         backfill_fn=None if config.dry_run else backfill_fn,

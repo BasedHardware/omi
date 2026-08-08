@@ -53,6 +53,12 @@ from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
+from database import document_store
+import database.memory_apply_store as _mas_store
+import database.knowledge_graph as _kg_store
+import database.review_queue as _rq_store
+from tests.store_fakes import FakeDocumentStore
+
 _FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 
 
@@ -192,6 +198,42 @@ class _FailingIndex:
         raise RuntimeError("pinecone unavailable")
 
 
+class _PortOverIndex:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
+
+    def __init__(self, index):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
 def _load_vector_db_with_stubs():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
@@ -217,7 +259,8 @@ def _load_vector_db_with_stubs():
 def _install_recording_vector_db(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(fake_index))
+    monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
     sys.modules["database.vector_db"] = vector_db
     return vector_db, fake_index
@@ -538,7 +581,8 @@ def test_canonical_archive_layer_round_trip(monkeypatch):
 
 def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
-    monkeypatch.setattr(vector_db, "index", _FailingIndex())
+    monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(_FailingIndex()))
+    monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
     sys.modules["database.vector_db"] = vector_db
 
@@ -571,7 +615,7 @@ def test_sync_canonical_memory_vector_deletes_restricted_item_without_upsert(mon
     assert upserted == []
 
 
-def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write_support):
+def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write_support, monkeypatch):
     support = canonical_write_support
     uid = "uid-canonical"
     conversation_id = "conv-1"
@@ -598,6 +642,12 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
             f"users/{uid}/memory_items/{memory_id}": support.stored_item(committed_item),
         }
     )
+    # document_store now reads/writes through the neutral port, not the injected Firestore fake.
+    # Share the fake's backing dict so the seeded committed item is visible to document_store.
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     apply_result = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
         memory_items=[],
@@ -616,7 +666,6 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
         returned_id = support.write_canonical_extraction_memory(
             uid,
             support.sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content),
-            db_client=db,
         )
 
     assert returned_id == memory_id
@@ -672,9 +721,25 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
         control_state=control,
     )
 
+    # document_store now reads/writes through the neutral port, not the injected db_client fake.
+    # The backfill path first probes for the canonical item (must be absent so it proceeds to
+    # apply), then re-reads it after an idempotent_skip apply to sync its vector. Model that:
+    # start empty, and have the (patched) apply materialize the committed item in the store.
+    backfill_store_docs: dict = {}
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+
+    def _apply_materializes_item(**_kwargs):
+        backfill_store_docs[f"users/{uid}/memory_items/{canonical_memory_id}"] = committed_item.model_dump(
+            mode="json"
+        )
+        return apply_result
+
     with patch(
         "utils.memory.legacy_backfill.apply_long_term_patch_firestore",
-        return_value=apply_result,
+        side_effect=_apply_materializes_item,
     ), patch(
         "utils.memory.legacy_backfill._persist_evidence",
         return_value=None,
@@ -691,7 +756,6 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
             index=0,
             control=control,
             run_id="run-1",
-            db_client=_BackfillDb(),
         )
 
     assert row_result.written is False
@@ -699,3 +763,4 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     assert row_result.vector_sync_failed is False
     assert row_result.keyword_sync_succeeded is True
     assert fake_index.upserts == []
+

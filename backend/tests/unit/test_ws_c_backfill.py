@@ -89,8 +89,10 @@ from utils.memory.legacy_backfill import (
     live_extraction_memory_id_for_legacy_row,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from database import document_store
 from tests.unit.test_ws_b_short_term_lifecycle import (
     NOW,
+    _DOC_STORE_HOLDER,
     _PromotionFakeDb,
     _canonical_db_with_control,
     _seed_canonical_short_term,
@@ -207,6 +209,28 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
                 }
 
 
+# Post-D1 (ADR-0022) ``document_store`` reads/writes through ``get_document_store()``, not through
+# the injected Firestore-shaped ``db_client`` fake. The ``_PromotionFakeDb`` constructor (shared with
+# test_ws_b) rebinds ``_DOC_STORE_HOLDER["store"]`` to a ``FakeDocumentStore`` sharing the fake's
+# backing ``.docs`` dict; this autouse fixture patches the ``_store`` seam to read from it so seeded
+# data and writes stay consistent between the two.
+@pytest.fixture(autouse=True)
+def _route_document_store_to_fake(monkeypatch):
+    monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.review_queue._store", lambda: _DOC_STORE_HOLDER["store"])
+    # ``canonical_consolidation`` reads pending items through the port seam directly
+    # (``get_document_store().query(...)`` — it bound the factory symbol at import via
+    # ``from database.store import get_document_store``), so route that binding to the same
+    # shared ``FakeDocumentStore`` the shim seam uses. Without this, the consolidation query hits
+    # the real Firestore adapter (MagicMock client) and never sees the seeded/staged items.
+    monkeypatch.setattr(
+        "utils.memory.canonical_consolidation.get_document_store",
+        lambda: _DOC_STORE_HOLDER["store"],
+    )
+
+
 @pytest.fixture(autouse=True)
 def _canonical_cohort_for_backfill(monkeypatch, request):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
@@ -230,7 +254,7 @@ def test_gate_blocks_non_whitelisted_uid(_trusted_account):
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
     db = _canonical_db_with_control(LEGACY_UID)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.cohort_gated is True
     assert report.written_count == 0
@@ -282,14 +306,14 @@ def test_manual_note_id_fallback_enables_both_store_dedup(_trusted_account):
     )
     db.docs[f"users/{LEGACY_UID}/memory_items/{live_id}"] = _stored_item(live_item)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.completed is True
     assert report.written_count == 0
     assert report.skipped_both_store_duplicate == 1
     backfill_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=legacy_id)
     assert f"users/{LEGACY_UID}/memory_items/{backfill_id}" not in db.docs
-    assert both_store_canonical_duplicate_exists(uid=LEGACY_UID, legacy_row=rows[0], db_client=db)
+    assert both_store_canonical_duplicate_exists(uid=LEGACY_UID, legacy_row=rows[0])
 
 
 def test_semantic_duplicate_skipped_in_run(_trusted_account):
@@ -303,7 +327,7 @@ def test_semantic_duplicate_skipped_in_run(_trusted_account):
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.completed is True
     assert report.written_count == 1
@@ -324,7 +348,6 @@ def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
 
     report = backfill_user(
         uid,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         allow_admin_override=True,
         acknowledge_non_canonical_uid=False,
@@ -355,7 +378,6 @@ def test_admin_override_with_ack_writes_and_logs(_trusted_account, monkeypatch, 
     with caplog.at_level(logging.WARNING, logger="utils.memory.legacy_backfill"):
         report = backfill_user(
             uid,
-            db_client=db,
             get_non_filtered_memories_fn=get_non_filtered_fn,
             allow_admin_override=True,
             acknowledge_non_canonical_uid=True,
@@ -411,7 +433,7 @@ def test_dedup_prevents_doubles_when_live_written(monkeypatch, _trusted_account)
     )
     db.docs[f"users/{LEGACY_UID}/memory_items/{live_id}"] = _stored_item(live_item)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.completed is True
     assert report.written_count == 0
@@ -433,7 +455,7 @@ def test_backfill_copies_legacy_without_mutating_source(_trusted_account):
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn, batch_size=2)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn, batch_size=2)
 
     assert report.completed is True
     assert report.source_count == 3
@@ -465,8 +487,8 @@ def test_backfill_idempotent_second_run(_trusted_account):
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    first = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
-    second = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn, resume=True)
+    first = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
+    second = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn, resume=True)
 
     assert first.written_count == 1
     assert second.written_count == 0
@@ -483,7 +505,7 @@ def test_dry_run_writes_nothing(_trusted_account):
     db = _PromotionFakeDb({})
     control_path = f"users/{LEGACY_UID}/memory_state/apply_control"
 
-    report = backfill_user(LEGACY_UID, dry_run=True, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, dry_run=True, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.dry_run is True
     assert report.intended_count == 1
@@ -507,7 +529,6 @@ def test_bulk_inventory_is_read_only_and_never_returns_content(_trusted_account)
 
     report = inventory_legacy_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -534,19 +555,16 @@ def test_capped_backfill_resumes_until_complete(_trusted_account):
 
     first = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         max_rows=1,
     )
     second = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         max_rows=1,
     )
     third = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         max_rows=1,
     )
@@ -569,7 +587,6 @@ def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trus
     _seed_legacy_evidence(db, rows)
     first = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered,
         max_rows=1,
     )
@@ -579,7 +596,6 @@ def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trus
     _seed_legacy_evidence(db, [inserted_before_cursor])
     resumed = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered,
         max_rows=1,
     )
@@ -607,7 +623,6 @@ def test_changed_source_recovery_keeps_source_indexes_and_seeds_existing_semanti
     _seed_legacy_evidence(db, rows)
     first = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered,
         max_rows=1,
     )
@@ -627,8 +642,7 @@ def test_changed_source_recovery_keeps_source_indexes_and_seeds_existing_semanti
     with patch("utils.memory.legacy_backfill._apply_one_legacy_row", side_effect=record_source_index):
         resumed = backfill_user(
             LEGACY_UID,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered,
+                get_non_filtered_memories_fn=get_non_filtered,
             max_rows=2,
         )
 
@@ -662,7 +676,6 @@ def test_continue_on_error_refreshes_control_and_retries_row(_trusted_account):
     with patch("utils.memory.legacy_backfill.apply_long_term_patch_firestore", side_effect=_fail_once):
         report = backfill_user(
             LEGACY_UID,
-            db_client=db,
             get_non_filtered_memories_fn=get_non_filtered_fn,
             continue_on_error=True,
         )
@@ -713,7 +726,7 @@ def test_stage_all_skips_obvious_noise_before_canonical_staging(_trusted_account
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.source_count == 3
     assert report.admissible_count == 1
@@ -797,7 +810,7 @@ def test_remediation_plan_preserves_asserted_rows_and_archives_known_noise(_trus
         source_surface="v3_api",
     )
 
-    plan = build_legacy_backfill_remediation_plan(LEGACY_UID, db_client=db, sample_size=10)
+    plan = build_legacy_backfill_remediation_plan(LEGACY_UID, sample_size=10)
 
     assert plan.candidate_count == 5
     assert plan.action_counts == {"archive": 1, "keep": 2, "review": 2}
@@ -850,7 +863,6 @@ def test_remediation_archives_only_planned_noise_through_apply_and_outbox(_trust
         LEGACY_UID,
         expected_archive_count=1,
         dry_run=False,
-        db_client=db,
     )
 
     archived = MemoryItem.model_validate(db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"])
@@ -913,7 +925,6 @@ def test_remediation_count_lock_refuses_to_mutate_when_the_fresh_plan_changes(_t
         LEGACY_UID,
         expected_archive_count=2,
         dry_run=False,
-        db_client=db,
     )
 
     persisted = MemoryItem.model_validate(db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"])
@@ -942,7 +953,6 @@ def test_bucketed_inventory_dry_run_reports_counts_and_writes_nothing(_trusted_a
     report = backfill_user_bucketed(
         LEGACY_UID,
         dry_run=True,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -980,7 +990,6 @@ def test_bucketed_manual_apply_writes_required_promotion_with_legacy_timestamps(
         LEGACY_UID,
         bucket=LegacyBackfillBucket.manual_required_promotion,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -1043,7 +1052,6 @@ def test_stage_all_preserves_durable_classification_for_required_processing(
 
     report = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=reader,
     )
 
@@ -1059,7 +1067,6 @@ def test_stage_all_preserves_durable_classification_for_required_processing(
     processed = process_required_memory_item(
         LEGACY_UID,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content="The user prefers launch checklists.",
             subject_entity_id="user",
@@ -1096,7 +1103,6 @@ def test_bucketed_reviewed_apply_stages_processing_with_legacy_timestamp(_truste
         LEGACY_UID,
         bucket=LegacyBackfillBucket.reviewed_long_term,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -1171,7 +1177,6 @@ def test_bucketed_backfill_preserves_known_third_party_subject(
         LEGACY_UID,
         bucket=bucket,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=reader,
     )
 
@@ -1202,7 +1207,6 @@ def test_bucketed_reviewed_rerun_keeps_pending_item_out_of_kg(_trusted_account):
         LEGACY_UID,
         bucket=LegacyBackfillBucket.reviewed_long_term,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -1215,7 +1219,6 @@ def test_bucketed_reviewed_rerun_keeps_pending_item_out_of_kg(_trusted_account):
         LEGACY_UID,
         bucket=LegacyBackfillBucket.reviewed_long_term,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -1236,7 +1239,7 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    staged = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=initial_reader)
+    staged = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=initial_reader)
     assert staged.completed is True
     memory_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     item_path = f"users/{LEGACY_UID}/memory_items/{memory_id}"
@@ -1249,7 +1252,6 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted
         LEGACY_UID,
         bucket=LegacyBackfillBucket.reviewed_long_term,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=reviewed_reader,
     )
 
@@ -1261,7 +1263,6 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted
     processed = process_required_memory_item(
         LEGACY_UID,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content="The user works on the Omi memory system.",
             subject_entity_id="user",
@@ -1295,7 +1296,6 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted
     ):
         promoted = run_canonical_consolidation(
             LEGACY_UID,
-            db_client=db,
             now=datetime.now(timezone.utc),
             run_id="legacy-stage-upgrade",
             llm_invoke=lambda _prompt: json.dumps(
@@ -1317,7 +1317,6 @@ def test_resume_completed_checkpoint_keeps_pending_item_out_of_kg(_trusted_accou
 
     first = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         batch_size=1,
         resume=False,
@@ -1330,7 +1329,6 @@ def test_resume_completed_checkpoint_keeps_pending_item_out_of_kg(_trusted_accou
 
     repaired = backfill_user(
         LEGACY_UID,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
         batch_size=1,
         resume=True,
@@ -1351,7 +1349,6 @@ def test_bucketed_hold_bucket_never_writes(_trusted_account):
         LEGACY_UID,
         bucket=LegacyBackfillBucket.hold_sensitive,
         dry_run=False,
-        db_client=db,
         get_non_filtered_memories_fn=get_non_filtered_fn,
     )
 
@@ -1383,7 +1380,6 @@ def test_resume_after_interruption(_trusted_account):
     with patch("utils.memory.legacy_backfill.apply_long_term_patch_firestore", side_effect=_interrupting_apply):
         interrupted = backfill_user(
             LEGACY_UID,
-            db_client=db,
             get_non_filtered_memories_fn=get_non_filtered_fn,
             batch_size=1,
             resume=False,
@@ -1396,7 +1392,7 @@ def test_resume_after_interruption(_trusted_account):
     assert control.legacy_backfill_processed_count == 2
 
     resumed = backfill_user(
-        LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn, batch_size=1, resume=True
+        LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn, batch_size=1, resume=True
     )
     assert resumed.resumed_from_index == 2
     assert resumed.completed is True
@@ -1413,12 +1409,12 @@ def test_count_reconciliation_flags_missing_destination(_trusted_account):
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
-    backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     missing_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id="leg-v2")
     del db.docs[f"users/{LEGACY_UID}/memory_items/{missing_id}"]
 
-    _, destination_count, verified, discrepancy = reconcile_backfill_counts(LEGACY_UID, rows, db_client=db)
+    _, destination_count, verified, discrepancy = reconcile_backfill_counts(LEGACY_UID, rows)
     assert destination_count == 1
     assert verified is False
     assert discrepancy == "source=2 destination=1"
@@ -1472,7 +1468,7 @@ def test_archive_hidden_long_term_visible_in_canonical_read(monkeypatch, _truste
     )
     db.docs[f"users/{uid}/memory_items/{archive_item.memory_id}"] = _stored_item(archive_item)
 
-    memories = read_canonical_memories(uid, db_client=db)
+    memories = read_canonical_memories(uid)
     ids = {memory.id for memory in memories}
     assert long_term_id in ids
     assert archive_item.memory_id not in ids
@@ -1503,7 +1499,7 @@ def test_pagination_fetches_active_rows_across_sparse_pages(_trusted_account, mo
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, all_active)
 
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    report = backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert report.source_count == 3
     assert report.written_count == 3
@@ -1550,32 +1546,12 @@ def test_pagination_regression_would_miss_page_two_with_old_post_filtered_paging
     old_rows = _old_broken_post_filtered_pagination()
     new_rows = _fetch_active_legacy_memories(
         LEGACY_UID,
-        db_client=MagicMock(),
         get_non_filtered_memories_fn=_make_paginated_non_filtered_store(page_size=page_size, pages=[page1, page2]),
         scan_page_size=page_size,
     )
 
     assert len(old_rows) == 1
     assert len(new_rows) == 3
-
-
-def test_fetch_active_legacy_memories_passes_explicit_firestore_client():
-    db_client = MagicMock(name="explicit-db-client")
-    calls = []
-
-    def _source(uid, *, limit, offset, firestore_client):
-        calls.append((uid, limit, offset, firestore_client))
-        return [_legacy_row(legacy_id="active-explicit", content="Active row")] if offset == 0 else []
-
-    rows = _fetch_active_legacy_memories(
-        LEGACY_UID,
-        db_client=db_client,
-        get_non_filtered_memories_fn=_source,
-        scan_page_size=1,
-    )
-
-    assert [row["id"] for row in rows] == ["active-explicit"]
-    assert calls[0][3] is db_client
 
 
 def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):
@@ -1587,10 +1563,10 @@ def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, mon
     _seed_legacy_memories_in_db(db, LEGACY_UID, rows)
     legacy_before = _legacy_memory_docs_snapshot(db, LEGACY_UID)
 
-    backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+    backfill_user(LEGACY_UID, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert _legacy_memory_docs_snapshot(db, LEGACY_UID) == legacy_before
-    assert resolve_memory_system(non_canonical_uid, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(non_canonical_uid) == MemorySystem.LEGACY
 
     non_canonical_rows = [
         {
@@ -1605,7 +1581,7 @@ def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, mon
         "utils.memory.memory_service.memories_db.get_memories",
         lambda uid, limit, offset=0, **kwargs: _get_memories_from_fake_db(db, uid, limit=limit, offset=offset),
     )
-    service = MemoryService(db_client=db)
+    service = MemoryService()
     legacy_memories = service.read(non_canonical_uid, limit=10)
 
     assert _legacy_memory_docs_snapshot(db, non_canonical_uid) == non_canonical_before

@@ -5,10 +5,18 @@ Database operations for Wrapped (yearly recap) stored in users/{uid}/wrapped/{ye
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
-from ._client import db
+from database.store import get_document_store
 
 # Collection name under user document
 WRAPPED_COLLECTION = 'wrapped'
+
+
+def _store():
+    return get_document_store()
+
+
+def _wrapped_path(uid: str, year: int) -> str:
+    return f'users/{uid}/{WRAPPED_COLLECTION}/{year}'
 
 
 class WrappedStatus:
@@ -44,9 +52,7 @@ def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
     Returns:
         Wrapped document data or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
-    doc = wrapped_ref.get()
+    doc = _store().get(_wrapped_path(uid, year))
 
     if not getattr(doc, "exists", False):
         return None
@@ -86,9 +92,7 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
-    wrapped_ref.set(wrapped_data)
+    _store().set(_wrapped_path(uid, year), wrapped_data)
 
     return wrapped_data
 
@@ -113,10 +117,9 @@ def update_wrapped_status(
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    path = _wrapped_path(uid, year)
 
-    if not getattr(wrapped_ref.get(), "exists", False):
+    if not getattr(_store().get(path), "exists", False):
         return False
 
     now = datetime.now(timezone.utc)
@@ -133,7 +136,7 @@ def update_wrapped_status(
         update_data['error'] = error
         update_data['result'] = None
 
-    wrapped_ref.update(update_data)
+    _store().update(path, update_data)
     return True
 
 
@@ -149,17 +152,17 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    path = _wrapped_path(uid, year)
 
-    if not getattr(wrapped_ref.get(), "exists", False):
+    if not getattr(_store().get(path), "exists", False):
         return False
 
-    wrapped_ref.update(
+    _store().update(
+        path,
         {
             'progress': progress,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -188,9 +191,7 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
-    wrapped_ref.set(wrapped_data)
+    _store().set(_wrapped_path(uid, year), wrapped_data)
 
     return wrapped_data
 

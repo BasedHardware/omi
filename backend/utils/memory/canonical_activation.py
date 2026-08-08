@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
 
-from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
+from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import pin_memory_system
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.control_reader_contract import (
@@ -28,29 +27,14 @@ class CanonicalWriteDecision:
     reason: str = "ok"
 
 
-def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecision:
+def canonical_write_decision(uid: str) -> CanonicalWriteDecision:
     """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
 
-    if db_client is None:
-        if uid in set(list_canonical_cohort_uids()):
-            return CanonicalWriteDecision(
-                enabled=False,
-                memory_system=MemorySystem.CANONICAL,
-                fail_closed=True,
-                reason="missing_db_client",
-            )
-        return CanonicalWriteDecision(
-            enabled=False,
-            memory_system=MemorySystem.LEGACY,
-            fail_closed=False,
-            reason="missing_db_client",
-        )
-
-    memory_system = pin_memory_system(uid, db_client=db_client)
+    memory_system = pin_memory_system(uid)
     if memory_system != MemorySystem.CANONICAL:
         return CanonicalWriteDecision(enabled=False, memory_system=memory_system, reason="not_canonical")
 
-    control = read_v3_control(uid=uid, db_client=db_client)
+    control = read_v3_control(uid=uid)
     if not control.cohort_enrolled or control.state is None:
         reason = control.read_error_reason or "missing_state"
         logger.info("canonical_write disabled uid=%s reason=%s", uid, reason)
@@ -71,15 +55,14 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
     return CanonicalWriteDecision(enabled=True, memory_system=memory_system)
 
 
-def canonical_write_enabled(uid: str, *, db_client: Any) -> bool:
+def canonical_write_enabled(uid: str) -> bool:
     """Return true only when the user is in cohort and write gates are ready."""
-    return canonical_write_decision(uid, db_client=db_client).enabled
+    return canonical_write_decision(uid).enabled
 
 
 def canonical_read_enabled(
     uid: str,
     *,
-    db_client: Any,
     source_decision: str | None = None,
     cursor_memory_read_requested: bool = False,
     archive_requested: bool = False,
@@ -89,13 +72,11 @@ def canonical_read_enabled(
 
     if source_decision is not None and source_decision != "memory_read":
         return False
-    if db_client is None:
-        return False
-    if pin_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if pin_memory_system(uid) != MemorySystem.CANONICAL:
         return False
 
-    control = read_v3_control(uid=uid, db_client=db_client)
-    trusted_generation = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    control = read_v3_control(uid=uid)
+    trusted_generation = read_memory_v3_trusted_account_generation(uid=uid)
     effective_env = env if env is not None else os.environ
     decision = decide_v3_control_route(
         V3ControlReaderRequest(

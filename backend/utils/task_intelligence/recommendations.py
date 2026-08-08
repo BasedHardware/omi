@@ -757,7 +757,6 @@ def evaluate(
     judgment: RecommendationJudgment,
     account_generation: int = 0,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> WhatMattersNowProjection:
     evaluated_at = now or datetime.now(timezone.utc)
     device_scope = request.device_id or 'global'
@@ -767,7 +766,6 @@ def evaluate(
             request.device_id,
             now=evaluated_at,
             account_generation=account_generation,
-            firestore_client=firestore_client,
         )
         if request.device_id is not None
         else None
@@ -778,17 +776,14 @@ def evaluate(
             device_id=request.device_id,
             now=evaluated_at,
             account_generation=account_generation,
-            firestore_client=firestore_client,
         )
         if request.device_id is not None
         else []
     )
-    state = recommendation_db.load_canonical_product_state(
-        uid, account_generation=account_generation, firestore_client=firestore_client
-    )
+    state = recommendation_db.load_canonical_product_state(uid, account_generation=account_generation)
     subjects = _build_subjects(state, context=context, open_loop_snapshots=open_loops, now=evaluated_at)
     suppressed = recommendation_db.list_active_override_dedupe_keys(
-        uid, now=evaluated_at, account_generation=account_generation, firestore_client=firestore_client
+        uid, now=evaluated_at, account_generation=account_generation
     )
     material_version = _material_version(
         subjects,
@@ -803,7 +798,6 @@ def evaluate(
         now=evaluated_at,
         include_expired=True,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     if cached is not None and cached.material_version == material_version:
         if cached.expires_at > evaluated_at:
@@ -823,7 +817,6 @@ def evaluate(
             cached.evaluation_id,
             device_scope=device_scope,
             account_generation=account_generation,
-            firestore_client=firestore_client,
         )
         published = recommendation_db.save_projection(
             uid,
@@ -831,7 +824,6 @@ def evaluate(
             projection=refreshed,
             decisions=[decision.model_copy(update={'expires_at': refreshed_expiry}) for decision in prior_decisions],
             account_generation=account_generation,
-            firestore_client=firestore_client,
         )
         return published
 
@@ -955,7 +947,6 @@ def evaluate(
         projection=projection,
         decisions=decisions,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     if published != projection:
         return published
@@ -973,7 +964,6 @@ def get_debug_projection(
     device_id: Optional[str],
     account_generation: int = 0,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> Optional[DecisionDebugProjection]:
     checked_at = now or datetime.now(timezone.utc)
     projection = recommendation_db.get_evaluation_projection(
@@ -982,7 +972,6 @@ def get_debug_projection(
         device_scope=device_id or 'global',
         now=checked_at,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     if projection is None:
         return None
@@ -991,7 +980,6 @@ def get_debug_projection(
         evaluation_id,
         device_scope=device_id or 'global',
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     return DecisionDebugProjection(projection=projection, decisions=decisions)
 
@@ -1003,7 +991,6 @@ def register_intervention(
     idempotency_key: str,
     account_generation: int = 0,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> InterventionRecord:
     created_at = now or datetime.now(timezone.utc)
     if request.expires_at <= created_at:
@@ -1014,7 +1001,6 @@ def register_intervention(
         idempotency_key=idempotency_key,
         account_generation=account_generation,
         now=created_at,
-        firestore_client=firestore_client,
     )
     if newly_created:
         TASK_INTELLIGENCE_ATTRIBUTION_TOTAL.labels(
@@ -1030,7 +1016,6 @@ def record_feedback(
     idempotency_key: str,
     account_generation: int = 0,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> FeedbackRecord:
     created_at = now or datetime.now(timezone.utc)
     override_expires_at: Optional[datetime] = None
@@ -1047,7 +1032,6 @@ def record_feedback(
         now=created_at,
         override_expires_at=override_expires_at,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     if newly_recorded:
         TASK_INTELLIGENCE_ATTRIBUTION_TOTAL.labels(
@@ -1100,7 +1084,6 @@ def record_feedback(
             record.feedback_id,
             completion_candidate.candidate_id,
             account_generation=account_generation,
-            firestore_client=firestore_client,
         )
         record = record.model_copy(update={'proposed_completion_candidate_id': completion_candidate.candidate_id})
     return record
@@ -1113,7 +1096,6 @@ def record_outcome(
     idempotency_key: str,
     account_generation: int = 0,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> OutcomeRecord:
     record, newly_recorded = recommendation_db.create_outcome(
         uid,
@@ -1121,7 +1103,6 @@ def record_outcome(
         idempotency_key=idempotency_key,
         now=now or datetime.now(timezone.utc),
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     if newly_recorded:
         TASK_INTELLIGENCE_ATTRIBUTION_TOTAL.labels(
@@ -1148,7 +1129,6 @@ def ingest_context_snapshot(
     account_generation: int = 0,
     idempotency_key: str | None = None,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> SnapshotReceipt:
     checked_at = now or datetime.now(timezone.utc)
     _validate_snapshot_window(snapshot.generated_at, snapshot.expires_at, checked_at)
@@ -1157,7 +1137,6 @@ def ingest_context_snapshot(
         snapshot,
         account_generation=account_generation,
         idempotency_key=idempotency_key,
-        firestore_client=firestore_client,
     )
 
 
@@ -1168,7 +1147,6 @@ def ingest_open_loop_snapshot(
     account_generation: int = 0,
     idempotency_key: str | None = None,
     now: Optional[datetime] = None,
-    firestore_client: Any = None,
 ) -> SnapshotReceipt:
     checked_at = now or datetime.now(timezone.utc)
     if snapshot.owner != uid:
@@ -1178,7 +1156,6 @@ def ingest_open_loop_snapshot(
         uid,
         snapshot.workstream_id,
         account_generation=account_generation,
-        firestore_client=firestore_client,
     )
     workstream_status = getattr(getattr(workstream, 'status', None), 'value', getattr(workstream, 'status', None))
     if workstream is None or workstream_status != 'open':
@@ -1188,7 +1165,6 @@ def ingest_open_loop_snapshot(
         snapshot,
         account_generation=account_generation,
         idempotency_key=idempotency_key,
-        firestore_client=firestore_client,
     )
 
 

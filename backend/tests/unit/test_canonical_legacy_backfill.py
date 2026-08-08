@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from database import document_store
 from database.memory_collections import MemoryCollections
+from tests.store_fakes import FakeDocumentStore
 from utils.memory import canonical_legacy_backfill as backfill
 from utils.memory.bulk_legacy_backfill import MigrationCheckpoint, MigrationState
 from utils.memory.legacy_backfill import BackfillReport
@@ -14,43 +16,37 @@ from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryRep
 from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
-@dataclass
-class _Snapshot:
-    payload: dict | None
+class _RecordingStore(FakeDocumentStore):
+    """FakeDocumentStore that records the paths written during a run.
 
-    @property
-    def exists(self) -> bool:
-        return self.payload is not None
+    The module now talks to the backend-neutral DocumentStore via the ``_store`` seams
+    (``canonical_legacy_backfill._store`` for the enrollment control read and the ``document_store``
+    facade for the checkpoint store + global pause), so seeding writes straight to ``_docs`` (not a
+    recorded write) and the run's durable writes land in ``writes``.
+    """
 
-    def to_dict(self):
-        return self.payload
+    def __init__(self) -> None:
+        super().__init__()
+        self.writes: list[str] = []
 
+    def set(self, path: str, data, *, merge: bool = False) -> None:
+        self.writes.append(path)
+        super().set(path, data, merge=merge)
 
-class _Document:
-    def __init__(self, db: "_Db", path: str):
-        self._db = db
-        self._path = path
+    def create(self, path: str, data) -> None:
+        self.writes.append(path)
+        super().create(path, data)
 
-    def get(self):
-        self._db.reads.append(self._path)
-        return _Snapshot(self._db.documents.get(self._path))
-
-    def set(self, payload, merge: bool = False):
-        self._db.writes.append((self._path, payload, merge))
-        if merge and self._path in self._db.documents:
-            self._db.documents[self._path] = {**self._db.documents[self._path], **payload}
-        else:
-            self._db.documents[self._path] = dict(payload)
+    def update(self, path: str, data) -> None:
+        self.writes.append(path)
+        super().update(path, data)
 
 
-class _Db:
-    def __init__(self):
-        self.documents: dict[str, dict] = {}
-        self.reads: list[str] = []
-        self.writes: list[tuple[str, dict, bool]] = []
-
-    def document(self, path: str):
-        return _Document(self, path)
+def _install_store(monkeypatch) -> _RecordingStore:
+    store = _RecordingStore()
+    monkeypatch.setattr(backfill, "_store", lambda: store)
+    monkeypatch.setattr(document_store, "_store", lambda: store)
+    return store
 
 
 def _inventory(uid: str, *, candidates: int = 1) -> LegacyBackfillInventoryReport:
@@ -81,18 +77,21 @@ def _backfill_report(uid: str, **kwargs) -> BackfillReport:
     )
 
 
-def _seed_checkpoint(db: _Db, uid: str, state: MigrationState) -> None:
-    db.documents[MemoryCollections(uid).legacy_canonical_backfill_checkpoint] = MigrationCheckpoint(
+def _seed_checkpoint(store: _RecordingStore, uid: str, state: MigrationState) -> None:
+    # Seed directly into the backing store (not a recorded write).
+    store._docs[MemoryCollections(uid).legacy_canonical_backfill_checkpoint] = MigrationCheckpoint(
         uid=uid,
         state=state,
     ).to_payload()
 
 
-def _seed_rollout_control(db: _Db, uid: str, *, stage: str = "write", writes_blocked: bool | None = None) -> None:
+def _seed_rollout_control(
+    store: _RecordingStore, uid: str, *, stage: str = "write", writes_blocked: bool | None = None
+) -> None:
     payload = backfill.build_user_control_state(uid=uid, stage=stage, account_generation=1)
     if writes_blocked is not None:
         payload["writes_blocked"] = writes_blocked
-    db.documents[MemoryCollections(uid).memory_control_state] = payload
+    store._docs[MemoryCollections(uid).memory_control_state] = payload
 
 
 def _allow_canonical_writes(monkeypatch) -> None:
@@ -118,21 +117,21 @@ def test_config_defaults_to_dry_run():
 
 def test_default_config_does_not_stage_or_write(monkeypatch):
     """An unparameterized page run inventories only and writes no checkpoints."""
-    db = _Db()
+    store = _install_store(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     monkeypatch.setattr(backfill, "backfill_user", lambda *a, **k: pytest.fail("dry-run must not stage"))
 
-    page = backfill.run_canonical_legacy_backfill_page(db_client=db)
+    page = backfill.run_canonical_legacy_backfill_page()
 
     assert page.summary.dry_run is True
-    assert db.writes == []
+    assert store.writes == []
 
 
 def test_enrollment_hook_rejects_non_cohort_uid():
     """A non-cohort uid must never reach terminal read_ready via this seam."""
     with pytest.raises(ValueError, match="non-cohort"):
-        backfill._cohort_enrollment_hook("intruder", canonical_uids=frozenset({"cohort-a"}), db_client=_Db())
+        backfill._cohort_enrollment_hook("intruder", canonical_uids=frozenset({"cohort-a"}))
 
 
 def test_helper_does_not_import_terminal_graph_or_cron_owners():
@@ -144,9 +143,9 @@ def test_helper_does_not_import_terminal_graph_or_cron_owners():
 
 
 def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypatch):
-    db = _Db()
-    _seed_checkpoint(db, "already-done", MigrationState.read_ready)
-    _seed_rollout_control(db, "cohort-a")
+    store = _install_store(monkeypatch)
+    _seed_checkpoint(store, "already-done", MigrationState.read_ready)
+    _seed_rollout_control(store, "cohort-a")
     _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["already-done", "cohort-a", "cohort-b"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
@@ -160,7 +159,6 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
 
     page = backfill.run_canonical_legacy_backfill_page(
         config=backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False),
-        db_client=db,
     )
 
     assert page.cohort_user_count == 3
@@ -174,8 +172,8 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
 
 
 def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
-    db = _Db()
-    _seed_rollout_control(db, "cohort-a")
+    store = _install_store(monkeypatch)
+    _seed_rollout_control(store, "cohort-a")
     _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
@@ -188,9 +186,9 @@ def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
     monkeypatch.setattr(backfill, "backfill_user", stage)
     config = backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False)
 
-    first = backfill.run_canonical_legacy_backfill_page(config=config, db_client=db)
+    first = backfill.run_canonical_legacy_backfill_page(config=config)
     calls_after_first = list(calls)
-    second = backfill.run_canonical_legacy_backfill_page(config=config, db_client=db)
+    second = backfill.run_canonical_legacy_backfill_page(config=config)
 
     assert first.summary.read_ready_count == 1
     assert first.remaining_user_count == 0
@@ -199,12 +197,12 @@ def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
     assert second.remaining_user_count == 0
     assert calls == calls_after_first == ["cohort-a"]
     checkpoint_path = MemoryCollections("cohort-a").legacy_canonical_backfill_checkpoint
-    assert db.documents[checkpoint_path]["state"] == MigrationState.read_ready.value
+    assert store.get(checkpoint_path).to_dict()["state"] == MigrationState.read_ready.value
 
 
 def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypatch):
-    db = _Db()
-    _seed_rollout_control(db, "cohort-a")
+    store = _install_store(monkeypatch)
+    _seed_rollout_control(store, "cohort-a")
     _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
@@ -218,7 +216,6 @@ def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypa
 
     page = backfill.run_canonical_legacy_backfill_page(
         config=backfill.CanonicalLegacyBackfillConfig(page_size=1, max_rows_per_user=7, dry_run=False),
-        db_client=db,
     )
 
     assert page.summary.read_ready_count == 1
@@ -229,14 +226,15 @@ def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypa
     assert stage_kwargs[0]["max_rows"] == 7
     assert stage_kwargs[0]["continue_on_error"] is True
     assert callable(stage_kwargs[0]["stop_requested"])
-    assert stage_kwargs[0]["db_client"] is db
-    written_paths = {path for path, _, _ in db.writes}
+    # The neutral store port owns persistence now, so backfill_user is no longer handed a db_client.
+    assert "db_client" not in stage_kwargs[0]
+    written_paths = set(store.writes)
     assert written_paths == {MemoryCollections("cohort-a").legacy_canonical_backfill_checkpoint}
     assert not any("memory_graph_assertions" in path for path in written_paths)
 
 
 def test_dry_run_inventories_page_without_durable_writes(monkeypatch):
-    db = _Db()
+    store = _install_store(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     stage = lambda *args, **kwargs: pytest.fail("dry-run must not stage canonical candidates")
@@ -244,21 +242,20 @@ def test_dry_run_inventories_page_without_durable_writes(monkeypatch):
 
     page = backfill.run_canonical_legacy_backfill_page(
         config=backfill.CanonicalLegacyBackfillConfig(dry_run=True),
-        db_client=db,
     )
 
     assert page.summary.dry_run is True
     assert page.summary.users[0].actions == ("would_enroll_write_only", "would_stage_all_for_admission")
-    assert db.writes == []
+    assert store.writes == []
 
 
 @pytest.mark.parametrize("control_state", ["missing", "off", "write_blocked"])
 def test_page_fails_closed_without_write_stage_enrollment_control(monkeypatch, control_state):
-    db = _Db()
+    store = _install_store(monkeypatch)
     if control_state == "off":
-        _seed_rollout_control(db, "cohort-a", stage="off")
+        _seed_rollout_control(store, "cohort-a", stage="off")
     elif control_state == "write_blocked":
-        _seed_rollout_control(db, "cohort-a", writes_blocked=True)
+        _seed_rollout_control(store, "cohort-a", writes_blocked=True)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     calls: list[str] = []
@@ -271,7 +268,6 @@ def test_page_fails_closed_without_write_stage_enrollment_control(monkeypatch, c
 
     page = backfill.run_canonical_legacy_backfill_page(
         config=backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False),
-        db_client=db,
     )
 
     assert page.summary.read_ready_count == 0
@@ -279,4 +275,4 @@ def test_page_fails_closed_without_write_stage_enrollment_control(monkeypatch, c
     assert calls == []
     assert page.remaining_user_count == 1
     checkpoint_path = MemoryCollections("cohort-a").legacy_canonical_backfill_checkpoint
-    assert checkpoint_path not in db.documents
+    assert not store.exists(checkpoint_path)

@@ -1,7 +1,7 @@
 """Tests for content-hash idempotency on create_action_item.
 
 `database.action_items.create_action_item` historically allocated a fresh
-Firestore id on every call. A flaky-network retry from the desktop client
+document id on every call. A flaky-network retry from the desktop client
 would happily produce a duplicate document. The fix:
 
 - ``create_action_item(..., idempotency_key=<key>)``: when supplied, the
@@ -14,232 +14,272 @@ would happily produce a duplicate document. The fix:
   retried POST of the same task collapses to the original.
 
 These tests exercise the db-layer contract (idempotency hit / miss / no-key
-backwards compat) and the router-layer key derivation.
+backwards compat) against the neutral storage port (``FakeDocumentStore``),
+and the router-layer key derivation.
 """
 
 from unittest.mock import MagicMock
 
-from google.api_core.exceptions import Aborted
+import pytest
 
 from database import action_items as action_items_db  # noqa: E402
-from database import firestore_transaction_retry
+from database.firestore_transaction_retry import FirestoreAborted, FirestoreContentionExhausted  # noqa: E402
 from routers import action_items as action_items_router  # noqa: E402
+from tests.store_fakes import FakeDocumentStore, _FakeTransaction
+
+_UID = 'uid'
 
 # ---------------------------------------------------------------------------
 # create_action_item — db layer
 # ---------------------------------------------------------------------------
 
 
-def _make_doc(doc_id, data=None):
-    doc = MagicMock()
-    doc.id = doc_id
-    doc.to_dict.return_value = data or {}
-    return doc
+def _make_store(existing=(), *, control_generation=None):
+    store = FakeDocumentStore()
+    for doc_id, data in existing:
+        store._docs[f'users/{_UID}/action_items/{doc_id}'] = dict(data)
+    if control_generation is not None:
+        store._docs[f'users/{_UID}/task_intelligence_control/state'] = {'account_generation': control_generation}
+    return store
 
 
-def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
-    """Stub db.collection('users').document(uid).collection('action_items').
+def _bind(monkeypatch, store):
+    monkeypatch.setattr(action_items_db, '_store', lambda: store)
 
-    Returns a tuple ``(action_items_ref, captured)`` where ``captured`` is a
-    dict that records add() calls for assertions.
-    """
-    captured = {'added': [], 'set': {}, 'filters': []}
 
-    fake_query = MagicMock()
-
-    # Chain: .where(...).where(...).limit(N).stream() — every intermediate
-    # call returns the same fake so we don't have to model a query builder.
-    def _where(*, filter):
-        captured['filters'].append((filter.field_path, filter.op_string, filter.value))
-        return fake_query
-
-    fake_query.where.side_effect = _where
-    fake_query.limit.return_value = fake_query
-
-    def _stream(**kwargs):
-        generation_filters = [value for field, operator, value in captured['filters'] if field == 'account_generation']
-        if not generation_filters:
-            return iter(existing_docs)
-        generation = generation_filters[-1]
-        return iter([doc for doc in existing_docs if doc.to_dict().get('account_generation') == generation])
-
-    fake_query.stream.side_effect = _stream
-
-    fake_action_items_ref = MagicMock()
-    fake_action_items_ref.where.side_effect = _where
-
-    def _add(payload):
-        captured['added'].append(payload)
-        ref = MagicMock()
-        ref.id = 'newly-created-id'
-        return (None, ref)
-
-    fake_action_items_ref.add.side_effect = _add
-    document_refs = {}
-
-    def _document(document_id=None):
-        if document_id is None:
-            document_id = 'newly-created-id'
-        if document_id in document_refs:
-            return document_refs[document_id]
-        ref = MagicMock()
-        ref.id = document_id
-        ref.get.side_effect = lambda **kwargs: MagicMock(
-            exists=document_id in captured['set'],
-            to_dict=lambda: captured['set'].get(document_id, {}),
-        )
-
-        def _set(payload):
-            captured['set'][document_id] = payload
-            if document_id == 'newly-created-id':
-                captured['added'].append(payload)
-
-        ref.set.side_effect = _set
-        document_refs[document_id] = ref
-        return ref
-
-    fake_action_items_ref.document.side_effect = _document
-
-    fake_control_ref = MagicMock()
-    fake_control_ref.get.side_effect = lambda **kwargs: MagicMock(
-        exists=control_generation is not None,
-        to_dict=lambda: {'account_generation': control_generation} if control_generation is not None else {},
-    )
-    fake_control_collection = MagicMock()
-    fake_control_collection.document.return_value = fake_control_ref
-
-    fake_user_doc = MagicMock()
-    fake_user_doc.collection.side_effect = lambda name: (
-        fake_action_items_ref if name == action_items_db.action_items_collection else fake_control_collection
-    )
-
-    fake_users = MagicMock()
-    fake_users.document.return_value = fake_user_doc
-
-    transaction = MagicMock()
-    transaction.set.side_effect = lambda ref, payload: ref.set(payload)
-    fake_db = MagicMock(collection=MagicMock(return_value=fake_users))
-    fake_db.transaction.return_value = transaction
-    monkeypatch.setattr(action_items_db, 'db', fake_db)
-    monkeypatch.setattr(
-        action_items_db.firestore,
-        'transactional',
-        lambda function: lambda transaction: function(transaction),
-    )
-    return captured
+def _action_item_docs(store):
+    prefix = f'users/{_UID}/action_items/'
+    return {path[len(prefix):]: data for path, data in store._docs.items() if path.startswith(prefix)}
 
 
 def test_no_idempotency_key_creates_new_doc(monkeypatch):
     """Backwards-compat: existing callers that do not pass a key see no change."""
-    captured = _stub_collection(monkeypatch, [])
-    result = action_items_db.create_action_item('uid', {'description': 'Buy milk', 'completed': False})
-    assert result == 'newly-created-id'
-    assert len(captured['added']) == 1
-    assert 'idempotency_key' not in captured['added'][0]
+    store = _make_store()
+    _bind(monkeypatch, store)
+    result = action_items_db.create_action_item(_UID, {'description': 'Buy milk', 'completed': False})
+    docs = _action_item_docs(store)
+    assert result in docs
+    assert len(docs) == 1
+    assert 'idempotency_key' not in docs[result]
 
 
 def test_idempotency_hit_on_active_returns_existing_id(monkeypatch):
     """Hit on an active (non-completed, non-deleted) doc collapses the call."""
-    captured = _stub_collection(
-        monkeypatch,
-        [_make_doc('existing-id', {'completed': False, 'deleted': False})],
-    )
+    store = _make_store([('existing-id', {'completed': False, 'deleted': False, 'idempotency_key': 'abc123'})])
+    _bind(monkeypatch, store)
     result = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
     )
     assert result == 'existing-id'
-    assert captured['added'] == [], "no new document should be created on idempotency hit"
+    assert len(_action_item_docs(store)) == 1, "no new document should be created on idempotency hit"
 
 
 def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
     """A soft-deleted match must not block recreation — the user explicitly
     deleted it, so a fresh POST is a recreation, not a retry."""
-    captured = _stub_collection(
-        monkeypatch,
-        [_make_doc('deleted-id', {'completed': False, 'deleted': True})],
-    )
+    store = _make_store([('deleted-id', {'completed': False, 'deleted': True, 'idempotency_key': 'abc123'})])
+    _bind(monkeypatch, store)
     result = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
     )
-    assert result == 'newly-created-id', "deleted match must not short-circuit"
-    assert len(captured['added']) == 1
-    assert captured['added'][0].get('idempotency_key') == 'abc123'
+    assert result != 'deleted-id', "deleted match must not short-circuit"
+    docs = _action_item_docs(store)
+    assert len(docs) == 2
+    assert docs[result].get('idempotency_key') == 'abc123'
 
 
 def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
-    captured = _stub_collection(monkeypatch, [])
+    store = _make_store()
+    _bind(monkeypatch, store)
     result = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
     )
-    assert result == 'newly-created-id'
-    assert len(captured['added']) == 1
-    assert captured['added'][0].get('idempotency_key') == 'abc123'
+    docs = _action_item_docs(store)
+    assert len(docs) == 1
+    assert docs[result].get('idempotency_key') == 'abc123'
 
 
 def test_idempotency_does_not_return_prior_generation_task(monkeypatch):
-    captured = _stub_collection(
-        monkeypatch,
-        [_make_doc('old-generation-id', {'completed': False, 'deleted': False, 'account_generation': 6})],
-        control_generation=7,
-    )
+    class _RecordingStore(FakeDocumentStore):
+        def __init__(self):
+            super().__init__()
+            self.query_filters = []
+
+        def query(self, collection, *, filters=None, **kwargs):
+            self.query_filters.append(list(filters or []))
+            return super().query(collection, filters=filters, **kwargs)
+
+    store = _RecordingStore()
+    store._docs[f'users/{_UID}/action_items/old-generation-id'] = {
+        'completed': False,
+        'deleted': False,
+        'account_generation': 6,
+        'idempotency_key': 'abc123',
+    }
+    store._docs[f'users/{_UID}/task_intelligence_control/state'] = {'account_generation': 7}
+    _bind(monkeypatch, store)
+
     result = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
     )
-    assert result == 'newly-created-id'
-    assert captured['added'][0]['account_generation'] == 7
-    assert ('account_generation', '==', 7) in captured['filters']
+    docs = _action_item_docs(store)
+    assert result != 'old-generation-id'
+    assert docs[result]['account_generation'] == 7
+    # The idempotency lookup is scoped to the current account generation.
+    assert any(('account_generation', '==', 7) in filters for filters in store.query_filters)
 
 
 def test_reserved_document_id_is_idempotent_across_crash_retry(monkeypatch):
-    captured = _stub_collection(monkeypatch, [])
+    store = _make_store()
+    _bind(monkeypatch, store)
 
     first = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+        _UID, {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
     )
     second = action_items_db.create_action_item(
-        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+        _UID, {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
     )
 
     assert first == second == 'task-reserved'
-    assert list(captured['set']) == ['task-reserved']
-    assert captured['added'] == []
+    assert list(_action_item_docs(store)) == ['task-reserved']
 
 
 def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch):
-    captured = _stub_collection(monkeypatch, [])
-    attempts = 0
+    class _RetryingStore(FakeDocumentStore):
+        """Runs the write callback twice to simulate a transaction contention retry.
 
-    def transactional(function):
-        def wrapped(transaction):
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                raise Aborted('read contention')
-            return function(transaction)
+        A stable, pre-generated document id must make the retry overwrite the same path rather
+        than allocate a fresh one, so the collection ends with exactly one document.
+        """
 
-        return wrapped
+        def __init__(self):
+            super().__init__()
+            self.fn_calls = 0
 
-    def fast_retry(transaction_factory, operation, **kwargs):
-        return firestore_transaction_retry.run_with_transaction_contention_retry(
-            transaction_factory,
-            operation,
-            **kwargs,
-            sleep=lambda _delay: None,
-            random_value=lambda: 0.0,
-        )
+        def run_transaction(self, fn, *, attempts=3):
+            self.fn_calls += 1
+            fn(_FakeTransaction(self))  # first attempt, discarded (as if aborted pre-commit)
+            self.fn_calls += 1
+            return fn(_FakeTransaction(self))  # retry commits
 
-    monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(action_items_db, 'run_with_transaction_contention_retry', fast_retry)
+    store = _RetryingStore()
+    _bind(monkeypatch, store)
 
     result = action_items_db.create_action_item(
-        'uid',
+        _UID,
         {'description': 'Buy milk', 'completed': False},
         idempotency_key='abc123',
     )
 
-    assert result == 'newly-created-id'
-    assert attempts == 2
-    assert len(captured['added']) == 1
+    docs = _action_item_docs(store)
+    assert store.fn_calls == 2
+    assert len(docs) == 1
+    assert result in docs
+
+
+def test_concurrent_same_key_creates_do_not_duplicate_when_query_is_blind(monkeypatch):
+    """The pre-transaction idempotency query cannot observe a concurrent, not-yet-committed sibling
+    create — modeled here by a query that always misses. The transaction-visible reservation must
+    still collapse two same-key creates to a single document. Without the reservation each call
+    allocates its own uuid and the collection ends with two duplicates.
+    """
+
+    class _QueryBlindStore(FakeDocumentStore):
+        def query(self, collection, *, filters=None, **kwargs):  # noqa: D401 - test double
+            return []
+
+    store = _QueryBlindStore()
+    _bind(monkeypatch, store)
+
+    first = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    second = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert first == second, 'the reservation must return the winner id to the racing sibling'
+    assert len(_action_item_docs(store)) == 1, 'the transactional reservation must prevent a duplicate'
+
+
+def test_reservation_falls_through_when_reserved_target_completed(monkeypatch):
+    """A reservation pointing at a now-completed task must not block a fresh create (parity with the
+    query's ``completed == False`` semantic): the user completed it and is re-adding it."""
+
+    class _QueryBlindStore(FakeDocumentStore):
+        def query(self, collection, *, filters=None, **kwargs):
+            return []
+
+    store = _QueryBlindStore()
+    _bind(monkeypatch, store)
+
+    first = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    # The reserved task is completed out-of-band.
+    store._docs[f'users/{_UID}/action_items/{first}']['completed'] = True
+
+    second = action_items_db.create_action_item(
+        _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert second != first, 'a completed reserved target must not short-circuit a new create'
+    assert len(_action_item_docs(store)) == 2
+
+
+def test_create_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    """When the store transaction exhausts contention (raw ``Aborted`` escapes ``run_transaction``),
+    create_action_item must surface ``FirestoreContentionExhausted`` so the route maps it to 503 —
+    not leak a raw provider error as an unmapped 500."""
+
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.create_action_item(
+            _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        )
+
+
+def test_batch_create_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.create_action_items_batch(_UID, [{'description': 'Buy milk', 'completed': False}])
+
+
+def test_linked_update_maps_exhausted_contention_to_firestore_contention_exhausted(monkeypatch):
+    class _AbortingStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise FirestoreAborted('transaction contention')
+
+    _bind(monkeypatch, _AbortingStore())
+
+    # goal_id routes update_action_item through its transactional (contention-mapped) path.
+    with pytest.raises(FirestoreContentionExhausted):
+        action_items_db.update_action_item(_UID, 'task-1', {'goal_id': 'goal-1'})
+
+
+def test_create_does_not_convert_non_contention_errors(monkeypatch):
+    """Only genuine contention becomes FirestoreContentionExhausted; unrelated failures propagate."""
+
+    class _BrokenStore(FakeDocumentStore):
+        def run_transaction(self, fn, *, attempts=3):
+            raise RuntimeError('unrelated failure')
+
+    _bind(monkeypatch, _BrokenStore())
+
+    with pytest.raises(RuntimeError, match='unrelated failure'):
+        action_items_db.create_action_item(
+            _UID, {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +351,7 @@ def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
 
     assert result.id == 'task-1'
     assert submitted_to == [postprocess_pool], (
-        'the task auto-sync coordinator must run on postprocess_executor so its Firestore '
+        'the task auto-sync coordinator must run on postprocess_executor so its storage '
         'children can acquire db_executor workers'
     )
     assert database_submissions == [], 'the task auto-sync coordinator must never occupy a db_executor worker'

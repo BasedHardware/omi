@@ -20,12 +20,22 @@ users/{uid}/daily_summaries/{summary_id}
 
 from typing import Any, Dict, List, Optional, cast
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-from google.cloud import firestore
-from ._client import db
+from database.store import Filter, get_document_store
 from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
+
+
+def _store():
+    return get_document_store()
+
+
+def _collection_path(uid: str) -> str:
+    return f'users/{uid}/{DAILY_SUMMARIES_COLLECTION}'
+
+
+def _summary_path(uid: str, summary_id: str) -> str:
+    return f'users/{uid}/{DAILY_SUMMARIES_COLLECTION}/{summary_id}'
 
 
 def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
@@ -39,9 +49,7 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     Returns:
         The summary ID
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
-    summary_ref.set(summary_data)
+    _store().set(_summary_path(uid, summary_data['id']), summary_data)
     return summary_data['id']
 
 
@@ -56,11 +64,9 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    doc = summary_ref.get()
+    doc = _store().get(_summary_path(uid, summary_id))
 
-    if getattr(doc, "exists", False):
+    if doc.exists:
         raw: object = doc.to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     return None
@@ -77,10 +83,7 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', date)).limit(1)
-
-    docs = list(query.stream())
+    docs = _store().query(_collection_path(uid), filters=[('date', '==', date)], limit=1)
     if docs:
         raw: object = docs[0].to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
@@ -107,19 +110,21 @@ def get_daily_summaries(
     Returns:
         List of summary data dicts
     """
-    user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(DAILY_SUMMARIES_COLLECTION)
-
+    filters: List[Filter] = []
     if start_date:
-        query = query.where(filter=FieldFilter('date', '>=', start_date))
+        filters.append(('date', '>=', start_date))
     if end_date:
-        query = query.where(filter=FieldFilter('date', '<=', end_date))
-
-    query = query.order_by('date', direction=firestore.Query.DESCENDING)
-    query = query.limit(limit).offset(offset)
+        filters.append(('date', '<=', end_date))
 
     summaries: List[Dict[str, Any]] = []
-    for doc in query.stream():
+    for doc in _store().query(
+        _collection_path(uid),
+        filters=filters,
+        order_by='date',
+        direction='desc',
+        limit=limit,
+        offset=offset,
+    ):
         raw: object = doc.to_dict()
         if isinstance(raw, dict):
             summaries.append(cast(Dict[str, Any], raw))
@@ -134,13 +139,11 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     contents of the summary the user is looking at instead of spawning a
     duplicate doc for the same date.
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     # Force id back to the existing doc id: the generator always allocates a
     # fresh UUID, and we don't want that leaking into the stored payload
     # where readers key off summary['id'].
     payload: Dict[str, Any] = {**summary_data, 'id': summary_id}
-    summary_ref.set(payload)
+    _store().set(_summary_path(uid, summary_id), payload)
 
 
 def delete_daily_summary(uid: str, summary_id: str) -> bool:
@@ -154,17 +157,13 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     Returns:
         True if deleted successfully
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.delete()
+    _store().delete(_summary_path(uid, summary_id))
     redis_db.remove_daily_summary_to_uid(summary_id)
     return True
 
 
 def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.update({'visibility': visibility})
+    _store().update(_summary_path(uid, summary_id), {'visibility': visibility})
 
 
 def get_summaries_count(uid: str) -> int:
@@ -177,7 +176,4 @@ def get_summaries_count(uid: str) -> int:
     Returns:
         Count of summaries
     """
-    user_ref = db.collection('users').document(uid)
-    count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
-    result = count_query.get()
-    return int(result[0][0].value or 0)
+    return _store().count(_collection_path(uid))

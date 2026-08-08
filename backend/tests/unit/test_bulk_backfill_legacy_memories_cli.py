@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryReport
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -27,39 +29,30 @@ def script():
     return _load_script()
 
 
-class _Snapshot:
-    exists = False
+class _RecordingStore(FakeDocumentStore):
+    """Neutral store fake that records path-level reads/writes for the CLI assertions."""
 
-    def to_dict(self):
-        return None
-
-
-class _Document:
-    def __init__(self, db, path):
-        self._db = db
-        self._path = path
-
-    def get(self):
-        self._db.reads.append(self._path)
-        return _Snapshot()
-
-    def set(self, payload, merge=False):
-        self._db.writes.append((self._path, payload, merge))
-
-
-class _Db:
     def __init__(self):
-        self.reads = []
-        self.writes = []
+        super().__init__()
+        self.reads: list[str] = []
+        self.writes: list[tuple] = []
 
-    def document(self, path):
-        return _Document(self, path)
+    def get(self, path, **kwargs):
+        self.reads.append(path)
+        return super().get(path, **kwargs)
+
+    def set(self, path, data, *, merge=False):
+        self.writes.append((path, data, merge))
+        return super().set(path, data, merge=merge)
 
 
 def test_dry_run_cli_uses_offline_fake_and_emits_redacted_json(script, monkeypatch, capsys):
-    db = _Db()
+    store = _RecordingStore()
     secret_content = "the user's raw secret memory"
-    monkeypatch.setattr(script, "_load_firestore_client", lambda **_: db)
+    # The CLI resolves its store via get_document_store(); read_global_pause reads through the
+    # document_store facade. Route both to one recording fake so the dry-run access is observable.
+    monkeypatch.setattr(script, "get_document_store", lambda: store)
+    monkeypatch.setattr(document_store, "_store", lambda: store)
     monkeypatch.setattr(
         script,
         "inventory_legacy_user",
@@ -94,8 +87,8 @@ def test_dry_run_cli_uses_offline_fake_and_emits_redacted_json(script, monkeypat
         "would_stage_all_for_admission",
     ]
     assert secret_content not in output
-    assert db.writes == []
-    assert db.reads == ["memory_control/legacy_canonical_backfill_pause"]
+    assert store.writes == []
+    assert store.reads == ["memory_control/legacy_canonical_backfill_pause"]
 
 
 def test_apply_cli_requires_both_bulk_confirmations(script, capsys):

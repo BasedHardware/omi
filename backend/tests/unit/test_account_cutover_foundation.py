@@ -17,7 +17,8 @@ from models.account_cutover import (
     OfflineQueueInstruction,
 )
 from routers import account_cutover as account_cutover_router
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.store_fakes import FakeDocumentStore
+from database import document_store
 from utils.account_cutover.access import (
     AccountCutoverAccessDenial,
     evaluate_account_cutover_access,
@@ -38,8 +39,10 @@ from utils.other import endpoints as auth
 
 
 @pytest.fixture
-def fake_db():
-    return StrictFirestore()
+def fake_db(monkeypatch):
+    store = FakeDocumentStore()
+    monkeypatch.setattr(document_store, "_store", lambda: store)
+    return store
 
 
 @pytest.fixture
@@ -258,10 +261,12 @@ def test_should_skip_background_account_mutation(monkeypatch):
 
 
 def test_malformed_cutover_document_fails_closed(fake_db):
-    path = ('users', 'broken-uid', 'account_cutover', 'state')
-    fake_db.rows[path] = {'schema_version': 1, 'uid': 'broken-uid', 'state': 'not-a-real-state'}
+    fake_db.set(
+        'users/broken-uid/account_cutover/state',
+        {'schema_version': 1, 'uid': 'broken-uid', 'state': 'not-a-real-state'},
+    )
     with pytest.raises(MalformedDocError):
-        account_cutover_db.get_account_cutover_record('broken-uid', firestore_client=fake_db)
+        account_cutover_db.get_account_cutover_record('broken-uid')
 
 
 def test_access_fails_closed_on_malformed_cutover_document(monkeypatch, fake_db):
@@ -351,7 +356,7 @@ def test_generation_zero_remains_compatible_without_header(monkeypatch):
 
 
 def test_coordinator_begin_requires_explicit_enrollment(fake_db):
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     with pytest.raises(AccountCutoverTransitionError) as exc:
         coordinator.begin('user-abc')
     assert exc.value.code == 'cutover_not_enrolled'
@@ -359,7 +364,7 @@ def test_coordinator_begin_requires_explicit_enrollment(fake_db):
 
 def test_coordinator_begin_is_idempotent(fake_db, enroll_uid):
     enroll_uid('user-abc')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     first = coordinator.begin('user-abc')
     second = coordinator.begin('user-abc')
     assert first.created is True
@@ -371,7 +376,7 @@ def test_coordinator_begin_is_idempotent(fake_db, enroll_uid):
 
 def test_prepare_offline_drain_only_before_fence(fake_db, enroll_uid):
     enroll_uid('user-drain')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     drained = coordinator.prepare_offline_drain('user-drain')
     assert drained.state == AccountCutoverState.legacy
     assert drained.offline_queue_instruction == OfflineQueueInstruction.drain
@@ -384,7 +389,7 @@ def test_prepare_offline_drain_only_before_fence(fake_db, enroll_uid):
 
 def test_coordinator_refuses_import_without_destination_binding(fake_db, enroll_uid):
     enroll_uid('user-xyz')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('user-xyz')
     coordinator.checkpoint(
         'user-xyz',
@@ -406,7 +411,7 @@ def test_coordinator_refuses_import_without_destination_binding(fake_db, enroll_
 
 def test_bind_product_generations_refuses_without_destination(fake_db, enroll_uid):
     enroll_uid('user-bind')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('user-bind')
     with pytest.raises(AccountCutoverTransitionError) as exc:
         coordinator.bind_destination_product_generations(
@@ -484,16 +489,18 @@ def test_direct_auth_call_api_preserved(monkeypatch):
 
 
 def test_uid_document_binding_rejects_mismatched_embedded_uid(fake_db):
-    path = ('users', 'path-uid', 'account_cutover', 'state')
-    fake_db.rows[path] = AccountCutoverRecord(uid='other-uid', state=AccountCutoverState.migrating).persisted_payload()
+    fake_db.set(
+        'users/path-uid/account_cutover/state',
+        AccountCutoverRecord(uid='other-uid', state=AccountCutoverState.migrating).persisted_payload(),
+    )
     with pytest.raises(MalformedDocError) as exc:
-        account_cutover_db.get_account_cutover_record('path-uid', firestore_client=fake_db)
+        account_cutover_db.get_account_cutover_record('path-uid')
     assert 'uid' in exc.value.error_fields
 
 
 def test_cas_requires_token_match_for_existing_document(fake_db, enroll_uid):
     enroll_uid('cas-uid')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('cas-uid')
     stale = begun.record.model_copy(update={'checkpoint_phase': AccountCutoverCheckpointPhase.offline_queue_fenced})
     with pytest.raises(account_cutover_db.AccountCutoverConcurrencyError) as exc:
@@ -503,14 +510,13 @@ def test_cas_requires_token_match_for_existing_document(fake_db, enroll_uid):
             expected_account_generation=begun.record.account_generation,
             expected_checkpoint_token=None,
             require_existing=True,
-            firestore_client=fake_db,
         )
     assert exc.value.code == 'cutover_checkpoint_cas_mismatch'
 
 
 def test_checkpoint_rotates_token_and_rejects_completed_phase(fake_db, enroll_uid):
     enroll_uid('token-uid')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('token-uid')
     first_token = begun.record.checkpoint_token
     advanced = coordinator.checkpoint(
@@ -538,7 +544,7 @@ def test_checkpoint_rotates_token_and_rejects_completed_phase(fake_db, enroll_ui
 
 def test_complete_to_new_is_idempotent(fake_db, enroll_uid):
     enroll_uid('complete-uid')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('complete-uid')
     # Seed a cutover_ready + destination-bound record through CAS.
     ready = begun.record.model_copy(
@@ -554,7 +560,6 @@ def test_complete_to_new_is_idempotent(fake_db, enroll_uid):
         expected_account_generation=begun.record.account_generation,
         expected_checkpoint_token=begun.record.checkpoint_token,
         require_existing=True,
-        firestore_client=fake_db,
     )
     first = coordinator.complete_to_new(
         'complete-uid',
@@ -723,7 +728,7 @@ def test_telemetry_bounds_unknown_transition_reason(monkeypatch):
 
 def test_concurrent_checkpoint_loses_on_stale_token(fake_db, enroll_uid):
     enroll_uid('race-uid')
-    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    coordinator = AccountCutoverCoordinator()
     begun = coordinator.begin('race-uid')
     token = begun.record.checkpoint_token
     first = coordinator.checkpoint(
@@ -747,5 +752,4 @@ def test_concurrent_checkpoint_loses_on_stale_token(fake_db, enroll_uid):
             expected_account_generation=begun.record.account_generation,
             expected_checkpoint_token=token,
             require_existing=True,
-            firestore_client=fake_db,
         )

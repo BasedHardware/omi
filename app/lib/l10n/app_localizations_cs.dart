@@ -1876,6 +1876,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get signInWithGoogle => 'Přihlásit se přes Google';
 
   @override
+  String get signInWithSSO => 'Přihlásit se přes SSO';
+
+  @override
   String get byContinuingAgree => 'Pokračováním souhlasíte s našimi ';
 
   @override

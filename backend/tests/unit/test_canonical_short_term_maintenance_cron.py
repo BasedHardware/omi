@@ -54,7 +54,6 @@ def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenanc
     monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
         now=NOW,
         run_id="cron-disabled",
     )
@@ -84,15 +83,14 @@ def test_enabled_cohort_runs_lifecycle_before_maintenance(monkeypatch):
         "run_canonical_short_term_maintenance",
         lambda uid, **_kwargs: MaintenanceReport(uid=uid),
     )
-    client = object()
-
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
         now=NOW,
         run_id="cron-lifecycle",
     )
 
-    assert lifecycle_calls == [{"db_client": client}]
+    # The cron path persists through the neutral store port; the cohort lifecycle is invoked
+    # without a threaded db_client (ADR-0028).
+    assert lifecycle_calls == [{}]
     assert summary.lifecycle_write_enrolled_total == 1
     assert summary.lifecycle_backfill_read_ready_total == 1
     assert summary.lifecycle_generation_reconciled_total == 1
@@ -113,7 +111,6 @@ def test_lifecycle_failure_blocks_graph_staging_but_not_per_user_maintenance(mon
 def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A)
     monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
-    client = object()
     monkeypatch.setattr(
         cron,
         "run_canonical_short_term_maintenance",
@@ -128,7 +125,6 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     monkeypatch.setattr(cron, "run_enrichment", run_graph_enrichment)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
         now=NOW,
         run_id="cron-graph-backfill",
     )
@@ -137,7 +133,8 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     assert summary.graph_enrichment_blocked_total == 0
     assert len(graph_calls) == 1
     assert graph_calls[0]["uid"] == CANONICAL_A
-    assert graph_calls[0]["db_client"] is client
+    # The cron path persists through the neutral store port; db_client is not threaded.
+    assert "db_client" not in graph_calls[0]
     assert graph_calls[0]["apply"] is True
     assert graph_calls[0]["confirm_uid"] == CANONICAL_A
     assert graph_calls[0]["limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
@@ -167,7 +164,7 @@ def test_graph_backfill_uses_per_item_fences_while_lifecycle_staging_is_incomple
     graph_calls = []
     monkeypatch.setattr(cron, "run_enrichment", lambda **kwargs: graph_calls.append(kwargs) or {"outcomes": {}})
 
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-not-ready")
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-not-ready")
 
     assert len(graph_calls) == 1
     assert summary.graph_enriched_total == 0
@@ -202,7 +199,7 @@ def test_graph_backfill_uses_one_page_budget_for_apply_and_safe_scan(monkeypatch
     graph_calls: list[dict[str, object]] = []
     monkeypatch.setattr(cron, "run_enrichment", lambda **kwargs: graph_calls.append(kwargs) or {"outcomes": {}})
 
-    cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-page-budget")
+    cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-page-budget")
 
     assert graph_calls[0]["limit"] == 10
     assert graph_calls[0]["apply_limit"] == 10
@@ -211,7 +208,6 @@ def test_graph_backfill_uses_one_page_budget_for_apply_and_safe_scan(monkeypatch
 
 def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
-    client = object()
     recurrence_sink = MagicMock()
     calls: list[tuple[str, dict[str, Any]]] = []
     reports = {
@@ -243,7 +239,6 @@ def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
     monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
         now=NOW,
         run_id="cron-routes",
         recurrence_signal_persister=recurrence_sink,
@@ -256,13 +251,11 @@ def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
     assert summary.errors == []
     assert [uid for uid, _kwargs in calls] == [CANONICAL_A, CANONICAL_B]
     for _uid, kwargs in calls:
-        assert kwargs["db_client"] is client
         assert kwargs["now"] == NOW
         assert kwargs["run_id"] == "cron-routes"
         assert kwargs["recurrence_signal_sink"] is recurrence_sink
         assert callable(kwargs["required_processor"])
         assert set(kwargs) == {
-            "db_client",
             "now",
             "run_id",
             "recurrence_signal_sink",
@@ -367,7 +360,6 @@ def test_nonempty_outbox_errors_fail_cron_even_when_failure_counters_are_zero(
     monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
         now=NOW,
         run_id="cron-outbox-error",
     )
@@ -395,7 +387,6 @@ def test_blocked_consolidation_is_a_cohort_error_that_fails_the_job_contract(
     monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
         now=NOW,
         run_id="cron-consolidation-error",
     )
@@ -419,7 +410,6 @@ def test_required_processing_failures_are_cohort_errors_that_fail_the_job_contra
     monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
         now=NOW,
         run_id="cron-required-processing-error",
     )
@@ -429,7 +419,6 @@ def test_required_processing_failures_are_cohort_errors_that_fail_the_job_contra
 
 def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A)
-    client = object()
     signal = cast(CanonicalRecurrenceSignal, object())
     recurrence_sink = MagicMock()
     consumer = MagicMock(side_effect=RuntimeError("candidate store unavailable"))
@@ -451,7 +440,6 @@ def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeyp
     monkeypatch.setattr(cron, "record_fallback", fallback)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
         now=NOW,
         run_id="cron-recurrence",
         recurrence_signal_persister=recurrence_sink,
@@ -462,7 +450,6 @@ def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeyp
     consumer.assert_called_once_with(
         CANONICAL_A,
         [signal],
-        firestore_client=client,
     )
     fallback.assert_called_once_with(
         component="other",
@@ -479,7 +466,6 @@ def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeyp
 
 
 def test_async_entrypoint_offloads_sync_cohort_runner_to_db_executor(monkeypatch):
-    client = object()
     executor = object()
     recurrence_sink = MagicMock()
     recurrence_consumer = MagicMock()
@@ -500,7 +486,6 @@ def test_async_entrypoint_offloads_sync_cohort_runner_to_db_executor(monkeypatch
 
     result = asyncio.run(
         cron.run_canonical_short_term_maintenance_cron(
-            db_client=client,
             now=NOW,
             run_id="cron-async",
             recurrence_signal_persister=recurrence_sink,
@@ -515,7 +500,6 @@ def test_async_entrypoint_offloads_sync_cohort_runner_to_db_executor(monkeypatch
             cron.run_canonical_short_term_maintenance_for_cohort,
             (),
             {
-                "db_client": client,
                 "now": NOW,
                 "run_id": "cron-async",
                 "recurrence_signal_persister": recurrence_sink,

@@ -1,21 +1,19 @@
-"""Canonical Firestore apply adapter for long-term memory patches (WS-G7)."""
+"""Canonical apply adapter for long-term memory patches (WS-G7).
+
+Persistence flows through the backend-neutral storage port
+(``database.store``); this module never touches a raw Firestore client.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from functools import wraps
-from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
+from typing import Any, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
 
 from pydantic import BaseModel
 
-try:
-    from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]  # firebase_admin firestore_v1 untyped
-except ImportError:  # pragma: no cover - local unit tests mock Firestore.
-    _firestore_transactional = None
-
-from database._client import db
+from database.store import Transaction, get_document_store
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import (
@@ -44,6 +42,10 @@ from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryItemStatu
 from models.memory_state_head import trusted_memory_state_head_fields
 
 
+def _store():
+    return get_document_store()
+
+
 class MemoryFirestoreApplyError(Exception):
     pass
 
@@ -60,7 +62,7 @@ class ConversationSourceReplacementConflict(MemoryFirestoreApplyError):
 
 
 class ConversationSourceReplacementLimitError(MemoryFirestoreApplyError):
-    """A source replacement cannot fit in one Firestore transaction."""
+    """A source replacement cannot fit in one storage transaction."""
 
 
 class CanonicalMemoryTombstoneConflict(MemoryFirestoreApplyError):
@@ -68,7 +70,7 @@ class CanonicalMemoryTombstoneConflict(MemoryFirestoreApplyError):
 
 
 class CanonicalMemoryTombstoneLimitError(MemoryFirestoreApplyError):
-    """A privacy tombstone cannot fit in one Firestore transaction."""
+    """A privacy tombstone cannot fit in one storage transaction."""
 
 
 class CanonicalReviewResolutionConflict(MemoryFirestoreApplyError):
@@ -122,7 +124,7 @@ class _MemoryControlFence:
 
 
 class MemoryApplyDoc(TypedDict, total=False):
-    """Firestore document contract for the memory-apply store.
+    """Storage document contract for the memory-apply store.
 
     Captures the union of keys read into ``MemoryControlState``,
     ``MemoryOperation``, ``MemoryEvidence`` and ``MemoryItem`` plus the
@@ -224,42 +226,11 @@ class MemoryApplyDoc(TypedDict, total=False):
     source: str
 
 
-F = TypeVar("F", bound=Callable[..., Any])
 M = TypeVar("M", bound=BaseModel)
 
 
-def transactional(func: F) -> F:
-    """Typed facade over ``google.cloud.firestore_v1.transactional``.
-
-    Delegates to the real Firestore decorator when the SDK is importable;
-    otherwise falls back to a transaction-lifecycle simulator used by local
-    unit tests that mock Firestore.
-    """
-    if _firestore_transactional is not None:
-        return cast("F", _firestore_transactional(func))
-
-    @wraps(func)
-    def wrapper(transaction: Any, *args: Any, **kwargs: Any) -> Any:
-        if hasattr(transaction, "_begin"):
-            transaction._begin()
-        try:
-            result: Any = func(transaction, *args, **kwargs)
-            if hasattr(transaction, "_commit"):
-                transaction._commit()
-            return result
-        except Exception:
-            if hasattr(transaction, "_rollback"):
-                transaction._rollback()
-            raise
-        finally:
-            if hasattr(transaction, "_clean_up"):
-                transaction._clean_up()
-
-    return cast("F", wrapper)
-
-
 def _typed_doc(doc: Any) -> Dict[str, Any]:
-    """Typed adapter for Firestore ``DocumentSnapshot.to_dict()`` reads."""
+    """Typed adapter for the storage port ``StoredDocument.to_dict()`` reads."""
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
@@ -271,23 +242,22 @@ def apply_long_term_patch_firestore(
     patch_payload: Dict[str, Any],
     proposed_operation: Optional[MemoryOperation] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
-    db_client: Any = db,
 ) -> ApplyResult:
-    """Apply a memory Long-term patch through the Firestore transaction boundary.
+    """Apply a memory Long-term patch through the storage-port transaction boundary.
 
     The pure contract in `models.memory_apply` stays dependency-free. This
-    adapter owns authoritative Firestore reads/writes and never trusts caller
+    adapter owns authoritative store reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
-    transaction = db_client.transaction()
-    return _apply_long_term_patch_firestore_transaction(
-        transaction,
-        db_client,
-        uid,
-        operation_id,
-        patch_payload,
-        proposed_operation,
-        review_resolution,
+    return _store().run_transaction(
+        lambda tx: _apply_long_term_patch_firestore_transaction(
+            tx,
+            uid,
+            operation_id,
+            patch_payload,
+            proposed_operation,
+            review_resolution,
+        )
     )
 
 
@@ -305,7 +275,6 @@ def replace_conversation_source_firestore(
     expected_source_items: List[MemoryItem],
     expected_reactivation_items: List[MemoryItem],
     writes: List[CanonicalApplyWrite],
-    db_client: Any = db,
 ) -> ConversationSourceReplacementResult:
     """Atomically replace every active item sourced from one conversation.
 
@@ -315,19 +284,19 @@ def replace_conversation_source_firestore(
     canonical write therefore restarts planning instead of committing a partial
     or stale replacement.
     """
-    transaction = db_client.transaction()
-    return _replace_conversation_source_firestore_transaction(
-        transaction,
-        db_client,
-        uid,
-        conversation_id,
-        replacement_id,
-        replacement_digest,
-        replacement_operation,
-        observed_control,
-        expected_source_items,
-        expected_reactivation_items,
-        writes,
+    return _store().run_transaction(
+        lambda tx: _replace_conversation_source_firestore_transaction(
+            tx,
+            uid,
+            conversation_id,
+            replacement_id,
+            replacement_digest,
+            replacement_operation,
+            observed_control,
+            expected_source_items,
+            expected_reactivation_items,
+            writes,
+        )
     )
 
 
@@ -339,19 +308,19 @@ def tombstone_memory_items_firestore(
     expected_items: List[MemoryItem],
     preserved_evidence_ids: Iterable[str],
     review_resolution: Optional[CanonicalReviewResolution] = None,
-    db_client: Any = db,
 ) -> CanonicalMemoryTombstoneResult:
     """Atomically journal and tombstone one bounded authoritative item set."""
-    transaction = db_client.transaction()
-    return _tombstone_memory_items_firestore_transaction(
-        transaction,
-        db_client,
-        uid,
-        reason,
-        observed_control,
-        expected_items,
-        frozenset(preserved_evidence_ids),
-        review_resolution,
+    frozen_preserved = frozenset(preserved_evidence_ids)
+    return _store().run_transaction(
+        lambda tx: _tombstone_memory_items_firestore_transaction(
+            tx,
+            uid,
+            reason,
+            observed_control,
+            expected_items,
+            frozen_preserved,
+            review_resolution,
+        )
     )
 
 
@@ -416,8 +385,7 @@ def _privacy_delete_events(
 
 def _read_canonical_review_resolution(
     *,
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     request: Optional[CanonicalReviewResolution],
 ) -> Optional[Dict[str, Any]]:
@@ -429,9 +397,9 @@ def _read_canonical_review_resolution(
         or request.decision not in {"accept", "correct", "reject", "drop"}
     ):
         raise CanonicalReviewResolutionConflict("stale_review", "canonical review resolution identity is invalid")
-    review_ref = db_client.document(f"{collections.memory_review_queue}/{request.review_id}")
-    snapshot = review_ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+    review_path = f"{collections.memory_review_queue}/{request.review_id}"
+    snapshot = tx.get(review_path)
+    if not snapshot.exists:
         raise CanonicalReviewResolutionConflict("stale_review", "canonical review no longer exists")
     review_item = _typed_doc(snapshot)
     if (
@@ -481,8 +449,7 @@ def _validate_canonical_review_source(
 
 def _write_canonical_review_resolution(
     *,
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     request: Optional[CanonicalReviewResolution],
     review_item: Optional[Dict[str, Any]],
@@ -510,8 +477,8 @@ def _write_canonical_review_resolution(
         "candidate": {"id": request.memory_id},
         "permitted_uses": [],
     }
-    review_ref = db_client.document(f"{collections.memory_review_queue}/{request.review_id}")
-    transaction.set(review_ref, _firestore_data(redacted))
+    review_path = f"{collections.memory_review_queue}/{request.review_id}"
+    tx.set(review_path, _firestore_data(redacted))
 
 
 def _privacy_tombstoned_evidence(evidence: MemoryEvidence) -> MemoryEvidence:
@@ -534,10 +501,8 @@ def _privacy_tombstoned_evidence(evidence: MemoryEvidence) -> MemoryEvidence:
     )
 
 
-@transactional
 def _tombstone_memory_items_firestore_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
     reason: str,
     observed_control: MemoryControlState,
@@ -553,14 +518,13 @@ def _tombstone_memory_items_firestore_transaction(
 
     collections = MemoryCollections(uid=uid)
     review_item = _read_canonical_review_resolution(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
         request=review_resolution,
     )
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    control_snapshot = control_ref.get(transaction=transaction)
-    if not getattr(control_snapshot, "exists", False):
+    control_path = collections.memory_apply_control_state
+    control_snapshot = tx.get(control_path)
+    if not control_snapshot.exists:
         raise CanonicalMemoryTombstoneConflict("canonical memory control state is missing")
     control = parse_snapshot_strict(
         MemoryControlState,
@@ -573,9 +537,8 @@ def _tombstone_memory_items_firestore_transaction(
     authoritative_items: List[MemoryItem] = []
     evidence_by_id: Dict[str, MemoryEvidence] = {}
     for memory_id in sorted(expected_by_id):
-        item_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-        item_snapshot = item_ref.get(transaction=transaction)
-        if not getattr(item_snapshot, "exists", False):
+        item_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+        if not item_snapshot.exists:
             raise CanonicalMemoryTombstoneConflict(f"privacy tombstone item disappeared: {memory_id}")
         item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
         expected = expected_by_id[memory_id]
@@ -591,9 +554,8 @@ def _tombstone_memory_items_firestore_transaction(
         for embedded in item.evidence:
             if embedded.evidence_id in evidence_by_id:
                 continue
-            evidence_ref = db_client.document(f"{collections.memory_evidence}/{embedded.evidence_id}")
-            evidence_snapshot = evidence_ref.get(transaction=transaction)
-            if not getattr(evidence_snapshot, "exists", False):
+            evidence_snapshot = tx.get(f"{collections.memory_evidence}/{embedded.evidence_id}")
+            if not evidence_snapshot.exists:
                 raise CanonicalMemoryTombstoneConflict(
                     f"privacy tombstone evidence disappeared: {embedded.evidence_id}"
                 )
@@ -643,8 +605,8 @@ def _tombstone_memory_items_firestore_transaction(
         source_generation=control.source_generation,
         observed_head_commit_id=control.head_commit_id,
     )
-    operation_ref = db_client.document(f"{collections.memory_operations}/{operation.operation_id}")
-    if getattr(operation_ref.get(transaction=transaction), "exists", False):
+    operation_path = f"{collections.memory_operations}/{operation.operation_id}"
+    if tx.get(operation_path).exists:
         raise CanonicalMemoryTombstoneConflict("privacy tombstone operation already exists")
 
     commit_id = control.next_commit_id(operation.operation_id)
@@ -717,7 +679,7 @@ def _tombstone_memory_items_firestore_transaction(
     )
     if mutation_count > _MAX_FIRESTORE_TRANSACTION_MUTATIONS:
         raise CanonicalMemoryTombstoneLimitError(
-            "canonical memory batch exceeds Firestore's 500-mutation transaction limit"
+            "canonical memory batch exceeds the 500-mutation transaction limit"
         )
 
     committed_operation = operation.mark_committed(
@@ -735,18 +697,15 @@ def _tombstone_memory_items_firestore_transaction(
     )
 
     for evidence in tombstoned_evidence.values():
-        evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-        transaction.set(evidence_ref, _firestore_data(evidence))
+        tx.set(f"{collections.memory_evidence}/{evidence.evidence_id}", _firestore_data(evidence))
     _write_apply_result(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
-        operation_ref=operation_ref,
+        operation_path=operation_path,
         result=result,
     )
     _write_canonical_review_resolution(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
         request=review_resolution,
         review_item=review_item,
@@ -1043,10 +1002,8 @@ def _replacement_mutation_count(
     return count
 
 
-@transactional
 def _replace_conversation_source_firestore_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
     conversation_id: str,
     replacement_id: str,
@@ -1058,9 +1015,9 @@ def _replace_conversation_source_firestore_transaction(
     writes: List[CanonicalApplyWrite],
 ) -> ConversationSourceReplacementResult:
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    control_snapshot = control_ref.get(transaction=transaction)
-    if getattr(control_snapshot, "exists", False):
+    control_path = collections.memory_apply_control_state
+    control_snapshot = tx.get(control_path)
+    if control_snapshot.exists:
         control = parse_snapshot_strict(MemoryControlState, control_snapshot, payload_from_snapshot=_typed_doc)
     else:
         control = MemoryControlState(
@@ -1070,9 +1027,9 @@ def _replace_conversation_source_firestore_transaction(
             source_generation=1,
         )
 
-    replacement_ref = db_client.document(f"{collections.memory_source_replacements}/{replacement_id}")
-    replacement_snapshot = replacement_ref.get(transaction=transaction)
-    if getattr(replacement_snapshot, "exists", False):
+    replacement_path = f"{collections.memory_source_replacements}/{replacement_id}"
+    replacement_snapshot = tx.get(replacement_path)
+    if replacement_snapshot.exists:
         receipt = parse_snapshot_strict(
             ConversationSourceReplacementReceipt,
             replacement_snapshot,
@@ -1090,8 +1047,8 @@ def _replace_conversation_source_firestore_transaction(
         )
         expected_source_version = f"source_generation:{receipt.control_state.source_generation}"
         for memory_id in receipt.committed_memory_ids:
-            item_snapshot = db_client.document(f"{collections.memory_items}/{memory_id}").get(transaction=transaction)
-            if not getattr(item_snapshot, "exists", False):
+            item_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+            if not item_snapshot.exists:
                 receipt_is_current = False
                 break
             item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
@@ -1109,8 +1066,8 @@ def _replace_conversation_source_firestore_transaction(
                 receipt_is_current = False
                 break
         for memory_id in receipt.reactivated_memory_ids:
-            item_snapshot = db_client.document(f"{collections.memory_items}/{memory_id}").get(transaction=transaction)
-            if not getattr(item_snapshot, "exists", False):
+            item_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+            if not item_snapshot.exists:
                 receipt_is_current = False
                 break
             item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
@@ -1145,10 +1102,8 @@ def _replace_conversation_source_firestore_transaction(
         or replacement_operation.logical_payload.metadata.get("replacement_digest") != replacement_digest
     ):
         raise ConversationSourceReplacementConflict("source replacement operation mismatch")
-    replacement_operation_ref = db_client.document(
-        f"{collections.memory_operations}/{replacement_operation.operation_id}"
-    )
-    if getattr(replacement_operation_ref.get(transaction=transaction), "exists", False):
+    replacement_operation_path = f"{collections.memory_operations}/{replacement_operation.operation_id}"
+    if tx.get(replacement_operation_path).exists:
         raise ConversationSourceReplacementConflict("source replacement operation already exists")
 
     expected_by_id = {item.memory_id: item for item in expected_source_items}
@@ -1159,9 +1114,8 @@ def _replace_conversation_source_firestore_transaction(
     evidence_by_old_item: Dict[str, List[MemoryEvidence]] = {}
     old_evidence_ids: set[str] = set()
     for memory_id in sorted(expected_by_id):
-        item_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-        item_snapshot = item_ref.get(transaction=transaction)
-        if not getattr(item_snapshot, "exists", False):
+        item_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+        if not item_snapshot.exists:
             raise ConversationSourceReplacementConflict(f"source memory disappeared: {memory_id}")
         item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
         expected = expected_by_id[memory_id]
@@ -1179,9 +1133,8 @@ def _replace_conversation_source_firestore_transaction(
         authoritative_by_id[memory_id] = item
         item_evidence: List[MemoryEvidence] = []
         for embedded in item.evidence:
-            evidence_ref = db_client.document(f"{collections.memory_evidence}/{embedded.evidence_id}")
-            evidence_snapshot = evidence_ref.get(transaction=transaction)
-            if not getattr(evidence_snapshot, "exists", False):
+            evidence_snapshot = tx.get(f"{collections.memory_evidence}/{embedded.evidence_id}")
+            if not evidence_snapshot.exists:
                 raise ConversationSourceReplacementConflict(f"source evidence disappeared: {embedded.evidence_id}")
             evidence = parse_snapshot_strict(
                 MemoryEvidence,
@@ -1207,9 +1160,8 @@ def _replace_conversation_source_firestore_transaction(
 
     authoritative_reactivation_by_id: Dict[str, tuple[MemoryItem, Any]] = {}
     for memory_id in sorted(expected_reactivation_by_id):
-        item_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-        item_snapshot = item_ref.get(transaction=transaction)
-        if not getattr(item_snapshot, "exists", False):
+        item_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+        if not item_snapshot.exists:
             raise ConversationSourceReplacementConflict(f"superseded lineage item disappeared: {memory_id}")
         item = parse_snapshot_strict(MemoryItem, item_snapshot, payload_from_snapshot=_typed_doc)
         expected = expected_reactivation_by_id[memory_id]
@@ -1230,9 +1182,8 @@ def _replace_conversation_source_firestore_transaction(
         ):
             raise ConversationSourceReplacementConflict(f"superseded lineage item changed: {memory_id}")
         for embedded in item.evidence:
-            evidence_ref = db_client.document(f"{collections.memory_evidence}/{embedded.evidence_id}")
-            evidence_snapshot = evidence_ref.get(transaction=transaction)
-            if not getattr(evidence_snapshot, "exists", False):
+            evidence_snapshot = tx.get(f"{collections.memory_evidence}/{embedded.evidence_id}")
+            if not evidence_snapshot.exists:
                 raise ConversationSourceReplacementConflict(
                     f"superseded lineage evidence disappeared: {embedded.evidence_id}"
                 )
@@ -1261,8 +1212,8 @@ def _replace_conversation_source_firestore_transaction(
             or operation.source_packet_id != conversation_id
         ):
             raise ConversationSourceReplacementConflict("replacement operation generation/source mismatch")
-        operation_ref = db_client.document(f"{collections.memory_operations}/{operation.operation_id}")
-        if getattr(operation_ref.get(transaction=transaction), "exists", False):
+        operation_path = f"{collections.memory_operations}/{operation.operation_id}"
+        if tx.get(operation_path).exists:
             raise ConversationSourceReplacementConflict("replacement operation already exists")
         raw_memory_id = write.patch_payload.get("new_memory_id")
         if not isinstance(raw_memory_id, str) or not raw_memory_id.strip():
@@ -1272,9 +1223,8 @@ def _replace_conversation_source_firestore_transaction(
             raise MemoryFirestoreApplyError("conversation replacement contains duplicate memory ids")
         new_memory_ids.append(memory_id)
         if memory_id not in authoritative_by_id:
-            memory_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-            memory_snapshot = memory_ref.get(transaction=transaction)
-            if getattr(memory_snapshot, "exists", False):
+            memory_snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
+            if memory_snapshot.exists:
                 prior_item = parse_snapshot_strict(
                     MemoryItem,
                     memory_snapshot,
@@ -1302,8 +1252,7 @@ def _replace_conversation_source_firestore_transaction(
             ):
                 raise MemoryFirestoreApplyError("invalid conversation replacement evidence")
             new_evidence_ids.add(evidence.evidence_id)
-            evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-            if getattr(evidence_ref.get(transaction=transaction), "exists", False):
+            if tx.get(f"{collections.memory_evidence}/{evidence.evidence_id}").exists:
                 raise ConversationSourceReplacementConflict("replacement evidence already exists")
     if sorted(replacement_operation.logical_payload.metadata.get("new_memory_ids") or []) != sorted(new_memory_ids):
         raise ConversationSourceReplacementConflict("source replacement manifest does not match writes")
@@ -1457,31 +1406,26 @@ def _replace_conversation_source_firestore_transaction(
     mutation_count += 1  # committed replacement receipt
     if mutation_count > _MAX_FIRESTORE_TRANSACTION_MUTATIONS:
         raise ConversationSourceReplacementLimitError(
-            "conversation source replacement exceeds Firestore's 500-mutation transaction limit"
+            "conversation source replacement exceeds the 500-mutation transaction limit"
         )
 
     # No writes occur before the complete source/control/operation validation
     # and mutation preflight above.
     for evidence in tombstoned_evidence.values():
-        evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-        transaction.set(evidence_ref, _firestore_data(evidence))
+        tx.set(f"{collections.memory_evidence}/{evidence.evidence_id}", _firestore_data(evidence))
     for write in writes:
         for evidence in write.evidence:
-            evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-            transaction.set(evidence_ref, _firestore_data(evidence))
+            tx.set(f"{collections.memory_evidence}/{evidence.evidence_id}", _firestore_data(evidence))
     for memory_id, item in tombstoned_items.items():
         if memory_id not in new_memory_ids:
-            item_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-            transaction.set(item_ref, _firestore_data(item))
-            assertion_ref = db_client.document(f"{collections.memory_graph_assertions}/{memory_id}")
-            transaction.delete(assertion_ref)
+            tx.set(f"{collections.memory_items}/{memory_id}", _firestore_data(item))
+            tx.delete(f"{collections.memory_graph_assertions}/{memory_id}")
     for result in [replacement_apply_result, *results]:
-        operation_ref = db_client.document(f"{collections.memory_operations}/{result.operation.operation_id}")
+        operation_path = f"{collections.memory_operations}/{result.operation.operation_id}"
         _write_apply_result(
-            transaction=transaction,
-            db_client=db_client,
+            tx=tx,
             collections=collections,
-            operation_ref=operation_ref,
+            operation_path=operation_path,
             result=result,
         )
     receipt = ConversationSourceReplacementReceipt(
@@ -1497,7 +1441,7 @@ def _replace_conversation_source_firestore_transaction(
         tombstoned_evidence_ids=sorted(old_evidence_ids),
         committed_at=now,
     )
-    transaction.set(replacement_ref, _firestore_data(receipt))
+    tx.set(replacement_path, _firestore_data(receipt))
 
     return ConversationSourceReplacementResult(
         control_state=working_control,
@@ -1508,23 +1452,20 @@ def _replace_conversation_source_firestore_transaction(
     )
 
 
-def atomic_bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
+def atomic_bump_source_generation(uid: str) -> MemoryControlState:
     """Atomically advance canonical apply ``source_generation`` (Q7 reprocess)."""
-    transaction = db_client.transaction()
-    return _atomic_bump_source_generation_transaction(transaction, db_client, uid)
+    return _store().run_transaction(lambda tx: _atomic_bump_source_generation_transaction(tx, uid))
 
 
-@transactional
 def _atomic_bump_source_generation_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
 ) -> MemoryControlState:
     now = datetime.now(timezone.utc)
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = control_ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+    control_path = collections.memory_apply_control_state
+    snapshot = tx.get(control_path)
+    if not snapshot.exists:
         control = MemoryControlState(
             uid=uid,
             head_commit_id="head0",
@@ -1540,14 +1481,12 @@ def _atomic_bump_source_generation_transaction(
             "updated_at": now,
         }
     )
-    transaction.set(control_ref, _firestore_data(bumped))
+    tx.set(control_path, _firestore_data(bumped))
     return bumped
 
 
-@transactional
 def _apply_long_term_patch_firestore_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
     operation_id: str,
     patch_payload: Dict[str, Any],
@@ -1556,22 +1495,21 @@ def _apply_long_term_patch_firestore_transaction(
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
     review_item = _read_canonical_review_resolution(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
         request=review_resolution,
     )
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    operation_ref = db_client.document(f"{collections.memory_operations}/{operation_id}")
+    control_path = collections.memory_apply_control_state
+    operation_path = f"{collections.memory_operations}/{operation_id}"
 
     control_state = _required_model(
-        ref=control_ref,
-        transaction=transaction,
+        tx=tx,
+        path=control_path,
         model=MemoryControlState,
         label="memory control state",
     )
-    operation_snapshot = operation_ref.get(transaction=transaction)
-    if getattr(operation_snapshot, "exists", False):
+    operation_snapshot = tx.get(operation_path)
+    if operation_snapshot.exists:
         operation = parse_snapshot_strict(
             MemoryOperation,
             operation_snapshot,
@@ -1580,7 +1518,7 @@ def _apply_long_term_patch_firestore_transaction(
     elif proposed_operation is not None:
         operation = proposed_operation
     else:
-        raise MissingMemoryDocument(f"missing memory operation: {operation_ref.path}")
+        raise MissingMemoryDocument(f"missing memory operation: {operation_path}")
     if operation.uid != uid:
         raise MemoryFirestoreApplyError("operation uid does not match requested uid")
     if operation.operation_id != operation_id:
@@ -1603,33 +1541,29 @@ def _apply_long_term_patch_firestore_transaction(
         return committed_replay
     if committed_replay.status in {ApplyStatus.generation_mismatch, ApplyStatus.retryable_head_mismatch}:
         _write_apply_result(
-            transaction=transaction,
-            db_client=db_client,
+            tx=tx,
             collections=collections,
-            operation_ref=operation_ref,
+            operation_path=operation_path,
             result=committed_replay,
         )
         return committed_replay
 
     evidence_items = _read_authoritative_evidence(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         evidence_ids=operation.evidence_ids,
     )
     target_validation = _validate_authoritative_targets(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         operation=operation,
         control_state=control_state,
     )
     if target_validation is not None:
         _write_apply_result(
-            transaction=transaction,
-            db_client=db_client,
+            tx=tx,
             collections=collections,
-            operation_ref=operation_ref,
+            operation_path=operation_path,
             result=target_validation,
         )
         return target_validation
@@ -1637,8 +1571,7 @@ def _apply_long_term_patch_firestore_transaction(
     authoritative_payload: Dict[str, Any] = dict(patch_payload)
     authoritative_payload["evidence"] = evidence_items
     existing_item = _read_authoritative_target_item(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         operation=operation,
     )
@@ -1657,8 +1590,7 @@ def _apply_long_term_patch_firestore_transaction(
             item=existing_item,
         )
     superseded_items = _read_authoritative_superseded_items(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         operation=operation,
     )
@@ -1671,16 +1603,14 @@ def _apply_long_term_patch_firestore_transaction(
         patch_payload=authoritative_payload,
     )
     _write_apply_result(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
-        operation_ref=operation_ref,
+        operation_path=operation_path,
         result=result,
     )
     if result.status == ApplyStatus.committed:
         _write_canonical_review_resolution(
-            transaction=transaction,
-            db_client=db_client,
+            tx=tx,
             collections=collections,
             request=review_resolution,
             review_item=review_item,
@@ -1692,17 +1622,15 @@ def _apply_long_term_patch_firestore_transaction(
 
 def _read_authoritative_evidence(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     evidence_ids: Iterable[str],
 ) -> List[MemoryEvidence]:
     evidence_items: List[MemoryEvidence] = []
     for evidence_id in evidence_ids:
-        evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence_id}")
         evidence = _required_model(
-            ref=evidence_ref,
-            transaction=transaction,
+            tx=tx,
+            path=f"{collections.memory_evidence}/{evidence_id}",
             model=MemoryEvidence,
             label="memory evidence",
         )
@@ -1712,8 +1640,7 @@ def _read_authoritative_evidence(
 
 def _read_authoritative_target_item(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
 ) -> Optional[MemoryItem]:
@@ -1722,8 +1649,7 @@ def _read_authoritative_target_item(
     target_id = operation.logical_payload.target_memory_id or operation.target_memory_id
     if not target_id:
         return None
-    target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
-    snapshot = target_ref.get(transaction=transaction)
+    snapshot = tx.get(f"{collections.memory_items}/{target_id}")
     if not snapshot.exists:
         return None
     return parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
@@ -1731,15 +1657,13 @@ def _read_authoritative_target_item(
 
 def _read_authoritative_superseded_items(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
 ) -> List[MemoryItem]:
     items: List[MemoryItem] = []
     for memory_id in operation.logical_payload.supersedes:
-        ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-        snapshot = ref.get(transaction=transaction)
+        snapshot = tx.get(f"{collections.memory_items}/{memory_id}")
         if not snapshot.exists:
             continue
         items.append(parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc))
@@ -1748,16 +1672,14 @@ def _read_authoritative_superseded_items(
 
 def _validate_authoritative_targets(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
     control_state: MemoryControlState,
 ) -> Optional[ApplyResult]:
     target_ids = _operation_target_ids(operation)
     for target_id in target_ids:
-        target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
-        snapshot = target_ref.get(transaction=transaction)
+        snapshot = tx.get(f"{collections.memory_items}/{target_id}")
         if not snapshot.exists:
             return _target_not_active(control_state, operation, f"missing target memory item: {target_id}")
         target = parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
@@ -1791,21 +1713,20 @@ def _target_not_active(control_state: MemoryControlState, operation: MemoryOpera
 
 def _write_apply_result(
     *,
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     collections: MemoryCollections,
-    operation_ref: Any,
+    operation_path: str,
     result: ApplyResult,
 ) -> None:
-    transaction.set(operation_ref, _firestore_data(result.operation))
+    tx.set(operation_path, _firestore_data(result.operation))
     if result.status != ApplyStatus.committed:
         return
 
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
-    state_head_ref = db_client.document(collections.memory_state_head)
-    transaction.set(control_ref, _firestore_data(result.control_state))
-    transaction.set(state_head_ref, _firestore_data(_memory_state_head_from_control(result.control_state)))
+    control_path = collections.memory_apply_control_state
+    commit_path = f"{collections.memory_commits}/{result.control_state.head_commit_id}"
+    state_head_path = collections.memory_state_head
+    tx.set(control_path, _firestore_data(result.control_state))
+    tx.set(state_head_path, _firestore_data(_memory_state_head_from_control(result.control_state)))
     commit_doc: MemoryApplyDoc = {
         "commit_id": result.control_state.head_commit_id,
         "uid": result.control_state.uid,
@@ -1817,21 +1738,20 @@ def _write_apply_result(
         "outbox_event_ids": result.operation.committed_outbox_event_ids,
         "updated_at": result.control_state.updated_at,
     }
-    transaction.set(commit_ref, _firestore_data(commit_doc))
+    tx.set(commit_path, _firestore_data(commit_doc))
     for item in result.memory_items:
-        item_ref = db_client.document(f"{collections.memory_items}/{item.memory_id}")
-        transaction.set(item_ref, _firestore_data(item))
-        assertion_ref = db_client.document(f"{collections.memory_graph_assertions}/{item.memory_id}")
+        tx.set(f"{collections.memory_items}/{item.memory_id}", _firestore_data(item))
+        assertion_path = f"{collections.memory_graph_assertions}/{item.memory_id}"
         matching_assertion = next(
             (assertion for assertion in result.graph_assertions if assertion.memory_id == item.memory_id),
             None,
         )
         if matching_assertion is not None:
-            transaction.set(assertion_ref, _firestore_data(matching_assertion))
+            tx.set(assertion_path, _firestore_data(matching_assertion))
         elif item.status != MemoryItemStatus.tombstoned and (
             item.status != MemoryItemStatus.active or not item.graph_ready
         ):
-            transaction.delete(assertion_ref)
+            tx.delete(assertion_path)
         promotion = item.promotion or {}
         if item.status == MemoryItemStatus.active and promotion.get("route") == "review":
             conflict_id = promotion.get("target_memory_id")
@@ -1851,11 +1771,10 @@ def _write_apply_result(
                 impact=0.5,
                 now=item.updated_at,
             )
-            review_ref = db_client.document(f"{collections.memory_review_queue}/{review_item['review_id']}")
-            transaction.set(review_ref, _firestore_data(review_item))
+            review_path = f"{collections.memory_review_queue}/{review_item['review_id']}"
+            tx.set(review_path, _firestore_data(review_item))
     for event in result.outbox_events:
-        event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
-        transaction.set(event_ref, _firestore_data(event))
+        tx.set(f"{collections.memory_outbox}/{event.event_id}", _firestore_data(event))
 
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> MemoryApplyDoc:
@@ -1870,10 +1789,10 @@ def _memory_state_head_from_control(control_state: MemoryControlState) -> Memory
     return cast(MemoryApplyDoc, {**trusted_fields, "updated_at": control_state.updated_at})
 
 
-def _required_model(*, ref: Any, transaction: Any, model: type[M], label: str) -> M:
-    snapshot = ref.get(transaction=transaction)
+def _required_model(*, tx: Transaction, path: str, model: type[M], label: str) -> M:
+    snapshot = tx.get(path)
     if not snapshot.exists:
-        raise MissingMemoryDocument(f"missing {label}: {ref.path}")
+        raise MissingMemoryDocument(f"missing {label}: {path}")
     return parse_snapshot_strict(model, snapshot, payload_from_snapshot=_typed_doc)
 
 

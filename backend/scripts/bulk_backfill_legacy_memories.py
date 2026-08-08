@@ -18,13 +18,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from google.cloud import firestore
-
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from database.google_credentials import prepare_google_credentials
+from database.store import get_document_store
 from scripts.enroll_canonical_memory_user import apply_documents, build_rollout_documents
 from utils.memory.bulk_legacy_backfill import (
     BulkMigrationConfig,
@@ -131,11 +129,6 @@ def _validate_apply_flags(args: argparse.Namespace, uids: list[str]) -> None:
         raise ValueError("--allow-admin-override and --i-understand-uids-not-whitelisted must be supplied together")
 
 
-def _load_firestore_client(*, firestore_project: str) -> Any:
-    prepare_google_credentials()
-    return firestore.Client(project=firestore_project)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -154,11 +147,11 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
 
-    db_client = _load_firestore_client(firestore_project=args.firestore_project)
+    store = get_document_store()
     operator_context = args.operator_context or getpass.getuser()
 
     def inventory_fn(uid: str):
-        return inventory_legacy_user(uid, db_client=db_client)
+        return inventory_legacy_user(uid)
 
     def enroll_fn(uid: str) -> None:
         # Global read/write gates are rollout-wide controls, not per-user bulk
@@ -174,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             if document.path.startswith(f"users/{uid}/")
         ]
-        apply_documents(db_client, documents, allow_existing_update=args.allow_existing_update)
+        apply_documents(store, documents, allow_existing_update=args.allow_existing_update)
 
     def backfill_fn(uid: str, max_rows: int, resume: bool, stop_requested):
         return backfill_user(
@@ -188,7 +181,6 @@ def main(argv: list[str] | None = None) -> int:
             allow_admin_override=args.allow_admin_override,
             acknowledge_non_canonical_uid=args.i_understand_uids_not_whitelisted,
             operator_context=operator_context,
-            db_client=db_client,
         )
 
     def bucket_process_fn(uid: str, bucket: str, max_rows: int, stop_requested):
@@ -200,15 +192,14 @@ def main(argv: list[str] | None = None) -> int:
             allow_admin_override=args.allow_admin_override,
             acknowledge_non_canonical_uid=args.i_understand_uids_not_whitelisted,
             operator_context=operator_context,
-            db_client=db_client,
         )
 
     summary = run_bulk_migration(
         uids,
         config=config,
         inventory_fn=inventory_fn,
-        pause_fn=lambda: read_global_pause(db_client),
-        checkpoint_store=FirestoreCheckpointStore(db_client) if args.apply else None,
+        pause_fn=lambda: read_global_pause(),
+        checkpoint_store=FirestoreCheckpointStore() if args.apply else None,
         enroll_fn=enroll_fn if args.apply else None,
         backfill_fn=backfill_fn if args.apply else None,
         bucket_process_fn=bucket_process_fn if args.apply else None,

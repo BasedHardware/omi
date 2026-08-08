@@ -230,7 +230,7 @@ def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():
 def test_l1_archive_extractor_persists_archive_route_outcomes_with_deterministic_identity(monkeypatch):
     persisted = []
 
-    def fake_persist(outcome, *, db_client=None):
+    def fake_persist(outcome):
         persisted.append(outcome)
         return outcome
 

@@ -24,11 +24,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 import firebase_admin
-from google.cloud import storage
-from google.cloud.firestore import DELETE_FIELD
-from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database.store import get_document_store, sentinels
+from utils.object_store import get_object_store
 from services.agent_vm_lifecycle import (
     DEFAULT_ZONE,
     LEASE_HEARTBEAT_SECONDS,
@@ -159,22 +157,17 @@ def _init_firebase() -> None:
         firebase_admin.initialize_app(options=firebase_admin_options())
 
 
+def _store():
+    return get_document_store()
+
+
 def _read_gcs_uri(uri: str) -> bytes:
     if not uri.startswith("gs://"):
         raise ValueError("Agent VM active release must use a gs:// URI")
     bucket_name, _, blob_name = uri[5:].partition("/")
     if not bucket_name or not blob_name:
         raise ValueError("Agent VM release URI must contain a bucket and object")
-    blob = storage.Client().bucket(bucket_name).blob(blob_name)
-    # Mutable public GCS objects implicitly receive ``public, max-age=3600``
-    # when no Cache-Control metadata is set. Resolve the current generation via
-    # the authenticated metadata API, then pin the media download to that
-    # immutable generation so a cached predecessor can never drive a rollout.
-    blob.reload()
-    generation = blob.generation
-    if generation is None:
-        raise RuntimeError("Agent VM release object is missing a generation")
-    return blob.download_as_bytes(if_generation_match=generation)
+    return get_object_store().get_bytes(bucket_name, blob_name)
 
 
 def load_active_release() -> tuple[AgentVmRelease, dict[str, Any]]:
@@ -219,11 +212,9 @@ def _owners() -> list[tuple[str, dict[str, Any]]]:
     execute it may use the bounded scan; saturation fails the run so owners are
     never silently omitted.
     """
-    client = get_firestore_client()
-    users = client.collection("users")
     owner_limit = _bounded_limit("AGENT_VM_OWNER_DISCOVERY_LIMIT", OWNER_DISCOVERY_LIMIT)
     try:
-        snapshots = list(users.where(filter=FieldFilter("agentVm.vmName", ">=", "")).limit(owner_limit + 1).stream())
+        snapshots = list(_store().query("users", filters=[("agentVm.vmName", ">=", "")], limit=owner_limit + 1))
     except Exception as exc:
         fallback_limit = _bounded_limit("AGENT_VM_OWNER_FALLBACK_SCAN_LIMIT", OWNER_FALLBACK_SCAN_LIMIT)
         record_fallback(
@@ -235,7 +226,7 @@ def _owners() -> list[tuple[str, dict[str, Any]]]:
             log=logger,
         )
         logger.info("Bounded Agent VM owner compatibility scan limit: %d", fallback_limit)
-        snapshots = list(users.limit(fallback_limit + 1).stream())
+        snapshots = list(_store().query("users", limit=fallback_limit + 1))
         if len(snapshots) > fallback_limit:
             raise RuntimeError(
                 "bounded Agent VM owner compatibility scan exhausted; targeted Firestore query is required"
@@ -279,9 +270,8 @@ def _rollout_spec(raw: Mapping[str, Any], phase: str) -> tuple[int, int]:
 
 
 def _rollout_phase(environment: str, release_id: str, raw: Mapping[str, Any], *, persist: bool = True) -> str:
-    client = get_firestore_client()
-    ref = client.collection("agent_vm_rollouts").document(environment)
-    snapshot = ref.get()
+    path = f"agent_vm_rollouts/{environment}"
+    snapshot = _store().get(path)
     current = snapshot.to_dict() if snapshot.exists else {}
     current_map = current if isinstance(current, dict) else {}
     if current_map.get("releaseId") == release_id:
@@ -291,7 +281,8 @@ def _rollout_phase(environment: str, release_id: str, raw: Mapping[str, Any], *,
         return str(current_phase)
     phase = _requested_rollout_phase(raw, environment)
     if persist:
-        ref.set(
+        _store().set(
+            path,
             {"releaseId": release_id, "phase": phase, "successfulRuns": 0, "updatedAt": time.time()},
             merge=True,
         )
@@ -305,9 +296,8 @@ def _advance_rollout(
     results: Sequence[ReconcileResult],
     selected_count: int,
 ) -> None:
-    client = get_firestore_client()
-    ref = client.collection("agent_vm_rollouts").document(environment)
-    snapshot = ref.get()
+    path = f"agent_vm_rollouts/{environment}"
+    snapshot = _store().get(path)
     current = snapshot.to_dict() if snapshot.exists else {}
     current_map = current if isinstance(current, dict) else {}
     if current_map.get("releaseId") != release_id or current_map.get("phase") != phase:
@@ -318,7 +308,8 @@ def _advance_rollout(
     if next_phase and runs >= ROLLOUT_STABLE_RUNS:
         phase = next_phase
         runs = 0
-    ref.set(
+    _store().set(
+        path,
         {
             "releaseId": release_id,
             "phase": phase,
@@ -1305,14 +1296,14 @@ async def reconcile_one(
                 "state": "missing",
                 "lastError": "GCE instance not found",
                 "missingSince": recorded_missing_since,
-                "lease": DELETE_FIELD,
-                "drainRequested": DELETE_FIELD,
-                "drainRequestedAt": DELETE_FIELD,
+                "lease": sentinels.DELETE,
+                "drainRequested": sentinels.DELETE,
+                "drainRequestedAt": sentinels.DELETE,
             }
             # A provider-confirmed 404 makes the observed demand impossible to
             # fulfill. Consume only that exact request, while the transaction
             # preserves any newer demand that arrives during this check.
-            missing_fields.update({"startRequested": DELETE_FIELD, "startRequestedAt": DELETE_FIELD})
+            missing_fields.update({"startRequested": sentinels.DELETE, "startRequestedAt": sentinels.DELETE})
             if not await _update_reconcile(
                 uid,
                 vm_name,
@@ -1450,7 +1441,7 @@ async def reconcile_one(
                     "driftReasons": [reason],
                     "requiredBootImage": release.boot_image,
                     "observedBootImage": actual,
-                    "missingSince": DELETE_FIELD,
+                    "missingSince": sentinels.DELETE,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 consume_start_request_at=observed_start_request_at,
@@ -1525,7 +1516,7 @@ async def reconcile_one(
                     "retryCount": 0,
                     "lastError": None,
                     "retryAt": None,
-                    "missingSince": DELETE_FIELD,
+                    "missingSince": sentinels.DELETE,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 vm_fields={
@@ -1588,7 +1579,7 @@ async def reconcile_one(
                 "retryCount": 0,
                 "lastError": None,
                 "retryAt": None,
-                "missingSince": DELETE_FIELD,
+                "missingSince": sentinels.DELETE,
                 **clear_vm_reconcile_lease_fields(),
             },
             vm_fields={
@@ -1666,9 +1657,9 @@ async def reconcile_one(
                 # A demand start is the retry's eligibility signal. Retain it
                 # until terminal quarantine so the scheduled reconciler can
                 # honor retryAt without requiring another client request.
-                "lease": DELETE_FIELD,
-                "drainRequested": True if not cleanup_succeeded else DELETE_FIELD,
-                "drainRequestedAt": time.time() if not cleanup_succeeded else DELETE_FIELD,
+                "lease": sentinels.DELETE,
+                "drainRequested": True if not cleanup_succeeded else sentinels.DELETE,
+                "drainRequestedAt": time.time() if not cleanup_succeeded else sentinels.DELETE,
             },
             consume_start_request_at=observed_start_request_at if retry_state == "quarantined" else None,
             force_consume_start_request=retry_state == "quarantined",

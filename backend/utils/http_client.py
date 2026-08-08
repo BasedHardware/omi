@@ -415,6 +415,22 @@ def get_webhook_client() -> httpx.AsyncClient:
     )
 
 
+def get_ntfy_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for UnifiedPush/ntfy delivery (ADR-0011).
+
+    The push server is an operator-configured internal service (e.g. ``http://ntfy`` on the
+    on-prem network), so — unlike partner webhooks — these POSTs are intentionally NOT routed
+    through the SSRF guard (``assert_public_http_url``), which would reject a private address.
+    """
+    return _get_client(
+        'ntfy',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=2.0),
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
+        ),
+    )
+
+
 def get_maps_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client for Google Maps geocoding."""
     return _get_client(

@@ -12,6 +12,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/services/oidc_auth_service.dart';
 import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
@@ -134,7 +136,13 @@ class _FCMNotificationService implements NotificationInterface {
   Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
     String timeZone = await getTimeZone();
-    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
+    // OIDC (ADR-0038) sign-ins have no Firebase user; gating on one would skip
+    // FCM registration entirely. `saveFcmTokenServer` authenticates through the
+    // app's configured token path (getAuthHeader → OIDC or Firebase), so a
+    // stored OIDC session is sufficient here.
+    final hasSession =
+        Env.useOidc ? OidcAuthService.instance.hasStoredSession() : FirebaseAuth.instance.currentUser != null;
+    if (hasSession && token.isNotEmpty) {
       await saveFcmTokenServer(token: token, timeZone: timeZone);
 
       try {

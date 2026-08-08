@@ -11,8 +11,11 @@ try:
 except Exception as exc:  # pragma: no cover - system pytest env without backend deps
     pytest.skip(f'FastAPI/TestClient route proof requires backend venv dependencies: {exc}', allow_module_level=True)
 
+import database.memory_compatibility_projection as projection_module
 from config.memory_rollout import MemoryRolloutMode
+from database import document_store
 from database.memory_collections import MemoryCollections
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 from utils.memory.v3.composed_get_service import (
     V3ComposedRequestParams,
@@ -91,6 +94,45 @@ class FakeDb:
 @pytest.fixture(autouse=True)
 def _canonical_uid(monkeypatch):
     set_canonical_cohort(monkeypatch, 'uid-a')
+
+
+class _RecordingStore(FakeDocumentStore):
+    """FakeDocumentStore that shares the injected fake's ``.docs`` dict and records read paths.
+
+    After the ``document_store`` migration (ADR-0022) the control/state-head/gate reads no longer
+    flow through the Firestore-shaped ``db_client`` fake — they go through the neutral storage port.
+    Sharing ``db.docs`` keeps the seeded data visible to both; ``reads`` preserves the tests' intent
+    of asserting *which documents the read path consulted*, now observed on the port instead of on
+    the fake's Firestore ``document().get()`` mechanics.
+    """
+
+    def __init__(self, *, backing):
+        super().__init__(backing=backing)
+        self.reads = []
+        self.queries = []
+
+    def get(self, path, *, fields=None):
+        self.reads.append(path)
+        return super().get(path, fields=fields)
+
+    def query(self, collection, **kwargs):
+        self.queries.append((collection, kwargs.get('limit')))
+        return super().query(collection, **kwargs)
+
+
+def _install_store(monkeypatch, db):
+    """Route ``document_store`` reads/writes through the SAME dict as the injected ``db_client`` fake."""
+    # The projection reader now reads through the neutral store too; fold the Firestore-shaped
+    # collection seeds into the shared path->data backing so a collection query sees them.
+    for collection, entries in db.collections.items():
+        for doc_id, data in entries:
+            db.docs.setdefault(f'{collection}/{doc_id}', data)
+    store = _RecordingStore(backing=db.docs)
+    monkeypatch.setattr(document_store, '_store', lambda: store)
+    monkeypatch.setattr(projection_module, '_store', lambda: store)
+    db.doc_reads = store.reads
+    db.store_queries = store.queries
+    return store
 
 
 def _control_doc(uid='uid-a'):
@@ -215,7 +257,7 @@ def _route_client(monkeypatch, db, legacy_calls):
     monkeypatch.setitem(sys.modules, 'utils.other.storage', fake_storage)
     import routers.memories as memories_router
 
-    monkeypatch.setattr(memories_router.db_client_module, 'db', db)
+    _install_store(monkeypatch, db)
 
     def legacy_get(uid, limit, offset):
         legacy_calls.append({'uid': uid, 'limit': limit, 'offset': offset})
@@ -264,8 +306,10 @@ def test_real_router_ignores_v3_env_gate_for_an_enrolled_user(monkeypatch):
     assert response.headers['x-omi-memory-device-scope-supported'] == 'true'
     assert legacy_calls == []
     # The composed reader asks for the requested page plus its ten-row scan
-    # cushion, then the projection store asks for one cursor sentinel.
-    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 14)]
+    # cushion, then the projection store asks for one cursor sentinel. After the
+    # document_store migration the projection query is observed on the port seam
+    # (store_queries), not the Firestore-shaped stream(), like the sibling test.
+    assert db.store_queries == [('users/uid-a/v3_compatibility_projection_items', 14)]
 
 
 @pytest.mark.slow
@@ -285,8 +329,8 @@ def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_call
     assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'true'
     assert response.headers['x-omi-memory-device-scope-supported'] == 'true'
     assert legacy_calls == []
-    assert any(path == 'users/uid-a/memory_state/head' for path, _ in db.reads)
-    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 12)]
+    assert 'users/uid-a/memory_state/head' in db.doc_reads
+    assert db.store_queries == [('users/uid-a/v3_compatibility_projection_items', 12)]
     assert db.writes == []
 
 
@@ -334,7 +378,7 @@ def test_absent_memory_env_still_builds_an_enrolled_runtime(monkeypatch):
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is True
     assert runtime.source_decision == 'memory_read'
@@ -346,7 +390,7 @@ def test_memory_env_cannot_disable_an_enrolled_runtime(monkeypatch):
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is True
     assert runtime.source_decision == 'memory_read'
@@ -358,7 +402,7 @@ def test_non_boolean_v3_env_cannot_disable_an_enrolled_runtime(monkeypatch):
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', '1')
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is True
     assert runtime.source_decision == 'memory_read'
@@ -371,7 +415,7 @@ def test_memory_mode_values_cannot_disable_an_enrolled_runtime(monkeypatch):
         monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
         db = _ready_db()
 
-        runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+        runtime = build_v3_production_runtime(uid='uid-a')
 
         assert runtime.enabled is True
         assert runtime.source_decision == 'memory_read'
@@ -384,7 +428,7 @@ def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypat
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'other-user')
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is False
     assert runtime.source_decision == 'legacy_primary'
@@ -396,8 +440,9 @@ def test_whitelisted_ready_user_uses_real_memory_projection_and_never_writes(mon
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
+    _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = runtime.service(V3ComposedRequestParams(limit=1, offset=0), runtime.adapters)
 
     assert runtime.enabled is True
@@ -407,10 +452,10 @@ def test_whitelisted_ready_user_uses_real_memory_projection_and_never_writes(mon
     assert response.body[0]['id'] == 'm1'
     assert response.body[0]['content'] == 'memory visible memory'
     assert db.writes == []
-    assert any(path == 'users/uid-a/memory_control/state' for path, _ in db.reads)
-    assert any(path == 'users/uid-a/memory_state/head' for path, _ in db.reads)
-    assert any(path == 'users/uid-a/v3_compatibility_projection/state' for path, _ in db.reads)
-    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 12)]
+    assert 'users/uid-a/memory_control/state' in db.doc_reads
+    assert 'users/uid-a/memory_state/head' in db.doc_reads
+    assert 'users/uid-a/v3_compatibility_projection/state' in db.doc_reads
+    assert db.store_queries == [('users/uid-a/v3_compatibility_projection_items', 12)]
 
 
 def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypatch):
@@ -419,8 +464,9 @@ def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypa
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
     db.docs['users/uid-a/memory_state/head'] = _state_head(account_generation=8)
+    _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert response.http_status == 503
@@ -434,7 +480,7 @@ def test_enrolled_unavailable_db_fails_closed_without_legacy_fallback(monkeypatc
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=None)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert runtime.enabled is True
@@ -449,8 +495,9 @@ def test_missing_global_gate_for_whitelisted_read_mode_fails_closed_no_legacy_fa
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
     del db.docs['memory_control/global_read_gate']
+    _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert runtime.enabled is True

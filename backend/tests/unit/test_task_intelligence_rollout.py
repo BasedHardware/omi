@@ -43,18 +43,15 @@ def test_chat_first_ui_uses_the_same_canonical_membership_decision(mode, memory_
 def test_production_resolver_uses_authoritative_memory_selector(monkeypatch):
     calls = []
 
-    def fake_resolve_memory_system(uid, *, db_client=None):
-        calls.append((uid, db_client))
+    def fake_resolve_memory_system(uid):
+        calls.append(uid)
         return MemorySystem.CANONICAL
 
     monkeypatch.setattr(rollout_module, 'resolve_memory_system', fake_resolve_memory_system)
-    db_client = object()
 
-    decision = resolve_task_intelligence_for_user(
-        uid='user-1', workflow_mode='read', account_generation=3, db_client=db_client
-    )
+    decision = resolve_task_intelligence_for_user(uid='user-1', workflow_mode='read', account_generation=3)
 
-    assert calls == [('user-1', db_client)]
+    assert calls == ['user-1']
     assert decision.memory_cohort_eligible is True
     assert decision.intelligence_product_enabled is True
 

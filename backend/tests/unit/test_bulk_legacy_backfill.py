@@ -5,6 +5,7 @@ from threading import Barrier, Lock
 
 import pytest
 
+from database import document_store
 from utils.memory.bulk_legacy_backfill import (
     BulkMigrationConfig,
     MigrationCheckpoint,
@@ -128,16 +129,16 @@ def test_user_governor_limits_inventory_to_configured_count():
     assert inventoried == ["uid-a", "uid-b"]
 
 
-def test_global_pause_env_and_read_failure_both_fail_closed():
-    assert read_global_pause(object(), env={"MEMORY_BULK_BACKFILL_PAUSED": "true"}) == PauseDecision(
-        True, "paused_by_env"
-    )
+def test_global_pause_env_and_read_failure_both_fail_closed(monkeypatch):
+    assert read_global_pause(env={"MEMORY_BULK_BACKFILL_PAUSED": "true"}) == PauseDecision(True, "paused_by_env")
 
-    class _FailingDb:
-        def document(self, path):
+    # No env pause -> the store control read must fail closed when the neutral store is unavailable.
+    class _FailingStore:
+        def get(self, path):
             raise RuntimeError("unavailable")
 
-    assert read_global_pause(_FailingDb(), env={}) == PauseDecision(True, "pause_check_failed")
+    monkeypatch.setattr(document_store, "_store", lambda: _FailingStore())
+    assert read_global_pause(env={}) == PauseDecision(True, "pause_check_failed")
 
 
 def test_apply_is_idempotent_across_multiple_uids_and_skips_read_ready_reentry():

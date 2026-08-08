@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import copy
-import threading
-from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
 
 from database import conversations as conversations_db
 from database import recording_sessions
+from tests.store_fakes import FakeDocumentStore
 from utils.conversations import lifecycle as lifecycle_service
 
 
@@ -27,116 +25,34 @@ def _stored_conversation(segments: list[dict[str, Any]], *, level: str = 'standa
     )
 
 
-@dataclass
-class _Snapshot:
-    data: dict[str, Any] | None
-
-    @property
-    def exists(self) -> bool:
-        return self.data is not None
-
-    def to_dict(self) -> dict[str, Any] | None:
-        return copy.deepcopy(self.data)
-
-
-@dataclass
-class _DocumentRef:
-    firestore: '_FakeFirestore'
-    path: tuple[str, ...]
-
-    def get(self, transaction: object = None) -> _Snapshot:
-        del transaction
-        return _Snapshot(self.firestore.documents.get(self.path))
-
-    def collection(self, name: str) -> '_CollectionRef':
-        return _CollectionRef(self.firestore, self.path + (name,))
-
-
-@dataclass
-class _CollectionRef:
-    firestore: '_FakeFirestore'
-    path: tuple[str, ...]
-
-    def document(self, document_id: str) -> _DocumentRef:
-        return _DocumentRef(self.firestore, self.path + (document_id,))
-
-
-@dataclass
-class _Transaction:
-    firestore: '_FakeFirestore'
-
-    def create(self, document: _DocumentRef, data: dict[str, Any]) -> None:
-        if document.path in self.firestore.documents:
-            raise RuntimeError('already exists')
-        self.firestore.documents[document.path] = copy.deepcopy(data)
-
-    def update(self, document: _DocumentRef, updates: dict[str, Any]) -> None:
-        self.firestore.documents[document.path].update(copy.deepcopy(updates))
-
-    def delete(self, document: _DocumentRef) -> None:
-        self.firestore.documents.pop(document.path, None)
-
-
-@dataclass
-class _FakeFirestore:
-    documents: dict[tuple[str, ...], dict[str, Any]] = field(default_factory=dict)
-    transaction_lock: threading.Lock = field(default_factory=threading.Lock)
-
-    def collection(self, name: str) -> _CollectionRef:
-        return _CollectionRef(self, (name,))
-
-    def transaction(self) -> _Transaction:
-        return _Transaction(self)
-
-
 @pytest.fixture
 def recording_store(monkeypatch):
-    store = _FakeFirestore()
-
-    def transactional(func):
-        def locked(transaction, *args, **kwargs):
-            with transaction.firestore.transaction_lock:
-                return func(transaction, *args, **kwargs)
-
-        return locked
-
-    monkeypatch.setattr(recording_sessions.firestore, 'transactional', transactional)
+    store = FakeDocumentStore()
+    monkeypatch.setattr(recording_sessions, '_store', lambda: store)
     return store
 
 
 def test_retry_keeps_one_canonical_recording_session_binding(recording_store):
-    first = recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'conversation', firestore_client=recording_store
-    )
-    retry = recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'conversation', firestore_client=recording_store
-    )
+    first = recording_sessions.create_or_get_recording_session('uid', 'session', 'conversation')
+    retry = recording_sessions.create_or_get_recording_session('uid', 'session', 'conversation')
 
     assert first == retry
     assert first['mapping_conflict'] is False
-    assert len(recording_store.documents) == 1
+    assert len(recording_store._docs) == 1
 
 
 def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store):
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'recording-one', 'conversation-one', firestore_client=recording_store
-    )
-    recording_sessions.record_lifecycle_event(
-        'uid', 'recording-one', 'conversation-one', 'processing', firestore_client=recording_store
-    )
-    completed = recording_sessions.record_lifecycle_event(
-        'uid', 'recording-one', 'conversation-one', 'completed', firestore_client=recording_store
-    )
+    recording_sessions.create_or_get_recording_session('uid', 'recording-one', 'conversation-one')
+    recording_sessions.record_lifecycle_event('uid', 'recording-one', 'conversation-one', 'processing')
+    completed = recording_sessions.record_lifecycle_event('uid', 'recording-one', 'conversation-one', 'completed')
 
     retry = recording_sessions.create_or_get_recording_session(
-        'uid', 'recording-one', 'new-proposed-conversation', firestore_client=recording_store
+        'uid', 'recording-one', 'new-proposed-conversation'
     )
     replay = recording_sessions.record_lifecycle_event(
-        'uid', 'recording-one', retry['conversation_id'], 'completed', firestore_client=recording_store
+        'uid', 'recording-one', retry['conversation_id'], 'completed'
     )
-    rollover = recording_sessions.create_or_get_recording_session(
-        'uid', 'recording-two', 'conversation-two', firestore_client=recording_store
-    )
+    rollover = recording_sessions.create_or_get_recording_session('uid', 'recording-two', 'conversation-two')
 
     assert retry['conversation_id'] == 'conversation-one'
     assert retry['mapping_conflict'] is True
@@ -144,26 +60,18 @@ def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store
     assert replay['lifecycle_phase'] == 'completed'
     assert replay['lifecycle_sequence'] == completed['lifecycle_sequence']
     assert rollover['conversation_id'] == 'conversation-two'
-    assert len(recording_store.documents) == 2
+    assert len(recording_store._docs) == 2
 
 
 def test_empty_recording_tombstone_forces_a_fresh_live_generation(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
     monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
-    lifecycle_service.open_recording_session(
-        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
-    )
+    lifecycle_service.open_recording_session('uid', 'recording-old', 'conversation-old')
 
-    tombstone = lifecycle_service.tombstone_recording_session(
-        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
-    )
-    reconnect = lifecycle_service.open_live_recording_session(
-        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
-    )
-    fresh = lifecycle_service.open_live_recording_session(
-        'uid', 'recording-new', 'conversation-new', firestore_client=recording_store
-    )
-    original = recording_sessions.get_recording_session('uid', 'recording-old', firestore_client=recording_store)
+    tombstone = lifecycle_service.tombstone_recording_session('uid', 'recording-old', 'conversation-old')
+    reconnect = lifecycle_service.open_live_recording_session('uid', 'recording-old', 'conversation-old')
+    fresh = lifecycle_service.open_live_recording_session('uid', 'recording-new', 'conversation-new')
+    original = recording_sessions.get_recording_session('uid', 'recording-old')
 
     assert tombstone is not None
     assert tombstone['lifecycle_phase'] == 'discarded'
@@ -178,14 +86,10 @@ def test_empty_recording_tombstone_forces_a_fresh_live_generation(recording_stor
 def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
     monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
-    lifecycle_service.open_recording_session(
-        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
-    )
+    lifecycle_service.open_recording_session('uid', 'recording-old', 'conversation-old')
 
-    reconnect = lifecycle_service.open_live_recording_session(
-        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
-    )
-    original = recording_sessions.get_recording_session('uid', 'recording-old', firestore_client=recording_store)
+    reconnect = lifecycle_service.open_live_recording_session('uid', 'recording-old', 'conversation-old')
+    original = recording_sessions.get_recording_session('uid', 'recording-old')
 
     assert reconnect['requires_rollover'] is True
     assert original is not None
@@ -194,103 +98,76 @@ def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, m
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_empty_cleanup_atomically_tombstones_its_session(recording_store, level):
-    conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    recording_store.documents[conversation_path] = _stored_conversation([], level=level)
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'recording', 'conversation', firestore_client=recording_store
-    )
+    conversation_path = 'users/uid/conversations/conversation'
+    recording_store.set(conversation_path, _stored_conversation([], level=level))
+    recording_sessions.create_or_get_recording_session('uid', 'recording', 'conversation')
 
-    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
-        'uid', 'conversation', 'recording', firestore_client=recording_store
-    )
-    binding = recording_sessions.get_recording_session('uid', 'recording', firestore_client=recording_store)
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation('uid', 'conversation', 'recording')
+    binding = recording_sessions.get_recording_session('uid', 'recording')
 
     assert deleted is True
-    assert conversation_path not in recording_store.documents
+    assert conversation_path not in recording_store._docs
     assert binding is not None
     assert binding['lifecycle_phase'] == 'discarded'
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_empty_cleanup_refuses_late_content_without_tombstoning(recording_store, level):
-    conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    recording_store.documents[conversation_path] = _stored_conversation(
-        [{'id': 'late-segment', 'text': 'persisted'}], level=level
-    )
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'recording', 'conversation', firestore_client=recording_store
-    )
+    conversation_path = 'users/uid/conversations/conversation'
+    recording_store.set(conversation_path, _stored_conversation([{'id': 'late-segment', 'text': 'persisted'}], level=level))
+    recording_sessions.create_or_get_recording_session('uid', 'recording', 'conversation')
 
-    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
-        'uid', 'conversation', 'recording', firestore_client=recording_store
-    )
-    binding = recording_sessions.get_recording_session('uid', 'recording', firestore_client=recording_store)
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation('uid', 'conversation', 'recording')
+    binding = recording_sessions.get_recording_session('uid', 'recording')
 
     assert deleted is False
-    assert conversation_path in recording_store.documents
+    assert conversation_path in recording_store._docs
     assert binding is not None
     assert binding['lifecycle_phase'] == 'in_progress'
 
 
 def test_empty_cleanup_keeps_a_conversation_whose_segments_cannot_be_decoded(recording_store):
-    conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    recording_store.documents[conversation_path] = {
-        'id': 'conversation',
-        'status': 'in_progress',
-        'transcript_segments': b'not-a-zlib-stream',
-        'transcript_segments_compressed': True,
-    }
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'recording', 'conversation', firestore_client=recording_store
+    conversation_path = 'users/uid/conversations/conversation'
+    recording_store.set(
+        conversation_path,
+        {
+            'id': 'conversation',
+            'status': 'in_progress',
+            'transcript_segments': b'not-a-zlib-stream',
+            'transcript_segments_compressed': True,
+        },
     )
+    recording_sessions.create_or_get_recording_session('uid', 'recording', 'conversation')
 
-    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
-        'uid', 'conversation', 'recording', firestore_client=recording_store
-    )
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation('uid', 'conversation', 'recording')
 
     assert deleted is False
-    assert conversation_path in recording_store.documents
+    assert conversation_path in recording_store._docs
 
 
 def test_conflicting_retry_returns_the_original_conversation(recording_store):
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'first-conversation', firestore_client=recording_store
-    )
+    recording_sessions.create_or_get_recording_session('uid', 'session', 'first-conversation')
 
-    result = recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    result = recording_sessions.create_or_get_recording_session('uid', 'session', 'second-conversation')
 
     assert result['conversation_id'] == 'first-conversation'
     assert result['mapping_conflict'] is True
 
 
 def test_same_recording_id_is_scoped_to_each_user(recording_store):
-    one = recording_sessions.create_or_get_recording_session(
-        'first-user', 'session', 'first-conversation', firestore_client=recording_store
-    )
-    two = recording_sessions.create_or_get_recording_session(
-        'second-user', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    one = recording_sessions.create_or_get_recording_session('first-user', 'session', 'first-conversation')
+    two = recording_sessions.create_or_get_recording_session('second-user', 'session', 'second-conversation')
 
     assert (one['conversation_id'], two['conversation_id']) == ('first-conversation', 'second-conversation')
-    assert len(recording_store.documents) == 2
+    assert len(recording_store._docs) == 2
 
 
 def test_events_are_monotonic_and_stale_callbacks_are_discarded(recording_store):
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'conversation', firestore_client=recording_store
-    )
+    recording_sessions.create_or_get_recording_session('uid', 'session', 'conversation')
 
-    processing = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'conversation', 'processing', firestore_client=recording_store
-    )
-    completed = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'conversation', 'completed', firestore_client=recording_store
-    )
-    stale = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'conversation', 'processing', firestore_client=recording_store
-    )
+    processing = recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', 'processing')
+    completed = recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', 'completed')
+    stale = recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', 'processing')
 
     assert (processing['accepted'], processing['lifecycle_sequence']) == (True, 1)
     assert (completed['accepted'], completed['lifecycle_sequence']) == (True, 2)
@@ -304,19 +181,11 @@ def test_events_are_monotonic_and_stale_callbacks_are_discarded(recording_store)
 def test_terminal_session_phase_is_immutable(recording_store, terminal_phase, replacement_phase):
     if terminal_phase == replacement_phase:
         return
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'conversation', firestore_client=recording_store
-    )
+    recording_sessions.create_or_get_recording_session('uid', 'session', 'conversation')
     if terminal_phase != 'completed':
-        recording_sessions.record_lifecycle_event(
-            'uid', 'session', 'conversation', 'processing', firestore_client=recording_store
-        )
-    terminal = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'conversation', terminal_phase, firestore_client=recording_store
-    )
-    replacement = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'conversation', replacement_phase, firestore_client=recording_store
-    )
+        recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', 'processing')
+    terminal = recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', terminal_phase)
+    replacement = recording_sessions.record_lifecycle_event('uid', 'session', 'conversation', replacement_phase)
 
     assert replacement['accepted'] is False
     assert replacement['discard_reason'] == 'terminal_immutable'
@@ -324,13 +193,9 @@ def test_terminal_session_phase_is_immutable(recording_store, terminal_phase, re
 
 
 def test_event_for_a_different_conversation_is_discarded(recording_store):
-    recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'conversation', firestore_client=recording_store
-    )
+    recording_sessions.create_or_get_recording_session('uid', 'session', 'conversation')
 
-    result = recording_sessions.record_lifecycle_event(
-        'uid', 'session', 'other-conversation', 'processing', firestore_client=recording_store
-    )
+    result = recording_sessions.record_lifecycle_event('uid', 'session', 'other-conversation', 'processing')
 
     assert result['accepted'] is False
     assert result['discard_reason'] == 'mapping_conflict'
@@ -339,11 +204,9 @@ def test_event_for_a_different_conversation_is_discarded(recording_store):
 
 def test_lifecycle_owner_enforces_a_conflicting_durable_binding(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
-    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation')
 
-    result = lifecycle_service.open_recording_session(
-        'uid', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    result = lifecycle_service.open_recording_session('uid', 'session', 'second-conversation')
 
     assert result['conversation_id'] == 'first-conversation'
     assert result['mapping_conflict'] is True
@@ -351,11 +214,9 @@ def test_lifecycle_owner_enforces_a_conflicting_durable_binding(recording_store,
 
 def test_shadow_mode_keeps_legacy_route_but_reports_the_mismatch(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'shadow')
-    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation')
 
-    result = lifecycle_service.open_recording_session(
-        'uid', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    result = lifecycle_service.open_recording_session('uid', 'session', 'second-conversation')
 
     assert result['conversation_id'] == 'second-conversation'
     assert result['mapping_conflict'] is True
@@ -366,11 +227,9 @@ def test_shadow_mode_keeps_legacy_route_but_reports_the_mismatch(recording_store
 
 def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'dual_write')
-    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation')
 
-    result = lifecycle_service.open_recording_session(
-        'uid', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    result = lifecycle_service.open_recording_session('uid', 'session', 'second-conversation')
 
     assert result['conversation_id'] == 'second-conversation'
     assert result['mapping_conflict'] is True
@@ -381,20 +240,16 @@ def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recordi
 
 def test_dual_write_mismatch_keeps_legacy_processing_and_completion_events(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'dual_write')
-    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
-    binding = lifecycle_service.open_recording_session(
-        'uid', 'session', 'second-conversation', firestore_client=recording_store
-    )
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation')
+    binding = lifecycle_service.open_recording_session('uid', 'session', 'second-conversation')
 
     processing = lifecycle_service.record_recording_session_event(
-        'uid', 'session', binding['conversation_id'], 'processing', firestore_client=recording_store
+        'uid', 'session', binding['conversation_id'], 'processing'
     )
     completed = lifecycle_service.record_recording_session_event(
-        'uid', 'session', binding['conversation_id'], 'completed', firestore_client=recording_store
+        'uid', 'session', binding['conversation_id'], 'completed'
     )
-    canonical = recording_sessions.create_or_get_recording_session(
-        'uid', 'session', 'first-conversation', firestore_client=recording_store
-    )
+    canonical = recording_sessions.create_or_get_recording_session('uid', 'session', 'first-conversation')
 
     expected_legacy_envelope = {
         'recording_session_id': 'session',

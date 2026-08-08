@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from threading import RLock
+from typing import Any, Callable, Dict, Optional
 import json
 from pathlib import Path
 
@@ -9,18 +11,63 @@ from pydantic import ValidationError
 
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.store_fakes import FakeDocumentStore
 from utils.task_intelligence import candidate_service
+
+
+class _PathRows(dict):
+    """Backing dict addressable by both '/'-joined path strings (what the storage port
+    uses) and Firestore-style segment tuples (what this suite's assertions were written
+    against). Normalizing tuple keys to the port's path string lets the ``FakeDocumentStore``
+    and the tests share one backing store after the candidates port migration.
+    """
+
+    @staticmethod
+    def _key(key: Any) -> Any:
+        return '/'.join(key) if isinstance(key, tuple) else key
+
+    def __getitem__(self, key: Any) -> Any:
+        return super().__getitem__(self._key(key))
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        super().__setitem__(self._key(key), value)
+
+    def __delitem__(self, key: Any) -> None:
+        super().__delitem__(self._key(key))
+
+    def __contains__(self, key: Any) -> bool:
+        return super().__contains__(self._key(key))
+
+
+class _SerializedFakeDocumentStore(FakeDocumentStore):
+    """``FakeDocumentStore`` that serializes ``run_transaction`` under one lock.
+
+    Several lifecycle tests assert concurrency invariants (exactly one accept wins, one
+    pending Candidate survives a semantic race) that depend on transaction atomicity. The
+    base fake runs each callback directly — atomicity is covered by the live contract test —
+    so this variant reintroduces the serialize-per-transaction guarantee those tests exercise,
+    the hermetic stand-in for Firestore's transactional isolation.
+    """
+
+    def __init__(self, *, backing: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+        super().__init__(backing=backing)
+        self._txn_lock = RLock()
+
+    def run_transaction(self, fn: Callable[[Any], Any], *, attempts: int = 3) -> Any:
+        with self._txn_lock:
+            return super().run_transaction(fn, attempts=attempts)
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
-    database = StrictFirestore()
-    database.rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
+    rows = _PathRows()
+    store = _SerializedFakeDocumentStore(backing=rows)
+    store.rows = rows
+    rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
         'workflow_mode': 'read',
         'account_generation': 3,
     }
-    database.rows[('users', 'user-1', 'goals', 'goal-1')] = {
+    rows[('users', 'user-1', 'goals', 'goal-1')] = {
         'id': 'goal-1',
         'goal_id': 'goal-1',
         'title': 'Goal 1',
@@ -28,27 +75,19 @@ def fake_db(monkeypatch):
         'is_active': True,
         'account_generation': 3,
     }
-    database.rows[('users', 'user-1', 'workstreams', 'workstream-1')] = {
+    rows[('users', 'user-1', 'workstreams', 'workstream-1')] = {
         'workstream_id': 'workstream-1',
         'goal_id': 'goal-1',
         'account_generation': 3,
     }
 
-    def transactional(function):
-        def run(transaction):
-            with transaction.lock:
-                return function(transaction)
-
-        return run
-
-    monkeypatch.setattr(candidates_db, 'db', database)
-    monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(candidates_db, '_store', lambda: store)
     # candidates.py gates writes on is_canonical_memory_user, not workflow_mode.
     monkeypatch.setattr(candidates_db, 'is_canonical_memory_user', lambda uid: uid == 'user-1')
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
-    yield database
+    yield store
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
 

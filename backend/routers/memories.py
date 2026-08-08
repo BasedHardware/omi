@@ -3,7 +3,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
-import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
@@ -137,7 +136,7 @@ def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
     docs alone cannot activate canonical memory.
     """
 
-    return build_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
+    return build_v3_production_runtime(uid=uid)
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -203,10 +202,9 @@ class ReviewResolutionRequest(BaseModel):
 
 async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: str) -> None:
     mode = import_write_block_mode()
-    db_client = getattr(db_client_module, 'db', None)
     # Canonical users must never fall back from evidence ingress into a direct
     # product-memory write, regardless of the legacy rollout env default.
-    if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) == MemorySystem.CANONICAL:
         mode = "enforce"
     if mode == "off":
         return
@@ -371,8 +369,8 @@ def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> boo
     }
 
 
-def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client: Any) -> bool:
-    decision = canonical_write_decision(uid, db_client=db_client)
+def _canonical_write_enabled_or_fail_closed(uid: str) -> bool:
+    decision = canonical_write_decision(uid)
     if decision.enabled:
         return True
     if decision.fail_closed:
@@ -381,7 +379,7 @@ def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client: Any) -> bool
     return False
 
 
-def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: Any) -> None:
+def _mirror_delete_into_legacy(uid: str, memory_ids: List[str]) -> None:
     """Mirror a canonical delete into legacy while the user still reads legacy.
 
     Canonical writes can become ready in persisted control state before canonical
@@ -398,7 +396,7 @@ def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: An
     """
     if not memory_ids:
         return
-    if canonical_read_enabled(uid, db_client=db_client):
+    if canonical_read_enabled(uid):
         return
     try:
         memories_db.delete_memories_batch(uid, memory_ids)
@@ -433,7 +431,7 @@ def _purge_legacy_memories(uid: str) -> None:
         delete_memory_vectors_batch(uid, memory_ids)
 
 
-def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
+def _mirror_delete_all_into_legacy(uid: str) -> None:
     """Mirror a canonical delete-all into legacy while the user still reads legacy.
 
     Same window and reasoning as _mirror_delete_into_legacy: when persisted
@@ -443,7 +441,7 @@ def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
     cutover, and best-effort because canonical is authoritative and already
     committed.
     """
-    if canonical_read_enabled(uid, db_client=db_client):
+    if canonical_read_enabled(uid):
         return
     try:
         _purge_legacy_memories(uid)
@@ -452,16 +450,16 @@ def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
 
 
 def _validate_memory(uid: str, memory_id: str) -> MemoryPayload:
-    return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
+    return fetch_memory_dict(uid, memory_id)
 
 
-def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
+def _validate_mutable_memory(uid: str, memory_id: str) -> MemoryPayload:
+    if _canonical_write_enabled_or_fail_closed(uid):
+        item = read_canonical_memory_item(uid, memory_id)
         if item is None:
             raise HTTPException(status_code=404, detail='Memory not found')
         return memory_item_to_memorydb(item).dict()
-    return fetch_memory_dict(uid, memory_id, db_client=db_client)
+    return fetch_memory_dict(uid, memory_id)
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
@@ -506,10 +504,9 @@ async def create_memory(
         session_id=memory_db.id,
         memories=[memory_db],
     )
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid):
         try:
-            memory_service = MemoryService(db_client=db_client)
+            memory_service = MemoryService()
             created = await run_blocking(
                 db_executor,
                 memory_service.create_external_memory,
@@ -629,9 +626,8 @@ async def create_memories_batch(
         memories=memory_dbs,
     )
 
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        memory_service = MemoryService(db_client=db_client)
+    if _canonical_write_enabled_or_fail_closed(uid):
+        memory_service = MemoryService()
         # Pre-validate the entire batch so a whitespace-only (or otherwise
         # canonical-rejected) item fails fast *before* any per-item write
         # commits. This preserves the legacy single-batch-write semantics:
@@ -661,7 +657,7 @@ async def create_memories_batch(
             submit_with_context(postprocess_executor, update_personas_async, uid)
         server_memories: List[MemoryDB] = []
         for memory_id in committed_ids:
-            item = await run_blocking(db_executor, read_canonical_memory_item, uid, memory_id, db_client=db_client)
+            item = await run_blocking(db_executor, read_canonical_memory_item, uid, memory_id)
             if item is not None:
                 server_memories.append(memory_item_to_memorydb(item))
             else:
@@ -732,12 +728,7 @@ async def create_memory_import_batch(
     promotion, vector sync, keyword sync, and KG extraction are backend-owned
     later stages.
     """
-    db_client = getattr(db_client_module, 'db', None)
-    if db_client is None:
-        logger.error("memory import ingest unavailable: firestore client missing uid=%s", uid)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-
-    write_decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=db_client)
+    write_decision = await run_blocking(db_executor, canonical_write_decision, uid)
     if write_decision.memory_system != MemorySystem.CANONICAL:
         raise HTTPException(status_code=403, detail="memory_import_requires_canonical")
     if not write_decision.enabled:
@@ -768,7 +759,7 @@ async def create_memory_import_batch(
         },
     )
     try:
-        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request, db_client=db_client)
+        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request)
     except Exception:
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -796,10 +787,8 @@ def get_memories(
         x_app_platform=x_app_platform,
         x_device_id_hash=x_device_id_hash,
     )
-    db_client = getattr(db_client_module, 'db', None)
     is_canonical = canonical_read_enabled(
         uid,
-        db_client=db_client,
         source_decision=memory_runtime.source_decision,
         cursor_memory_read_requested=bool(cursor),
     )
@@ -835,7 +824,7 @@ def get_memories(
             clamped_limit = max(1, min(limit, 5000))
             if clamped_offset == 0:
                 clamped_limit = 5000
-            return MemoryService(db_client=db_client).read(
+            return MemoryService().read(
                 uid,
                 limit=clamped_limit,
                 offset=clamped_offset,
@@ -970,18 +959,17 @@ def delete_memories_batch(
     if not memory_ids:
         return {'status': 'ok'}
 
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid):
         # The adapter validates and tombstones the full selection in one Firestore
         # transaction. A concurrent mutation retries the transaction, so a later
         # missing item can never leave earlier items committed from a failed request.
         try:
-            delete_canonical_memories_batch(uid, memory_ids, db_client=db_client)
+            delete_canonical_memories_batch(uid, memory_ids)
         except CanonicalBatchMutationLimitError:
             raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
         except CanonicalMemoryNotFoundError:
             raise HTTPException(status_code=404, detail='Memory not found')
-        _mirror_delete_into_legacy(uid, memory_ids, db_client=db_client)
+        _mirror_delete_into_legacy(uid, memory_ids)
         return {'status': 'ok'}
 
     # Legacy cohort: enforce the same per-memory guard as _validate_memory, but via a
@@ -1011,15 +999,14 @@ def delete_memory(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid):
         try:
-            MemoryService(db_client=db_client).delete(uid, memory_id)
+            MemoryService().delete(uid, memory_id)
         except CanonicalBatchMutationLimitError:
             raise HTTPException(status_code=413, detail='Memory lineage is too large to delete atomically')
         except ValueError:
             raise HTTPException(status_code=404, detail='Memory not found')
-        _mirror_delete_into_legacy(uid, [memory_id], db_client=db_client)
+        _mirror_delete_into_legacy(uid, [memory_id])
         return {'status': 'ok'}
 
     _validate_memory(uid, memory_id)
@@ -1041,13 +1028,12 @@ def delete_memories(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid):
         if scope == 'default':
-            MemoryService(db_client=db_client).delete_default(uid)
+            MemoryService().delete_default(uid)
         else:
-            MemoryService(db_client=db_client).delete_all(uid)
-        _mirror_delete_all_into_legacy(uid, db_client=db_client)
+            MemoryService().delete_all(uid)
+        _mirror_delete_all_into_legacy(uid)
         return {'status': 'ok'}
 
     _purge_legacy_memories(uid)
@@ -1062,12 +1048,11 @@ def review_memory(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).review(uid, memory_id, value)
+    if _canonical_write_enabled_or_fail_closed(uid):
+        _validate_mutable_memory(uid, memory_id)
+        MemoryService().review(uid, memory_id, value)
         return {'status': 'ok'}
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    _validate_mutable_memory(uid, memory_id)
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
@@ -1089,13 +1074,12 @@ def edit_memory(
     if mutation_value is None:
         raise HTTPException(status_code=422, detail="Missing memory mutation value")
 
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+    if _canonical_write_enabled_or_fail_closed(uid):
+        _validate_mutable_memory(uid, memory_id)
+        MemoryService().update_content(uid, memory_id, mutation_value)
         return {'status': 'ok'}
 
-    memory = _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    memory = _validate_mutable_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, mutation_value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
@@ -1131,13 +1115,12 @@ def update_memory_visibility(
         raise HTTPException(status_code=422, detail="Missing memory mutation value")
     if mutation_value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    if _canonical_write_enabled_or_fail_closed(uid):
+        _validate_mutable_memory(uid, memory_id)
+        MemoryService().update_visibility(uid, memory_id, mutation_value)
         submit_with_context(postprocess_executor, update_personas_async, uid)
         return {'status': 'ok'}
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    _validate_mutable_memory(uid, memory_id)
     memories_db.change_memory_visibility(uid, memory_id, mutation_value)
     return {'status': 'ok'}
 
@@ -1155,10 +1138,9 @@ def update_memory_baseline(
     so writing to the legacy store would silently have no effect for canonical readers.
     Canonical users receive 503 explicitly rather than a silent wrong-store write.
     """
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid):
         raise HTTPException(status_code=503, detail='Service temporarily unavailable')
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    _validate_mutable_memory(uid, memory_id)
     memories_db.update_memory_fields(uid, memory_id, {'is_baseline': value})
     submit_with_context(postprocess_executor, update_personas_async, uid)
     return {'status': 'ok'}

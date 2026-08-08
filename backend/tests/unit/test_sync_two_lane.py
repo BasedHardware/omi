@@ -5,10 +5,10 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import yaml
-from google.cloud import firestore
 
 from database import sync_ledger, user_usage
 from scripts.render_cloud_run_clone_env import clone_environment
+from tests.store_fakes import FakeDocumentStore
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -467,255 +467,211 @@ def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
     assert allowed.allowed is True
 
 
-class _Snapshot:
-    def __init__(self, data=None):
-        self._data = data
-        self.exists = data is not None
-
-    def to_dict(self):
-        return self._data
+_LEDGER = 'users/u/sync_content_ledger/c'
 
 
-class _Ref:
-    def __init__(self, data=None):
-        self.data = data
-        self.writes = []
-
-    def get(self, transaction=None):
-        return _Snapshot(self.data)
-
-    def set(self, data, merge=False):
-        self.writes.append((data, merge))
+def _seed(monkeypatch, data=None):
+    """Return a FakeDocumentStore wired into sync_ledger, optionally seeded at ``_LEDGER``."""
+    store = FakeDocumentStore()
+    monkeypatch.setattr(sync_ledger, '_store', lambda: store)
+    if data is not None:
+        store.set(_LEDGER, data)
+    return store
 
 
-class _Transaction:
-    def __init__(self):
-        self.writes = []
-
-    def set(self, ref, data, merge=False):
-        self.writes.append((ref, data, merge))
-
-
-def test_fresh_ledger_claim_omits_delete_field_for_missing_keys():
-    """First-time claims must not DELETE absent ledger fields.
-
-    Real Firestore no-ops missing deletes; hermetic fakes raise KeyError. Keep
-    the write sparse so both stay green.
-    """
-    now = datetime.now(timezone.utc)
-    transaction = _Transaction()
-    claim = sync_ledger._claim_transaction.to_wrap(transaction, _Ref(None), 'job-fresh', 'fresh', now)
+def test_fresh_ledger_claim_omits_delete_field_for_missing_keys(monkeypatch):
+    """A first-time claim produces a clean processing record with no run binding."""
+    store = _seed(monkeypatch)
+    claim = sync_ledger.claim_sync_content('u', 'c', 'job-fresh', 'fresh')
 
     assert claim == {'outcome': 'owned'}
-    assert len(transaction.writes) == 1
-    payload, merge = transaction.writes[0][1], transaction.writes[0][2]
-    assert merge is True
-    assert payload['status'] == 'processing'
-    assert payload['job_id'] == 'job-fresh'
-    assert 'ledger_run_token' not in payload
-    assert 'ledger_run_epoch' not in payload
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['status'] == 'processing'
+    assert stored['job_id'] == 'job-fresh'
+    assert 'ledger_run_token' not in stored
+    assert 'ledger_run_epoch' not in stored
 
 
-def test_retryable_ledger_claim_clears_existing_run_binding():
+def test_retryable_ledger_claim_clears_existing_run_binding(monkeypatch):
     now = datetime.now(timezone.utc)
-    transaction = _Transaction()
-    claim = sync_ledger._claim_transaction.to_wrap(
-        transaction,
-        _Ref(
-            {
-                'status': 'retryable',
-                'job_id': 'old-job',
-                'ledger_run_token': '1:token-a',
-                'ledger_run_epoch': 1,
-                'updated_at': now - timedelta(days=3),
-            }
-        ),
-        'job-2',
-        'fresh',
-        now,
+    store = _seed(
+        monkeypatch,
+        {
+            'status': 'retryable',
+            'job_id': 'old-job',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'updated_at': now - timedelta(days=3),
+        },
+    )
+    claim = sync_ledger.claim_sync_content('u', 'c', 'job-2', 'fresh')
+
+    assert claim == {'outcome': 'owned'}
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['job_id'] == 'job-2'
+    assert 'ledger_run_token' not in stored
+    assert 'ledger_run_epoch' not in stored
+
+
+def test_durable_ledger_replays_completion_and_blocks_recent_duplicate(monkeypatch):
+    store = _seed(monkeypatch)
+    completed_result = {'failed_segments': 0, 'total_segments': 2, 'errors': [], 'outcome': 'success'}
+    store.set('users/u/sync_content_ledger/done', {'status': 'completed', 'result': completed_result})
+    store.set(
+        'users/u/sync_content_ledger/busy',
+        {'status': 'processing', 'job_id': 'other', 'updated_at': datetime.now(timezone.utc) - timedelta(minutes=1)},
     )
 
-    assert claim == {'outcome': 'owned'}
-    payload = transaction.writes[0][1]
-    assert payload['job_id'] == 'job-2'
-    assert payload['ledger_run_token'] == firestore.DELETE_FIELD
-    assert payload['ledger_run_epoch'] == firestore.DELETE_FIELD
-
-
-def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():
-    now = datetime.now(timezone.utc)
-    completed_result = {'failed_segments': 0, 'total_segments': 2, 'errors': [], 'outcome': 'success'}
-    completed_ref = _Ref({'status': 'completed', 'result': completed_result})
-    busy_ref = _Ref({'status': 'processing', 'job_id': 'other', 'updated_at': now - timedelta(minutes=1)})
-
-    completed = sync_ledger._claim_transaction.to_wrap(_Transaction(), completed_ref, 'new-job', 'backfill', now)
-    busy = sync_ledger._claim_transaction.to_wrap(_Transaction(), busy_ref, 'new-job', 'backfill', now)
+    completed = sync_ledger.claim_sync_content('u', 'done', 'new-job', 'backfill')
+    busy = sync_ledger.claim_sync_content('u', 'busy', 'new-job', 'backfill')
 
     assert completed == {'outcome': 'completed', 'result': completed_result}
     assert busy == {'outcome': 'busy'}
 
 
-def test_durable_ledger_side_effect_is_once_only():
-    now = datetime.now(timezone.utc)
-    transaction = _Transaction()
-    first = sync_ledger._side_effect_transaction.to_wrap(
-        transaction,
-        _Ref({'status': 'processing', 'job_id': 'job-1', 'ledger_run_token': '1:token-a', 'ledger_run_epoch': 1}),
-        'job-1',
-        'speech_ms',
-        1000,
-        now,
-        '1:token-a',
-        1,
+def test_durable_ledger_side_effect_is_once_only(monkeypatch):
+    store = _seed(monkeypatch)
+    store.set(
+        'users/u/sync_content_ledger/first',
+        {'status': 'processing', 'job_id': 'job-1', 'ledger_run_token': '1:token-a', 'ledger_run_epoch': 1},
     )
-    duplicate = sync_ledger._side_effect_transaction.to_wrap(
-        _Transaction(),
-        _Ref(
-            {
-                'status': 'processing',
-                'job_id': 'job-1',
-                'ledger_run_token': '1:token-a',
-                'ledger_run_epoch': 1,
-                'metered_at': now,
-            }
-        ),
-        'job-1',
-        'speech_ms',
-        1000,
-        now,
-        '1:token-a',
-        1,
-    )
-
-    assert first is True
-    assert transaction.writes[0][1]['speech_ms_value'] == 1000
-    assert duplicate is False
-
-
-def test_release_preserves_once_only_side_effect_markers():
-    ref = _Ref(
+    store.set(
+        'users/u/sync_content_ledger/dup',
         {
             'status': 'processing',
             'job_id': 'job-1',
             'ledger_run_token': '1:token-a',
             'ledger_run_epoch': 1,
             'metered_at': datetime.now(timezone.utc),
-        }
+        },
     )
-    transaction = _Transaction()
 
-    released = sync_ledger._release_claim_transaction.to_wrap(
-        transaction,
-        ref,
-        'job-1',
-        datetime.now(timezone.utc),
-        '1:token-a',
-        1,
+    first = sync_ledger.try_mark_sync_content_side_effect(
+        'u', 'first', 'job-1', 'speech_ms', 1000, run_token='1:token-a', run_epoch=1
     )
+    duplicate = sync_ledger.try_mark_sync_content_side_effect(
+        'u', 'dup', 'job-1', 'speech_ms', 1000, run_token='1:token-a', run_epoch=1
+    )
+
+    assert first is True
+    assert store.get('users/u/sync_content_ledger/first').to_dict()['speech_ms_value'] == 1000
+    assert duplicate is False
+
+
+def test_release_preserves_once_only_side_effect_markers(monkeypatch):
+    store = _seed(
+        monkeypatch,
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'metered_at': datetime.now(timezone.utc),
+        },
+    )
+
+    released = sync_ledger.release_sync_content_claim('u', 'c', 'job-1', run_token='1:token-a', run_epoch=1)
 
     assert released is True
-    assert transaction.writes[0][1]['status'] == 'retryable'
-    assert transaction.writes[0][2] is True
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['status'] == 'retryable'
+    # The once-only metering marker survives the release (merged, not overwritten).
+    assert stored['metered_at'] is not None
 
 
-def test_stale_claim_release_cannot_clear_a_newer_job_after_transaction_retry():
+def test_stale_claim_release_cannot_clear_a_newer_job_after_transaction_retry(monkeypatch):
     """A release retry re-reads the ledger and leaves a newer owner's claim intact."""
-    ref = _Ref(
+    store = _seed(
+        monkeypatch,
         {
             'status': 'processing',
             'job_id': 'job-new',
             'ledger_run_token': '2:token-new',
             'ledger_run_epoch': 2,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
-    transaction = _Transaction()
 
-    released = sync_ledger._release_claim_transaction.to_wrap(
-        transaction,
-        ref,
-        'job-old',
-        datetime.now(timezone.utc),
-        '1:token-old',
-        1,
-    )
+    released = sync_ledger.release_sync_content_claim('u', 'c', 'job-old', run_token='1:token-old', run_epoch=1)
 
     assert released is False
-    assert transaction.writes == []
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['status'] == 'processing'
+    assert stored['job_id'] == 'job-new'
 
 
-def test_stale_ledger_completion_and_partial_checkpoint_cannot_overwrite_new_owner():
-    """Every ledger write rechecks job ownership inside its Firestore transaction."""
-    now = datetime.now(timezone.utc)
-    ref = _Ref(
+def test_stale_ledger_completion_and_partial_checkpoint_cannot_overwrite_new_owner(monkeypatch):
+    """Every ledger write rechecks job ownership inside its transaction."""
+    store = _seed(
+        monkeypatch,
         {
             'status': 'processing',
             'job_id': 'job-new',
             'ledger_run_token': '2:token-new',
             'ledger_run_epoch': 2,
-            'updated_at': now,
-        }
+            'updated_at': datetime.now(timezone.utc),
+        },
     )
 
-    completed = sync_ledger._mark_completed_transaction.to_wrap(
-        _Transaction(),
-        ref,
+    completed = sync_ledger.mark_sync_content_completed(
+        'u',
+        'c',
         'job-old',
         {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
-        now,
-        '1:token-old',
-        1,
+        run_token='1:token-old',
+        run_epoch=1,
     )
-    checkpointed = sync_ledger._checkpoint_partial_result_transaction.to_wrap(
-        _Transaction(),
-        ref,
-        'job-old',
-        {'new_memories': ['conversation-old']},
-        now,
-        '1:token-old',
-        1,
+    checkpointed = sync_ledger.checkpoint_sync_content_partial_result(
+        'u', 'c', 'job-old', {'new_memories': ['conversation-old']}, run_token='1:token-old', run_epoch=1
     )
 
     assert completed is False
     assert checkpointed is False
+    stored = store.get(_LEDGER).to_dict()
+    assert 'result' not in stored
+    assert 'partial_result' not in stored
 
 
-def test_delayed_lower_epoch_bind_and_mutations_cannot_displace_newer_owner():
-    """A late A Firestore request cannot overwrite B's higher Redis epoch."""
-    now = datetime.now(timezone.utc)
-    ref = _Ref(
+def test_delayed_lower_epoch_bind_and_mutations_cannot_displace_newer_owner(monkeypatch):
+    """A late lower-epoch request cannot overwrite a higher Redis epoch owner."""
+    store = _seed(
+        monkeypatch,
         {
             'status': 'processing',
             'job_id': 'job-1',
             'ledger_run_token': '2:token-b',
             'ledger_run_epoch': 2,
             'processed_segment_ids': [],
-        }
+        },
     )
     valid_result = {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
 
-    delayed_bind = sync_ledger._bind_run_token_transaction.to_wrap(_Transaction(), ref, 'job-1', '1:token-a', 1, now)
-    checkpointed = sync_ledger._checkpoint_partial_result_transaction.to_wrap(
-        _Transaction(), ref, 'job-1', {'new_memories': ['old']}, now, '1:token-a', 1
+    delayed_bind = sync_ledger.bind_sync_content_run_token('u', 'c', 'job-1', '1:token-a', 1)
+    checkpointed = sync_ledger.checkpoint_sync_content_partial_result(
+        'u', 'c', 'job-1', {'new_memories': ['old']}, run_token='1:token-a', run_epoch=1
     )
-    completed = sync_ledger._mark_completed_transaction.to_wrap(
-        _Transaction(), ref, 'job-1', valid_result, now, '1:token-a', 1
+    completed = sync_ledger.mark_sync_content_completed(
+        'u', 'c', 'job-1', valid_result, run_token='1:token-a', run_epoch=1
     )
-    marked_segment = sync_ledger._processed_segment_transaction.to_wrap(
-        _Transaction(), ref, 'job-1', 'segment-old', now, '1:token-a', 1
+    marked_segment = sync_ledger.add_processed_sync_segment_id(
+        'u', 'c', 'job-1', 'segment-old', run_token='1:token-a', run_epoch=1
     )
-    released = sync_ledger._release_claim_transaction.to_wrap(_Transaction(), ref, 'job-1', now, '1:token-a', 1)
+    released = sync_ledger.release_sync_content_claim('u', 'c', 'job-1', run_token='1:token-a', run_epoch=1)
 
     assert delayed_bind.outcome is sync_ledger.SyncContentRunBindingOutcome.LOST
     assert checkpointed is False
     assert completed is False
     assert marked_segment is False
     assert released is False
+    # The newer owner's binding is untouched by every rejected lower-epoch write.
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['ledger_run_token'] == '2:token-b'
+    assert stored['ledger_run_epoch'] == 2
 
 
-def test_higher_epoch_bind_supersedes_old_owner_without_discarding_retry_material():
-    now = datetime.now(timezone.utc)
-    ref = _Ref(
+def test_higher_epoch_bind_supersedes_old_owner_without_discarding_retry_material(monkeypatch):
+    store = _seed(
+        monkeypatch,
         {
             'status': 'processing',
             'job_id': 'job-1',
@@ -723,40 +679,39 @@ def test_higher_epoch_bind_supersedes_old_owner_without_discarding_retry_materia
             'ledger_run_epoch': 1,
             'partial_result': {'new_memories': ['conversation-a']},
             'processed_segment_ids': ['segment-a'],
-        }
+        },
     )
-    transaction = _Transaction()
 
-    binding = sync_ledger._bind_run_token_transaction.to_wrap(transaction, ref, 'job-1', '2:token-b', 2, now)
+    binding = sync_ledger.bind_sync_content_run_token('u', 'c', 'job-1', '2:token-b', 2)
 
     assert binding.bound is True
-    update = transaction.writes[0][1]
-    assert update['ledger_run_token'] == '2:token-b'
-    assert update['ledger_run_epoch'] == 2
-    assert 'partial_result' not in update
-    assert 'processed_segment_ids' not in update
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['ledger_run_token'] == '2:token-b'
+    assert stored['ledger_run_epoch'] == 2
+    # Retry material is preserved (not part of the bind's update payload).
+    assert stored['partial_result'] == {'new_memories': ['conversation-a']}
+    assert stored['processed_segment_ids'] == ['segment-a']
 
 
-def test_retryable_claim_preserves_partial_and_processed_segment_checkpoints():
-    now = datetime.now(timezone.utc)
-    ref = _Ref(
+def test_retryable_claim_preserves_partial_and_processed_segment_checkpoints(monkeypatch):
+    store = _seed(
+        monkeypatch,
         {
             'status': 'retryable',
             'partial_result': {'new_memories': ['conversation-a']},
             'processed_segment_ids': ['segment-a'],
             'ledger_run_token': '1:token-a',
             'ledger_run_epoch': 1,
-        }
+        },
     )
-    transaction = _Transaction()
 
-    claim = sync_ledger._claim_transaction.to_wrap(transaction, ref, 'job-2', 'fresh', now)
+    claim = sync_ledger.claim_sync_content('u', 'c', 'job-2', 'fresh')
 
     assert claim == {'outcome': 'owned'}
-    update = transaction.writes[0][1]
-    assert update['status'] == 'processing'
-    assert 'partial_result' not in update
-    assert 'processed_segment_ids' not in update
+    stored = store.get(_LEDGER).to_dict()
+    assert stored['status'] == 'processing'
+    assert stored['partial_result'] == {'new_memories': ['conversation-a']}
+    assert stored['processed_segment_ids'] == ['segment-a']
 
 
 def test_completed_result_validation_accepts_legacy_nonzero_success_but_rejects_ambiguous_zero():
@@ -767,9 +722,8 @@ def test_completed_result_validation_accepts_legacy_nonzero_success_but_rejects_
     assert not sync_ledger.is_valid_completed_sync_content_result({})
 
 
-def test_completion_transaction_rejects_invalid_results_without_a_write():
-    """The Firestore boundary cannot publish malformed, partial, or ambiguous legacy completion."""
-    now = datetime.now(timezone.utc)
+def test_completion_transaction_rejects_invalid_results_without_a_write(monkeypatch):
+    """The ledger boundary cannot publish malformed, partial, or ambiguous legacy completion."""
     invalid_results = (
         {},
         {'failed_segments': 1, 'total_segments': 2, 'errors': ['stt_timeout'], 'outcome': 'success'},
@@ -777,126 +731,106 @@ def test_completion_transaction_rejects_invalid_results_without_a_write():
     )
 
     for result in invalid_results:
-        transaction = _Transaction()
-        ref = _Ref(
+        store = _seed(
+            monkeypatch,
             {
                 'status': 'processing',
                 'job_id': 'job-1',
                 'ledger_run_token': '1:token-a',
                 'ledger_run_epoch': 1,
-            }
+            },
         )
 
-        completed = sync_ledger._mark_completed_transaction.to_wrap(
-            transaction,
-            ref,
-            'job-1',
-            result,
-            now,
-            '1:token-a',
-            1,
+        completed = sync_ledger.mark_sync_content_completed(
+            'u', 'c', 'job-1', result, run_token='1:token-a', run_epoch=1
         )
 
         assert completed is False
-        assert transaction.writes == []
+        stored = store.get(_LEDGER).to_dict()
+        assert 'result' not in stored
+        assert stored['status'] == 'processing'
 
 
-def test_completion_transaction_accepts_success_and_expected_silence():
+def test_completion_transaction_accepts_success_and_expected_silence(monkeypatch):
     """New terminal success contracts still commit at the same transaction boundary."""
-    now = datetime.now(timezone.utc)
     valid_results = (
         {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
         {'failed_segments': 0, 'total_segments': 0, 'errors': [], 'outcome': 'expected_silence'},
     )
 
     for result in valid_results:
-        transaction = _Transaction()
-        ref = _Ref(
+        store = _seed(
+            monkeypatch,
             {
                 'status': 'processing',
                 'job_id': 'job-1',
                 'ledger_run_token': '1:token-a',
                 'ledger_run_epoch': 1,
-            }
+            },
         )
 
-        completed = sync_ledger._mark_completed_transaction.to_wrap(
-            transaction,
-            ref,
-            'job-1',
-            result,
-            now,
-            '1:token-a',
-            1,
+        completed = sync_ledger.mark_sync_content_completed(
+            'u', 'c', 'job-1', result, run_token='1:token-a', run_epoch=1
         )
 
         assert completed is True
-        assert transaction.writes[0][1]['status'] == 'completed'
-        assert transaction.writes[0][1]['result'] == result
+        stored = store.get(_LEDGER).to_dict()
+        assert stored['status'] == 'completed'
+        assert stored['result'] == result
 
 
-def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
-    transaction = _Transaction()
-    marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+def test_hourly_usage_increment_and_ledger_marker_share_one_transaction(monkeypatch):
+    """The idempotency marker and the hourly-usage increment are committed together, and a
+    replay under the same content key is a no-op (drives the neutral storage-port seam, WP2)."""
+    store = FakeDocumentStore()
+    monkeypatch.setattr(user_usage, '_store', lambda: store)
 
-    recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
-        transaction,
-        marker_ref,
-        usage_ref,
-        {'transcription_seconds': 5},
-    )
-    duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
-        _Transaction(),
-        _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
-        usage_ref,
-        {'transcription_seconds': 5},
-    )
+    date = datetime(2026, 6, 23, 14, tzinfo=timezone.utc)
+
+    recorded = user_usage.update_hourly_usage_once('uid', date, {'transcription_seconds': 5}, 'key-1')
+    # Replaying the same idempotency key must not increment a second time.
+    duplicate = user_usage.update_hourly_usage_once('uid', date, {'transcription_seconds': 5}, 'key-1')
 
     assert recorded is True
-    assert len(transaction.writes) == 2
-    assert transaction.writes[0][1].get('usage_committed_at') is not None
     assert duplicate is False
 
+    marker = store.get('users/uid/sync_content_ledger/key-1')
+    assert marker.exists and marker.to_dict().get('usage_committed_at') is not None
 
-def test_durable_processed_segment_is_not_added_twice():
-    now = datetime.now(timezone.utc)
-    transaction = _Transaction()
+    usage = store.get('users/uid/hourly_usage/2026-06-23-14')
+    assert usage.to_dict()['transcription_seconds'] == 5
 
-    added = sync_ledger._processed_segment_transaction.to_wrap(
-        transaction,
-        _Ref(
-            {
-                'status': 'processing',
-                'job_id': 'job-1',
-                'ledger_run_token': '1:token-a',
-                'ledger_run_epoch': 1,
-                'processed_segment_ids': [],
-            }
-        ),
-        'job-1',
-        'segment-1',
-        now,
-        '1:token-a',
-        1,
+
+def test_durable_processed_segment_is_not_added_twice(monkeypatch):
+    store = _seed(monkeypatch)
+    store.set(
+        'users/u/sync_content_ledger/fresh',
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'processed_segment_ids': [],
+        },
     )
-    duplicate = sync_ledger._processed_segment_transaction.to_wrap(
-        _Transaction(),
-        _Ref(
-            {
-                'status': 'processing',
-                'job_id': 'job-1',
-                'ledger_run_token': '1:token-a',
-                'ledger_run_epoch': 1,
-                'processed_segment_ids': ['segment-1'],
-            }
-        ),
-        'job-1',
-        'segment-1',
-        now,
-        '1:token-a',
-        1,
+    store.set(
+        'users/u/sync_content_ledger/already',
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'processed_segment_ids': ['segment-1'],
+        },
+    )
+
+    added = sync_ledger.add_processed_sync_segment_id(
+        'u', 'fresh', 'job-1', 'segment-1', run_token='1:token-a', run_epoch=1
+    )
+    duplicate = sync_ledger.add_processed_sync_segment_id(
+        'u', 'already', 'job-1', 'segment-1', run_token='1:token-a', run_epoch=1
     )
 
     assert added is True
+    assert store.get('users/u/sync_content_ledger/fresh').to_dict()['processed_segment_ids'] == ['segment-1']
     assert duplicate is False

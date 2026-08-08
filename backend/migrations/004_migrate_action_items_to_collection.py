@@ -11,6 +11,7 @@ Usage:
 import os
 import sys
 import time
+import uuid
 import random
 import threading
 from datetime import datetime, timezone
@@ -18,8 +19,6 @@ from typing import List, Dict, Any
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import firebase_admin
-from firebase_admin import credentials, firestore
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,16 +26,12 @@ logger = logging.getLogger(__name__)
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Initialize Firebase Admin SDK
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
+from database.store import get_document_store
 
-db = firestore.client()
+
+def _store():
+    # The port's factory owns client selection via STORAGE_BACKEND; no manual init needed.
+    return get_document_store()
 
 # Configuration
 BATCH_SIZE = 500  # Number of conversations to process per batch
@@ -126,7 +121,7 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
     batch_user_items = defaultdict(int)
 
     # Prepare batch write for action items
-    batch_write = db.batch()
+    batch_write = _store().batch()
     batch_operations = 0
 
     for conv_data in conversations_batch:
@@ -183,18 +178,17 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
                 }
 
                 # Add to batch write
-                user_ref = db.collection('users').document(uid)
-                action_items_ref = user_ref.collection('action_items')
-                new_doc_ref = action_items_ref.document()  # Auto-generate ID
+                new_doc_id = str(uuid.uuid4())  # Auto-generate ID
+                new_doc_path = f'users/{uid}/action_items/{new_doc_id}'
 
-                batch_write.set(new_doc_ref, action_item_data)
+                batch_write.set(new_doc_path, action_item_data)
                 batch_operations += 1
                 batch_action_items += 1
                 batch_user_items[uid] += 1
 
                 if batch_operations >= FIRESTORE_BATCH_SIZE:
                     safe_firestore_operation(lambda: batch_write.commit(), f"Batch commit for batch {batch_num}")
-                    batch_write = db.batch()
+                    batch_write = _store().batch()
                     batch_operations = 0
                     time.sleep(0.2)
 
@@ -236,11 +230,9 @@ def get_users_batch(offset=0, limit=None):
         limit = USER_BATCH_SIZE
 
     try:
-        users_ref = db.collection('users')
-        query = users_ref.offset(offset).limit(limit)
-
         users_docs = safe_firestore_operation(
-            lambda: query.get(), f"Get users batch (offset: {offset}, limit: {limit})"
+            lambda: _store().query('users', limit=limit, offset=offset),
+            f"Get users batch (offset: {offset}, limit: {limit})",
         )
 
         return [doc for doc in users_docs]
@@ -256,17 +248,14 @@ def get_conversations_for_user_batch(uid, offset=0, limit=None):
     if limit is None:
         limit = CONVERSATION_BATCH_SIZE
     try:
-        user_ref = db.collection('users').document(uid)
-        conversations_ref = user_ref.collection('conversations')
-
-        query = (
-            conversations_ref.where(filter=firestore.FieldFilter('structured.action_items', '!=', []))
-            .offset(offset)
-            .limit(limit)
-        )
-
         conversations_docs = safe_firestore_operation(
-            lambda: query.get(), f"Get conversations for user {uid} (offset: {offset}, limit: {limit})"
+            lambda: _store().query(
+                f'users/{uid}/conversations',
+                filters=[('structured.action_items', '!=', [])],
+                offset=offset,
+                limit=limit,
+            ),
+            f"Get conversations for user {uid} (offset: {offset}, limit: {limit})",
         )
 
         conversations = []
@@ -429,17 +418,19 @@ def verify_migration():
     log_progress("Starting migration verification...")
 
     # Sample a few users and check if their action items were migrated
-    users_ref = db.collection('users')
-    sample_users_docs = safe_firestore_operation(lambda: users_ref.limit(5).get(), "Get sample users for verification")
+    sample_users_docs = safe_firestore_operation(
+        lambda: _store().query('users', limit=5), "Get sample users for verification"
+    )
 
     for user_doc in sample_users_docs:
         uid = user_doc.id
 
-        conversations_ref = user_doc.reference.collection('conversations')
         conversations_with_items_docs = safe_firestore_operation(
-            lambda: conversations_ref.where(filter=firestore.FieldFilter('structured.action_items', '!=', []))
-            .limit(10)
-            .get(),
+            lambda: _store().query(
+                f'users/{uid}/conversations',
+                filters=[('structured.action_items', '!=', [])],
+                limit=10,
+            ),
             f"Get conversations with items for user {uid}",
         )
 
@@ -450,9 +441,9 @@ def verify_migration():
             conv_action_items_count += len(action_items)
 
         # Count action items in dedicated collection
-        action_items_ref = user_doc.reference.collection('action_items')
         dedicated_action_items_docs = safe_firestore_operation(
-            lambda: action_items_ref.limit(100).get(), f"Get dedicated action items for user {uid}"
+            lambda: _store().query(f'users/{uid}/action_items', limit=100),
+            f"Get dedicated action items for user {uid}",
         )
         dedicated_count = len(dedicated_action_items_docs)
 

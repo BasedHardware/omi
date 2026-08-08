@@ -1873,6 +1873,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get signInWithGoogle => 'ورود با Google';
 
   @override
+  String get signInWithSSO => 'ورود با SSO';
+
+  @override
   String get byContinuingAgree => 'با ادامه، موافقت می‌کنید با ';
 
   @override

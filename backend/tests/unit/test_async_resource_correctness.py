@@ -52,6 +52,14 @@ def gmail_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
 
+    # WP1 boundary module: google_utils imports the neutral DELETE from database.store.sentinels.
+    store_pkg = types.ModuleType("database.store")
+    store_pkg.__path__ = []
+    store_sentinels = types.ModuleType("database.store.sentinels")
+    store_sentinels.DELETE = object()
+    monkeypatch.setitem(sys.modules, "database.store", store_pkg)
+    monkeypatch.setitem(sys.modules, "database.store.sentinels", store_sentinels)
+
     tools_mod = types.ModuleType("langchain_core.tools")
     tools_mod.tool = _ToolWrapper
     runnables_mod = types.ModuleType("langchain_core.runnables")

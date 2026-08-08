@@ -109,7 +109,7 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
 
-        def verify_id_token(token: str) -> dict[str, str]:
+        def verify_id_token(token: str, *, check_revoked: bool = False) -> dict[str, str]:
             assert token == 'firebase-token'
             return {'uid': 'user-1'}
 
@@ -122,22 +122,26 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
 
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
-        assert result == 'user-1'
-        assert calls == [
-            (dependencies.critical_executor, verify_id_token, ('firebase-token',), {}),
-            (
-                dependencies.db_executor,
-                dependencies.enforce_account_deletion_http_access,
-                ('user-1',),
-                {},
-            ),
-            (
-                dependencies.db_executor,
-                dependencies._enforce_cutover_http_if_request,
-                ('user-1', None),
-                {},
-            ),
-        ]
+        assert result == 'user-1'  # the port's verify_token internally calls the stubbed verify_id_token
+        # Three offloaded boundaries: the port's verify_token on the critical executor (not the raw
+        # firebase SDK — dependencies.py goes through utils.auth, ADR-0034; identity varies, so compare
+        # by name), then account-deletion access enforcement and cutover enforcement on the db executor.
+        assert len(calls) == 3
+        assert calls[0][0] is dependencies.critical_executor
+        assert getattr(calls[0][1], '__name__', '') == 'verify_token'
+        assert calls[0][2] == ('firebase-token',) and calls[0][3] == {}
+        assert calls[1] == (
+            dependencies.db_executor,
+            dependencies.enforce_account_deletion_http_access,
+            ('user-1',),
+            {},
+        )
+        assert calls[2] == (
+            dependencies.db_executor,
+            dependencies._enforce_cutover_http_if_request,
+            ('user-1', None),
+            {},
+        )
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
@@ -311,7 +315,7 @@ def test_firebase_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str) -> dict[str, str]:
+            def blocking_verify(_token: str, *, check_revoked: bool = False) -> dict[str, str]:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}

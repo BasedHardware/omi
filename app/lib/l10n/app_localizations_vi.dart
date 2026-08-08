@@ -1878,6 +1878,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get signInWithGoogle => 'Đăng nhập bằng Google';
 
   @override
+  String get signInWithSSO => 'Đăng nhập bằng SSO';
+
+  @override
   String get byContinuingAgree => 'Bằng cách tiếp tục, bạn đồng ý với ';
 
   @override

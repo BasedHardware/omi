@@ -13,7 +13,6 @@ from langchain_core.runnables import RunnableConfig
 import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
 import database.notifications as notification_db
-from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
 import logging
 
@@ -292,13 +291,10 @@ def search_screen_activity_tool(
         ts = ts_by_id.get(sid, 0)
         ts_str = datetime.fromtimestamp(ts, tz=display_tz).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
 
-        # Fetch OCR text from Firestore
+        # Fetch OCR text from Firestore (through the persistence boundary)
         ocr_text = ''
         try:
-            doc = firestore_db.collection('users').document(uid).collection('screen_activity').document(str(sid)).get()
-            if doc.exists:
-                doc_data = cast(Dict[str, Any], doc.to_dict())
-                ocr_text = doc_data.get('ocrText', '')[:200]
+            ocr_text = screen_activity_db.get_screen_activity_ocr_text(uid, str(sid))
         except Exception:
             pass
 

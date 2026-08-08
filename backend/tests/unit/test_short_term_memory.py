@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import review_queue
+from tests.store_fakes import FakeDocumentStore
 from utils.llm.memories import HighRecallMemories, Memories
 
 
@@ -43,7 +44,7 @@ def test_pending_timeout_resolves_by_evidence_not_fixed_outcome():
 
 
 def test_review_resolution_mutations_and_correction_record(monkeypatch):
-    monkeypatch.setattr(review_queue, 'db', MagicMock())
+    monkeypatch.setattr(review_queue, '_store', lambda: FakeDocumentStore())
     item = {
         'review_id': 'review1',
         'fact_id': 'new',
@@ -78,28 +79,12 @@ def test_review_resolution_mutations_and_correction_record(monkeypatch):
 
 
 def test_review_queue_lists_pending_items_by_impact(monkeypatch):
-    class FakeDoc:
-        def __init__(self, doc_id, data):
-            self.id = doc_id
-            self._data = data
-            self.reference = MagicMock()
-
-        def to_dict(self):
-            return self._data
-
-    queue_ref = MagicMock()
-    queue_ref.where.return_value = queue_ref
-    queue_ref.order_by.return_value = queue_ref
-    queue_ref.limit.return_value = queue_ref
-    queue_ref.stream.return_value = [
-        FakeDoc('high', {'status': 'pending', 'impact': 0.8}),
-        FakeDoc('low', {'status': 'pending', 'impact': 0.2}),
-    ]
-    user_ref = MagicMock()
-    user_ref.collection.return_value = queue_ref
-    users_ref = MagicMock()
-    users_ref.document.return_value = user_ref
-    monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
+    fake = FakeDocumentStore()
+    base = 'users/uid-1/memory_review_queue'
+    fake.set(f'{base}/low', {'status': 'pending', 'impact': 0.2})
+    fake.set(f'{base}/done', {'status': 'accepted', 'impact': 1.0})
+    fake.set(f'{base}/high', {'status': 'pending', 'impact': 0.8})
+    monkeypatch.setattr(review_queue, '_store', lambda: fake)
 
     items = review_queue.list_review_conflicts('uid-1', limit=10)
 
@@ -115,21 +100,16 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
         'source_short_term_id': 'st-new',
         'status': 'pending',
     }
-    updates = []
-    doc_ref = MagicMock()
-    doc_ref.update.side_effect = lambda payload: updates.append(payload)
-    queue_ref = MagicMock()
-    queue_ref.document.return_value = doc_ref
-    user_ref = MagicMock()
-    user_ref.collection.return_value = queue_ref
-    users_ref = MagicMock()
-    users_ref.document.return_value = user_ref
+    fake = FakeDocumentStore()
+    # The review-queue doc exists when resolve runs (get_review_conflict read it); seed it so the
+    # projection update() targets an existing doc — update requires one on every backend.
+    fake.set('users/uid-1/memory_review_queue/review1', item)
     merges = []
     corrections = []
     marked_short_term = []
 
     monkeypatch.setattr(review_queue, 'get_review_conflict', lambda uid, review_id: item)
-    monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
+    monkeypatch.setattr(review_queue, '_store', lambda: fake)
     monkeypatch.setattr(
         review_queue.memories_db,
         'merge_contradict_memory',
@@ -154,8 +134,9 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     assert merges[0][0]['status'] == 'accepted'
     assert merges[0][0]['qualifiers']['epistemic_status'] == 'accepted'
     assert merges[0][1] == ['old']
-    assert updates[0]['status'] == 'accepted'
-    assert updates[0]['resolution_commit_id'] == 'commit-review'
+    stored_update = fake._docs['users/uid-1/memory_review_queue/review1']
+    assert stored_update['status'] == 'accepted'
+    assert stored_update['resolution_commit_id'] == 'commit-review'
     assert corrections[0]['decision'] == 'accept'
     assert marked_short_term == [('st-new', 'commit-review')]
 
@@ -170,13 +151,7 @@ def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projec
         'authority': 'canonical_memory',
         'status': 'pending',
     }
-    doc_ref = MagicMock()
-    queue_ref = MagicMock()
-    queue_ref.document.return_value = doc_ref
-    user_ref = MagicMock()
-    user_ref.collection.return_value = queue_ref
-    users_ref = MagicMock()
-    users_ref.document.return_value = user_ref
+    docs: dict = {}
 
     resolved_item = {
         **item,
@@ -187,7 +162,7 @@ def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projec
         'resolution_commit_id': 'canonical-commit',
     }
     monkeypatch.setattr(review_queue, 'get_review_conflict', MagicMock(side_effect=[item, resolved_item]))
-    monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
+    monkeypatch.setattr(review_queue, '_store', lambda: FakeDocumentStore(backing=docs))
     canonical_commit = MagicMock(return_value={'commit': {'commit_id': 'canonical-commit'}})
     monkeypatch.setattr(review_queue, '_append_canonical_resolution_commit', canonical_commit)
     monkeypatch.setattr(
@@ -217,7 +192,9 @@ def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projec
     assert result['commit']['commit_id'] == 'canonical-commit'
     assert result['correction'] is None
     assert result['item']['candidate'] == {'id': 'mem-canonical'}
-    doc_ref.update.assert_not_called()
+    # Canonical review routes through its sole mutation authority and never writes the legacy
+    # review-doc projection through the neutral store.
+    assert docs == {}
 
 
 def test_review_queue_reject_uses_projection_writer(monkeypatch):
@@ -229,13 +206,9 @@ def test_review_queue_reject_uses_projection_writer(monkeypatch):
         'source_short_term_id': 'st-new',
         'status': 'pending',
     }
-    doc_ref = MagicMock()
-    queue_ref = MagicMock()
-    queue_ref.document.return_value = doc_ref
-    user_ref = MagicMock()
-    user_ref.collection.return_value = queue_ref
-    users_ref = MagicMock()
-    users_ref.document.return_value = user_ref
+    fake = FakeDocumentStore()
+    # The review-queue doc exists when resolve runs; seed it so the projection update() has a target.
+    fake.set('users/uid-1/memory_review_queue/review1', item)
     projection_updates = []
     marked_short_term = []
 
@@ -243,11 +216,14 @@ def test_review_queue_reject_uses_projection_writer(monkeypatch):
         exists = True
 
     class Transaction:
+        def get(self, path):
+            return Snapshot()
+
         def update(self, ref, payload):
             projection_updates.append((ref, payload))
 
     monkeypatch.setattr(review_queue, 'get_review_conflict', lambda uid, review_id: item)
-    monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
+    monkeypatch.setattr(review_queue, '_store', lambda: fake)
     monkeypatch.setattr(review_queue, 'record_correction', lambda uid, **kwargs: {'correction_id': 'correction-review'})
     monkeypatch.setattr(
         review_queue.short_term_db,
@@ -265,7 +241,6 @@ def test_review_queue_reject_uses_projection_writer(monkeypatch):
         return {'commit': {'commit_id': 'commit-review'}}
 
     monkeypatch.setattr(review_queue.memory_ledger, 'append_commit', fake_append_commit)
-    queue_ref.document.return_value.get.return_value = Snapshot()
 
     result = review_queue.resolve_review_conflict('uid-1', 'review1', 'reject')
 

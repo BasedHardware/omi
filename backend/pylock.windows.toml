@@ -801,6 +801,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec9
 wheels = [{ url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", upload-time = 2022-08-14T12:40:09Z, size = 9979, hashes = { sha256 = "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8" } }]
 
 [[packages]]
+name = "mongomock"
+version = "4.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/4d/a4/4a560a9f2a0bec43d5f63104f55bc48666d619ca74825c8ae156b08547cf/mongomock-4.3.0.tar.gz", upload-time = 2024-11-16T11:23:25Z, size = 135862, hashes = { sha256 = "32667b79066fabc12d4f17f16a8fd7361b5f4435208b3ba32c226e52212a8c30" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/94/4d/8bea712978e3aff017a2ab50f262c620e9239cc36f348aae45e48d6a4786/mongomock-4.3.0-py2.py3-none-any.whl", upload-time = 2024-11-16T11:23:24Z, size = 64891, hashes = { sha256 = "5ef86bd12fc8806c6e7af32f21266c61b6c4ba96096f85129852d1c4fec1327e" } }]
+
+[[packages]]
 name = "monotonic"
 version = "1.6"
 sdist = { url = "https://files.pythonhosted.org/packages/ea/ca/8e91948b782ddfbd194f323e7e7d9ba12e5877addf04fb2bf8fca38e86ac/monotonic-1.6.tar.gz", upload-time = 2021-08-11T14:37:28Z, size = 7615, hashes = { sha256 = "3a55207bcfed53ddd5c5bae174524062935efed17792e9de2ad0205ce9ad63f7" } }
@@ -1143,6 +1149,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a384
 wheels = [{ url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", upload-time = 2026-05-21T19:54:35Z, size = 31274, hashes = { sha256 = "66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728" } }]
 
 [[packages]]
+name = "pymongo"
+version = "4.10.1"
+sdist = { url = "https://files.pythonhosted.org/packages/1a/35/b62a3139f908c68b69aac6a6a3f8cc146869de0a7929b994600e2c587c77/pymongo-4.10.1.tar.gz", upload-time = 2024-10-01T23:07:58Z, size = 1903902, hashes = { sha256 = "a9de02be53b6bb98efe0b9eda84ffa1ec027fcb23a2de62c4f941d9a2f2f3330" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/02/68/b71c4106d03eef2482eade440c6f5737c2a4a42f6155726009f80ea38d06/pymongo-4.10.1-cp311-cp311-win_amd64.whl", upload-time = 2024-10-01T23:06:49Z, size = 876473, hashes = { sha256 = "9df4ab5594fdd208dcba81be815fa8a8a5d8dedaf3b346cbf8b61c7296246a7a" } }]
+
+[[packages]]
 name = "pynndescent"
 version = "0.5.13"
 sdist = { url = "https://files.pythonhosted.org/packages/7e/58/560a4db5eb3794d922fe55804b10326534ded3d971e1933c1eef91193f5e/pynndescent-0.5.13.tar.gz", upload-time = 2024-06-17T15:48:32Z, size = 2975955, hashes = { sha256 = "d74254c0ee0a1eeec84597d5fe89fedcf778593eeabe32c2f97412934a9800fb" } }
@@ -1328,6 +1340,12 @@ name = "semver"
 version = "3.0.2"
 sdist = { url = "https://files.pythonhosted.org/packages/41/6c/a536cc008f38fd83b3c1b98ce19ead13b746b5588c9a0cb9dd9f6ea434bc/semver-3.0.2.tar.gz", upload-time = 2023-10-09T11:58:25Z, size = 214988, hashes = { sha256 = "6253adb39c70f6e51afed2fa7152bcd414c411286088fb4b9effb133885ab4cc" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/9a/77/0cc7a8a3bc7e53d07e8f47f147b92b0960e902b8254859f4aee5c4d7866b/semver-3.0.2-py3-none-any.whl", upload-time = 2023-10-09T11:58:24Z, size = 17099, hashes = { sha256 = "b1ea4686fe70b981f85359eda33199d60c53964284e0cfb4977d243e37cf4bf4" } }]
+
+[[packages]]
+name = "sentinels"
+version = "1.1.1"
+sdist = { url = "https://files.pythonhosted.org/packages/6f/9b/07195878aa25fe6ed209ec74bc55ae3e3d263b60a489c6e73fdca3c8fe05/sentinels-1.1.1.tar.gz", upload-time = 2025-08-12T07:57:50Z, size = 4393, hashes = { sha256 = "3c2f64f754187c19e0a1a029b148b74cf58dd12ec27b4e19c0e5d6e22b5a9a86" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/49/65/dea992c6a97074f6d8ff9eab34741298cac2ce23e2b6c74fb7d08afdf85c/sentinels-1.1.1-py3-none-any.whl", upload-time = 2025-08-12T07:57:48Z, size = 3744, hashes = { sha256 = "835d3b28f3b47f5284afa4bf2db6e00f2dc5f80f9923d4b7e7aeeeccf6146a11" } }]
 
 [[packages]]
 name = "setuptools"

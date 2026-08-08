@@ -12,7 +12,6 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from models.memory_admin import MemoryReadRolloutObservabilityReport, ShortTermLifecycleRunResponse
 
-from database._client import db
 from jobs.short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
 from utils.memory.non_active_route_audit import NonActiveRouteAuditReport, fetch_non_active_route_audit_report
 from utils.memory.default_read_rollout import (
@@ -88,7 +87,7 @@ def get_memory_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     """
 
     _require_admin_key(secret_key)
-    decisions = read_default_read_rollout_decisions(uid=uid, db_client=db)
+    decisions = read_default_read_rollout_decisions(uid=uid)
     return build_default_read_rollout_observability_report(decisions)
 
 
@@ -144,7 +143,6 @@ def post_short_term_lifecycle_run(
     evaluated_time = _parse_evaluated_at(evaluated_at)
     report = run_short_term_lifecycle_firestore(
         uid=uid,
-        db_client=db,
         run_id=run_id,
         now=evaluated_time,
         limit=limit,
@@ -154,7 +152,6 @@ def post_short_term_lifecycle_run(
 
 
 __all__ = [
-    "db",
     "fetch_non_active_route_audit_report",
     "get_non_active_route_report",
     "get_memory_read_rollout_decision",

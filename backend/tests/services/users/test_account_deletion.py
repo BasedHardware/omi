@@ -1248,6 +1248,9 @@ def test_background_wipe_fails_closed_when_running_marker_persist_fails(monkeypa
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
+    # Make the vector store available explicitly (order-independent) — don't rely on a stubbed
+    # vector_db making is_vector_available() truthy, which leaks across files in one pytest process.
+    monkeypatch.setattr(account_deletion.vector_db, 'is_vector_available', lambda: True)
     calls = []
     conversation_calls = iter([['c1'], ['c2']])
     monkeypatch.setattr(
@@ -1320,6 +1323,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
 
 
 def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
+    monkeypatch.setattr(account_deletion.vector_db, 'is_vector_available', lambda: True)  # order-independent
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(side_effect=Exception('read down')))
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
@@ -1359,7 +1363,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 
 
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
-    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion.vector_db, 'is_vector_available', lambda: False)
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
     monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))

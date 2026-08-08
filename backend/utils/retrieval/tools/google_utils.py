@@ -8,9 +8,9 @@ import os
 from typing import Any, Dict, Optional
 
 import httpx
-from google.cloud import firestore
 
 import database.users as users_db
+from database.store.sentinels import DELETE
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.integration_telemetry import (
@@ -92,7 +92,7 @@ async def _mark_google_integration_reauth_required(
     updated['connected'] = False
     updated['reauth_required'] = True
     updated['reauth_reason'] = reason
-    updated['access_token'] = firestore.DELETE_FIELD
+    updated['access_token'] = DELETE
     await run_blocking(db_executor, users_db.set_integration, uid, integration_key, updated)
 
 

@@ -12,7 +12,7 @@ from config.memory_confidence import (
     SOURCE_SIGNAL_CAPTURE_PRIORS,
     VERACITY_PRIORS,
 )
-from database._client import document_id_from_seed
+from database.document_ids import document_id_from_seed
 from models.memory_domain import tier_to_layer
 from models.product_memory import MemoryTier
 

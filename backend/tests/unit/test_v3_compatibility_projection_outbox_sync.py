@@ -1,17 +1,27 @@
+"""Behavioral tests for the ``/v3`` compatibility projection normal-outbox writer.
+
+Reshaped onto the neutral storage port (WP2): the projection writer and reader are driven against a
+``FakeDocumentStore`` seeded at the module's real logical paths, so the transactions run through
+``FakeDocumentStore.run_transaction`` exactly as production runs them through the store adapter.
+"""
+
 from __future__ import annotations
 
-import copy
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from database import knowledge_graph as kg_db
+from database import memory_compatibility_projection as projection_reader
 from database.memory_collections import MemoryCollections
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.short_term_promotion import _canonical_outbox_side_effects
+from utils.memory.v3 import compatibility_projection_sync
 from utils.memory.v3.compatibility_projection_sync import CompatibilityProjectionSyncError
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
@@ -25,104 +35,13 @@ UID = "uid-compat-outbox"
 MEMORY_ID = "mem-compat"
 
 
-class _Snapshot:
-    def __init__(self, path: str, data: dict[str, Any] | None):
-        self.id = path.rsplit("/", 1)[-1]
-        self.exists = data is not None
-        self._data = copy.deepcopy(data)
-
-    def to_dict(self):
-        return copy.deepcopy(self._data)
-
-
-class _Document:
-    def __init__(self, db: "_Db", path: str):
-        self._db = db
-        self._path = path
-
-    def get(self, transaction=None):
-        return _Snapshot(self._path, self._db.docs.get(self._path))
-
-    def set(self, payload: dict[str, Any]):
-        self._db.docs[self._path] = copy.deepcopy(payload)
-
-    def delete(self):
-        self._db.docs.pop(self._path, None)
-
-
-class _Transaction:
-    def __init__(self, db: "_Db"):
-        self._db = db
-        self._writes: list[tuple[str, str, dict[str, Any] | None]] = []
-
-    def _begin(self):
-        self._writes = []
-
-    def set(self, ref: _Document, payload: dict[str, Any]):
-        self._writes.append(("set", ref._path, copy.deepcopy(payload)))
-
-    def delete(self, ref: _Document):
-        self._writes.append(("delete", ref._path, None))
-
-    def _commit(self):
-        for operation, path, payload in self._writes:
-            if operation == "delete":
-                self._db.docs.pop(path, None)
-            else:
-                assert payload is not None
-                self._db.docs[path] = payload
-
-    def _rollback(self):
-        self._writes = []
-
-    def _clean_up(self):
-        return None
-
-
-class _Query:
-    def __init__(self, db: "_Db", path: str, *, limit: int | None = None):
-        self._db = db
-        self._path = path
-        self._limit = limit
-
-    def order_by(self, *_args, **_kwargs):
-        return self
-
-    def start_after(self, _cursor):
-        return self
-
-    def limit(self, value: int):
-        return _Query(self._db, self._path, limit=value)
-
-    def stream(self):
-        prefix = f"{self._path}/"
-        rows = [_Snapshot(path, payload) for path, payload in self._db.docs.items() if path.startswith(prefix)]
-        rows.sort(
-            key=lambda row: (
-                cast_datetime((row.to_dict() or {}).get("created_at")),
-                row.id,
-            ),
-            reverse=True,
-        )
-        return rows[: self._limit] if self._limit is not None else rows
-
-
-class _Db:
-    def __init__(self, docs: dict[str, dict[str, Any]]):
-        self.docs = copy.deepcopy(docs)
-
-    def document(self, path: str):
-        return _Document(self, path)
-
-    def collection(self, path: str):
-        return _Query(self, path)
-
-    def transaction(self):
-        return _Transaction(self)
-
-
-def cast_datetime(value: object) -> datetime:
-    return value if isinstance(value, datetime) else datetime.min.replace(tzinfo=timezone.utc)
+def _install_store(monkeypatch, docs: dict[str, dict[str, Any]]) -> FakeDocumentStore:
+    """Seed a shared-backing fake store and route both port callers through it."""
+    fake = FakeDocumentStore(backing=docs)
+    monkeypatch.setattr(compatibility_projection_sync, "_store", lambda: fake)
+    monkeypatch.setattr(projection_reader, "_store", lambda: fake)
+    monkeypatch.setattr(kg_db, "_store", lambda: fake)
+    return fake
 
 
 def _projection_state() -> dict[str, Any]:
@@ -186,9 +105,8 @@ def _item(
     )
 
 
-def _read(db: _Db) -> list[dict[str, Any]]:
+def _read() -> list[dict[str, Any]]:
     return read_v3_compatibility_projection_page(
-        db_client=cast(Any, db),
         request=V3ProjectionReadRequest(
             uid=UID,
             limit=10,
@@ -197,56 +115,57 @@ def _read(db: _Db) -> list[dict[str, Any]]:
     ).items
 
 
-def test_normal_projection_callback_creates_then_updates_the_v3_read_model():
+def test_normal_projection_callback_creates_then_updates_the_v3_read_model(monkeypatch):
     paths = MemoryCollections(uid=UID)
     original_state = _projection_state()
-    db = _Db({paths.v3_compatibility_projection_state: original_state})
+    docs = {paths.v3_compatibility_projection_state: dict(original_state)}
+    _install_store(monkeypatch, docs)
     keyword_sync = MagicMock(return_value=True)
-    side_effects = _canonical_outbox_side_effects(db_client=db)
+    side_effects = _canonical_outbox_side_effects()
 
     with patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", keyword_sync):
         assert side_effects.projection_upsert(_item(), 7) is True
-        assert [row["content"] for row in _read(db)] == ["Original durable preference"]
+        assert [row["content"] for row in _read()] == ["Original durable preference"]
 
         updated = _item(content="Updated durable preference", revision=2)
         assert side_effects.projection_upsert(updated, 7) is True
 
-    rows = _read(db)
+    rows = _read()
     assert [row["content"] for row in rows] == ["Updated durable preference"]
     assert rows[0]["updated_at"] == updated.updated_at
     assert rows[0]["memory_tier"] == MemoryLayer.long_term.value
     assert "evidence" not in rows[0]
-    assert db.docs[paths.v3_compatibility_projection_state] == original_state
+    assert docs[paths.v3_compatibility_projection_state] == original_state
     assert keyword_sync.call_count == 2
 
 
-def test_processed_short_term_is_compatibility_visible_without_becoming_a_keyword_atom():
+def test_processed_short_term_is_compatibility_visible_without_becoming_a_keyword_atom(monkeypatch):
     paths = MemoryCollections(uid=UID)
-    db = _Db({paths.v3_compatibility_projection_state: _projection_state()})
+    docs = {paths.v3_compatibility_projection_state: _projection_state()}
+    _install_store(monkeypatch, docs)
     keyword_sync = MagicMock(return_value=True)
-    side_effects = _canonical_outbox_side_effects(db_client=db)
+    side_effects = _canonical_outbox_side_effects()
 
     with patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", keyword_sync):
         short_term = _item(content="Fresh source-backed context", tier=MemoryLayer.short_term)
         assert side_effects.projection_upsert(short_term, 7) is True
 
-    assert [row["memory_tier"] for row in _read(db)] == [MemoryLayer.short_term.value]
-    keyword_sync.assert_called_once_with(short_term, db_client=db)
+    assert [row["memory_tier"] for row in _read()] == [MemoryLayer.short_term.value]
+    keyword_sync.assert_called_once_with(short_term)
 
 
-def test_normal_projection_delete_hides_v3_content_before_retryable_external_cleanup():
+def test_normal_projection_delete_hides_v3_content_before_retryable_external_cleanup(monkeypatch):
     paths = MemoryCollections(uid=UID)
     graph_assertion_path = f"users/{UID}/memory_graph_assertions/{MEMORY_ID}"
-    db = _Db(
-        {
-            paths.v3_compatibility_projection_state: _projection_state(),
-            graph_assertion_path: {"memory_id": MEMORY_ID},
-        }
-    )
-    side_effects = _canonical_outbox_side_effects(db_client=db)
+    docs = {
+        paths.v3_compatibility_projection_state: _projection_state(),
+        graph_assertion_path: {"memory_id": MEMORY_ID},
+    }
+    _install_store(monkeypatch, docs)
+    side_effects = _canonical_outbox_side_effects()
     with patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", return_value=True):
         assert side_effects.projection_upsert(_item(), 7) is True
-    assert len(_read(db)) == 1
+    assert len(_read()) == 1
 
     kg_prune = MagicMock()
     review_purge = MagicMock()
@@ -260,9 +179,9 @@ def test_normal_projection_delete_hides_v3_content_before_retryable_external_cle
     ):
         assert side_effects.projection_delete(UID, MEMORY_ID, 7) is False
 
-    assert _read(db) == []
-    assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" not in db.docs
-    assert graph_assertion_path not in db.docs
+    assert _read() == []
+    assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" not in docs
+    assert graph_assertion_path not in docs
     kg_prune.assert_not_called()
     review_purge.assert_not_called()
 
@@ -275,13 +194,13 @@ def test_normal_projection_delete_hides_v3_content_before_retryable_external_cle
         {"write_convergence_complete": False},
     ],
 )
-def test_projection_upsert_fails_closed_without_valid_enrollment_fences(state_patch):
+def test_projection_upsert_fails_closed_without_valid_enrollment_fences(monkeypatch, state_patch):
     paths = MemoryCollections(uid=UID)
     docs: dict[str, dict[str, Any]] = {}
     if state_patch is not None:
         docs[paths.v3_compatibility_projection_state] = {**_projection_state(), **state_patch}
-    db = _Db(docs)
-    side_effects = _canonical_outbox_side_effects(db_client=db)
+    _install_store(monkeypatch, docs)
+    side_effects = _canonical_outbox_side_effects()
 
     with (
         patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", return_value=True),
@@ -289,10 +208,10 @@ def test_projection_upsert_fails_closed_without_valid_enrollment_fences(state_pa
     ):
         side_effects.projection_upsert(_item(), 7)
 
-    assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" not in db.docs
+    assert f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}" not in docs
 
 
-def test_stale_generation_delete_cannot_remove_a_new_generation_projection_row():
+def test_stale_generation_delete_cannot_remove_a_new_generation_projection_row(monkeypatch):
     paths = MemoryCollections(uid=UID)
     new_generation_state = {
         **_projection_state(),
@@ -303,15 +222,14 @@ def test_stale_generation_delete_cannot_remove_a_new_generation_projection_row()
         "vector_cleanup_fence_generation": 8,
     }
     item_path = f"{paths.v3_compatibility_projection_items}/{MEMORY_ID}"
-    db = _Db(
-        {
-            paths.v3_compatibility_projection_state: new_generation_state,
-            item_path: {"new_generation_private_content": True},
-        }
-    )
-    side_effects = _canonical_outbox_side_effects(db_client=db)
+    docs = {
+        paths.v3_compatibility_projection_state: new_generation_state,
+        item_path: {"new_generation_private_content": True},
+    }
+    _install_store(monkeypatch, docs)
+    side_effects = _canonical_outbox_side_effects()
 
     with pytest.raises(CompatibilityProjectionSyncError):
         side_effects.projection_delete(UID, MEMORY_ID, 7)
 
-    assert db.docs[item_path] == {"new_generation_private_content": True}
+    assert docs[item_path] == {"new_generation_private_content": True}

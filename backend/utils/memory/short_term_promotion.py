@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
+from database import document_store
 from database import knowledge_graph as kg_db
-from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_outbox_worker import (
     CanonicalMemoryOutboxSideEffects,
@@ -82,16 +82,16 @@ class CanonicalShortTermMaintenanceReport:
         return len(self.consolidation.batched_memory_ids) if self.consolidation is not None else 0
 
 
-def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client: Any) -> bool:
+def _delete_atom_projection_and_citations(uid: str, memory_id: str) -> bool:
     """Delete every keyword/KG/review projection owned by one canonical memory."""
-    kg_db.delete_memory_graph_assertion(uid, memory_id, db_client=db_client)
-    if not delete_atom_keyword_doc(uid, memory_id, db_client=db_client):
+    kg_db.delete_memory_graph_assertion(uid, memory_id)
+    if not delete_atom_keyword_doc(uid, memory_id):
         return False
-    kg_db.prune_memory_citations_from_kg(uid, [memory_id], db_client=db_client)
+    kg_db.prune_memory_citations_from_kg(uid, [memory_id])
     item_path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = db_client.document(item_path).get()
+    snapshot = document_store.get_document(item_path)
     authoritative_item: Optional[MemoryItem] = None
-    if getattr(snapshot, "exists", False):
+    if snapshot.exists:
         raw_item: object = snapshot.to_dict()
         if not isinstance(raw_item, dict):
             raise ValueError("authoritative memory item payload is invalid")
@@ -108,19 +108,17 @@ def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client
             uid,
             [memory_id],
             reason="memory_outbox_projection_deleted",
-            db_client=db_client,
         )
     return True
 
 
-def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSideEffects:
+def _canonical_outbox_side_effects() -> CanonicalMemoryOutboxSideEffects:
     def projection_upsert(item: MemoryItem, account_generation: int) -> bool:
-        if not sync_atom_keyword_index_for_item(item, db_client=db_client):
+        if not sync_atom_keyword_index_for_item(item):
             return False
         return upsert_v3_compatibility_projection_item(
             item,
             expected_account_generation=account_generation,
-            db_client=db_client,
         )
 
     def projection_delete(uid: str, memory_id: str, account_generation: int) -> bool:
@@ -131,10 +129,9 @@ def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSi
             uid,
             memory_id,
             expected_account_generation=account_generation,
-            db_client=db_client,
         ):
             return False
-        return _delete_atom_projection_and_citations(uid, memory_id, db_client=db_client)
+        return _delete_atom_projection_and_citations(uid, memory_id)
 
     def vector_upsert(item: MemoryItem, commit_id: str) -> bool:
         return sync_canonical_memory_vector(item, projection_commit_id=commit_id)
@@ -162,7 +159,6 @@ def _canonical_outbox_worker_config(*, run_id: str) -> CanonicalMemoryOutboxWork
 def _drain_canonical_outbox(
     uid: str,
     *,
-    db_client: Any,
     run_id: str,
     now: datetime,
     max_ticks: int = 5,
@@ -183,10 +179,9 @@ def _drain_canonical_outbox(
         "actions": [],
         "errors": [],
     }
-    side_effects = _canonical_outbox_side_effects(db_client=db_client)
+    side_effects = _canonical_outbox_side_effects()
     for _tick in range(max_ticks):
         summary = run_canonical_memory_outbox_worker_tick(
-            db_client=db_client,
             uid=uid,
             config=config,
             side_effects=side_effects,
@@ -248,25 +243,22 @@ def _merge_canonical_outbox_summaries(*summaries: Dict[str, Any]) -> Dict[str, A
 def run_canonical_short_term_ttl_lifecycle(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     limit: Optional[int] = None,
 ) -> CanonicalShortTermLifecycleReport:
     """Audit expiry and settle indexed Short-term items through canonical L2 apply."""
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     items = fetch_expired_short_term_memory_items_firestore(
         uid=uid,
-        db_client=client,
         now=current_time,
         limit=limit,
     )
-    store = FirestoreShortTermLifecycleTransitionStore(db_client=client, now=current_time)
+    store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
     created = 0
     existing = 0
     terminal = 0
@@ -292,8 +284,8 @@ def run_canonical_short_term_ttl_lifecycle(
             and item.status == MemoryItemStatus.active
             and item.processing_state == ProcessingState.processed
         ):
-            control_snapshot = client.document(MemoryCollections(uid=uid).memory_apply_control_state).get()
-            if not getattr(control_snapshot, "exists", False):
+            control_snapshot = document_store.get_document(MemoryCollections(uid=uid).memory_apply_control_state)
+            if not control_snapshot.exists:
                 raise RuntimeError("canonical memory control state is missing")
             raw_control = control_snapshot.to_dict()
             if not isinstance(raw_control, dict):
@@ -314,7 +306,6 @@ def run_canonical_short_term_ttl_lifecycle(
                 control=MemoryControlState.model_validate(raw_control),
                 run_id=f"{run_id}:ttl",
                 now=current_time,
-                db_client=client,
             )
             terminal += 1
 
@@ -329,7 +320,6 @@ def run_canonical_short_term_ttl_lifecycle(
 def run_canonical_short_term_maintenance(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
@@ -337,8 +327,7 @@ def run_canonical_short_term_maintenance(
     required_processor: Optional[RequiredMemoryProcessor] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
-    client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
@@ -347,25 +336,17 @@ def run_canonical_short_term_maintenance(
     pre_outbox_now = current_time if now is not None else datetime.now(timezone.utc)
     pre_outbox = _drain_canonical_outbox(
         uid,
-        db_client=client,
         run_id=run_id,
         now=pre_outbox_now,
     )
     required_processing = run_required_memory_processing(
         uid,
-        db_client=client,
         processor=required_processor,
         now=current_time,
     )
-    lifecycle = run_canonical_short_term_ttl_lifecycle(
-        uid,
-        db_client=client,
-        now=current_time,
-        run_id=run_id,
-    )
+    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, now=current_time, run_id=run_id)
     consolidation = run_canonical_consolidation(
         uid,
-        db_client=client,
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
@@ -376,7 +357,6 @@ def run_canonical_short_term_maintenance(
     outbox_now = current_time if now is not None else datetime.now(timezone.utc)
     post_outbox = _drain_canonical_outbox(
         uid,
-        db_client=client,
         run_id=run_id,
         now=outbox_now,
     )

@@ -17,25 +17,33 @@ from routers import desktop_agent_vm
 
 
 def test_vm_publish_transaction_refuses_deletion_admitted_before_commit():
-    deletion = type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'wipe_status': 'running'}})()
+    # A deletion admitted before commit must short-circuit on the neutral store-port transaction: the
+    # deletion marker is read, the user doc is never read, and nothing is written.
+    reads: list[str] = []
 
-    class Ref:
-        def __init__(self, snapshot):
-            self.snapshot = snapshot
-            self.reads = 0
+    class _Snap:
+        def __init__(self, data):
+            self.exists = True
+            self._data = data
 
-        def get(self, transaction=None):
-            self.reads += 1
-            return self.snapshot
+        def to_dict(self):
+            return self._data
 
-    deletion_ref = Ref(deletion)
-    user_ref = Ref(type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'agentVm': {}}})())
-    transaction = type('Transaction', (), {'set': lambda *args, **kwargs: None})()
-    raw = getattr(desktop_agent_vm._set_vm_if_current_txn, 'to_wrap', desktop_agent_vm._set_vm_if_current_txn)
+    class _Tx:
+        def get(self, path):
+            reads.append(path)
+            if path.startswith("account_deletions/"):
+                return _Snap({'wipe_status': 'running'})
+            return _Snap({'agentVm': {}})
 
-    assert raw(transaction, deletion_ref, user_ref, 'vm', 'token', 'ready', '34.1.2.3', 'zone') is False
-    assert deletion_ref.reads == 1
-    assert user_ref.reads == 0
+        def set(self, path, data, *, merge=False):
+            raise AssertionError("must not write when deletion blocks access")
+
+    result = desktop_agent_vm._set_vm_if_current_txn(
+        _Tx(), "account_deletions/u", "users/u", 'vm', 'token', 'ready', '34.1.2.3', 'zone'
+    )
+    assert result is False
+    assert reads == ["account_deletions/u"]
 
 
 @pytest.mark.asyncio
@@ -66,118 +74,92 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
 
 
 def test_claim_allows_replacement_when_reconciler_marked_missing():
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.store_fakes import FakeDocumentStore
 
-    database = StrictFirestore(
+    store = FakeDocumentStore()
+    store.set(
+        "users/uid",
         {
-            ("users", "uid"): {
-                "agentVm": {
-                    "vmName": "omi-agent-stale",
-                    "authToken": "old",
-                    "status": "ready",
-                    "reconcile": {"state": "missing", "missingSince": 1.0},
-                }
+            "agentVm": {
+                "vmName": "omi-agent-stale",
+                "authToken": "old",
+                "status": "ready",
+                "reconcile": {"state": "missing", "missingSince": 1.0},
             }
-        }
+        },
     )
     candidate = {"vmName": "omi-agent-new", "status": "provisioning", "authToken": "new"}
-    raw = getattr(desktop_agent_vm._claim_vm_if_allowed_txn, "to_wrap", desktop_agent_vm._claim_vm_if_allowed_txn)
 
-    claimed_vm, claimed = raw(
-        database.transaction(),
-        database.collection("account_deletions").document("uid"),
-        database.collection("users").document("uid"),
-        candidate,
+    claimed_vm, claimed = store.run_transaction(
+        lambda tx: desktop_agent_vm._claim_vm_if_allowed_txn(tx, "account_deletions/uid", "users/uid", candidate)
     )
 
     assert claimed is True
     assert claimed_vm == candidate
-    stored = database.rows[("users", "uid")]["agentVm"]
+    stored = store.get("users/uid").to_dict()["agentVm"]
     assert stored == candidate
     assert "reconcile" not in stored
-    assert database.transactions[-1].updates[-1][1] == {"agentVm": candidate}
 
 
-def test_record_provider_missing_rejects_active_reconcile_lease(monkeypatch):
+def test_record_provider_missing_rejects_active_reconcile_lease():
     from services import agent_vm_read
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.store_fakes import FakeDocumentStore
 
     now = 1_700_000_000.0
-    database = StrictFirestore(
+    store = FakeDocumentStore()
+    store.set(
+        "users/uid",
         {
-            ("users", "uid"): {
-                "agentVm": {
-                    "vmName": "omi-agent-stale",
-                    "zone": "us-central1-a",
-                    "authToken": "token",
-                    "status": "ready",
-                    "reconcile": {
-                        "state": "claimed",
-                        "lease": {"owner": "worker-1", "expiresAt": now + 60},
-                    },
-                }
+            "agentVm": {
+                "vmName": "omi-agent-stale",
+                "zone": "us-central1-a",
+                "authToken": "token",
+                "status": "ready",
+                "reconcile": {
+                    "state": "claimed",
+                    "lease": {"owner": "worker-1", "expiresAt": now + 60},
+                },
             }
-        }
-    )
-    monkeypatch.setattr(agent_vm_read, "get_firestore_client", lambda: database)
-    raw = getattr(
-        agent_vm_read._record_provider_missing_if_current_txn,
-        "to_wrap",
-        agent_vm_read._record_provider_missing_if_current_txn,
+        },
     )
 
-    marked = raw(
-        database.transaction(),
-        database.collection("account_deletions").document("uid"),
-        database.collection("users").document("uid"),
-        "omi-agent-stale",
-        "us-central1-a",
-        "token",
-        now,
+    marked = store.run_transaction(
+        lambda tx: agent_vm_read._record_provider_missing_if_current_txn(
+            tx, "account_deletions/uid", "users/uid", "omi-agent-stale", "us-central1-a", "token", now
+        )
     )
 
     assert marked is False
-    assert database.rows[("users", "uid")]["agentVm"]["reconcile"]["state"] == "claimed"
-    assert database.transactions[-1].updates == []
+    assert store.get("users/uid").to_dict()["agentVm"]["reconcile"]["state"] == "claimed"
 
 
 def test_record_provider_missing_rejects_quarantined_state():
     from services import agent_vm_read
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.store_fakes import FakeDocumentStore
 
     now = 1_700_000_000.0
-    database = StrictFirestore(
+    store = FakeDocumentStore()
+    store.set(
+        "users/uid",
         {
-            ("users", "uid"): {
-                "agentVm": {
-                    "vmName": "omi-agent-stale",
-                    "zone": "us-central1-a",
-                    "authToken": "token",
-                    "status": "ready",
-                    "reconcile": {"state": "quarantined", "releaseId": "rel-1"},
-                }
+            "agentVm": {
+                "vmName": "omi-agent-stale",
+                "zone": "us-central1-a",
+                "authToken": "token",
+                "status": "ready",
+                "reconcile": {"state": "quarantined", "releaseId": "rel-1"},
             }
-        }
-    )
-    raw = getattr(
-        agent_vm_read._record_provider_missing_if_current_txn,
-        "to_wrap",
-        agent_vm_read._record_provider_missing_if_current_txn,
+        },
     )
 
-    marked = raw(
-        database.transaction(),
-        database.collection("account_deletions").document("uid"),
-        database.collection("users").document("uid"),
-        "omi-agent-stale",
-        "us-central1-a",
-        "token",
-        now,
+    marked = store.run_transaction(
+        lambda tx: agent_vm_read._record_provider_missing_if_current_txn(
+            tx, "account_deletions/uid", "users/uid", "omi-agent-stale", "us-central1-a", "token", now
+        )
     )
 
     assert marked is False
-    assert database.rows[("users", "uid")]["agentVm"]["reconcile"]["state"] == "quarantined"
-    assert database.transactions[-1].updates == []
+    assert store.get("users/uid").to_dict()["agentVm"]["reconcile"]["state"] == "quarantined"
 
 
 @pytest.mark.asyncio
@@ -896,7 +878,7 @@ def test_stop_broker_reads_the_full_nested_compute_identity(monkeypatch):
 
 
 def test_stop_broker_owner_lookup_is_a_bounded_indexed_query(monkeypatch):
-    calls = []
+    recorded: dict = {}
     snapshot = type(
         "Snapshot",
         (),
@@ -906,34 +888,25 @@ def test_stop_broker_owner_lookup_is_a_bounded_indexed_query(monkeypatch):
         },
     )()
 
-    class Query:
-        def where(self, *, filter):
-            calls.append(("where", filter.field_path, filter.op_string, filter.value))
-            return self
+    class _Store:
+        def query(self, collection, *, filters=None, limit=None, **_):
+            recorded["collection"] = collection
+            recorded["filters"] = filters
+            recorded["limit"] = limit
+            return [snapshot]
 
-        def limit(self, count):
-            calls.append(("limit", count))
-            return self
-
-        def stream(self):
-            return iter([snapshot])
-
-    class Firestore:
-        def collection(self, name):
-            calls.append(("collection", name))
-            return Query()
-
-    monkeypatch.setattr(desktop_agent_vm, "get_firestore_client", Firestore)
+    monkeypatch.setattr(desktop_agent_vm, "_store", lambda: _Store())
 
     uid, vm = desktop_agent_vm._find_vm_owner("omi-agent-user") or (None, None)
 
     assert uid == "uid"
     assert vm["vmName"] == "omi-agent-user"
-    assert calls == [
-        ("collection", "users"),
-        ("where", "agentVm.vmName", "==", "omi-agent-user"),
-        ("limit", 2),
-    ]
+    # Bounded, indexed lookup expressed on the neutral store port.
+    assert recorded == {
+        "collection": "users",
+        "filters": [("agentVm.vmName", "==", "omi-agent-user")],
+        "limit": 2,
+    }
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,8 @@ This module wires the V3 memory-read production runtime.
 
 from __future__ import annotations
 
+from database import document_store
+
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -55,7 +57,7 @@ _MEMORY_SOURCE = 'memory_compatibility_projection'
 
 
 class ProjectionReader(Protocol):
-    def __call__(self, *, db_client: object, request: V3ProjectionReadRequest) -> V3ProjectionPage: ...
+    def __call__(self, *, request: V3ProjectionReadRequest) -> V3ProjectionPage: ...
 
 
 _projection_reader = cast(ProjectionReader, getattr(projection_db, 'read_v3_compatibility_projection_page'))
@@ -81,7 +83,6 @@ class V3GetRuntime:
 @dataclass(frozen=True)
 class _RuntimeConfig:
     uid: str
-    db_client: object
     cursor_secret: bytes | None
     cursor_policy_version: str
     cursor_secret_version: str
@@ -109,14 +110,13 @@ class _ProductionV3Adapters:
     def decide_dependency(self, request: V3ComposedRequest, budget_ms: int) -> V3ComposedDependencyDecision:
         control = read_v3_control(
             uid=self.config.uid,
-            db_client=self.config.db_client,
         )
         if not control.cohort_enrolled:
             self._last_control = control
             self._last_trusted_generation = None
             return V3ComposedDependencyDecision.legacy(self.config.uid)
         trusted_generation = read_memory_v3_trusted_account_generation(
-            uid=self.config.uid, db_client=self.config.db_client
+            uid=self.config.uid
         )
         expected_generation = trusted_generation.account_generation
         route_decision = decide_v3_control_route(
@@ -147,7 +147,7 @@ class _ProductionV3Adapters:
             return V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
         control_state = self._last_control.state
         projection_state_data = _read_doc_dict(
-            self.config.db_client, f'users/{subject_uid}/v3_compatibility_projection/state'
+            f'users/{subject_uid}/v3_compatibility_projection/state'
         )
         if not isinstance(projection_state_data, dict):
             return V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
@@ -201,7 +201,6 @@ class _ProductionV3Adapters:
         budget_ms: int,
     ) -> V3ComposedProjectionPage:
         projection_page = _projection_reader(
-            db_client=self.config.db_client,
             request=V3ProjectionReadRequest(
                 uid=context.subject_uid,
                 limit=limit,
@@ -258,8 +257,8 @@ class _ProductionV3Adapters:
         )
 
 
-def _read_doc_dict(db_client: Any, path: str) -> MemoryDbItem | None:
-    snapshot: Any = db_client.document(path).get()
+def _read_doc_dict(path: str) -> MemoryDbItem | None:
+    snapshot: Any = document_store.get_document(path)
     if getattr(snapshot, 'exists', False) is False:
         return None
     data: object = snapshot.to_dict()
@@ -363,24 +362,23 @@ def _cursor_ttl_from_env(env: EnvMapping) -> int:
         return _DEFAULT_CURSOR_TTL_SECONDS
 
 
-def _source_decision_for_uid(*, uid: str, db_client: object) -> V3GetSourceDecision:
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+def _source_decision_for_uid(*, uid: str) -> V3GetSourceDecision:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return 'legacy_primary'
-    control = read_v3_control(uid=uid, db_client=db_client)
+    control = read_v3_control(uid=uid)
     if not control.cohort_enrolled:
         return 'legacy_primary'
     return 'memory_read'
 
 
-def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping | None = None) -> V3GetRuntime:
+def build_v3_production_runtime(*, uid: str, env: EnvMapping | None = None) -> V3GetRuntime:
     effective_env = env if env is not None else os.environ
-    source_decision = _source_decision_for_uid(uid=uid, db_client=db_client)
+    source_decision = _source_decision_for_uid(uid=uid)
     if source_decision == 'legacy_primary':
         return V3GetRuntime(enabled=False, source_decision='legacy_primary')
 
     config = _RuntimeConfig(
         uid=uid,
-        db_client=db_client,
         cursor_secret=_cursor_secret_from_env(effective_env),
         cursor_policy_version=effective_env.get('MEMORY_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,
         cursor_secret_version=effective_env.get('MEMORY_V3_CURSOR_SECRET_VERSION') or _DEFAULT_CURSOR_SECRET_VERSION,

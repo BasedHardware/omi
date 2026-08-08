@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Optional, Protocol, Sequence
 
+from database import document_store
 from database.memory_collections import MemoryCollections
 from utils.executors import db_executor
 from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryReport
@@ -198,21 +199,20 @@ class CheckpointStore(Protocol):
 
 
 class FirestoreCheckpointStore:
-    """Server-owned checkpoint store under each user's ``memory_control``."""
-
-    def __init__(self, db_client: Any):
-        self._db_client = db_client
+    """Server-owned checkpoint store under each user's ``memory_control`` (neutral store port)."""
 
     def read(self, uid: str) -> MigrationCheckpoint:
-        snapshot = self._db_client.document(MemoryCollections(uid).legacy_canonical_backfill_checkpoint).get()
+        snapshot = document_store.get_document(MemoryCollections(uid).legacy_canonical_backfill_checkpoint)
         payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
         return MigrationCheckpoint.from_payload(uid, payload)
 
     def write(self, checkpoint: MigrationCheckpoint) -> None:
         current = self.read(checkpoint.uid)
         validate_checkpoint_transition(current.state, checkpoint.state)
-        self._db_client.document(MemoryCollections(checkpoint.uid).legacy_canonical_backfill_checkpoint).set(
-            checkpoint.to_payload(), merge=True
+        document_store.set_document(
+            MemoryCollections(checkpoint.uid).legacy_canonical_backfill_checkpoint,
+            checkpoint.to_payload(),
+            merge=True,
         )
 
 
@@ -222,13 +222,13 @@ class PauseDecision:
     reason: Optional[str] = None
 
 
-def read_global_pause(db_client: Any, *, env: Optional[dict[str, str]] = None) -> PauseDecision:
-    """Fail closed when the environment or Firestore pause control cannot be cleared."""
+def read_global_pause(*, env: Optional[dict[str, str]] = None) -> PauseDecision:
+    """Fail closed when the environment or the store pause control cannot be cleared."""
     values = os.environ if env is None else env
     if str(values.get(PAUSE_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}:
         return PauseDecision(True, "paused_by_env")
     try:
-        snapshot = db_client.document(GLOBAL_PAUSE_PATH).get()
+        snapshot = document_store.get_document(GLOBAL_PAUSE_PATH)
         payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
     except Exception:
         return PauseDecision(True, "pause_check_failed")

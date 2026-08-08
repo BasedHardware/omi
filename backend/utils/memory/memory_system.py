@@ -6,7 +6,6 @@ Replaces fragmented memory rollout flags with one explicit server-owned selector
 
 import os
 from enum import Enum
-from typing import Any
 
 from config import canonical_memory_cohort
 
@@ -41,7 +40,7 @@ def _local_fixture_canonical_uids() -> frozenset[str]:
     return frozenset(uid.strip() for uid in os.getenv('MEMORY_CANONICAL_USERS', '').split(',') if uid.strip())
 
 
-def resolve_memory_system(uid: object, *, db_client: Any = None) -> MemorySystem:
+def resolve_memory_system(uid: object) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     ``CANONICAL_MEMORY_USERS`` is the production entitlement selector. The
@@ -55,7 +54,6 @@ def resolve_memory_system(uid: object, *, db_client: Any = None) -> MemorySystem
     A stale persisted ``memory_control/state.memory_system=canonical`` does **not** override
     whitelist removal — clearing the code whitelist is the global kill-switch (everyone legacy).
     """
-    del db_client  # reserved for callers/tests; cohort is code-defined today
 
     is_canonical = canonical_memory_cohort.is_canonical_memory_user(uid) or (
         isinstance(uid, str) and uid in _local_fixture_canonical_uids()

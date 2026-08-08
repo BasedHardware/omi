@@ -137,6 +137,47 @@ logger = logging.getLogger(__name__)
 _usage_callback = get_usage_callback()
 _GEMINI_OPENAI_BASE_URL = GEMINI_OPENAI_BASE_URL
 
+# ---------------------------------------------------------------------------
+# On-prem embeddings endpoint (the one hard-cloud inference gap).
+#
+# By default embeddings go to OpenAI ``text-embedding-3-large`` (3072-dim),
+# a first-class cloud backend. On-prem operators point them at any
+# OpenAI-compatible endpoint (Ollama / vLLM / TEI) that serves ``/v1/embeddings``
+# — the same endpoint can serve chat, so a single Ollama URL covers both.
+# The embedding model's dimension MUST equal ``QDRANT_VECTOR_DIM`` (e.g.
+# nomic-embed-text=768, mxbai-embed-large=1024); a fresh vector store is
+# required when switching away from the 3072-dim default.
+EMBEDDINGS_BASE_URL_ENV_VAR = 'OMI_EMBEDDINGS_BASE_URL'
+EMBEDDINGS_MODEL_ENV_VAR = 'OMI_EMBEDDINGS_MODEL'
+EMBEDDINGS_API_KEY_ENV_VAR = 'OMI_EMBEDDINGS_API_KEY'
+_DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-large'
+
+
+def _embeddings_base_url() -> str:
+    """The configured on-prem embeddings endpoint, or '' for cloud OpenAI."""
+    return os.getenv(EMBEDDINGS_BASE_URL_ENV_VAR, '').strip().rstrip('/')
+
+
+def _embeddings_model() -> str:
+    return os.getenv(EMBEDDINGS_MODEL_ENV_VAR, '').strip() or _DEFAULT_EMBEDDINGS_MODEL
+
+
+def _embeddings_ctor_kwargs() -> Dict[str, Any]:
+    """Extra ``OpenAIEmbeddings`` kwargs.
+
+    When an on-prem endpoint is configured every client construction (default
+    *and* BYOK) is pinned to it, so no embedding call escapes to the cloud.
+    ``check_embedding_ctx_length=False`` is required: with the default True,
+    LangChain sends token-id arrays rather than strings, which OpenAI-compatible
+    servers like Ollama reject.
+    """
+    base_url = _embeddings_base_url()
+    if not base_url:
+        return {}
+    # Local servers ignore the key, but the OpenAI client requires a non-empty one.
+    api_key = os.getenv(EMBEDDINGS_API_KEY_ENV_VAR, '').strip() or 'not-set'
+    return {'base_url': base_url, 'api_key': api_key, 'check_embedding_ctx_length': False}
+
 
 class _LLMErrorCallback(BaseCallbackHandler):
     """LangChain callback that tags provider errors with platform/BYOK source."""
@@ -225,13 +266,39 @@ def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
-    __slots__ = ('_model', '_default', '_ctor_kwargs')
+    __slots__ = ('_model_factory', '_ctor_kwargs_factory', '_model_cached', '_default', '_ctor_kwargs_cached')
     _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
-    def __init__(self, model: str, default: Optional[OpenAIEmbeddings], ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_model', model)
+    def __init__(
+        self,
+        model_factory: Callable[[], str],
+        default: Optional[OpenAIEmbeddings],
+        ctor_kwargs_factory: Callable[[], Dict[str, Any]],
+    ):
+        # model + ctor_kwargs are resolved lazily (call-time, memoized) rather than snapshotted at
+        # import: an env change between import and first embedding call must be honored, and no env
+        # is read for a process that never embeds.
+        object.__setattr__(self, '_model_factory', model_factory)
+        object.__setattr__(self, '_ctor_kwargs_factory', ctor_kwargs_factory)
+        object.__setattr__(self, '_model_cached', None)
         object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+        object.__setattr__(self, '_ctor_kwargs_cached', None)
+
+    @property
+    def _model(self) -> str:
+        cached = self._model_cached
+        if cached is None:
+            cached = self._model_factory()
+            object.__setattr__(self, '_model_cached', cached)
+        return cached
+
+    @property
+    def _ctor_kwargs(self) -> Dict[str, Any]:
+        cached = self._ctor_kwargs_cached
+        if cached is None:
+            cached = self._ctor_kwargs_factory()
+            object.__setattr__(self, '_ctor_kwargs_cached', cached)
+        return cached
 
     def _default_client(self) -> OpenAIEmbeddings:
         default = self._default
@@ -242,7 +309,12 @@ class _OpenAIEmbeddingsProxy:
 
     def _resolve(self) -> OpenAIEmbeddings:
         byok = get_byok_key('openai')
-        if byok:
+        # A configured on-prem endpoint pins every construction to itself: its own key
+        # (OMI_EMBEDDINGS_API_KEY) already lives in ``_ctor_kwargs['api_key']``. In that mode
+        # BYOK must not pass a second ``api_key`` — that raises "multiple values for keyword
+        # argument 'api_key'" — and there is no cloud egress to send a user key to anyway, so
+        # the endpoint credential wins and BYOK falls through to the pinned default client.
+        if byok and 'api_key' not in self._ctor_kwargs:
             cache_key = f"emb:{self._model}:{_hash_key(byok)}"
             inst = _openai_cache.get(cache_key)
             if inst is None:
@@ -658,9 +730,9 @@ llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
 embeddings = _OpenAIEmbeddingsProxy(
-    model="text-embedding-3-large",
+    model_factory=_embeddings_model,
     default=None,
-    ctor_kwargs={},
+    ctor_kwargs_factory=_embeddings_ctor_kwargs,
 )
 parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
@@ -691,6 +763,12 @@ def gemini_embed_query(text: str) -> List[float]:
     Prefers the per-request BYOK Gemini key; falls back to the process-wide
     env key so non-BYOK callers behave exactly as before.
     """
+    if _embeddings_base_url():
+        # On-prem: screen-activity queries use the same local OpenAI-compatible
+        # endpoint as every other embedding, so there is no Google egress. The
+        # desktop app must be configured to the same model/endpoint so its
+        # RETRIEVAL_DOCUMENT vectors align with these query vectors.
+        return generate_embedding(text)
     if should_route_features_through_gateway():
         record_direct_exception_surface(surface='gemini_screen_activity_query_embedding', reason='out_of_scope')
     api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')

@@ -9,8 +9,9 @@ whole active queue in one call (DELETE /v1/staged-tasks).
   the same dedup/merge/create tail as the top-scored path (default task_id=None is unchanged).
 - clear_staged_tasks batch-deletes only active (completed==False) staged tasks, preserving history.
 
-Test isolation: the modules import cleanly, so they are imported normally and the collection is
-faked via monkeypatch.setattr(staged_tasks_db, '_user_col'/'db') (no sys.modules mutation).
+Test isolation: the modules import cleanly, so they are imported normally and storage is faked
+via the ``_store()`` port seam (monkeypatch.setattr(staged_tasks_db, '_store', ...) with an
+in-memory FakeDocumentStore), asserting on stored state rather than Firestore call mechanics.
 """
 
 import os
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from tests.store_fakes import FakeDocumentStore
 from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
 
@@ -40,44 +42,26 @@ def legacy_workflow_mode(monkeypatch):
     monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: TaskWorkflowControl())
 
 
-def _make_doc(doc_id, data):
-    doc = MagicMock()
-    doc.id = doc_id
-    doc.to_dict.return_value = data
-    return doc
+def _seed_by_id(monkeypatch, task_id, data, uid="uid"):
+    """Seed a FakeDocumentStore so ``users/{uid}/staged_tasks/{task_id}`` holds ``data``
+    (absent when ``data`` is None). Returns ``(store, path)`` for state assertions."""
+    store = FakeDocumentStore()
+    path = f'users/{uid}/staged_tasks/{task_id}'
+    if data is not None:
+        store.set(path, dict(data))
+    monkeypatch.setattr(staged_tasks_db, "_store", lambda: store)
+    return store, path
 
 
-def _stub_staged_by_id(monkeypatch, task_id, data):
-    """Stub _user_col so document(task_id).get() returns a doc with `data` (exists=False if None)."""
-    snap = MagicMock()
-    snap.exists = data is not None
-    snap.id = task_id
-    snap.to_dict.return_value = data
-
-    update_calls = {}
-    ref = MagicMock()
-    ref.get.return_value = snap
-    ref.update.side_effect = lambda payload: update_calls.update(payload)
-
-    fake_col = MagicMock()
-    fake_col.document.return_value = ref
-    monkeypatch.setattr(staged_tasks_db, "_user_col", lambda uid, name: fake_col)
-    return fake_col, update_calls
-
-
-def _stub_clear(monkeypatch, doc_ids):
-    """Stub _user_col + db.batch for clear_staged_tasks."""
-    fake_query = MagicMock()
-    fake_query.select.return_value = fake_query
-    fake_query.stream.return_value = iter([_make_doc(d, {}) for d in doc_ids])
-
-    fake_col = MagicMock()
-    fake_col.where.return_value = fake_query
-
-    batch = MagicMock()
-    monkeypatch.setattr(staged_tasks_db, "_user_col", lambda uid, name: fake_col)
-    monkeypatch.setattr(staged_tasks_db, "db", MagicMock(batch=MagicMock(return_value=batch)))
-    return fake_col, fake_query, batch
+def _seed_clear(monkeypatch, active_ids, completed_ids=(), uid="uid"):
+    """Seed active (completed==False) and terminal (completed==True) staged rows."""
+    store = FakeDocumentStore()
+    for doc_id in active_ids:
+        store.set(f'users/{uid}/staged_tasks/{doc_id}', {'completed': False})
+    for doc_id in completed_ids:
+        store.set(f'users/{uid}/staged_tasks/{doc_id}', {'completed': True})
+    monkeypatch.setattr(staged_tasks_db, "_store", lambda: store)
+    return store
 
 
 # --- promote_staged_task(task_id=...) ---
@@ -85,7 +69,7 @@ def _stub_clear(monkeypatch, doc_ids):
 
 class TestPromoteById:
     def test_promotes_the_specified_candidate(self, monkeypatch):
-        fake_col, update_calls = _stub_staged_by_id(
+        store, path = _seed_by_id(
             monkeypatch, "staged-x", {"id": "staged-x", "description": "Unique task", "completed": False}
         )
         monkeypatch.setattr(action_items_db, "get_active_action_item_by_description", lambda uid, desc: None)
@@ -97,12 +81,13 @@ class TestPromoteById:
         result = staged_tasks_db.promote_staged_task("uid", task_id="staged-x")
 
         assert result == {"id": "fresh-1", "description": "Unique task"}
-        fake_col.document.assert_any_call("staged-x")  # promoted the chosen doc, not a scored query
-        assert update_calls.get("completed") is True
-        assert update_calls.get("promoted_to") == "fresh-1"
+        # The chosen doc (not a scored query result) was the one closed and pointed at the new item.
+        stored = store.get(path).to_dict()
+        assert stored.get("completed") is True
+        assert stored.get("promoted_to") == "fresh-1"
 
     def test_dedup_tail_still_applies_when_promoting_by_id(self, monkeypatch):
-        _stub_staged_by_id(
+        _seed_by_id(
             monkeypatch, "staged-y", {"id": "staged-y", "description": "Follow up on Volt", "completed": False}
         )
         existing = {"id": "existing-1", "description": "Follow up on Volt", "completed": False}
@@ -118,11 +103,11 @@ class TestPromoteById:
         assert create_called == []  # dedup guard fired instead of creating a duplicate
 
     def test_nonexistent_id_returns_none(self, monkeypatch):
-        _stub_staged_by_id(monkeypatch, "ghost", None)  # snap.exists = False
+        _seed_by_id(monkeypatch, "ghost", None)  # not present in the store
         assert staged_tasks_db.promote_staged_task("uid", task_id="ghost") is None
 
     def test_already_completed_returns_none(self, monkeypatch):
-        _stub_staged_by_id(monkeypatch, "done-1", {"id": "done-1", "description": "x", "completed": True})
+        _seed_by_id(monkeypatch, "done-1", {"id": "done-1", "description": "x", "completed": True})
         assert staged_tasks_db.promote_staged_task("uid", task_id="done-1") is None
 
 
@@ -131,29 +116,28 @@ class TestPromoteById:
 
 class TestClearStagedTasks:
     def test_deletes_active_and_returns_count(self, monkeypatch):
-        fake_col, fake_query, batch = _stub_clear(monkeypatch, ["a", "b", "c"])
+        # A completed row ('hist') must survive — clear is scoped, not an unfiltered wipe.
+        store = _seed_clear(monkeypatch, ["a", "b", "c"], completed_ids=["hist"])
         count = staged_tasks_db.clear_staged_tasks("uid")
         assert count == 3
-        assert batch.delete.call_count == 3
-        batch.commit.assert_called_once()
-        fake_col.where.assert_called_once()  # scoped, not an unfiltered wipe
-        fake_query.select.assert_called_once()  # IDs-only projection
+        remaining = set(store.list_ids("users/uid/staged_tasks"))
+        assert remaining == {"hist"}  # only the terminal history row is preserved
 
     def test_empty_queue_returns_zero_without_commit(self, monkeypatch):
-        _fake_col, _fake_query, batch = _stub_clear(monkeypatch, [])
+        # Only a completed row exists; nothing active to clear.
+        store = _seed_clear(monkeypatch, [], completed_ids=["hist"])
         assert staged_tasks_db.clear_staged_tasks("uid") == 0
-        batch.delete.assert_not_called()
-        batch.commit.assert_not_called()
+        assert store.list_ids("users/uid/staged_tasks") == ["hist"]
 
     def test_terminal_candidate_suppression_closes_row_without_promoted_task(self, monkeypatch):
-        ref = MagicMock()
-        collection = MagicMock()
-        collection.document.return_value = ref
-        monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
+        store = FakeDocumentStore()
+        path = 'users/user-1/staged_tasks/staged-1'
+        store.set(path, {'completed': False})
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
 
         staged_tasks_db.suppress_staged_task_for_terminal_candidate('user-1', 'staged-1', reason='rejected')
 
-        patch = ref.update.call_args.args[0]
+        patch = store.get(path).to_dict()
         assert patch['completed'] is True
         assert patch['candidate_terminal_reason'] == 'rejected'
         assert patch['promotion_skipped'] == 'candidate_terminal'

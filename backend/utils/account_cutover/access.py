@@ -100,7 +100,6 @@ def evaluate_account_cutover_access(
     method: str,
     path: str,
     headers: Mapping[str, str],
-    firestore_client: Any = None,
     force: bool = False,
     mutating: Optional[bool] = None,
 ) -> None:
@@ -118,7 +117,7 @@ def evaluate_account_cutover_access(
         return
 
     try:
-        record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
+        record = account_cutover_db.get_account_cutover_record(uid)
     except MalformedDocError as error:
         raise AccountCutoverAccessDenial(
             code='account_cutover_state_unavailable',
@@ -220,7 +219,6 @@ def enforce_account_cutover_http_access(
     method: str,
     path: str,
     headers: Mapping[str, str],
-    firestore_client: Any = None,
 ) -> None:
     try:
         evaluate_account_cutover_access(
@@ -228,7 +226,6 @@ def enforce_account_cutover_http_access(
             method=method,
             path=path,
             headers=headers,
-            firestore_client=firestore_client,
         )
     except AccountCutoverAccessDenial as denial:
         record_cutover_access_decision(
@@ -250,7 +247,6 @@ def enforce_account_cutover_ws_access(
     *,
     path: str,
     headers: Mapping[str, str],
-    firestore_client: Any = None,
 ) -> None:
     try:
         # Product WebSocket sessions perform capture/mutations after admission.
@@ -260,7 +256,6 @@ def enforce_account_cutover_ws_access(
             method='GET',
             path=path,
             headers=headers,
-            firestore_client=firestore_client,
             mutating=True,
         )
     except AccountCutoverAccessDenial as denial:
@@ -277,8 +272,6 @@ def enforce_account_cutover_ws_access(
 
 def should_skip_background_account_mutation(
     uid: str,
-    *,
-    firestore_client: Any = None,
 ) -> bool:
     """True when enforcement is on and queued work must not mutate this account.
 
@@ -289,7 +282,7 @@ def should_skip_background_account_mutation(
     if not cutover_enforcement_enabled():
         return False
     try:
-        record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
+        record = account_cutover_db.get_account_cutover_record(uid)
     except MalformedDocError:
         return True
     return background_job_should_skip_account(record)

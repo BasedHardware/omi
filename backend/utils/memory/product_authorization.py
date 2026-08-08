@@ -48,7 +48,6 @@ class ProductAuthorizationContext:
 class ProductAuthorizationDecision:
     allowed: bool
     context: ProductAuthorizationContext
-    db_client: object
     read_decision: MemoryReadDecision
     reason: str
     observability: ObservabilityPayload
@@ -138,7 +137,6 @@ def _rollout_observability(
 def _deny(
     *,
     context: ProductAuthorizationContext,
-    db_client: object,
     read_decision: MemoryReadDecision,
     reason: str,
     observability: ObservabilityPayload,
@@ -151,7 +149,6 @@ def _deny(
     return ProductAuthorizationDecision(
         allowed=False,
         context=context,
-        db_client=db_client,
         read_decision=read_decision,
         reason=reason,
         observability=observability,
@@ -165,7 +162,6 @@ def _deny(
 def _allow(
     *,
     context: ProductAuthorizationContext,
-    db_client: object,
     global_gate: GlobalReadGateDecision,
     rollout: DefaultReadRolloutDecision,
     policy: MemoryAccessPolicy,
@@ -174,7 +170,6 @@ def _allow(
     return ProductAuthorizationDecision(
         allowed=True,
         context=context,
-        db_client=db_client,
         read_decision=MemoryReadDecision.USE_MEMORY,
         reason='ok',
         observability=observability,
@@ -404,7 +399,6 @@ def authorize_app_key_scope_memory_grant(
 def authorize_memory_external_default_memory_read(
     context: ProductAuthorizationContext,
     *,
-    db_client: object,
     read_app_key_grants_state: ReadAppKeyGrantsState = cast(
         ReadAppKeyGrantsState, getattr(app_key_grants_db, 'read_app_key_memory_grants_state')
     ),
@@ -419,7 +413,7 @@ def authorize_memory_external_default_memory_read(
     Archive capability.
     """
 
-    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    grant_state_read = read_app_key_grants_state(uid=context.uid)
     decision = authorize_app_key_scope_memory_grant(
         context,
         persisted_grant_state=getattr(grant_state_read, 'state', {}),
@@ -433,7 +427,6 @@ def authorize_memory_external_default_memory_read(
 def authorize_memory_external_default_memory_write(
     context: ProductAuthorizationContext,
     *,
-    db_client: object,
     read_app_key_grants_state: ReadAppKeyGrantsState = cast(
         ReadAppKeyGrantsState, getattr(app_key_grants_db, 'read_app_key_memory_grants_state')
     ),
@@ -447,7 +440,7 @@ def authorize_memory_external_default_memory_write(
     memories before any external-memory service call.
     """
 
-    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    grant_state_read = read_app_key_grants_state(uid=context.uid)
     decision = authorize_app_key_scope_memory_grant(
         context,
         persisted_grant_state=getattr(grant_state_read, 'state', {}),
@@ -461,7 +454,6 @@ def authorize_memory_external_default_memory_write(
 def authorize_memory_product_memory_route(
     context: ProductAuthorizationContext,
     *,
-    db_client: object,
     read_global_gate: ReadGlobalGate = read_global_read_gate,
     read_default_rollout: ReadRollout = read_default_read_rollout,
     read_archive_rollout: ReadRollout = read_archive_read_rollout,
@@ -474,12 +466,11 @@ def authorize_memory_product_memory_route(
     Archive capability. It never creates a default policy with Archive enabled.
     """
 
-    global_gate = read_global_gate(db_client=db_client)
+    global_gate = read_global_gate()
     global_observability = _global_read_gate_observability(global_gate, context)
     if global_gate.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,
-            db_client=db_client,
             read_decision=global_gate.read_decision,
             reason=global_gate.fallback_reason or global_gate.reason,
             observability=global_observability,
@@ -489,7 +480,6 @@ def authorize_memory_product_memory_route(
     if context.requires_archive_capability and not context.explicit_archive_request:
         return _deny(
             context=context,
-            db_client=db_client,
             read_decision=MemoryReadDecision.DENY_MEMORY,
             reason='missing_explicit_archive_request',
             observability=global_observability,
@@ -497,7 +487,7 @@ def authorize_memory_product_memory_route(
         )
 
     rollout_reader = read_archive_rollout if context.requires_archive_capability else read_default_rollout
-    rollout = rollout_reader(uid=context.uid, db_client=db_client, consumer=context.consumer)
+    rollout = rollout_reader(uid=context.uid, consumer=context.consumer)
     rollout_observability = _rollout_observability(rollout, context)
 
     # Rollout normalization already encodes grant + projection gates in
@@ -506,7 +496,6 @@ def authorize_memory_product_memory_route(
     if rollout.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,
-            db_client=db_client,
             read_decision=rollout.read_decision,
             reason=rollout.fallback_reason or rollout.reason,
             observability=rollout_observability,
@@ -522,7 +511,6 @@ def authorize_memory_product_memory_route(
 
     return _allow(
         context=context,
-        db_client=db_client,
         global_gate=global_gate,
         rollout=rollout,
         policy=policy,

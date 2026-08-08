@@ -189,8 +189,8 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     ):
         assert rest.get_memories(auth_context=auth_context) == []
 
-    pin.assert_called_once_with("auth-user", db_client=rest.db)
-    authorize.assert_called_once_with(auth_context, db_client=rest.db)
+    pin.assert_called_once_with("auth-user")
+    authorize.assert_called_once_with(auth_context)
     memory_service.read_pinned.assert_called_once_with(
         "auth-user",
         rest.MemorySystem.CANONICAL,

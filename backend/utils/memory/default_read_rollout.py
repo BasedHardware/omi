@@ -13,6 +13,7 @@ from config.memory_rollout import (
     MemoryRolloutState,
     decide_memory_rollout_capabilities,
 )
+from database import document_store
 from database.memory_collections import MemoryCollections
 from utils.memory.memory_read_rollout_core import extract_consumer_grants
 
@@ -196,11 +197,11 @@ def normalize_global_read_gate(data: Any) -> GlobalReadGateDecision:
     return GlobalReadGateDecision(source_path=GLOBAL_READ_GATE_PATH, read_decision=MemoryReadDecision.USE_MEMORY)
 
 
-def read_global_read_gate(*, db_client: Any) -> GlobalReadGateDecision:
+def read_global_read_gate() -> GlobalReadGateDecision:
     """Read the global emergency memory product-read gate before per-user rollout state."""
 
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(GLOBAL_READ_GATE_PATH))
+        snapshot = _get_firestore_document_snapshot(GLOBAL_READ_GATE_PATH)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return GlobalReadGateDecision(
@@ -255,11 +256,11 @@ def normalize_write_convergence_gate(data: Any) -> WriteConvergencePolicy:
     return WriteConvergencePolicy(source_path=WRITE_CONVERGENCE_GATE_PATH, ready=True)
 
 
-def read_write_convergence_gate(*, db_client: Any) -> WriteConvergencePolicy:
+def read_write_convergence_gate() -> WriteConvergencePolicy:
     """Read server-owned durable write convergence/outbox readiness."""
 
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(WRITE_CONVERGENCE_GATE_PATH))
+        snapshot = _get_firestore_document_snapshot(WRITE_CONVERGENCE_GATE_PATH)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return WriteConvergencePolicy(
@@ -399,18 +400,17 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
 
 def guard_legacy_memory_write(
     uid: str,
-    db_client: Any,
     *,
     consumer: str,
     operation: str,
 ) -> LegacyMemoryWriteGuardDecision:
     """Read rollout state and evaluate legacy write guard for external memory mutations."""
 
-    rollout = read_default_read_rollout(uid=uid, db_client=db_client, consumer=consumer)
+    rollout = read_default_read_rollout(uid=uid, consumer=consumer)
     return assert_legacy_memory_write_allowed_for_default_read_decision(
         rollout,
         operation=operation,
-        write_convergence_policy=read_write_convergence_gate(db_client=db_client),
+        write_convergence_policy=read_write_convergence_gate(),
     )
 
 
@@ -545,21 +545,16 @@ def normalize_archive_read_rollout_decision(
     )
 
 
-def _get_firestore_document_snapshot(document_ref: Any) -> Any:
-    try:
-        return document_ref.get(timeout=DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
-    except TypeError as exc:
-        if 'timeout' not in str(exc):
-            raise
-        return document_ref.get()
+def _get_firestore_document_snapshot(path: str) -> Any:
+    return document_store.get_document(path)
 
 
-def read_default_read_rollout(*, uid: str, db_client: Any, consumer: str) -> DefaultReadRolloutDecision:
+def read_default_read_rollout(*, uid: str, consumer: str) -> DefaultReadRolloutDecision:
     """Read and normalize server-owned persisted default-read rollout state."""
 
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_default_read_rollout_decision(
@@ -572,12 +567,12 @@ def read_default_read_rollout(*, uid: str, db_client: Any, consumer: str) -> Def
     return normalize_default_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
 
-def read_archive_read_rollout(*, uid: str, db_client: Any, consumer: str) -> DefaultReadRolloutDecision:
+def read_archive_read_rollout(*, uid: str, consumer: str) -> DefaultReadRolloutDecision:
     """Read persisted default-read rollout plus server-owned Archive capability."""
 
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_default_read_rollout_decision(
@@ -590,10 +585,10 @@ def read_archive_read_rollout(*, uid: str, db_client: Any, consumer: str) -> Def
     return normalize_archive_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
 
-def read_rollout_state_doc(*, uid: str, db_client: Any) -> RolloutStateDocRead:
+def read_rollout_state_doc(*, uid: str) -> RolloutStateDocRead:
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return source_path, None, 'malformed_rollout_state'
@@ -603,11 +598,11 @@ def read_rollout_state_doc(*, uid: str, db_client: Any) -> RolloutStateDocRead:
 
 
 def read_default_read_rollout_decisions(
-    *, uid: str, db_client: Any, consumers: Iterable[str] = DEFAULT_READ_OBSERVABILITY_CONSUMERS
+    *, uid: str, consumers: Iterable[str] = DEFAULT_READ_OBSERVABILITY_CONSUMERS
 ) -> dict[str, DefaultReadRolloutDecision]:
     """Read one rollout state doc and derive per-consumer default-read decisions."""
 
-    source_path, data, read_error = read_rollout_state_doc(uid=uid, db_client=db_client)
+    source_path, data, read_error = read_rollout_state_doc(uid=uid)
     decisions: dict[str, DefaultReadRolloutDecision] = {}
     for consumer in consumers:
         if read_error is not None:

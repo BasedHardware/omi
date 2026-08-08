@@ -3214,5 +3214,6 @@
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
-    "accountCutoverOpenStore": "Buka toko"
+    "accountCutoverOpenStore": "Buka toko",
+    "signInWithSSO": "Log masuk dengan SSO"
 }

@@ -83,8 +83,8 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
             raise RuntimeError(f'{operation} only deleted {deleted}/{expected} records')
 
     def require_vector_index(operation: str):
-        if vector_db.index is None:
-            raise RuntimeError(f'Pinecone index not initialized for {operation}')
+        if not vector_db.is_vector_available():
+            raise RuntimeError(f'Vector store not initialized for {operation}')
 
     try:
         conversation_ids = get_conversation_ids(uid)

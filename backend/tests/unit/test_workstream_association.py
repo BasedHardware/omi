@@ -35,6 +35,42 @@ FIXTURE = Path(__file__).parent / 'fixtures' / 'task_intelligence' / 'associatio
 NOW = datetime(2026, 7, 9, 12, tzinfo=timezone.utc)
 
 
+class _PortOverIndex:
+    """Adapt the neutral vector-store port (ADR-0033) onto a Pinecone-index-shaped fake."""
+
+    def __init__(self, index):
+        self._i = index
+
+    def upsert(self, namespace, records):
+        recs = list(records)
+        self._i.upsert(vectors=recs, namespace=namespace)
+        return len(recs)
+
+    def query(self, namespace, vector, *, top_k, filter=None, include_metadata=True, include_values=False):
+        return self._i.query(
+            vector=vector,
+            top_k=top_k,
+            include_metadata=include_metadata,
+            include_values=include_values,
+            filter=filter,
+            namespace=namespace,
+        )["matches"]
+
+    def update_metadata(self, namespace, id, set_metadata):
+        self._i.update(id, set_metadata=set_metadata, namespace=namespace)
+
+    def delete_by_ids(self, namespace, ids):
+        ids = list(ids)
+        self._i.delete(ids=ids, namespace=namespace)
+        return len(ids)
+
+    def delete_by_filter(self, namespace, filter):
+        self._i.delete(filter=filter, namespace=namespace)
+
+    def list_ids(self, namespace, *, prefix):
+        yield from self._i.list(prefix=prefix, namespace=namespace)
+
+
 def _workstream(payload: dict) -> Workstream:
     return Workstream(
         workstream_id=payload['workstream_id'],
@@ -49,11 +85,11 @@ def _workstream(payload: dict) -> Workstream:
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
-        lambda uid, firestore_client=None: TaskWorkflowControl(
+        lambda uid: TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.write,
             account_generation=7,
         ),
@@ -75,7 +111,6 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
         outcome = association.associate_canonical_evidence(
             'uid-1',
             AssociationEvidence(evidence_id=case['id'], **case['evidence']),
-            firestore_client=object(),
             retrieve_ids=lambda uid, summary, **kwargs: list(records),
             hydrate=lambda uid, workstream_id, **kwargs: records.get(workstream_id),
             adjudicate=lambda request: AssociationJudgment(
@@ -119,9 +154,7 @@ def test_retrieval_hydrates_authority_and_purges_missing_or_closed_hits(enabled)
             evidence_id='memory-1',
             summary='Pricing changed',
             evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
-        ),
-        firestore_client=object(),
-        retrieve_ids=lambda uid, summary, **kwargs: ['missing-1', 'closed-1', 'open-1'],
+        ),        retrieve_ids=lambda uid, summary, **kwargs: ['missing-1', 'closed-1', 'open-1'],
         hydrate=lambda uid, workstream_id, **kwargs: records.get(workstream_id),
         purge_stale=lambda uid, workstream_id, **kwargs: purged.append(workstream_id) is None,
         adjudicate=lambda request: (
@@ -155,7 +188,6 @@ def test_retry_coalesces_same_evidence_into_one_event_key(enabled):
         ],
     )
     kwargs = {
-        'firestore_client': object(),
         'retrieve_ids': lambda uid, summary, **kwargs: ['ws-1'],
         'hydrate': lambda uid, workstream_id, **kwargs: record,
         'adjudicate': lambda request: AssociationJudgment(
@@ -184,9 +216,7 @@ def test_material_event_uses_minimized_adjudicator_summary_not_memory_content(en
             evidence_id='memory-1',
             summary=raw_memory,
             evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
-        ),
-        firestore_client=object(),
-        retrieve_ids=lambda *args, **kwargs: ['ws-1'],
+        ),        retrieve_ids=lambda *args, **kwargs: ['ws-1'],
         hydrate=lambda *args, **kwargs: record,
         adjudicate=lambda request: AssociationJudgment(
             workstream_id='ws-1',
@@ -208,7 +238,7 @@ def test_persisted_shadow_mode_cannot_suppress_canonical_association(enabled, mo
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
-        lambda uid, firestore_client=None: TaskWorkflowControl(
+        lambda uid: TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.shadow,
             account_generation=7,
         ),
@@ -275,7 +305,7 @@ def test_adjudication_reason_requires_consistent_selection_shape():
 
 
 def test_noncanonical_user_executes_no_retrieval_or_recurrence_mutation(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid: MemorySystem.LEGACY)
     calls: list[str] = []
     evidence = AssociationEvidence(
         evidence_id='memory-1',
@@ -339,11 +369,10 @@ def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypa
     consumed: list[CanonicalRecurrenceSignal] = []
 
     summary = maintenance_cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
         now=NOW,
         run_id='run-1',
         recurrence_signal_persister=lambda *args, **kwargs: 1,
-        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
+        recurrence_signal_consumer=lambda uid, signals: (
             consumed.extend(signals) or len(signals)
         ),
     )
@@ -364,23 +393,17 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
     one_off = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=1),
-        account_generation=7,
-        firestore_client=object(),
-        create_candidate=create,
+        account_generation=7,        create_candidate=create,
     )
     first = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
-        account_generation=7,
-        firestore_client=object(),
-        create_candidate=create,
+        account_generation=7,        create_candidate=create,
     )
     second = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
-        account_generation=7,
-        firestore_client=object(),
-        create_candidate=create,
+        account_generation=7,        create_candidate=create,
     )
 
     assert one_off.outcome == RecurrenceOutcomeKind.below_threshold
@@ -390,11 +413,11 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
 
 
 def test_persisted_shadow_mode_cannot_suppress_canonical_recurrence_candidate(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
-        lambda uid, firestore_client=None: TaskWorkflowControl(
+        lambda uid: TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.shadow,
             account_generation=7,
         ),
@@ -449,9 +472,7 @@ def test_durable_recurrence_inbox_retries_failures_and_continues(enabled, monkey
     monkeypatch.setattr(association, 'consume_recurrence_signal', consume)
     created = association.consume_recurrence_signals_for_maintenance(
         'uid-1',
-        [first, second],
-        firestore_client=object(),
-        enqueue=lambda uid, signal, **kwargs: enqueued.append(signal.stable_loop_key) or receipts[0],
+        [first, second],        enqueue=lambda uid, signal, **kwargs: enqueued.append(signal.stable_loop_key) or receipts[0],
         list_pending=lambda *args, **kwargs: receipts,
         complete=lambda uid, receipt_id, **kwargs: completed.append(receipt_id),
         retry=lambda uid, receipt_id, **kwargs: retried.append(receipt_id),
@@ -501,11 +522,11 @@ def test_recurrence_contract_rejects_impossible_temporal_counts():
 
 
 def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(monkeypatch):
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
-        lambda uid, firestore_client=None: TaskWorkflowControl(
+        lambda uid: TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.read, account_generation=7
         ),
     )
@@ -537,11 +558,11 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
     indexed: list[str] = []
     deleted: list[str] = []
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
-        lambda uid, firestore_client=None: TaskWorkflowControl(
+        lambda uid: TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.read, account_generation=7
         ),
     )
@@ -560,7 +581,7 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
         delete_index=lambda uid, workstream_id, **kwargs: deleted.append(workstream_id) is None or True,
     )
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid: MemorySystem.LEGACY)
     assert not workstream_index.refresh_workstream_association_index(
         'uid-1',
         'legacy-1',
@@ -599,7 +620,8 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
             self.deletes.append(kwargs)
 
     fake = FakeIndex()
-    monkeypatch.setattr(vector_db, 'index', fake)
+    monkeypatch.setattr(vector_db, '_vector_store', lambda: _PortOverIndex(fake))
+    monkeypatch.setattr(vector_db, 'is_vector_available', lambda: True)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
 
     assert vector_db.upsert_workstream_association_vector(

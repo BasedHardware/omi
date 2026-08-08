@@ -19,20 +19,18 @@ def refresh_workstream_association_index(
     uid: str,
     workstream_id: str,
     *,
-    firestore_client=None,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
     delete_index: Callable[..., bool] = delete_workstream_association_vector,
 ) -> bool:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return False
     try:
-        control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+        control = workstreams_db.get_task_workflow_control(uid)
         workstream = hydrate(
             uid,
             workstream_id,
             account_generation=control.account_generation,
-            firestore_client=firestore_client,
         )
         if workstream is None or workstream.status != WorkstreamStatus.open:
             return delete_index(uid, workstream_id, account_generation=control.account_generation)
@@ -57,20 +55,18 @@ def refresh_workstream_association_index(
 def rebuild_workstream_association_index(
     uid: str,
     *,
-    firestore_client=None,
     list_source: Callable[..., list[Workstream]] = workstreams_db.list_open_workstreams,
     reset_index: Callable[..., bool] = reset_workstream_association_vectors,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
 ) -> WorkstreamIndexRebuildReport:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return WorkstreamIndexRebuildReport(uid=uid, source_count=0, indexed_count=0)
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     workstreams = [
         item
         for item in list_source(
             uid,
             account_generation=control.account_generation,
-            firestore_client=firestore_client,
         )
         if item.status == WorkstreamStatus.open
     ]

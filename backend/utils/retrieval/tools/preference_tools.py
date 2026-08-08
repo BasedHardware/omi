@@ -12,7 +12,6 @@ from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 import database.vector_db as vector_db
-from database._client import db
 import logging
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
@@ -105,8 +104,8 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
-        if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-            MemoryService(db_client=db).create_external_memory(
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            MemoryService().create_external_memory(
                 uid,
                 MemoryDB.model_validate(memory_data),
                 memory_system=MemorySystem.CANONICAL,

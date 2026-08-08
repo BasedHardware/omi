@@ -44,6 +44,20 @@ _UNIT_TEST_ROOTS = (
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_provider_singleton():
+    """Each test starts with a fresh auth-provider (ADR-0034). The get_auth_provider() singleton must
+    not leak across files that stub firebase differently within one pytest process (CI runs many files
+    per process), mirroring how stub_modules gives each file a fresh module environment."""
+    try:
+        from utils.auth.factory import reset_auth_provider_for_tests
+
+        reset_auth_provider_for_tests()
+    except Exception:
+        pass
+    yield
+
+
 def _env_enabled(name, default='1'):
     return os.environ.get(name, default).lower() not in {'0', 'false', 'no', 'off'}
 

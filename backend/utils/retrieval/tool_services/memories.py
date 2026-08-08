@@ -9,7 +9,6 @@ from typing import Optional, Any, Dict, List, cast
 import database.memories as memory_db
 import database.notifications as notification_db
 import database.vector_db as vector_db
-from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.memory_service import MemoryService
@@ -55,9 +54,9 @@ def get_memories_text(
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset, now=now)
+        memories = MemoryService().read(uid, limit=limit, offset=offset, now=now)
         if start_dt or end_dt:
             filtered: List[MemoryDB] = []
             for memory in memories:
@@ -76,7 +75,6 @@ def get_memories_text(
         uid=uid,
         limit=limit,
         offset=offset,
-        db_client=firestore_db,
         allow_legacy_safe_fallback=True,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
@@ -146,9 +144,9 @@ def search_memories_text(
         logger.warning(f"search_memories_text - timezone lookup failed, formatting dates in UTC: {tz_error}")
         display_tz = timezone.utc
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = MemoryService().search(uid, query, limit=limit)
         if not matches:
             return f"No memories found matching '{query}'."
         result = f"Found {len(matches)} memories matching '{query}':\n\n"
@@ -165,7 +163,6 @@ def search_memories_text(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=firestore_db,
         allow_legacy_safe_fallback=True,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:

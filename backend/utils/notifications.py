@@ -5,7 +5,7 @@ import math
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
-from firebase_admin import messaging, auth
+from firebase_admin import messaging
 import database.notifications as notification_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
@@ -16,6 +16,8 @@ from database.redis_db import (
 )
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
+from utils.push.base import DISABLED, UNIFIEDPUSH, PushMessage
+from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -27,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    return auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    from utils.auth import get_auth_provider
+
+    return get_auth_provider().get_user_profile(uid)  # UserProfile: .display_name / .email etc.
 
 
 # iOS bundle ID for APNs
@@ -169,6 +173,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _to_push_message(
+    tag: str,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+) -> PushMessage:
+    """Translate the FCM-shaped send arguments into a backend-neutral PushMessage."""
+    title: Optional[str] = cast(Any, notification).title if notification else None
+    body: Optional[str] = cast(Any, notification).body if notification else None
+    return PushMessage(tag=tag, title=title, body=body, data=data, is_background=is_background, priority=priority)
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -179,6 +196,13 @@ def _send_to_user(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    backend = resolve_push_backend()
+    if backend == DISABLED:
+        return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up
+
+        return _up.send_to_user(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -214,6 +238,13 @@ async def _send_to_user_async(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    backend = resolve_push_backend()
+    if backend == DISABLED:
+        return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up
+
+        return await _up.send_to_user_async(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
@@ -245,6 +276,20 @@ def send_notification(
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
+def send_user_notification(user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> int:
+    """Send a visible notification and return how many devices were reached.
+
+    Same delivery as ``send_notification`` (routed through the active push backend), but returns the
+    successful-send count for callers that gate on delivery confirmation — e.g. the BYOK
+    error-notification dedupe lock, which is released when nothing was delivered so the next error
+    can retry.
+    """
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data)
 
 
 async def send_notification_async(
@@ -367,6 +412,23 @@ def send_training_data_submitted_notification(user_id: str) -> None:
 
 async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
     """Send notification to multiple users in batches."""
+    backend = resolve_push_backend()
+    if backend == DISABLED:
+        return
+    if backend == UNIFIEDPUSH:
+        # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
+        from utils.push import unifiedpush as _up
+        from database.notifications import UnifiedPushEndpoint
+
+        # Normalize to UnifiedPushEndpoint so a caller passing bare URL strings (the pre-key-set
+        # recipient shape) still delivers instead of failing inside send_bulk.
+        endpoints = [
+            recipient if isinstance(recipient, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=recipient)
+            for recipient in user_tokens
+        ]
+        tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
+        await _up.send_bulk(endpoints, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
+        return
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)

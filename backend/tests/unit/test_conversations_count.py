@@ -1,191 +1,114 @@
 """Tests for get_conversations_count logic and /v1/conversations/count endpoint.
 
-The DB function is tested inline against a module-local MagicMock ``mock_db``; the
-test never imports ``database.*`` (it only reads production source via ``open()`` for
-the parity assertions), so no import-time stubbing is required. The inline copy is
-kept hermetic and fast; ``test_source_matches_implementation`` guards against drift.
+The DB function is exercised through the neutral document-store port: a ``_CountCaptureStore``
+(a ``FakeDocumentStore`` whose ``count()`` returns a scripted value and records the neutral
+filters it saw) is injected at the ``_store`` seam (ADR-0002/ADR-0028). This drives the real
+``database.conversations.get_conversations_count`` — no inline copy to drift, so no source-scrape
+tripwire. The router-level tests still read production source via ``open()`` for registration
+parity assertions.
 """
 
 import os
-from unittest.mock import MagicMock
 
-try:
-    from google.cloud.firestore_v1 import FieldFilter
-except ImportError:
-    # Lightweight test runs may not install Firestore.
-
-    class FieldFilter:
-        def __init__(self, field_path, op_string, value):
-            self.field_path = field_path
-            self.op_string = op_string
-            self.value = value
+import database.conversations as conversations_db
+from tests.store_fakes import FakeDocumentStore
 
 
-mock_db = MagicMock()
+class _CountCaptureStore(FakeDocumentStore):
+    """A store whose ``count()`` returns a scripted value and records the neutral filters it saw.
 
+    This exercises the real ``database.conversations.get_conversations_count`` through the port
+    seam, so there is no inline copy to drift and no source-scrape tripwire (AGENTS.md prefers
+    behavioral coverage over asserting source strings).
+    """
 
-def get_conversations_count(
-    uid,
-    include_discarded=False,
-    statuses=None,
-    start_date=None,
-    end_date=None,
-    categories=None,
-    folder_id=None,
-    starred=None,
-    sources=None,
-):
-    """Mirrors database.conversations.get_conversations_count."""
-    conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
-    if not include_discarded:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
-    if sources:
-        if len(sources) == 1:
-            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
-        else:
-            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
-    if statuses:
-        if len(statuses) == 1:
-            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
-        else:
-            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
-    if categories:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
-    if folder_id:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
-    if starred is not None:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
-    if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
-    if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
-    result = conversations_ref.count().get()
-    return int(result[0][0].value)
+    def __init__(self, value):
+        super().__init__()
+        self._value = value
+        self.count_calls = []
+
+    def count(self, collection, *, filters=None):
+        self.count_calls.append((collection, [tuple(f) for f in (filters or [])]))
+        return self._value
 
 
 class TestConversationsCount:
-    def setup_method(self):
-        mock_db.reset_mock()
+    """Behavioral tests of the real get_conversations_count against the neutral port seam."""
 
-    def _make_result(self, value):
-        v = MagicMock()
-        v.value = value
-        return [[v]]
+    def _seed(self, monkeypatch, value):
+        store = _CountCaptureStore(value)
+        monkeypatch.setattr(conversations_db, '_store', lambda: store)
+        return store
 
-    def test_source_matches_implementation(self):
-        """Verify the real function's core logic matches this test's inline copy."""
-        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(source_path, encoding='utf-8') as f:
-            source = f.read()
-        assert 'def get_conversations_count(' in source
-        assert "FieldFilter('discarded', '==', False)" in source
-        assert "FieldFilter('source', '==', sources[0])" in source
-        assert "FieldFilter('source', 'in', sources)" in source
-        assert "FieldFilter('status', '==', statuses[0])" in source
-        assert "FieldFilter('status', 'in', statuses)" in source
-        assert "FieldFilter('folder_id', '==', folder_id)" in source
-        assert "FieldFilter('starred', '==', starred)" in source
-        assert "FieldFilter('created_at', '>=', start_date)" in source
-        assert "FieldFilter('created_at', '<=', end_date)" in source
-        assert '.count().get()' in source
-        assert 'result[0][0].value' in source
+    def _filters(self, store):
+        assert len(store.count_calls) == 1
+        collection, filters = store.count_calls[0]
+        assert collection == 'users/uid1/conversations'
+        return filters
 
-    def test_count_returns_integer(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(42)
+    def test_count_returns_integer(self, monkeypatch):
+        self._seed(monkeypatch, 42)
 
-        result = get_conversations_count('uid1')
+        result = conversations_db.get_conversations_count('uid1')
         assert result == 42
         assert isinstance(result, int)
 
-    def test_count_with_statuses_applies_correct_filters(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(10)
+    def test_count_with_statuses_applies_correct_filters(self, monkeypatch):
+        store = self._seed(monkeypatch, 10)
 
-        result = get_conversations_count('uid1', statuses=['processing', 'completed'])
+        result = conversations_db.get_conversations_count('uid1', statuses=['processing', 'completed'])
         assert result == 10
-        assert ref.where.call_count == 2
-        # Verify FieldFilter arguments (FieldFilter doesn't support equality, check attrs)
-        f0 = ref.where.call_args_list[0].kwargs['filter']
-        assert f0.field_path == 'discarded'
-        assert f0.value is False
-        f1 = ref.where.call_args_list[1].kwargs['filter']
-        assert f1.field_path == 'status'
-        assert f1.value == ['processing', 'completed']
+        assert self._filters(store) == [
+            ('discarded', '==', False),
+            ('status', 'in', ['processing', 'completed']),
+        ]
 
-    def test_count_composes_sources_and_statuses(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(3)
+    def test_count_composes_sources_and_statuses(self, monkeypatch):
+        store = self._seed(monkeypatch, 3)
 
-        result = get_conversations_count('uid1', statuses=['processing', 'completed'], sources=['omi'])
+        result = conversations_db.get_conversations_count(
+            'uid1', statuses=['processing', 'completed'], sources=['omi']
+        )
 
         assert result == 3
-        filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
-        assert [(f.field_path, f.op_string, f.value) for f in filters] == [
+        assert self._filters(store) == [
             ('discarded', '==', False),
             ('source', '==', 'omi'),
             ('status', 'in', ['processing', 'completed']),
         ]
 
-    def test_count_include_discarded_skips_filter(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(55)
+    def test_count_include_discarded_skips_filter(self, monkeypatch):
+        store = self._seed(monkeypatch, 55)
 
-        result = get_conversations_count('uid1', include_discarded=True)
+        result = conversations_db.get_conversations_count('uid1', include_discarded=True)
         assert result == 55
-        ref.where.assert_not_called()
+        assert self._filters(store) == []
 
-    def test_count_zero(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(0)
+    def test_count_zero(self, monkeypatch):
+        self._seed(monkeypatch, 0)
 
-        result = get_conversations_count('uid1')
-        assert result == 0
+        assert conversations_db.get_conversations_count('uid1') == 0
 
-    def test_count_discarded_only_applies_discarded_filter(self):
+    def test_count_discarded_only_applies_discarded_filter(self, monkeypatch):
         """No statuses passed — only the discarded filter should be applied."""
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(7)
+        store = self._seed(monkeypatch, 7)
 
-        result = get_conversations_count('uid1')
+        result = conversations_db.get_conversations_count('uid1')
         assert result == 7
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'discarded'
-        assert f.value is False
+        assert self._filters(store) == [('discarded', '==', False)]
 
-    def test_count_include_discarded_with_statuses(self):
+    def test_count_include_discarded_with_statuses(self, monkeypatch):
         """include_discarded=True + statuses — only status filter, no discarded filter."""
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(20)
+        store = self._seed(monkeypatch, 20)
 
-        result = get_conversations_count('uid1', include_discarded=True, statuses=['processing'])
+        result = conversations_db.get_conversations_count('uid1', include_discarded=True, statuses=['processing'])
         assert result == 20
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'status'
-        assert (f.op_string, f.value) == ('==', 'processing')
+        assert self._filters(store) == [('status', '==', 'processing')]
 
-    def test_count_applies_list_filter_parity(self):
-        ref = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value = ref
-        ref.where.return_value = ref
-        ref.count.return_value.get.return_value = self._make_result(3)
+    def test_count_applies_list_filter_parity(self, monkeypatch):
+        store = self._seed(monkeypatch, 3)
 
-        result = get_conversations_count(
+        result = conversations_db.get_conversations_count(
             'uid1',
             statuses=['completed'],
             start_date='2026-06-01T00:00:00Z',
@@ -195,8 +118,7 @@ class TestConversationsCount:
         )
 
         assert result == 3
-        filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
-        assert [(f.field_path, f.op_string, f.value) for f in filters] == [
+        assert self._filters(store) == [
             ('discarded', '==', False),
             ('status', '==', 'completed'),
             ('folder_id', '==', 'folder-a'),

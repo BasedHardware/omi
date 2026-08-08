@@ -69,20 +69,20 @@ def _rollout_state_from_data(*, uid: str, data: dict[str, Any]) -> MemoryRollout
     )
 
 
-def read_v3_control(*, uid: str, db_client: Any, consumer: str = V3_DEFAULT_CONSUMER) -> V3ControlReadResult:
+def read_v3_control(*, uid: str, consumer: str = V3_DEFAULT_CONSUMER) -> V3ControlReadResult:
     """Read canonical memory rollout state and derive the `/v3` control contract.
 
     Non-enrolled users are identified solely by the canonical-memory selector and do
-    not trigger a Firestore read. Enrolled users must have a persisted control doc;
-    missing or unreadable state fails closed and is not reinterpreted as
+    not trigger a persisted-state read. Enrolled users must have a persisted control
+    doc; missing or unreadable state fails closed and is not reinterpreted as
     non-enrollment.
     """
 
     source_path = MemoryCollections(uid=uid).memory_control_state
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return V3ControlReadResult(cohort_enrolled=False, source_path=source_path)
 
-    source_path, data, read_error = read_rollout_state_doc(uid=uid, db_client=db_client)
+    source_path, data, read_error = read_rollout_state_doc(uid=uid)
     if read_error is not None:
         return V3ControlReadResult(
             cohort_enrolled=True,
@@ -136,8 +136,8 @@ def read_v3_control(*, uid: str, db_client: Any, consumer: str = V3_DEFAULT_CONS
     global_read_gate_open = False
     write_convergence_ready = False
     if effective_mode == MemoryRolloutMode.read:
-        global_gate = read_global_read_gate(db_client=db_client)
-        write_gate = read_write_convergence_gate(db_client=db_client)
+        global_gate = read_global_read_gate()
+        write_gate = read_write_convergence_gate()
         global_read_gate_open = global_gate.read_decision == MemoryReadDecision.USE_MEMORY
         write_convergence_ready = write_gate.ready
 

@@ -44,11 +44,10 @@ def resolve_task_intelligence_for_user(
     uid: str,
     workflow_mode: TaskWorkflowMode | str,
     account_generation: int = 0,
-    db_client=None,
 ) -> TaskIntelligenceRolloutDecision:
     """Compose workflow mode with the authoritative canonical-memory selector."""
 
-    memory_cohort_eligible = resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    memory_cohort_eligible = resolve_memory_system(uid) == MemorySystem.CANONICAL
     return resolve_task_intelligence_rollout(
         uid=uid,
         workflow_mode=workflow_mode,

@@ -10,7 +10,6 @@ before copying, mirroring the decrypt-then-reencrypt pattern already used by mig
 """
 
 import os
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -25,6 +24,7 @@ os.environ.setdefault(
 # so no client is constructed and no network is touched on import. Fakes are injected per-test via
 # the firestore_client parameter and monkeypatch on the module's encryption singleton.
 from database import memories  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 class FakeEnc:
@@ -51,33 +51,28 @@ def enc(monkeypatch):
     return FakeEnc
 
 
-def _doc(data):
-    snap = MagicMock()
-    snap.to_dict.return_value = data
-    return snap
+@pytest.fixture
+def store(monkeypatch):
+    fake = FakeDocumentStore()
+    monkeypatch.setattr(memories, "_store", lambda: fake)
+    return fake
 
 
-def _make_db(source_dicts):
-    db = MagicMock()
-    memories_ref = db.collection.return_value.document.return_value.collection.return_value
-    memories_ref.stream.return_value = [_doc(d) for d in source_dicts]
-    batch = MagicMock()
-    db.batch.return_value = batch
-    return db, batch
+def _seed(store, source_dicts):
+    for d in source_dicts:
+        store.set(f"users/prevuid/memories/{d['id']}", d)
 
 
-def _written(batch):
-    # The second positional arg of each batch.set(ref, memory) call.
-    return [call.args[1] for call in batch.set.call_args_list]
+def _written(store, memory_id):
+    return store.get(f"users/newuid/memories/{memory_id}").to_dict()
 
 
-def test_enhanced_memory_is_rekeyed_for_new_owner(enc):
-    src = [{"id": "m1", "content": enc.encrypt("secret", "prevuid"), "data_protection_level": "enhanced"}]
-    db, batch = _make_db(src)
-    count = memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+def test_enhanced_memory_is_rekeyed_for_new_owner(enc, store):
+    _seed(store, [{"id": "m1", "content": enc.encrypt("secret", "prevuid"), "data_protection_level": "enhanced"}])
+    count = memories.migrate_memories("prevuid", "newuid")
 
     assert count == 1
-    written = _written(batch)[0]
+    written = _written(store, "m1")
     # The content must now be encrypted under the NEW owner's key, not the previous owner's.
     assert written["content"] == enc.encrypt("secret", "newuid")
     assert written["content"] != enc.encrypt("secret", "prevuid")
@@ -86,39 +81,37 @@ def test_enhanced_memory_is_rekeyed_for_new_owner(enc):
     assert enc.decrypt(written["content"], "newuid") == "secret"
 
 
-def test_standard_memory_is_copied_unchanged(enc):
-    src = [{"id": "m2", "content": "plain text", "data_protection_level": "standard"}]
-    db, batch = _make_db(src)
-    memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+def test_standard_memory_is_copied_unchanged(enc, store):
+    _seed(store, [{"id": "m2", "content": "plain text", "data_protection_level": "standard"}])
+    memories.migrate_memories("prevuid", "newuid")
 
-    written = _written(batch)[0]
     # Standard memories are not encrypted; they copy across verbatim.
-    assert written["content"] == "plain text"
+    assert _written(store, "m2")["content"] == "plain text"
 
 
-def test_undecryptable_content_is_copied_as_is_not_double_wrapped(enc):
+def test_undecryptable_content_is_copied_as_is_not_double_wrapped(enc, store):
     # If the content cannot be decrypted with the source user's key (already-corrupted ciphertext),
     # it must be copied unchanged, NOT re-encrypted under the new key (which would mask the
     # corruption as a value the new owner can "decrypt").
     poisoned = enc.encrypt("secret", "someone-else")  # not decryptable with prevuid
-    src = [{"id": "m1", "content": poisoned, "data_protection_level": "enhanced"}]
-    db, batch = _make_db(src)
-    memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+    _seed(store, [{"id": "m1", "content": poisoned, "data_protection_level": "enhanced"}])
+    memories.migrate_memories("prevuid", "newuid")
 
-    written = _written(batch)[0]
+    written = _written(store, "m1")
     assert written["content"] == poisoned
     assert written["content"] != enc.encrypt(poisoned, "newuid")
 
 
-def test_mixed_batch_rekeys_only_enhanced(enc):
-    src = [
-        {"id": "m1", "content": enc.encrypt("alpha", "prevuid"), "data_protection_level": "enhanced"},
-        {"id": "m2", "content": "beta", "data_protection_level": "standard"},
-    ]
-    db, batch = _make_db(src)
-    count = memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+def test_mixed_batch_rekeys_only_enhanced(enc, store):
+    _seed(
+        store,
+        [
+            {"id": "m1", "content": enc.encrypt("alpha", "prevuid"), "data_protection_level": "enhanced"},
+            {"id": "m2", "content": "beta", "data_protection_level": "standard"},
+        ],
+    )
+    count = memories.migrate_memories("prevuid", "newuid")
 
     assert count == 2
-    written = _written(batch)
-    assert enc.decrypt(written[0]["content"], "newuid") == "alpha"
-    assert written[1]["content"] == "beta"
+    assert enc.decrypt(_written(store, "m1")["content"], "newuid") == "alpha"
+    assert _written(store, "m2")["content"] == "beta"

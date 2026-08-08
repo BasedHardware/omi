@@ -27,29 +27,29 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from testing.import_isolation import stub_modules
+from utils.auth import errors as auth_errors
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-# Firebase auth exception classes. Defined at module scope so they are available to
-# ``@patch(..., side_effect=InvalidIdTokenError(...))`` decorators evaluated at class
-# definition time. The module-scoped autouse fixture below installs these *same*
-# class objects onto the ``firebase_admin.auth`` stub, so when
-# ``utils.other.endpoints`` is exec'd against the stub it binds identical class
-# objects -- preserving ``isinstance`` identity for the close-code logic under test.
-class CertificateFetchError(Exception):
+# Firebase auth exception classes used by the ``@patch(verify_token, side_effect=...)`` decorators.
+# verify_token now surfaces the NEUTRAL auth-error taxonomy (the firebase adapter translates the SDK
+# exceptions), and the WS close-code logic branches on THOSE — so these subclass the neutral errors:
+# ``except auth_errors.AuthError`` catches them and map_ws_auth_close maps them (JWKS/Expired/Revoked
+# by type, the rest by the message string fallback), exactly preserving the codes under test.
+class CertificateFetchError(auth_errors.JWKSUnavailable):
     pass
 
 
-class ExpiredIdTokenError(Exception):
+class ExpiredIdTokenError(auth_errors.ExpiredToken):
     pass
 
 
-class InvalidIdTokenError(Exception):
+class InvalidIdTokenError(auth_errors.InvalidToken):
     pass
 
 
-class RevokedIdTokenError(Exception):
+class RevokedIdTokenError(auth_errors.RevokedToken):
     pass
 
 
@@ -58,6 +58,7 @@ class RevokedIdTokenError(Exception):
 get_current_user_uid_ws_listen = None
 get_current_user_uid_ws = None
 get_current_user_uid = None
+map_ws_auth_close = None
 database_users_stub = None
 
 
@@ -135,6 +136,7 @@ def _ws_auth_isolation():
         mod.get_current_user_uid_ws_listen = endpoints.get_current_user_uid_ws_listen
         mod.get_current_user_uid_ws = endpoints.get_current_user_uid_ws
         mod.get_current_user_uid = endpoints.get_current_user_uid
+        mod.map_ws_auth_close = endpoints.map_ws_auth_close
         mod.database_users_stub = users_stub
         yield
 
@@ -232,8 +234,12 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
             self.assertEqual(data["uid"], "test-uid-123")
         mock_verify.assert_called_once_with("valid_token")
 
-    def test_empty_bearer_token_sends_close_1008(self):
-        """Authorization: 'Bearer ' (empty token) -> close with 1008."""
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('empty token'))
+    def test_empty_bearer_token_sends_close_1008(self, mock_verify):
+        """Authorization: 'Bearer ' (empty token) -> the empty token still reaches auth and closes 1008.
+
+        verify_token is patched to reject so the assertion is deterministic regardless of the
+        LOCAL_DEVELOPMENT dev-bypass (which would otherwise map an unverifiable token to uid '123')."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer "}):
                 pass
@@ -489,6 +495,95 @@ class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
             handler_sig,
             "/v4/web/listen must NOT have auth dependency — uses accept-first pattern",
         )
+
+    def test_web_listen_routes_autherror_through_shared_mapper(self):
+        """STATIC TRIPWIRE (labeled per AGENTS Testing): the /v4/web/listen first-message auth branch
+        must route its neutral AuthError through the shared close-code mapper, not flat-close 1008.
+
+        The close-code *policy* (4001/4004/1008 by error type) is covered behaviorally by
+        ``TestMapWsAuthClose``. Driving web_listen_handler end-to-end is left to the desktop/web path
+        because ``routers.transcribe`` pulls the full listen runtime; this guard just pins the wiring so
+        the handler can't silently regress to a generic 1008.
+        """
+        source = self._read_transcribe_source()
+        self.assertIn(
+            'auth.map_ws_auth_close(error)',
+            source,
+            "/v4/web/listen must map AuthError through the shared close-code mapper",
+        )
+        self.assertNotIn(
+            "reason='Invalid token'",
+            source,
+            "/v4/web/listen must not flat-close AuthError with a generic 1008 'Invalid token'",
+        )
+
+
+class TestHttpAuthDependencyRejects401(WebSocketAuthTestCase):
+    """Finding #1: an invalid/expired/revoked bearer must map to HTTP 401, never 500.
+
+    ``verify_token`` surfaces the neutral auth taxonomy (ADR-0034: InvalidToken/ExpiredToken/
+    RevokedToken/JWKSUnavailable all subclass ``auth_errors.AuthError``). The HTTP dependency handlers
+    previously caught ``InvalidIdTokenError`` — a Firebase SDK class that isn't even imported here — so
+    the ``except`` clause raised ``NameError`` and FastAPI returned 500. Catching ``AuthError`` restores
+    the 401 contract every client depends on.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.app = FastAPI()
+
+        @self.app.get("/protected")
+        def protected(uid: str = Depends(get_current_user_uid)):  # uses the isolated endpoints dep
+            return {"uid": uid}
+
+        self.client = TestClient(self.app)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=auth_errors.InvalidToken('bad signature'))
+    def test_invalid_token_returns_401(self, _mock):
+        resp = self.client.get("/protected", headers={"Authorization": "Bearer sometoken"})
+        self.assertEqual(resp.status_code, 401)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=auth_errors.ExpiredToken('token expired'))
+    def test_expired_token_returns_401(self, _mock):
+        resp = self.client.get("/protected", headers={"Authorization": "Bearer sometoken"})
+        self.assertEqual(resp.status_code, 401)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=auth_errors.RevokedToken('token revoked'))
+    def test_revoked_token_returns_401(self, _mock):
+        resp = self.client.get("/protected", headers={"Authorization": "Bearer sometoken"})
+        self.assertEqual(resp.status_code, 401)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=auth_errors.JWKSUnavailable('jwks down'))
+    def test_jwks_unavailable_returns_401(self, _mock):
+        resp = self.client.get("/protected", headers={"Authorization": "Bearer sometoken"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_missing_authorization_header_returns_401(self):
+        resp = self.client.get("/protected")
+        self.assertEqual(resp.status_code, 401)
+
+
+class TestMapWsAuthClose(unittest.TestCase):
+    """Finding #5: the shared WS close-code policy maps each neutral auth error to the client recovery
+    contract — 4001 (refresh) for expired / JWKS-unavailable, 4004 (re-login) for revoked, 1008 else.
+    This is the exact policy ``/v4/web/listen`` now routes through instead of a flat 1008.
+    """
+
+    def test_expired_token_maps_to_4001(self):
+        code, _reason = map_ws_auth_close(auth_errors.ExpiredToken('expired'))
+        self.assertEqual(code, 4001)
+
+    def test_jwks_unavailable_maps_to_4001(self):
+        code, _reason = map_ws_auth_close(auth_errors.JWKSUnavailable('jwks fetch failed'))
+        self.assertEqual(code, 4001)
+
+    def test_revoked_token_maps_to_4004(self):
+        code, _reason = map_ws_auth_close(auth_errors.RevokedToken('revoked'))
+        self.assertEqual(code, 4004)
+
+    def test_invalid_token_maps_to_1008(self):
+        code, _reason = map_ws_auth_close(auth_errors.InvalidToken('bad signature'))
+        self.assertEqual(code, 1008)
 
 
 if __name__ == '__main__':

@@ -6,15 +6,14 @@ Legacy ``short_term_lifecycle_worker`` remains an importable alias.
 
 from __future__ import annotations
 
+from database import document_store
+
 import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, cast
 
-from google.cloud.firestore_v1 import FieldFilter
-
-from database.firestore_index_registry import EXPIRED_SHORT_TERM_LIFECYCLE_QUERY
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
 from utils.memory.short_term_lifecycle import (
@@ -126,33 +125,26 @@ class FirestoreShortTermLifecycleTransitionStore:
     drift fails closed before writing.
     """
 
-    def __init__(self, *, db_client: Any, now: Optional[datetime] = None) -> None:
-        self._db_client = db_client
+    def __init__(self, *, now: Optional[datetime] = None) -> None:
         self._now = now
 
     def persist_short_term_lifecycle_transition(
         self, record: ShortTermLifecycleTransitionRecord
     ) -> ShortTermLifecyclePersistResult:
-        transaction = self._db_client.transaction()
-        return _run_short_term_lifecycle_transaction(
-            transaction,
-            _persist_short_term_lifecycle_transition_transaction,
-            self._db_client,
-            record,
-            self._now,
+        return document_store.run_transaction(
+            lambda tx: _persist_short_term_lifecycle_transition_transaction(tx, record, self._now)
         )
 
 
 def _persist_short_term_lifecycle_transition_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Any,
     record: ShortTermLifecycleTransitionRecord,
     now: Optional[datetime],
 ) -> ShortTermLifecyclePersistResult:
     transition_id = _stable_transition_id(record.uid, record.idempotency_key)
     collections = MemoryCollections(uid=record.uid)
-    transition_ref = db_client.document(f'{collections.short_term_lifecycle_transitions}/{transition_id}')
-    snapshot = transition_ref.get(transaction=transaction)
+    transition_path = f'{collections.short_term_lifecycle_transitions}/{transition_id}'
+    snapshot = tx.get(transition_path)
 
     if snapshot.exists:
         data = cast(JsonDict, snapshot.to_dict() or {})
@@ -161,29 +153,8 @@ def _persist_short_term_lifecycle_transition_transaction(
         return ShortTermLifecyclePersistResult(record=_record_from_firestore_data(data), created=False)
 
     payload = _firestore_transition_payload(record, transition_id=transition_id, now=now)
-    transaction.set(transition_ref, payload)
+    tx.set(transition_path, payload)
     return ShortTermLifecyclePersistResult(record=record, created=True)
-
-
-def _run_short_term_lifecycle_transaction(
-    transaction: Any,
-    func: Callable[..., ShortTermLifecyclePersistResult],
-    *args: Any,
-) -> ShortTermLifecyclePersistResult:
-    if hasattr(transaction, '_begin'):
-        transaction._begin()
-    try:
-        result = func(transaction, *args)
-        if hasattr(transaction, '_commit'):
-            transaction._commit()
-        return result
-    except Exception:
-        if hasattr(transaction, '_rollback'):
-            transaction._rollback()
-        raise
-    finally:
-        if hasattr(transaction, '_clean_up'):
-            transaction._clean_up()
 
 
 def _current_time(now: Optional[datetime]) -> datetime:
@@ -202,7 +173,6 @@ def _coerce_dispositions(
 def fetch_expired_short_term_memory_items_firestore(
     *,
     uid: str,
-    db_client: Any,
     now: Optional[datetime] = None,
     limit: Optional[int] = None,
 ) -> List[MemoryItem]:
@@ -223,17 +193,9 @@ def fetch_expired_short_term_memory_items_firestore(
         if limit is None
         else min(limit, MAX_SHORT_TERM_MAINTENANCE_SCAN_LIMIT)
     )
-    query = EXPIRED_SHORT_TERM_LIFECYCLE_QUERY.build(
-        db_client.collection(MemoryCollections(uid=uid).memory_items),
-        {
-            'tier': MemoryTier.short_term.value,
-            'status': MemoryItemStatus.active.value,
-            'processing_state': ProcessingState.processed.value,
-            'expires_at': current_time,
-        },
-        field_filter_factory=FieldFilter,
+    snapshots = document_store.stream_collection_where(
+        MemoryCollections(uid=uid).memory_items, 'tier', '==', MemoryTier.short_term.value
     )
-    snapshots = query.order_by('expires_at').order_by('memory_id').limit(effective_limit).stream()
     items: List[MemoryItem] = []
     for snapshot in snapshots:
         item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
@@ -248,13 +210,12 @@ def fetch_expired_short_term_memory_items_firestore(
         ):
             items.append(item)
     items = sorted(items, key=lambda item: (_current_time(cast(datetime, item.expires_at)), item.memory_id))
-    return items
+    return items[:effective_limit]
 
 
 def run_short_term_lifecycle_firestore(
     *,
     uid: str,
-    db_client: Any,
     run_id: str,
     now: Optional[datetime] = None,
     limit: Optional[int] = None,
@@ -265,11 +226,10 @@ def run_short_term_lifecycle_firestore(
     current_time = _current_time(now)
     items = fetch_expired_short_term_memory_items_firestore(
         uid=uid,
-        db_client=db_client,
         now=current_time,
         limit=limit,
     )
-    store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
+    store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
     return process_short_term_lifecycle_items(
         items,
         store=store,

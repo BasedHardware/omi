@@ -9,12 +9,10 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timezone
 
-import firebase_admin
-from firebase_admin import credentials, firestore
-
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from database.store import get_document_store
 from database import user_usage as user_usage_db
 from models.conversation import Conversation
 from models.memories import MemoryDB
@@ -23,27 +21,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK
-try:
-    if os.getenv('SERVICE_ACCOUNT_JSON'):
-        # This path is for Modal environment
-        service_account_info = os.environ["SERVICE_ACCOUNT_JSON"]
-        cred = credentials.Certificate(
-            eval(service_account_info) if service_account_info.startswith('{') else service_account_info
-        )
-    else:
-        # This path is for local development, GOOGLE_APPLICATION_CREDENTIALS should be set
-        cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    logger.error(
-        "Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set for local dev or SERVICE_ACCOUNT_JSON for Modal."
-    )
-    logger.error(e)
-    sys.exit(1)
 
-
-db = firestore.client()
+def _store():
+    # The port's factory owns client selection via STORAGE_BACKEND; no manual init needed.
+    return get_document_store()
 
 
 def _decrypt_conversation_data(data: dict, uid: str) -> dict:
@@ -81,10 +62,9 @@ def _decrypt_conversation_data(data: dict, uid: str) -> dict:
 
 
 def get_all_conversations_for_user(uid: str) -> list[Conversation]:
-    """Fetches and decrypts all conversations for a user directly from Firestore."""
-    conversations_ref = db.collection('users').document(uid).collection('conversations')
+    """Fetches and decrypts all conversations for a user directly from the store."""
     conversations = []
-    for doc in conversations_ref.stream():
+    for doc in _store().query(f'users/{uid}/conversations'):
         data = doc.to_dict()
         if data.get('data_protection_level') == 'enhanced':
             data = _decrypt_conversation_data(data, uid)
@@ -114,10 +94,9 @@ def _decrypt_memory_data(memory_data: dict, uid: str) -> dict:
 
 
 def get_all_memories_for_user(uid: str) -> list[MemoryDB]:
-    """Fetches and decrypts all memories for a user directly from Firestore."""
-    memories_ref = db.collection('users').document(uid).collection('memories')
+    """Fetches and decrypts all memories for a user directly from the store."""
     memories = []
-    for doc in memories_ref.stream():
+    for doc in _store().query(f'users/{uid}/memories'):
         data = doc.to_dict()
         if data.get('data_protection_level') == 'enhanced':
             data = _decrypt_memory_data(data, uid)
@@ -131,15 +110,16 @@ def get_all_memories_for_user(uid: str) -> list[MemoryDB]:
 def delete_hourly_usage_for_user(uid: str):
     """Deletes all documents in the hourly_usage subcollection for a user to ensure idempotency."""
     logger.info(f"Deleting existing hourly usage data for user {uid}...")
-    coll_ref = db.collection('users').document(uid).collection('hourly_usage')
+    coll = f'users/{uid}/hourly_usage'
+    store = _store()
     batch_size = 200
     while True:
-        docs = list(coll_ref.limit(batch_size).stream())
+        docs = store.query(coll, limit=batch_size)
         if not docs:
             break
-        batch = db.batch()
+        batch = store.batch()
         for doc in docs:
-            batch.delete(doc.reference)
+            batch.delete(doc.path)
         batch.commit()
         if len(docs) < batch_size:
             break
@@ -249,8 +229,7 @@ def main():
             logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
         logger.info("Fetching list of all users...")
-        users_ref = db.collection('users')
-        all_users = [user.id for user in users_ref.stream()]
+        all_users = _store().list_ids('users')
         users_to_migrate = [uid for uid in all_users if uid not in ignore_uids]
         logger.info(f"Found {len(users_to_migrate)} users to migrate.")
 

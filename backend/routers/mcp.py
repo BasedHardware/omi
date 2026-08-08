@@ -15,9 +15,8 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
-from database._client import db
 import database.phone_calls as phone_calls_db
-from firebase_admin import auth as firebase_auth
+from utils.auth import get_auth_provider
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -122,17 +121,17 @@ def create_memory(
 ):
     # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
     # must not mutate canonical memories.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    memory_service = MemoryService(db_client=db)
+    memory_service = MemoryService()
     memory_db = memory_service.create_external_memory(
         uid,
         memory_db,
@@ -152,7 +151,7 @@ def create_memory(
 
 
 def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
-    return fetch_memory_dict(uid, memory_id, db_client=db)
+    return fetch_memory_dict(uid, memory_id)
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
@@ -162,17 +161,17 @@ def delete_memory(
 ):
     # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
     # must not mutate canonical memories.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     if memory_system != MemorySystem.CANONICAL:
         _validate_mcp_memory(uid, memory_id)
-    MemoryService(db_client=db).delete_external_memory(
+    MemoryService().delete_external_memory(
         uid,
         memory_id,
         memory_system=memory_system,
@@ -190,16 +189,16 @@ def edit_memory(
 ):
     # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
     # must not mutate canonical memories.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
             detail=write_grant.observability,
         )
     uid = auth_context.uid
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     _validate_mcp_memory(uid, memory_id)
-    MemoryService(db_client=db).update_external_memory_content(
+    MemoryService().update_external_memory_content(
         uid,
         memory_id,
         value,
@@ -224,7 +223,7 @@ def _get_user_contact(uid: str) -> dict:
     lookup failure must not break the profile response."""
     name = email = phone_number = None
     try:
-        user = firebase_auth.get_user(uid)
+        user = get_auth_provider().get_user_profile(uid)
         name = user.display_name or None
         email = user.email or None
         phone_number = user.phone_number or None
@@ -283,7 +282,7 @@ def search_memories(
     limit: int = 10,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
 ):
-    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
@@ -293,18 +292,17 @@ def search_memories(
     uid = auth_context.uid
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
-    memory_system = pin_memory_system(uid, db_client=db)
-    memory_service = MemoryService(db_client=db)
+    memory_system = pin_memory_system(uid)
+    memory_service = MemoryService()
 
     if memory_system == MemorySystem.CANONICAL:
         return memory_service.search_mcp(uid, query, limit=limit)
 
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
+    memory_rollout = read_default_read_rollout(uid=uid, consumer='mcp')
     vector_search_results = search_default_mcp_memories_vector(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=db,
         rollout_decision=memory_rollout,
     )
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
@@ -354,12 +352,12 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
 
     # Fail closed: authorize memory read before any system branch, matching
     # the search route. Legacy keys without persisted memories.read scope
     # cannot list canonical memories.
-    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
@@ -376,7 +374,7 @@ def get_memories(
         filtered = collect_filtered_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
-                for m in MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
+                for m in MemoryService().read_pinned(uid, memory_system, batch_limit, batch_offset)
             ],
             limit=limit,
             offset=offset,
@@ -395,12 +393,11 @@ def get_memories(
                 memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         return memories
 
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
+    memory_rollout = read_default_read_rollout(uid=uid, consumer='mcp')
     memory_list_results = list_default_mcp_memories(
         uid=uid,
         limit=limit,
         offset=offset,
-        db_client=db,
         rollout_decision=memory_rollout,
         categories=[category.value for category in category_list],
         reviewed=reviewed,

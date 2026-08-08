@@ -125,6 +125,7 @@ from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_pay
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.auth import get_auth_provider
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
@@ -1651,9 +1652,9 @@ async def verify_twitter_ownership_tweet(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get provider info from Firebase
+    # Get provider info via the auth port (UserProfile.providers is already a list of provider ids)
     user_info = auth.get_user(uid)
-    provider_data = [p.provider_id for p in user_info.provider_data]
+    provider_data = list(user_info.providers)
 
     # Verify handle
     if handle.startswith('@'):
@@ -1703,8 +1704,8 @@ async def migrate_app_owner(
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:
-        source_claims = await run_blocking(
-            critical_executor, auth.auth.verify_id_token, source_token, check_revoked=True
+        source_principal = await run_blocking(
+            critical_executor, get_auth_provider().verify_token, source_token, check_revoked=True
         )
         source_user = await run_blocking(critical_executor, auth.get_user, old_id)
     except Exception:
@@ -1712,10 +1713,9 @@ async def migrate_app_owner(
         # are deliberately indistinguishable to callers. Neither may mutate state.
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
-    source_uid = source_claims.get('uid')
-    firebase_claims = source_claims.get('firebase')
-    source_provider = firebase_claims.get('sign_in_provider') if isinstance(firebase_claims, dict) else None
-    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.provider_data:
+    # is_anonymous replaces the raw firebase.sign_in_provider=='anonymous' claim read (ADR-0034 §3:
+    # anonymous stays Firebase-only — on OIDC is_anonymous is always False, so migration always rejects).
+    if source_principal.uid != old_id or not source_principal.is_anonymous or source_user.disabled or source_user.providers:
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:

@@ -1881,6 +1881,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get signInWithGoogle => 'Најавете се со Google';
 
   @override
+  String get signInWithSSO => 'Најавете се со SSO';
+
+  @override
   String get byContinuingAgree => 'Со продолжување, се согласувате со нашиот ';
 
   @override

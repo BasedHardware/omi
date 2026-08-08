@@ -1,0 +1,62 @@
+# Self-contained dev-build image for the Flutter Android APK — ours, no third-party base image
+# (avoids cross-compat surprises from someone else's Flutter/SDK layout). Everything is pinned.
+#
+# Pins match the app's toolchain (app/android/app/build.gradle + gradle-wrapper.properties +
+# settings.gradle): compileSdk/targetSdk 36, minSdk 29, NDK 28.2.13676358, Gradle 8.14.2 (from the
+# wrapper), AGP 8.10.1, Java 21 toolchain. Flutter is pinned via FLUTTER_VERSION (Dart >=3.0 <4.0);
+# it must be recent enough to support compileSdk 36.
+#
+# Build: docker build -t omi-appbuild:cached \
+#          --build-arg FLUTTER_VERSION=stable -f deploy/onprem/Dockerfile.appbuild .
+# Use (persistent gradle/pub caches -> fast rebuilds):
+#   docker run --rm -v $PWD/app:/app -w /app \
+#     -v /tmp/omi-gradle-home:/root/.gradle -v /tmp/omi-pub-cache:/root/.pub-cache \
+#     omi-appbuild:cached bash -lc \
+#     "flutter pub get && dart run build_runner build --delete-conflicting-outputs \
+#      && flutter build apk --debug --flavor dev"
+# Prereq: the app's Firebase config files are gitignored — provide them before building
+#   (app/lib/firebase_options_{dev,prod}.dart + app/android/app/src/{dev,prod}/google-services.json),
+#   e.g. via `flutterfire configure`. Firebase.initializeApp runs even under AUTH_BACKEND=oidc.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# cmake + ninja + a C toolchain: the webpush_encryption dep pulls webcrypto, whose Dart build hook
+# compiles BoringSSL as a native asset per Android ABI (needs cmake + ninja + the NDK, already below).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git curl unzip zip xz-utils ca-certificates openjdk-21-jdk libglu1-mesa \
+      cmake ninja-build build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# --- Android SDK (cmdline-tools + platform 36 + build-tools 36 + NDK) ---
+ENV ANDROID_HOME=/opt/android
+ENV ANDROID_SDK_ROOT=/opt/android
+ARG ANDROID_CMDLINE_TOOLS=11076708
+ARG ANDROID_PLATFORM=android-36
+ARG ANDROID_BUILD_TOOLS=36.0.0
+ARG ANDROID_NDK=28.2.13676358
+ENV PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+RUN mkdir -p $ANDROID_HOME/cmdline-tools \
+ && curl -fsSL -o /tmp/cmdtools.zip \
+      https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS}_latest.zip \
+ && unzip -q /tmp/cmdtools.zip -d $ANDROID_HOME/cmdline-tools \
+ && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest \
+ && rm /tmp/cmdtools.zip \
+ && yes | sdkmanager --licenses >/dev/null \
+ && sdkmanager "platform-tools" "platforms;${ANDROID_PLATFORM}" \
+      "build-tools;${ANDROID_BUILD_TOOLS}" "ndk;${ANDROID_NDK}" >/dev/null
+
+# --- Flutter (pinned) ---
+ENV FLUTTER_HOME=/opt/flutter
+ENV PATH=$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin:$PATH
+ARG FLUTTER_VERSION=stable
+RUN git clone --depth 1 --branch ${FLUTTER_VERSION} https://github.com/flutter/flutter.git $FLUTTER_HOME \
+ && git config --global --add safe.directory $FLUTTER_HOME \
+ && flutter config --no-analytics \
+ && flutter precache --android \
+ && flutter --version
+
+# jq: the app test gate `app/scripts/analyze_ratchet.sh` shells out to it to diff analyzer
+# occurrences against analysis_baseline.json. Kept in a late layer so it does not invalidate the
+# expensive SDK/NDK/Flutter layers above. See SELFHOST_NOTES §"Testing the Flutter app offline".
+RUN apt-get update && apt-get install -y --no-install-recommends jq \
+ && rm -rf /var/lib/apt/lists/*

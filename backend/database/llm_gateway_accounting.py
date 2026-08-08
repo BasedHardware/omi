@@ -1,6 +1,6 @@
 """Durable LLM-gateway accounting ledger writes.
 
-The gateway is the producer, but Firestore is the canonical backend-owned
+The gateway is the producer, but the backend-owned datastore is the canonical
 ledger. Events are immutable and idempotent by provider-attempt ID so retries
 or process restarts cannot double-count a billed attempt.
 """
@@ -10,18 +10,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from google.api_core.exceptions import AlreadyExists
-
-from database._client import get_firestore_client
+from database.store import get_document_store
+from database.store.errors import AlreadyExists
 
 ATTEMPTS_COLLECTION = 'llm_gateway_attempts'
 
 
-def record_llm_gateway_attempt(
-    event: Mapping[str, Any],
-    *,
-    firestore_client: Any | None = None,
-) -> bool:
+def _store():
+    return get_document_store()
+
+
+def record_llm_gateway_attempt(event: Mapping[str, Any]) -> bool:
     """Create one immutable gateway attempt event.
 
     Returns ``True`` for a new event and ``False`` for an already-persisted
@@ -29,22 +28,21 @@ def record_llm_gateway_attempt(
     in the event schema constructed by the gateway.
     """
     attempt_id = _required_string(event, 'attempt_id')
-    client = firestore_client or get_firestore_client()
     data = dict(event)
-    data['subscription_tier'] = _subscription_tier(client, data.get('user_uid'))
+    data['subscription_tier'] = _subscription_tier(data.get('user_uid'))
     try:
-        client.collection(ATTEMPTS_COLLECTION).document(attempt_id).create(data)
+        _store().create(f'{ATTEMPTS_COLLECTION}/{attempt_id}', data)
     except AlreadyExists:
         return False
     return True
 
 
-def _subscription_tier(client: Any, uid: object) -> str:
+def _subscription_tier(uid: object) -> str:
     if not isinstance(uid, str) or not uid:
         return 'unattributed'
     try:
-        snapshot = client.collection('users').document(uid).get(['subscription'])
-        if not getattr(snapshot, 'exists', False):
+        snapshot = _store().get(f'users/{uid}', fields=['subscription'])
+        if not snapshot.exists:
             return 'basic'
         raw = snapshot.to_dict()
         if not isinstance(raw, Mapping):
