@@ -129,12 +129,45 @@ export function verifyArtifactRecords(
   provenance: ProvenanceRecord,
 ): void {
   requireEqual("lock schema", lock.schemaVersion, 2);
-  requireEqual("publication status", lock.publicationStatus, "upstream-branch-qa-evidence");
   requireEqual("source repository", lock.source.repository, "BasedHardware/omi");
-  requireEqual("source branch", lock.source.ref, "refs/heads/codex/contract-seam-memory-read");
-  requireEqual("upstream branch pushed flag", lock.source.upstreamBranchPushed, true);
-  requireEqual("merged-to-main flag", lock.source.mergedToMain, false);
-  requireEqual("registry-published flag", lock.source.registryPublished, false);
+
+  // PUBLICATION STATE IS CHECKED FOR COHERENCE, NOT PINNED TO ONE STAGE.
+  //
+  // This block used to be three `requireEqual`s against literals: status ===
+  // "upstream-branch-qa-evidence", upstreamBranchPushed === true, and ref === a specific
+  // branch name. Every one of those was wrong in a different way.
+  //
+  //  - `upstreamBranchPushed === true` compared a boolean THE LOCKFILE DECLARES ABOUT
+  //    ITSELF against `true`. No ls-remote, no remote of any kind. The gate asked the
+  //    lockfile whether it had been pushed and the lockfile answered. Writing `true`
+  //    without pushing produced a fully green gate and a false record; writing the truth
+  //    broke the build. That is backwards, and it is this project's signature failure —
+  //    a mechanism reporting success while the thing it claims never happened.
+  //  - Pinning the status to one stage means the artifact can never legitimately BE at
+  //    another stage. Pre-push is a real, honest state and had no way to be expressed.
+  //  - The pinned `ref` was a stale literal from the 0.1.1 vintage naming a branch that
+  //    does not exist in this workspace at all.
+  //
+  // So: the declared status must AGREE with the declared flags. That is genuinely
+  // checkable offline and catches the incoherent combinations. It deliberately does NOT
+  // claim the flags are true of the world — see verify-publication.ts, which does the
+  // ls-remote and cannot live here because this runs inside a hermetic `bun test`.
+  const PUBLICATION_STAGES: Record<string, { pushed: boolean; merged: boolean; registry: boolean }> = {
+    "local-qa-evidence": { pushed: false, merged: false, registry: false },
+    "upstream-branch-qa-evidence": { pushed: true, merged: false, registry: false },
+  };
+  const stage = PUBLICATION_STAGES[lock.publicationStatus];
+  if (!stage) {
+    fail(`unknown publication status "${lock.publicationStatus}" (known: ${Object.keys(PUBLICATION_STAGES).join(", ")})`);
+  }
+  requireEqual("upstream branch pushed flag", lock.source.upstreamBranchPushed, stage.pushed);
+  requireEqual("merged-to-main flag", lock.source.mergedToMain, stage.merged);
+  requireEqual("registry-published flag", lock.source.registryPublished, stage.registry);
+  // A ref must be a well-formed branch ref. Which branch is a fact about where the source
+  // lives, not a constant to be frozen here.
+  if (!/^refs\/heads\/[A-Za-z0-9._\/-]+$/.test(lock.source.ref)) {
+    fail(`source ref must be a refs/heads/... branch ref, got "${lock.source.ref}"`);
+  }
   if (!lock.source.evidence.includes("not merged to main, registry-published, or adopted in production")) {
     fail("source evidence must state the non-production publication boundary");
   }

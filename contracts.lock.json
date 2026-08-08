@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "publicationStatus": "upstream-branch-qa-evidence",
+  "publicationStatus": "local-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
     "version": "0.2.0",
@@ -40,13 +40,13 @@
   "source": {
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
-    "ref": "refs/heads/codex/contract-seam-memory-read",
-    "commit": "2185608d52ce7c855228ad4df16d303741e8c21b",
+    "ref": "refs/heads/core/foundation",
+    "commit": "73dca8250dd39901447f3fe1754635836a2912fd",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": false,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact source commit exists locally on core-foundation's core/foundation branch (a real, non-main branch already tracked at origin/core/foundation) but has NOT been pushed there by this change - pushing to the real public BasedHardware/omi repository is an outward-facing action this lane declined to take without explicit human confirmation. It is not merged to main, registry-published, or adopted in production. This vendored tarball remains QA evidence pending that push."
+    "evidence": "The exact source commit exists on core-foundation's core/foundation branch but has NOT been pushed to the public BasedHardware/omi remote; pushing is an outward-facing action awaiting explicit human confirmation. Status is therefore local-qa-evidence, not upstream-branch-qa-evidence. It is not merged to main, registry-published, or adopted in production. Verify the positive claim with scripts/verify-publication.ts, which does a real ls-remote; qa-contracts.ts only checks this record is internally coherent."
   },
   "toolchain": {
     "artifactBuild": {
