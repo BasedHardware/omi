@@ -23,13 +23,20 @@
 # domain with the generation that actually served it. A green legacy result is
 # NOT a new-stack result.
 #
-#   *** KNOWN GAP, read the report: the surfaces do not yet have a client
-#   *** adapter for the new backend. `createLegacyProductionStoreFactory` is
-#   *** the only store factory that exists in core/packages/surfaces. So the
-#   *** APPS currently talk to the LEGACY wire for every domain, including
-#   *** memories. The new backend on 4851 is live and conformant, but nothing
-#   *** in the UI consumes it yet. This script boots and verifies both, and
-#   *** tells you plainly which one the app is really using.
+#   *** KNOWN GAP as of 78d8bfbbb2 — read the report before believing any
+#   *** "runs on the new backend" claim, including one this script prints.
+#   ***
+#   *** FE-CORE has landed the client HALF: `core/packages/adapters-platform/`
+#   *** (the ratified memory-read client) and
+#   *** `core/packages/domain/src/generation-selection.ts` (the host-driven
+#   *** per-domain knob, which rejects an unavailable generation rather than
+#   *** silently downgrading).
+#   ***
+#   *** What is still missing is the CONSUMER: `surfaces/src/production/
+#   *** main.tsx` still calls `createLegacyProductionStoreFactory` and nothing
+#   *** else. So every domain in the running app — memories included — is
+#   *** served by the LEGACY wire. The pieces exist; they are not connected.
+#   *** That last wire is FE-SURFACES' to land.
 #
 # ---------------------------------------------------------------------------
 # USAGE
@@ -292,7 +299,7 @@ fi
 
 # ── 3. Surfaces ─────────────────────────────────────────────────────────────
 say "${B}surfaces${Z} — building @omi-core/surfaces"
-( cd "$CORE_REPO/core" && pnpm install --silent && pnpm --filter @omi-core/surfaces build ) \
+( cd "$CORE_REPO/core" && pnpm install --config.confirmModulesPurge=false --silent && pnpm --filter @omi-core/surfaces build ) \
   > "$LOGDIR/surfaces-build.log" 2>&1 \
   || fixit "surfaces build failed" "Log: $LOGDIR/surfaces-build.log" "$(tail -15 "$LOGDIR/surfaces-build.log")"
 [[ -f "$SURFACES/dist/index.html" ]] || fixit "surfaces build produced no dist/index.html" \
@@ -321,16 +328,55 @@ ok "surfaces at http://127.0.0.1:$SURFACES_PORT/"
 # ── 4. macOS app ────────────────────────────────────────────────────────────
 STATS_BEFORE="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
 if [[ $WANT_MACOS -eq 1 ]]; then
-  say "${B}macOS app${Z} — building and launching (bundles the dist you just built)"
+  # The shell's loopback port defaults to 5290 and is NOT in the port registry,
+  # so two people running a macOS shell collide and the second one dies with a
+  # bare "port remained busy". Pick a free port instead, and say which.
+  SHELL_PORT="${OMI_SHELL_PORT:-5290}"
+  if lsof -nP -iTCP:"$SHELL_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    holder="$(ps -o command= -p "$(lsof -nP -tiTCP:"$SHELL_PORT" -sTCP:LISTEN 2>/dev/null | head -1)" 2>/dev/null | sed 's#.*/##')"
+    for candidate in 5291 5292 5293 5294 5295 5296 5297 5298 5299; do
+      if ! lsof -nP -iTCP:"$candidate" -sTCP:LISTEN >/dev/null 2>&1; then
+        warn "port $SHELL_PORT is taken by another shell (${holder:-unknown}); using $candidate instead"
+        SHELL_PORT="$candidate"; break
+      fi
+    done
+  fi
+  # WITHOUT OMI_API_BASE_URL the shell registers no HTTP handler at all and the
+  # surface truthfully renders "bridge unavailable" — the app looks broken and
+  # serves zero requests. This is the legacy wire because that is what the
+  # surfaces actually consume today; see the KNOWN GAP note at the top.
+  export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
+  export OMI_API_TOKEN="omi-qa-fake-token-v1"
+
+  say "${B}macOS app${Z} — building and launching on $SHELL_PORT (bundles the dist you just built)"
   ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
       OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
-      TZ=UTC ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
+      OMI_SURFACE_PORT="$SHELL_PORT" TZ=UTC ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
   if [[ $? -ne 0 ]]; then
     warn "macOS shell failed to launch — see $LOGDIR/macos.log"
     tail -8 "$LOGDIR/macos.log" | sed 's/^/    /'
   else
-    ok "macOS app running — its surface is at http://127.0.0.1:5290/"
+    ok "macOS app running — its surface is at http://127.0.0.1:$SHELL_PORT/"
     echo "    window should be open now; if not, check $LOGDIR/macos.log"
+  fi
+
+  # BRIDGE ACCEPTANCE. A separate, headless run of the same app that exits with
+  # its own verdict. The app reports a HOST-OBSERVED served count and passes
+  # only when it is nonzero: probes prove nothing, and a stalled bridge is
+  # indistinguishable from offline. We propagate the CHILD's exit status —
+  # waiting only for HTTP readiness would report success while this failed.
+  say "${B}macOS bridge acceptance${Z} — headless run, asserts nonzero served traffic"
+  ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
+      OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
+      OMI_SURFACE_PORT="$((SHELL_PORT + 3))" OMI_ACCEPTANCE_EXIT=1 TZ=UTC \
+      ./scripts/run-shell.sh ) > "$LOGDIR/macos-acceptance.log" 2>&1
+  accept_status=$?
+  accept_line="$(grep -o 'ACCEPTANCE .*' "$MACOS_SHELL/.build/on-integration/omi-on-integration.run.log" 2>/dev/null | tail -1)"
+  if [[ $accept_status -eq 0 && "$accept_line" == *"status=PASS"* ]]; then
+    ok "bridge acceptance PASSED — $accept_line"
+  else
+    warn "bridge acceptance FAILED (exit $accept_status) — ${accept_line:-no acceptance line emitted}"
+    echo "    log: $LOGDIR/macos-acceptance.log"
   fi
 fi
 
@@ -366,7 +412,7 @@ printf '%s\n' "${B}══════════════════ stack 
 printf '  %-22s %s\n' "new backend"  "$BACKEND_URL   (memories read path, ratified 0.1.1)"
 printf '  %-22s %s\n' "legacy wire"  "http://127.0.0.1:$LEGACY_PORT   (tasks, conversations, folders)"
 printf '  %-22s %s\n' "surfaces"     "http://127.0.0.1:$SURFACES_PORT/"
-[[ $WANT_MACOS -eq 1 ]] && printf '  %-22s %s\n' "macOS app" "http://127.0.0.1:5290/  (app window)"
+[[ $WANT_MACOS -eq 1 ]] && printf "  %-22s %s\n" "macOS app" "http://127.0.0.1:${SHELL_PORT:-5290}/  (app window)"
 [[ $WANT_IOS  -eq 1 ]] && printf '  %-22s %s\n' "iOS app" "simulator ${UDID:-none}"
 echo
 printf '  %s\n' "${B}served by the NEW backend:${Z} servedReads ${read_before} -> ${read_after}"
