@@ -7,6 +7,11 @@ import {
   parseSynthesizedPageJson,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import { isTrustedRecallTraceData, parseRecallTraceJson } from "@omi-core/ratified-contracts/recall/trace";
+import {
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  WRITE_REFUSALS,
+} from "@omi-core/ratified-contracts/write/ops";
 
 const fixtureRoot = new URL("./node_modules/@omi-core/ratified-contracts/fixtures/", import.meta.url);
 for (const row of await fixture("page-conformance.json")) {
@@ -69,6 +74,20 @@ try {
 assert.ok(parsedPage);
 assert.ok(parsedTrace);
 assert.equal(inheritedGetterCalls, 0);
+
+// The write-ops corpus of record, read from the INSTALLED package rather than
+// from source: this is the only consumer in the tree that sees exactly the
+// bytes a backend would install, and rule 15 is about the real shape.
+const writeOpsSchema = await fixture("write-ops-outcomes.json");
+for (const row of writeOpsSchema.outcomes) {
+  if (row.kind !== "refusal") continue;
+  assert.equal(WRITE_REFUSALS[row.outcome].status, row.status, `${row.outcome} status`);
+  assert.equal(WRITE_REFUSALS[row.outcome].body, row.body, `${row.outcome} body`);
+  assert.equal(readWriteRefusalOutcome(row.status, row.body), row.outcome, `${row.outcome} round trip`);
+}
+for (const row of await fixture("write-ops-conformance.json")) {
+  assert.equal(parseWriteOpEnvelopeJson(row.requestBody) !== null, row.envelopeAccepted, row.name);
+}
 
 async function fixture(name) {
   return JSON.parse(await readFile(new URL(name, fixtureRoot), "utf8"));

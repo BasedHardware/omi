@@ -1,0 +1,251 @@
+[
+  {
+    "name": "create accepted on first send",
+    "wireOutcome": "accepted",
+    "ruling": "B4",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Pick up prescription\",\"done\":false}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 200,
+      "body": "{\"applied\":{\"record_id\":\"task-9f21\",\"revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"},\"idempotent\":false}"
+    },
+    "clientFailure": null
+  },
+  {
+    "name": "crash-replay of an op that already applied is a SUCCESS, not a conflict",
+    "wireOutcome": "accepted_idempotent",
+    "ruling": "B1",
+    "note": "The demonstrated failure of the revision-derived design: applied, crashed before tombstone, interleaved write, replay. The registry answers from the recorded outcome. Reporting this as conflict would tell the user a saved edit failed.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Pick up prescription\",\"done\":false}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 200,
+      "body": "{\"applied\":{\"record_id\":\"task-9f21\",\"revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"},\"idempotent\":true}"
+    },
+    "clientFailure": null
+  },
+  {
+    "name": "patch with a base_revision precondition accepted",
+    "wireOutcome": "accepted",
+    "ruling": "B4",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 200,
+      "body": "{\"applied\":{\"record_id\":\"task-9f21\",\"revision\":\"270f87f7ae52dacd830ddca7cbf92c022d5579600e6a3d7ec6b83e8cbcdf8a80\"},\"idempotent\":false}"
+    },
+    "clientFailure": null
+  },
+  {
+    "name": "delete of an already-absent record is accepted with a null revision",
+    "wireOutcome": "accepted",
+    "ruling": "B4",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fb21be93792052d84d3728ea0805ffb0e0fae71c01072cd88172e2574e539b8e\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"delete\",\"record_id\":\"task-0000\"}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 200,
+      "body": "{\"applied\":{\"record_id\":\"task-0000\",\"revision\":null},\"idempotent\":false}"
+    },
+    "clientFailure": null
+  },
+  {
+    "name": "missing or invalid session",
+    "wireOutcome": "authentication",
+    "ruling": "B2",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"refusal_outcome\":\"authentication\"}"
+    },
+    "clientFailure": {
+      "kind": "auth-invalid"
+    }
+  },
+  {
+    "name": "missing grant and grant scope mismatch are byte-identical",
+    "wireOutcome": "authorization",
+    "ruling": "B2",
+    "note": "Inner denial reason never reaches the wire. The read route's discipline, kept: class is distinguished, reason is not.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 403,
+      "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"authorization\"}"
+    },
+    "clientFailure": {
+      "kind": "auth-invalid"
+    }
+  },
+  {
+    "name": "entitlement denial is its own class, not a bare 403",
+    "wireOutcome": "entitlement",
+    "ruling": "B2",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 403,
+      "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"entitlement\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "entitlement"
+    }
+  },
+  {
+    "name": "straggler refused by the account epoch fence",
+    "wireOutcome": "stale_epoch",
+    "ruling": "B2",
+    "note": "409, the same status as conflict, and it must NOT classify as conflict or gone. Preserved for manual resolution; not user-retryable.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":6,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"title\":\"Pick up prescription for Mum\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 409,
+      "body": "{\"error\":\"stale_epoch\",\"refusal_outcome\":\"stale_epoch\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "stale_epoch"
+    }
+  },
+  {
+    "name": "same write_id replayed with different content",
+    "wireOutcome": "write_id_reuse",
+    "ruling": "B1",
+    "note": "A buggy adapter laundering two ops through one key. 409, and it is NOT stale_epoch.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Something else entirely\"}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 409,
+      "body": "{\"error\":\"write_id_reuse\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  },
+  {
+    "name": "base_revision precondition failed: a genuine concurrent edit",
+    "wireOutcome": "conflict",
+    "ruling": "B4",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fb21be93792052d84d3728ea0805ffb0e0fae71c01072cd88172e2574e539b8e\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":false},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 409,
+      "body": "{\"error\":\"conflict\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "conflict"
+    }
+  },
+  {
+    "name": "migration window: backpressure, recorded nowhere",
+    "wireOutcome": "maintenance",
+    "ruling": "B2",
+    "note": "Not evidence. Nothing is persisted. The client must NOT dead-letter this.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "envelopeAccepted": true,
+    "response": {
+      "status": 503,
+      "body": "{\"error\":\"maintenance\"}"
+    },
+    "clientFailure": {
+      "kind": "retryable"
+    }
+  },
+  {
+    "name": "write_id is not 64 lowercase hex",
+    "wireOutcome": "validation",
+    "ruling": "B1",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"edit-task-9f21-set-done\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "envelopeAccepted": false,
+    "response": {
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  },
+  {
+    "name": "memories is not a writable domain",
+    "wireOutcome": "validation",
+    "ruling": "B6",
+    "note": "Memories is read-only by ratified design. An envelope naming it is refused, never applied.",
+    "path": "/v1/memories/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"memories\",\"op\":{\"op\":\"patch\",\"record_id\":\"mem-01\",\"patch\":{\"text\":\"x\"}}}",
+    "envelopeAccepted": false,
+    "response": {
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  },
+  {
+    "name": "unknown envelope field is refused, never ignored",
+    "wireOutcome": "validation",
+    "ruling": "B4",
+    "note": "The envelope is a REQUEST shape. Tolerate-and-count applies to fields a client RECEIVES; a server silently ignoring a field a client thought it sent is how a precondition goes missing.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}},\"op_id\":\"edit-task-9f21\"}",
+    "envelopeAccepted": false,
+    "response": {
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  },
+  {
+    "name": "create carries no base_revision precondition",
+    "wireOutcome": "validation",
+    "ruling": "B4",
+    "note": "There is nothing for a create to be a revision OF. Accepting it would let a client believe it had a precondition it does not have.",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-0001\",\"content\":{\"title\":\"x\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "envelopeAccepted": false,
+    "response": {
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  },
+  {
+    "name": "negative account_epoch",
+    "wireOutcome": "validation",
+    "ruling": "B2",
+    "path": "/v1/tasks/ops",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":-1,\"domain\":\"tasks\",\"op\":{\"op\":\"delete\",\"record_id\":\"task-9f21\"}}",
+    "envelopeAccepted": false,
+    "response": {
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}"
+    },
+    "clientFailure": {
+      "kind": "permanent",
+      "reason": "validation"
+    }
+  }
+]
