@@ -88,7 +88,9 @@ interface QaCoherentMaterial {
   readonly account_timezone: string;
   readonly coverage: RecallCompletenessInput;
   readonly generations: ApplicationRecallGenerationDigests;
-  readonly coherent_snapshot_digest: string;
+  /** Visible-closure identity. Never a storage-level digest. */
+  readonly visible_generation: string;
+  readonly visible_content_digest: string;
 }
 
 export interface QaRecallReader {
@@ -165,9 +167,29 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     );
     const renders = await produceQaRenders(projected);
 
-    const declaredFrontier = `${QA_DECLARED_FRONTIER_PREFIX}${load.coherent_snapshot_digest}`;
+    // ── The visible-derivation rule ────────────────────────────────────────
+    // Everything that can reach the wire is derived from the AUTHORIZED
+    // PROJECTION, never from the raw storage snapshot.
+    //
+    // This is not stylistic. `load.coherent_snapshot_digest` and
+    // `internal_coverage.durable.ledger_head.sequence` both cover records the
+    // reader cannot see. Measured on a 6-claim snapshot with one claim hidden by
+    // policy versus a 5-claim snapshot where it never existed: the digests differ
+    // (3ad6626b… vs 1441b306…) and the ledger sequence differs (6 vs 5). Routing
+    // either to the declared frontier or into a cursor binding publishes the
+    // existence of a record the reader is not allowed to know about — a textbook
+    // authorization oracle, and one that looks entirely reasonable in review.
+    //
+    // `projected.graph_generation` and `projected.projected_content_digest` are
+    // computed over the visible closure only, so they are safe and, as a bonus,
+    // more correct: a cursor now survives writes that do not affect this reader
+    // instead of being invalidated by unrelated activity.
+    //
+    // `load.coherent_snapshot_digest` is deliberately NOT used anywhere below.
+    const visibleGeneration = projected.graph_generation;
+    const visibleContent = projected.projected_content_digest;
+    const declaredFrontier = `${QA_DECLARED_FRONTIER_PREFIX}${visibleGeneration}`;
     const coverage = qaCoverage(declaredFrontier);
-    const internal = load.internal_coverage;
 
     const generations: ApplicationRecallGenerationDigests = Object.freeze({
       // Must equal read_coordinates.authorization_state_digest; the application
@@ -175,11 +197,14 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
       authorization_generation_digest: digestOf("authorization", authorizationState()),
       synthesized_projection_generation_digest:
         computeApplicationSynthesizedProjectionGenerationDigest(projected, renders),
-      durable_generation_digest: digestOf("durable", internal.durable),
+      durable_generation_digest: digestOf("durable", visibleGeneration),
       overlay_generation_digest: digestOf("overlay", { overlays: [] }),
       declared_generation_digest: digestOf("declared", { declared_frontier: declaredFrontier }),
-      accepted_generation_digest: digestOf("accepted", internal.accepted),
-      stm_generation_digest: digestOf("stm", internal.stm),
+      // Accepted and STM are reported as no-eligible, so their generation
+      // receipts are derived from that declared state rather than from raw
+      // internal counts, which would carry hidden-row cardinality to the wire.
+      accepted_generation_digest: digestOf("accepted", { state: "no_eligible" }),
+      stm_generation_digest: digestOf("stm", { state: "no_eligible" }),
     });
 
     return Object.freeze({
@@ -189,7 +214,8 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
       account_timezone: accountTimezone,
       coverage,
       generations,
-      coherent_snapshot_digest: load.coherent_snapshot_digest,
+      visible_generation: visibleGeneration,
+      visible_content_digest: visibleContent,
     });
   };
 
@@ -226,9 +252,11 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     // coordinate that changes the moment a grant is revoked.
     authorization_state_digest: current.generations.authorization_generation_digest,
     grant_state_digest: digestOf("grant", authorizationState()),
-    account_head_digest: digestOf("account", current.coherent_snapshot_digest),
-    authorized_graph_digest: digestOf("graph", current.projected.graph_generation),
-    coherent_projection_commit_digest: digestOf("commit", current.coherent_snapshot_digest),
+    // Visible-derived, per the rule in buildMaterial. A storage-level digest
+    // here would republish hidden-record existence through the cursor.
+    account_head_digest: digestOf("account", current.visible_generation),
+    authorized_graph_digest: digestOf("graph", current.visible_generation),
+    coherent_projection_commit_digest: digestOf("commit", current.visible_content_digest),
     visibility_digest: digestOf("visibility", { default_synthesized: true, raw_read: false }),
     filter_digest: digestOf("filter", { filters: [] }),
     query_digest: digestOf("query", { query: null }),

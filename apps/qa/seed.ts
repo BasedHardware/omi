@@ -17,6 +17,21 @@ export interface QaSeedOptions {
   readonly owner_account_id: string;
   readonly account_timezone: string;
   readonly claim_count: number;
+  /**
+   * Physical insertion order of the seeded rows. The seeded *content* is
+   * identical either way — only the order the rows hit the tables differs.
+   *
+   * This exists so a proof can show server order is independent of insertion
+   * history rather than merely repeatable, which is a much weaker claim. Row
+   * identity, ids, and timestamps stay a pure function of the logical index.
+   */
+  readonly insertion_order?: "ascending" | "descending";
+  /**
+   * Logical indices to seed with a non-generic policy label. Such a claim is
+   * durably present but invisible to the application-default projection, which
+   * is what makes hidden-present versus physically-absent testable.
+   */
+  readonly hidden_indices?: readonly number[];
 }
 
 export interface QaSeedResult {
@@ -190,7 +205,12 @@ export const seedQaSnapshot = (db: Database, options: QaSeedOptions): QaSeedResu
   const evidenceIds: string[] = [];
   const eventRevisionIds: string[] = [];
 
-  for (let index = 0; index < claimCount; index += 1) {
+  const hidden = new Set(options.hidden_indices ?? []);
+  const order = options.insertion_order === "descending"
+    ? Array.from({ length: claimCount }, (_, index) => claimCount - 1 - index)
+    : Array.from({ length: claimCount }, (_, index) => index);
+
+  for (const index of order) {
     const token = pad4(index);
     const sequence = index + 1;
     const commitId = `qa-commit:${owner}:${token}`;
@@ -201,7 +221,12 @@ export const seedQaSnapshot = (db: Database, options: QaSeedOptions): QaSeedResu
 
     const event = eventFor(owner, index, evidenceId, eventRevisionId);
     const evidence = evidenceFor(owner, index, evidenceId, eventRevisionId);
-    const claim = claimFor(owner, timezone, index, claimRevisionId, evidenceId);
+    const baseClaim = claimFor(owner, timezone, index, claimRevisionId, evidenceId);
+    // A non-generic policy label makes the claim durably present but invisible
+    // to the application-default projection.
+    const claim: CanonicalClaim = hidden.has(index)
+      ? { ...baseClaim, policy_labels: ["sensitivity:restricted"] }
+      : baseClaim;
 
     insertDerivation(db, commitId, owner, sequence);
 
@@ -237,9 +262,9 @@ export const seedQaSnapshot = (db: Database, options: QaSeedOptions): QaSeedResu
       commitId,
     );
 
-    claimRevisionIds.push(claimRevisionId);
-    evidenceIds.push(evidenceId);
-    eventRevisionIds.push(eventRevisionId);
+    claimRevisionIds[index] = claimRevisionId;
+    evidenceIds[index] = evidenceId;
+    eventRevisionIds[index] = eventRevisionId;
   }
 
   const graphGeneration = claimCount;
