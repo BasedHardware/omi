@@ -116,6 +116,7 @@ Future<Map<String, String>> buildHeaders({
   bool expireTerminalSession = true,
   String? url,
   String? method,
+  bool forWebSocket = false,
 }) async {
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
@@ -126,10 +127,15 @@ Future<Map<String, String>> buildHeaders({
     ...fromHeaders,
   };
 
-  if (shouldAttachAccountGenerationHeader(url: url, method: method, requireAuthCheck: requireAuthCheck)) {
+  if (shouldAttachAccountGenerationHeader(
+    url: url,
+    method: method,
+    requireAuthCheck: requireAuthCheck,
+    forWebSocket: forWebSocket,
+  )) {
     final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
     // Generation-zero remains compatible without the header; positive generations
-    // must present matching metadata on mutating Omi API requests.
+    // must present matching metadata on mutating Omi API requests / product WS.
     if (accountGeneration > 0) {
       headers['X-Account-Generation'] = accountGeneration.toString();
     }
@@ -144,24 +150,45 @@ Future<Map<String, String>> buildHeaders({
   return headers;
 }
 
+@visibleForTesting
+String normalizeOmiApiUrlForHostMatch(String url) {
+  // HTTP helpers and product sockets share one API host; compare scheme-neutrally
+  // so `wss://` listen URLs still count as Omi API traffic.
+  return url
+      .replaceFirst(RegExp(r'^https://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^http://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^wss://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^ws://', caseSensitive: false), '');
+}
+
 bool _isRequiredAuthCheck(String url) {
   // Agent VM endpoints always hit prod even when app uses dev
   if (url.contains('api.omi.me')) return true;
   final base = Env.apiBaseUrl;
-  if (base != null && base.isNotEmpty && url.contains(base)) {
-    return true;
+  if (base != null && base.isNotEmpty) {
+    final normalizedUrl = normalizeOmiApiUrlForHostMatch(url);
+    final normalizedBase = normalizeOmiApiUrlForHostMatch(base);
+    if (normalizedBase.isNotEmpty && normalizedUrl.contains(normalizedBase)) {
+      return true;
+    }
   }
   return false;
 }
 
 const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};
 
-/// `X-Account-Generation` is only for authenticated Omi API mutation traffic —
-/// never arbitrary third-party hosts (e.g. firmware zip downloads).
+/// `X-Account-Generation` is only for authenticated Omi API mutation traffic and
+/// product WebSocket admission — never arbitrary third-party hosts (e.g. zip CDN).
 @visibleForTesting
-bool shouldAttachAccountGenerationHeader({String? url, String? method, required bool requireAuthCheck}) {
+bool shouldAttachAccountGenerationHeader({
+  String? url,
+  String? method,
+  required bool requireAuthCheck,
+  bool forWebSocket = false,
+}) {
   if (!requireAuthCheck) return false;
   if (url != null && url.isNotEmpty && !_isRequiredAuthCheck(url)) return false;
+  if (forWebSocket) return true;
   if (method == null || method.isEmpty) return false;
   return _mutatingHttpMethods.contains(method.toUpperCase());
 }

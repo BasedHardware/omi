@@ -174,9 +174,11 @@ Future _init() async {
       await AuthService.instance.restoreOnboardingState();
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
-    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(
-      FirebaseAuth.instance.currentUser?.uid,
-    );
+    // Anonymous Firebase sessions are not cutover product owners.
+    final bootstrapUser = FirebaseAuth.instance.currentUser;
+    if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
+      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid);
+    }
   }
   initOpus(await opus_flutter.load());
 
@@ -260,9 +262,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
     // Apply fresh cutover control before waking WAL recovery so a stale
     // legacy/allow projection cannot admit one offline upload.
-    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(
-      FirebaseAuth.instance.currentUser?.uid,
-    );
+    final resumeUser = FirebaseAuth.instance.currentUser;
+    final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
   }
