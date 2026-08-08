@@ -60,6 +60,64 @@ startup_fail() {
   exit 1
 }
 
+expand_root_filesystem() {
+  local system_vendor
+  local root_source
+  local root_partition
+  local root_filesystem
+  local parent_name
+  local partition_number
+  local root_disk
+  local disk_size
+  local partition_size
+  local growth_headroom=$((256 * 1024 * 1024))
+  local tool
+
+  # This mutates a partition table and therefore stays fenced to the GCE guest
+  # environment this startup script owns. Unit and container harnesses can
+  # expose host block devices that are neither accessible nor safe to inspect.
+  [[ -r /sys/class/dmi/id/sys_vendor ]] || return 0
+  IFS= read -r system_vendor < /sys/class/dmi/id/sys_vendor || return 0
+  [[ "$system_vendor" == "Google" ]] || return 0
+  [[ -d /sys/class/block ]] || startup_fail "GCE block-device inventory is unavailable"
+  for tool in findmnt readlink lsblk blockdev growpart resize2fs tr; do
+    command -v "$tool" >/dev/null 2>&1 || startup_fail "$tool is required to size the root filesystem"
+  done
+
+  root_source="$(findmnt --noheadings --output SOURCE /)" \
+    || startup_fail "root filesystem source is unavailable"
+  root_partition="$(readlink -f "$root_source")" \
+    || startup_fail "root filesystem source cannot be resolved"
+  # Containerized test runners commonly expose overlayfs rather than a block
+  # device. The GCE guest path below is intentionally limited to a partition.
+  [[ -b "$root_partition" ]] || return 0
+  root_filesystem="$(findmnt --noheadings --output FSTYPE /)" \
+    || startup_fail "root filesystem type is unavailable"
+  [[ "$root_filesystem" == "ext4" ]] || startup_fail "unsupported root filesystem type: $root_filesystem"
+
+  parent_name="$(lsblk --noheadings --output PKNAME "$root_partition" | tr -d '[:space:]')" \
+    || startup_fail "root disk identity is unavailable"
+  partition_number="$(lsblk --noheadings --output PARTN "$root_partition" | tr -d '[:space:]')" \
+    || startup_fail "root partition number is unavailable"
+  [[ "$parent_name" =~ ^[a-zA-Z0-9._-]+$ && "$partition_number" =~ ^[0-9]+$ ]] \
+    || startup_fail "root partition identity is invalid"
+  root_disk="/dev/${parent_name}"
+  [[ -b "$root_disk" ]] || startup_fail "root disk is not a block device"
+
+  disk_size="$(blockdev --getsize64 "$root_disk")" \
+    || startup_fail "root disk size is unavailable"
+  partition_size="$(blockdev --getsize64 "$root_partition")" \
+    || startup_fail "root partition size is unavailable"
+  [[ "$disk_size" =~ ^[0-9]+$ && "$partition_size" =~ ^[0-9]+$ ]] \
+    || startup_fail "root filesystem size is invalid"
+  if ((disk_size - partition_size > growth_headroom)); then
+    growpart "$root_disk" "$partition_number" \
+      || startup_fail "root partition could not be expanded"
+    resize2fs "$root_partition" \
+      || startup_fail "root filesystem could not be expanded"
+  fi
+}
+
 ensure_docker_daemon() {
   if ! command -v docker >/dev/null 2>&1; then
     apt-get update
@@ -422,6 +480,7 @@ ensure_state_tools() {
   done
 }
 
+expand_root_filesystem
 quiesce_docker_before_state_mount
 
 state_required_raw=""
