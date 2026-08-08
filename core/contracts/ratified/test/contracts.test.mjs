@@ -6,15 +6,19 @@ import {
   parseKeysetCursor,
 } from "../dist/pagination/cursor.js";
 import {
+  APP_CONTRACT_FLOOR_VERSION,
+  APP_CONTRACT_VERSION_HEADER,
   isTrustedPageWindowHonest,
   isTrustedRecallCompletenessHonest,
   isTrustedSynthesizedPageData,
+  isWellFormedContractVersion,
   MAX_SYNTHESIZED_PAGE_JSON_CODE_UNITS,
   parseCitationRef,
   parseSynthesizedItemId,
   parseSha256Digest,
   parseSynthesizedPageJson,
   parseSynthesizedText,
+  resolveDeclaredContractVersion,
 } from "../dist/projections/synthesized.js";
 import {
   isTrustedRecallTraceData,
@@ -30,6 +34,35 @@ test("ready item boundaries reject empty identifiers, text, and citations", () =
   assert.equal(parseSynthesizedText("   "), null);
   assert.equal(parseCitationRef("citation-v1:bright-coral-harbor"), "citation-v1:bright-coral-harbor");
   assert.equal(parseCitationRef(""), null);
+});
+
+test("a request without a declared contract version resolves to the floor, never a rejection", () => {
+  // red-proof: change the `typeof headerValue !== "string"` branch in
+  // resolveDeclaredContractVersion (src/projections/synthesized.ts) to
+  // `return headerValue;` (i.e. pass undefined/null straight through instead
+  // of falling back to APP_CONTRACT_FLOOR_VERSION). Applied by hand against
+  // dist/projections/synthesized.js during this change: the first two
+  // assertions below failed with "AssertionError [ERR_ASSERTION]: undefined
+  // !== '1.0.0'" / "null !== '1.0.0'" before the mutation was reverted and
+  // `pnpm run build` restored the real dist output.
+  assert.equal(resolveDeclaredContractVersion(undefined), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion(null), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion(""), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion("   "), APP_CONTRACT_FLOOR_VERSION);
+});
+
+test("a malformed declared contract version resolves to the floor rather than reflecting untrusted bytes", () => {
+  assert.equal(resolveDeclaredContractVersion("not-a-version"), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion("1.0"), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion("1.0.0\nx-injected: 1"), APP_CONTRACT_FLOOR_VERSION);
+  assert.equal(resolveDeclaredContractVersion("v1.0.0"), APP_CONTRACT_FLOOR_VERSION);
+});
+
+test("a well-formed declared contract version passes through verbatim", () => {
+  assert.equal(resolveDeclaredContractVersion("1.0.0"), "1.0.0");
+  assert.equal(resolveDeclaredContractVersion(" 2.3.10 "), "2.3.10");
+  assert.ok(isWellFormedContractVersion(APP_CONTRACT_FLOOR_VERSION));
+  assert.equal(APP_CONTRACT_VERSION_HEADER, "x-omi-contract-version");
 });
 
 test("provenance digests accept only lowercase 64-character SHA-256 hex", () => {
