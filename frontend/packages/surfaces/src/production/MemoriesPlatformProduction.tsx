@@ -7,16 +7,14 @@ import type {
   SynthesizedRecallState,
 } from "./ProductionSynthesizedMemoryStore.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionSearchField } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import {
   citationSummary,
   completenessNotice,
-  dataSourceBadge,
   emptyPresentation,
   filterLoadedPropositions,
   lineageRows,
   paginationAffordance,
-  type SurfaceDataSource,
 } from "./proposition-presentation.js";
 import "./memories-platform.css";
 
@@ -138,7 +136,6 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
   }, [locale, reload, store]);
 
   const notice = phaseLabel(status, locale);
-  const badge = useMemo(() => dataSourceBadge(source), [source]);
   const completeness = useMemo(() => completenessNotice(recall), [recall]);
   const pagination = useMemo(() => paginationAffordance(recall), [recall]);
   const presentation = useMemo(() => emptyPresentation(items.length, recall), [items.length, recall]);
@@ -168,7 +165,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
       data-production-shell="true"
       data-route="memories"
       data-generation="platform"
-      data-data-source={badge.tone}
+      data-data-source={source.kind}
       data-surface-state={status.refresh.phase}
       data-qa-fixture={source.kind === "fixture" ? source.fixture : "none"}
       data-completeness={completeness.kind}
@@ -176,9 +173,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
       <ProductionChrome locale={locale} active="memories" placement="top" />
       <section className="desktop-page-panel">
         <ProductionLibrarySegment locale={locale} active="memories" />
-        <p className={`data-source-badge tone-${badge.tone}`} role="status">
-          {t(locale, "dataSource.detail", { source: t(locale, badge.labelKey), detail: badge.detail })}
-        </p>
+        <ProductionDataSourceBadge source={source} locale={locale} />
         <header className="production-header memories-platform-header">
           <div>
             <p className="eyebrow">{t(locale, "nav.memories")}</p>

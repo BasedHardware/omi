@@ -7,7 +7,6 @@ import test from "node:test";
 import {
   citationSummary,
   completenessNotice,
-  dataSourceBadge,
   emptyPresentation,
   filterLoadedPropositions,
   lineageRows,
@@ -170,34 +169,38 @@ test("absent citations and zero citations are different answers", () => {
 // Fixture versus live must be unmistakable.
 // ---------------------------------------------------------------------------
 
-test("a fixture render and a live render carry different copy, tone and detail", () => {
-  const fixture = dataSourceBadge({ kind: "fixture", fixture: "degraded" });
-  const live = dataSourceBadge({ kind: "live", origin: "http://127.0.0.1:4811" });
-  assert.equal(fixture.labelKey, "dataSource.fixture");
-  assert.equal(fixture.detail, "degraded");
-  assert.equal(fixture.tone, "fixture");
-  assert.equal(live.labelKey, "dataSource.live");
-  assert.equal(live.detail, "http://127.0.0.1:4811");
-  assert.equal(live.tone, "live");
-  assert.notEqual(fixture.labelKey, live.labelKey);
-  assert.match(EN_MESSAGES["dataSource.fixture"], /not from your account/);
-  // red-proof: making both branches return the same labelKey, or softening the fixture
-  // copy so it no longer says the data is not the user's, removes the only on-screen
-  // signal telling a reviewer whether they are looking at a review corpus or real data.
-});
-
-test("the data-source badge is never hidden at desktop width the way the QA label is", async () => {
+test("every production surface declares where its rows came from, and never hides it", async () => {
+  const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
-  const platform = await read("src/production/memories-platform.css");
+
+  // One implementation, shared by all four surfaces.
+  assert.match(primitives, /export function ProductionDataSourceBadge/);
+  assert.match(primitives, /"dataSource\.live"\s*:\s*"dataSource\.fixture"/);
+  assert.match(EN_MESSAGES["dataSource.fixture"], /not from your account/);
+  assert.notEqual(EN_MESSAGES["dataSource.fixture"], EN_MESSAGES["dataSource.live"]);
+
+  // The badge must never be hidden the way .qa-label is. The first assertion pins that
+  // .qa-label really is hidden on desktop, so this test fails loudly if someone "fixes"
+  // the badge by styling it like the label.
   assert.match(styles, /html\[data-platform="desktop"\] \.qa-label \{ display: none; \}/);
   assert.ok(
-    !/\.data-source-badge[^{]*\{[^}]*display:\s*none/.test(platform),
+    !/\.data-source-badge[^{]*\{[^}]*display:\s*none/.test(styles),
     "the data-source badge must not be hidden at any width",
   );
-  assert.match(platform, /html\[data-platform="desktop"\] \.data-source-badge/);
-  // red-proof: styling the badge as `.qa-label` (which styles.css hides on desktop, as the
-  // first assertion pins) would make every desktop review capture of a fixture look
-  // exactly like a live one. That confusion is the specific failure this guards.
+  assert.match(styles, /html\[data-platform="desktop"\] \.data-source-badge/);
+
+  for (const file of ["MemoriesPlatformProduction.tsx", "ChatProduction.tsx", "SettingsProduction.tsx", "ListenProduction.tsx"]) {
+    const source = await read(`src/production/${file}`);
+    assert.match(source, /<ProductionDataSourceBadge/, `${file} does not declare its data source`);
+    assert.ok(
+      !/className="qa-label"/.test(source),
+      `${file} still uses the desktop-hidden qa-label instead of the badge`,
+    );
+  }
+  // red-proof: reverting any surface to the `qa-label` line, or adding display:none to the
+  // badge, makes this fail. Those are the two ways a fixture render silently starts
+  // looking like real signed-in data at desktop width — the exact confusion the
+  // coordinator flagged as demo-killing.
 });
 
 // ---------------------------------------------------------------------------
@@ -322,7 +325,7 @@ test("the platform Memories surface exposes no write affordance and no legacy me
     assert.ok(!source.includes(forbidden), `platform Memories must not reference ${forbidden}`);
   }
   assert.ok(source.includes('data-generation="platform"'), "the generation must be inspectable in the DOM");
-  assert.ok(source.includes("data-data-source={badge.tone}"), "the data source must be inspectable in the DOM");
+  assert.ok(source.includes("data-data-source={source.kind}"), "the data source must be inspectable in the DOM");
   // red-proof: reintroducing the legacy editable card here passes every other test in this
   // file while breaking board ruling PR-2 — the platform wire has no editable memory
   // fields and no internal record ids to edit them by.

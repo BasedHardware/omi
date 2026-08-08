@@ -1,7 +1,13 @@
 import { t } from "@omi-core/i18n";
 
 type Locale = string;
-type ProductionRoute = "home" | "memories" | "conversations" | "tasks";
+// Chat, Settings and Listen are real routes (board ruling PR-7) but they are NOT yet
+// visible nav destinations: where they sit in the shell is a chrome design change that
+// belongs to the Ink/WindowGlass source of record (PR #11117), not to a surface author
+// inventing a slot. Widening `active` lets those surfaces render with an honest chrome in
+// which nothing is falsely highlighted; every `active === ...` comparison below simply
+// finds no match. See status/FE-SURFACES.md.
+type ProductionRoute = "home" | "memories" | "conversations" | "tasks" | "chat" | "settings" | "listen";
 type ChromeIconName = "home" | "library" | "tasks" | "rewind" | "apps" | "conversations" | "microphone" | "screen" | "settings";
 type ThemeSelection = "default" | "system" | "light" | "dark";
 
