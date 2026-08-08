@@ -1163,6 +1163,14 @@ async def _retire_soaked_boot_image_predecessor(
         # journal from the active owner.  Leaving auto-delete disabled keeps
         # the candidate's sole state disk recoverable; ordinary reconciliation
         # validates its identity and repairs this provider policy on retry.
+        record_fallback(
+            component="agent_vm_reconciler",
+            from_mode="automatic_state_disk_lifecycle",
+            to_mode="protected_disk_repair",
+            reason="other",
+            outcome="degraded",
+            log=logger,
+        )
         logger.exception("Agent VM state disk auto-delete repair deferred for uid=%s", uid)
         return ReconcileResult(uid, "retired", f"retired soaked predecessor {old_vm_name}; state disk protected")
     return ReconcileResult(uid, "retired", f"retired soaked predecessor {old_vm_name}")

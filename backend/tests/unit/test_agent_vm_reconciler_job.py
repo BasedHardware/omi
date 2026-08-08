@@ -1341,8 +1341,10 @@ def test_boot_image_migration_retains_source_clone_until_retirement_claim(monkey
     assert "within its journaled soak" in result.detail
 
 
-def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal_claim(monkeypatch):
+@pytest.mark.parametrize("auto_delete_fails", [False, True])
+def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal_claim(monkeypatch, auto_delete_fails):
     events: list[tuple[Any, ...]] = []
+    fallback_events: list[dict[str, Any]] = []
 
     class RetirementApi:
         async def get_instance(self, _name: str) -> dict[str, Any]:
@@ -1357,12 +1359,15 @@ def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal
 
         async def set_disk_auto_delete(self, vm_name: str, device_name: str, enabled: bool) -> None:
             events.append(("auto-delete", vm_name, device_name, enabled))
+            if auto_delete_fails:
+                raise RuntimeError("provider unavailable")
 
         async def delete_replacement(self, vm_name: str, instance_id: str, migration_id: str) -> bool:
             events.append(("delete-predecessor", vm_name, instance_id, migration_id))
             return True
 
     monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "record_fallback", lambda **kwargs: fallback_events.append(kwargs))
     monkeypatch.setattr(
         reconciler,
         "claim_boot_image_migration_retirement",
@@ -1404,6 +1409,20 @@ def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal
         ("complete-migration",),
         ("auto-delete", "candidate", lifecycle.STATE_DISK_DEVICE_NAME, True),
     ]
+    if auto_delete_fails:
+        assert "state disk protected" in result.detail
+        assert fallback_events == [
+            {
+                "component": "agent_vm_reconciler",
+                "from_mode": "automatic_state_disk_lifecycle",
+                "to_mode": "protected_disk_repair",
+                "reason": "other",
+                "outcome": "degraded",
+                "log": reconciler.logger,
+            }
+        ]
+    else:
+        assert fallback_events == []
 
 
 def test_boot_image_migration_retirement_keeps_state_disk_protected_when_source_cleanup_fails(monkeypatch):

@@ -194,7 +194,12 @@ def _state_startup_environment(
         "      error) exit 1 ;;\n"
         "      *) printf 'true\\n200\\n' ;;\n"
         "    esac ;;\n"
-        "  *'omi-agent-migration'*) if [[ \"$MIGRATION_MODE\" == fallback ]]; then exit 1; else printf '%s\\n' migration-test-1; fi ;;\n"
+        "  *'omi-agent-migration'*)\n"
+        "    case \"$MIGRATION_MODE\" in\n"
+        "      fallback|missing) printf '\\n404\\n' ;;\n"
+        "      error) exit 1 ;;\n"
+        "      *) printf 'migration-test-1\\n200\\n' ;;\n"
+        "    esac ;;\n"
         "  *'/instance/name'*) printf '%s\\n' vm-instance-name ;;\n"
         "  *'/instance/attributes/auth-token'*) printf '%s\\n' omi-token ;;\n"
         "  *'/instance/service-accounts/default/token'*) printf '%s\\n' '{\"access_token\":\"metadata-token\"}' ;;\n"
@@ -327,6 +332,21 @@ def test_startup_falls_back_to_instance_name_for_migration_id(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     receipt = json.loads((state_mount / "state-receipt.json").read_text(encoding="utf-8"))
     assert receipt["migrationId"] == "vm-instance-name"
+
+
+def test_startup_preserves_receipt_identity_when_migration_metadata_is_unavailable(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    first = _run_state_startup(environment)
+    assert first.returncode == 0, first.stderr
+    receipt_path = state_mount / "state-receipt.json"
+    original = receipt_path.read_bytes()
+
+    environment["MIGRATION_MODE"] = "error"
+    second = _run_state_startup(environment)
+
+    assert second.returncode != 0
+    assert "state migration metadata is unavailable" in second.stderr
+    assert receipt_path.read_bytes() == original
 
 
 def test_startup_revalidates_and_rewrites_a_valid_prior_migration_receipt(tmp_path: Path) -> None:

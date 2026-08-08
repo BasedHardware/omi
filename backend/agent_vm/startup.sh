@@ -442,8 +442,11 @@ state_receipt_for_container=""
 
 if [[ "$state_required" == true || -e "$state_device" ]]; then
   [[ -e "$state_device" ]] || state_fail "required state device is missing"
-  state_migration_id="$(metadata_get 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/omi-agent-migration' 2>/dev/null || true)"
-  if [[ -z "$state_migration_id" ]]; then
+  if state_migration_id="$(metadata_get_optional 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/omi-agent-migration')"; then
+    :
+  else
+    state_migration_status=$?
+    [[ "$state_migration_status" == 1 ]] || state_fail "state migration metadata is unavailable"
     state_migration_id="$(metadata_get 'http://metadata.google.internal/computeMetadata/v1/instance/name' 2>/dev/null || true)"
   fi
   [[ -n "$state_migration_id" ]] || state_fail "state migration metadata is missing"
