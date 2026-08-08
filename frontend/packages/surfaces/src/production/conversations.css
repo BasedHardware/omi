@@ -235,9 +235,18 @@ html[data-platform="desktop"] .conversation-row:first-of-type { border-top-width
 html[data-platform="desktop"] .conversation-row:hover { background: var(--surface-elevated); }
 
 html[data-platform="mobile"] .conversation-controls { margin-top: calc(0px - var(--space-sm)); }
+html[data-platform="mobile"] [data-route="conversations"] .mobile-library-segment { margin: 0 0 var(--space-md); padding: 0; }
+html[data-platform="mobile"] [data-route="conversations"] .production-header { display: none; }
+html[data-platform="mobile"] [data-route="conversations"] > .desktop-page-panel > .qa-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 html[data-platform="mobile"] .conversation-filter { margin-inline: calc(0px - var(--space-sm)); padding-inline: var(--space-sm); }
+html[data-platform="mobile"] .conversation-filter button { position: relative; isolation: isolate; min-height: var(--min-tap-target); border-color: transparent; padding: var(--space-sm) var(--space-lg); background: transparent; }
+html[data-platform="mobile"] .conversation-filter button::before { position: absolute; inset: var(--space-xs) 0; z-index: -1; border: 1px solid var(--border); border-radius: var(--radius-circular); background: var(--surface-raised); content: ""; }
+html[data-platform="mobile"] .conversation-filter button[aria-pressed="true"] { border-color: transparent; background: transparent; }
+html[data-platform="mobile"] .conversation-filter button[aria-pressed="true"]::before { border-color: var(--focus); background: var(--surface-elevated); }
 html[data-platform="mobile"] .production-shell:has(.conversation-detail) .mobile-library-segment,
 html[data-platform="mobile"] .production-shell:has(.conversation-detail) .production-header { display: none; }
+html[data-platform="mobile"] .conversation-row { min-height: calc(var(--min-tap-target) + var(--space-xl)); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-section); }
+html[data-platform="mobile"] .conversation-avatar { width: calc(var(--min-tap-target) - var(--space-sm)); height: calc(var(--min-tap-target) - var(--space-sm)); justify-self: center; }
 html[data-platform="mobile"] .conversation-detail-header { align-items: center; }
 html[data-platform="mobile"] .conversation-detail-header h2 { font-size: var(--type-title-size); }
 html[data-platform="mobile"] .conversation-detail-meta { gap: var(--space-xs); }

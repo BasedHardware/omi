@@ -174,4 +174,12 @@ export const EN_MESSAGES = {
   "nav.screenCapture": "Screen capture",
   "nav.settings": "Settings",
   "nav.tasks": "Tasks",
+  "home.title": "Find anything",
+  "home.subtitle": "Search your saved memories, conversations, and tasks",
+  "home.searchPlaceholder": "Search saved Omi data",
+  "home.startTyping": "Start typing to search what's saved",
+  "home.resultsFor": "Results for “{query}”",
+  "home.keySearch": "⌘K",
+  "home.loadedCount": "{count} loaded items",
+  "home.matchCount": "{count} matches in loaded items",
 } as const;
