@@ -1,10 +1,10 @@
 {
   "files": {
-"desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2180,
+"desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2156,
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1941
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Chat-first capability wiring remains with onboarding's shared chat surface so rollout state cannot diverge across entry points. Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Gmail account selection and Google OAuth ownership checks fail closed on probe, keychain, owner, and provider-response errors; refreshes before expiry and preserves explicit primary-account selection."
   },
   "threshold": 1500
