@@ -251,14 +251,14 @@ final class SuggestedTasksStore: ObservableObject {
       recordsByID = [:]
       return
     }
-    if AccountCutoverControlManager.shared.quarantinesOfflineQueues {
-      pendingFeedback.removeAll()
-      feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
-    } else {
+    if AccountCutoverControlManager.shared.allowsOfflineQueueUpload {
       pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
       feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
       await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    } else {
+      // Retain local pending feedback across maintenance / quarantine; do not upload.
+      feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
     }
 
     let records: [OmiAPI.CandidateRecord]
@@ -670,6 +670,7 @@ final class SuggestedTasksStore: ObservableObject {
     var failedByKey: [String: PendingSuggestedFeedback] = [:]
     for entry in retryEntries {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      guard AccountCutoverOfflineUploadAdmission.allowsUpload() else { return }
       var request = entry.request
       do {
         if request.interventionId == nil,
@@ -682,6 +683,7 @@ final class SuggestedTasksStore: ObservableObject {
             accountGeneration: entry.accountGeneration
           )
           guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+          guard AccountCutoverOfflineUploadAdmission.allowsUpload() else { return }
           request = Self.feedbackRequest(request, interventionID: intervention.interventionId)
         }
         _ = try await client.recordTaskFeedback(

@@ -1,12 +1,13 @@
 version: 2
 name: account-cutover-gate
-tier: 2
-description: Verify signed-in desktop home installs the account-cutover control refresh and fail-closed overlays before product traffic
+tier: manual
+description: Manual verification that signed-in desktop home awaits cutover control before product services and that offline outboxes respect the shared upload gate
 app: com.omi.desktop-dev
 covers:
   - desktop/macos/Desktop/Sources/AccountCutover/APIClient+AccountCutover.swift
   - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverBlockingOverlay.swift
   - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverControl.swift
+  - desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
@@ -20,13 +21,13 @@ steps:
     do: "Launch a named non-prod bundle already signed in and onboarded. Confirm DesktopHomeView reaches the signed-in shell."
 
   - id: S2
-    name: Confirm cutover control refresh
-    do: "On home appear / app activation, confirm AccountCutoverControlManager refreshes GET /v1/account/cutover/control. With a legacy default projection, confirm product traffic remains available and no blocking overlay is shown."
+    name: Confirm cutover control bootstrap
+    do: "Confirm AccountCutoverControlManager stays pending until GET /v1/account/cutover/control succeeds, then admits product services. With a legacy projection, confirm product traffic remains available and no blocking overlay is shown."
 
   - id: S3
     name: Confirm force-upgrade overlay reuses update prompt
     do: "Inject or stub a cutover control with client_action=force_upgrade. Confirm the required-update prompt surface blocks the home shell and the CTA opens the existing desktop download URL path."
 
   - id: S4
-    name: Confirm migration maintenance quarantines offline work
-    do: "Inject or stub a migrating control with offline_queue_instruction=quarantine. Confirm the migration-maintenance overlay blocks product traffic and SuggestedTasksStore / offline queue upload paths respect quarantine."
+    name: Confirm migration maintenance blocks durable uploads
+    do: "Inject or stub a migrating control with product traffic blocked. Confirm the migration-maintenance overlay blocks product traffic and durable outbox / WAL upload paths (SuggestedTasks, dashboard feedback, recording WAL, kernel journal, candidates) refuse upload until the gate reopens."

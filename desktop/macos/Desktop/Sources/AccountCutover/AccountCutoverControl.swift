@@ -72,6 +72,14 @@ enum AccountCutoverGateDecision: Equatable, Sendable {
   case migrationMaintenance
 }
 
+/// Bootstrap projection before the first authoritative control fetch for the bound owner.
+enum AccountCutoverBootstrapPhase: Equatable, Sendable {
+  /// No confirmed control for the current owner — product services stay blocked.
+  case pending
+  /// Server control has been applied for the current owner.
+  case ready
+}
+
 struct AccountCutoverGate: Sendable {
   func decide(_ control: AccountCutoverControl) -> AccountCutoverGateDecision {
     switch control.clientAction {
@@ -97,56 +105,185 @@ struct AccountCutoverGate: Sendable {
   }
 }
 
+/// Shared admission for every durable desktop outbox / WAL upload path.
+enum AccountCutoverOfflineUploadAdmission {
+  @MainActor
+  static func allowsUpload(
+    manager: AccountCutoverControlManager = .shared
+  ) -> Bool {
+    manager.allowsOfflineQueueUpload
+  }
+
+  static func allowsUploadOffMainActor() async -> Bool {
+    await MainActor.run { allowsUpload() }
+  }
+}
+
 @MainActor
 final class AccountCutoverControlManager: ObservableObject {
   static let shared = AccountCutoverControlManager()
 
+  @Published private(set) var bootstrapPhase: AccountCutoverBootstrapPhase = .pending
   @Published private(set) var control: AccountCutoverControl = .legacyDefault
-  @Published private(set) var decision: AccountCutoverGateDecision = .allowProductTraffic
+  @Published private(set) var decision: AccountCutoverGateDecision = .migrationMaintenance
 
   private let gate = AccountCutoverGate()
   private let fetchControl: () async throws -> AccountCutoverControl
+  private let currentOwnerID: () -> String?
   private var activationObserver: NSObjectProtocol?
+  private var ownerChangeObserver: NSObjectProtocol?
+  private var signOutObserver: NSObjectProtocol?
   private var lifecycleInstalled = false
+  private var boundOwnerID: String?
+  private var refreshGeneration: UInt64 = 0
+  private var hasAuthoritativeControl = false
 
-  init(fetchControl: @escaping () async throws -> AccountCutoverControl = AccountCutoverControlManager.defaultFetch) {
+  init(
+    fetchControl: @escaping () async throws -> AccountCutoverControl = AccountCutoverControlManager.defaultFetch,
+    currentOwnerID: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
+  ) {
     self.fetchControl = fetchControl
+    self.currentOwnerID = currentOwnerID
   }
 
-  var allowsOfflineQueueUpload: Bool { gate.shouldUploadOfflineQueues(control) }
-  var quarantinesOfflineQueues: Bool { gate.shouldQuarantineOfflineQueues(control) }
-  var blocksProductTraffic: Bool { decision != .allowProductTraffic }
+  /// Token that changes whenever signed-in product services may start or must stop.
+  var productShellAdmissionToken: String {
+    "\(bootstrapPhase)-\(decision)-\(boundOwnerID ?? "none")"
+  }
 
-  /// Install activation refresh once; call from the signed-in home shell.
+  var allowsOfflineQueueUpload: Bool {
+    bootstrapPhase == .ready && gate.shouldUploadOfflineQueues(control)
+  }
+
+  var quarantinesOfflineQueues: Bool {
+    bootstrapPhase == .ready && gate.shouldQuarantineOfflineQueues(control)
+  }
+
+  var blocksProductTraffic: Bool {
+    bootstrapPhase != .ready || decision != .allowProductTraffic
+  }
+
+  var isProductShellAdmitted: Bool {
+    bootstrapPhase == .ready && decision == .allowProductTraffic
+  }
+
+  /// Overlay decision while bootstrap is pending: fail closed into maintenance.
+  var overlayDecision: AccountCutoverGateDecision {
+    bootstrapPhase == .ready ? decision : .migrationMaintenance
+  }
+
+  /// Install activation / owner observers once and bind+refresh the current owner.
   func installLifecycleObserversIfNeeded() {
-    guard !lifecycleInstalled else { return }
-    lifecycleInstalled = true
-    activationObserver = NotificationCenter.default.addObserver(
-      forName: NSApplication.didBecomeActiveNotification,
-      object: nil,
-      queue: .main
-    ) { [weak self] _ in
-      Task { @MainActor in
-        await self?.refresh()
+    if !lifecycleInstalled {
+      lifecycleInstalled = true
+      activationObserver = NotificationCenter.default.addObserver(
+        forName: NSApplication.didBecomeActiveNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor in
+          await self?.refresh()
+        }
+      }
+      ownerChangeObserver = NotificationCenter.default.addObserver(
+        forName: .runtimeOwnerDidChange,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor in
+          await self?.bindCurrentOwnerAndRefresh()
+        }
+      }
+      signOutObserver = NotificationCenter.default.addObserver(
+        forName: .userDidSignOut,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor in
+          self?.resetForSignedOutOwner()
+        }
       }
     }
-    Task { await refresh() }
+    Task { await bindCurrentOwnerAndRefresh() }
+  }
+
+  /// Awaited by the signed-in home shell before product services start.
+  func prepareSignedInShell() async {
+    installLifecycleObserversIfNeeded()
+    await bindCurrentOwnerAndRefresh()
+  }
+
+  func bindCurrentOwnerAndRefresh() async {
+    let ownerID = currentOwnerID()
+    if ownerID == nil {
+      resetForSignedOutOwner()
+      return
+    }
+    if ownerID != boundOwnerID {
+      resetForOwnerChange(newOwnerID: ownerID)
+    }
+    await refresh()
   }
 
   func refresh() async {
+    let ownerID = boundOwnerID ?? currentOwnerID()
+    guard let ownerID else {
+      resetForSignedOutOwner()
+      return
+    }
+    if boundOwnerID != ownerID {
+      resetForOwnerChange(newOwnerID: ownerID)
+    }
+    refreshGeneration &+= 1
+    let generation = refreshGeneration
+    let refreshOwnerID = ownerID
     do {
       let fetched = try await fetchControl()
-      apply(fetched)
+      guard generation == refreshGeneration, boundOwnerID == refreshOwnerID else { return }
+      applyAuthoritative(fetched)
     } catch {
-      // Keep legacy-compatible defaults until enforcement + bridge floors are live.
-      apply(.legacyDefault)
-      log("AccountCutoverControl: fetch failed error_type=\(String(reflecting: type(of: error)))")
+      guard generation == refreshGeneration, boundOwnerID == refreshOwnerID else { return }
+      // Keep the last confirmed control; never reopen the gate from a blip.
+      // Before the first confirmation, stay pending / blocked.
+      log(
+        "AccountCutoverControl: fetch failed retained_authoritative=\(hasAuthoritativeControl) "
+          + "error_type=\(String(reflecting: type(of: error)))"
+      )
     }
   }
 
   func apply(_ control: AccountCutoverControl) {
+    applyAuthoritative(control)
+  }
+
+  /// Test seam: force pending bootstrap without a network round-trip.
+  func resetForTesting() {
+    refreshGeneration &+= 1
+    boundOwnerID = nil
+    hasAuthoritativeControl = false
+    bootstrapPhase = .pending
+    control = .legacyDefault
+    decision = .migrationMaintenance
+  }
+
+  private func applyAuthoritative(_ control: AccountCutoverControl) {
     self.control = control
     decision = gate.decide(control)
+    hasAuthoritativeControl = true
+    bootstrapPhase = .ready
+  }
+
+  private func resetForOwnerChange(newOwnerID: String?) {
+    refreshGeneration &+= 1
+    boundOwnerID = newOwnerID
+    hasAuthoritativeControl = false
+    bootstrapPhase = .pending
+    control = .legacyDefault
+    decision = .migrationMaintenance
+  }
+
+  private func resetForSignedOutOwner() {
+    resetForOwnerChange(newOwnerID: nil)
   }
 
   private static func defaultFetch() async throws -> AccountCutoverControl {

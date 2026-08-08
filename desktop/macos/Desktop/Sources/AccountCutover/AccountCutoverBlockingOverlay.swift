@@ -68,7 +68,7 @@ private struct AccountCutoverBlockingOverlayHost: View {
 
   var body: some View {
     AccountCutoverBlockingOverlay(
-      decision: manager.decision,
+      decision: manager.overlayDecision,
       strandedNewData: manager.control.strandedNewData,
       onOpenDownload: onOpenDownload
     )

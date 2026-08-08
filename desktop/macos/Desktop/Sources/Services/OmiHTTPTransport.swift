@@ -307,6 +307,7 @@ enum APIError: LocalizedError {
   case unsupportedTierScopedBulkMutation(String)
   case syncRateLimited(retryAfterSeconds: Int?)
   case syncUploadRejected(reason: String)
+  case accountCutoverOfflineQueueBlocked
 
   var detail: String? {
     switch self {
@@ -339,6 +340,8 @@ enum APIError: LocalizedError {
       return "Sync rate limited"
     case .syncUploadRejected(let reason):
       return reason
+    case .accountCutoverOfflineQueueBlocked:
+      return "Account cutover offline upload gate closed"
     }
   }
 }

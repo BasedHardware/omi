@@ -303,11 +303,17 @@ actor KernelJournalBackendSyncDriver {
 
   private enum SyncError: Error, Equatable {
     case ownerChanged
+    case accountCutoverOfflineQueueBlocked
   }
 
   nonisolated static func boundedErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -360,6 +366,9 @@ actor KernelJournalBackendSyncDriver {
   func sync(_ request: Request) async throws -> Receipt {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
+    }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
     }
     await conversationBarrier.beginSync(conversationId: request.conversationId)
     let response: SaveMessageResponse
