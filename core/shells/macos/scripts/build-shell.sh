@@ -57,6 +57,49 @@ swiftc -O \
 # Copy the real shared surface (relative-base Vite build).
 rsync -a --delete "$OMI_SURFACES_DIST/" "$app/Contents/Resources/surface/"
 
+# Stamp the bundle with the source tree the SHELL was compiled from (not to be
+# confused with the surfaces-dist stamp already sitting in
+# Contents/Resources/surface/omi-build-stamp.json, written by the surfaces
+# build for the bundle it served — the two can legitimately differ and are
+# never merged; see integration/lib/provenance.mjs).
+#
+# A build must never fail because provenance failed: git being unavailable (a
+# tarball checkout, a shallow CI clone missing objects) is a real, survivable
+# case. On any failure the stamp is a distinguishable `unavailable` object,
+# never a fabricated value that merely looks like a valid stamp.
+repo_root="$(cd "$here/../../.." && pwd)"
+provenance_script="$repo_root/integration/lib/provenance.mjs"
+shell_stamp="$app/Contents/Resources/omi-build-stamp.json"
+# Fallback writer used both when node is entirely absent (message is a fixed
+# literal, safe to embed raw) and as a last resort if even the node-based
+# writer below somehow fails.
+write_unavailable_stamp_raw() {
+  printf '{"schema":1,"repo":"core-foundation","artifact":"macos-app","unavailable":"%s"}\n' "$1" > "$shell_stamp"
+}
+if ! command -v node >/dev/null 2>&1; then
+  write_unavailable_stamp_raw "node unavailable at build time"
+elif [[ ! -f "$provenance_script" ]]; then
+  write_unavailable_stamp_raw "provenance module missing at $provenance_script"
+else
+  provenance_stderr="$out/.provenance-stderr.$$"
+  if node "$provenance_script" --repo core-foundation --artifact macos-app --out "$shell_stamp" >/dev/null 2>"$provenance_stderr"; then
+    rm -f "$provenance_stderr"
+  else
+    # node is known present here, so let it do the JSON escaping of whatever
+    # the CLI printed to stderr — never hand-build JSON around untrusted text.
+    node -e '
+      const fs = require("fs");
+      const reason = fs.readFileSync(process.argv[1], "utf8").trim().slice(0, 300) || "unknown error";
+      fs.writeFileSync(process.argv[2], JSON.stringify({
+        schema: 1, repo: "core-foundation", artifact: "macos-app",
+        unavailable: `provenance CLI failed: ${reason}`,
+      }) + "\n");
+    ' "$provenance_stderr" "$shell_stamp" || write_unavailable_stamp_raw "provenance CLI failed"
+    rm -f "$provenance_stderr"
+  fi
+fi
+echo "stamped: ${shell_stamp/#$here/.}"
+
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

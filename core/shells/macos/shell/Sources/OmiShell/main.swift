@@ -28,6 +28,50 @@ func resolveSurfaceRoot() -> URL? {
   return nil
 }
 
+/// The two provenance stamps this bundle carries: the shell it was compiled
+/// from (`Contents/Resources/omi-build-stamp.json`, written by
+/// scripts/build-shell.sh), and the surfaces bundle it serves
+/// (`Contents/Resources/surface/omi-build-stamp.json`, written by the
+/// surfaces build). They legitimately differ and are read separately — see
+/// integration/lib/provenance.mjs.
+///
+/// Resolved via `Bundle.main.resourceURL`, the same seam `resolveSurfaceRoot()`
+/// already uses successfully for this unsigned swiftc-built bundle. It is
+/// plist/bundle-structure-driven lookup, not code-signature-driven, so an
+/// unsigned bundle resolves it exactly like a signed one; deriving from
+/// `CommandLine.arguments[0]` would duplicate that same relative-path logic
+/// with none of its existing precedent.
+let shellStampURL = Bundle.main.resourceURL?.appendingPathComponent("omi-build-stamp.json")
+let surfaceStampURL = Bundle.main.resourceURL?
+  .appendingPathComponent("surface", isDirectory: true)
+  .appendingPathComponent("omi-build-stamp.json")
+
+/// Per-run client identity for the privileged HTTP bridge (`OMI_RUN_CLIENT_ID`).
+/// Threaded into `BridgeHttpHandler`'s init below rather than read from
+/// `ProcessInfo` inside `BridgeHttpPolicy`, so that seam stays a pure function
+/// the generated host-conformance runner can call without an environment.
+/// Absent/empty means "send no header" — the backend buckets those reads
+/// under its own `anonymous` key; never fabricate a value here.
+let runClientId: String? = env["OMI_RUN_CLIENT_ID"].flatMap { $0.isEmpty ? nil : $0 }
+
+/// Extract a `<commit12>/<tree12>` summary from a build-stamp JSON file for the
+/// ACCEPTANCE line, or the literal `"unavailable"` when the file is missing,
+/// unparseable, or is itself a `{"unavailable": ...}` fallback stamp written by
+/// a build that could not compute provenance. Never a blank or fabricated
+/// value — minimal hand-rolled extraction via JSONSerialization, no new
+/// dependency.
+func provenanceStampSummary(at url: URL?) -> String {
+  guard let url, let data = try? Data(contentsOf: url) else { return "unavailable" }
+  guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    return "unavailable"
+  }
+  if obj["unavailable"] is String { return "unavailable" }
+  guard let commit = obj["commit"] as? String, let treeHash = obj["treeHash"] as? String,
+    !commit.isEmpty, !treeHash.isEmpty
+  else { return "unavailable" }
+  return "\(commit.prefix(12))/\(treeHash.prefix(12))"
+}
+
 func redactedURL(_ url: URL) -> String {
   guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
     return "(invalid-url)"
@@ -273,8 +317,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let bridge = httpHandler == nil ? "disabled" : "enabled"
     let status = acceptancePassed ? "PASS" : "FAIL"
     let traffic = httpHandler?.trafficSummary ?? "dispatched=0 succeeded=0"
+    // Appended AFTER the existing fields so dev-stack.sh's `status=PASS` /
+    // `httpError=` substring greps keep matching unchanged. shellStamp is the
+    // tree the shell binary was compiled from; surfaceStamp is the tree the
+    // bundle it is serving was built from — they can legitimately differ and
+    // are read from two separate files (see the doc comment above
+    // shellStampURL). clientId echoes what was actually sent on the wire
+    // (or "none" if OMI_RUN_CLIENT_ID was absent/empty, matching the backend's
+    // own "anonymous" bucket for the same case) — never a fabricated value.
+    let shellStamp = provenanceStampSummary(at: shellStampURL)
+    let surfaceStamp = provenanceStampSummary(at: surfaceStampURL)
+    let clientIdField = runClientId ?? "none"
     let line =
-      "ACCEPTANCE phase=\(phase) bridge=\(bridge) \(traffic) servedCount=\(served) status=\(status)\n"
+      "ACCEPTANCE phase=\(phase) bridge=\(bridge) \(traffic) servedCount=\(served) status=\(status)"
+      + " shellStamp=\(shellStamp) surfaceStamp=\(surfaceStamp) clientId=\(clientIdField)\n"
     FileHandle.standardError.write(Data(line.utf8))
     return acceptancePassed
   }
@@ -331,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           .utf8))
     var httpHandler: BridgeHttpHandler?
     if let base = session.baseURL {
-      httpHandler = BridgeHttpHandler(baseURL: base, token: session.token)
+      httpHandler = BridgeHttpHandler(baseURL: base, token: session.token, clientId: runClientId)
       FileHandle.standardError.write(
         Data(
           "bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(session.tokenPresent ? "present" : "absent"))\n"
@@ -373,10 +429,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.standardWindowButton(.closeButton)?.isHidden = true
     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
     window.standardWindowButton(.zoomButton)?.isHidden = true
-    window.center()
-    window.makeKeyAndOrderFront(nil)
+    // ── HEADLESS IS THE DEFAULT. HEADED IS OPT-IN. ──────────────────────────
+    //
+    // An agent loop that steals focus every 90 seconds is not usable. This shell
+    // is launched by automation far more often than by a person — the launcher
+    // alone starts it twice per run — and every one of those launches used to
+    // pop a window to the front and take the keyboard.
+    //
+    // Headless costs NO evidence, which is what makes this cheap: bridge
+    // traffic, JS execution, `evaluateJavaScript`, the loopback server and
+    // `WKWebView.takeSnapshot` (OMI_SNAPSHOT_PATH) all work perfectly without a
+    // visible window. Only WINDOW-COMPOSITED pixel evidence needs a real window
+    // on screen, and that is a headed, human-initiated activity.
+    //
+    //   .accessory      no Dock icon, no menu bar, cannot take focus.
+    //   offscreen order the window is ordered in far off-screen rather than left
+    //                   unordered, because an unordered window gets its
+    //                   WKWebView paint throttled — which would make snapshots
+    //                   blank and quietly cost us the evidence this whole
+    //                   program is about. Ordered-but-offscreen paints normally
+    //                   and is invisible.
+    //
+    // OMI_HEADED=1 restores the old behavior in full.
+    let headed = env["OMI_HEADED"] == "1"
     installMenu()
-    NSApp.activate(ignoringOtherApps: true)
+    if headed {
+      NSApp.setActivationPolicy(.regular)
+      window.center()
+      window.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+    } else {
+      NSApp.setActivationPolicy(.accessory)
+      // Far outside any plausible display arrangement, so it cannot appear on a
+      // second monitor either.
+      window.setFrameOrigin(NSPoint(x: -30000, y: -30000))
+      window.orderBack(nil)
+    }
+    FileHandle.standardError.write(Data("display-mode: \(headed ? "headed" : "headless (OMI_HEADED=1 to show a window)")\n".utf8))
     controller.start()
     // Diagnostic hook: OMI_PROBE_JS=<expr> prints the evaluated result to stdout
     // after load, so load strategies can be checked from a script.
@@ -493,7 +582,12 @@ MainActor.assumeIsolated {
   let app = NSApplication.shared
   let delegate = AppDelegate()
   app.delegate = delegate
-  app.setActivationPolicy(.regular)
+  // Set the policy BEFORE the app finishes launching, not only in the delegate.
+  // `.regular` here would flash a Dock icon and pull focus for the moment before
+  // applicationDidFinishLaunching runs — a smaller version of exactly the
+  // problem, and the kind that is easy to call fixed because the window itself
+  // no longer appears.
+  app.setActivationPolicy(ProcessInfo.processInfo.environment["OMI_HEADED"] == "1" ? .regular : .accessory)
   objc_setAssociatedObject(app, "omi.delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
   app.run()
 }
