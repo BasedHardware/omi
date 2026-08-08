@@ -24,8 +24,26 @@ test("production surfaces depend on stable store ports instead of QA fixtures", 
 test("bootstrap chooses backend generation through one production factory", async () => {
   const main = await read("src/production/main.tsx");
   const stores = await read("src/production/ProductionStores.ts");
-  assert.match(main, /createLegacyProductionStoreFactory\(bridge, env, http\)/);
+  // The bootstrap now builds the PLATFORM factory for every route. It extends the legacy
+  // factory, so legacy domains are unchanged — which is exactly what lets Memories move
+  // generation while Tasks/Conversations/Folders stay put (board ruling PR-1).
+  assert.match(main, /createPlatformProductionStoreFactory\(bridge, env, \{ legacyHttp: http, platformHttp: http \}, requestedGenerations\)/);
   assert.doesNotMatch(main, /(?:Memories|Conversations|Folders|Tasks)Store\.open/);
+
+  // Selection comes from the HOST, never from a bare user-typed URL alone, and a
+  // rejection is reported rather than silently downgraded.
+  assert.match(main, /__OMI_HOST_CONFIG__/);
+  assert.match(main, /OMI_GENERATION_REJECTED/);
+  assert.match(main, /OMI_GENERATION_SELECTION/);
+
+  // The platform read model is reachable ONLY on the memories route. Rendering it for any
+  // selected generation would hijack Home/Tasks/Conversations with a Memories screen.
+  assert.match(main, /route === "memories" && platform\.selection\.memories === "platform"/);
+  // red-proof: dropping the `route === "memories"` conjunct makes `?generation=platform`
+  // render propositions on every route, including Tasks. Dropping the REJECTED log lets a
+  // client believe it is on the new backend while reading the legacy wire — the single
+  // worst outcome available here.
+
   assert.match(stores, /export type ProductionStoreFactory/);
   assert.match(stores, /openMemories\(\)/);
   assert.match(stores, /openConversations\(\)/);
