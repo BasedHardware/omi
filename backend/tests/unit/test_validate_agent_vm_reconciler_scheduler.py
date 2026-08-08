@@ -55,3 +55,30 @@ def test_reconciler_scheduler_requires_five_minute_post_trigger():
         scheduler_service_account="scheduler@based-hardware-dev.iam.gserviceaccount.com",
     )
     assert any("serviceAccountEmail must equal" in error for error in errors)
+
+
+def test_reconciler_scheduler_can_validate_an_intentionally_paused_install():
+    state = {
+        "name": "projects/based-hardware/locations/us-central1/jobs/agent-vm-reconciler-5m",
+        "state": "PAUSED",
+        "schedule": "*/5 * * * *",
+        "timeZone": "Etc/UTC",
+        "httpTarget": {
+            "httpMethod": "POST",
+            "uri": target_uri("based-hardware", "us-central1", "agent-vm-reconciler"),
+            "oauthToken": {"serviceAccountEmail": "scheduler@based-hardware.iam.gserviceaccount.com"},
+        },
+    }
+
+    assert (
+        validate_scheduler_state(
+            state,
+            project="based-hardware",
+            region="us-central1",
+            scheduler_job="agent-vm-reconciler-5m",
+            cloud_run_job="agent-vm-reconciler",
+            scheduler_service_account="scheduler@based-hardware.iam.gserviceaccount.com",
+            expected_state="PAUSED",
+        )
+        == []
+    )
