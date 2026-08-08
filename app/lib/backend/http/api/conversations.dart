@@ -696,7 +696,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);

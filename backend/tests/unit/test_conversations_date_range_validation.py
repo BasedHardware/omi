@@ -109,6 +109,7 @@ def conv():
         "utils.conversations.render": AutoMockModule("utils.conversations.render"),
         "utils.conversations.process_conversation": AutoMockModule("utils.conversations.process_conversation"),
         "utils.conversations.search": AutoMockModule("utils.conversations.search"),
+        "utils.conversations.mcp_transcript_search": AutoMockModule("utils.conversations.mcp_transcript_search"),
         "utils.conversations.calendar_linking": AutoMockModule("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": AutoMockModule("utils.conversations.calendar_utils"),
         "utils.conversations.location": AutoMockModule("utils.conversations.location"),

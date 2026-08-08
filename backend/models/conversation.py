@@ -41,6 +41,7 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'TranscriptMatchSnippet',
     'SharedConversationChatHistoryMessage',
     'SharedConversationChatRequest',
     'SharedConversationChatResponse',
@@ -154,6 +155,18 @@ class ConversationAudio(BaseModel):
     spans: List[ConversationAudioSpan] = []
     content_type: str = 'audio/mpeg'
     built_at: Optional[datetime] = None
+
+
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript hit returned on conversation search for seek-to-moment UX."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
 
 
 class Conversation(BaseModel):

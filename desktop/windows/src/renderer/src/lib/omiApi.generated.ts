@@ -1162,6 +1162,44 @@ export interface ConversationRecordingResponse {
   has_recording: boolean;
 }
 
+export interface ConversationSearchItem {
+  app_id?: string | null;
+  apps_results?: Array<AppResult>;
+  audio_files?: Array<AudioFile>;
+  calendar_event?: CalendarEventLink | null;
+  call_id?: string | null;
+  client_device_id?: string | null;
+  client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
+  created_at: string;
+  data_protection_level?: string | null;
+  deferred?: boolean;
+  discarded?: boolean;
+  external_data?: Record<string, unknown> | null;
+  finished_at: string | null;
+  folder_id?: string | null;
+  geolocation?: Geolocation | null;
+  id: string;
+  is_locked?: boolean;
+  language?: string | null;
+  match_snippets?: Array<TranscriptMatchSnippet>;
+  photos?: Array<ConversationPhoto>;
+  plugins_results?: Array<PluginResult>;
+  private_cloud_sync_enabled?: boolean;
+  processing_conversation_id?: string | null;
+  processing_memory_id?: string | null;
+  source?: ConversationSource | null;
+  starred?: boolean;
+  started_at: string | null;
+  status?: ConversationStatus | null;
+  structured: Structured;
+  suggested_summarization_apps?: Array<string>;
+  transcript_segments?: Array<TranscriptSegment>;
+  transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
+  visibility?: ConversationVisibility;
+}
+
 export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
 
 export type ConversationStatus = "in_progress" | "processing" | "merging" | "completed" | "failed";
@@ -2891,7 +2929,7 @@ export interface SavePayPalPaymentDetailsRequest {
 
 export interface SearchConversationsResponse {
   current_page: number;
-  items: Array<Conversation>;
+  items: Array<ConversationSearchItem>;
   per_page: number;
   total_pages: number;
 }
@@ -3479,6 +3517,16 @@ export interface TokenResponse {
 export interface TrainingDataOptInResponse {
   opted_in: boolean;
   status?: string | null;
+}
+
+export interface TranscriptMatchSnippet {
+  end?: number | null;
+  end_ms?: number | null;
+  segment_id?: string | null;
+  speaker_id?: number | null;
+  start?: number | null;
+  start_ms?: number | null;
+  text: string;
 }
 
 export interface TranscriptSegment {
@@ -4074,6 +4122,7 @@ export interface OmiApiSchemas {
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
+  "ConversationSearchItem": ConversationSearchItem;
   "ConversationSource": ConversationSource;
   "ConversationStatus": ConversationStatus;
   "ConversationStatusResponse": ConversationStatusResponse;
@@ -4398,6 +4447,7 @@ export interface OmiApiSchemas {
   "TesterAccessRequest": TesterAccessRequest;
   "TokenResponse": TokenResponse;
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
+  "TranscriptMatchSnippet": TranscriptMatchSnippet;
   "TranscriptSegment": TranscriptSegment;
   "TranscriptionErrorDetail": TranscriptionErrorDetail;
   "TranscriptionErrorResponse": TranscriptionErrorResponse;
