@@ -45,7 +45,13 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { REPO_PATHS, assertRepoPathsExist, readStampFile, verifyArtifact } from "./lib/provenance.mjs";
+import {
+  REPO_PATHS,
+  assertCrossTreePairingIsDeclared,
+  assertRepoPathsExist,
+  readStampFile,
+  verifyArtifact,
+} from "./lib/provenance.mjs";
 
 const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
@@ -158,7 +164,16 @@ function runLane(laneId, { json = false } = {}) {
     }
   }
 
-  if (!json) process.stdout.write(`▸ ${laneId} — ${lane.name} (${lane.budgetNote})\n`);
+  if (!json) {
+    process.stdout.write(`▸ ${laneId} — ${lane.name} (${lane.budgetNote})\n`);
+    // WHICH TREES, every run, before any of them are measured. The receipt has
+    // carried this all along and nobody read it; a lane read its own green L2 as
+    // a statement about its diff while the platform stamp named the shared
+    // checkout. Evidence nobody looks at is not evidence.
+    for (const [repo, path] of Object.entries(REPO_PATHS)) {
+      process.stdout.write(`  ${repo.padEnd(16)} ${path}\n`);
+    }
+  }
   for (const step of lane.steps) {
     const stepStart = Date.now();
     let status = 0;
@@ -247,6 +262,8 @@ if (!laneArg || argv.includes("--help")) {
 // A lane that cannot see a repo must say so, not fail later inside git.
 try {
   assertRepoPathsExist();
+  // ...and refuse a lane/shared pairing nobody chose. See provenance.mjs.
+  assertCrossTreePairingIsDeclared();
 } catch (err) {
   process.stderr.write(`${err.message}\n`);
   process.exit(2);
