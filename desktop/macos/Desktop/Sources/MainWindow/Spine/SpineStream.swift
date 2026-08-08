@@ -253,14 +253,15 @@ struct SpineStream: View {
       // opened. Either way the manual door has to be there — and unlike the old footer it does not
       // fetch itself the instant it appears, so a spine of nothing but folded headers cannot page
       // the account away behind a screen with nothing on it to have reached the end of.
-      SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
-        await appState.loadMoreConversations()
-      }
+      SpineLoadMoreFooter { hydrator.retry() }
     }
   }
 
   private var foot: SpineFoot {
-    SpineFoot.resolve(corpus: hydrator.state, canLoadMore: appState.canLoadMoreConversations)
+    SpineFoot.resolve(
+      corpus: hydrator.state,
+      canLoadMore: appState.canLoadMoreConversations || memoriesViewModel.hasMoreMemories
+    )
   }
 
   /// Folds one day shut, or opens it again.
@@ -289,18 +290,20 @@ struct SpineStream: View {
   /// were still arriving. The copy is resolved from the same `SpineFoot` the footer is, and the foot
   /// is rendered here too, so the two can never disagree about whether the corpus is complete.
   private var emptyState: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .center, spacing: 6) {
       Text(copy.headline)
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundStyle(Ink.primary)
+        .multilineTextAlignment(.center)
       if let detail = copy.detail {
         Text(detail)
           .scaledFont(size: OmiType.caption, weight: .regular)
           .foregroundStyle(Ink.secondary)
+          .multilineTextAlignment(.center)
       }
       footer
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.vertical, OmiSpacing.lg)
     .padding(.horizontal, OmiSpacing.sm)
     .accessibilityIdentifier("query-shell-empty")
@@ -501,25 +504,21 @@ private struct SpineDayDisclosure: View {
 /// hydration owns the paging, the footer is only ever a button, which is also the only shape a
 /// keyboard and automation can reach reliably.
 struct SpineLoadMoreFooter: View {
-  let isLoading: Bool
-  let load: () async -> Void
+  let load: () -> Void
 
   var body: some View {
-    Button {
-      Task { await load() }
-    } label: {
+    Button(action: load) {
       HStack(spacing: 8) {
-        if isLoading { ProgressView().controlSize(.small) }
-        Text(isLoading ? "Loading earlier days…" : "Load earlier days")
-          .scaledFont(size: OmiType.caption, weight: .regular)
-          .foregroundStyle(Ink.secondary)
+        Image(systemName: "clock.arrow.circlepath")
+          .accessibilityHidden(true)
+        Text("Load earlier days")
       }
-      .frame(maxWidth: .infinity)
-      .padding(.vertical, 14)
-      .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
-    .disabled(isLoading)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    .frame(maxWidth: .infinity)
+    .padding(.top, OmiSpacing.sm)
+    .padding(.bottom, OmiSpacing.md)
+    .help("Retry loading the rest of your history")
     .accessibilityIdentifier("spine-load-more")
   }
 }

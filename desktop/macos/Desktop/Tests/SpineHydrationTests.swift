@@ -145,7 +145,7 @@ private final class FakeCorpus {
   let corpus: Int
   let pageSize: Int
   /// Pages that answer with nothing and do not advance — a failing endpoint, not an empty one.
-  let failing: Bool
+  private(set) var failing: Bool
   private(set) var loaded = 0
   private(set) var requests = 0
   private(set) var reachedEnd = false
@@ -160,6 +160,10 @@ private final class FakeCorpus {
   func truncate(to rows: Int) {
     loaded = rows
     reachedEnd = false
+  }
+
+  func recover() {
+    failing = false
   }
 
   var source: SpinePageSource {
@@ -336,5 +340,27 @@ final class SpineHydrationTests: XCTestCase {
 
     XCTAssertEqual(broken.requests, afterFirstRun)
     XCTAssertEqual(hydrator.state, .partial)
+  }
+
+  /// The manual footer is a retry, not a one-page fetch. Once the source recovers, one click must
+  /// restart the bounded hydrator and walk every source to the end.
+  func testManualRetryRestartsAnAbandonedCorpusAndLoadsItToTheEnd() async {
+    let conversations = FakeCorpus(corpus: 120, pageSize: 50, failing: true)
+    let memories = FakeCorpus(corpus: 180, pageSize: 100, failing: true)
+    let hydrator = SpineHydrator()
+
+    await hydrator.hydrate([conversations.source, memories.source])
+    XCTAssertEqual(hydrator.state, .partial)
+
+    conversations.recover()
+    memories.recover()
+    hydrator.retry()
+    for _ in 0..<1_000 where !conversations.reachedEnd || !memories.reachedEnd {
+      await Task.yield()
+    }
+
+    XCTAssertEqual(conversations.loaded, 120)
+    XCTAssertEqual(memories.loaded, 180)
+    XCTAssertEqual(hydrator.state, .whole)
   }
 }

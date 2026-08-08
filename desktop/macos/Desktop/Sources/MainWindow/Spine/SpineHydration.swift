@@ -176,10 +176,23 @@ final class SpineHydrator: ObservableObject {
     // run twice in the same turn, and a flag the loop only raises once it is scheduled would let
     // the second call spawn a second loop over the same cursors.
     isRunning = true
+    publish()
     let pending = sources
     task = Task { [weak self] in
       await self?.hydrate(pending)
     }
+  }
+
+  /// Explicitly try an abandoned corpus again after the person asks for earlier days.
+  ///
+  /// Automatic `resume()` deliberately refuses to revive an abandoned source: otherwise every
+  /// store update and every keystroke would turn a broken endpoint into another request. A direct
+  /// click is different evidence. It is permission to spend one more bounded hydration run, across
+  /// every source rather than one conversation page, and to show progress immediately.
+  func retry() {
+    guard !isRunning, !sources.isEmpty else { return }
+    didAbandon = false
+    resume()
   }
 
   /// Stop paging. Leaves the state describing what actually landed.
