@@ -7,11 +7,25 @@ export type ServedCountSnapshot = {
   readonly domainReadsFailed: number;
   readonly nonDomainRequests: number;
   readonly totalRequests: number;
+  /**
+   * COORD-contract-evolution-policy.md §4's payoff: "counting unknown fields
+   * turns 'how many clients are behind the wire' into a population statistic
+   * instead of a guess." This is the narrower, available-today slice of that:
+   * how many app-facing requests declared NO contract version at all (and so
+   * were resolved to the floor), versus how many declared one explicitly.
+   * It does not require `FallbackSink` (COORD-degradation-is-unobservable,
+   * a different lane's dependency this run) because it counts a request-side
+   * header, not a response-side unknown-field degradation.
+   */
+  readonly declaredContractVersionAtFloor: number;
+  readonly declaredContractVersionExplicit: number;
 };
 
 export type ServedCounter = {
   recordDomainRead(outcome: DomainReadOutcome): void;
   recordNonDomainRequest(): void;
+  /** Whether the request resolved to the floor (no/malformed header) or declared explicitly. */
+  recordDeclaredContractVersion(input: { readonly atFloor: boolean }): void;
   snapshot(): ServedCountSnapshot;
 };
 
@@ -21,6 +35,8 @@ export type ServedCounterQaSeed = {
   readonly domainReadsDenied?: number;
   readonly domainReadsFailed?: number;
   readonly nonDomainRequests?: number;
+  readonly declaredContractVersionAtFloor?: number;
+  readonly declaredContractVersionExplicit?: number;
 };
 
 const SNAPSHOT_VERSION = "served-count-v1" as const;
@@ -32,6 +48,8 @@ type ServedCounterBuckets = {
   domainReadsDenied: number;
   domainReadsFailed: number;
   nonDomainRequests: number;
+  declaredContractVersionAtFloor: number;
+  declaredContractVersionExplicit: number;
 };
 
 type ServedCounterInternal = ServedCounter & {
@@ -58,6 +76,8 @@ const zeroBuckets = (): ServedCounterBuckets => ({
   domainReadsDenied: 0,
   domainReadsFailed: 0,
   nonDomainRequests: 0,
+  declaredContractVersionAtFloor: 0,
+  declaredContractVersionExplicit: 0,
 });
 
 const snapshotFrom = (buckets: ServedCounterBuckets): ServedCountSnapshot =>
@@ -72,6 +92,8 @@ const snapshotFrom = (buckets: ServedCounterBuckets): ServedCountSnapshot =>
       + buckets.domainReadsDenied
       + buckets.domainReadsFailed
       + buckets.nonDomainRequests,
+    declaredContractVersionAtFloor: buckets.declaredContractVersionAtFloor,
+    declaredContractVersionExplicit: buckets.declaredContractVersionExplicit,
   });
 
 export function createServedCounter(qaSeed?: ServedCounterQaSeed): ServedCounter {
@@ -81,6 +103,8 @@ export function createServedCounter(qaSeed?: ServedCounterQaSeed): ServedCounter
       domainReadsDenied: assertSeedCount("domainReadsDenied", qaSeed.domainReadsDenied),
       domainReadsFailed: assertSeedCount("domainReadsFailed", qaSeed.domainReadsFailed),
       nonDomainRequests: assertSeedCount("nonDomainRequests", qaSeed.nonDomainRequests),
+      declaredContractVersionAtFloor: assertSeedCount("declaredContractVersionAtFloor", qaSeed.declaredContractVersionAtFloor),
+      declaredContractVersionExplicit: assertSeedCount("declaredContractVersionExplicit", qaSeed.declaredContractVersionExplicit),
     }
     : zeroBuckets();
 
@@ -108,6 +132,14 @@ export function createServedCounter(qaSeed?: ServedCounterQaSeed): ServedCounter
 
     recordNonDomainRequest(): void {
       buckets.nonDomainRequests = increment(buckets.nonDomainRequests);
+    },
+
+    recordDeclaredContractVersion({ atFloor }: { readonly atFloor: boolean }): void {
+      if (atFloor) {
+        buckets.declaredContractVersionAtFloor = increment(buckets.declaredContractVersionAtFloor);
+      } else {
+        buckets.declaredContractVersionExplicit = increment(buckets.declaredContractVersionExplicit);
+      }
     },
 
     snapshot(): ServedCountSnapshot {

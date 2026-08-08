@@ -9,6 +9,8 @@ const emptySnapshot = (): ServedCountSnapshot => ({
   domainReadsFailed: 0,
   nonDomainRequests: 0,
   totalRequests: 0,
+  declaredContractVersionAtFloor: 0,
+  declaredContractVersionExplicit: 0,
 });
 
 describe("createServedCounter", () => {
@@ -32,6 +34,8 @@ describe("createServedCounter", () => {
       domainReadsFailed: 1,
       nonDomainRequests: 0,
       totalRequests: 4,
+      declaredContractVersionAtFloor: 0,
+      declaredContractVersionExplicit: 0,
     });
   });
 
@@ -49,6 +53,8 @@ describe("createServedCounter", () => {
       domainReadsFailed: 0,
       nonDomainRequests: 3,
       totalRequests: 3,
+      declaredContractVersionAtFloor: 0,
+      declaredContractVersionExplicit: 0,
     });
   });
 
@@ -74,6 +80,8 @@ describe("createServedCounter", () => {
       domainReadsFailed: 1,
       nonDomainRequests: 2,
       totalRequests: 6,
+      declaredContractVersionAtFloor: 0,
+      declaredContractVersionExplicit: 0,
     });
   });
 
@@ -183,6 +191,8 @@ describe("createServedCounter", () => {
       domainReadsFailed: 0,
       nonDomainRequests: 1,
       totalRequests: 3,
+      declaredContractVersionAtFloor: 0,
+      declaredContractVersionExplicit: 0,
     });
     expect(right.snapshot()).toEqual(emptySnapshot());
   });
@@ -207,8 +217,28 @@ describe("createServedCounter", () => {
       expect(serialized.includes(marker)).toBe(false);
     }
     expect(serialized).toBe(
-      '{"version":"served-count-v1","domainReadsServed":0,"domainReadsDenied":1,"domainReadsFailed":1,"nonDomainRequests":1,"totalRequests":3}',
+      '{"version":"served-count-v1","domainReadsServed":0,"domainReadsDenied":1,"domainReadsFailed":1,"nonDomainRequests":1,"totalRequests":3,"declaredContractVersionAtFloor":0,"declaredContractVersionExplicit":0}',
     );
+  });
+
+  test("records declared-contract-version outcomes into their dedicated buckets, independent of domain read buckets", () => {
+    const counter = createServedCounter();
+
+    counter.recordDeclaredContractVersion({ atFloor: true });
+    counter.recordDeclaredContractVersion({ atFloor: true });
+    counter.recordDeclaredContractVersion({ atFloor: false });
+
+    const snap = counter.snapshot();
+    // red-proof: swap the atFloor/explicit branches in recordDeclaredContractVersion
+    // (served-count.ts) and this test fails - it asserts 2 at-floor vs 1 explicit,
+    // which flips to 1 vs 2 under the mutation.
+    expect(snap.declaredContractVersionAtFloor).toBe(2);
+    expect(snap.declaredContractVersionExplicit).toBe(1);
+    // Declared-version counts are a population statistic over requests already
+    // classified elsewhere (served/denied/failed/nonDomain); they must not
+    // silently also bump an unrelated bucket.
+    expect(snap.domainReadsServed).toBe(0);
+    expect(snap.totalRequests).toBe(0);
   });
 
   test("rejects increments that would exceed Number.MAX_SAFE_INTEGER", () => {
@@ -216,6 +246,8 @@ describe("createServedCounter", () => {
     const atDeniedMax = createServedCounter({ domainReadsDenied: Number.MAX_SAFE_INTEGER });
     const atFailedMax = createServedCounter({ domainReadsFailed: Number.MAX_SAFE_INTEGER });
     const atNonDomainMax = createServedCounter({ nonDomainRequests: Number.MAX_SAFE_INTEGER });
+    const atFloorMax = createServedCounter({ declaredContractVersionAtFloor: Number.MAX_SAFE_INTEGER });
+    const atExplicitMax = createServedCounter({ declaredContractVersionExplicit: Number.MAX_SAFE_INTEGER });
 
     // red-proof: remove the MAX_SAFE_INTEGER guard and this test fails
     expect(() => atServedMax.recordDomainRead("served")).toThrow(
@@ -228,6 +260,12 @@ describe("createServedCounter", () => {
       "served counter: count would exceed Number.MAX_SAFE_INTEGER",
     );
     expect(() => atNonDomainMax.recordNonDomainRequest()).toThrow(
+      "served counter: count would exceed Number.MAX_SAFE_INTEGER",
+    );
+    expect(() => atFloorMax.recordDeclaredContractVersion({ atFloor: true })).toThrow(
+      "served counter: count would exceed Number.MAX_SAFE_INTEGER",
+    );
+    expect(() => atExplicitMax.recordDeclaredContractVersion({ atFloor: false })).toThrow(
       "served counter: count would exceed Number.MAX_SAFE_INTEGER",
     );
   });

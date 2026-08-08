@@ -3,6 +3,12 @@
 // domain-pending(DIV-DOMAPPS-006)
 import type { Hono } from "hono";
 
+import {
+  APP_CONTRACT_VERSION_HEADER,
+  isWellFormedContractVersion,
+  resolveDeclaredContractVersion,
+} from "@omi-core/ratified-contracts/projections/synthesized";
+
 import { ApplicationReadDenied } from "../../../core/retrieve/authorization-boundary";
 import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedMemoryRead } from "../composition/memory-read";
@@ -147,6 +153,22 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
       deps.counter.recordDomainRead("denied");
       return fixedResponse(UNAUTHORIZED_BODY, 401);
     }
+
+    // COORD-contract-evolution-policy.md §4: every app-facing request
+    // declares the contract version its client was built against; absent is
+    // treated as the floor. This is a READ only - it does not gate or alter
+    // the response. N/N-1 refusal (policy §5) is the auth-outcome-split
+    // bump's job, not this one's; see the CONTRACT-lane report for why.
+    const declaredContractVersionHeader = context.req.header(APP_CONTRACT_VERSION_HEADER);
+    deps.counter.recordDeclaredContractVersion({
+      atFloor: typeof declaredContractVersionHeader !== "string"
+        || !isWellFormedContractVersion(declaredContractVersionHeader.trim()),
+    });
+    // Resolved but intentionally unused beyond the count above until a
+    // consumer (the auth-outcome-split bump) needs it - resolving here once,
+    // rather than leaving the header unread, is the whole point of this
+    // change and is what SEAM's composition is expected to gate on next.
+    void resolveDeclaredContractVersion(declaredContractVersionHeader);
 
     const page = parsePageQuery(
       context.req.query("limit") ?? undefined,
