@@ -12,6 +12,7 @@
 // Never put a token in logs, argv, URL query strings, or error messages.
 
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Read/write/delete of a bearer token for a named account.
@@ -54,6 +55,16 @@ struct KeychainCredentialStore: CredentialStore {
 
   var logDescription: String { "KeychainCredentialStore(service:\(service))" }
 
+  /// Non-interactive authentication context. `kSecUseAuthenticationUI` is
+  /// deprecated since macOS 11; the supported spelling is an `LAContext` with
+  /// `interactionNotAllowed`. Same intent either way: a Keychain call on the
+  /// launch path must never raise a blocking SecurityAgent dialog.
+  private static func nonInteractiveContext() -> LAContext {
+    let context = LAContext()
+    context.interactionNotAllowed = true
+    return context
+  }
+
   init(service: String? = nil) {
     if let service, !service.isEmpty {
       self.service = service
@@ -84,7 +95,7 @@ struct KeychainCredentialStore: CredentialStore {
       // Failing closed instead lets bootstrap fall through to the dev issuer or
       // the environment, which is the correct dev-loop behavior: custody is used
       // when it is available and never blocks startup when it is not.
-      kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+      kSecUseAuthenticationContext as String: Self.nonInteractiveContext(),
     ]
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -121,7 +132,7 @@ struct KeychainCredentialStore: CredentialStore {
       // Same non-prompting rule as read(): updating an item created by an
       // earlier unsigned build would otherwise raise a blocking dialog.
       var updateQuery = base
-      updateQuery[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+      updateQuery[kSecUseAuthenticationContext as String] = Self.nonInteractiveContext()
       let updateStatus = SecItemUpdate(
         updateQuery as CFDictionary,
         [kSecValueData as String: data] as CFDictionary)

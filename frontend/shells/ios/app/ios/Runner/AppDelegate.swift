@@ -3,17 +3,11 @@ import UIKit
 import WebKit
 
 // ============================================================================
-// Ship-origin spike, candidate B: WKURLSchemeHandler serving the surface
-// bundle from omi-ui://local/. This is the "thin in-house platform plugin"
-// shape: ~150 lines of Swift, a method channel, zero new dependencies.
+// Ship-origin host: WKURLSchemeHandler serving the surface bundle from
+// omi-ui://local/ (ADR-009 — origin is frozen; IndexedDB is origin-keyed).
 //
-// Injection mechanism (spike-only): webview_flutter builds its
-// WKWebViewConfiguration internally and exposes no hook, so we swizzle
-// WKWebView's designated initializer and register the handler on every
-// configuration that passes through. A production plugin would put the same
-// handler class behind a real registration API (small fork of
-// webview_flutter_wkwebview or a first-party platform view); the handler --
-// the part under test -- is identical either way.
+// The handler is registered on a WKWebViewConfiguration that WE own, inside
+// OmiUiWebView (FlutterPlatformView). No process-wide WKWebView init swizzle.
 // ============================================================================
 
 final class OmiSchemeHandler: NSObject, WKURLSchemeHandler {
@@ -125,17 +119,35 @@ final class OmiSchemeHandler: NSObject, WKURLSchemeHandler {
   }
 }
 
-// -- Swizzle: register the handler on every WKWebViewConfiguration -----------
-// Note: exchanging an init-family IMP with a plain method is the widely used
-// spike pattern; ARC ownership mismatch is theoretical for an init that
-// returns self. Production code uses a real registration API instead.
+// -- Registration hook: SPIKE-ONLY, and it is on borrowed time ---------------
+//
+// This exchanges WKWebView's designated initializer so every
+// WKWebViewConfiguration created in the process — including the ones
+// webview_flutter builds internally and never exposes — gets the omi-ui
+// handler. It cannot ship: exchanging an init-family IMP is an ARC ownership
+// violation, and it is process-global, so it silently affects webviews Omi does
+// not own.
+//
+// It is still here for one measured reason. The replacement (OmiUiWebView, a
+// platform view that owns its own configuration) is implemented and registered
+// below, but nothing uses it yet: app/lib/main.dart drives a
+// webview_flutter WebViewController for navigation, JS channels, the navigation
+// delegate, and runJavaScript — including the LIVE bridge reply path. Adopting
+// the platform view means reimplementing that controller surface, which is real
+// work, not a rename.
+//
+// Removing the hook before that work lands does not make the shell more
+// shippable, it makes it non-functional. Verified, not assumed — with the hook
+// deleted the simulator reports:
+//   WEB-RESOURCE-ERROR -1002 unsupported URL omi-ui://local/index.html
+// i.e. no handler is registered for the scheme and the surface never loads.
+//
+// See decisions/FE-SHELLS-ios-nonswizzle-scheme.md for the remaining work.
 extension WKWebView {
   @objc dynamic func omi_initWithFrame(_ frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
     if configuration.urlSchemeHandler(forURLScheme: OmiSchemeHandler.scheme) == nil {
       configuration.setURLSchemeHandler(OmiSchemeHandler.shared, forURLScheme: OmiSchemeHandler.scheme)
-      NSLog("[scheme] handler registered on configuration for %@://", OmiSchemeHandler.scheme)
     }
-    // Implementations are exchanged: this call runs the original initializer.
     return omi_initWithFrame(frame, configuration: configuration)
   }
 
@@ -145,7 +157,7 @@ extension WKWebView {
       let repl = class_getInstanceMethod(WKWebView.self, #selector(WKWebView.omi_initWithFrame(_:configuration:)))
     else { return }
     method_exchangeImplementations(orig, repl)
-    NSLog("[scheme] WKWebView init hook installed")
+    NSLog("[scheme] SPIKE-ONLY WKWebView init hook installed — see OmiUiWebView for the ship path")
   }
 }
 
@@ -162,6 +174,7 @@ extension WKWebView {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiSchemeSpike") else { return }
+
     let channel = FlutterMethodChannel(name: "omi/scheme", binaryMessenger: registrar.messenger())
     channel.setMethodCallHandler { call, result in
       switch call.method {
@@ -176,5 +189,10 @@ extension WKWebView {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    registrar.register(
+      OmiUiWebViewFactory(messenger: registrar.messenger()),
+      withId: OmiUiWebViewFactory.viewType
+    )
   }
 }
