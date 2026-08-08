@@ -655,6 +655,20 @@ target.chmod(0o600)
 PY
 }
 
+wait_for_fault_launch_signal() {
+  local attempts="${OMI_FAULT_LAUNCH_SIGNAL_ATTEMPTS:-200}" attempt
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] || {
+    echo "desktop-core-harness: OMI_FAULT_LAUNCH_SIGNAL_ATTEMPTS must be a positive integer" >&2
+    return 1
+  }
+  for attempt in $(seq 1 "$attempts"); do
+    [[ -f "$FAULT_LAUNCH_SIGNAL_FILE" ]] && return 0
+    sleep 0.05
+  done
+  echo "desktop-core-harness: timed out waiting for fault launch signal" >&2
+  return 1
+}
+
 validated_fault_app_pid() {
   [[ -n "$FAULT_APP_RECORD" && -f "$FAULT_APP_RECORD" ]] || return 1
   python3 - "$FAULT_APP_RECORD" "$FAULT_RUN_TOKEN" "$FAULT_BUNDLE" "$PORT" <<'PY'
@@ -889,6 +903,11 @@ start_fault_stack() {
   for attempt in $(seq 1 "$bridge_ready_attempts"); do
     if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
       OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/omi-ctl" wait-ready 90
+      # The detached `open` launcher can make the bridge healthy before its
+      # owner-only launch signal is written. Wait for that proof before
+      # recording the process, otherwise a fast runner can report a false
+      # missing-launch-proof failure.
+      wait_for_fault_launch_signal
       record_owned_fault_app
       echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT (bundle: $expected_bundle)"
       return 0

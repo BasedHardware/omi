@@ -17,8 +17,12 @@ desktop agent leaves a permanent disk (~$5/mo).
 | `RUNNING` | `creationTimestamp` older than **2d** |
 
 After a TERMINATED VM is deleted, `GET /v2/agent/status` sees `NOT_FOUND`,
-clears Firestore `agentVm`, and the desktop client re-provisions + re-uploads
-its DB (`AgentVMService`).
+demotes the client-facing status to `updating`, records `reconcile.state=missing`
+(when no reconciler lease/quarantine owns the pointer), and queues fenced
+reconciler demand. Desktop `ensureExistingOrProvision` can then claim a
+replacement immediately because missing pointers are replaceable; the
+reconciler's grace/session clear remains the backstop when the request path
+does not replace first.
 
 ## Apply (refuse-by-default)
 

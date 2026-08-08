@@ -45,6 +45,8 @@ env:
     value: "/secrets/google-credentials.json"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: AGENT_VM_SESSION_LEASES_ENABLED
+    value: "true"
 
 volumes:
   - name: gcp-credentials

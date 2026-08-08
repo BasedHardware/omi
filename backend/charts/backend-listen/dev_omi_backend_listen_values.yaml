@@ -52,8 +52,12 @@ podLabels:
   # Keep those scrape targets in the same development-only evidence plane as
   # the Pusher targets.
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  # The image runs as omi:omi (10001:10001). Kubernetes mounts emptyDir as
+  # root-owned, so the parity-pack cassette root needs this supplemental group
+  # before the non-root listener can create its cassettes/ directory.
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
 
 securityContext: {}
   # capabilities:
@@ -127,9 +131,9 @@ env:
   # Development-only dogfood capture. The capture runtime compares this exact
   # Firebase UID; do not replace it with an email or a broad user allowlist.
   - name: OMI_PARITY_PACK_CAPTURE
-    value: "1"
+    value: "0"
   - name: OMI_PARITY_PACK_ALLOWED_PRINCIPALS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: ""
   - name: OMI_PARITY_PACK_ROOT
     value: "/var/omi-parity-pack"
   # Durable export target (private dev bucket). Export is fail-open.
@@ -140,6 +144,8 @@ env:
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
+  - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "false"
@@ -161,12 +167,11 @@ env:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
-    value: "read"
+    value: "off"
   - name: MEMORY_ENABLED_USERS
-    # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: ""
   - name: MEMORY_V3_GET_ENABLED
-    value: "true"
+    value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
@@ -223,8 +228,15 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

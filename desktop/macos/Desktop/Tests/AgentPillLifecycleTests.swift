@@ -994,11 +994,8 @@ import XCTest
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
     // omi-test-quality: source-inspection -- static contract: geometry inside
     // the LazyVStack must not feed transcript layout values back into state;
-    // the behavioral scroll/active-mark coverage lives in
-    // ChatPromptTimelineTests and ChatScrollLiveEdgeTests.
-    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
-    XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
-    XCTAssertTrue(source.contains("ChatPromptRowAnchorReporter"))
+    // the behavioral scroll coverage lives in ChatScrollLiveEdgeTests.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: "))
     // omi-test-quality: source-inspection -- static contract: a local send may
     // enter follow mode, but must never clear the reader's in-flight gesture
     // latch to do it; the behavioral coverage is in
@@ -1024,8 +1021,7 @@ import XCTest
       scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
     XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
-    XCTAssertTrue(scrollSource.contains("documentFrameObservation"))
-    XCTAssertTrue(scrollSource.contains("documentHeight: documentHeight"))
+    XCTAssertTrue(scrollSource.contains(".onChange(of: contentChangeToken)"))
     XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
     XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
   }
@@ -1611,7 +1607,7 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
     XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
     XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatBubbleSource.contains(".frame(height: compact ? 34 : nil)"))
+    XCTAssertTrue(chatBubbleSource.contains("minimumHeight: compact ? 34 : nil"))
     XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
     XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
@@ -1686,16 +1682,19 @@ import XCTest
     let tableRendererSource =
       rendererSource
       .components(separatedBy: "private struct OmiMarkdownTableView").last?
-      .components(separatedBy: "private struct CodeBlockCopyButton").first ?? ""
+      .components(separatedBy: "private struct OmiMarkdownCodeBlockView").first ?? ""
     XCTAssertTrue(rendererSource.contains("GridRow(alignment: .top)"))
-    XCTAssertTrue(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
+    XCTAssertFalse(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
     XCTAssertTrue(
       rendererSource.contains(
         ".frame(maxHeight: .infinity, alignment: columnAlignment.topAlignment)"
       )
     )
     XCTAssertTrue(rendererSource.contains(".background(rowBackground(row))"))
-    XCTAssertFalse(tableRendererSource.contains("ScrollView"))
+    XCTAssertTrue(tableRendererSource.contains("ScrollView(.horizontal, showsIndicators: true)"))
+    XCTAssertTrue(tableRendererSource.contains(".background(VerticalWheelPassthrough())"))
+    XCTAssertTrue(tableRendererSource.contains(".fixedSize(horizontal: false, vertical: true)"))
+    XCTAssertTrue(tableRendererSource.contains("OmiMarkdownInlineCopyText("))
     XCTAssertFalse(rendererSource.contains("@State private var document"))
     XCTAssertFalse(rendererSource.contains("attrCache"))
     XCTAssertTrue(rendererSource.contains(".textSelection(.disabled)"))
@@ -1798,17 +1797,23 @@ import XCTest
     }
   }
 
-  func testOmiMarkdownProvidesCopyOnlyForCodeBlocks() throws {
+  func testOmiMarkdownProvidesOneClickCopyForInlineAndFencedCode() throws {
     // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
-    // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
+    // renderer owns the copy affordances; clipboard writes are exercised manually in the app.
     let source = try omiMarkdownSource()
 
     XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
-    XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownCodeBlockView: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownInlineCodeCopyButton: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownCopyToast: View"))
+    XCTAssertTrue(source.contains("Text(\"Copied\")"))
     XCTAssertFalse(source.contains("private struct MarkdownTableCopyButton: View"))
     XCTAssertTrue(source.contains("@State private var copied = false"))
-    XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
-    XCTAssertTrue(source.contains(".help(\"Copy code\")"))
+    XCTAssertTrue(source.contains("OmiMarkdownClipboard.copy(code)"))
+    XCTAssertTrue(source.contains("guard OmiMarkdownClipboard.copy(code) else"))
+    XCTAssertTrue(source.contains(".onTapGesture { copyCode() }"))
+    XCTAssertTrue(source.contains("Click anywhere in the code block to copy"))
+    XCTAssertTrue(source.contains(".accessibilityAction { copyCode() }"))
     XCTAssertFalse(source.contains("Copy table"))
   }
 
@@ -1877,14 +1882,6 @@ import XCTest
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
-  }
-
-  private func chatPageSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

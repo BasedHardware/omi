@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -18,6 +19,16 @@ import 'package:omi/utils/waveform_utils.dart';
 enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
+
+List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedConversationPointer> pointers) {
+  final sorted = List<SyncedConversationPointer>.from(pointers);
+  sorted.sort((a, b) {
+    final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
+    final bDate = b.conversation.startedAt ?? b.conversation.createdAt;
+    return bDate.compareTo(aDate);
+  });
+  return sorted;
+}
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
@@ -202,10 +213,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// exhausted), the file is unreadable, or the server permanently refused it
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount => _countWhere((s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow);
+  int get needsAttentionWalsCount => _countWhere(
+        (s) =>
+            s == WalSyncDisplayState.failed ||
+            s == WalSyncDisplayState.corrupted ||
+            s == WalSyncDisplayState.outsideRecoveryWindow,
+      );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -290,9 +303,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
   List<SyncedConversationPointer> get syncedConversationsPointers {
-    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
-    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
-    return sorted;
+    return sortSyncedConversationPointers(_syncState.syncedConversations);
   }
 
   String? get syncError => _syncState.errorMessage;
@@ -398,12 +409,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     if (_isDisposed) return;
+    // Refresh WALs *before* updating the "synced" conversation UI so we don't
+    // label recordings as synced while the reconciler is still leaving some
+    // WALs in an uploaded/pending state (issue #7240).
+    await refreshWals();
     if (conversations.isNotEmpty && !_syncState.isProcessing) {
       // Append to whatever is already shown — jobs reconcile incrementally.
       final merged = [..._syncState.syncedConversations, ...conversations];
-      _updateSyncState(_syncState.toCompleted(conversations: merged));
+      final filtered = filterFullySyncedConversations(conversations: merged, wals: _allWals);
+      _updateSyncState(_syncState.toCompleted(conversations: filtered));
     }
-    await refreshWals();
   }
 
   Future<void> _discoverPendingWals() async {
@@ -541,8 +556,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       failedWal: wal,
     );
     // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
-    // is scheduled (do not poke SyncReconciler here).
-    if (result != null && _startBackgroundSync) {
+    // is scheduled (do not poke SyncReconciler here). Soft-retry failures wake
+    // from _performSync itself; do not double-wake here.
+    if (result != null &&
+        result.localUploadFailures == 0 &&
+        result.localUploadPermanentFailures == 0 &&
+        _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
     }
   }
@@ -598,11 +617,44 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _updateSyncState(_syncState.toCompleted(conversations: []));
       }
 
-      if ((result?.localUploadFailures ?? 0) > 0) {
-        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
+      // Client-side upload aborts (leave/background mid-multipart, #4587) leave
+      // WALs as `miss`. Soft-retry only when failures are transient; permanent
+      // server refusals (400/413) still surface SyncStatus.error.
+      final permanentFailures = result?.localUploadPermanentFailures ?? 0;
+      final localFailures = result?.localUploadFailures ?? 0;
+      if (permanentFailures > 0) {
+        final hint = result?.localUploadPermanentError;
+        final errorMessage = _formatSyncError(
+          hint != null ? Exception(hint) : Exception('Upload failed. Check your connection and try again'),
+          failedWal,
+        );
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $permanentFailures permanent local upload failure(s)',
+        );
+        _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
+      } else if (localFailures > 0) {
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $localFailures transient local upload failure(s); re-arming recovery',
+        );
+        _updateSyncState(_syncState.toIdle());
+        // Coordinator drains use rethrowOnError and schedule their own cooldown
+        // via RecordingTransferCoordinator._runPass — do not double-wake here.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
       }
       return result;
     } catch (e) {
+      if (isTransientNetworkError(e)) {
+        DebugLogManager.logWarning('SyncProvider: $context hit transient network error; re-arming recovery: $e');
+        _updateSyncState(_syncState.toIdle());
+        // Wake only for direct/manual calls; coordinator owns retry scheduling.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
+        if (rethrowOnError) rethrow;
+        return null;
+      }
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
@@ -676,9 +728,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       newConversationIds: result.newConversationIds,
       updatedConversationIds: result.updatedConversationIds,
     );
-    _updateSyncState(_syncState.toCompleted(conversations: conversations));
-    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    // Refresh WAL list so we can filter "synced" conversations to only those
+    // whose WALs have been reconciled to WalStatus.synced.
     await refreshWals();
+    final filtered = filterFullySyncedConversations(conversations: conversations, wals: _allWals);
+    _updateSyncState(_syncState.toCompleted(conversations: filtered));
+  }
+
+  /// Filters "synced" conversation pointers down to only those conversations
+  /// whose associated WALs have been fully reconciled (`WalStatus.synced`).
+  ///
+  /// This prevents UI states like "synced OK" from showing up while some
+  /// recordings are still left in an uploaded/pending state (issue #7240).
+  @visibleForTesting
+  static List<SyncedConversationPointer> filterFullySyncedConversations({
+    required List<SyncedConversationPointer> conversations,
+    required List<Wal> wals,
+  }) {
+    final byConversationId = <String, List<Wal>>{};
+    for (final wal in wals) {
+      final id = wal.conversationId;
+      if (id == null) continue;
+      (byConversationId[id] ??= <Wal>[]).add(wal);
+    }
+
+    bool isFullySynced(SyncedConversationPointer pointer) {
+      final walsForConversation = byConversationId[pointer.conversation.id] ?? const <Wal>[];
+      if (walsForConversation.isEmpty) return true; // No local WALs → nothing pending.
+      return walsForConversation.every((w) => w.status == WalStatus.synced);
+    }
+
+    return conversations.where(isFullySynced).toList();
   }
 
   // Audio playback delegate methods

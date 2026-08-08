@@ -2558,6 +2558,14 @@ actor AgentRuntimeProcess {
       "AgentRuntimeProcess: starting node=\(nodePath) (exists=\(nodeExists)), bridge=\(bridgePath) (exists=\(bridgeExists)), package.json=\(pkgJsonExists)"
     )
 
+    // Refuse an incomplete payload here rather than spawning a runtime that exits 1 seconds
+    // after the person has already sent their message. `AgentRuntimePayload` owns the reason.
+    if let refusal = AgentRuntimePayload.startRefusal(bridgeScriptPath: bridgePath) {
+      startupBinaryPresent = false
+      log(refusal.logLine)
+      throw refusal.error
+    }
+
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: nodePath)
     proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
@@ -2915,8 +2923,8 @@ actor AgentRuntimeProcess {
       return .exitedDuringStartup
     case .agentError:
       return .incompatibleHandshake
-    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError,
-      .failedToStart, .stopped, .restarting, .requestAlreadyActive,
+    case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
+      .encodingError, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
       .agentRuntimeFailure, .quotaExceeded, .authMissing:
       return .launchFailed
     }

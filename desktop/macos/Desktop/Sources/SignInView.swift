@@ -2,174 +2,144 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+/// The first screen anyone ever sees, and therefore the one that has to be most obviously *this*
+/// product rather than a template.
+///
+/// **It paints one ground, and the ground is the glass.** There was a full-bleed dune photograph here
+/// under a black gradient, and it is gone rather than restyled: an opaque image edge to edge hid the
+/// panel entirely and forced every label on this screen to be white. White type is what made this the
+/// worst-affected screen in the light conversion — it survived only *because* the art under it was
+/// dark. The blurred desktop is the backdrop now, the mark and the sentence are the design, and the
+/// whole screen is two rungs of near-black type on one floating card (`onboardingScreen`).
+///
+/// It briefly had *no* ground at all: the art came off while `ShellWindowChrome` still installed a
+/// window-wide glass slab, so a bare column was a column on glass. When that slab was retired in
+/// favour of per-destination panels, this screen kept the bare column and got the wallpaper.
 struct SignInView: View {
   @ObservedObject var authState: AuthState
-  @Environment(\.sbTheme) private var sb
   @State private var breathe = false
   /// Sign-in opens on just the Omi mark + wordmark; after a beat the mark spins,
   /// the "Omi" wordmark fades, and the rest of the screen reveals.
   @State private var introRevealed = false
 
-  private static let logoImage: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-      let data = try? Data(contentsOf: url)
-    else { return nil }
-    let img = NSImage(data: data)
-    img?.isTemplate = true
-    return img
-  }()
-
-  private static let backgroundImage: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "signin_bg", withExtension: "png") else { return nil }
-    return NSImage(contentsOf: url)
-  }()
-
   var body: some View {
-    ZStack {
-      // Sign-in background image, dimmed under the content for legibility.
-      if let bg = Self.backgroundImage {
-        Image(nsImage: bg)
-          .resizable()
-          .scaledToFill()
-          .overlay(
-            LinearGradient(
-              colors: [.black.opacity(0.32), .black.opacity(0.42), .black.opacity(0.66)],
-              startPoint: .top, endPoint: .bottom)
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .clipped()
-          .ignoresSafeArea()
-      } else {
-        SBWallpaper()
+    // Clean, centered, symmetric sign-in: brand on the glass, one primary capsule and one secondary,
+    // generous whitespace, no floating box and no second ground.
+    VStack(spacing: 0) {
+      HStack(spacing: 12) {
+        SBLogo(size: introRevealed ? 44 : 60, spinning: !introRevealed)
+          .scaleEffect(breathe ? 1.04 : 1.0)
+          .animation(InkReduceMotion.animation(SBMotion.breathe), value: breathe)
+
+        if !introRevealed {
+          Text("Omi")
+            .inkStyle(InkType.introHero, color: Ink.primary)
+            .transition(.opacity)
+        }
       }
 
-      // Clean, centered, symmetric sign-in — the way premium apps do it:
-      // brand on the backdrop, one primary + one frosted-glass secondary button,
-      // generous whitespace, no floating box.
-      VStack(spacing: 0) {
-        HStack(spacing: 12) {
-          SBLogo(size: introRevealed ? 44 : 60, spinning: !introRevealed)
-            .scaleEffect(breathe ? 1.04 : 1.0)
-            .animation(SBMotion.breathe, value: breathe)
+      if introRevealed {
+        Group {
+          Text("A second brain you trust\nmore than your first")
+            .inkStyle(InkType.introHero, color: Ink.primary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, InkLayout.rhythm[0])
 
-          if !introRevealed {
-            Text("Omi")
-              .geist(size: 40, weight: .semibold, tracking: 40 * -0.02)
-              .foregroundStyle(sb.ink)
-              .transition(.opacity)
+          Text("It remembers every conversation — and does the follow-ups.")
+            .inkStyle(InkType.prose, color: Ink.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, InkLayout.rhythm[5])
+
+          VStack(spacing: InkLayout.rhythm[6]) {
+            signInButton(
+              title: "Continue with Apple",
+              kind: .primary,
+              leading: { Image(systemName: "applelogo").font(.system(size: 13)) },
+              action: { signIn(apple: true) })
+            signInButton(
+              title: "Continue with Google",
+              kind: .secondary,
+              leading: { GoogleLogo().frame(width: 15, height: 15) },
+              action: { signIn(apple: false) })
           }
-        }
+          // This used to be a fixed 320pt column. When the window was
+          // narrower (or its usable width was reduced by window chrome),
+          // both sign-in actions extended past the visible content area.
+          .frame(maxWidth: 320)
+          .frame(maxWidth: .infinity)
+          .padding(.top, InkLayout.rhythm[0])
 
-        if introRevealed {
-          Group {
-            Text("A second brain you trust\nmore than your first")
-              .geist(size: 32, weight: .semibold, tracking: 32 * -0.03)
-              .foregroundStyle(sb.ink)
-              .multilineTextAlignment(.center)
-              .lineSpacing(3)
-              .fixedSize(horizontal: false, vertical: true)
-              .padding(.top, 28)
-
-            Text("It remembers every conversation — and does the follow-ups.")
-              .geist(size: 15)
-              .foregroundStyle(sb.ink(.w55))
-              .multilineTextAlignment(.center)
-              .fixedSize(horizontal: false, vertical: true)
-              .padding(.top, 10)
-
-            VStack(spacing: 11) {
-              signInButton(
-                title: "Continue with Apple",
-                filled: true,
-                leading: {
-                  Image(systemName: "applelogo").font(.system(size: 13)).foregroundStyle(sb.inkInverted)
-                },
-                action: { signIn(apple: true) })
-              signInButton(
-                title: "Continue with Google",
-                filled: false,
-                leading: { GoogleLogo().frame(width: 15, height: 15) },
-                action: { signIn(apple: false) })
-            }
-            // This used to be a fixed 320pt column. When the window was
-            // narrower (or its usable width was reduced by window chrome),
-            // both sign-in actions extended past the visible content area.
-            .frame(maxWidth: 320)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 34)
-
-            if authState.isLoading {
-              HStack(spacing: 10) {
-                ProgressView().scaleEffect(0.7).tint(sb.ink(.w6))
-                Button {
-                  AuthService.shared.cancelSignIn()
-                } label: {
-                  Text("Cancel").geist(size: 12.5).foregroundStyle(sb.ink(.w45))
-                }
-                .buttonStyle(.plain)
+          if authState.isLoading {
+            HStack(spacing: InkLayout.rhythm[5]) {
+              // `Ink.primary`, not a wash: a spinner nobody can see is a screen that looks frozen.
+              ProgressView().scaleEffect(0.7).tint(Ink.primary)
+              Button {
+                AuthService.shared.cancelSignIn()
+              } label: {
+                Text("Cancel").inkStyle(InkType.statusLabel, color: Ink.secondary)
               }
-              .padding(.top, 14)
+              .buttonStyle(.plain)
             }
-            if let error = authState.error {
-              Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
-                .geist(size: 12.5).foregroundStyle(sb.ink(.w6))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 12)
-            }
-
-            Text("open source · runs on your mac · pause anytime")
-              .geistMono(size: 12)
-              .foregroundStyle(sb.ink(.w35))
-              .padding(.top, 28)
+            .padding(.top, InkLayout.rhythm[3])
           }
-          .transition(.opacity)
+          if let error = authState.error {
+            // The one place this screen raises its voice. It used to be set in the same grey as the
+            // footer, which is a failed sign-in reported as a footnote.
+            Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
+              .inkStyle(InkType.statusLabel, color: Ink.errorRed)
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: 320)
+              .frame(maxWidth: .infinity)
+              .padding(.top, InkLayout.rhythm[4])
+          }
+
+          // `secondary` and not a fainter grey: glass carries two rungs, and the bottom one is this.
+          Text("open source · runs on your mac · pause anytime")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .padding(.top, InkLayout.rhythm[0])
         }
+        .transition(.opacity)
       }
-      .frame(maxWidth: 460)
-      .padding(.horizontal, 24)
-      .animation(.easeOut(duration: 0.5), value: introRevealed)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // The card, and the pin. `onboardingScreen` puts the column on the shared glass — the same
+    // material, corner and ambient shadow every panel in this app wears — and pins the light
+    // appearance, so `Ink`'s dynamic colours resolve dark here even when the machine is in Dark Mode.
+    // Without the pin this screen is near-white type on a near-white panel; without the card it is
+    // near-black type on the user's wallpaper, which is what it became when the window's ground was
+    // retired (`ShellWindowChrome`) and nobody gave this screen one.
+    .onboardingScreen()
+    .animation(InkReduceMotion.animation(.easeOut(duration: 0.5)), value: introRevealed)
     .onAppear {
       breathe = true
       guard !introRevealed else { return }
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-        withAnimation(.easeOut(duration: 0.5)) { introRevealed = true }
+        InkReduceMotion.perform(.easeOut(duration: 0.5)) { introRevealed = true }
       }
     }
   }
 
+  /// One sign-in action. A **full stadium capsule** from the design system's one button style — the
+  /// 12 pt rounded rectangle it replaces was the shape that read as a web form.
+  ///
+  /// The leading glyph takes no colour of its own: `InkButtonStyle` sets the label, so the Apple mark
+  /// inverts with the fill it sits on. `GoogleLogo` is a multicolour bitmap and is unaffected by the
+  /// tint, which is correct — it is a third-party mark, not our ink.
   @ViewBuilder private func signInButton<Leading: View>(
-    title: String, filled: Bool, @ViewBuilder leading: () -> Leading, action: @escaping () -> Void
+    title: String, kind: InkButton.Kind, @ViewBuilder leading: () -> Leading,
+    action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
       HStack(spacing: 8) {
         leading()
-        Text(title).geist(size: 15, weight: filled ? .semibold : .medium)
+        Text(title)
       }
-      .foregroundStyle(filled ? sb.inkInverted : sb.ink(.w9))
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 12.5)
-      .background(buttonBackground(filled: filled))
-      .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(filled ? .clear : Color.white.opacity(0.16), lineWidth: 1)
-      )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(InkButtonStyle(kind: kind))
     .disabled(authState.isLoading)
-  }
-
-  @ViewBuilder private func buttonBackground(filled: Bool) -> some View {
-    let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-    if filled {
-      shape.fill(sb.ink)
-    } else {
-      shape.fill(Color.white.opacity(0.08))
-        .background(.ultraThinMaterial, in: shape)
-    }
   }
 
   private func signIn(apple: Bool) {

@@ -10,6 +10,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -33,25 +34,27 @@ class AuthTokenUnavailableException implements Exception {
 }
 
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
-// connection reset, TLS handshake during reconnect, request timeout). Reporting
-// these to Crashlytics drowns out real signal — caller logs them locally and
-// either returns null or rethrows for the upstream sync state machine.
-bool _isTransientNetworkError(Object e) {
+// connection reset, TLS handshake during reconnect, request timeout, OS abort
+// when the app backgrounds mid-upload). Reporting these to Crashlytics drowns
+// out real signal — caller logs them locally and either returns null or
+// rethrows for the upstream sync state machine.
+bool isTransientNetworkError(Object e) {
   if (e is SocketException) return true;
   if (e is HandshakeException) return true;
   if (e is TimeoutException) return true;
-  if (e is http.ClientException) {
-    final m = e.message;
-    return m.contains('SocketException') ||
-        m.contains('HandshakeException') ||
-        m.contains('TimeoutException') ||
-        m.contains('Connection closed') ||
-        m.contains('Connection reset') ||
-        m.contains('Failed host lookup') ||
-        m.contains('Network is unreachable') ||
-        m.contains('Bad file descriptor');
-  }
-  return false;
+  final text = e is http.ClientException ? e.message : e.toString();
+  final lower = text.toLowerCase();
+  return text.contains('SocketException') ||
+      text.contains('HandshakeException') ||
+      text.contains('TimeoutException') ||
+      text.contains('Connection closed') ||
+      text.contains('Connection reset') ||
+      text.contains('Failed host lookup') ||
+      text.contains('Network is unreachable') ||
+      text.contains('Bad file descriptor') ||
+      // Android leave/background mid-multipart (#4587): match the full abort
+      // phrase only — a bare "ClientSoftware" token is not a connectivity signal.
+      lower.contains('software caused connection abort');
 }
 
 Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
@@ -111,14 +114,32 @@ Future<Map<String, String>> buildHeaders({
   required bool requireAuthCheck,
   Map<String, String> fromHeaders = const {},
   bool expireTerminalSession = true,
+  String? url,
+  String? method,
+  bool forWebSocket = false,
 }) async {
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
     'X-App-Platform': PlatformManager.instance.platform,
     'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
+    'X-App-Build': PlatformManager.instance.appBuild,
     ...fromHeaders,
   };
+
+  if (shouldAttachAccountGenerationHeader(
+    url: url,
+    method: method,
+    requireAuthCheck: requireAuthCheck,
+    forWebSocket: forWebSocket,
+  )) {
+    final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
+    // Generation-zero remains compatible without the header; positive generations
+    // must present matching metadata on mutating Omi API requests / product WS.
+    if (accountGeneration > 0) {
+      headers['X-Account-Generation'] = accountGeneration.toString();
+    }
+  }
 
   if (requireAuthCheck) {
     // Authenticated requests must never degrade into anonymous traffic. A
@@ -129,13 +150,47 @@ Future<Map<String, String>> buildHeaders({
   return headers;
 }
 
+@visibleForTesting
+String normalizeOmiApiUrlForHostMatch(String url) {
+  // HTTP helpers and product sockets share one API host; compare scheme-neutrally
+  // so `wss://` listen URLs still count as Omi API traffic.
+  return url
+      .replaceFirst(RegExp(r'^https://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^http://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^wss://', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'^ws://', caseSensitive: false), '');
+}
+
 bool _isRequiredAuthCheck(String url) {
   // Agent VM endpoints always hit prod even when app uses dev
   if (url.contains('api.omi.me')) return true;
-  if (url.contains(Env.apiBaseUrl!)) {
-    return true;
+  final base = Env.apiBaseUrl;
+  if (base != null && base.isNotEmpty) {
+    final normalizedUrl = normalizeOmiApiUrlForHostMatch(url);
+    final normalizedBase = normalizeOmiApiUrlForHostMatch(base);
+    if (normalizedBase.isNotEmpty && normalizedUrl.contains(normalizedBase)) {
+      return true;
+    }
   }
   return false;
+}
+
+const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};
+
+/// `X-Account-Generation` is only for authenticated Omi API mutation traffic and
+/// product WebSocket admission — never arbitrary third-party hosts (e.g. zip CDN).
+@visibleForTesting
+bool shouldAttachAccountGenerationHeader({
+  String? url,
+  String? method,
+  required bool requireAuthCheck,
+  bool forWebSocket = false,
+}) {
+  if (!requireAuthCheck) return false;
+  if (url != null && url.isNotEmpty && !_isRequiredAuthCheck(url)) return false;
+  if (forWebSocket) return true;
+  if (method == null || method.isEmpty) return false;
+  return _mutatingHttpMethods.contains(method.toUpperCase());
 }
 
 Future<http.StreamedResponse> makeRawApiCall({
@@ -145,7 +200,12 @@ Future<http.StreamedResponse> makeRawApiCall({
 }) async {
   final requireAuthCheck = _isRequiredAuthCheck(url);
   try {
-    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    var builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
     var response = await HttpPoolManager.instance.sendStreaming(request);
@@ -156,7 +216,7 @@ Future<http.StreamedResponse> makeRawApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = http.Request(method, Uri.parse(url));
           request.headers.addAll(builtHeaders);
           return HttpPoolManager.instance.sendStreaming(request);
@@ -185,6 +245,17 @@ http.StreamedResponse _authUnavailableStreamedResponse() =>
 
 void _checkClockSkewResponse(http.Response response) {
   ClockSkewDetector.instance.checkResponse(response);
+}
+
+Future<http.Response> _materializeErrorResponse(http.StreamedResponse response) async {
+  try {
+    return await http.Response.fromStream(response);
+  } catch (e) {
+    // Preserve the quota/error sentinel even when the provider resets a
+    // truncated response before the body can be read.
+    Logger.debug('Failed to materialize streaming error response: ${e.runtimeType}');
+    return http.Response('{}', response.statusCode, reasonPhrase: response.reasonPhrase, headers: response.headers);
+  }
 }
 
 Future<void> _handleAuthUnavailable(
@@ -278,6 +349,8 @@ Future<http.Response?> makeApiCall({
       requireAuthCheck: requireAuthCheck,
       fromHeaders: headers,
       expireTerminalSession: signOutOn401,
+      url: url,
+      method: method,
     );
 
     final effectiveTimeout =
@@ -300,6 +373,8 @@ Future<http.Response?> makeApiCall({
             requireAuthCheck: true,
             fromHeaders: headers,
             expireTerminalSession: signOutOn401,
+            url: url,
+            method: method,
           );
           return HttpPoolManager.instance.send(
             () => _buildRequest(url, builtHeaders, body, method),
@@ -318,7 +393,7 @@ Future<http.Response?> makeApiCall({
     return null;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     return null;
@@ -414,7 +489,12 @@ Future<http.Response> makeMultipartApiCall({
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -434,7 +514,7 @@ Future<http.Response> makeMultipartApiCall({
         statusCode: (value) => value.statusCode,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = await _buildMultipartRequest(
             url: url,
             files: files,
@@ -457,7 +537,7 @@ Future<http.Response> makeMultipartApiCall({
     return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     rethrow;
@@ -478,7 +558,12 @@ Future<http.Response> makeMultipartApiCallUnpooled({
   final client = http.Client();
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -499,7 +584,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
         statusCode: (value) => value.statusCode,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = await _buildMultipartRequest(
             url: url,
             files: files,
@@ -523,7 +608,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     rethrow;
@@ -540,7 +625,12 @@ Stream<String> makeStreamingApiCall({
 }) async* {
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
-    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    var builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
@@ -559,7 +649,7 @@ Stream<String> makeStreamingApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = http.Request(method, Uri.parse(url));
           request.headers.addAll(builtHeaders);
           if (body.isNotEmpty) {
@@ -573,10 +663,14 @@ Stream<String> makeStreamingApiCall({
     }
 
     if (streamedResponse.statusCode != 200) {
-      Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
-      if (streamedResponse.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await _materializeErrorResponse(streamedResponse);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await streamedResponse.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';
@@ -612,7 +706,7 @@ Stream<String> makeStreamingApiCall({
     Logger.debug('Authenticated streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
   }
@@ -627,7 +721,12 @@ Stream<String> makeMultipartStreamingApiCall({
 }) async* {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: 'POST',
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -647,7 +746,7 @@ Stream<String> makeMultipartStreamingApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: 'POST');
           request = await _buildMultipartRequest(
             url: url,
             files: files,
@@ -663,10 +762,14 @@ Stream<String> makeMultipartStreamingApiCall({
     }
 
     if (response.statusCode != 200) {
-      Logger.error('Multipart streaming request failed: ${response.statusCode}');
-      if (response.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await _materializeErrorResponse(response);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Multipart streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await response.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';
@@ -696,7 +799,7 @@ Stream<String> makeMultipartStreamingApiCall({
     Logger.debug('Authenticated multipart streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
     }
   }
