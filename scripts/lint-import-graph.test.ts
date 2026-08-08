@@ -257,6 +257,48 @@ test("rule 17: a hatched server does not exempt a second, unhatched server in th
   );
 });
 
+test("rule 17: the hatch marker must be in a COMMENT, not a string literal on the same line", () => {
+  // Round-2 audit finding, and worse than round 1: round 1 needed a pre-existing
+  // legitimate hatch to hide behind. This needs nothing — any rogue file
+  // self-exempts on first write, by putting the marker in a property value on the
+  // very line it is exempting.
+  withWirePathFixture(
+    // The marker MUST sit on the same physical line as the construction, which is
+    // the only line `hatchedAt` substring-searches. A first draft of this test put
+    // it three lines down; it passed, and the isolation proof (revert the fence,
+    // expect exactly one red) stayed green — proving the test, not the fence.
+    [
+      "const rogue = Bun.serve({ port: 0, banner: \"wire-path-ok(fake, not a real comment)\","
+        + " fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
+      "    : new Response(\"\", { status: 404 }) });",
+      "void rogue;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17: a genuine trailing-comment hatch on the construction line still works", () => {
+  // The converse of the test above, and the reason it cannot simply be
+  // "reject any marker on the construction line". A guard that rejects a
+  // legitimate justification is how a guardrail gets routed around.
+  withWirePathFixture(
+    [
+      "const probe = Bun.serve({ port: 0, fetch: () => new Response(\"\") });"
+        + " // wire-path-ok(constant empty body; the reference below is a client call)",
+      "void probe;",
+      "export const call = (base: string) => fetch(`${base}/v1/memories`);",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("rule 17 does not fire on a DIFFERENT route that merely starts with a registered path", () => {
   // `/v1/memories-legacy-export` contains `/v1/memories` as a substring and is
   // not it. No such path exists in the tree today; the guard is here so the

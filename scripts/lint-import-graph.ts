@@ -334,13 +334,36 @@ for (const file of files(root)) {
      * checking only `index - 1` (rule 16's rule, adequate for a one-line
      * justification) would reject a hatch that is correctly placed.
      */
+    /**
+     * A line whose comment-stripped form is blank while its raw form is not is
+     * comment TEXT. Deriving it this way rather than by `trimStart().startsWith("//")`
+     * is what makes the two halves below agree with each other, and it is why
+     * the marker cannot be smuggled in as data — `withoutComments` blanks
+     * comments and leaves string literals alone, so a marker that survives
+     * stripping was never in a comment.
+     */
+    const isCommentText = (index: number): boolean =>
+      (codeLines[index] ?? "").trim() === "" && (rawLines[index] ?? "").trim() !== "";
+
     const hatchedAt = (index: number): boolean => {
-      if ((rawLines[index] ?? "").includes(wirePathAllowMarker)) return true;
+      const raw = rawLines[index] ?? "";
+      const stripped = codeLines[index] ?? "";
+      // On the construction line: present raw, ABSENT after stripping — i.e. it
+      // lives in a trailing comment, not in a string literal. Without the second
+      // half this is a bare substring search over the line, and the marker can be
+      // smuggled in as a property value on the very line it exempts:
+      //
+      //   Bun.serve({ port: 0, banner: "wire-path-ok(fake)", fetch: … })
+      //
+      // which needs no pre-existing hatch to hide behind: any rogue file
+      // self-exempts on first write. Found by the round-2 non-author audit, which
+      // built it rather than reasoning about it.
+      if (raw.includes(wirePathAllowMarker) && !stripped.includes(wirePathAllowMarker)) return true;
+      // Otherwise: the contiguous comment block directly above. A blank line or
+      // any code ends the block, which fails closed — verified by the audit.
       for (let above = index - 1; above >= 0; above -= 1) {
-        const line = (rawLines[above] ?? "").trim();
-        const isComment = line.startsWith("//") || line.startsWith("*") || line.startsWith("/*");
-        if (!isComment) return false;
-        if (line.includes(wirePathAllowMarker)) return true;
+        if (!isCommentText(above)) return false;
+        if ((rawLines[above] ?? "").includes(wirePathAllowMarker)) return true;
       }
       return false;
     };
