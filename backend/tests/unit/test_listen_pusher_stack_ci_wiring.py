@@ -93,6 +93,9 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
     assert 'github.event.pull_request.base.sha' in scope
     assert 'github.event.merge_group.base_sha' in scope
+    assert 'timeout-minutes: 5' in scope
+    assert 'fetch-depth: 0' in scope
+    assert 'filter: blob:none' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
 
