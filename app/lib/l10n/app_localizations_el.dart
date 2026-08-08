@@ -9890,6 +9890,27 @@ class AppLocalizationsEl extends AppLocalizations {
   String get yourRequestUnderReview => 'Το αίτημά σου εξετάζεται';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Απαιτείται ενημέρωση';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Εγκαταστήστε την πιο πρόσφατη εφαρμογή Omi για να συνεχίσετε μετά τη μετεγκατάσταση λογαριασμού.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Η μετεγκατάσταση είναι σε εξέλιξη';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.';
+
+  @override
+  String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

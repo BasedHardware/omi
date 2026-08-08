@@ -9848,6 +9848,27 @@ class AppLocalizationsNl extends AppLocalizations {
   String get yourRequestUnderReview => 'Je aanvraag wordt beoordeeld';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Update vereist';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installeer de nieuwste Omi-app om door te gaan na de accountmigratie.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migratie bezig';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.';
+
+  @override
+  String get accountCutoverOpenStore => 'Store openen';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

@@ -1,5 +1,6 @@
 """Renderer for backend Cloud Run runtime env."""
 
+import json
 import runpy
 from pathlib import Path
 
@@ -108,10 +109,11 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in memory_env
-    assert 'MEMORY_MODE=read' in memory_env
+    assert 'MEMORY_ENABLED_USERS=' in memory_env
+    assert 'MEMORY_MODE=off' in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
     rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
@@ -128,7 +130,20 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
 
-    notifications_job = jobs['notifications-job']
+
+def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
+    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
+
+    cloud_run = _MANIFEST['environments']['dev']['cloud_run']
+    services = cloud_run['services']
+    for service in services.values():
+        env = service.get('env', {})
+        if 'OMI_PARITY_PACK_CAPTURE' in env:
+            assert env['OMI_PARITY_PACK_CAPTURE']['value'] == '0'
+            assert env['OMI_PARITY_PACK_ALLOWED_PRINCIPALS']['value'] == ''
+
+    notifications_job = cloud_run['jobs']['notifications-job']
     notifications_env = notifications_job['env']
     forbidden_notifications_vars = {
         'MEMORY_MODE',
@@ -176,7 +191,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     job_env = _job_env_block(out, 'memory_maintenance_job')
     assert 'MEMORY_MODE=off' in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
+    assert 'MEMORY_ENABLED_USERS=' in job_env
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
 

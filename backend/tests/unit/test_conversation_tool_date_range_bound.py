@@ -109,7 +109,9 @@ class TestExactConversationReference:
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
         ct.parse_exact_conversation_reference.return_value = conversation_id
         ct.conversation_matches_date_range.return_value = True
-        ct.keyword_search_conversation_ids.reset_mock()
+        # Rebind: sibling unit files may have already loaded conversation_tools with a real
+        # keyword_search_conversation_ids (not a MagicMock), so reset_mock is unsafe here.
+        ct.keyword_search_conversation_ids = MagicMock()
         ct.vector_db.query_vectors = MagicMock(return_value=[])
         ct.conversations_db.get_conversations_by_id = MagicMock(
             return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]

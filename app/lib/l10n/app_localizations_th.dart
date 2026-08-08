@@ -9766,6 +9766,26 @@ class AppLocalizationsTh extends AppLocalizations {
   String get yourRequestUnderReview => 'คำขอของคุณอยู่ระหว่างการตรวจสอบ';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'ต้องอัปเดต';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'ติดตั้งแอป Omi ล่าสุดเพื่อใช้งานต่อหลังการย้ายบัญชี';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'กำลังย้ายข้อมูล';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'บัญชีของคุณกำลังย้าย ฟีเจอร์ผลิตภัณฑ์จะหยุดชั่วคราวจนกว่าการย้ายจะเสร็จ';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'บัญชีของคุณอยู่ในโหมดบำรุงรักษาหลังการย้อนกลับการย้าย ข้อมูลที่ใหม่กว่าบางส่วนอาจถูกแยกไว้';
+
+  @override
+  String get accountCutoverOpenStore => 'เปิดสโตร์';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

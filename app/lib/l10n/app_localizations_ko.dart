@@ -9659,6 +9659,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yourRequestUnderReview => '요청을 검토 중입니다';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => '업데이트가 필요합니다';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '계정 마이그레이션 이후에도 계속하려면 최신 Omi 앱을 설치하세요.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '마이그레이션 진행 중';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.';
+
+  @override
+  String get accountCutoverOpenStore => '스토어 열기';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

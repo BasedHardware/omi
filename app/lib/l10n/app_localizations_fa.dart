@@ -9822,6 +9822,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get yourRequestUnderReview => 'درخواست شما در حال بررسی است';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'التحديث مطلوب';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'الترحيل قيد التقدم';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.';
+
+  @override
+  String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

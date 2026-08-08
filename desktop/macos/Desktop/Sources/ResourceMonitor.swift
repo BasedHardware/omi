@@ -307,12 +307,6 @@ class ResourceMonitor {
       components["videoEncoder_currentChunkAgeSec"] = Int(age)
     }
 
-    // FocusAssistant pending tasks (actor — await, optional since it may not be initialized)
-    if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
-      components["focus_pendingTasks"] = await focusAssistant.pendingTasksCount
-      components["focus_historyCount"] = await focusAssistant.analysisHistoryCount
-    }
-
     // Rewind backpressure stats (MainActor — direct access)
     let plugin = ProactiveAssistantsPlugin.shared
     components["rewind_droppedFrames"] = plugin.droppedFrameCount
@@ -562,11 +556,6 @@ class ResourceMonitor {
         _ = try await RewindStorage.shared.flushCurrentVideoChunk()
       } catch {
         logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)
-      }
-
-      // Clear focus assistant pending tasks specifically
-      if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
-        await focusAssistant.clearPendingWork()
       }
 
       // Pause AgentSync to reduce memory pressure and resume after 60s

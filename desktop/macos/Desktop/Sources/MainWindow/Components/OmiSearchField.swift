@@ -80,12 +80,12 @@ struct OmiSearchField: View {
         }
       }
       .frame(width: 16, height: 16)
-      .foregroundStyle(OmiColors.textTertiary)
+      .foregroundStyle(Ink.secondary)
 
       TextField(placeholder, text: $text)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
 
       if !text.isEmpty {
         Button {
@@ -93,7 +93,7 @@ struct OmiSearchField: View {
         } label: {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.body)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
         }
         .buttonStyle(.plain)
         .help("Clear search")
@@ -102,11 +102,9 @@ struct OmiSearchField: View {
     }
     .padding(.horizontal, OmiSpacing.md)
     .frame(minHeight: 44)
-    .omiControlSurface(
-      fill: OmiColors.backgroundSecondary,
-      radius: 16,
-      stroke: OmiColors.border.opacity(0.18)
-    )
+    // The shared field surface, so a search field here and one on a content page
+    // cannot disagree — and no drop shadow, which is what `omiControlSurface` added.
+    .glassField()
     .accessibilityElement(children: .contain)
   }
 }

@@ -9820,6 +9820,27 @@ class AppLocalizationsNo extends AppLocalizations {
   String get yourRequestUnderReview => 'Forespørselen din er til vurdering';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Uppdatering krävs';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installera den senaste Omi-appen för att fortsätta efter kontomigreringen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrering pågår';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.';
+
+  @override
+  String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

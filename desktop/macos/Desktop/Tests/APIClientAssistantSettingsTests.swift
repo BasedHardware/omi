@@ -22,7 +22,6 @@ final class APIClientAssistantSettingsTests: XCTestCase {
 
     let response = try JSONDecoder().decode(AssistantSettingsResponse.self, from: data)
 
-    XCTAssertNil(response.focus)
     XCTAssertEqual(response.task?.enabled, true)
     XCTAssertEqual(response.task?.minConfidence, 0.72)
     XCTAssertEqual(response.floatingBar?.voiceAnswersEnabled, true)

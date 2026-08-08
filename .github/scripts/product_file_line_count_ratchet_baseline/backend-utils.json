@@ -9,6 +9,7 @@
     "backend/utils/other/storage.py": 1587,
     "backend/utils/retrieval/agentic.py": 1519,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
+    "backend/utils/stt/streaming.py": 1523,
     "backend/utils/sync/pipeline.py": 2491
   },
   "raise_justifications": {
@@ -19,6 +20,7 @@
     "backend/utils/memory/legacy_backfill.py": "Public inventory wrappers for bulk backfill without exposing private helpers; keep one backfill module.",
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873); the deletion purge path additionally records bounded storage wipe counters for telemetry.",
     "backend/utils/retrieval/agentic.py": "Split setup vs post-setup TTFT clocks, emit an early think: progress event after setup, and persist typed timeout/failure answers so the chat router cannot append the generic canned sorry after error: (SCA-296). +8 accepts a shared absolute setup deadline from the chat router so metadata + prompt/tool load use one budget (SCA-296). +5 wires PageContext chat_scope into the agent configurable so conversation/timeframe hard-scope reaches retrieval tools (#4515).",
+    "backend/utils/stt/streaming.py": "Restoring hosted Deepgram added the provider client lifecycle back to this module: a lazily built account client, the self-hosted endpoint guard, and BYOK selection. The lifecycle is a coherent unit and should move to utils/stt/deepgram_client.py; this entry records the debt rather than hiding it.",
     "backend/utils/sync/pipeline.py": "Plan-aware soft-cap evaluation and its default-tier fallback remain in a small helper beside Sync's idempotent fresh-speech metering rather than overgrowing the durable worker coordinator."
   },
   "threshold": 1500

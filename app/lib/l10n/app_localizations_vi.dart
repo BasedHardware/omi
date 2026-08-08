@@ -9817,6 +9817,27 @@ class AppLocalizationsVi extends AppLocalizations {
   String get yourRequestUnderReview => 'Yêu cầu của bạn đang được xem xét';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Cần cập nhật';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Cài đặt ứng dụng Omi mới nhất để tiếp tục sau khi di chuyển tài khoản.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Đang di chuyển';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tài khoản của bạn đang được di chuyển. Các tính năng sản phẩm tạm dừng cho đến khi hoàn tất.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tài khoản của bạn đang bảo trì sau khi hoàn tác di chuyển. Một số dữ liệu mới hơn có thể bị cô lập.';
+
+  @override
+  String get accountCutoverOpenStore => 'Mở cửa hàng';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

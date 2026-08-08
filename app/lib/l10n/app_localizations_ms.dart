@@ -9846,6 +9846,27 @@ class AppLocalizationsMs extends AppLocalizations {
   String get yourRequestUnderReview => 'Permintaan anda sedang disemak';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Pembaruan diperlukan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrasi sedang berlangsung';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.';
+
+  @override
+  String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

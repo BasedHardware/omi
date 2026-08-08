@@ -9822,6 +9822,26 @@ class AppLocalizationsFi extends AppLocalizations {
   String get yourRequestUnderReview => 'Pyyntösi on käsittelyssä';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'Asenna uusin Omi-sovellus jatkaaksesi tilin siirron jälkeen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Siirto käynnissä';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.';
+
+  @override
+  String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override

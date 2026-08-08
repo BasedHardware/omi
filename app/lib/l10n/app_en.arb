@@ -11611,6 +11611,30 @@
     "@yourRequestUnderReview": {
         "description": "Subtitle shown while a training-data access request is pending"
     },
+    "accountCutoverUpdateRequiredTitle": "Update Required",
+    "@accountCutoverUpdateRequiredTitle": {
+        "description": "Title for account cutover force-upgrade blocking screen"
+    },
+    "accountCutoverUpdateRequiredMessage": "Install the latest Omi app to continue after account migration.",
+    "@accountCutoverUpdateRequiredMessage": {
+        "description": "Body for account cutover force-upgrade blocking screen"
+    },
+    "accountCutoverMigrationInProgressTitle": "Migration in Progress",
+    "@accountCutoverMigrationInProgressTitle": {
+        "description": "Title for account cutover migration-maintenance blocking screen"
+    },
+    "accountCutoverMigrationInProgressMessage": "Your account is migrating. Product features are paused until migration finishes.",
+    "@accountCutoverMigrationInProgressMessage": {
+        "description": "Body for account cutover migration-maintenance blocking screen"
+    },
+    "accountCutoverMigrationRollbackMessage": "Your account is in maintenance after a migration rollback. Some newer data may be stranded.",
+    "@accountCutoverMigrationRollbackMessage": {
+        "description": "Body when cutover rollback stranded newer data"
+    },
+    "accountCutoverOpenStore": "Open store",
+    "@accountCutoverOpenStore": {
+        "description": "Button that opens the app store for a required cutover upgrade"
+    },
     "chatScopeToday": "Today",
     "@chatScopeToday": {
         "description": "Chat timeframe scope chip for today"

@@ -176,14 +176,27 @@ struct OnboardingStepScaffold<Content: View>: View {
           // the line runs full height and the chip sits centered on it.
           ZStack {
             Rectangle()
-              .fill(OmiColors.backgroundTertiary)
+              .fill(Ink.separator)
               .frame(width: 1)
               .frame(maxHeight: .infinity)
+              // The chip used to knock the rule out with an opaque disc of the page colour. On glass
+              // there is no page colour to knock out *with* — the ground is the blurred desktop, so a
+              // filled disc is a grey blob and no disc leaves the rule crossing the glyph. The rule is
+              // **masked** where the chip sits instead, the same answer `glassScrollFade` gives for
+              // the same reason. The band is the glyph plus its padding, and it carries the chip's own
+              // offset so the two cannot drift apart.
+              .mask {
+                VStack(spacing: 0) {
+                  Rectangle()
+                  Color.clear.frame(height: 34)
+                  Rectangle()
+                }
+                .offset(y: -64)
+              }
             Image(systemName: "arrow.right.circle.fill")
               .scaledFont(size: 24)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .padding(4)
-              .background(Circle().fill(OmiColors.backgroundPrimary))
               // Raised to sit at the vertical middle of the graph, which centers
               // higher than the full pane (the footer summary sits below it).
               .offset(y: -64)
@@ -196,8 +209,10 @@ struct OnboardingStepScaffold<Content: View>: View {
           splitPane
             .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
 
-          Divider()
-            .background(OmiColors.backgroundTertiary)
+          Rectangle()
+            .fill(Ink.separator)
+            .frame(width: 1)
+            .frame(maxHeight: .infinity)
 
           OnboardingSecondBrainPane(
             graphViewModel: graphViewModel,
@@ -208,14 +223,12 @@ struct OnboardingStepScaffold<Content: View>: View {
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(OmiColors.backgroundPrimary)
 
     case .centered:
       VStack(spacing: 0) {
         header
 
-        Divider()
-          .background(OmiColors.backgroundTertiary)
+        GlassSeparator()
 
         progressRow
 
@@ -242,7 +255,6 @@ struct OnboardingStepScaffold<Content: View>: View {
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(OmiColors.backgroundPrimary)
     }
   }
 
@@ -250,8 +262,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     VStack(spacing: 0) {
       header
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       progressRow
 
@@ -268,7 +279,6 @@ struct OnboardingStepScaffold<Content: View>: View {
       // steps (e.g. the permission steps) whose content already fits.
       .scrollBounceBehavior(.basedOnSize)
     }
-    .background(OmiColors.backgroundPrimary)
   }
 
   private var header: some View {
@@ -281,7 +291,7 @@ struct OnboardingStepScaffold<Content: View>: View {
         Button(action: onSkip) {
           Text("Skip")
             .font(.system(size: 13, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -304,21 +314,19 @@ struct OnboardingStepScaffold<Content: View>: View {
         Text(eyebrow.uppercased())
           .font(.system(size: 12, weight: .semibold))
           .tracking(1.2)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Text(title)
-        .font(.system(size: 40, weight: .bold))
-        .foregroundColor(OmiColors.textPrimary)
-        .lineSpacing(2)
+        .inkStyle(InkType.stepHeadline, color: Ink.primary)
         .multilineTextAlignment(centered ? .center : .leading)
+        .fixedSize(horizontal: false, vertical: true)
 
       if !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         Text(description)
-          .font(.system(size: 16))
-          .foregroundColor(OmiColors.textSecondary)
-          .lineSpacing(4)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .multilineTextAlignment(centered ? .center : .leading)
+          .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: 460, alignment: centered ? .center : .leading)
       }
     }
@@ -335,13 +343,13 @@ struct OnboardingLogoMark: View {
         Image(nsImage: logoImage)
           .resizable()
           .renderingMode(.template)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
           .scaledToFit()
           .frame(width: 52, height: 18)
       } else {
         Text("omi")
           .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
     }
     .contentShape(Rectangle())
@@ -412,12 +420,13 @@ struct OnboardingProgressBar: View {
 
     return ZStack(alignment: .leading) {
       Capsule()
-        .fill(Color.white.opacity(0.22))
+        .fill(Ink.hairline)
         .frame(width: width, height: Self.barHeight)
       Capsule()
-        .fill(Color.white)
+        .fill(Ink.primary)
         .frame(width: width * CGFloat(filled) / CGFloat(pages), height: Self.barHeight)
-        .animation(.snappy(duration: 0.2), value: filled)
+        .animation(
+          InkReduceMotion.animation(.snappy(duration: InkMotion.stepTransition)), value: filled)
       HStack(spacing: 0) {
         ForEach(phase.steps, id: \.self) { step in
           pageSlice(step, phase: phase, showTicks: hoveredPhase == phaseIndex)
@@ -450,11 +459,11 @@ struct OnboardingProgressBar: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .overlay(alignment: .leading) {
-        // Page-boundary tick, revealed on hover. Background-colored so it
+        // Page-boundary tick, revealed on hover. Cut in the sheet colour so it
         // reads as the same notch over the filled and unfilled parts alike.
         if showTicks, localIndex > 0 {
           RoundedRectangle(cornerRadius: 0.75)
-            .fill(OmiColors.backgroundPrimary)
+            .fill(Ink.surface)
             .frame(width: 1.5, height: Self.barHeight + 4)
             .offset(x: -0.75)
         }
@@ -522,17 +531,19 @@ struct OnboardingKeyCapView: View {
           .font(.system(size: 22, weight: .semibold))
       }
     }
-    .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+    // The active cap inverts the label ladder, the way the primary button does:
+    // `Ink.primary` fill, `Ink.surface` label.
+    .foregroundColor(isActive ? Ink.surface : Ink.primary)
     .padding(.horizontal, 10)
     .padding(.vertical, 8)
     .frame(minWidth: isWide ? 116 : 64, minHeight: 64)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(isActive ? Color.white : OmiColors.backgroundTertiary)
+        .fill(isActive ? Ink.primary : Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(
-              isActive ? Color.white : OmiColors.textTertiary.opacity(0.3),
+              isActive ? Ink.primary : Ink.hairline,
               lineWidth: 2
             )
         )
@@ -550,7 +561,7 @@ struct OnboardingBackButton: View {
   var body: some View {
     if let onboardingBack {
       Button("Back", action: onboardingBack)
-        .buttonStyle(OmiButtonStyle(.secondary))
+        .buttonStyle(InkButtonStyle(kind: .secondary))
         .accessibilityLabel("Back")
     }
   }
@@ -563,25 +574,26 @@ private struct OnboardingSecondBrainPane: View {
 
   var body: some View {
     ZStack(alignment: .bottom) {
-      OmiColors.backgroundSecondary
+      // A wash, not a fill: the pane reads as a shade of the glass rather than
+      // as a second background pasted over it.
+      Ink.rowFill
         .ignoresSafeArea()
 
       VStack(spacing: 0) {
         graphBody
 
         if case .graph = mode, let footerText, !footerText.isEmpty {
-          Divider()
-            .background(Color.white.opacity(0.08))
+          GlassSeparator()
 
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Who you are")
               .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .tracking(0.6)
 
             Text(footerText)
               .font(.system(size: 13))
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .lineSpacing(3)
               .lineLimit(4)
               .fixedSize(horizontal: false, vertical: true)
@@ -589,7 +601,6 @@ private struct OnboardingSecondBrainPane: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal, OmiSpacing.xxl)
           .padding(.vertical, OmiSpacing.lg)
-          .background(OmiColors.backgroundPrimary.opacity(0.92))
         }
       }
     }
@@ -613,14 +624,14 @@ private struct OnboardingSecondBrainPane: View {
     case .message(let title, let detail):
       VStack(spacing: OmiSpacing.md) {
         Text(title)
-          .font(.system(size: 28, weight: .bold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.stepHeadline, color: Ink.primary)
           .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
 
         Text(detail)
-          .font(.system(size: 15))
-          .foregroundColor(OmiColors.textTertiary)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: 320)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -629,9 +640,9 @@ private struct OnboardingSecondBrainPane: View {
       if graphViewModel.isEmpty {
         VStack(spacing: OmiSpacing.md) {
           Text("Your graph appears once Omi has something real to map.")
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
+            .inkStyle(InkType.prose, color: Ink.secondary)
             .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 320)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -642,8 +653,7 @@ private struct OnboardingSecondBrainPane: View {
 
           VStack(spacing: OmiSpacing.sm) {
             Text("This is your 2nd brain")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.white)
+              .inkStyle(InkType.rowCopy, color: Ink.primary)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.xs)
 
@@ -667,7 +677,7 @@ private struct OnboardingSecondBrainPane: View {
       Text(label)
         .font(.system(size: 11))
     }
-    .foregroundColor(.white.opacity(0.5))
+    .foregroundColor(Ink.secondary)
   }
 }
 
@@ -678,24 +688,23 @@ private struct OnboardingGraphBrandMark: View {
         Image(nsImage: logoImage)
           .resizable()
           .renderingMode(.template)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
           .scaledToFit()
           .frame(width: 45, height: 20)
       } else {
         Text("omi")
           .font(.system(size: 20, weight: .semibold))
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
 
       Text(".me")
         .font(.system(size: 20, weight: .semibold))
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
         .offset(y: -1)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
-    .background(Color.black.opacity(0.28))
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
+    .glassChip()
     .accessibilityLabel("omi.me")
   }
 }
@@ -720,37 +729,30 @@ struct OnboardingInsightCard: View {
   var body: some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
       ZStack {
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .fill(OmiColors.backgroundQuaternary)
+        RoundedRectangle(cornerRadius: PageGlass.chipRadius, style: .continuous)
+          .fill(Ink.rowFillHover)
           .frame(width: 42, height: 42)
 
         Image(systemName: icon)
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text(title)
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
 
         Text(detail)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .lineSpacing(3)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer()
     }
     .padding(OmiSpacing.lg)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
+    .glassCard()
   }
 }
 
@@ -766,18 +768,11 @@ struct OnboardingSelectableChip: View {
         if let leading { leading }
         Text(title)
           .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+          .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.sm)
-      .background(
-        Capsule()
-          .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
-      )
-      .overlay(
-        Capsule()
-          .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-      )
+      .glassChip(isActive: isSelected)
     }
     .buttonStyle(.plain)
   }

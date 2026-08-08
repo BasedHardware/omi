@@ -45,10 +45,53 @@ before it becomes eligible for the fenced terminal-cleanup path. The
 reconciler never creates a replacement without the account request path's
 owner claim.
 
-If the immutable `bootImage` differs from the actual boot disk source, the
-reconciler records `recreate_required` and does not stop, replace, or start the
-VM. An operator must recreate that dev/prod VM through the owner provisioning
-path with the exact image reference before the fleet can converge.
+## Persistent state disk and browser policy
+
+Each active owner has one persistent state disk, separate from the disposable
+boot disk. The state disk and any migration disk are named and labelled with
+the owner/migration identity under the `omi-agent-*` namespace. A replacement
+uses a **source clone** only when it cannot reuse a verified owner state disk;
+the clone is created from the predecessor's disk source, labelled, and
+attached read-only to the candidate for the controlled migration. It never
+attaches an unverified predecessor disk or copies arbitrary predecessor
+metadata. When an owner state disk is reusable, the reconciler first fences it,
+sets its current attachment to `autoDelete: false`, detaches it, and attaches
+that same identity-checked disk to the candidate. The candidate's state disk
+becomes the active owner's state surface only after the health,
+release-identity, lease, and cutover checks succeed.
+
+Replacement creation attaches only the new boot disk and durable state disk.
+The full predecessor clone is hot-attached read-only with `autoDelete: false`
+after the guest kernel has selected its root device, avoiding duplicate legacy
+filesystem labels during boot. Startup waits a bounded interval for required
+state devices and expands the image's ext4 root partition to the provisioned
+boot-disk size before installing or pulling Docker content.
+
+The **explicit ephemeral browser policy** is part of this contract: only paths
+listed in the state-disk contract are persistent. Browser cache, temporary
+profiles, downloads, and other unlisted browser data are ephemeral and must be
+recreated; persistence must never be inferred merely because a disk is
+attached. Credentials or browser session material are not persistent unless a
+separate reviewed state contract names them.
+
+The active owner's boot disk and initial state-disk attachment are created with
+`autoDelete: true`. Once migration must preserve state across VM replacement,
+the reconciler changes the state-disk attachment to `autoDelete: false` before
+detaching it; the temporary read-only source clone remains protected with
+`autoDelete: false` until explicit retirement.
+During migration, the stopped predecessor, detached persistent state disk, and
+temporary clone are preserved through the journaled soak window; candidate
+health alone never authorizes cleanup. After cutover, cleanup is
+**identity-fenced cleanup**: deletion requires the journaled numeric
+instance/disk identity, the expected `omi-agent-*` labels, owner and migration
+fences, the active pointer, and drained lease/account-deletion checks to match.
+A name prefix or a provider 404 by itself is never sufficient to delete a
+predecessor, state disk, or temporary clone.
+
+If the immutable `bootImage` differs from the actual boot disk source, ordinary
+rollout records `recreate_required` and does not replace the VM. The sole
+exception is the explicit, development-only migration below; production keeps
+the fail-closed `recreate_required` behavior.
 
 ## Development-only boot-image replacement
 
@@ -70,14 +113,28 @@ development owner:
 The job rejects this object outside development, requires a non-empty explicit
 allowlist, and only considers an already stopped owner with no session/start or
 drain demand. It journals a deterministic replacement candidate, verifies its
-private authenticated health and release identity, then atomically cuts the
-owner pointer over. The predecessor remains stopped and labelled during the
-soak window, then the same migration journal deletes it only after its numeric
-instance ID, label, active pointer, account-deletion, and lease fences still
-match. Candidate health retries reuse the journaled name and bearer token; a
-candidate that exhausts the normal retry budget is identity-fenced deleted
-before the owner record is quarantined. Production replacement is hard-disabled
-in code.
+private authenticated health, release identity, and state receipt, then
+atomically cuts the owner pointer over while keeping proxy admission blocked.
+Every scheduled soak pass rechecks the exact candidate and receipt; only after
+the deadline and a healthy check does the journal retire the numeric-ID-fenced
+predecessor and reopen admission. Any pre-cutover failure immediately deletes
+or detaches the exact candidate and restores the predecessor's exact state disk
+before a retry can clear the drain. Ambiguous cleanup stays drained and
+quarantined. Production replacement is hard-disabled
+in code. **Production remains disabled until dev proof** demonstrates state-disk
+continuity, source-clone attach/detach, the explicit ephemeral browser policy,
+active-owner `autoDelete: true`, and identity-fenced cleanup across a complete
+soak and rollback exercise. The production manifest must continue to omit the
+migration flag until that evidence is reviewed and accepted.
+
+A pre-cutover failure remains retryable under the same immutable release. If a
+normal deployment advances the release first, the reconciler does not require
+an operator to edit Firestore: it revalidates that the exact candidate is gone,
+the journaled state disk is attached to the numeric-ID-fenced predecessor, and
+the disk deletion policy is restored. Only then may a lease-guarded transaction
+mark the old journal `superseded` and clear its durable owner marker. Any
+identity or cleanup ambiguity stays fail-closed instead of starting a candidate
+for the newer release.
 
 Generate the opt-in manifest with the checked-in renderer; do not hand-edit a
 manifest after it receives `manifestSha256`:
@@ -152,6 +209,13 @@ external NAT, so the installer creates a two-permission subnet role and binds
 it directly to that exact regional subnet. The replacement request omits the
 redundant VPC-network field when a subnetwork is present, so Compute infers the
 network from the subnet and no project-wide network access is granted.
+The same custom role includes only the additional state-disk/clone operations
+`compute.disks.create`, `compute.disks.delete`, `compute.disks.get`,
+`compute.disks.update`, `compute.disks.use`, `compute.disks.useReadOnly`,
+`compute.instances.attachDisk`, `compute.instances.detachDisk`, and
+`compute.instances.setDiskAutoDelete`. The existing `omi-agent-*` instance,
+disk, and image conditions remain in force; no broad Compute role or
+project-wide disk access is granted.
 Validate the installed trigger with
 `backend/scripts/validate_agent_vm_reconciler_scheduler.py` before the first
 live execution.

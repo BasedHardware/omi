@@ -9861,6 +9861,27 @@ class AppLocalizationsHu extends AppLocalizations {
   String get yourRequestUnderReview => 'A kérelmedet vizsgáljuk';
 
   @override
+  String get accountCutoverUpdateRequiredTitle => 'Frissítés szükséges';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Telepítse a legújabb Omi alkalmazást a fiókmigráció utáni folytatáshoz.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migráció folyamatban';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'A fiókja migrálás alatt áll. A termékfunkciók szünetelnek a migráció befejezéséig.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'A fiókja karbantartás alatt áll a migráció visszavonása után. Egyes újabb adatok elkülönítve maradhatnak.';
+
+  @override
+  String get accountCutoverOpenStore => 'Áruház megnyitása';
+
+  @override
   String get chatScopeToday => 'Today';
 
   @override
