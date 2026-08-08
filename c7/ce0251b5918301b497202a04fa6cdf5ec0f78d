@@ -1,0 +1,25 @@
+desktop/macos/changelog/unreleased/20260808-dmg-installer-polish.json
+  s_4e7fb1dd3ff9e6::t_0fb8a70385b8e0 1-3
+desktop/macos/dmg-assets/background.svg
+  s_4e7fb1dd3ff9e6::t_99f2f4dc4a9781 2-6,8-15
+desktop/macos/dmg-assets/dmgbuild_settings.py
+  s_4e7fb1dd3ff9e6::t_c11028301c9900 36,39-40,44-45
+desktop/macos/tests/test-dmg-background-retina.sh
+  s_4e7fb1dd3ff9e6::t_a8ac743a8090be 30-31,36-40,47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c7ce0251b5918301b497202a04fa6cdf5ec0f78d",
+  "prompts": {},
+  "sessions": {
+    "s_4e7fb1dd3ff9e6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe22d-d461-7db0-942a-b5de64013a16",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
