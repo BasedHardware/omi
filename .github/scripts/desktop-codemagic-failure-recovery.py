@@ -31,6 +31,9 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 DIAGNOSTIC_RE = re.compile(r"^(?:FAIL|ERROR|WARN):\s+.{1,600}$")
 AUTHORIZATION_RE = re.compile(r"(?i)(\bauthorization\b\s*[:=]\s*)(?:bearer\s+)?\S+")
 CREDENTIAL_HEADER_RE = re.compile(r"(?i)(\b(?:cookie|set-cookie)\b\s*:\s*).*$")
+ENV_ASSIGNMENT_RE = re.compile(
+    r"((?<![?&])\b[A-Z][A-Z0-9_]{1,127}\s*=\s*)(?:\"[^\"]*\"|'[^']*'|\S+)"
+)
 CREDENTIAL_RE = re.compile(
     r"(?i)((?<![?&])\b(?:"
     r"x-auth-token|api[\s_-]?key|client[\s_-]?secret|"
@@ -154,6 +157,7 @@ def sanitize_diagnostics(log: bytes) -> list[str]:
             continue
         line = CREDENTIAL_HEADER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
         line = AUTHORIZATION_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+        line = ENV_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
         line = CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
         line = BEARER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
         line = URL_CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)

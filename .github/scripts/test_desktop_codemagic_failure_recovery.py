@@ -81,6 +81,9 @@ class RecoveryTests(unittest.TestCase):
             b"WARN: GITHUB_TOKEN=github-token-value\n"
             b"FAIL: SIGNING_KEY='quoted signing key'\n"
             b"WARN: AWS_SECRET_ACCESS_KEY=aws-secret-value\n"
+            b"ERROR: AWS_ACCESS_KEY_ID=aws-access-id\n"
+            b"WARN: GOOGLE_APPLICATION_CREDENTIALS=/private/credentials.json\n"
+            b"FAIL: SERVICE_ACCOUNT_JSON='{\"private_key\":\"json-secret\"}'\n"
             b"ERROR: Cookie: session=session-secret; csrf=csrf-secret\n"
             b"WARN: Set-Cookie: auth=set-cookie-secret; Secure; HttpOnly\n"
             b"FAIL: https://example.test/callback?access_token=query-secret&mode=test\n"
@@ -106,6 +109,9 @@ class RecoveryTests(unittest.TestCase):
                 "WARN: GITHUB_TOKEN=<redacted>",
                 "FAIL: SIGNING_KEY=<redacted>",
                 "WARN: AWS_SECRET_ACCESS_KEY=<redacted>",
+                "ERROR: AWS_ACCESS_KEY_ID=<redacted>",
+                "WARN: GOOGLE_APPLICATION_CREDENTIALS=<redacted>",
+                "FAIL: SERVICE_ACCOUNT_JSON=<redacted>",
                 "ERROR: Cookie: <redacted>",
                 "WARN: Set-Cookie: <redacted>",
                 "FAIL: https://example.test/callback?access_token=<redacted>&mode=test",
@@ -119,6 +125,9 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn("github-token-value", json.dumps(capsule))
         self.assertNotIn("quoted signing key", json.dumps(capsule))
         self.assertNotIn("aws-secret-value", json.dumps(capsule))
+        self.assertNotIn("aws-access-id", json.dumps(capsule))
+        self.assertNotIn("credentials.json", json.dumps(capsule))
+        self.assertNotIn("json-secret", json.dumps(capsule))
         self.assertNotIn("session-secret", json.dumps(capsule))
         self.assertNotIn("csrf-secret", json.dumps(capsule))
         self.assertNotIn("set-cookie-secret", json.dumps(capsule))
