@@ -71,6 +71,18 @@ test("catalog does not claim capabilities outside the sanctioned production slic
   // red-proof: adding a "goals.title" or "chat.generate" key must fail this. These are
   // approved cuts, not gaps waiting to be filled, so a catalog entry for one is evidence
   // that a surface fabricated it.
-  const deprecated = /goal|quicknote|generate|persona|wrapped|insight|checkout|rewind\w*\.(?!title)|bulkselect/i;
-  for (const key of Object.keys(EN_MESSAGES)) assert.equal(deprecated.test(key), false, key);
+  //
+  // EXTENDED 2026-08-08 (coordinator): the concept list now checks VALUES as well as keys.
+  // As first written it inspected keys only, while the guard it replaced inspected both —
+  // so `"home.section": "Your Goals"` would have passed. Visible copy is exactly where a
+  // fabricated capability shows up to a user, so the value side is the half that matters.
+  // `generate` is word-bounded because "generated" is legitimate copy about propositions
+  // (memoriesPlatform.readOnlyNote); the cut is the Generate *capability*, not the verb.
+  const deprecatedConcepts = /goal|quicknote|\bgenerate\b|persona|wrapped|insight|checkout|bulkselect/i;
+  for (const key of Object.keys(EN_MESSAGES)) assert.equal(deprecatedConcepts.test(key), false, key);
+  for (const value of Object.values(EN_MESSAGES)) assert.equal(deprecatedConcepts.test(value), false, value);
+
+  // Key-shaped only: a `rewind.*` key other than the disabled affordance's own title.
+  const deprecatedKeyShapes = /rewind\w*\.(?!title)/i;
+  for (const key of Object.keys(EN_MESSAGES)) assert.equal(deprecatedKeyShapes.test(key), false, key);
 });
