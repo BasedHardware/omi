@@ -48,6 +48,9 @@ class _ContendedMic implements IMicRecorderService {
     _onStop?.call();
     _onStop = null;
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 void main() {

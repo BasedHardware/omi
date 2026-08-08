@@ -13,6 +13,7 @@ import database.vector_db as vector_db
 from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
+    delete_default_canonical_memories,
     delete_all_canonical_memories,
     delete_canonical_memory,
     memory_item_to_memorydb,
@@ -366,6 +367,11 @@ class LegacyMemoryBackend:
     def delete_all(self, uid: str) -> None:
         memories_db.delete_all_memories(uid)
 
+    def delete_default(self, uid: str) -> None:
+        # Legacy memories have no separate Archive tier, so the default scope
+        # retains the legacy backend's existing delete-all behavior.
+        self.delete_all(uid)
+
 
 class CanonicalMemoryBackend:
     def __init__(self, *, db_client: Any = None):
@@ -447,6 +453,9 @@ class CanonicalMemoryBackend:
 
     def delete_all(self, uid: str) -> None:
         delete_all_canonical_memories(uid, db_client=self._db_client)
+
+    def delete_default(self, uid: str) -> None:
+        delete_default_canonical_memories(uid, db_client=self._db_client)
 
 
 class MemoryService:
@@ -604,6 +613,9 @@ class MemoryService:
 
     def delete_all(self, uid: str) -> None:
         self._resolve_mutation_backend(uid).delete_all(uid)
+
+    def delete_default(self, uid: str) -> None:
+        self._resolve_mutation_backend(uid).delete_default(uid)
 
     def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
         backend = self._resolve_mutation_backend(uid)

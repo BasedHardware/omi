@@ -38,15 +38,14 @@ struct OnboardingFloatingBarShortcutStepView: View {
         Button(action: onSkip) {
           Text("Skip")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -55,22 +54,19 @@ struct OnboardingFloatingBarShortcutStepView: View {
       OnboardingContentWithPinnedActions {
         VStack(spacing: OmiSpacing.xxl) {
           Text("Let's set the \"Open Omi\" shortcut.\nPress this shortcut. Do the buttons light up?")
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundColor(OmiColors.textPrimary)
+            .inkStyle(InkType.stepHeadline, color: Ink.primary)
             .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
 
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+          shortcutKeyPreview
             .frame(height: 152)
             .frame(maxWidth: 480)
-            .overlay {
-              shortcutKeyPreview
-            }
+            .glassCard()
 
           VStack(spacing: OmiSpacing.md) {
             Text("Choose a different shortcut:")
               .font(.system(size: 14, weight: .medium))
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             LazyVGrid(
               columns: [GridItem(.adaptive(minimum: 92), spacing: OmiSpacing.sm)],
@@ -97,16 +93,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
           if showContinue {
             Button(action: onComplete) {
               Text("Continue")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.black)
-                .padding(.horizontal, OmiSpacing.xxl)
-                .padding(.vertical, OmiSpacing.md)
-                .background(
-                  RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                    .fill(Color.white)
-                )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .keyboardShortcut(.defaultAction)
             .transition(.move(edge: .bottom).combined(with: .opacity))
           }
@@ -115,7 +103,6 @@ struct OnboardingFloatingBarShortcutStepView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
     .onAppear {
       GlobalShortcutManager.shared.setRegistrationSuspended(true)
       installKeyMonitor()
@@ -138,8 +125,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
       }
 
       Text(shortcutDetected ? "Shortcut detected" : "Press to test")
-        .font(.system(size: 13, weight: .medium))
-        .foregroundColor(OmiColors.textTertiary)
+        .inkStyle(InkType.statusLabel, color: Ink.secondary)
     }
   }
 
@@ -148,13 +134,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
     return Button(action: beginCustomShortcutCapture) {
       Text("Custom")
         .font(.system(size: 14, weight: .medium))
-        .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.md)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
-        )
+        .glassChip(isActive: isSelected)
     }
     .buttonStyle(.plain)
   }
@@ -163,7 +146,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(isRecordingCustomShortcut ? "Press your custom shortcut now" : "Custom shortcut")
         .font(.system(size: 13, weight: .semibold))
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
 
       HStack(spacing: OmiSpacing.sm) {
         HStack(spacing: OmiSpacing.xs) {
@@ -176,65 +160,40 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
         Button(action: handleCustomShortcutSaveButton) {
           Text(isRecordingCustomShortcut ? "Listening..." : "Save")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .fill(OmiColors.backgroundPrimary)
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(InkButtonStyle(kind: .secondary))
         .disabled(isRecordingCustomShortcut)
       }
 
       Text("Use at least one non-modifier key, like J or Return.")
-        .font(.system(size: 12))
-        .foregroundColor(OmiColors.textTertiary)
+        .inkStyle(InkType.statusLabel, color: Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
 
       if let captureError {
         Text(captureError)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(.red.opacity(0.9))
+          .inkStyle(InkType.statusLabel, color: Ink.errorRed)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: 420)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-    )
+    .glassCard()
   }
 
-  private func keyCap(_ label: String) -> some View {
-    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-      .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
-      .frame(minWidth: 48, minHeight: 48)
+  /// A keycap on glass: a wash with a hairline outline, inverting to an `Ink.primary` fill with an
+  /// `Ink.surface` glyph while the key is held.
+  private func smallKeyCap(_ label: String, active: Bool) -> some View {
+    RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+      .fill(active ? Ink.primary : Ink.rowFill)
+      .frame(minWidth: 36, minHeight: 32)
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .stroke(
-            shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
-            lineWidth: 2
-          )
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .strokeBorder(active ? Color.clear : Ink.hairline, lineWidth: 1)
       )
       .overlay {
         Text(label)
-          .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
-          .padding(.horizontal, label.count > 2 ? 14 : 10)
-      }
-      .fixedSize()
-  }
-
-  private func smallKeyCap(_ label: String, active: Bool) -> some View {
-    RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-      .fill(active ? Color.white : OmiColors.backgroundTertiary)
-      .frame(minWidth: 36, minHeight: 32)
-      .overlay {
-        Text(label)
           .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(active ? .black : OmiColors.textPrimary)
+          .foregroundColor(active ? Ink.surface : Ink.primary)
           .padding(.horizontal, label.count > 2 ? 10 : 8)
       }
       .fixedSize()
@@ -254,13 +213,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
             .font(.system(size: 13, weight: .medium))
         }
       }
-      .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+      .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
-      )
+      .glassChip(isActive: isSelected)
     }
     .buttonStyle(.plain)
   }
