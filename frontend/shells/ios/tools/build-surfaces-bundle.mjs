@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+// Copies the real @omi-core/surfaces ship build into app/assets/surfaces/
+// so the iOS scheme handler can serve it at omi-ui://local/ (wave-2).
+// Expects core/packages/surfaces/dist to already be built.
+//   node tools/build-surfaces-bundle.mjs
+// Optional: SURFACES_DIST=/abs/path/to/dist
+
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const contract = JSON.parse(readFileSync(join(root, 'contract/bridge.contract.json'), 'utf8'));
+const defaultDist = resolve(
+  root,
+  '../../../core-foundation/core/packages/surfaces/dist',
+);
+const dist = resolve(process.env.SURFACES_DIST ?? defaultDist);
+const out = join(root, 'app/assets/surfaces');
+
+if (!existsSync(join(dist, 'index.html'))) {
+  console.error(
+    `surfaces dist missing at ${dist} — run: cd core && pnpm --filter @omi-core/surfaces build`,
+  );
+  process.exit(1);
+}
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+cpSync(dist, out, { recursive: true });
+
+function stripMaps(dir) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, ent.name);
+    if (ent.isDirectory()) stripMaps(p);
+    else if (ent.name.endsWith('.map')) unlinkSync(p);
+  }
+}
+stripMaps(out);
+
+writeFileSync(
+  join(out, 'manifest.json'),
+  JSON.stringify(
+    { bundleId: 'surfaces', bridgeContractVersion: contract.version, source: 'core:packages/surfaces/dist' },
+    null,
+    2,
+  ),
+);
+
+console.log(`surfaces bundle -> ${out} (contract ${contract.version}, from ${dist})`);
