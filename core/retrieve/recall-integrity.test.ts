@@ -78,6 +78,12 @@ describe("merged authorized recent recall", () => {
       candidate({ candidate_ref: "candidate:a", dedupe_ref: "a", supersedes_refs: ["candidate:b"] }),
       candidate({ candidate_ref: "candidate:b", dedupe_ref: "b", supersedes_refs: ["candidate:a"] }),
     ])).toThrow("cyclic");
+    expect(() => mergeAuthorizedRecallCandidates([
+      candidate({ candidate_ref: "candidate:a", dedupe_ref: "g1", dedupe_rank: 2, supersedes_refs: ["candidate:b"] }),
+      candidate({ candidate_ref: "candidate:d", dedupe_ref: "g1", dedupe_rank: 1 }),
+      candidate({ candidate_ref: "candidate:b", dedupe_ref: "g2", dedupe_rank: 1 }),
+      candidate({ candidate_ref: "candidate:c", dedupe_ref: "g2", dedupe_rank: 2, supersedes_refs: ["candidate:d"] }),
+    ])).toThrow("cyclic");
 
     let getterCalls = 0;
     const hostile = { ...candidate() } as Record<string, unknown>;
@@ -151,6 +157,7 @@ describe("aggregate accepted and STM completeness", () => {
     expect(qualifyRecallAbsence(0, false, incomplete)).toEqual({ kind: "query_gap", globally_complete: false });
     expect(qualifyRecallAbsence(1, true, incomplete)).toBeNull();
     expect(() => qualifyRecallAbsence(0, true, incomplete)).toThrow("cannot advertise continuation");
+    expect(() => qualifyRecallAbsence(0, false, { ...incomplete, status: "complete" })).toThrow("requires computed completeness");
   });
 
   test("rejects contradictory coverage instead of silently claiming completeness", () => {
@@ -188,7 +195,35 @@ describe("content-safe recall trace", () => {
     expect(hasContentSafeRecallTrace({ ...groundedTrace(), query: "raw query sentinel" })).toBe(false);
   });
 
-  test("rejects accessors without executing them and isolates a failing telemetry sink", () => {
+  test("rejects prototype and proxy aliases instead of certifying caller-owned telemetry", () => {
+    const prototypePayload = groundedTrace() as Record<string, unknown>;
+    Object.defineProperty(prototypePayload, "__proto__", {
+      enumerable: true,
+      value: { raw_query: "secret" },
+    });
+    expect(() => buildContentSafeRecallTrace(prototypePayload)).toThrow("invalid shape");
+    expect(hasContentSafeRecallTrace(prototypePayload)).toBe(false);
+
+    let exposeRaw = false;
+    const proxy = new Proxy(groundedTrace() as Record<string, unknown>, {
+      ownKeys(target) {
+        return exposeRaw ? [...Reflect.ownKeys(target), "raw_query"] : Reflect.ownKeys(target);
+      },
+      getOwnPropertyDescriptor(target, property) {
+        if (property === "raw_query") return { configurable: true, enumerable: true, value: "secret", writable: false };
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+      get(target, property, receiver) {
+        if (property === "raw_query" && exposeRaw) return "secret";
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    expect(hasContentSafeRecallTrace(proxy)).toBe(false);
+    exposeRaw = true;
+    expect(JSON.stringify(proxy)).toContain("raw_query");
+  });
+
+  test("rejects accessors without executing them and isolates sync and async telemetry sink failures", async () => {
     let getterCalls = 0;
     const hostile = groundedTrace() as Record<string, unknown>;
     Object.defineProperty(hostile, "tokenCounts", {
@@ -200,7 +235,9 @@ describe("content-safe recall trace", () => {
 
     const trace = buildContentSafeRecallTrace(groundedTrace());
     const result = { id: "unchanged-result" };
-    expect(emitRecallTraceSafely(trace, () => { throw new Error("sink unavailable"); })).toBe(false);
+    expect(await emitRecallTraceSafely(trace, () => { throw new Error("sink unavailable"); })).toBe(false);
+    expect(await emitRecallTraceSafely(trace, async () => { throw new Error("async sink unavailable"); })).toBe(false);
+    expect(await emitRecallTraceSafely(trace, async () => {})).toBe(true);
     expect(result).toEqual({ id: "unchanged-result" });
   });
 });

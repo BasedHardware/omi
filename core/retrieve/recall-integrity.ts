@@ -3,6 +3,8 @@ import { compareStrings } from "../order";
 const INTERNAL_REF = /^[\x21-\x7e]{1,512}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
 const STRATEGY_VERSION = /^[A-Za-z0-9._:-]{1,128}$/;
+const computedCompleteness = new WeakSet<object>();
+const contentSafeTraces = new WeakSet<object>();
 
 type PlainJson = null | boolean | number | string | readonly PlainJson[] | { readonly [key: string]: PlainJson };
 
@@ -44,7 +46,10 @@ const detachPlainJson = (input: unknown): PlainJson => {
       const descriptors = Object.getOwnPropertyDescriptors(value);
       const keys = Reflect.ownKeys(descriptors);
       if (keys.some((key) => typeof key !== "string")) return fail("recall integrity rejects symbol keys");
-      const result: Record<string, PlainJson> = {};
+      // A null prototype makes `__proto__` an ordinary own key. It therefore
+      // survives detachment and is rejected by the exact-shape validators
+      // instead of mutating the detached object's prototype.
+      const result = Object.create(null) as Record<string, PlainJson>;
       for (const key of (keys as string[]).sort(compareStrings)) {
         const descriptor = descriptors[key];
         if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return fail("recall integrity rejects accessors and hidden fields");
@@ -141,23 +146,31 @@ export const mergeAuthorizedRecallCandidates = (input: unknown): readonly Author
   const refs = candidates.map((candidate) => candidate.candidate_ref);
   if (!uniqueStrings(refs)) return fail("recall candidates require unique references");
   const byRef = new Map(candidates.map((candidate) => [candidate.candidate_ref, candidate]));
+  const classByRef = new Map(candidates.map((candidate) => [candidate.candidate_ref, candidate.dedupe_ref]));
+  const classEdges = new Map<string, Set<string>>();
+  for (const candidate of candidates) {
+    const edges = classEdges.get(candidate.dedupe_ref) ?? new Set<string>();
+    for (const supersededRef of candidate.supersedes_refs) {
+      const targetClass = classByRef.get(supersededRef);
+      if (targetClass !== undefined && targetClass !== candidate.dedupe_ref) edges.add(targetClass);
+    }
+    classEdges.set(candidate.dedupe_ref, edges);
+  }
   const visiting = new Set<string>();
   const visited = new Set<string>();
-  const assertAcyclic = (candidateRef: string): void => {
-    if (visiting.has(candidateRef)) return fail("recall candidate supersession is cyclic");
-    if (visited.has(candidateRef)) return;
-    visiting.add(candidateRef);
-    for (const supersededRef of byRef.get(candidateRef)?.supersedes_refs ?? []) {
-      if (byRef.has(supersededRef)) assertAcyclic(supersededRef);
-    }
-    visiting.delete(candidateRef);
-    visited.add(candidateRef);
+  const assertAcyclic = (dedupeRef: string): void => {
+    if (visiting.has(dedupeRef)) return fail("recall candidate supersession is cyclic");
+    if (visited.has(dedupeRef)) return;
+    visiting.add(dedupeRef);
+    for (const supersededClass of classEdges.get(dedupeRef) ?? []) assertAcyclic(supersededClass);
+    visiting.delete(dedupeRef);
+    visited.add(dedupeRef);
   };
-  for (const candidateRef of refs) assertAcyclic(candidateRef);
-  const superseded = new Set(candidates.flatMap((candidate) => [...candidate.supersedes_refs]));
+  for (const dedupeRef of classEdges.keys()) assertAcyclic(dedupeRef);
+  const supersededClasses = new Set([...classEdges.values()].flatMap((edges) => [...edges]));
   const winners = new Map<string, AuthorizedRecallCandidate>();
   for (const candidate of candidates) {
-    if (superseded.has(candidate.candidate_ref)) continue;
+    if (supersededClasses.has(candidate.dedupe_ref)) continue;
     const previous = winners.get(candidate.dedupe_ref);
     winners.set(candidate.dedupe_ref, previous ? preferredEquivalent(previous, candidate) : candidate);
   }
@@ -296,7 +309,9 @@ export const computeRecallCompleteness = (input: unknown): RecallCompletenessRes
     },
   };
   Object.freeze(result.frontiers);
-  return Object.freeze(result);
+  const frozen = Object.freeze(result);
+  computedCompleteness.add(frozen);
+  return frozen;
 };
 
 export interface RecallAbsenceQualification {
@@ -313,6 +328,9 @@ export const qualifyRecallAbsence = (
   completeness: RecallCompletenessResult,
 ): RecallAbsenceQualification | null => {
   if (!Number.isSafeInteger(itemCount) || itemCount < 0 || typeof hasMore !== "boolean") return fail("invalid recall page state");
+  if (typeof completeness !== "object" || completeness === null || !computedCompleteness.has(completeness)) {
+    return fail("recall absence requires computed completeness");
+  }
   if (itemCount > 0) return null;
   if (hasMore) return fail("an empty recall page cannot advertise continuation");
   return Object.freeze({ kind: "query_gap", globally_complete: completeness.status === "complete" });
@@ -386,7 +404,7 @@ const parseTrace = (input: unknown): ContentSafeRecallTrace => {
   if (!honest) return fail("recall trace outcome contradicts its stages");
   const frozenStages = Object.freeze(stages) as unknown as RecallTraceStages;
   const tokenCounts = Object.freeze({ input: value.tokenCounts.input, output: value.tokenCounts.output });
-  return Object.freeze({
+  const trace = Object.freeze({
     version: "recall-trace-v1",
     traceRef: value.traceRef as RecallTraceRef,
     strategyVersion: value.strategyVersion,
@@ -396,6 +414,8 @@ const parseTrace = (input: unknown): ContentSafeRecallTrace => {
     tokenCounts,
     stages: frozenStages,
   });
+  contentSafeTraces.add(trace);
+  return trace;
 };
 
 // domain-pending(DIV-DOMCORE-001)
@@ -404,17 +424,21 @@ export const buildContentSafeRecallTrace = (input: unknown): ContentSafeRecallTr
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
-export const hasContentSafeRecallTrace = (input: unknown): input is ContentSafeRecallTrace => {
-  try { parseTrace(input); return true; } catch { return false; }
-};
+export const hasContentSafeRecallTrace = (input: unknown): input is ContentSafeRecallTrace =>
+  typeof input === "object" && input !== null && contentSafeTraces.has(input);
 
 /** Telemetry is evidence only: sink failure is isolated from the read result. */
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
-export const emitRecallTraceSafely = (
+export const emitRecallTraceSafely = async (
   trace: ContentSafeRecallTrace,
-  sink: (trace: ContentSafeRecallTrace) => void,
-): boolean => {
+  sink: (trace: ContentSafeRecallTrace) => void | Promise<void>,
+): Promise<boolean> => {
   const safe = parseTrace(trace);
-  try { sink(safe); return true; } catch { return false; }
+  try {
+    await sink(safe);
+    return true;
+  } catch {
+    return false;
+  }
 };
