@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>loopback origin probe</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin:0; background:#0b0b0f; color:#f2f2f7;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main { padding: calc(env(safe-area-inset-top) + 12px) 14px 24px; }
+  h1 { font-size:15px; }
+  #log div { border-bottom: 1px solid #26262b; padding: 3px 0; word-break: break-all; }
+  .fail { color:#ff453a; } .ok { color:#30d158; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ship-origin probe (loopback)</h1>
+  <div id="log"></div>
+</main>
+<!-- The point of this page: a REAL type="module" script, multi-file graph,
+     top-level await. In file:// asset mode this line executes nothing. -->
+<script type="module" src="./main-esm.js"></script>
+</body>
+</html>

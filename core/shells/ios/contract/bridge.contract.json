@@ -1,0 +1,51 @@
+{
+  "version": "0.1.0",
+  "name": "OmiShellBridge",
+  "channel": "OmiBridge",
+  "types": {
+    "DeviceState": {
+      "connected": "bool",
+      "deviceId": "string?",
+      "batteryPct": "int?"
+    },
+    "StartListeningParams": {
+      "sampleRateHz": "int",
+      "language": "string?"
+    },
+    "ListenSession": {
+      "sessionId": "string"
+    },
+    "TranscriptEvent": {
+      "sessionId": "string",
+      "text": "string",
+      "isFinal": "bool",
+      "shellSentAtMs": "int"
+    }
+  },
+  "messages": [
+    {
+      "name": "getDeviceState",
+      "direction": "ui->shell",
+      "kind": "request",
+      "params": null,
+      "result": "DeviceState",
+      "doc": "Surface asks the Flutter shell for current BLE device state. Shell owns BLE lifecycle (see constraints-and-conventions.md)."
+    },
+    {
+      "name": "startListening",
+      "direction": "ui->shell",
+      "kind": "request",
+      "params": "StartListeningParams",
+      "result": "ListenSession",
+      "doc": "Surface commands the shell to open a capture session. Shell owns audio capture and the /listen socket."
+    },
+    {
+      "name": "transcriptEvent",
+      "direction": "shell->ui",
+      "kind": "push",
+      "params": "TranscriptEvent",
+      "result": null,
+      "doc": "Shell pushes transcript segments to the surface. shellSentAtMs is set by the shell for latency measurement."
+    }
+  ]
+}

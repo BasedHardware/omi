@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>scheme origin probe</title>
+<!-- CSS as a separate subresource on purpose: asset subresource loading over
+     the custom scheme is one of the facts under test. -->
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<main>
+  <h1>Ship-origin probe (custom scheme)</h1>
+  <div id="bundle-tag">bundle: (loading manifest…)</div>
+  <img id="probe-img" src="./asset.svg" alt="svg subresource" width="24" height="24" />
+  <div id="log"></div>
+</main>
+<!-- Real type="module" multi-file graph, same shape as the loopback probe. -->
+<script type="module" src="./main-esm.js"></script>
+</body>
+</html>
