@@ -45,6 +45,41 @@ test("permanent rejection dead-letters, never retries (FC-permanent-write-reject
   assert.equal(dead[0]!.opId, "op-big");
   assert.equal(dead[0]!.failure.reason, "oversize");
   assert.equal(dead[0]!.summary, "test op op-big", "dead letter is renderable — retained content is not lost content");
+  // COORD-cross-generation-writes: export-then-exclude requires reconstructing
+  // the user's edit BY HAND, and a summary string cannot do that — only the
+  // actual op can. red-proof: drop `payload: op.payload,` from the dead-letter
+  // push in outbox.ts's "outcome" case (restore the pre-fix shape) — this
+  // assertion fails because `dead[0]!.payload` is `undefined`.
+  assert.equal(dead[0]!.payload, `{"op":"op-big"}`, "dead letter carries the reconstructable op, not just its summary");
+
+  // COORD-degradation-is-unobservable: `sync.outbox.dead-letter` is emitted by
+  // the pure engine (engine.ts) unconditionally — that assertion already
+  // existed and always passed. What did NOT exist is anything downstream of
+  // the emission: `case "telemetry": return;` swallowed it. red-proof: restore
+  // that `return;` in outbox.ts's interpret() — this assertion fails because
+  // `env.fallbackSink.records` stays empty; the engine-level emission test
+  // would still pass, which is exactly the invisible gap the ruling names.
+  assert.equal(env.fallbackSink.records.length, 1, "dead-letter telemetry reaches the bound sink, not a void");
+  assert.equal(env.fallbackSink.records[0]!.path, "sync.outbox.dead-letter");
+});
+
+test("auth-invalid pause reaches the bound sink (COORD-degradation-is-unobservable)", async () => {
+  const store = new MemoryStore();
+  const env = new ManualEnv();
+  const t = new ScriptedTransport();
+  t.respondWith({ ok: false, failure: { kind: "auth-invalid", detail: "token expired" } });
+
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
+  await box.enqueue(op("op-authed-2"));
+  await env.advance(1);
+
+  assert.equal(box.queueStatus().phase, "needs-auth");
+  // red-proof: restore `case "telemetry": return;` in outbox.ts — this fails
+  // because nothing ever reaches `env.fallbackSink`, even though the engine
+  // unconditionally emits the `sync.outbox.auth-paused` effect either way.
+  assert.equal(env.fallbackSink.records.length, 1);
+  assert.equal(env.fallbackSink.records[0]!.path, "sync.outbox.auth-paused");
+  assert.equal(env.fallbackSink.records[0]!.detail, "token expired");
 });
 
 test("retryable failures back off and eventually succeed", async () => {
