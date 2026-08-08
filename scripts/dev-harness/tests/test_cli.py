@@ -133,6 +133,51 @@ def test_status_reports_seeded_scenario_and_summary_path(tmp_path: Path) -> None
     assert "PROVIDER_MODE=offline active" in result.stdout
 
 
+def _health_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> config.HarnessConfig:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_process_records", lambda _cfg: [])
+    monkeypatch.setattr(cli, "_port_open", lambda *_args, **_kwargs: True)
+    return config.load_config(REPO_ROOT, create_layout=True)
+
+
+def test_wait_health_reports_a_service_that_never_becomes_healthy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = _health_config(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_http_ok",
+        lambda url, headers=None: (False, "connection refused") if "/docs" in url else (True, "HTTP 200"),
+    )
+    monkeypatch.setattr(cli, "_HEALTH_TIMEOUTS", {**cli._HEALTH_TIMEOUTS, "backend": 0.4})
+
+    failures = cli._wait_health(cfg)
+
+    assert len(failures) == 1, failures
+    assert failures[0].startswith("backend: not healthy after")
+    assert "connection refused" in failures[0]
+
+
+def test_wait_health_ignores_a_service_that_recovers_before_its_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg = _health_config(monkeypatch, tmp_path)
+    attempts = {"backend": 0}
+
+    def fake_http_ok(url: str, headers: dict[str, str] | None = None) -> tuple[bool, str]:
+        if "/docs" in url:
+            attempts["backend"] += 1
+            if attempts["backend"] < 3:
+                return False, "connection refused"
+        return True, "HTTP 200"
+
+    monkeypatch.setattr(cli, "_http_ok", fake_http_ok)
+
+    assert cli._wait_health(cfg) == []
+    assert attempts["backend"] == 3
+
+
 def test_session_summary_is_local_emulator_non_activation(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["PROVIDER_MODE"] = "offline"

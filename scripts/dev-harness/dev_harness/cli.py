@@ -769,14 +769,20 @@ def _wait_health(
             base = timeout
         deadlines[service] = start + base
     failures: dict[str, str] = {}
+    # Detail from the most recent failed poll, folded into the deadline message.
+    # Kept separate from ``failures`` so a service that recovers before its
+    # deadline is not reported as a failure.
+    last_detail: dict[str, str] = {}
     process_records = {r["service"]: r for r in _process_records(cfg)}
     while pending:
         now = time.time()
         # Expire services whose per-service deadline has passed.
         for service in list(pending):
             if now >= deadlines[service]:
-                url = pending[service][0]
-                failures.setdefault(service, f"not healthy after {deadlines[service] - start:.0f}s at {url}")
+                url = pending[service][0] or f"127.0.0.1:{cfg.redis_port}"
+                message = f"not healthy after {deadlines[service] - start:.0f}s at {url}"
+                detail = last_detail.get(service)
+                failures.setdefault(service, f"{message}: {detail}" if detail else message)
                 pending.pop(service)
         if not pending:
             break
@@ -800,12 +806,12 @@ def _wait_health(
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
             else:
-                failures[service] = detail
+                last_detail[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, (url, _) in pending.items():
-        failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending] if failures else []
+    # ``pending`` is empty here by loop invariant, so the report is built from
+    # the services that actually expired or died — never from ``pending``.
+    return [f"{service}: {message}" for service, message in failures.items()]
 
 
 def cmd_up(args: argparse.Namespace) -> int:
