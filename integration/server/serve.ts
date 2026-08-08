@@ -21,7 +21,11 @@ import { createServiceApp } from "../../apps/service/app";
 
 import { createQaPorts } from "./compose";
 import { assertFixtureTimezone } from "./fixture-clock";
+import { BACKEND_PROCESS_STAMP } from "./provenance";
 import { QaStore } from "./qa-store";
+
+/** Request header a launcher sends on every bridge request so served reads are joinable to the run that made them — see provenance.ts and qa-store.ts `countClientRead`. */
+const CLIENT_ID_HEADER = "x-omi-client-id";
 
 const DEFAULT_PORT = 4851;
 const HOSTNAME = "127.0.0.1";
@@ -74,6 +78,7 @@ async function handleRecallRoute(url: URL, request: Request): Promise<Response> 
   const cursor = url.searchParams.get("cursor");
 
   store.countRequest();
+  store.countClientRead(request.headers.get(CLIENT_ID_HEADER));
 
   let page: unknown;
   try {
@@ -120,6 +125,7 @@ const server = Bun.serve({
     // Count every domain-path request that reaches the app under test.
     if (url.pathname === "/mcp") {
       store.countRequest();
+      store.countClientRead(request.headers.get(CLIENT_ID_HEADER));
     }
     return app.fetch(request);
   },
@@ -159,8 +165,10 @@ function handleQaControl(url: URL, request: Request): Response {
       return json({
         servedRequests: store.servedRequests,
         servedReads: store.servedReads,
+        servedReadsByClient: store.servedReadsByClient,
         rows: store.allRowIds().length,
         fixtureTimezone: timezone,
+        stamp: BACKEND_PROCESS_STAMP,
       });
     }
     default:

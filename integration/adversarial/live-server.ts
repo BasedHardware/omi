@@ -79,6 +79,8 @@ export async function callTool(
     readonly limit?: number;
     readonly cursor?: string | null;
     readonly id?: string;
+    /** Value for `x-omi-client-id`, if any — omit to send no header at all. */
+    readonly clientId?: string;
   } = {},
 ): Promise<{ status: number; text: string }> {
   const name = options.name ?? "read_synthesized_memory";
@@ -86,16 +88,20 @@ export async function callTool(
   if (options.cursor != null) {
     args.cursor = options.cursor;
   }
+  const headers: Record<string, string> = {
+    accept: "application/json, text/event-stream",
+    authorization: options.key ?? QA_KEY,
+    "content-type": "application/json",
+    "mcp-method": "tools/call",
+    "mcp-name": name,
+    "mcp-protocol-version": PROTOCOL_VERSION,
+  };
+  if (options.clientId !== undefined) {
+    headers["x-omi-client-id"] = options.clientId;
+  }
   const response = await fetch(`${baseUrl}/mcp`, {
     method: "POST",
-    headers: {
-      accept: "application/json, text/event-stream",
-      authorization: options.key ?? QA_KEY,
-      "content-type": "application/json",
-      "mcp-method": "tools/call",
-      "mcp-name": name,
-      "mcp-protocol-version": PROTOCOL_VERSION,
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: options.id ?? "1",
@@ -131,4 +137,43 @@ export async function control(baseUrl: string, path: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`QA control call failed: ${path} -> ${response.status}`);
   }
+}
+
+/** Fetches and parses `/qa/stats` as an untyped object — callers narrow the fields they need. */
+export async function stats(baseUrl: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${baseUrl}/qa/stats`);
+  if (!response.ok) {
+    throw new Error(`GET /qa/stats -> ${response.status}`);
+  }
+  return (await response.json()) as Record<string, unknown>;
+}
+
+/**
+ * `GET /v1/memories` against a live server, with full header control — used
+ * to exercise the settled client recall route the same way the recall-route
+ * conformance suite does, but with a caller-controlled `x-omi-client-id`.
+ */
+export async function recall(
+  baseUrl: string,
+  options: {
+    readonly key?: string;
+    readonly limit?: number;
+    readonly cursor?: string | null;
+    readonly clientId?: string;
+  } = {},
+): Promise<{ status: number; text: string }> {
+  const headers: Record<string, string> = { authorization: options.key ?? QA_KEY };
+  if (options.clientId !== undefined) {
+    headers["x-omi-client-id"] = options.clientId;
+  }
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) {
+    params.set("limit", String(options.limit));
+  }
+  if (options.cursor != null) {
+    params.set("cursor", options.cursor);
+  }
+  const query = params.toString();
+  const response = await fetch(`${baseUrl}/v1/memories${query ? `?${query}` : ""}`, { headers });
+  return { status: response.status, text: await response.text() };
 }
