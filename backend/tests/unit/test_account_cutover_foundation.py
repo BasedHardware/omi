@@ -604,16 +604,33 @@ def test_entering_migrating_requires_generation_increase():
     assert exc.value.code == 'account_generation_regression'
 
 
-def test_new_state_blocks_product_traffic_until_destination_bound():
+@pytest.mark.parametrize('destination_backend_bound', [False, True])
+def test_new_state_blocks_product_traffic_until_client_routing_exists(destination_backend_bound):
     record = AccountCutoverRecord(
         uid='u1',
         state=AccountCutoverState.new,
         account_generation=2,
-        destination_backend_bound=False,
+        destination_backend_bound=destination_backend_bound,
     )
     control = build_account_cutover_control(record, platform='ios', client_build=99)
     assert control.client_action == AccountCutoverClientAction.migration_maintenance
     assert control.product_traffic_allowed is False
+    assert control.offline_queue_instruction == OfflineQueueInstruction.quarantine
+
+
+def test_rolled_back_stranded_reopens_legacy_product_traffic_but_quarantines_outbox():
+    record = AccountCutoverRecord(
+        uid='u1',
+        state=AccountCutoverState.rolled_back_stranded,
+        account_generation=3,
+        stranded_new_data=True,
+        offline_queue_instruction=OfflineQueueInstruction.drain,
+    )
+    control = build_account_cutover_control(record, platform='ios', client_build=99)
+    assert control.client_action == AccountCutoverClientAction.none
+    assert control.product_traffic_allowed is True
+    assert control.legacy_writes_allowed is True
+    assert control.stranded_new_data is True
     assert control.offline_queue_instruction == OfflineQueueInstruction.quarantine
 
 
@@ -628,6 +645,42 @@ def test_explicit_build_zero_is_preserved_over_version_header():
     )
     assert control.client_action == AccountCutoverClientAction.force_upgrade
     assert control.product_traffic_allowed is False
+
+
+def test_access_preserves_explicit_build_zero_over_version_header(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1')
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    observed: dict[str, int | None] = {}
+
+    def _build(record, *, platform=None, client_build=None, **kwargs):
+        observed['client_build'] = client_build
+        return build_account_cutover_control(
+            record,
+            platform=platform,
+            client_build=client_build,
+            minimum_builds={'ios': 1},
+        )
+
+    monkeypatch.setattr('utils.account_cutover.access.build_account_cutover_control', _build)
+    with pytest.raises(AccountCutoverAccessDenial) as exc:
+        evaluate_account_cutover_access(
+            'u1',
+            method='GET',
+            path='/v1/conversations',
+            headers={
+                'X-App-Platform': 'ios',
+                'X-App-Build': '0',
+                'X-App-Version': '1+100',
+            },
+            force=True,
+        )
+    assert exc.value.code == 'force_upgrade_required'
+    assert observed == {'client_build': 0}
 
 
 def test_persisted_payload_uses_config_schema_version():

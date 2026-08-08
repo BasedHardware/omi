@@ -141,9 +141,8 @@ def evaluate_account_cutover_access(
             _deny_generation_mismatch(record, client_generation=client_generation)
 
     platform = (_headers_get(headers, 'X-App-Platform') or '').strip().lower() or None
-    build = parse_client_build(_headers_get(headers, 'X-App-Build')) or parse_client_build(
-        _headers_get(headers, 'X-App-Version')
-    )
+    parsed_build = parse_client_build(_headers_get(headers, 'X-App-Build'))
+    build = parsed_build if parsed_build is not None else parse_client_build(_headers_get(headers, 'X-App-Version'))
     control = build_account_cutover_control(record, platform=platform, client_build=build)
 
     # Default legacy accounts with no floors keep main behavior, except when

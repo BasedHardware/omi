@@ -68,12 +68,13 @@ def resolve_client_action(
         if floor > 0 and (client_build is None or client_build < floor):
             return AccountCutoverClientAction.force_upgrade
 
-    if record.state in {AccountCutoverState.migrating, AccountCutoverState.rolled_back_stranded}:
+    if record.state == AccountCutoverState.migrating:
         return AccountCutoverClientAction.migration_maintenance
 
-    # Keep ``new`` on maintenance until a destination route is actually bound.
-    # This foundation never binds one, so product shells stay blocked.
-    if record.state == AccountCutoverState.new and record.destination_backend_bound is not True:
+    # A destination import binding is not a client routing binding. Neither
+    # shipped bridge selects a backend from api/ui generation yet, so every
+    # ``new`` account must stay off the legacy product shell in this foundation.
+    if record.state == AccountCutoverState.new:
         return AccountCutoverClientAction.migration_maintenance
 
     return AccountCutoverClientAction.none
@@ -86,11 +87,7 @@ def product_traffic_allowed(
 ) -> bool:
     if client_action != AccountCutoverClientAction.none:
         return False
-    if record.state == AccountCutoverState.migrating:
-        return False
-    # No destination bridge route yet: never reopen the legacy product plane for
-    # ``new`` accounts until ``destination_backend_bound`` is honest.
-    if record.state == AccountCutoverState.new and record.destination_backend_bound is not True:
+    if record.state in {AccountCutoverState.migrating, AccountCutoverState.new}:
         return False
     return True
 
@@ -130,12 +127,16 @@ def build_account_cutover_control(
 
     offline = record.offline_queue_instruction
     if (
-        record.state in {AccountCutoverState.migrating, AccountCutoverState.new}
+        record.state
+        in {
+            AccountCutoverState.migrating,
+            AccountCutoverState.new,
+            AccountCutoverState.rolled_back_stranded,
+        }
         and offline != OfflineQueueInstruction.quarantine
     ):
-        # Migrating/new always project quarantine so clients do not attempt a
-        # drain that server enforcement cannot accept. Stranded may still show
-        # prepare_offline_drain instructions before a later begin.
+        # Fenced migration states and lossy rollback keep pre-cutover queues
+        # quarantined. Rollback reopens new legacy traffic, not stale outboxes.
         offline = OfflineQueueInstruction.quarantine
 
     return AccountCutoverControl(
