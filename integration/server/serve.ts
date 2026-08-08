@@ -118,7 +118,24 @@ const server = Bun.serve({
       return handleQaControl(url, request);
     }
 
+    // METHOD, not just path. This route is documented two screens up as
+    // "`GET /v1/memories`", and dispatching on the path alone made this harness
+    // answer POST/PUT/PATCH/DELETE with 200 and the full read payload while the
+    // real route (`apps/service/routes/memories.ts`, GET-only, pinned by
+    // `route-hardening.test.ts`) correctly refused them. A client with a method
+    // bug would have looked healthy here and failed against production — this
+    // harness's entire job is to be interchangeable with the real backend by
+    // base URL alone, and it was not.
+    //
+    // The refusal must be the real route's refusal, byte for byte: 404 with the
+    // fixed `not_found` body, never a 405. A distinct method-not-allowed status
+    // would confirm the collection exists to a caller who may not be allowed to
+    // know that, which is the authorization oracle this file's own comment at
+    // `handleRecallRoute`'s authorize branch is already careful about.
     if (url.pathname === PLATFORM_RECALL_PATH) {
+      if (request.method !== "GET") {
+        return json({ error: "not_found" }, 404);
+      }
       return handleRecallRoute(url, request);
     }
 
