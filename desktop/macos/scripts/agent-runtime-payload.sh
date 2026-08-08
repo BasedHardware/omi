@@ -14,6 +14,7 @@
 # Bundle-relative files that must exist and be non-empty.
 OMI_AGENT_RUNTIME_REQUIRED_FILES=(
   "Contents/Resources/agent/dist/index.js"
+  "Contents/Resources/agent/dist/runtime/omi-tool-manifest.js"
   "Contents/Resources/agent/package.json"
   "Contents/Resources/pi-mono-extension/index.ts"
   "Contents/Resources/pi-mono-extension/package.json"

@@ -470,6 +470,16 @@ checks:
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/scripts/test_check_codemagic_tag_intake.py", ".github/workflows/desktop_auto_release.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-179 requires bounded exact-tag evidence that native Codemagic intake selected the release workflow and immutable source"
+  - id: desktop-codemagic-failure-recovery
+    command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
+    triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "failed desktop Codemagic builds must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
+  - id: desktop-release-rehearsal-contract
+    command: ["bash", "desktop/macos/tests/test-desktop-release-rehearsal.sh"]
+    triggers: ["desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/tests/test-desktop-release-rehearsal.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the local desktop release rehearsal must remain manual, exact-failed-build-bound, credential-safe, and incapable of publishing or changing a release channel"
   - id: mobile-internal-build-cadence
     command: ["python3", ".github/scripts/test_dispatch_mobile_internal_builds.py"]
     triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
