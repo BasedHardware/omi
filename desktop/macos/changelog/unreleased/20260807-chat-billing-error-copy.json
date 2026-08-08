@@ -1,0 +1,3 @@
+{
+  "change": "Chat now explains a billing rejection in plain language instead of showing a raw \"HTTP 402\" status and inviting you to retry a message that can never go through"
+}

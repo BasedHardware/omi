@@ -40,6 +40,7 @@ class ListenRequest:
     call_id: Optional[str] = None
     client_conversation_id: Optional[str] = None
     client_device_context: Optional[ClientDeviceContext] = None
+    owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass

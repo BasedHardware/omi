@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "طرح شما در تاریخ {date} تجدید خواهد شد.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "طرح رایگان",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,22 @@
     "whisperModelSizeLarge": "بزرگ",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "کوچک",
-    "whisperModelSizeTiny": "خیلی کوچک"
+    "whisperModelSizeTiny": "خیلی کوچک",
+    "planSheetChooseYourPlan": "برای باز کردن Omi نامحدود، طرح خود را انتخاب کنید.",
+    "availableOnMacMobileWeb": "در دسترس روی Mac، موبایل و وب",
+    "popularBadge": "محبوب",
+    "worksOnDesktop": "روی دسکتاپ کار می‌کند",
+    "noDesktopAccess": "روی دسکتاپ کار نمی‌کند",
+    "annualBillingSummary": "{months} ماه / {price}",
+    "monthsFreeBadge": "{count, plural, =1{۱ ماه رایگان} other{{count} ماه رایگان}}",
+    "freemiumLimitsIntro": "Omi رایگان است، اما نسخه رایگان محدودیت‌هایی دارد که بر تجربه شما اثر می‌گذارد:",
+    "downgradeLimitDelayNotRealTime": "۵ تا ۷ ثانیه تأخیر (بلادرنگ نیست)",
+    "downgradeToFreemiumAction": "بازگشت به نسخه رایگان",
+    "getFreeUnlimitedAccess": "دسترسی نامحدود رایگان بگیرید",
+    "shareDataForTraining": "اشتراک‌گذاری داده برای آموزش",
+    "yourRequestUnderReview": "درخواست شما در حال بررسی است",
+    "pinAsBaseline": "سنجاق به‌عنوان مبنا",
+    "unpinAsBaseline": "برداشتن سنجاق از مبنا",
+    "baselineMemory": "حافظه مبنا",
+    "alwaysInContext": "همیشه در زمینه"
 }

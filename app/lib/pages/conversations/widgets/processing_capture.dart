@@ -354,13 +354,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             _isPhoneMicPaused);
 
     // Determine pause state based on recording type.
-    // Call-active interruption is treated as paused for button/dot display.
-    bool isCallInterrupted = provider.recordingState == RecordingState.interrupted && provider.isCallActive;
+    // Any audio-session interruption (call, other-app audio, system alert) is
+    // treated as paused so the UI does not claim "Listening" while mute (#4706).
+    bool isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
     bool isPaused = false;
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
+      isPaused = _isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
     }
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
 
@@ -368,7 +369,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool hasPhotos = provider.photos.isNotEmpty;
     // Show "Listening" for all active recording states — WAL ensures audio is
     // saved locally regardless of transcription connection status.
-    String statusText = provider.recordingState == RecordingState.interrupted && provider.isCallActive
+    String statusText = isAudioInterrupted
         ? context.l10n.paused
         : isPaused
             ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)

@@ -44,4 +44,28 @@ final class ChatConversationSwitchTests: XCTestCase {
     XCTAssertEqual(t.newTracked, "A1")
     XCTAssertFalse(t.shouldReset)
   }
+
+  func testConversationSwitchCancelsPendingScrollWork() throws {
+    let source = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+    let resetRange = try XCTUnwrap(
+      source.range(of: "if transition.shouldReset {", options: .backwards))
+    let resetBody = String(source[resetRange.lowerBound...].prefix(500))
+    XCTAssertTrue(
+      resetBody.contains("cancelAllPendingScrolls()"),
+      "conversation switches must cancel delayed initial scroll work from the previous chat"
+    )
+  }
+
+  func testMainChatDefaultIdentityIsShared() {
+    XCTAssertEqual(ChatConversationIdentity.mainChatDefault, "main-chat-default")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
 }

@@ -1894,7 +1894,13 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
         logger.exception("canonical batch KG cleanup failed uid=%s count=%d", uid, len(lineage_ids))
 
 
-def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
+def _delete_canonical_memories_matching(
+    uid: str,
+    *,
+    db_client: Any = None,
+    should_delete: Callable[[MemoryItem], bool],
+    reason: str,
+) -> None:
     client = db_client if db_client is not None else default_db_client
     deleted_ids: List[str] = []
     completed = False
@@ -1909,7 +1915,7 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
             or observed_control.commit_sequence != confirmed_control.commit_sequence
         ):
             continue
-        candidates = [item for item in items if item.status != MemoryItemStatus.tombstoned]
+        candidates = [item for item in items if should_delete(item)]
         if not candidates:
             completed = True
             break
@@ -1920,7 +1926,7 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
                 uid,
                 [item.memory_id for item in batch],
                 db_client=client,
-                reason="canonical_memory_delete_all",
+                reason=reason,
                 authoritative_items=list(current_by_id.values()),
             )
             for item in tombstoned:
@@ -1929,7 +1935,7 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
                     uid,
                     item.memory_id,
                     db_client=client,
-                    reason="canonical_memory_delete_all",
+                    reason=reason,
                     include_review_queue=False,
                 )
                 deleted_ids.append(item.memory_id)
@@ -1942,7 +1948,7 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 deleted_ids,
-                reason="canonical_memory_delete_all",
+                reason=reason,
                 db_client=client,
             )
         except Exception:
@@ -1950,7 +1956,26 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
         try:
             invalidate_kg_for_memory_retraction(uid, deleted_ids, db_client=client)
         except Exception:
-            logger.exception("canonical immediate delete-all KG cleanup failed uid=%s count=%d", uid, len(deleted_ids))
+            logger.exception("canonical scoped delete KG cleanup failed uid=%s count=%d", uid, len(deleted_ids))
+
+
+def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
+    _delete_canonical_memories_matching(
+        uid,
+        db_client=db_client,
+        should_delete=lambda item: item.status != MemoryItemStatus.tombstoned,
+        reason="canonical_memory_delete_all",
+    )
+
+
+def delete_default_canonical_memories(uid: str, *, db_client: Any = None) -> None:
+    """Privacy-delete default-access tiers while leaving Archive untouched (not_archive)."""
+    _delete_canonical_memories_matching(
+        uid,
+        db_client=db_client,
+        should_delete=lambda item: item.status != MemoryItemStatus.tombstoned and item.tier != MemoryLayer.archive,
+        reason="canonical_memory_delete_default",
+    )
 
 
 def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dict[str, Any]:

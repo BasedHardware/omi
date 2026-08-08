@@ -30,6 +30,8 @@ DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
 POLL_INTERVAL_SECONDS = 0.02
 NAMED_NON_PRODUCTION_BUNDLE_PREFIX = "com.omi.omi-"
 STABLE_ACCESSIBILITY_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+AUTOMATION_UI_PRESENTATION_ACTION = "set_automation_ui_presentation"
+AUTOMATION_UI_PRESENTATION_MODES = {"quiet", "interactive", "normal"}
 
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -50,6 +52,8 @@ class HarnessContext:
     log_start: int
     bundle_id: str | None
     process_match: str | None
+    presentation_restore_mode: str | None = None
+    presentation_control_available: bool = False
 
 
 def now_iso() -> str:
@@ -143,6 +147,113 @@ def request_json(
         return {"ok": False, "error": f"connection_failed: {exc.reason}"}
     except TimeoutError as exc:
         return {"ok": False, "error": f"connection_timeout: {exc}"}
+
+
+class AutomationUIPresentationUnavailable(RuntimeError):
+    """The bundle predates the optional automation UI presentation action."""
+
+
+def automation_ui_presentation_unavailable(response: dict[str, typing.Any]) -> bool:
+    error = str(response.get("error") or "")
+    return response.get("http_status") in {404, 501} or error.startswith("unknown_action:")
+
+
+def automation_ui_presentation_detail(response: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    if automation_ui_presentation_unavailable(response):
+        raise AutomationUIPresentationUnavailable(
+            f"{AUTOMATION_UI_PRESENTATION_ACTION} is unavailable on this bundle"
+        )
+    if not response.get("ok"):
+        raise RuntimeError(response.get("error") or "automation UI presentation action failed")
+    result = response.get("result")
+    detail = result.get("detail") if isinstance(result, dict) else None
+    if not isinstance(detail, dict):
+        raise RuntimeError("automation UI presentation action returned no detail")
+    return detail
+
+
+def automation_ui_presentation(
+    ctx: HarnessContext, mode: str | None = None, activate: bool = False
+) -> dict[str, typing.Any]:
+    payload: dict[str, typing.Any] = {"name": AUTOMATION_UI_PRESENTATION_ACTION}
+    if mode is not None:
+        if mode not in AUTOMATION_UI_PRESENTATION_MODES:
+            raise ValueError(f"unsupported automation UI presentation mode: {mode!r}")
+        payload["params"] = {"mode": mode, "activate": activate}
+    return automation_ui_presentation_detail(
+        request_json(ctx.base_url, "POST", "/action", payload)
+    )
+
+
+def validate_automation_ui_presentation_mode(detail: dict[str, typing.Any], key: str) -> str:
+    mode = detail.get(key)
+    if mode not in AUTOMATION_UI_PRESENTATION_MODES:
+        raise RuntimeError(f"automation UI presentation detail missing valid {key}: {detail!r}")
+    return str(mode)
+
+
+def prepare_automation_ui_presentation(ctx: HarnessContext, warnings: list[str]) -> None:
+    """Take quiet-mode ownership for the run, when the bundle supports it."""
+    try:
+        query_detail = automation_ui_presentation(ctx)
+    except AutomationUIPresentationUnavailable as exc:
+        warnings.append(f"{exc}; continuing without quiet UI presentation")
+        return
+
+    # The query is intentional: it exercises the action's read path before any
+    # harness-owned presentation change. The setter's previous_mode remains the
+    # authoritative restore target in case a user changes the mode between calls.
+    prior_mode = validate_automation_ui_presentation_mode(query_detail, "mode")
+    # Record the queried mode before attempting the setter. If the setter
+    # changes the app and then loses its response, teardown still has a target.
+    ctx.presentation_restore_mode = prior_mode
+    ctx.presentation_control_available = True
+    try:
+        quiet_detail = automation_ui_presentation(ctx, "quiet", activate=False)
+    except AutomationUIPresentationUnavailable as exc:
+        ctx.presentation_control_available = False
+        warnings.append(f"{exc}; continuing without quiet UI presentation")
+        return
+
+    restore_mode = validate_automation_ui_presentation_mode(quiet_detail, "previous_mode")
+    ctx.presentation_restore_mode = restore_mode
+    # Mark ownership before validating the returned current mode so a malformed
+    # response after a successful setter still gets a best-effort restore.
+    ctx.presentation_control_available = True
+    if validate_automation_ui_presentation_mode(quiet_detail, "mode") != "quiet":
+        raise RuntimeError(f"automation UI presentation did not enter quiet mode: {quiet_detail!r}")
+
+
+def restore_automation_ui_presentation(
+    ctx: HarnessContext, errors: list[str]
+) -> None:
+    if not ctx.presentation_control_available or ctx.presentation_restore_mode is None:
+        return
+    restore_mode = ctx.presentation_restore_mode
+    try:
+        detail = automation_ui_presentation(ctx, restore_mode, activate=False)
+        if validate_automation_ui_presentation_mode(detail, "mode") != restore_mode:
+            raise RuntimeError(f"restore returned unexpected detail: {detail!r}")
+    except AutomationUIPresentationUnavailable as exc:
+        errors.append(f"failed to restore automation UI presentation to {restore_mode!r}: {exc}")
+    except Exception as exc:  # noqa: BLE001 - teardown must be reflected in run artifacts.
+        errors.append(f"failed to restore automation UI presentation to {restore_mode!r}: {exc}")
+    finally:
+        ctx.presentation_control_available = False
+
+
+def run_agent_swift_in_interactive_mode(
+    ctx: HarnessContext, args: list[str]
+) -> subprocess.CompletedProcess[str]:
+    if not ctx.presentation_control_available:
+        return run_agent_swift(ctx, args)
+    try:
+        automation_ui_presentation(ctx, "interactive", activate=True)
+        return run_agent_swift(ctx, args)
+    finally:
+        # AX needs real pixels and activation only for the duration of this
+        # command; quiet mode is restored even when agent-swift fails.
+        automation_ui_presentation(ctx, "quiet", activate=False)
 
 
 def log_path_from_health(health: dict[str, typing.Any], explicit_log: str | None = None) -> Path:
@@ -576,12 +687,34 @@ def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> 
 def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     traces = recent_traces(ctx)
     write_json(path, traces)
-    expectations = spec.get("equals") or spec
+    # A responsiveness assertion must apply to the route just exercised, not
+    # a faster matching route left over from an earlier loop iteration.
+    # `latest` is intentionally a harness-only selector, never a trace field.
+    latest = spec.get("latest", False)
+    if not isinstance(latest, bool):
+        return False, "trace.expect latest must be a boolean"
+    expectations = spec.get("equals") or {key: value for key, value in spec.items() if key != "latest"}
     if not isinstance(expectations, dict):
         return False, "trace.expect requires a mapping"
-    if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+    if latest:
+        # State waits commonly issue a follow-up /state request. Select the
+        # newest trace for the exercised route rather than accidentally
+        # asserting on that bookkeeping request. Select by route identity only
+        # (path + method); status and duration remain assertion predicates so a
+        # failed latest response can never be hidden by an earlier success.
+        selector = {
+            key: value
+            for key, value in expectations.items()
+            if key in {"trace.path", "trace.method"}
+            and not isinstance(value, dict)
+        }
+        matching = [trace for trace in traces if expectation_matches({"trace": trace}, selector)]
+        candidates = matching[-1:] if matching else traces[-1:]
+    else:
+        candidates = traces
+    if any(expectation_matches({"trace": trace}, expectations) for trace in candidates):
         return True, None
-    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in traces]
+    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in candidates]
     return False, f"no trace matched: expectations={expectations}, mismatches={reasons}"
 
 
@@ -643,6 +776,8 @@ def _string_list(spec: typing.Any, field: str) -> tuple[list[str] | None, str | 
 def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     if ctx.lane != "ui":
         return True, "skipped outside ui lane"
+    # AX snapshots address the app by bundle id and do not need visible pixels,
+    # activation, or the user's cursor. Keep the window parked in quiet mode.
     result = run_agent_swift(ctx, ["snapshot", "-i", "--json"])
     path.write_text(result.stdout, encoding="utf-8")
     if result.returncode != 0:
@@ -713,10 +848,11 @@ def activate_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) ->
     identifier = spec.get("identifier")
     if not is_stable_accessibility_identifier(identifier):
         return False, "ax.activate requires a stable identifier"
-    action = spec.get("action", "click")
+    action = spec.get("action", "press")
     if action not in {"click", "press"}:
         return False, "ax.activate action must be click or press"
-    result = run_agent_swift(ctx, ["find", "identifier", identifier, action])
+    runner = run_agent_swift_in_interactive_mode if action == "click" else run_agent_swift
+    result = runner(ctx, ["find", "identifier", identifier, action])
     path.write_text(result.stdout, encoding="utf-8")
     if result.returncode != 0:
         return False, f"agent-swift failed to {action} identifier {identifier!r}"
@@ -990,22 +1126,34 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
     ctx = create_context(args, flow_path, run_dir, args.lane)
     started = time.perf_counter()
     setup_errors: list[str] = []
-    initial_state = request_json(ctx.base_url, "GET", "/state")
-    capabilities = request_json(ctx.base_url, "GET", "/capabilities")
-    if initial_state.get("ok") and capabilities.get("ok"):
-        clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
-        if not clear_response.get("ok"):
-            setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
-    write_json(run_dir / "initial-state.json", initial_state)
-    write_json(run_dir / "capabilities.json", capabilities)
-
+    setup_warnings: list[str] = []
+    initial_state: dict[str, typing.Any] = {}
+    capabilities: dict[str, typing.Any] = {}
     step_results = []
-    if not setup_errors:
-        for index, step in enumerate(flow.get("steps", []), 1):
-            result = execute_step(ctx, index, step)
-            step_results.append(result)
-            if not result["ok"] and step.get("halt_on_failure") is True:
-                break
+    try:
+        try:
+            prepare_automation_ui_presentation(ctx, setup_warnings)
+        except Exception as exc:  # noqa: BLE001 - setup failures become run artifacts.
+            setup_errors.append(f"failed to prepare automation UI presentation: {type(exc).__name__}: {exc}")
+
+        initial_state = request_json(ctx.base_url, "GET", "/state")
+        capabilities = request_json(ctx.base_url, "GET", "/capabilities")
+        if initial_state.get("ok") and capabilities.get("ok"):
+            clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
+            if not clear_response.get("ok"):
+                setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
+        write_json(run_dir / "initial-state.json", initial_state)
+        write_json(run_dir / "capabilities.json", capabilities)
+
+        if not setup_errors:
+            for index, step in enumerate(flow.get("steps", []), 1):
+                result = execute_step(ctx, index, step)
+                step_results.append(result)
+                if not result["ok"] and step.get("halt_on_failure") is True:
+                    break
+    finally:
+        restore_automation_ui_presentation(ctx, setup_errors)
+
     logs = collect_logs(ctx)
     final_state = request_json(ctx.base_url, "GET", "/state")
     traces = recent_traces(ctx)
@@ -1036,6 +1184,7 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
         },
         "steps": step_results,
         "setup_errors": setup_errors,
+        "setup_warnings": setup_warnings,
         "logs": logs,
         "ok": bridge_ready and not setup_errors and all(step["ok"] for step in step_results),
         "bridge_ready": bridge_ready,
@@ -1066,6 +1215,8 @@ def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
     ]
     for error in metrics.get("setup_errors", []):
         lines.append(f"- FAIL setup {error}")
+    for warning in metrics.get("setup_warnings", []):
+        lines.append(f"- warning setup {warning}")
     for step in metrics["steps"]:
         status = "PASS" if step["ok"] else "FAIL"
         lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")

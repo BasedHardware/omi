@@ -64,6 +64,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     }
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
+        "backend/utils/memory/canonical_legacy_backfill.py": "tests/unit/test_canonical_legacy_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
         "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
@@ -321,6 +322,8 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert "has_desktop_rust" not in desktop_checks
     assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
     assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/database/__init__.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/database/account_deletion_policy.py'" in agent_proxy_auto_deploy
     assert "^backend/agent-proxy/Dockerfile$" in detect_changes
     assert "scan_import_time_side_effects.py" in manifest
     assert "check_module_stub_pollution.py" in manifest

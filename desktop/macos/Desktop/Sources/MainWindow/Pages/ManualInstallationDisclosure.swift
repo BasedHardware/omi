@@ -30,7 +30,7 @@ struct ManualInstallationDisclosure<Content: View>: View {
           Text(title)
             .scaledFont(size: fontSize, weight: .medium)
         }
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.vertical, OmiSpacing.xxs)
         .frame(minHeight: 28, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
