@@ -34,10 +34,14 @@ function serve(page: unknown): ReturnType<typeof parseSynthesizedMemoryPageRespo
 }
 
 test("the stub serves the route the client adapter asks for", () => {
+  // BE-SURFACE publishes GET /v1/memories?limit=&cursor= (status/BE-SURFACE.md,
+  // 2026-08-08). The stub must speak the SAME route as the real service or a
+  // shell cannot repoint between them by base URL alone, which is the entire
+  // point of having a stub.
   // red-proof: change DEV_RECALL_STUB_PATH to "/v1/recall" — the stub and the
   // client stop agreeing and every shell pointed at it 404s.
-  // APPLIED 2026-08-08: observed '/v1/recall' !== '/v1/memories/recall'
-  assert.equal(DEV_RECALL_STUB_PATH, "/v1/memories/recall");
+  // APPLIED 2026-08-08: observed '/v1/recall' !== '/v1/memories'
+  assert.equal(DEV_RECALL_STUB_PATH, "/v1/memories");
 });
 
 test("every complete-scenario page is accepted by the real adapter and walks to a terminal", () => {
