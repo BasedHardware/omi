@@ -40,6 +40,13 @@ Write-Host "- Gradle (v8.10)"
 Write-Host "- NDK (28.2.13676358)"
 Write-Host ""
 
+# Honor caller override so local-backend setup actually writes that URL to .dev.env
+# (#9404 review). Default remains community remote staging.
+if ([string]::IsNullOrWhiteSpace($env:API_BASE_URL)) {
+    $script:API_BASE_URL = "https://api.omiapi.com/"
+} else {
+    $script:API_BASE_URL = $env:API_BASE_URL
+}
 
 function SetupFirebase {
     # Create directories if they don't exist
@@ -56,37 +63,68 @@ function SetupFirebase {
     Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_prod.dart"
     Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/prod/"
     Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Prod/"
+
+    Validate-FirebaseApiAlignment
 }
 
+# Fail closed when community remote-staging API cannot verify Firebase tokens
+# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
+# Compares every prebuilt artifact the app copies (json + dart + plist).
+function Get-FirebaseProjectIdFromPrebuilt {
+    param([string]$Path)
+    $text = Get-Content -Raw $Path
+    if ($Path -like "*.json") {
+        $match = [regex]::Match($text, '"project_id"\s*:\s*"([^"]+)"')
+        if ($match.Success) { return $match.Groups[1].Value }
+        return ""
+    }
+    if ($Path -like "*.plist") {
+        $match = [regex]::Match($text, '<key>PROJECT_ID</key>\s*<string>([^<]+)</string>')
+        if ($match.Success) { return $match.Groups[1].Value }
+        return ""
+    }
+    if ($Path -like "*.dart") {
+        $ids = [regex]::Matches($text, "projectId:\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        if ($ids.Count -eq 1) { return $ids[0] }
+        return ""
+    }
+    return ""
+}
 
-function SetupFirebaseWithServiceAccount {
-    dart pub global activate flutterfire_cli
+function Validate-FirebaseApiAlignment {
+    $jsonProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/google-services.json"
+    $dartProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/firebase_options.dart"
+    $plistProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/GoogleService-Info.plist"
 
-    # Dev configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_dev.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.development" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/dev/" `
-        --ios-out="ios/Config/Dev/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
+    if ([string]::IsNullOrWhiteSpace($jsonProj) -or [string]::IsNullOrWhiteSpace($dartProj) -or [string]::IsNullOrWhiteSpace($plistProj)) {
+        Write-Host "ERROR: could not parse Firebase project id from app/setup/prebuilt/* (#9404)."
+        Write-Host "  google-services.json → '$jsonProj'"
+        Write-Host "  firebase_options.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info.plist → '$plistProj'"
+        exit 1
+    }
+    if ($jsonProj -ne $dartProj -or $jsonProj -ne $plistProj) {
+        Write-Host "ERROR: prebuilt Firebase configs disagree on project id (#9404)."
+        Write-Host "  google-services.json → '$jsonProj'"
+        Write-Host "  firebase_options.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info.plist → '$plistProj'"
+        Write-Host "Regenerate the full trio via FlutterFire (do NOT text-replace — #5945)."
+        exit 1
+    }
+    $project = $jsonProj
 
-    # Prod configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_prod.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/prod/" `
-        --ios-out="ios/Config/Prod/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
+    if ($script:API_BASE_URL -eq "https://api.omiapi.com/" -and $project -ne "based-hardware") {
+        Write-Host "ERROR: Firebase project '$project' cannot authenticate to $($script:API_BASE_URL)."
+        Write-Host "Community remote staging requires Firebase project 'based-hardware' (#9404)."
+        Write-Host "Tokens from '$project' are rejected with 401 by the live backend."
+        Write-Host ""
+        Write-Host "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
+        Write-Host "  based-hardware (do NOT text-replace project IDs — closed PR #5945)."
+        Write-Host ""
+        Write-Host "Isolated local backend / emulator workaround (honors API_BASE_URL override):"
+        Write-Host "  `$env:API_BASE_URL='http://127.0.0.1:8000/'; then re-run setup.ps1"
+        exit 1
+    }
 }
 
 function SetupProvisioningProfile {
@@ -104,9 +142,8 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
-    $API_BASE_URL = "https://api.omiapi.com/"
     # Using Set-Content with UTF8 encoding
-    $content = "API_BASE_URL=$API_BASE_URL"
+    $content = "API_BASE_URL=$($script:API_BASE_URL)"
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
 }
 

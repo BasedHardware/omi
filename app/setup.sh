@@ -49,7 +49,9 @@ echo "- bash setup.sh android"
 echo ""
 
 
-API_BASE_URL=https://api.omiapi.com/
+# Honor caller override so local-backend setup actually writes that URL to .dev.env
+# (#9404 review). Default remains community remote staging.
+API_BASE_URL="${API_BASE_URL:-https://api.omiapi.com/}"
 
 ######################################
 # Generate device suffix from hostname
@@ -87,36 +89,77 @@ function setup_firebase() {
   cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services.json android/app/src/prod/
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
+
+  validate_firebase_api_alignment
 }
 
-##########################################
-# Setup Firebase with Service Account Json
-##########################################
-function setup_firebase_with_service_account() {
-  dart pub global activate flutterfire_cli
-  flutterfire config \
-    --platforms="android,ios,web" \
-    --out=lib/firebase_options_dev.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/dev/  \
-    --ios-out=ios/Config/Dev/ \
-    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
-    --ios-target="Runner" \
-    --yes
+##############################################################################
+# Fail closed when community remote-staging API cannot verify Firebase tokens
+# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
+# Compares every prebuilt artifact the app copies (json + dart + plist).
+##############################################################################
+function _firebase_project_id_from_prebuilt() {
+  local file="$1"
+  case "${file}" in
+    *.json)
+      grep -oE '"project_id"[[:space:]]*:[[:space:]]*"[^"]+"' "${file}" \
+        | head -1 \
+        | sed -E 's/.*"([^"]+)"[[:space:]]*$/\1/'
+      ;;
+    *.plist)
+      # PROJECT_ID key followed by <string>...</string>
+      tr '\n' ' ' <"${file}" \
+        | grep -oE '<key>PROJECT_ID</key>[[:space:]]*<string>[^<]+</string>' \
+        | head -1 \
+        | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/'
+      ;;
+    *.dart)
+      # Require a single projectId across platforms in firebase_options.dart
+      local ids
+      ids="$(grep -oE "projectId:[[:space:]]*'[^']+'" "${file}" | sed -E "s/.*'([^']+)'.*/\1/" | sort -u)"
+      if [[ "$(echo "${ids}" | grep -c .)" -eq 1 ]]; then
+        echo "${ids}"
+      fi
+      ;;
+  esac
+}
 
-  flutterfire config \
-    --platforms="android,ios,web" \
-    --out=lib/firebase_options_prod.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/prod/ \
-    --ios-out=ios/Config/Prod/ \
-    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
-    --ios-target="Runner" \
-    --yes
+function validate_firebase_api_alignment() {
+  local json_proj dart_proj plist_proj project
+  json_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/google-services.json)"
+  dart_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/firebase_options.dart)"
+  plist_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/GoogleService-Info.plist)"
+
+  if [[ -z "${json_proj}" || -z "${dart_proj}" || -z "${plist_proj}" ]]; then
+    echo "ERROR: could not parse Firebase project id from app/setup/prebuilt/* (#9404)."
+    echo "  google-services.json → '${json_proj}'"
+    echo "  firebase_options.dart → '${dart_proj}'"
+    echo "  GoogleService-Info.plist → '${plist_proj}'"
+    exit 1
+  fi
+  if [[ "${json_proj}" != "${dart_proj}" || "${json_proj}" != "${plist_proj}" ]]; then
+    echo "ERROR: prebuilt Firebase configs disagree on project id (#9404)."
+    echo "  google-services.json → '${json_proj}'"
+    echo "  firebase_options.dart → '${dart_proj}'"
+    echo "  GoogleService-Info.plist → '${plist_proj}'"
+    echo "Regenerate the full trio via FlutterFire (do NOT text-replace — #5945)."
+    exit 1
+  fi
+  project="${json_proj}"
+
+  if [[ "${API_BASE_URL}" == "https://api.omiapi.com/" && "${project}" != "based-hardware" ]]; then
+    echo "ERROR: Firebase project '${project}' cannot authenticate to ${API_BASE_URL}."
+    echo "Community remote staging requires Firebase project 'based-hardware' (#9404)."
+    echo "Tokens from '${project}' are rejected with 401 by the live backend."
+    echo ""
+    echo "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
+    echo "  based-hardware for com.friend.ios.dev / com.friend-app-with-wearable.ios12.development"
+    echo "  (do NOT text-replace project IDs — closed PR #5945)."
+    echo ""
+    echo "Isolated local backend / emulator workaround (honors API_BASE_URL override):"
+    echo "  API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios"
+    exit 1
+  fi
 }
 
 ######################################

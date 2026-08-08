@@ -1,0 +1,7 @@
+{
+  "issue": "https://github.com/BasedHardware/omi/issues/9404",
+  "note": "Shrink-only. Empty this list after FlutterFire regenerates app/setup/prebuilt/* against based-hardware. Never text-replace project IDs (#5945).",
+  "allowed_prebuilt_projects_while_api_is_remote_staging": [
+    "based-hardware-dev"
+  ]
+}

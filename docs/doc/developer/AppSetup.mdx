@@ -194,8 +194,29 @@ Manual setup gives you full control, allowing you to use your own backend.
   <Step title="Setup Firebase" icon="fire">
     Firebase is **mandatory** for the app to run.
 
+    Community mobile auth must match the backend that will verify ID tokens:
+
+    | Profile | `API_BASE_URL` | Firebase project |
+    | --- | --- | --- |
+    | Community remote staging | `https://api.omiapi.com/` | `based-hardware` |
+    | Isolated local / emulator | your local backend URL | emulator or your own / `based-hardware-dev` |
+
+    The live `api.omiapi.com` backend verifies Firebase tokens against **`based-hardware`**.
+    Signing into `based-hardware-dev` and then calling that API returns **401** after an apparently successful login ([#9404](https://github.com/BasedHardware/omi/issues/9404), follow-up to [#5939](https://github.com/BasedHardware/omi/issues/5939)).
+
     <Warning>
-    The repo ships **prebuilt Firebase configs** for both dev and prod. If you're using Omi's development backend (the common case), they're already in place after `setup.sh` — skip to the next step.
+    `setup.sh` / `setup.ps1` copy prebuilt configs from `app/setup/prebuilt/`, then **fail closed** if those configs are not `based-hardware` while the default API is `https://api.omiapi.com/`.
+
+    Until maintainers regenerate the prebuilt trio via FlutterFire against `based-hardware` (do **not** text-replace project IDs — see closed PR [#5945](https://github.com/BasedHardware/omi/pull/5945)), point setup at a local backend. `setup.sh` / `setup.ps1` honor an existing `API_BASE_URL` override and validate that `google-services.json`, `firebase_options.dart`, and `GoogleService-Info.plist` agree on one project id:
+
+    ```bash
+    API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios
+    ```
+
+    ```powershell
+    $env:API_BASE_URL='http://127.0.0.1:8000/'
+    # then re-run setup.ps1 from app/
+    ```
 
     **Never run `flutterfire configure`** against Omi's bundle IDs — it overwrites the prebuilt prod credentials in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, and `app/android/app/src/prod/`.
     </Warning>
@@ -257,10 +278,12 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     - Verify JDK version matches requirements (JDK 21)
     - Accept all Android licenses: `flutter doctor --android-licenses`
   </Accordion>
-  <Accordion title="Firebase auth not working" icon="fire">
+  <Accordion title="Firebase auth not working / 401 after sign-in" icon="fire">
+    - If `API_BASE_URL` is `https://api.omiapi.com/`, Firebase must be project **`based-hardware`**. Tokens from `based-hardware-dev` are rejected with 401 ([#9404](https://github.com/BasedHardware/omi/issues/9404)).
     - Enable Google/Apple sign-in in Firebase Console
     - Verify SHA1/SHA256 keys are added to Firebase
     - Check bundle IDs match your Firebase configuration
+    - For isolated local backends, point `API_BASE_URL` at your server before running setup (`API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios`) when using `based-hardware-dev` / emulator configs against a non-remote API
   </Accordion>
   <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
     **Error Message:**
