@@ -27,7 +27,9 @@ test("bootstrap chooses backend generation through one production factory", asyn
   // The bootstrap now builds the PLATFORM factory for every route. It extends the legacy
   // factory, so legacy domains are unchanged — which is exactly what lets Memories move
   // generation while Tasks/Conversations/Folders stay put (board ruling PR-1).
-  assert.match(main, /createPlatformProductionStoreFactory\(bridge, env, \{ legacyHttp: http, platformHttp: http \}, requestedGenerations\)/);
+  // The factory receives the ALREADY-RESOLVED selection, not the raw host input: the route
+  // is computed from that same selection, so resolving twice risks the two disagreeing.
+  assert.match(main, /createPlatformProductionStoreFactory\(bridge, env, \{ legacyHttp: http, platformHttp: http \}, generationSelection\)/);
   assert.doesNotMatch(main, /(?:Memories|Conversations|Folders|Tasks)Store\.open/);
 
   // Selection comes from the HOST, never from a bare user-typed URL alone, and a
@@ -38,6 +40,8 @@ test("bootstrap chooses backend generation through one production factory", asyn
 
   // The platform read model is reachable ONLY on the memories route. Rendering it for any
   // selected generation would hijack Home/Tasks/Conversations with a Memories screen.
+  // Routing itself — including the default that makes a bare `generation=platform` land
+  // here at all — is covered behaviorally in production-routing.test.mjs.
   assert.match(main, /route === "memories" && platform\.selection\.memories === "platform"/);
   // red-proof: dropping the `route === "memories"` conjunct makes `?generation=platform`
   // render propositions on every route, including Tasks. Dropping the REJECTED log lets a
