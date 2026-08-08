@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import copy
+import hashlib
 import json
 import os
 import re
@@ -38,7 +39,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
 
 class Runtime:
     def __init__(self) -> None:
-        self.db_path = Path(os.environ.get("DB_PATH", str(Path.home() / "omi-agent/data/omi.db")))
+        self.db_path = Path(os.environ.get("DB_PATH", "/root/omi-agent/data/omi.db"))
+        self.workspace_path = Path(os.environ.get("AGENT_VM_WORKSPACE", "/root/omi-agent/workspace"))
+        self.state_receipt_path = Path(os.environ.get("STATE_RECEIPT_PATH", "/root/omi-agent/state-receipt.json"))
         self.auth_token = os.environ.get("AUTH_TOKEN", "")
         self.backend_url = os.environ.get("BACKEND_URL", "https://api.omi.me")
         self.db: sqlite3.Connection | None = None
@@ -49,18 +52,64 @@ class Runtime:
         self.release_id = os.environ.get("AGENT_VM_RELEASE_ID", "")
         self.image_digest = os.environ.get("AGENT_VM_IMAGE_DIGEST", "")
         self.startup_sha256 = os.environ.get("AGENT_VM_STARTUP_SHA256", "")
+        self.state_ready = False
+        self.state_migration_id = ""
+        self.state_receipt_sha256 = ""
+        self.state_database_expected = False
         self.lock = threading.RLock()
+        self.upload_lock = asyncio.Lock()
+
+    def load_state_receipt(self) -> None:
+        self.state_ready = False
+        self.state_migration_id = ""
+        self.state_receipt_sha256 = ""
+        self.state_database_expected = False
+        try:
+            receipt_bytes = self.state_receipt_path.read_bytes()
+            receipt = json.loads(receipt_bytes)
+            if not isinstance(receipt, dict):
+                return
+            tree = receipt.get("tree")
+            db = receipt.get("db")
+            migration_id = receipt.get("migrationId")
+            if (
+                receipt.get("schemaVersion") != 1
+                or not isinstance(migration_id, str)
+                or not migration_id
+                or not isinstance(tree, dict)
+                or not isinstance(tree.get("digest"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", tree.get("digest", "")) is None
+                or not isinstance(tree.get("count"), int)
+                or isinstance(tree.get("count"), bool)
+                or tree.get("count") < 0
+                or not isinstance(tree.get("bytes"), int)
+                or isinstance(tree.get("bytes"), bool)
+                or tree.get("bytes") < 0
+                or not isinstance(db, dict)
+                or db.get("integrity") not in {"ok", "not_present"}
+            ):
+                return
+        except (OSError, TypeError, ValueError):
+            return
+        self.state_ready = True
+        self.state_migration_id = migration_id
+        self.state_receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest()
+        self.state_database_expected = db.get("integrity") == "ok"
 
     def open_database(self) -> bool:
-        self.close_database()
+        if self.db is not None:
+            self.close_database()
         if not self.db_path.is_file():
             return False
+        connection: sqlite3.Connection | None = None
         try:
             connection = sqlite3.connect(self.db_path, check_same_thread=False)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("SELECT 1")
         except sqlite3.Error:
+            if connection is not None:
+                connection.close()
             return False
         self.db = connection
         return True
@@ -86,8 +135,18 @@ runtime = Runtime()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     runtime.db_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime.workspace_path.mkdir(parents=True, exist_ok=True)
     runtime.db_path.with_suffix(runtime.db_path.suffix + ".uploading").unlink(missing_ok=True)
-    runtime.open_database()
+    previous = runtime.db_path.with_suffix(runtime.db_path.suffix + ".previous")
+    if previous.is_file() and not runtime.db_path.exists():
+        previous.replace(runtime.db_path)
+    runtime.load_state_receipt()
+    if runtime.open_database():
+        previous.unlink(missing_ok=True)
+    elif previous.is_file():
+        runtime.db_path.unlink(missing_ok=True)
+        previous.replace(runtime.db_path)
+        runtime.open_database()
     idle_task = asyncio.create_task(runtime_maintenance(), name="agent-vm-maintenance")
     try:
         yield
@@ -193,8 +252,151 @@ def run_sync(table: str, rows: list[dict[str, Any]]) -> int:
     return applied
 
 
+def validate_database_integrity(path: Path) -> list[Any]:
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
+        return [row[0] for row in connection.execute("PRAGMA integrity_check")]
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def fsync_file(path: Path) -> None:
+    fd = os.open(str(path), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    fd = os.open(str(path), flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def fsync_database_files(path: Path) -> None:
+    fsync_file(path)
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(str(path) + suffix)
+        if sidecar.is_file():
+            fsync_file(sidecar)
+
+
+def remove_database_sidecars(path: Path) -> None:
+    removed = False
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(str(path) + suffix)
+        if sidecar.is_file():
+            sidecar.unlink()
+            removed = True
+    if removed:
+        fsync_directory(path.parent)
+
+
+def close_runtime_database() -> None:
+    connection = runtime.db
+    try:
+        runtime.close_database()
+    except Exception:
+        runtime.db = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+
+async def run_thread_operation(function: Any, *args: Any) -> Any:
+    """Run a blocking operation without abandoning it when the caller is cancelled."""
+    operation = asyncio.create_task(asyncio.to_thread(function, *args))
+    try:
+        return await asyncio.shield(operation)
+    except asyncio.CancelledError:
+        while not operation.done():
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                continue
+            except BaseException:
+                break
+        if operation.done():
+            try:
+                operation.result()
+            except BaseException:
+                pass
+        raise
+
+
+def restore_previous_database(
+    previous: Path,
+    prior_moved: bool,
+    uploaded_moved: bool,
+    was_open: bool,
+    previous_available: bool,
+) -> None:
+    close_runtime_database()
+    if uploaded_moved:
+        remove_database_sidecars(runtime.db_path)
+    if prior_moved or (uploaded_moved and previous_available):
+        if not previous.is_file():
+            raise RuntimeError("Previous database is missing")
+        fsync_file(previous)
+        previous.replace(runtime.db_path)
+        fsync_directory(runtime.db_path.parent)
+    elif uploaded_moved:
+        runtime.db_path.unlink(missing_ok=True)
+        fsync_directory(runtime.db_path.parent)
+    if was_open and runtime.db is None and runtime.db_path.is_file() and not runtime.open_database():
+        raise RuntimeError("Failed to reopen previous database")
+    if was_open and runtime.db is not None:
+        fsync_database_files(runtime.db_path)
+        fsync_directory(runtime.db_path.parent)
+
+
+def install_uploaded_database(temporary: Path) -> None:
+    with runtime.lock:
+        previous = runtime.db_path.with_suffix(runtime.db_path.suffix + ".previous")
+        was_open = runtime.db is not None
+        previous_available = previous.is_file()
+        prior_moved = False
+        uploaded_moved = False
+        try:
+            if runtime.db is not None:
+                runtime.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            runtime.close_database()
+            if runtime.db_path.is_file():
+                fsync_file(runtime.db_path)
+            remove_database_sidecars(runtime.db_path)
+            if runtime.db_path.is_file():
+                runtime.db_path.replace(previous)
+                prior_moved = True
+                fsync_directory(runtime.db_path.parent)
+            temporary.replace(runtime.db_path)
+            uploaded_moved = True
+            fsync_directory(runtime.db_path.parent)
+            if not runtime.open_database():
+                raise RuntimeError("Failed to open uploaded database")
+            fsync_database_files(runtime.db_path)
+            fsync_directory(runtime.db_path.parent)
+            previous.unlink(missing_ok=True)
+        except Exception:
+            try:
+                restore_previous_database(previous, prior_moved, uploaded_moved, was_open, previous_available)
+            except Exception as restore_exc:
+                raise RuntimeError("Failed to restore previous database") from restore_exc
+            raise
+
+
 async def upload_database(request: Request) -> tuple[int, int]:
-    content_length = int(request.headers.get("content-length", "0"))
+    try:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
     if content_length > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
     encoding = request.headers.get("content-encoding", "").lower()
@@ -227,23 +429,27 @@ async def upload_database(request: Request) -> tuple[int, int]:
                 data = decompressor.flush()
                 output.write(data)
                 final_size += len(data)
+            output.flush()
+        await run_thread_operation(fsync_file, temporary)
+        await run_thread_operation(fsync_directory, temporary.parent)
         if final_size > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
-        with runtime.lock:
-            runtime.close_database()
-            for suffix in ("-wal", "-shm"):
-                Path(str(runtime.db_path) + suffix).unlink(missing_ok=True)
-            temporary.replace(runtime.db_path)
-            if not runtime.open_database():
-                raise RuntimeError("Failed to open uploaded database")
+        try:
+            integrity = await run_thread_operation(validate_database_integrity, temporary)
+        except sqlite3.Error as exc:
+            raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
+        if integrity != ["ok"]:
+            raise HTTPException(status_code=400, detail="Uploaded database failed SQLite integrity check")
+
+        await run_thread_operation(install_uploaded_database, temporary)
         runtime.last_activity_at = time.monotonic()
         return received, final_size
     except HTTPException:
-        temporary.unlink(missing_ok=True)
         raise
     except (OSError, zlib.error) as exc:
-        temporary.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 async def fetch_backend_tools() -> list[dict[str, Any]]:
@@ -504,7 +710,7 @@ class AgentSession:
             allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
             mcp_servers=mcp_servers,
             permission_mode="bypassPermissions",
-            cwd=os.environ.get("HOME", "/"),
+            cwd=str(runtime.workspace_path),
         )
         self.client = ClaudeSDKClient(options=options)
         await self.client.connect()
@@ -606,6 +812,10 @@ async def health(request: Request) -> dict[str, Any]:
         "status": "ok",
         "uptime": round(time.monotonic() - runtime.started_at),
         "databaseReady": runtime.db is not None,
+        "stateReady": runtime.state_ready,
+        "stateMigrationId": runtime.state_migration_id,
+        "stateReceiptSha256": runtime.state_receipt_sha256,
+        "stateDatabaseExpected": runtime.state_database_expected,
         "release": runtime.release_id,
         "imageDigest": runtime.image_digest,
         "startupSha256": runtime.startup_sha256,
@@ -615,7 +825,8 @@ async def health(request: Request) -> dict[str, Any]:
 @app.post("/upload")
 async def upload(request: Request) -> dict[str, Any]:
     runtime.require_auth(request)
-    received, final_size = await upload_database(request)
+    async with runtime.upload_lock:
+        received, final_size = await upload_database(request)
     return {"status": "ok", "bytesReceived": received, "finalSize": final_size, "databaseReady": True}
 
 
