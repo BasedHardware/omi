@@ -94,7 +94,13 @@ CORE_REPO="$(cd "$HERE/.." && pwd)"
 WORKSPACE="$(cd "$CORE_REPO/.." && pwd)"
 PLATFORM_REPO="$WORKSPACE/platform"
 TRACKER="$WORKSPACE/omi-frontend-unification-and-microapps-project-tracker"
-MACOS_SHELL="$TRACKER/prototypes/macos-webview-shell"
+# The PROMOTED shell (FE-SHELLS, core/shells/). The tracker prototype is NOT
+# equivalent: its bridge counts requests at DISPATCH, so it reports a healthy
+# nonzero servedCount while every request fails and the backend serves nothing.
+# The promoted shell keys acceptance on succeededCount and emits a traffic
+# breakdown. Driving the prototype is what made my first servedReads claim
+# unreproducible. Override only if you know why.
+MACOS_SHELL="${OMI_MACOS_SHELL:-$CORE_REPO/core/shells/macos}"
 IOS_SHELL="$TRACKER/prototypes/flutter-webview"
 LEGACY_FAKE="$TRACKER/prototypes/qa-api-server/server.mjs"
 SURFACES="$CORE_REPO/core/packages/surfaces"
@@ -354,7 +360,10 @@ if [[ $WANT_MACOS -eq 1 ]]; then
     # The app's memories surface reads the NEW backend over GET /v1/memories.
     export OMI_API_BASE_URL="$BACKEND_URL"
     export OMI_API_TOKEN="omi-integration-qa-key-v1"
-    export OMI_SURFACE_QUERY="generation=platform"
+    # BOTH are required. `generation=platform` alone leaves route=home, which takes
+    # the legacy branch and dispatches legacy calls at the platform backend - they
+    # fail, and a dispatch-counting shell calls that a PASS.
+    export OMI_SURFACE_QUERY="route=memories&generation=platform"
     say "generation=platform — memories will read the NEW backend at $BACKEND_URL"
   else
     export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
@@ -379,15 +388,24 @@ if [[ $WANT_MACOS -eq 1 ]]; then
   # only when it is nonzero: probes prove nothing, and a stalled bridge is
   # indistinguishable from offline. We propagate the CHILD's exit status —
   # waiting only for HTTP readiness would report success while this failed.
-  say "${B}macOS bridge acceptance${Z} — headless run, asserts nonzero served traffic"
+  ACCEPT_PORT=$((SHELL_PORT + 3))
+  say "${B}macOS bridge acceptance${Z} — headless run on $ACCEPT_PORT, asserts nonzero served traffic"
   ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
       OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
-      OMI_SURFACE_PORT="$((SHELL_PORT + 3))" OMI_ACCEPTANCE_EXIT=1 TZ=UTC \
+      OMI_SURFACE_PORT="$ACCEPT_PORT" OMI_ACCEPTANCE_EXIT=1 TZ=UTC \
       ./scripts/run-shell.sh ) > "$LOGDIR/macos-acceptance.log" 2>&1
   accept_status=$?
   accept_line="$(grep -o 'ACCEPTANCE .*' "$MACOS_SHELL/.build/on-integration/omi-on-integration.run.log" 2>/dev/null | tail -1)"
   if [[ $accept_status -eq 0 && "$accept_line" == *"status=PASS"* ]]; then
-    ok "bridge acceptance PASSED — $accept_line"
+    ok "bridge acceptance reported PASS — $accept_line"
+    # NEVER trust this line on its own. A shell that counts dispatches reports
+    # PASS while the backend serves zero; that is exactly how a false green got
+    # published from this launcher. The backend's own counter is the arbiter,
+    # and it is cross-checked in the summary below.
+    if [[ "$accept_line" == *"httpError="* && "$accept_line" != *"httpError=0"* ]]; then
+      warn "…but the shell recorded HTTP errors — requests reached a backend that refused them:"
+      warn "   ${accept_line#*ACCEPTANCE }"
+    fi
   else
     warn "bridge acceptance FAILED (exit $accept_status) — ${accept_line:-no acceptance line emitted}"
     echo "    log: $LOGDIR/macos-acceptance.log"
