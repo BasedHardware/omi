@@ -108,6 +108,10 @@ LEGACY_PORT=4747
 BACKEND_URL="${OMI_BACKEND_URL:-http://127.0.0.1:$BACKEND_PORT}"
 
 SEED="${OMI_SEED:-7}"
+# Which backend generation the APP should use for memories.
+#   legacy   -> the old wire on 4747 (default; what every domain uses today)
+#   platform -> the NEW backend on 4851 over the settled /v1/memories route
+GENERATION="${OMI_GENERATION:-legacy}"
 WANT_BACKEND=1 WANT_SURFACES=1 WANT_MACOS=1 WANT_IOS=1
 export TZ=UTC
 
@@ -132,6 +136,7 @@ while [[ $# -gt 0 ]]; do
     --only-ios)     WANT_MACOS=0; shift ;;
     --no-ios)       WANT_IOS=0; shift ;;
     --seed) SEED="${2:?--seed needs a number}"; shift 2 ;;
+    --generation) GENERATION="${2:?--generation needs legacy|platform}"; shift 2 ;;
     *) die "unknown option: $1  (try --help)" ;;
   esac
 done
@@ -345,8 +350,17 @@ if [[ $WANT_MACOS -eq 1 ]]; then
   # surface truthfully renders "bridge unavailable" — the app looks broken and
   # serves zero requests. This is the legacy wire because that is what the
   # surfaces actually consume today; see the KNOWN GAP note at the top.
-  export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
-  export OMI_API_TOKEN="omi-qa-fake-token-v1"
+  if [[ "$GENERATION" == "platform" ]]; then
+    # The app's memories surface reads the NEW backend over GET /v1/memories.
+    export OMI_API_BASE_URL="$BACKEND_URL"
+    export OMI_API_TOKEN="omi-integration-qa-key-v1"
+    export OMI_SURFACE_QUERY="generation=platform"
+    say "generation=platform — memories will read the NEW backend at $BACKEND_URL"
+  else
+    export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
+    export OMI_API_TOKEN="omi-qa-fake-token-v1"
+    unset OMI_SURFACE_QUERY
+  fi
 
   say "${B}macOS app${Z} — building and launching on $SHELL_PORT (bundles the dist you just built)"
   ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
@@ -416,11 +430,16 @@ printf '  %-22s %s\n' "surfaces"     "http://127.0.0.1:$SURFACES_PORT/"
 [[ $WANT_IOS  -eq 1 ]] && printf '  %-22s %s\n' "iOS app" "simulator ${UDID:-none}"
 echo
 printf '  %s\n' "${B}served by the NEW backend:${Z} servedReads ${read_before} -> ${read_after}"
-if [[ "$read_after" == "0" ]]; then
-  printf '  %s\n' "${Y}Zero reads on the new backend. Expected right now: the surfaces have no${Z}"
-  printf '  %s\n' "${Y}client adapter for it yet (see the KNOWN GAP note at the top of this${Z}"
-  printf '  %s\n' "${Y}file). The apps are talking to the LEGACY wire. Do not read a working${Z}"
-  printf '  %s\n' "${Y}app as proof the new backend is wired in.${Z}"
+if [[ "$read_after" == "0" && "$GENERATION" == "platform" ]]; then
+  printf '  %s\n' "${R}FAIL: you asked for generation=platform and the new backend served ZERO${Z}"
+  printf '  %s\n' "${R}reads. The app is NOT on the new backend, whatever it looks like.${Z}"
+  printf '  %s\n' "${R}Check the log for OMI_GENERATION_REJECTED.${Z}"
+elif [[ "$read_after" == "0" ]]; then
+  printf '  %s\n' "${Y}Zero reads on the new backend - expected on the default legacy${Z}"
+  printf '  %s\n' "${Y}generation. Re-run with --generation platform to put memories on the${Z}"
+  printf '  %s\n' "${Y}new backend. Do not read a working app as proof the new stack is wired.${Z}"
+else
+  printf '  %s\n' "${G}The app read the NEW backend ${read_after} time(s) over GET /v1/memories.${Z}"
 fi
 echo
 printf '  %s\n' "poke it:   curl -s $BACKEND_URL/qa/stats"
