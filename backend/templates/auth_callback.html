@@ -66,7 +66,7 @@
         }
 
         .manual-link {
-            display: none;
+            display: inline-block;
             margin-top: 24px;
             padding: 12px 24px;
             background-color: #333;
@@ -88,9 +88,9 @@
         <p id="message">Redirecting you back to the app...</p>
         <div class="spinner" id="spinner"></div>
         <div class="error" id="error"></div>
-        <!-- Render a working native-app URL up front. Some mobile browsers block
-             automatic custom-scheme navigation or inline scripts, but still
-             honor a user-initiated link tap. -->
+        <!-- Keep the server-rendered native-app link visible: mobile browsers
+             can block script-driven custom-scheme navigation, but honor a
+             user-initiated link tap even without JavaScript. -->
         <a href="{{ redirect_url | default('#') }}" id="manualLink" class="manual-link">Open App Manually</a>
     </div>
 

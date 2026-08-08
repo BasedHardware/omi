@@ -538,8 +538,8 @@ class TestCallbackTemplateRendering:
         assert 'const redirectUrl = "omi-computer://auth/callback?code=test-auth-code\\u0026state=test-state"' in html
         assert 'window.location.assign(redirectUrl);' in html
 
-    def test_template_json_escapes_redirect_uri(self):
-        """Verify redirect_uri is JSON-escaped in the template (XSS prevention)."""
+    def test_template_escapes_hostile_redirect_url_in_html_and_javascript(self):
+        """The rendered native-link URL cannot break the HTML attribute or inline script."""
         pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
@@ -548,17 +548,32 @@ class TestCallbackTemplateRendering:
         env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
         template = env.get_template("auth_callback.html")
 
+        hostile_code = 'test</script><script>alert(1)'
+        hostile_state = 'state"&<script>alert(2)</script>'
+        hostile_redirect_url = f'omi://auth/callback?code={hostile_code}&state={hostile_state}'
+
         html = template.render(
-            code='test</script><script>alert(1)',
-            state='test-state',
-            redirect_uri='omi-computer://auth/callback',
-            redirect_url='omi-computer://auth/callback?code=test-auth-code',
+            code=hostile_code,
+            state=hostile_state,
+            redirect_uri='omi://auth/callback',
+            redirect_url=hostile_redirect_url,
         )
 
-        assert '</script><script>' not in html
+        assert '</script><script>alert(1)' not in html
+        assert (
+            'href="omi://auth/callback?code=test&lt;/script&gt;&lt;script&gt;alert(1)&amp;state=state&#34;&amp;&lt;script&gt;alert(2)&lt;/script&gt;"'
+            in html
+        )
+        redirect_url_line = next(
+            line.strip() for line in html.splitlines() if line.strip().startswith("const redirectUrl")
+        )
+        assert hostile_redirect_url not in redirect_url_line
+        assert "\\u003c" in redirect_url_line
+        assert "\\u0026" in redirect_url_line
+        assert chr(92) + '"' in redirect_url_line
 
-    def test_template_defaults_when_redirect_uri_missing(self):
-        """Verify template falls back to omi://auth/callback when redirect_uri not provided."""
+    def test_template_defaults_when_redirect_url_missing(self):
+        """Missing redirect_url leaves a safe inert href and empty JavaScript value."""
         pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
@@ -570,10 +585,10 @@ class TestCallbackTemplateRendering:
         html = template.render(
             code="test-code",
             state="test-state",
-            redirect_url="omi://auth/callback?code=test-code&state=test-state",
         )
 
-        assert 'omi://auth/callback' in html
+        assert 'href="#"' in html
+        assert 'const redirectUrl = "";' in html
 
     def test_template_manual_link_is_usable_without_javascript(self):
         """Native callback URL is present in HTML before script execution."""
@@ -593,6 +608,7 @@ class TestCallbackTemplateRendering:
         )
 
         assert 'href="omi://auth/callback?code=test-code&amp;state=test-state"' in html
+        assert '.manual-link {\n            display: inline-block;' in html
 
 
 def test_build_callback_redirect_url_preserves_query_and_fragment():
