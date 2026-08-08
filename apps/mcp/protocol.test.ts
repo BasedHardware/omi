@@ -7,6 +7,7 @@ import {
   SYNTHESIZED_MEMORY_READ_SCOPE,
   SYNTHESIZED_MEMORY_READ_TOOL,
   type McpCredential,
+  type McpHttpRequest,
   type McpProtocolPorts,
 } from "./protocol";
 
@@ -18,16 +19,23 @@ type Counters = {
   cursorIssue: number;
   readPage: number;
   validatePage: number;
+  reauthorizeBeforeEmission: number;
   order: string[];
+  rateInputs: Array<Record<string, unknown>>;
 };
 
 type FixtureOptions = {
   authenticated?: boolean;
   scopes?: readonly string[];
   authorize?: boolean;
-  rateAllowed?: boolean;
+  transportRateAllowed?: boolean;
+  readRateAllowed?: boolean;
+  reauthorize?: boolean;
   cursorFailure?: boolean;
-  validPage?: boolean;
+  validatedPage?: string | null;
+  uid?: string;
+  app_id?: string;
+  key_id?: string;
 };
 
 function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; counters: Counters } {
@@ -39,19 +47,27 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
     cursorIssue: 0,
     readPage: 0,
     validatePage: 0,
+    reauthorizeBeforeEmission: 0,
     order: [],
+    rateInputs: [],
   };
   const credential: McpCredential = {
+    kind: "mcp_api_key",
     scopes: options.scopes ?? [SYNTHESIZED_MEMORY_READ_SCOPE],
-    rateLimitIdentity: "credential-rate-identity",
+    rateLimitKey: {
+      prefix: "mcp",
+      uid: options.uid ?? "owner-1",
+      app_id: options.app_id ?? "app-1",
+      key_id: options.key_id ?? "key-1",
+    },
     cursorBindings: {
-      ownerAuthorizationDigest: "sha256:owner_digest_only",
-      appAuthorizationDigest: "sha256:app_digest_only",
-      keyAuthorizationDigest: "sha256:key_digest_only",
-      graphGenerationDigest: "sha256:graph_digest_only",
-      projectionGenerationDigest: "sha256:projection_digest_only",
-      filterDigest: "sha256:filter_digest_only",
-      readModeDigest: "sha256:read_mode_digest_only",
+      ownerAuthorizationDigest: "owner-digest",
+      appAuthorizationDigest: "app-digest",
+      keyAuthorizationDigest: "key-digest",
+      graphGenerationDigest: "graph-digest",
+      projectionGenerationDigest: "projection-digest",
+      filterDigest: "filter-digest",
+      readModeDigest: "mode-digest",
     },
     authentication: { internalOnly: true },
   };
@@ -66,9 +82,9 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
   return {
     counters,
     ports: {
-      async authenticate() {
+      async authenticate(input) {
         counters.authenticate += 1;
-        counters.order.push("authenticate");
+        counters.order.push(`authenticate:${input.requiredKind}`);
         return options.authenticated === false ? null : credential;
       },
       async authorize() {
@@ -78,8 +94,12 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
       },
       async rateLimit(input) {
         counters.rateLimit += 1;
-        counters.order.push(`rateLimit:${input.declaredPolicy}`);
-        return options.rateAllowed === false ? { allowed: false, retryAfterSeconds: 3 } : { allowed: true };
+        counters.rateInputs.push({ ...input });
+        counters.order.push(`rateLimit:${input.rate_policy}:${input.key_id}`);
+        const allowed = input.rate_policy === "mcp:sse"
+          ? options.transportRateAllowed !== false
+          : options.readRateAllowed !== false;
+        return allowed ? { allowed: true } : { allowed: false, retryAfterSeconds: 3 };
       },
       async readPage(input) {
         counters.readPage += 1;
@@ -92,7 +112,12 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
       validatePage(value) {
         counters.validatePage += 1;
         counters.order.push("validatePage");
-        return options.validPage !== false && value !== null && typeof value === "object";
+        return options.validatedPage === undefined ? JSON.stringify(value) : options.validatedPage;
+      },
+      async reauthorizeBeforeEmission() {
+        counters.reauthorizeBeforeEmission += 1;
+        counters.order.push("reauthorizeBeforeEmission");
+        return options.reauthorize !== false;
       },
       cursor: {
         parse(input) {
@@ -113,13 +138,50 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
   };
 }
 
-function callRequest(arguments_: Record<string, unknown> = {}): Record<string, unknown> {
+function meta(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    jsonrpc: "2.0",
-    id: "request-1",
-    method: "tools/call",
-    params: { name: SYNTHESIZED_MEMORY_READ_TOOL, arguments: arguments_ },
+    "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+    "io.modelcontextprotocol/clientCapabilities": {},
+    ...overrides,
   };
+}
+
+function post(
+  rpcMethod: string,
+  params: Record<string, unknown>,
+  options: { id?: string | number; headerName?: string | undefined; headers?: Record<string, string | undefined> } = {},
+): McpHttpRequest {
+  const headers: Record<string, string | undefined> = {
+    "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+    "Mcp-Method": rpcMethod,
+    Authorization: "api-key-test-only",
+    ...options.headers,
+  };
+  const name = options.headerName ?? (rpcMethod === "tools/call" ? params.name as string | undefined : undefined);
+  if (name !== undefined) {
+    headers["Mcp-Name"] = name;
+  }
+  return {
+    method: "POST",
+    headers,
+    body: { jsonrpc: "2.0", id: options.id ?? "request-1", method: rpcMethod, params },
+  };
+}
+
+function discoverRequest(options: Parameters<typeof post>[2] = {}): McpHttpRequest {
+  return post("server/discover", { _meta: meta() }, options);
+}
+
+function listRequest(options: Parameters<typeof post>[2] = {}): McpHttpRequest {
+  return post("tools/list", { _meta: meta() }, options);
+}
+
+function callRequest(
+  arguments_: Record<string, unknown> = {},
+  toolName = SYNTHESIZED_MEMORY_READ_TOOL,
+  options: Parameters<typeof post>[2] = {},
+): McpHttpRequest {
+  return post("tools/call", { name: toolName, arguments: arguments_, _meta: meta() }, options);
 }
 
 function rpcBody(response: { body?: unknown }): Record<string, unknown> {
@@ -131,153 +193,264 @@ function errorCode(response: { body?: unknown }): number {
   return ((rpcBody(response).error as Record<string, unknown>).code) as number;
 }
 
-describe("protocol-native synthesized MCP handler", () => {
-  test("A1 authenticates before body dispatch and rejects unauthenticated input", async () => {
-    const { ports, counters } = fixture({ authenticated: false });
-    const handler = createMcpProtocolHandler(ports);
-
-    const response = await handler.handleHttp({ body: callRequest() });
+describe("MCP 2026-07-28 synthesized read handler", () => {
+  test("A1 requires a single self-describing POST and API-key authentication before any grant/read work", async () => {
+    const unauthenticated = fixture({ authenticated: false });
+    const response = await createMcpProtocolHandler(unauthenticated.ports).handleHttp(callRequest());
 
     expect(response.status).toBe(401);
-    expect(counters).toMatchObject({ authenticate: 1, authorize: 0, rateLimit: 0, readPage: 0 });
+    expect(unauthenticated.counters).toMatchObject({ authenticate: 1, authorize: 0, rateLimit: 0, readPage: 0 });
+    expect(unauthenticated.counters.order).toEqual(["authenticate:mcp_api_key"]);
 
-    const malformedCredential = fixture();
-    malformedCredential.ports.authenticate = async () => ({ scopes: SYNTHESIZED_MEMORY_READ_SCOPE } as never);
-    const malformedResponse = await createMcpProtocolHandler(malformedCredential.ports).handleHttp({ body: callRequest() });
-    expect(malformedResponse.status).toBe(401);
-    expect(malformedCredential.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
+    const batch = fixture();
+    const batchResponse = await createMcpProtocolHandler(batch.ports).handleHttp({
+      method: "POST",
+      headers: {},
+      body: [callRequest().body],
+    });
+    expect(batchResponse.status).toBe(400);
+    expect(errorCode(batchResponse)).toBe(-32600);
+    expect(batch.counters.authenticate).toBe(0);
+
+    const wrongMethod = await createMcpProtocolHandler(fixture().ports).handleHttp({
+      ...callRequest(),
+      method: "GET",
+    });
+    expect(wrongMethod.status).toBe(405);
   });
 
-  test("A2 gives tools/list and tools/call the same scope and grant gate", async () => {
-    const missingScope = fixture({ scopes: [] });
-    const missingScopeHandler = createMcpProtocolHandler(missingScope.ports);
-
-    const list = await missingScopeHandler.handleHttp({
-      body: { jsonrpc: "2.0", id: "list-1", method: "tools/list" },
-    });
-    const call = await missingScopeHandler.handleHttp({ body: callRequest() });
-
-    expect(((rpcBody(list).result as Record<string, unknown>).tools as unknown[])).toEqual([]);
-    expect(errorCode(call)).toBe(-32003);
-    expect(missingScope.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
-
-    const missingGrant = fixture({ authorize: false });
-    const missingGrantHandler = createMcpProtocolHandler(missingGrant.ports);
-    const deniedList = await missingGrantHandler.handleHttp({
-      body: { jsonrpc: "2.0", id: "list-2", method: "tools/list" },
-    });
-    const deniedCall = await missingGrantHandler.handleHttp({ body: callRequest() });
-
-    expect(((rpcBody(deniedList).result as Record<string, unknown>).tools as unknown[])).toEqual([]);
-    expect(errorCode(deniedCall)).toBe(-32003);
-    expect(missingGrant.counters).toMatchObject({ authorize: 2, rateLimit: 0, readPage: 0 });
-
-    const malformedDecision = fixture();
-    malformedDecision.ports.authorize = async () => ({ allowed: "false" } as never);
-    const malformedDecisionHandler = createMcpProtocolHandler(malformedDecision.ports);
-    const malformedList = await malformedDecisionHandler.handleHttp({
-      body: { jsonrpc: "2.0", id: "list-3", method: "tools/list" },
-    });
-    const malformedCall = await malformedDecisionHandler.handleHttp({ body: callRequest() });
-    expect(((rpcBody(malformedList).result as Record<string, unknown>).tools as unknown[])).toEqual([]);
-    expect(errorCode(malformedCall)).toBe(-32003);
-  });
-
-  test("A4 applies the declared per-credential policy before any page read", async () => {
-    const { ports, counters } = fixture({ rateAllowed: false });
-    const handler = createMcpProtocolHandler(ports);
-
-    const response = await handler.handleHttp({ body: callRequest() });
-
-    expect(errorCode(response)).toBe(-32029);
-    expect(counters.readPage).toBe(0);
-    expect(counters.order).toEqual([
-      "authenticate",
-      "authorize",
-      `rateLimit:${SYNTHESIZED_MEMORY_READ_RATE_POLICY}`,
-    ]);
-  });
-
-  test("A5 accepts only the injected strict page projection and serializes no raw fields", async () => {
-    const accepted = fixture();
-    const acceptedHandler = createMcpProtocolHandler(accepted.ports);
-    const response = await acceptedHandler.handleHttp({ body: callRequest() });
-    const result = rpcBody(response).result as Record<string, unknown>;
-    const content = (result.content as Array<Record<string, unknown>>)[0];
-    const projection = JSON.parse(content.text as string) as Record<string, unknown>;
-
-    expect(projection.items).toBeDefined();
-    expect(JSON.stringify(response.body)).not.toContain("owner-id");
-    expect(JSON.stringify(response.body)).not.toContain("raw-row");
-    expect(accepted.counters.validatePage).toBe(1);
-
-    const rejected = fixture({ validPage: false });
-    rejected.ports.readPage = async () => ({
-      id: "legacy-row-id",
-      content: "raw-row",
-      owner: "owner-id",
-    });
-    const rejectedHandler = createMcpProtocolHandler(rejected.ports);
-    const rejectedResponse = await rejectedHandler.handleHttp({ body: callRequest() });
-
-    expect(errorCode(rejectedResponse)).toBe(-32603);
-    expect(JSON.stringify(rejectedResponse.body)).not.toContain("Synthesized result");
-    expect(JSON.stringify(rejectedResponse.body)).not.toContain("raw-row");
-    expect(JSON.stringify(rejectedResponse.body)).not.toContain("owner-id");
-  });
-
-  test("A7 handles initialize, Streamable HTTP notifications, protocol errors, and SSE deterministically", async () => {
+  test("A2 implements modern discovery and removes initialize/notification/SSE-era methods", async () => {
     const { ports, counters } = fixture();
     const handler = createMcpProtocolHandler(ports);
 
-    const initialized = await handler.handleHttp({
-      body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+    const discovery = await handler.handleHttp(discoverRequest());
+    const discovered = rpcBody(discovery).result as Record<string, unknown>;
+    expect(discovery.status).toBe(200);
+    expect(discovered).toMatchObject({
+      resultType: "complete",
+      supportedVersions: [MCP_PROTOCOL_VERSION],
+      ttlMs: 0,
+      cacheScope: "private",
     });
-    const initializedResult = rpcBody(initialized).result as Record<string, unknown>;
-    expect(initializedResult.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
 
-    const notification = await handler.handleHttp({
-      body: { jsonrpc: "2.0", method: "notifications/initialized" },
-    });
-    expect(notification.status).toBe(202);
-    expect(notification.body).toBeUndefined();
+    const initialize = await handler.handleHttp(post("initialize", { _meta: meta() }));
+    expect(initialize.status).toBe(404);
+    expect(errorCode(initialize)).toBe(-32601);
+    expect(counters).toMatchObject({ authorize: 0, rateLimit: 1, readPage: 0 });
+    expect(counters.rateInputs[0]).toMatchObject({ rate_policy: "mcp:sse", log_on_failure: true });
 
-    const unknown = await handler.handleHttp({
-      accept: "text/event-stream",
-      body: { jsonrpc: "2.0", id: "unknown", method: "not/a/method" },
+    const notification = await createMcpProtocolHandler(fixture().ports).handleHttp({
+      method: "POST",
+      headers: {
+        "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
+        "Mcp-Method": "notifications/initialized",
+      },
+      body: { jsonrpc: "2.0", method: "notifications/initialized", params: { _meta: meta() } },
     });
-    expect(unknown.status).toBe(200);
-    expect(unknown.headers["content-type"]).toBe("text/event-stream");
-    expect(unknown.body).toBe("event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"unknown\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n\n");
+    expect(notification.status).toBe(400);
+    expect(errorCode(notification)).toBe(-32600);
+
+    const sseAttempt = await createMcpProtocolHandler(fixture().ports).handleHttp(listRequest({
+      headers: { Accept: "text/event-stream" },
+    }));
+    expect(sseAttempt.headers["content-type"]).toBe("application/json");
+  });
+
+  test("A4 uses the exact declared per-key rate tuple before any read", async () => {
+    const { ports, counters } = fixture({ readRateAllowed: false });
+    const response = await createMcpProtocolHandler(ports).handleHttp(callRequest());
+
+    expect(errorCode(response)).toBe(-32029);
+    expect(counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    expect(counters.order).toEqual([
+      "authenticate:mcp_api_key",
+      "rateLimit:mcp:sse:key-1",
+      "authorize",
+      `rateLimit:${SYNTHESIZED_MEMORY_READ_RATE_POLICY}:key-1`,
+    ]);
+    expect(counters.rateInputs).toEqual([{
+      prefix: "mcp",
+      uid: "owner-1",
+      app_id: "app-1",
+      key_id: "key-1",
+      rate_policy: "mcp:sse",
+      log_on_failure: true,
+    }, {
+      prefix: "mcp",
+      uid: "owner-1",
+      app_id: "app-1",
+      key_id: "key-1",
+      scope: SYNTHESIZED_MEMORY_READ_SCOPE,
+      rate_policy: SYNTHESIZED_MEMORY_READ_RATE_POLICY,
+      log_on_failure: true,
+    }]);
+  });
+
+  test("A5 uses the transport ring for list/call and the read ring only before call data", async () => {
+    const denied = fixture({ readRateAllowed: false });
+    const handler = createMcpProtocolHandler(denied.ports);
+    const list = await handler.handleHttp(listRequest());
+    const call = await handler.handleHttp(callRequest());
+    const tools = (rpcBody(list).result as Record<string, unknown>).tools as Array<Record<string, unknown>>;
+
+    expect(tools).toHaveLength(1);
+    expect(errorCode(call)).toBe(-32029);
+    expect(denied.counters).toMatchObject({ authorize: 2, rateLimit: 3, readPage: 0 });
+    expect(denied.counters.rateInputs.map((input) => input.rate_policy)).toEqual([
+      "mcp:sse",
+      "mcp:sse",
+      "mcp:memories_read",
+    ]);
+
+    const noGrant = fixture({ authorize: false });
+    const noGrantHandler = createMcpProtocolHandler(noGrant.ports);
+    const noGrantList = await noGrantHandler.handleHttp(listRequest());
+    const noGrantCall = await noGrantHandler.handleHttp(callRequest());
+    expect(((rpcBody(noGrantList).result as Record<string, unknown>).tools as unknown[])).toEqual([]);
+    expect(errorCode(noGrantCall)).toBe(-32602);
+    expect(noGrant.counters).toMatchObject({ authorize: 2, rateLimit: 2, readPage: 0 });
+
+    const allowed = fixture();
+    const listed = await createMcpProtocolHandler(allowed.ports).handleHttp(listRequest());
+    const listedResult = rpcBody(listed).result as Record<string, unknown>;
+    const listedTool = (listedResult.tools as Array<Record<string, unknown>>)[0];
+    expect(listedResult).toMatchObject({ resultType: "complete", ttlMs: 0, cacheScope: "private" });
+    expect(Object.hasOwn(listedTool, "securitySchemes")).toBe(false);
+  });
+
+  test("A7 validates exact headers and request metadata, with protocol errors at HTTP 400", async () => {
+    const { ports, counters } = fixture();
+    const handler = createMcpProtocolHandler(ports);
+
+    const mismatchedName = await handler.handleHttp(callRequest({}, SYNTHESIZED_MEMORY_READ_TOOL, { headerName: "other" }));
+    expect(mismatchedName.status).toBe(400);
+    expect(errorCode(mismatchedName)).toBe(-32020);
+
+    const missingVersion = await handler.handleHttp(post("tools/list", { _meta: meta() }, {
+      headers: { "MCP-Protocol-Version": undefined },
+    }));
+    expect(missingVersion.status).toBe(400);
+    expect(errorCode(missingVersion)).toBe(-32020);
+
+    const namedDiscovery = await handler.handleHttp(discoverRequest({ headerName: "not-allowed" }));
+    expect(namedDiscovery.status).toBe(400);
+    expect(errorCode(namedDiscovery)).toBe(-32020);
+
+    const badMeta = await handler.handleHttp(post("tools/list", {
+      _meta: meta({ "io.modelcontextprotocol/clientCapabilities": { experimental: {} } }),
+    }));
+    expect(badMeta.status).toBe(400);
+    expect(errorCode(badMeta)).toBe(-32602);
+
+    const unsupported = await handler.handleHttp(post("tools/list", { _meta: meta() }, {
+      headers: { "MCP-Protocol-Version": "2025-11-25" },
+    }));
+    expect(unsupported.status).toBe(400);
+    expect(errorCode(unsupported)).toBe(-32022);
+
+    const unknown = await handler.handleHttp(post("prompts/list", { _meta: meta() }));
+    expect(unknown.status).toBe(404);
+    expect(errorCode(unknown)).toBe(-32601);
     expect(counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
   });
 
-  test("U1 rejects malformed or failed cursor validation before data access", async () => {
+  test("U1 rejects malformed cursors after the gate and before data access", async () => {
     const { ports, counters } = fixture({ cursorFailure: true });
-    const handler = createMcpProtocolHandler(ports);
+    const response = await createMcpProtocolHandler(ports).handleHttp(callRequest({ cursor: "bad-cursor" }));
 
-    const response = await handler.handleHttp({ body: callRequest({ cursor: "bad-cursor" }) });
-
+    expect(response.status).toBe(400);
     expect(errorCode(response)).toBe(-32602);
-    expect(counters).toMatchObject({ cursorParse: 1, readPage: 0, validatePage: 0 });
+    expect(counters).toMatchObject({ cursorParse: 1, readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
   });
 
-  test("U2 rejects a cross-binding cursor through its injected validator before data access", async () => {
-    const { ports, counters } = fixture();
-    const originalParse = ports.cursor.parse;
-    ports.cursor.parse = (input) => {
-      counters.cursorParse += 1;
-      counters.order.push(`cursorParse:${input.cursor}`);
-      if (input.cursor === "cross-binding") {
-        throw new Error("binding mismatch");
-      }
-      return originalParse(input);
+  test("U2 rejects unknown credential and cursor-binding fields before authorization", async () => {
+    const unknownCredential = fixture();
+    unknownCredential.ports.authenticate = async () => ({
+      kind: "mcp_api_key",
+      scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
+      rateLimitKey: { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "key-1", extra: "reject" },
+      cursorBindings: {
+        ownerAuthorizationDigest: "owner-digest",
+        appAuthorizationDigest: "app-digest",
+        keyAuthorizationDigest: "key-digest",
+        graphGenerationDigest: "graph-digest",
+        projectionGenerationDigest: "projection-digest",
+        filterDigest: "filter-digest",
+        readModeDigest: "mode-digest",
+      },
+      authentication: null,
+    } as never);
+    const credentialResponse = await createMcpProtocolHandler(unknownCredential.ports).handleHttp(callRequest());
+    expect(credentialResponse.status).toBe(401);
+    expect(unknownCredential.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
+
+    const unknownBindings = fixture();
+    unknownBindings.ports.authenticate = async () => ({
+      kind: "mcp_api_key",
+      scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
+      rateLimitKey: { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "key-1" },
+      cursorBindings: {
+        ownerAuthorizationDigest: "owner-digest",
+        appAuthorizationDigest: "app-digest",
+        keyAuthorizationDigest: "key-digest",
+        graphGenerationDigest: "graph-digest",
+        projectionGenerationDigest: "projection-digest",
+        filterDigest: "filter-digest",
+        readModeDigest: "mode-digest",
+        extra: "reject",
+      },
+      authentication: null,
+    } as never);
+    const bindingResponse = await createMcpProtocolHandler(unknownBindings.ports).handleHttp(callRequest());
+    expect(bindingResponse.status).toBe(401);
+    expect(unknownBindings.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
+  });
+
+  test("S3 leaves a hidden and unknown tool indistinguishable to an unscoped caller", async () => {
+    const hidden = fixture({ scopes: [] });
+    const unknown = fixture({ scopes: [] });
+    const hiddenResponse = await createMcpProtocolHandler(hidden.ports).handleHttp(callRequest({}, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }));
+    const unknownResponse = await createMcpProtocolHandler(unknown.ports).handleHttp(callRequest({}, "unknown_tool", { id: "same" }));
+
+    expect(rpcBody(hiddenResponse)).toEqual(rpcBody(unknownResponse));
+    expect(hidden.counters).toMatchObject({ authorize: 0, rateLimit: 1, readPage: 0 });
+    expect(unknown.counters).toMatchObject({ authorize: 0, rateLimit: 1, readPage: 0 });
+  });
+
+  test("S4 emits the immutable contract-parser snapshot and reauthorizes immediately before positive bytes", async () => {
+    const snapshot = fixture();
+    const mutablePage: Record<string, unknown> = { text: "before" };
+    snapshot.ports.readPage = async () => mutablePage;
+    snapshot.ports.validatePage = () => {
+      mutablePage.text = "raw-after-validation";
+      return "{\"text\":\"immutable-contract-snapshot\"}";
     };
-    const handler = createMcpProtocolHandler(ports);
+    const snapshotResponse = await createMcpProtocolHandler(snapshot.ports).handleHttp(callRequest());
+    const snapshotResult = rpcBody(snapshotResponse).result as Record<string, unknown>;
+    const snapshotContent = ((snapshotResult.content as Array<Record<string, unknown>>)[0].text) as string;
+    expect(snapshotResult.resultType).toBe("complete");
+    expect(snapshotContent).toBe("{\"text\":\"immutable-contract-snapshot\"}");
+    expect(JSON.stringify(snapshotResponse.body)).not.toContain("raw-after-validation");
+    expect(snapshot.counters.reauthorizeBeforeEmission).toBe(1);
 
-    const response = await handler.handleHttp({ body: callRequest({ cursor: "cross-binding" }) });
+    const revoked = fixture({ reauthorize: false });
+    const revokedResponse = await createMcpProtocolHandler(revoked.ports).handleHttp(callRequest());
+    expect(errorCode(revokedResponse)).toBe(-32003);
+    expect(JSON.stringify(revokedResponse.body)).not.toContain("Synthesized result");
+    expect(revoked.counters).toMatchObject({ readPage: 1, validatePage: 1, reauthorizeBeforeEmission: 1 });
+  });
 
-    expect(errorCode(response)).toBe(-32602);
-    expect(counters).toMatchObject({ readPage: 0, validatePage: 0 });
+  test("FEAT-AUTH-013 keeps otherwise identical API keys in separate rate buckets", async () => {
+    const first = fixture({ uid: "owner-1", app_id: "app-1", key_id: "key-a" });
+    const second = fixture({ uid: "owner-1", app_id: "app-1", key_id: "key-b" });
+
+    await createMcpProtocolHandler(first.ports).handleHttp(callRequest());
+    await createMcpProtocolHandler(second.ports).handleHttp(callRequest());
+
+    const firstRead = first.counters.rateInputs.find((input) => input.rate_policy === "mcp:memories_read");
+    const secondRead = second.counters.rateInputs.find((input) => input.rate_policy === "mcp:memories_read");
+    expect(firstRead).toMatchObject({ key_id: "key-a", rate_policy: "mcp:memories_read", log_on_failure: true });
+    expect(secondRead).toMatchObject({ key_id: "key-b", rate_policy: "mcp:memories_read", log_on_failure: true });
+    expect(firstRead).not.toEqual(secondRead);
   });
 });
