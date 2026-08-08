@@ -11,6 +11,7 @@ const inputs = [
   "src/pagination/cursor.ts",
   "src/projections/synthesized.ts",
   "src/recall/trace.ts",
+  "src/wire/json.ts",
   "fixtures/clean-consumer/consumer.ts",
   "fixtures/clean-consumer/conformance.mjs",
   "fixtures/clean-consumer/tsconfig.json",

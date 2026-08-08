@@ -4,9 +4,9 @@
     "name": "@omi-core/ratified-contracts",
     "version": "0.1.0"
   },
-  "provenanceSha256": "08d18b5f243d4bd668d942d7e5750957332ebd92bcecde92ac111b1c1ad042e6",
-  "sourceDigest": "110596711c4004be29c507bbb32be6b893466c17109fe153f5f1acf5fba47873",
-  "tarballSha256": "2985ef36657a4433f8aeb28c27cdea9ce02a2b6462584227713646969728d2ec",
+  "provenanceSha256": "2552b9a0691ec94e7ada3db8f77dc1a6bba893f6896398050fec754ddd27a795",
+  "sourceDigest": "3ed654f28585d7d44c4cf289e4725021b8fd7998821b056a847d3b9c54917046",
+  "tarballSha256": "e163d41e35a52189d43b017628b2bdd162b8f14f7976147c688f325045009e9f",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",
@@ -16,6 +16,8 @@
     "package/dist/projections/synthesized.js",
     "package/dist/recall/trace.d.ts",
     "package/dist/recall/trace.js",
+    "package/dist/wire/json.d.ts",
+    "package/dist/wire/json.js",
     "package/fixtures/manifest.json",
     "package/fixtures/page-conformance.json",
     "package/fixtures/read-page-windows.json",

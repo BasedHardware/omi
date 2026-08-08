@@ -7,12 +7,12 @@
         "id": "retrieval-node-v1:fixture",
         "text": "Synthesized result",
         "citations": ["citation-v1:fixture"],
-        "provenance": {"synthesisVersion": "v1", "inputDigest": "sha256:input", "outputDigest": "sha256:output"}
+        "provenance": {"synthesisVersion": "v1", "inputDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "outputDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
       }],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
       "completeness": {
         "version": "recall-completeness-v1", "status": "complete", "reasons": [],
-        "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}
+        "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}
       },
       "absence": null
     },
@@ -24,7 +24,7 @@
       "contractVersion": "1.0.0",
       "items": [{"id": "retrieval-node-v1:fixture", "text": "Synthesized result", "evidence": "raw"}],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
       "absence": null
     },
     "safe": false
@@ -35,7 +35,7 @@
       "contractVersion": "1.0.0",
       "items": [{"id": "retrieval-node-v1:fixture", "text": "Synthesized result", "content": "legacy"}],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
       "absence": null
     },
     "safe": false
@@ -46,7 +46,7 @@
       "contractVersion": "1.0.0",
       "items": [{"id": "", "text": ""}],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
       "absence": null
     },
     "safe": false
@@ -56,7 +56,7 @@
     "page": {
       "contractVersion": "1.0.0", "items": [],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": null, "missingStmFrontierReason": "no_eligible_stm"}, "raw": "unsafe"},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": null, "missingStmFrontierReason": "no_eligible_stm"}, "raw": "unsafe"},
       "absence": {"kind": "query_gap"}
     },
     "safe": false
@@ -70,7 +70,7 @@
         {"id": "retrieval-node-v1:duplicate", "text": "Second"}
       ],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
       "absence": null
     },
     "safe": false
@@ -81,7 +81,7 @@
       "contractVersion": "1.0.0",
       "items": [{"id": "retrieval-node-v1:fixture", "text": "Result", "citations": ["citation-v1:same", "citation-v1:same"]}],
       "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
-      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
       "absence": null
     },
     "safe": false
@@ -92,7 +92,7 @@
       "contractVersion": "1.0.0",
       "items": [],
       "window": {"status": "more", "complete": false, "hasMore": true, "nextCursor": "v1.signature.payload"},
-      "completeness": {"version": "recall-completeness-v1", "status": "incomplete", "reasons": ["accepted_work_pending"], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": null, "missingStmFrontierReason": "accepted_work_pending"}},
+      "completeness": {"version": "recall-completeness-v1", "status": "incomplete", "reasons": ["accepted_work_pending"], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null, "newestSearchedStmFrontier": null, "missingStmFrontierReason": "accepted_work_pending"}},
       "absence": {"kind": "query_gap"}
     },
     "safe": false

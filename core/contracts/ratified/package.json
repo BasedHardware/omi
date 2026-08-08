@@ -26,6 +26,8 @@
     "dist/projections/synthesized.d.ts",
     "dist/recall/trace.js",
     "dist/recall/trace.d.ts",
+    "dist/wire/json.js",
+    "dist/wire/json.d.ts",
     "fixtures/manifest.json",
     "fixtures/read-page-windows.json",
     "fixtures/recall-completeness.json",

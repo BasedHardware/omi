@@ -28,5 +28,10 @@
     "name": "incomplete continuation mismatch",
     "window": { "status": "incomplete", "complete": false, "hasMore": false, "nextCursor": "v1.signature.payload" },
     "honest": false
+  },
+  {
+    "name": "extra window key rejected",
+    "window": { "status": "complete", "complete": true, "hasMore": false, "nextCursor": null, "raw": "unsafe" },
+    "honest": false
   }
 ]

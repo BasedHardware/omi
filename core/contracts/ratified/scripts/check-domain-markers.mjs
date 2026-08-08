@@ -40,8 +40,13 @@ for (const marker of [
   "domain-pending(DIV-DOMCORE-008)",
   "domain-pending(DIV-DOMCORE-003)",
   "domain-pending(DIV-DOMCORE-005)",
+  "domain-pending(DIV-DOMCORE-006)",
 ]) {
   assert.ok(readme.includes(`// ${marker}`), `README.md lacks visible // ${marker}`);
 }
+
+const projection = readFileSync(resolve(root, "src/projections/synthesized.ts"), "utf8");
+assert.match(projection, /domain-pending\(DIV-DOMCORE-006\)[\s\S]{0,120}MissingStmFrontierReason/);
+assert.match(projection, /domain-pending\(DIV-DOMCORE-006\)[\s\S]{0,120}newestSearchedStmFrontier/);
 
 console.log(`domain markers OK: ${governedFiles.length} files`);

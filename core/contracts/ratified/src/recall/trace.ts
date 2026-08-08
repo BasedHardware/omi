@@ -1,9 +1,12 @@
+import { isPlainJsonDataGraph, parseCanonicalJson } from "../wire/json.js";
+
 declare const RecallTraceRefBrand: unique symbol;
 
 /** Content-free opaque handle used only to correlate recall pipeline decisions. */
 export type RecallTraceRef = string & { readonly [RecallTraceRefBrand]: true };
 
 const TRACE_REF_PATTERN = /^[\x21-\x7e]{1,1024}$/;
+export const MAX_RECALL_TRACE_JSON_CODE_UNITS = 500_000;
 
 export function parseRecallTraceRef(raw: string): RecallTraceRef | null {
   return TRACE_REF_PATTERN.test(raw) ? (raw as RecallTraceRef) : null;
@@ -63,7 +66,9 @@ export type RecallTraceV1 = RecallTraceBase & (
   | { outcome: "degraded"; projectionFreshness: Exclude<ProjectionFreshness, "fresh">; stages: RecallTraceStages & { grounded: readonly [] } }
 );
 
-export function hasSafeRecallTrace(value: unknown): value is RecallTraceV1 {
+/** Strict predicate for already-parsed trusted JSON. It is not a hostile-object boundary. */
+export function isTrustedRecallTraceData(value: unknown): value is RecallTraceV1 {
+  if (!isPlainJsonDataGraph(value)) return false;
   if (!hasExactKeys(value, ["version", "traceRef", "strategyVersion", "projectionFreshness", "outcome", "latencyMs", "tokenCounts", "stages"])) return false;
   const trace = value as {
     version: unknown; traceRef: unknown; strategyVersion: unknown; projectionFreshness: unknown;
@@ -112,6 +117,11 @@ export function hasSafeRecallTrace(value: unknown): value is RecallTraceV1 {
     default:
       return false;
   }
+}
+
+/** Authoritative no-execution boundary for untrusted canonical JSON text. */
+export function parseRecallTraceJson(raw: string): RecallTraceV1 | null {
+  return parseCanonicalJson(raw, MAX_RECALL_TRACE_JSON_CODE_UNITS, isTrustedRecallTraceData);
 }
 
 const TRACE_STAGE_KEYS = ["eligible", "selected", "hydrated", "policyEligible", "cited", "grounded"] as const;

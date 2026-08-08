@@ -2,15 +2,19 @@ import { parseKeysetCursor } from "@omi-core/ratified-contracts/pagination/curso
 
 import {
   SYNTHESIZED_READ_CONTRACT_VERSION,
-  hasHonestPageWindow,
-  hasHonestRecallCompleteness,
+  isTrustedPageWindowHonest,
+  isTrustedRecallCompletenessHonest,
+  isTrustedSynthesizedPageData,
   parseCitationRef,
   parseRecallFrontier,
+  parseSha256Digest,
+  parseSynthesizedPageJson,
   parseSynthesizedItemId,
   parseSynthesizedText,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import {
-  hasSafeRecallTrace,
+  isTrustedRecallTraceData,
+  parseRecallTraceJson,
   parseRecallTraceRef,
 } from "@omi-core/ratified-contracts/recall/trace";
 import type { RecallTraceV1 } from "@omi-core/ratified-contracts/recall/trace";
@@ -25,8 +29,10 @@ const citation = parseCitationRef("citation-v1:bright-coral-harbor");
 const cursor = parseKeysetCursor("v1.signature.payload");
 const declaredFrontier = parseRecallFrontier("frontier-v1:declared");
 const includedFrontier = parseRecallFrontier("frontier-v1:included");
+const inputDigest = parseSha256Digest("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+const outputDigest = parseSha256Digest("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 const traceRef = parseRecallTraceRef("trace-v1:fixture");
-if (!id || !text || !citation || !cursor || !declaredFrontier || !includedFrontier || !traceRef) {
+if (!id || !text || !citation || !cursor || !declaredFrontier || !includedFrontier || !inputDigest || !outputDigest || !traceRef) {
   throw new Error("fixture boundary values must parse");
 }
 
@@ -38,8 +44,8 @@ const page: Read.Page = {
     citations: [citation],
     provenance: {
       synthesisVersion: "synthesis-v1",
-      inputDigest: "sha256:input-fixture",
-      outputDigest: "sha256:output-fixture",
+      inputDigest,
+      outputDigest,
     },
   }],
   window: { status: "more", complete: false, hasMore: true, nextCursor: cursor },
@@ -49,15 +55,20 @@ const page: Read.Page = {
     reasons: [],
     frontiers: {
       declaredFrontier,
-      newestIncludedStmFrontier: includedFrontier,
+      newestSearchedAcceptedFrontier: declaredFrontier,
+      missingAcceptedFrontierReason: null,
+      // domain-pending(DIV-DOMCORE-006)
+      newestSearchedStmFrontier: includedFrontier,
       missingStmFrontierReason: null,
     },
   },
   absence: null,
 };
 
-if (!hasHonestPageWindow(page.window)) throw new Error("valid page window rejected");
-if (!hasHonestRecallCompleteness(page)) throw new Error("valid completeness envelope rejected");
+if (!isTrustedPageWindowHonest(page.window)) throw new Error("valid page window rejected");
+if (!isTrustedRecallCompletenessHonest(page)) throw new Error("valid completeness envelope rejected");
+if (!isTrustedSynthesizedPageData(page)) throw new Error("valid trusted page rejected");
+if (!parseSynthesizedPageJson(JSON.stringify(page))) throw new Error("valid canonical page JSON rejected");
 
 const trace: RecallTraceV1 = {
   version: "recall-trace-v1",
@@ -72,7 +83,16 @@ const trace: RecallTraceV1 = {
     policyEligible: [traceRef], cited: [traceRef], grounded: [traceRef],
   },
 };
-if (!hasSafeRecallTrace(trace)) throw new Error("valid content-safe trace rejected");
+if (!isTrustedRecallTraceData(trace)) throw new Error("valid content-safe trace rejected");
+if (!parseRecallTraceJson(JSON.stringify(trace))) throw new Error("valid canonical trace JSON rejected");
+
+const invalidDigest: Read.Provenance = {
+  synthesisVersion: "synthesis-v1",
+  // @ts-expect-error provenance digests must come from the lowercase SHA-256 parser.
+  inputDigest: "arbitrary\nwire-value",
+  outputDigest,
+};
+void invalidDigest;
 
 // @ts-expect-error a complete page cannot advertise a continuation cursor.
 const invalidComplete: Read.Page = { ...page, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };

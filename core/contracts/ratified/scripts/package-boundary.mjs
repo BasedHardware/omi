@@ -18,6 +18,8 @@ const expectedManifestFiles = [
   "dist/projections/synthesized.d.ts",
   "dist/recall/trace.js",
   "dist/recall/trace.d.ts",
+  "dist/wire/json.js",
+  "dist/wire/json.d.ts",
   "fixtures/manifest.json",
   "fixtures/read-page-windows.json",
   "fixtures/recall-completeness.json",
@@ -35,6 +37,8 @@ const expectedTarFiles = [
   "package/dist/projections/synthesized.js",
   "package/dist/recall/trace.d.ts",
   "package/dist/recall/trace.js",
+  "package/dist/wire/json.d.ts",
+  "package/dist/wire/json.js",
   "package/fixtures/manifest.json",
   "package/fixtures/read-page-windows.json",
   "package/fixtures/recall-completeness.json",
@@ -58,7 +62,12 @@ if (/\bid:\s*RecordId\b/.test(declaration)) throw new Error("synthesized render 
 for (const forbiddenField of forbiddenProjectionFields) {
   if (new RegExp(`\\b${forbiddenField}\\??:`).test(declaration)) throw new Error(`forbidden legacy/presentational field escaped: ${forbiddenField}`);
 }
-for (const requiredField of ["id", "text", "citations", "provenance", "synthesisVersion", "inputDigest", "outputDigest"]) {
+for (const requiredField of [
+  "id", "text", "citations", "provenance", "synthesisVersion", "inputDigest", "outputDigest",
+  "declaredFrontier", "newestSearchedAcceptedFrontier", "missingAcceptedFrontierReason",
+  // domain-pending(DIV-DOMCORE-006)
+  "newestSearchedStmFrontier", "missingStmFrontierReason",
+]) {
   if (!new RegExp(`\\b${requiredField}\\??:`).test(declaration)) throw new Error(`frozen ready-item field missing: ${requiredField}`);
 }
 if (/\b(?:EmptyItem|FailedItem|ReadyItem)\b/.test(declaration)) throw new Error("non-ready item state escaped the projection");
