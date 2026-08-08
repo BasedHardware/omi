@@ -127,8 +127,16 @@ final class SpineCompositionTests: XCTestCase {
     // Its memories and its frames follow it immediately, indented.
     XCTAssertEqual(rows[conversationIndex + 1].kind, .memories)
     XCTAssertTrue(rows[conversationIndex + 1].isAttached)
+    XCTAssertFalse(
+      rows[conversationIndex + 1].showsSourceProvenance,
+      "the parent conversation already makes an attached memory's source clear")
     XCTAssertEqual(rows[conversationIndex + 2].kind, .screen)
     XCTAssertTrue(rows[conversationIndex + 2].isAttached)
+
+    let memoriesOnly = SpineComposer.filter(days, kind: .memories, query: "")
+    XCTAssertTrue(
+      memoriesOnly[0].rows.allSatisfy(\.showsSourceProvenance),
+      "soloed memories need their provenance after the parent conversation is filtered out")
   }
 
   func testAMemoryWhoseConversationIsNotLoadedStillAppears() {
@@ -165,11 +173,20 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(summary.taskCount, 1)
     XCTAssertEqual(days[0].rows[conversationIndex + 1].kind, .tasks)
     XCTAssertTrue(days[0].rows[conversationIndex + 1].isAttached)
-    XCTAssertTrue(days[0].rows.contains { $0.id == "task:manual" && !$0.isAttached })
+    XCTAssertFalse(
+      days[0].rows[conversationIndex + 1].showsSourceProvenance,
+      "the parent conversation already makes an attached task's source clear")
+    XCTAssertTrue(
+      days[0].rows.contains {
+        $0.id == "task:manual" && !$0.isAttached && $0.showsSourceProvenance
+      })
     XCTAssertEqual(days[0].taskCount, 2)
 
     let tasksOnly = SpineComposer.filter(days, kind: .tasks, query: "")
     XCTAssertTrue(tasksOnly[0].rows.allSatisfy { $0.kind == .tasks && !$0.isAttached })
+    XCTAssertTrue(
+      tasksOnly[0].rows.allSatisfy(\.showsSourceProvenance),
+      "soloed tasks need their provenance after the parent conversation is filtered out")
   }
 
   /// The attachment merge walks two newest-first runs at once. A frame newer than the newest

@@ -4,6 +4,11 @@ import XCTest
 
 @MainActor
 final class ConversationDetailAutomationStateTests: XCTestCase {
+  func testTranscriptUsesAnExclusivePaneInsteadOfCompressingTheSummaryToolbar() {
+    XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: false), .summary)
+    XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: true), .transcript)
+  }
+
   func testPendingOpenSurvivesUntilTheConversationsPageConsumesIt() {
     let state = ConversationDetailAutomationState()
 

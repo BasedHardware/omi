@@ -168,12 +168,14 @@ struct SpineRowView: View {
       SpineMemoriesRow(
         memories: memories,
         showsTimestamps: !row.isAttached && !showsIndent,
+        showsSourceProvenance: row.showsSourceProvenance,
         onOpenConversationSource: onOpenConversationSource
       )
     case .tasks(let tasks):
       SpineTasksRow(
         tasks: tasks,
         showsTimestamps: !row.isAttached && !showsIndent,
+        showsSourceProvenance: row.showsSourceProvenance,
         onToggle: onToggleTask,
         onOpenConversationSource: onOpenConversationSource
       )
@@ -264,6 +266,7 @@ struct SpineMemoriesRow: View {
   let memories: [SpineMemory]
   /// Set when the row is soloed and there is no conversation above it to own the minute.
   let showsTimestamps: Bool
+  let showsSourceProvenance: Bool
   let onOpenConversationSource: (String, [String]) -> Void
 
   var body: some View {
@@ -272,6 +275,7 @@ struct SpineMemoriesRow: View {
         SpineMemoryLine(
           memory: memory,
           showsTimestamp: showsTimestamps && memories.count > 1,
+          showsSourceProvenance: showsSourceProvenance,
           onOpenConversationSource: onOpenConversationSource
         )
       }
@@ -288,6 +292,7 @@ struct SpineMemoriesRow: View {
 private struct SpineMemoryLine: View {
   let memory: SpineMemory
   let showsTimestamp: Bool
+  let showsSourceProvenance: Bool
   let onOpenConversationSource: (String, [String]) -> Void
 
   private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
@@ -320,7 +325,7 @@ private struct SpineMemoryLine: View {
           Text(SpineFormat.time(memory.timestamp))
             .inkStyle(.statusLabel, color: Ink.secondary)
         }
-        if let conversationID = memory.conversationID {
+        if showsSourceProvenance, let conversationID = memory.conversationID {
           Button {
             onOpenConversationSource(conversationID, [])
           } label: {
@@ -343,10 +348,11 @@ private struct SpineMemoryLine: View {
 
 // MARK: - Tasks
 
-/// Tasks use the same quiet inline hierarchy as memories, with completion and provenance kept visible.
+/// Tasks use the same quiet inline hierarchy as memories, with provenance shown when they stand alone.
 struct SpineTasksRow: View {
   let tasks: [SpineTask]
   let showsTimestamps: Bool
+  let showsSourceProvenance: Bool
   let onToggle: (TaskActionItem) -> Void
   let onOpenConversationSource: (String, [String]) -> Void
 
@@ -369,7 +375,7 @@ struct SpineTasksRow: View {
               .inkStyle(.prose, color: task.task.completed ? Ink.secondary : Ink.primary)
               .strikethrough(task.task.completed, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
-            if let conversationID = task.conversationID {
+            if showsSourceProvenance, let conversationID = task.conversationID {
               Button {
                 let segmentIDs =
                   task.task.provenance?
@@ -385,7 +391,7 @@ struct SpineTasksRow: View {
               }
               .buttonStyle(.plain)
               .help("Open the source conversation and full transcript")
-            } else {
+            } else if showsSourceProvenance {
               Text(task.sourceLabel)
                 .inkStyle(.statusLabel, color: Ink.secondary)
             }

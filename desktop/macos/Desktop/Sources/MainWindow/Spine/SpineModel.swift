@@ -250,6 +250,11 @@ struct SpineRow: Identifiable, Equatable {
   let isAttached: Bool
   let content: Content
 
+  /// The parent conversation already supplies provenance for attached memories and tasks. Once a
+  /// row stands alone (including in a soloed filter), keep the source visible so it does not lose
+  /// that context.
+  var showsSourceProvenance: Bool { !isAttached }
+
   /// What a typed query is matched against.
   let searchText: String
 }
