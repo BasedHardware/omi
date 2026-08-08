@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -105,6 +106,8 @@ final class AccountCutoverControlManager: ObservableObject {
 
   private let gate = AccountCutoverGate()
   private let fetchControl: () async throws -> AccountCutoverControl
+  private var activationObserver: NSObjectProtocol?
+  private var lifecycleInstalled = false
 
   init(fetchControl: @escaping () async throws -> AccountCutoverControl = AccountCutoverControlManager.defaultFetch) {
     self.fetchControl = fetchControl
@@ -113,6 +116,22 @@ final class AccountCutoverControlManager: ObservableObject {
   var allowsOfflineQueueUpload: Bool { gate.shouldUploadOfflineQueues(control) }
   var quarantinesOfflineQueues: Bool { gate.shouldQuarantineOfflineQueues(control) }
   var blocksProductTraffic: Bool { decision != .allowProductTraffic }
+
+  /// Install activation refresh once; call from the signed-in home shell.
+  func installLifecycleObserversIfNeeded() {
+    guard !lifecycleInstalled else { return }
+    lifecycleInstalled = true
+    activationObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        await self?.refresh()
+      }
+    }
+    Task { await refresh() }
+  }
 
   func refresh() async {
     do {

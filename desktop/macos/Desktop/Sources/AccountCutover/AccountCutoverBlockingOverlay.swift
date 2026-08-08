@@ -8,6 +8,10 @@ struct AccountCutoverBlockingOverlay: View {
   let strandedNewData: Bool
   let onOpenDownload: (DesktopUpdatePolicyResponse) -> Void
 
+  static func host(onOpenDownload: @escaping (DesktopUpdatePolicyResponse) -> Void) -> some View {
+    AccountCutoverBlockingOverlayHost(onOpenDownload: onOpenDownload)
+  }
+
   var body: some View {
     switch decision {
     case .allowProductTraffic:
@@ -55,5 +59,18 @@ struct AccountCutoverBlockingOverlay: View {
       .zIndex(20)
     DesktopRequiredUpdatePrompt(policy: policy, onDownload: onDownload)
       .zIndex(21)
+  }
+}
+
+private struct AccountCutoverBlockingOverlayHost: View {
+  @ObservedObject private var manager = AccountCutoverControlManager.shared
+  let onOpenDownload: (DesktopUpdatePolicyResponse) -> Void
+
+  var body: some View {
+    AccountCutoverBlockingOverlay(
+      decision: manager.decision,
+      strandedNewData: manager.control.strandedNewData,
+      onOpenDownload: onOpenDownload
+    )
   }
 }

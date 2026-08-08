@@ -48,7 +48,6 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
-  @ObservedObject private var accountCutoverManager = AccountCutoverControlManager.shared
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
@@ -209,10 +208,8 @@ struct DesktopHomeView: View {
         }
         .onAppear {
           log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
-          // Refresh cutover before product traffic settles; overlay can block
-          // while initial load is still visible.
           updatePolicyManager.refresh(force: true)
-          Task { await AccountCutoverControlManager.shared.refresh() }
+          AccountCutoverControlManager.shared.installLifecycleObserversIfNeeded()
           // Check all permissions on launch
           appState.checkAllPermissions()
 
@@ -289,7 +286,6 @@ struct DesktopHomeView: View {
             Task { await appState.refreshConversations() }
           }
           updatePolicyManager.refresh()
-          Task { await AccountCutoverControlManager.shared.refresh() }
           // Reconcile persisted intent after returning from System Settings or
           // after a runtime service stopped while the app was inactive.
           restorePersistedCaptureServices(reason: "app active")
@@ -451,11 +447,7 @@ struct DesktopHomeView: View {
             )
             .zIndex(21)
           } else {
-            AccountCutoverBlockingOverlay(
-              decision: accountCutoverManager.decision,
-              strandedNewData: accountCutoverManager.control.strandedNewData,
-              onOpenDownload: { updatePolicyManager.openDownload($0) }
-            )
+            AccountCutoverBlockingOverlay.host(onOpenDownload: { updatePolicyManager.openDownload($0) })
           }
         }
       }
@@ -468,9 +460,6 @@ struct DesktopHomeView: View {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
-      if authState.isSignedIn {
-        Task { await AccountCutoverControlManager.shared.refresh() }
-      }
       // Register Geist/Geist Mono for the sign-in + conversational onboarding surfaces.
       // (Kept out of OmiApp to respect the product-file line-count ratchet.)
       OmiFontRegistration.registerAll()
