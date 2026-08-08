@@ -274,8 +274,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Publish the live delegate instance for callers that can't rely on
     // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
     AppDelegate.shared = self
+    if AuthStorageCanary.isRequested || UserNotificationCallbackBridge.isSignedSmokeRequested() { return }
     OmiFontRegistration.registerAll()
-    if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
     // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
