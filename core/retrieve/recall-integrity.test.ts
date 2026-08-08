@@ -84,6 +84,14 @@ describe("merged authorized recent recall", () => {
       candidate({ candidate_ref: "candidate:b", dedupe_ref: "g2", dedupe_rank: 1 }),
       candidate({ candidate_ref: "candidate:c", dedupe_ref: "g2", dedupe_rank: 2, supersedes_refs: ["candidate:d"] }),
     ])).toThrow("cyclic");
+    expect(() => mergeAuthorizedRecallCandidates([
+      candidate({ candidate_ref: "candidate:a", dedupe_ref: "same", dedupe_rank: 2, supersedes_refs: ["candidate:b"] }),
+      candidate({ candidate_ref: "candidate:b", dedupe_ref: "same", dedupe_rank: 1, supersedes_refs: ["candidate:a"] }),
+    ])).toThrow("cyclic");
+    expect(mergeAuthorizedRecallCandidates([
+      candidate({ candidate_ref: "candidate:successor", dedupe_ref: "same", dedupe_rank: 1, supersedes_refs: ["candidate:predecessor"] }),
+      candidate({ candidate_ref: "candidate:predecessor", dedupe_ref: "same", dedupe_rank: 2 }),
+    ]).map((item) => item.candidate_ref)).toEqual(["candidate:successor"]);
 
     let getterCalls = 0;
     const hostile = { ...candidate() } as Record<string, unknown>;

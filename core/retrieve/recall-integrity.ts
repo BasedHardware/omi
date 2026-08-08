@@ -146,6 +146,19 @@ export const mergeAuthorizedRecallCandidates = (input: unknown): readonly Author
   const refs = candidates.map((candidate) => candidate.candidate_ref);
   if (!uniqueStrings(refs)) return fail("recall candidates require unique references");
   const byRef = new Map(candidates.map((candidate) => [candidate.candidate_ref, candidate]));
+  const visitingRefs = new Set<string>();
+  const visitedRefs = new Set<string>();
+  const assertReferenceAcyclic = (candidateRef: string): void => {
+    if (visitingRefs.has(candidateRef)) return fail("recall candidate supersession is cyclic");
+    if (visitedRefs.has(candidateRef)) return;
+    visitingRefs.add(candidateRef);
+    for (const supersededRef of byRef.get(candidateRef)?.supersedes_refs ?? []) {
+      if (byRef.has(supersededRef)) assertReferenceAcyclic(supersededRef);
+    }
+    visitingRefs.delete(candidateRef);
+    visitedRefs.add(candidateRef);
+  };
+  for (const candidateRef of refs) assertReferenceAcyclic(candidateRef);
   const classByRef = new Map(candidates.map((candidate) => [candidate.candidate_ref, candidate.dedupe_ref]));
   const classEdges = new Map<string, Set<string>>();
   for (const candidate of candidates) {
@@ -168,9 +181,10 @@ export const mergeAuthorizedRecallCandidates = (input: unknown): readonly Author
   };
   for (const dedupeRef of classEdges.keys()) assertAcyclic(dedupeRef);
   const supersededClasses = new Set([...classEdges.values()].flatMap((edges) => [...edges]));
+  const supersededRefs = new Set(candidates.flatMap((candidate) => [...candidate.supersedes_refs]));
   const winners = new Map<string, AuthorizedRecallCandidate>();
   for (const candidate of candidates) {
-    if (supersededClasses.has(candidate.dedupe_ref)) continue;
+    if (supersededClasses.has(candidate.dedupe_ref) || supersededRefs.has(candidate.candidate_ref)) continue;
     const previous = winners.get(candidate.dedupe_ref);
     winners.set(candidate.dedupe_ref, previous ? preferredEquivalent(previous, candidate) : candidate);
   }
