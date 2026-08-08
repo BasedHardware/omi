@@ -16,6 +16,7 @@ from services.conversation_finalization import (
     get_listen_finalization_tasks_max_attempts_for_worker,
 )
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
+from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
@@ -128,6 +129,20 @@ async def run_listen_finalization_job(
                 logger.error('listen finalization final attempt failed job=%s error=invalid_job', job_id)
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        if await run_blocking(db_executor, should_skip_background_account_mutation, job['uid']):
+            # Prequeued finalization must not mutate migrating/new accounts.
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+            )
+            if not completed:
+                return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+            record_capture_finalization_terminal('stale', job.get('created_at'))
+            return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
         try:
             disposition = await finalize_persisted_conversation(

@@ -4,6 +4,47 @@ This package owns the compact/notch presentation, Push-to-Talk coordination, and
 the realtime voice transport. UI views render `FloatingControlBarState`; they do
 not own a second chat provider or make semantic routing decisions.
 
+## Push-to-talk entry points
+
+`PushToTalkManager` owns the one microphone and turn lifecycle. Every ingress
+enters that same state machine and none of them opens a second capture path or
+transcript writer: the global shortcut monitor, the automation bridge, and the
+composer mic button. `PushToTalkButtonTrigger` holds the click policy — which
+existing transition a click resolves to, given the authoritative reducer phase —
+and `PushToTalkMicButton` renders it for both the main-window composer and the
+floating ask bar. A click carries no hold, so it takes the hands-free lane the
+double-tap shortcut already drives: first click locks, next click finalizes.
+
+## The pill's glass
+
+`NotchGlassChrome.swift` owns every colour and surface value this package draws
+with, and it is the only file here that may. It is `InkGlass` with **two** values
+overridden — the appearance the material renders in, and the scrim painted over
+it — because the notch pill is **black glass in both themes** (`SBTheme.pillBackground`)
+while the rest of the app is pinned light. Everything else (the material, the
+corner, the edge alpha, the Reduce Transparency behaviour) is deferred to, not
+restated.
+
+- Ink inside the pill is `NotchGlass.primary` / `.secondary` / `.quiet` — the
+  white-on-black scale. `Ink.primary` is dynamic and resolves *dark* on the app's
+  pinned-light panels, so a run of it here is near-black type on near-black glass.
+- A surface that renders on **both** grounds (`PushToTalkMicButton`,
+  `VoiceWaveformBars`, shared with the main-window composer) uses `Ink.*` instead,
+  precisely because those tokens invert with the ground they land on.
+- `floatingBackground(cornerRadius:)` applies the panel. Apply it once per
+  **surface**, never per card: docked to the notch every card sits on
+  `unifiedFloatingSurface`'s black dock shape, but undocked a notification is a
+  bare sibling of the pill with no shared ground, so a card that does not paint
+  its own renders over the desktop. Grounding at the call site that knows the
+  presentation is what keeps a new card from being born invisible; grounding a
+  card as well stacks a second scrim.
+- **The panel is sized once to the maximum hover-menu extent and never animates
+  its frame** — every visible size change is a SwiftUI content morph. The window
+  keeps `hasShadow = false` and the glass draws no ambient shadow of its own,
+  because there is no clear margin inside the panel for one to fall into.
+
+Guards: `Tests/FloatingGlassChromeTests.swift`.
+
 ## Realtime hub
 
 `RealtimeHubController` is the single owner of mutable voice-session state and

@@ -3208,5 +3208,11 @@
     "pinAsBaseline": "Fixează ca referință",
     "unpinAsBaseline": "Anulează fixarea ca referință",
     "baselineMemory": "Memorie de referință",
-    "alwaysInContext": "Mereu în context"
+    "alwaysInContext": "Mereu în context",
+    "accountCutoverUpdateRequiredTitle": "Actualizare necesară",
+    "accountCutoverUpdateRequiredMessage": "Instalează cea mai recentă aplicație Omi pentru a continua după migrarea contului.",
+    "accountCutoverMigrationInProgressTitle": "Migrare în curs",
+    "accountCutoverMigrationInProgressMessage": "Contul tău este în curs de migrare. Funcțiile produsului sunt întrerupte până la finalizarea migrării.",
+    "accountCutoverMigrationRollbackMessage": "Contul tău este în mentenanță după un rollback al migrării. Unele date mai noi pot fi izolate.",
+    "accountCutoverOpenStore": "Deschide magazinul"
 }

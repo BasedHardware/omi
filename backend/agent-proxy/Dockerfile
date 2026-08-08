@@ -27,6 +27,7 @@ COPY backend/database/account_deletion_policy.py ./database/account_deletion_pol
 COPY backend/database/document_ids.py ./database/document_ids.py
 COPY backend/database/google_credentials.py ./database/google_credentials.py
 COPY backend/services/agent_vm_lifecycle.py ./services/agent_vm_lifecycle.py
+COPY backend/services/agent_vm_read.py ./services/agent_vm_read.py
 COPY backend/utils/__init__.py ./utils/__init__.py
 COPY backend/utils/executors.py ./utils/executors.py
 COPY backend/agent-proxy/resilience.py .

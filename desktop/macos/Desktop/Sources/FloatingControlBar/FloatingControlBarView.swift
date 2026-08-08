@@ -170,6 +170,7 @@ struct FloatingControlBarView: View {
 
           if let notification = state.currentNotification, !state.showingAIConversation {
             barNotification(notification)
+              .floatingBackground(cornerRadius: 18)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.bottom, OmiSpacing.sm)
               .transition(.move(edge: .top).combined(with: .opacity))
@@ -1205,7 +1206,6 @@ struct FloatingControlBarView: View {
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
     }
-    .floatingBackground(cornerRadius: 18)
   }
 
   private var controlBarView: some View {
