@@ -447,50 +447,12 @@ struct DesktopHomeView: View {
               onDownload: { updatePolicyManager.openDownload(policy) }
             )
             .zIndex(21)
-          } else if accountCutoverManager.decision == .forceUpgrade {
-            let cutoverUpgradePolicy = DesktopUpdatePolicyResponse(
-              id: "account-cutover-force-upgrade",
-              active: true,
-              severity: .required,
-              maximumBuildNumber: nil,
-              latestBuildNumber: nil,
-              title: "Update Required",
-              message: "Install the latest Omi desktop app to continue after account migration.",
-              ctaText: "Download latest",
-              downloadURL: DesktopUpdatePolicyResponse.stableManualDownloadURL.absoluteString,
-              canDismiss: false
+          } else {
+            AccountCutoverBlockingOverlay(
+              decision: accountCutoverManager.decision,
+              strandedNewData: accountCutoverManager.control.strandedNewData,
+              onOpenDownload: { updatePolicyManager.openDownload($0) }
             )
-            Color.black.opacity(0.62)
-              .ignoresSafeArea()
-              .zIndex(20)
-            DesktopRequiredUpdatePrompt(
-              policy: cutoverUpgradePolicy,
-              onDownload: { updatePolicyManager.openDownload(cutoverUpgradePolicy) }
-            )
-            .zIndex(21)
-          } else if accountCutoverManager.decision == .migrationMaintenance {
-            let maintenancePolicy = DesktopUpdatePolicyResponse(
-              id: "account-cutover-migration-maintenance",
-              active: true,
-              severity: .required,
-              maximumBuildNumber: nil,
-              latestBuildNumber: nil,
-              title: "Migration in Progress",
-              message: accountCutoverManager.control.strandedNewData
-                ? "Your account is in maintenance after a migration rollback. Some newer data may be stranded."
-                : "Your account is migrating. Product features are paused until migration finishes.",
-              ctaText: "OK",
-              downloadURL: DesktopUpdatePolicyResponse.stableManualDownloadURL.absoluteString,
-              canDismiss: false
-            )
-            Color.black.opacity(0.62)
-              .ignoresSafeArea()
-              .zIndex(20)
-            DesktopRequiredUpdatePrompt(
-              policy: maintenancePolicy,
-              onDownload: {}
-            )
-            .zIndex(21)
           }
         }
       }
