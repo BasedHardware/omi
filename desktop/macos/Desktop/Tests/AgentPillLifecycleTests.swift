@@ -1607,7 +1607,7 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
     XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
     XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatBubbleSource.contains(".frame(height: compact ? 34 : nil)"))
+    XCTAssertTrue(chatBubbleSource.contains("minimumHeight: compact ? 34 : nil"))
     XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
     XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
