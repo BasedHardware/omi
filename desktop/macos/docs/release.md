@@ -14,6 +14,8 @@ python3 .github/scripts/plan-desktop-release.py \
 
 The watcher reports only lifecycle transitions and never creates tags or builds, dispatches qualification, promotes channels, or changes release pointers.
 
+Before a tag is published, trusted-M1 readiness starts the exact source's offline stack. A service that exhausts its own health deadline is a failed startup even after it is removed from the polling set; the harness reports that service and endpoint, cleans only the current authenticated lease, and retries the full startup once. Both attempts must satisfy the unchanged offline health probe. This gate is intentionally separate from the signed-artifact rehearsal below, which cannot reproduce self-hosted Firebase/backend startup.
+
 ## Failed Codemagic build rehearsal
 
 A failed canonical Codemagic check triggers **Desktop Release Recovery Required**. Its job summary and retained JSON capsule bind the build ID, immutable tag, source SHA, failed step, sanitized diagnostics, and whether the step is locally reproducible. This is the just-in-time handoff for operators and agents; do not infer a fix from the generic Codemagic check title alone.

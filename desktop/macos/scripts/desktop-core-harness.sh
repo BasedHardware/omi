@@ -500,7 +500,7 @@ PY
 }
 
 ensure_dev_stack() {
-  local probe_json probe_status attempt
+  local probe_json probe_status attempt startup_attempt startup_attempt_limit dev_up_status
   set +e
   probe_json="$(probe_dev_stack)"
   probe_status=$?
@@ -521,25 +521,40 @@ ensure_dev_stack() {
 
   echo "desktop-core-harness: dev stack not healthy; starting with PROVIDER_MODE=offline"
   echo "$probe_json"
-  PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up
+  startup_attempt_limit=1
+  if [[ "$READINESS" -eq 1 && "$KEEP_STACK" -eq 0 ]]; then
+    startup_attempt_limit=2
+  fi
 
-  for attempt in $(seq 1 15); do
-    set +e
-    probe_json="$(probe_dev_stack)"
-    probe_status=$?
-    set -e
-    if [[ "$probe_status" -eq 0 ]]; then
-      DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
-      echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
-      return 0
-    fi
-    if [[ "$probe_status" -eq 2 ]]; then
-      echo "desktop-core-harness: dev stack provider_mode is not offline after dev-up" >&2
-      echo "$probe_json" >&2
-      exit 1
-    fi
-    if [[ "$attempt" -lt 15 ]]; then
+  for startup_attempt in $(seq 1 "$startup_attempt_limit"); do
+    dev_up_status=0
+    PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up || dev_up_status=$?
+
+    for attempt in $(seq 1 15); do
+      set +e
+      probe_json="$(probe_dev_stack)"
+      probe_status=$?
+      set -e
+      if [[ "$probe_status" -eq 0 ]]; then
+        DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
+        echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
+        return 0
+      fi
+      if [[ "$probe_status" -eq 2 ]]; then
+        echo "desktop-core-harness: dev stack provider_mode is not offline after dev-up" >&2
+        echo "$probe_json" >&2
+        exit 1
+      fi
+      if [[ "$dev_up_status" -ne 0 || "$attempt" -eq 15 ]]; then
+        break
+      fi
       sleep 2
+    done
+
+    if [[ "$startup_attempt" -lt "$startup_attempt_limit" ]]; then
+      echo "desktop-core-harness: offline stack startup failed; cleaning owned state and retrying once" >&2
+      echo "$probe_json" >&2
+      make -C "$REPO_ROOT" dev-down
     fi
   done
 
