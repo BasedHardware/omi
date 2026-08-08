@@ -24,7 +24,7 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from google.cloud.firestore import DELETE_FIELD, transactional
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status

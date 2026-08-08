@@ -26,7 +26,7 @@ from typing import Any, Mapping, Sequence
 import firebase_admin
 from google.cloud import storage
 from google.cloud.firestore import DELETE_FIELD
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from services.agent_vm_lifecycle import (
