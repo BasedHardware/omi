@@ -253,19 +253,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard acceptanceEnabled else { return true }
     guard !acceptanceEmitted else { return acceptancePassed }
     let served = httpHandler?.servedCount ?? 0
+    let succeeded = httpHandler?.succeededCount ?? 0
     // Surface-ready/snapshot are lifecycle hints, not proof that the async
     // refresh reached the host. Keep the probe alive until traffic arrives or
     // the bounded timeout below turns the absence into a real failure.
-    if served == 0 && phase != "ready-timeout" {
+    if succeeded == 0 && phase != "ready-timeout" {
       scheduleAcceptanceFallback()
       return true
     }
     acceptanceEmitted = true
     acceptanceFallbackScheduled = false
-    acceptancePassed = served > 0
+    // PASS KEYS ON SUCCESSES, NOT DISPATCHES. servedCount increments before the
+    // response arrives, so a shell whose every request 401s reports a healthy
+    // nonzero servedCount while the app renders an empty list. That was observed
+    // directly on this branch (servedCount=4, "0 loaded items", "No results")
+    // and it is the wave-9 false-green restated. A dispatched request that
+    // failed is not served traffic.
+    acceptancePassed = succeeded > 0
     let bridge = httpHandler == nil ? "disabled" : "enabled"
     let status = acceptancePassed ? "PASS" : "FAIL"
-    let line = "ACCEPTANCE phase=\(phase) bridge=\(bridge) servedCount=\(served) status=\(status)\n"
+    let traffic = httpHandler?.trafficSummary ?? "dispatched=0 succeeded=0"
+    let line =
+      "ACCEPTANCE phase=\(phase) bridge=\(bridge) \(traffic) servedCount=\(served) status=\(status)\n"
     FileHandle.standardError.write(Data(line.utf8))
     return acceptancePassed
   }
@@ -285,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func terminateForProbe() {
     // An acceptance-exit probe must not turn a still-in-flight refresh into an
     // immediate failure. The bounded fallback emits the terminal result.
-    if acceptanceEnabled && !acceptanceEmitted && (httpHandler?.servedCount ?? 0) == 0 {
+    if acceptanceEnabled && !acceptanceEmitted && (httpHandler?.succeededCount ?? 0) == 0 {
       scheduleAcceptanceFallback()
       return
     }
@@ -310,17 +319,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let contentRect = NSRect(x: 0, y: 0, width: 934, height: 671)
     let handlers = NativeHandlers()
-    // Privileged-HTTP custody lives here: the shell reads the API base URL and
-    // bearer token from its own environment and never hands either to JS.
-    // Dev-grade custody for this prototype (Keychain custody is owed) — but the
-    // SEAM is the ship shape: surface sends a relative path, shell owns the rest.
-    // No OMI_API_BASE_URL => no handler registered => the surface truthfully
-    // feature-detects "no bridge" and falls back to its DEV transport.
+    // Privileged-HTTP custody: SessionBootstrap resolves base URL + token via
+    // Keychain → optional scratch issuer → OMI_API_TOKEN env. Neither value is
+    // ever handed to JS. The SEAM is unchanged: surface sends a relative path,
+    // shell owns the rest. No resolvable base URL => no handler registered =>
+    // the surface truthfully feature-detects "no bridge" and falls back to DEV.
+    let session = SessionBootstrap.resolve(environment: env)
+    FileHandle.standardError.write(
+      Data(
+        "session-bootstrap: path=\(session.path.rawValue) store=\(session.storeLogDescription) token=\(session.tokenPresent ? "present" : "absent")\n"
+          .utf8))
     var httpHandler: BridgeHttpHandler?
-    if let raw = env["OMI_API_BASE_URL"], let base = URL(string: raw), base.scheme != nil, base.host != nil {
-      httpHandler = BridgeHttpHandler(baseURL: base, token: env["OMI_API_TOKEN"])
+    if let base = session.baseURL {
+      httpHandler = BridgeHttpHandler(baseURL: base, token: session.token)
       FileHandle.standardError.write(
-        Data("bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(env["OMI_API_TOKEN"]?.isEmpty == false ? "present" : "absent"))\n".utf8))
+        Data(
+          "bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(session.tokenPresent ? "present" : "absent"))\n"
+            .utf8))
     } else {
       FileHandle.standardError.write(
         Data("bridge-http: disabled (set OMI_API_BASE_URL to enable privileged HTTP)\n".utf8))
