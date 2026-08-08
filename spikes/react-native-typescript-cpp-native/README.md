@@ -312,9 +312,12 @@ This is an architecture comparison, not a claim that every framework was built i
 | **Crepuscularity** | Rust-owned DSL, GPUI desktop, web/extensions, and native View IR | Local repo proves GPUI, web, TUI, C ABI, SwiftUI/Compose View IR, and Tauri integration surfaces | Mobile View IR is not the same as a proven BLE/background relay; adopting it would be a new Rust/IR architecture | **Strong desktop/shared-UI comparison; do not call it mobile-proven** |
 | **Electrobun** | Very small TypeScript/Bun desktop apps | Excellent TS fit for desktop tooling and native desktop capabilities | Desktop-focused; does not solve iOS/Android mobile BLE/background lifecycle | **Desktop-only candidate** |
 | **Jetpack Compose Multiplatform** | Kotlin-native Android/iOS/desktop UI | Strong native mobile lifecycle and Android BLE ergonomics; C++ can bind through JNI/Objective-C++ | Kotlin becomes the app language and the TS-first goal is lost; iOS and desktop still need platform work | **Strong native mobile option, weak TS alignment** |
+| **Lynx / ReactLynx** | TypeScript/React-style cross-platform UI with Lynx native runtime and Lynx for Web | Promising TS-first mobile shell; native modules can own platform capabilities | Requires Lynx-specific runtime/module proof; does not automatically solve BLE background ownership or desktop parity | **TS mobile candidate; needs a real native-module spike** |
+| **Makepad** | Rust UI across native desktop/mobile and WASM | Broad target ambition and native Rust core; C++ would need an explicit FFI seam | Active development, nightly/cargo-makepad toolchain, Rust-first rather than TypeScript-first | **Rust breadth candidate; not TS-aligned** |
+| **Swift native** | iOS/macOS product shell with direct Apple APIs | Best Apple BLE/background control and direct C++ interop | Swift is not an Android target here by request; separate Android shell would be required | **iOS/macOS control baseline only** |
 | **Web TS + Moonshine** | Browser voice/UI experiments | Useful for web rendering/ASR boundary tests | No reliable mobile BLE/background relay or native device ownership | **Web/ASR-only comparison** |
 
-**Not included by request:** Lynx and Makepad.
+**Included by correction:** Lynx and Makepad. **Swift Android is intentionally skipped.**
 
 #### Recommendation from the expanded comparison
 
@@ -331,7 +334,10 @@ Evidence anchors for this comparison:
 - [Electrobun](https://electrobun.dev/) — Bun/TypeScript desktop candidate.
 - [Compose Multiplatform documentation](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform.html) — Kotlin native/mobile candidate.
 - [Valdi repository](https://github.com/Snapchat/Valdi) — TypeScript-to-native-view and polyglot-module claims; repository labels the project beta.
+- [Lynx stack repository](https://github.com/lynx-family/lynx-stack) — ReactLynx, Rspeedy, and Lynx for Web frontend stack.
+- [Makepad repository](https://github.com/makepad/makepad) — Rust native/web UI framework and `cargo-makepad` target tooling.
 - [Local Crepuscularity README](file:///Users/undivisible/projects/crepuscularity/README.md) — inspected local evidence for GPUI, Tauri integration, native View IR, C ABI, and mobile scaffolding.
+- [`framework-comparison/`](framework-comparison/) — runnable uniform contract probe and evidence-level manifest for every candidate.
 
 The next discriminating experiment is therefore one real mobile native adapter—not another UI framework benchmark:
 
