@@ -153,25 +153,25 @@ struct DesktopUpdateStatusChip: View {
           if kind.showsProgress {
             ProgressView()
               .controlSize(.small)
-              .tint(OmiColors.backgroundPrimary)
+              .tint(Ink.surface)
           } else {
             Image(systemName: "arrow.down.circle.fill")
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
           }
 
           Text(kind.compactTitle)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .lineLimit(1)
         }
         .padding(.horizontal, OmiSpacing.sm)
         .frame(height: 30)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-            .fill(OmiColors.accent)
+            .fill(Ink.primary)
         )
-        .shadow(color: OmiColors.accent.opacity(glowAnimating ? 0.55 : 0.25), radius: 6)
+        .shadow(color: Ink.primary.opacity(glowAnimating ? 0.55 : 0.25), radius: 6)
       }
       .buttonStyle(.plain)
       .help(kind.accessibilityLabel)
@@ -216,12 +216,12 @@ struct DesktopUpdateStatusBanner: View {
           if kind.showsProgress {
             ProgressView()
               .controlSize(.small)
-              .tint(OmiColors.backgroundPrimary)
+              .tint(Ink.surface)
               .frame(width: iconWidth)
           } else {
             Image(systemName: "arrow.down.circle.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
               .frame(width: iconWidth)
           }
 
@@ -229,14 +229,14 @@ struct DesktopUpdateStatusBanner: View {
             VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text(kind.title)
                 .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.backgroundPrimary)
+                .foregroundColor(Ink.surface)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
               if let detail = kind.detail {
                 Text(detail)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.backgroundPrimary.opacity(0.8))
+                  .foregroundColor(Ink.surface.opacity(0.8))
               }
             }
 
@@ -245,7 +245,7 @@ struct DesktopUpdateStatusBanner: View {
             if !kind.showsProgress {
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.backgroundPrimary.opacity(0.7))
+                .foregroundColor(Ink.surface.opacity(0.7))
             }
           }
         }
@@ -253,9 +253,9 @@ struct DesktopUpdateStatusBanner: View {
         .padding(.vertical, OmiSpacing.md)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-            .fill(OmiColors.accent)
+            .fill(Ink.primary)
         )
-        .shadow(color: OmiColors.accent.opacity(glowAnimating ? 0.7 : 0.3), radius: 8)
+        .shadow(color: Ink.primary.opacity(glowAnimating ? 0.7 : 0.3), radius: 8)
       }
       .buttonStyle(.plain)
       .help(isCollapsed ? kind.accessibilityLabel : "")

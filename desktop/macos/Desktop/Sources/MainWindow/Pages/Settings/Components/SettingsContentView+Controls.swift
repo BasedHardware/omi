@@ -634,24 +634,24 @@ extension SettingsContentView {
               } else {
                 Image(systemName: "arrow.down.circle.fill")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.accent)
+                  .foregroundColor(Ink.accent)
               }
 
               VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 Text(updateStatus.title)
                   .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                 if let detail = updateStatus.detail {
                   Text(detail)
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
               }
               Spacer(minLength: 0)
             }
             .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
             .cornerRadius(OmiChrome.elementRadius)
             .accessibilityIdentifier("settings-update-status")
             .accessibilityLabel(updateStatus.accessibilityLabel)
