@@ -2,7 +2,12 @@
 // Enforces the core/ isolation rules (core/README.md). Run in CI and pre-commit.
 //
 // Rule 1: nothing under core/ may import from the old trees (app/, desktop/, web/,
-//         backend/) — by relative path, tsconfig path alias, or package name.
+//         backend/) — by relative path, tsconfig path alias, or package name. The one
+//         declared exception is integration/lib/provenance.mjs: it is not old-tree code
+//         (it postdates core/ and ships alongside it, per REPO_SOURCE_ROOTS in that same
+//         file), and build-time provenance stamping needs it importable from inside a
+//         package's build config. Narrowly allowlisted below by exact path, not by
+//         loosening the traversal check generally.
 // Rule 3: fetch/axios/WebSocket against backend hosts may only appear inside an
 //         ADAPTER package (packages/adapters-legacy/, packages/adapters-platform/)
 //         or shells/ — the sync layer speaks contracts, not endpoints. The rule is
@@ -50,6 +55,7 @@ for (const file of walk(ROOT)) {
   for (const m of text.matchAll(IMPORT_RE)) {
     const spec = m[1];
     if (!spec.startsWith(".") && !spec.startsWith("/")) continue;
+    if (/(?:^|\/)integration\/lib\/provenance\.mjs$/.test(spec)) continue; // see Rule 1 note above
     const escapes = spec.startsWith("/")
       ? OLD_TREES.some((t) => spec.includes(`/${t}`))
       : OLD_TREES.some((t) => spec.includes(`../${t}`)) ||
