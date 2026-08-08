@@ -50,8 +50,19 @@ function baseRows(now: number): Task[] {
   const today = dayStart(now);
   return [
     task({ id: id("fixture-task-today"), description: "Review the first captured note", dueAt: today + 15 * 3_600_000, source: "user" }, now),
+    task({ id: id("fixture-task-design"), description: "Compare the desktop render with the approved reference", dueAt: today + 16 * 3_600_000 }, now),
+    task({ id: id("fixture-task-glass"), description: "Validate the native glass window on a light and dark desktop", dueAt: today + 17 * 3_600_000 }, now),
+    task({ id: id("fixture-task-copy"), description: "Tighten the empty and offline product copy", dueAt: today + 18 * 3_600_000 }, now),
+    task({ id: id("fixture-task-focus"), description: "Check keyboard focus across every task row", dueAt: today + 19 * 3_600_000 }, now),
+    task({ id: id("fixture-task-details"), description: "Review the conversation detail hierarchy", dueAt: today + 20 * 3_600_000 }, now),
+    task({ id: id("fixture-task-empty"), description: "Check empty, offline, and retry states", dueAt: today + 21 * 3_600_000 }, now),
+    task({ id: id("fixture-task-nav"), description: "Verify navigation and keyboard shortcuts", dueAt: today + 22 * 3_600_000 }, now),
+    task({ id: id("fixture-task-handoff"), description: "Prepare the desktop review handoff", dueAt: today + 23 * 3_600_000 }, now),
+    task({ id: id("fixture-task-finished"), description: "Build the deterministic UI fixture matrix", dueAt: today + 23.5 * 3_600_000, completed: true, completedAt: now - 1_800_000 }, now),
     task({ id: id("fixture-task-tomorrow"), description: "Send the short project update", dueAt: today + DAY_MS + 12 * 3_600_000, source: "assistant", provenance: ["assistant"] }, now),
+    task({ id: id("fixture-task-polish"), description: "Polish the conversation detail layout", dueAt: today + DAY_MS + 14 * 3_600_000 }, now),
     task({ id: id("fixture-task-later"), description: "Archive the completed checklist", dueAt: today + 3 * DAY_MS, completed: true, completedAt: now - 1_800_000, source: "" }, now),
+    task({ id: id("fixture-task-release"), description: "Prepare the review build handoff", dueAt: today + 4 * DAY_MS }, now),
     task({ id: id("fixture-task-unscheduled"), description: "Capture a due date when one is known", dueAt: null, source: "" }, now),
   ];
 }

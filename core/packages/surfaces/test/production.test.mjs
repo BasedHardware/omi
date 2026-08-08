@@ -109,11 +109,25 @@ test("production chrome preserves QA context while clearing fixture selection", 
   assert.match(source, /params\.get\("platform"\)|location\.search/);
   assert.match(source, /href\("tasks"\)/);
   assert.match(source, /active === "tasks" \? "page"/);
-  assert.match(source, /top && active !== "tasks"/);
+  assert.match(source, /export function ProductionLibrarySegment/);
   // red-proof: route links must not strand mobile/platform/profile QA on the
   // prior fixture, while profile remains available for the bridge shell. A
   // Tasks route must also identify itself in both navs without inheriting the
   // Library-only segmented rail.
+});
+
+test("desktop glass chrome keeps the reference hierarchy without changing mobile navigation", async () => {
+  const chrome = await read("src/production/ProductionChrome.tsx");
+  const styles = await read("src/production/styles.css");
+  assert.match(chrome, /nav-utilities/);
+  assert.match(chrome, /export function ProductionLibrarySegment/);
+  assert.match(styles, /grid-template-rows: var\(--desktop-nav-height\) var\(--desktop-panel-gap\) minmax\(0, 1fr\)/);
+  assert.match(styles, /data-native-glass="true"/);
+  assert.match(styles, /\.memory-card-header \{ order: 2;/);
+  assert.match(styles, /\.memory-content \{ order: 1;/);
+  assert.match(styles, /html\[data-platform="mobile"\] \.production-nav \.nav-mobile/);
+  // red-proof: restoring metadata above desktop memory copy, flattening the
+  // two glass islands, or dropping the mobile-specific navigation fails here.
 });
 
 test("memory cards keep locked and provenance behavior honest", async () => {

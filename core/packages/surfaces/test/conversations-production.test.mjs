@@ -20,6 +20,16 @@ test("conversation discovery uses only available title, overview, star, and fold
   // makes this fail; these fields are absent from the ratified list contract.
 });
 
+test("conversation parity labels fixture days without consulting the wall clock", async () => {
+  const source = await read("src/production/ConversationsProduction.tsx");
+  assert.match(source, /CONVERSATION_FIXED_NOW/);
+  assert.match(source, /deterministic && new Date\(value\)/);
+  assert.match(source, /return t\(locale, "tasks\.today"\)/);
+  assert.doesNotMatch(source, /Date\.now\(\)/);
+  // red-proof: replacing CONVERSATION_FIXED_NOW with Date.now() makes the
+  // Today group drift across screenshot runs and fails this guard.
+});
+
 test("conversation rows keep a compact, accessible reference shape", async () => {
   const source = await read("src/production/ConversationsProduction.tsx");
   const styles = await read("src/production/conversations.css");

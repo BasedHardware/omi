@@ -156,8 +156,10 @@ if (existsSync(productionRoot)) {
       name === "aria-hidden" || name === "aria-disabled" || name === "aria-live" ||
       name === "name" || name === "type" || name === "value" || name === "href" ||
       name === "src" || name === "style" || name === "key" || name === "active" || name === "placement" ||
-      name === "aria-labelledby" || name === "d" || name === "viewBox" || name === "focusable" || name.startsWith("data-");
-    const isNonCopyLiteral = (value) => /^[+×★☆]$/.test(value.trim());
+      name === "aria-labelledby" || name === "d" || name === "viewBox" || name === "focusable" ||
+      name === "x" || name === "y" || name === "cx" || name === "cy" || name === "r" || name === "rx" ||
+      name === "width" || name === "height" || name.startsWith("data-");
+    const isNonCopyLiteral = (value) => /^(?:[+×★☆]|•{2,3})$/.test(value.trim());
     const reportVisibleLiteral = (node, context) => {
       const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
       const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file;
