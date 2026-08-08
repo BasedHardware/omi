@@ -1,22 +1,9 @@
 // domain-pending(DIV-DOMCORE-001)
-// domain-pending(DIV-DOMAPPS-001)
-// domain-pending(DIV-DOMAPPS-006)
-import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
-import { Hono } from "hono";
 
-import { createSqliteQaRecallLoader } from "../../../drivers/sqlite/application-recall-read";
-import {
-  createDevTokenIssuer,
-  devPrincipalToAuthorizationRequest,
-  type DevPrincipal,
-} from "../auth/dev-token";
-import { prepareMemoryRead, type CoherentQaLoad } from "../composition/memory-read";
-import { createServedCounter } from "../observability/served-count";
-import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "../qa/seed";
-import { registerMemoryRoutes } from "../routes/memories";
-import { registerQaRoutes } from "../routes/qa";
+import { createLocalService } from "../app-facing";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
+import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
 
 /**
  * One-command local backend for testing a real macOS/iOS app against the new
@@ -28,7 +15,12 @@ import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
  * loopback-only HTTP service with deterministic seed data already loaded and
  * prints the base URL, the dev token, and the seed identity.
  *
- * SQLite here is QA fixture storage only and is never production authority. No
+ * This file owns ONLY process concerns - config, socket, printing, signals. The
+ * routes and their wiring live in `../app-facing.ts` so that tests exercise the
+ * same app this serves, rather than a lookalike that could agree with a wrong
+ * binding.
+ *
+ * SQLite here is QA fixture storage only, never production authority. No
  * production store, cloud service, credential, or deployment topology is
  * selected by this file.
  */
@@ -39,23 +31,23 @@ const DEFAULT_PORT = 4811;
 /**
  * Fixed, non-secret dev key material.
  *
- * This is NOT a credential. It signs dev tokens for a loopback-only service
- * that serves synthetic fixture data, and it is committed on purpose so a
- * restart issues the SAME token and an app under test keeps working without
- * being re-paired. Override with OMI_DEV_TOKEN_SECRET to rotate. A real
- * deployment replaces the whole dev-token seam, not this constant.
+ * NOT a credential. It signs dev tokens for a loopback-only service that serves
+ * synthetic fixture data, and it is committed on purpose so a restart issues the
+ * SAME token and an app under test keeps working without re-pairing. Override
+ * with OMI_DEV_TOKEN_SECRET to rotate. A real deployment replaces the whole
+ * dev-token seam, not this constant.
  */
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
-const DEV_KEY_ID = "dev-local";
-const DEV_TOKEN_TTL_SECONDS = 86_400;
-const CURSOR_TTL_SECONDS = 3_600;
 
 const DEFAULT_OWNER = "local-dev-user";
 const DEFAULT_MEMORY_COUNT = 12;
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
-const derive32 = (label: string): Uint8Array =>
-  new Uint8Array(createHash("sha256").update(label, "utf8").digest());
+const fail = (message: string): never => {
+  // Legible, actionable, and free of any user content.
+  process.stderr.write(`\nomi dev-server: ${message}\n\n`);
+  process.exit(1);
+};
 
 interface BootConfig {
   readonly port: number;
@@ -65,12 +57,6 @@ interface BootConfig {
   readonly databasePath: string;
   readonly devSecretLabel: string;
 }
-
-const fail = (message: string): never => {
-  // Legible, actionable, and free of any user content.
-  process.stderr.write(`\nomi dev-server: ${message}\n\n`);
-  process.exit(1);
-};
 
 const readConfig = (): BootConfig => {
   const rawPort = process.env.OMI_PORT;
@@ -131,126 +117,33 @@ const openDatabase = (path: string): Database => {
   }
 };
 
-const main = async (): Promise<void> => {
+const main = (): void => {
   const config = readConfig();
   const db = openDatabase(config.databasePath);
 
-  const seed = (): void => {
-    resetQaSnapshot(db);
-    seedQaSnapshot(db, {
-      owner_account_id: config.ownerAccountId,
-      memory_count: config.memoryCount,
-      account_timezone: config.accountTimezone,
-    });
-  };
+  let service: ReturnType<typeof createLocalService>;
   try {
-    seed();
-  } catch (error) {
-    fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
-  }
-
-  const counter = createServedCounter();
-  const issuer = createDevTokenIssuer({
-    signing_keyset: {
-      active_key_id: DEV_KEY_ID,
-      keys: [{ key_id: DEV_KEY_ID, secret: derive32(config.devSecretLabel) }],
-    },
-    ttl_seconds: DEV_TOKEN_TTL_SECONDS,
-  });
-
-  // A fixed issue instant keeps the printed token stable across restarts, so an
-  // app under test does not need re-pairing between runs.
-  const tokenIssuedAt = Math.floor(Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC) / 1000);
-  const devToken = issuer.issue(config.ownerAccountId, tokenIssuedAt);
-  // Verification uses the same anchor, so the printed token never expires
-  // mid-session on a machine whose wall clock is far from the fixture anchor.
-  const resolvePrincipal = (token: string): DevPrincipal | null =>
-    issuer.resolve(token, tokenIssuedAt);
-
-  const codecRootSecret = derive32(`${config.devSecretLabel}:codec-root`);
-  const cursorSigningKeyset = {
-    active_key_id: DEV_KEY_ID,
-    keys: [{ key_id: DEV_KEY_ID, secret: derive32(`${config.devSecretLabel}:cursor`) }],
-  };
-
-  const prepareRead = async (principal: DevPrincipal) => {
-    const loader = createSqliteQaRecallLoader({
+    service = createLocalService({
       db,
-      owner_account_id: principal.uid,
-      account_timezone: config.accountTimezone,
-      limits: { max_items: 512, max_bytes: 4_000_000 },
-      // The seeder owns the entire corpus and writes no accepted work, so
-      // "no eligible accepted work" is a declared fact here rather than an
-      // assumption. Without this the envelope would honestly report the
-      // accepted subsystem as bypassed and every page would be degraded.
-      accepted_fixture_state: {
-        state: "no_eligible",
-        declared_frontier: null,
-        searched_frontier: null,
-        candidates: [],
-      },
+      ownerAccountId: config.ownerAccountId,
+      memoryCount: config.memoryCount,
+      accountTimezone: config.accountTimezone,
+      devSecretLabel: config.devSecretLabel,
     });
-    return prepareMemoryRead({
-      loadCoherent: loader as unknown as () => CoherentQaLoad,
-      authorizationRequest: devPrincipalToAuthorizationRequest(principal, {
-        app_id: "omi-local-dev-app",
-        key_id: DEV_KEY_ID,
-      }),
-      codecRootSecret,
-      cursorSigningKeyset,
-      cursorTtlSeconds: CURSOR_TTL_SECONDS,
-      readTimestampEpochSeconds: tokenIssuedAt,
-      // Default telemetry carries opaque references only. The trace is
-      // deliberately dropped rather than logged: it is content-safe by
-      // construction, but a dev server has no reason to persist it.
-      traceSink: () => {},
-    });
-  };
-
-  const app = new Hono({ strict: true });
-  app.get("/health", () => {
-    counter.recordNonDomainRequest();
-    return new Response(JSON.stringify({ status: "ok" }), {
-      status: 200,
-      headers: { "cache-control": "no-store", "content-type": "application/json" },
-    });
-  });
-  app.get("/ready", () => {
-    counter.recordNonDomainRequest();
-    return new Response(JSON.stringify({ status: "ready" }), {
-      status: 200,
-      headers: { "cache-control": "no-store", "content-type": "application/json" },
-    });
-  });
-  registerMemoryRoutes(app, { resolvePrincipal, prepareRead, counter });
-  registerQaRoutes(app, {
-    counter,
-    resetSeed: seed,
-    isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
-    seedIdentity: () => ({
-      owner_account_id: config.ownerAccountId,
-      memory_count: config.memoryCount,
-      account_timezone: config.accountTimezone,
-      fixture_time_anchor_utc: QA_FIXTURE_TIME_ANCHOR_UTC,
-    }),
-  });
-  app.notFound(() => {
-    counter.recordNonDomainRequest();
-    return new Response(JSON.stringify({ error: "not_found" }), {
-      status: 404,
-      headers: { "cache-control": "no-store", "content-type": "application/json" },
-    });
-  });
+  } catch (error) {
+    return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
 
   let server: { stop: (closeActive?: boolean) => void };
   try {
     server = Bun.serve({
-      // Loopback ONLY. Omitting hostname makes Bun bind 0.0.0.0, which
-      // publishes this service to the LAN. That is the exact bug that shipped
-      // silently in an earlier wave.
+      // Loopback ONLY. Omitting hostname makes Bun bind 0.0.0.0, which publishes
+      // this service to the LAN. That exact bug shipped silently in an earlier
+      // wave and a loopback curl did not catch it, because a loopback curl
+      // succeeds either way.
       hostname: LOOPBACK_HOST,
       port: config.port,
-      fetch: app.fetch,
+      fetch: service.app.fetch,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -258,7 +151,7 @@ const main = async (): Promise<void> => {
       return fail(
         `port ${config.port} is already in use. Something else is listening.\n`
         + `  Find it:  lsof -nP -iTCP:${config.port} -sTCP:LISTEN\n`
-        + `  Or boot on this agent's spare port:  OMI_PORT=4812 bun run apps/service/bin/dev-server.ts`,
+        + `  Or boot on the spare port:  OMI_PORT=4812 bun run apps/service/bin/dev-server.ts`,
       );
     }
     return fail(`failed to bind ${LOOPBACK_HOST}:${config.port}.`);
@@ -272,8 +165,9 @@ const main = async (): Promise<void> => {
     + `  seed identity ${config.ownerAccountId}, ${config.memoryCount} memories, ${config.accountTimezone}\n`
     + `  time anchor   ${QA_FIXTURE_TIME_ANCHOR_UTC}\n`
     + `  storage       ${config.databasePath} (SQLite, QA fixture only - never production authority)\n\n`
-    + `  dev token\n    ${devToken}\n\n`
+    + `  dev token\n    ${service.devToken}\n\n`
     + `  try it\n`
+    + `    TOKEN='${service.devToken}'\n`
     + `    curl -s -H "Authorization: Bearer $TOKEN" "${baseUrl}/v1/memories?limit=5"\n`
     + `    curl -s ${baseUrl}/v1/qa/status\n`
     + `    curl -s -X POST -H "Authorization: Bearer $TOKEN" ${baseUrl}/v1/qa/reset\n\n`
@@ -286,7 +180,7 @@ const main = async (): Promise<void> => {
   // domain requests looked exactly like a healthy one.
   let lastReported = -1;
   const heartbeat = setInterval(() => {
-    const snapshot = counter.snapshot();
+    const snapshot = service.counter.snapshot();
     if (snapshot.domainReadsServed === lastReported) return;
     lastReported = snapshot.domainReadsServed;
     process.stdout.write(
@@ -307,4 +201,4 @@ const main = async (): Promise<void> => {
   process.on("SIGTERM", shutdown);
 };
 
-await main();
+main();
