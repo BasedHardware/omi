@@ -361,9 +361,35 @@ for (const file of files(root)) {
     // Every line that stands up a server. The hatch is judged against each of
     // these, not against the file, so one justified server cannot exempt the
     // next one somebody adds.
+    /**
+     * Matches per line, not merely whether a line matches. `(file, line)` is the
+     * hatch's key, so a line holding TWO constructions has one entry and one
+     * exemption covering both — a row written for a legitimate server would also
+     * cover an unrelated rogue one sharing its line. Found by the round-6 audit,
+     * demonstrated against the real hatched file, lint green.
+     */
+    const constructionsOn = (line: string): number =>
+      serverConstructionPatterns.reduce(
+        (total, pattern) => total + (line.match(new RegExp(pattern.source, "g")) ?? []).length,
+        0,
+      );
     const serverSites = codeLines
-      .map((line, index) => (serverConstructionPatterns.some((p) => p.test(line)) ? index : -1))
+      .map((line, index) => (constructionsOn(line) > 0 ? index : -1))
       .filter((index) => index >= 0);
+
+    // Two constructions on one line is ALWAYS a failure, hatch or no hatch. The
+    // registry's safety property assumes one line, one construction, and nothing
+    // was checking that assumption. Removing the ambiguity beats patching around
+    // it — the same reasoning that replaced the comment marker with this table.
+    for (const index of serverSites) {
+      if (constructionsOn(codeLines[index] ?? "") < 2) continue;
+      failures.push(
+        `${shown}:${index + 1}: two HTTP servers are constructed on one line. `
+        + `WIRE_PATH_HATCHES is keyed by (file, line), so a single exemption would `
+        + `cover both — including one nobody justified. Put each construction on `
+        + `its own line.`,
+      );
+    }
 
     /**
      * The marker on the construction line, or anywhere in the comment block
