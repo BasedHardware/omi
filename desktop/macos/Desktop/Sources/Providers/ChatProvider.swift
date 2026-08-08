@@ -1521,9 +1521,7 @@ class ChatProvider: ObservableObject {
 
   init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
     self.bridgeHarnessOverride = bridgeHarnessOverride
-    isRestoringDraft = true
-    draftText = ChatDraftStore.shared.text(for: activeDraftKey)
-    isRestoringDraft = false
+    composerDraft.restore()
     log("ChatProvider initialized, will start Omi AI bridge on first use")
 
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
