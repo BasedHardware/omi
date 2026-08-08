@@ -19,6 +19,7 @@ import {
   Percent,
   AlertTriangle,
   Smartphone,
+  Share2,
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -56,6 +57,11 @@ import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
 import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
 import { latestPeriodChange } from "@/lib/period-change";
+import {
+  completedWeeklyNewUsers,
+  maturedWeeklyActivation,
+  mondayKey,
+} from "@/lib/growth-metrics";
 
 // --- Types ---
 
@@ -232,6 +238,21 @@ interface ViralMetrics {
   };
 }
 
+interface KFactorData {
+  days: number;
+  available: boolean;
+  kFactor: number | null;
+  reason: string;
+  proxy?: {
+    newUsers: number;
+    sharers: number;
+    shareEvents: number;
+    shareRatePct: number;
+    sharesPerSharer: number;
+    sharesPerNewUser: number;
+  };
+}
+
 interface MacosVersionBreakdown {
   label: string;
   value: number;
@@ -375,6 +396,22 @@ const tooltipStyle = {
   borderRadius: "8px",
 };
 
+const SOFTWARE_USER_GOAL = 1_000_000;
+const ONE_MILLION_ORDER_REVISION = "1m-growth-v1";
+const ONE_MILLION_PRIORITY_IDS = [
+  "header-1m-growth",
+  "kpi-weekly-new-users",
+  "kpi-weekly-activated-users",
+  "kpi-w4-retention",
+  "kpi-k-factor",
+  "chart-weekly-new-users",
+  "viral-activation",
+  "controls-retention",
+  "retention-avg-curve",
+  "chart-retention-cohort-table",
+  "viral-growth-accounting",
+] as const;
+
 // --- Component ---
 
 export default function AnalyticsPage() {
@@ -426,6 +463,9 @@ export default function AnalyticsPage() {
   const { data: viralMetrics, isLoading: viralLoading } =
     useSWR<ViralMetrics>(token ? ["/api/omi/stats/viral-metrics?days=60", token] : null, authFetcher, swrOpts);
 
+  const { data: kFactorData, isLoading: kFactorLoading } =
+    useSWR<KFactorData>(token ? ["/api/omi/stats/k-factor/posthog?days=30", token] : null, authFetcher, swrOpts);
+
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
     useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
 
@@ -473,6 +513,13 @@ export default function AnalyticsPage() {
       authFetcher, swrOpts
     );
 
+  const { data: growthRetention, isLoading: growthRetentionLoading } =
+    useSWR<RetentionData>(
+      token ? ["/api/omi/stats/retention/posthog?days=30&intervals=30&platform=macos", token] : null,
+      authFetcher,
+      swrOpts,
+    );
+
   const isLoading =
     revenueLoading ||
     mrrLoading ||
@@ -509,7 +556,7 @@ export default function AnalyticsPage() {
 
   // Cumulative Users chart fetches the full history since the first
   // signup so the growth curve is meaningful.
-  const allDailyData = dailyNewUsers?.data ?? [];
+  const allDailyData = useMemo(() => dailyNewUsers?.data ?? [], [dailyNewUsers]);
   const dauData = dauTrends?.data?.slice(-30) ?? [];
   const ratingsData = messageRatings?.data ?? [];
   const totalThumbsUp = ratingsData.reduce((s, d) => s + d.thumbs_up, 0);
@@ -591,6 +638,7 @@ export default function AnalyticsPage() {
   // Retention values for summary cards
   const retentionD1 = retention?.data?.find((p) => p.day === 1)?.retention ?? null;
   const retentionD7 = retention?.data?.find((p) => p.day === 7)?.retention ?? null;
+  const retentionW4 = retention?.data?.find((p) => p.day === 28)?.retention ?? null;
 
   // Viral metrics
   const vm = viralMetrics;
@@ -598,6 +646,22 @@ export default function AnalyticsPage() {
   const powerCurve = vm?.powerUserCurve ?? [];
   const activationData = vm?.activation ?? [];
   const stickinessData = vm?.stickinessTrend ?? [];
+  const completedGrowthAccounting = useMemo(() => {
+    const currentWeek = mondayKey(new Date());
+    return currentWeek ? ga.filter((point) => point.week < currentWeek) : ga;
+  }, [ga]);
+  const weeklyNewUsersData = useMemo(
+    () => completedWeeklyNewUsers(allDailyData).slice(-12),
+    [allDailyData],
+  );
+  const weeklyActivationData = useMemo(
+    () => maturedWeeklyActivation(activationData).slice(-12),
+    [activationData],
+  );
+  const latestWeeklyNewUsers = weeklyNewUsersData.at(-1) ?? null;
+  const latestWeeklyActivation = weeklyActivationData.at(-1) ?? null;
+  const growthRetentionW4 =
+    growthRetention?.data?.find((point) => point.day === 28)?.retention ?? null;
 
   const profitCharts = useMemo<ChartItem[]>(() => {
     const summary = profitability?.summary;
@@ -1397,9 +1461,9 @@ export default function AnalyticsPage() {
     return [
       {
         id: "viral-growth-accounting",
-        title: "Growth Accounting",
-        periodChange: latestPeriodChange(ga, (point) => point.active, "vs previous week"),
-        subtitle: "Weekly breakdown: where do active users come from? (Churned shown as negative)",
+        title: "Net Weekly Active User Growth",
+        periodChange: latestPeriodChange(completedGrowthAccounting, (point) => point.active, "vs previous complete week"),
+        subtitle: "WAU trend with new + resurrected − churned users · completed weeks",
         icon: <TrendingUp className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
@@ -1407,26 +1471,27 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : ga.length > 0 ? (
+          ) : completedGrowthAccounting.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ga} stackOffset="sign">
+              <ComposedChart data={completedGrowthAccounting} stackOffset="sign">
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="users" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
                 <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(value: number, name: string) => {
-                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  const labels: Record<string, string> = { active: "WAU", newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
                   return [Math.abs(value), labels[name] || name];
                 }} />
                 <Legend formatter={(value) => {
-                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  const labels: Record<string, string> = { active: "WAU", newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
                   return labels[value] || value;
                 }} />
-                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
-                <Bar dataKey="newUsers" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="resurrected" stackId="a" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="retained" stackId="a" fill="#6366f1" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="churned" stackId="a" fill="#ef4444" radius={[0, 0, 2, 2]} />
-              </BarChart>
+                <ReferenceLine yAxisId="users" y={0} stroke="hsl(var(--muted-foreground))" />
+                <Bar yAxisId="users" dataKey="newUsers" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="users" dataKey="resurrected" stackId="a" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="users" dataKey="retained" stackId="a" fill="#64748b" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="users" dataKey="churned" stackId="a" fill="#ef4444" radius={[0, 0, 2, 2]} />
+                <Line yAxisId="users" type="monotone" dataKey="active" name="WAU" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
@@ -1620,9 +1685,9 @@ export default function AnalyticsPage() {
       },
       {
         id: "viral-activation",
-        title: "Activation Rate",
-        periodChange: latestPeriodChange(activationData, (point) => point.rate, "vs previous day"),
-        subtitle: "% of new users who create a Memory within 7 days of signing up",
+        title: "New Activated Users / Week",
+        periodChange: latestPeriodChange(weeklyActivationData, (point) => point.activated, "vs previous mature cohort week"),
+        subtitle: "Memory created within 7 days of signup · fully matured cohorts only",
         icon: <Target className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
@@ -1630,16 +1695,16 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : activationData.length > 0 ? (
+          ) : weeklyActivationData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={activationData}>
+              <ComposedChart data={weeklyActivationData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
                 <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
                 <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  labelFormatter={fullDate}
+                  labelFormatter={(value) => `Week of ${fullDate(value)}`}
                   formatter={(value: number, name: string) => {
                     if (name === "rate") return [`${value}%`, "Activation Rate"];
                     if (name === "activated") return [value, "Activated"];
@@ -1647,7 +1712,7 @@ export default function AnalyticsPage() {
                   }}
                 />
                 <Legend />
-                <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.5} />
+                <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#3b82f6" radius={[2, 2, 0, 0]} opacity={0.5} />
                 <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
               </ComposedChart>
@@ -1658,17 +1723,17 @@ export default function AnalyticsPage() {
         ),
       },
     ];
-  }, [viralLoading, ga, dauLoading, dauData, crashRate, crashRateLoading, dailyWithRollingAvg, dailyNewUsersLoading, stickinessData, powerCurve, activationData]);
+  }, [viralLoading, completedGrowthAccounting, dauLoading, dauData, crashRate, crashRateLoading, dailyWithRollingAvg, dailyNewUsersLoading, stickinessData, powerCurve, weeklyActivationData]);
 
   const retentionCharts = useMemo<ChartItem[]>(() => {
     if (retentionView !== "average") return [];
     return [
       {
         id: "retention-avg-curve",
-        title: "Average Retention Curve",
+        title: "Activity Retention (W1 → W4)",
         subtitle: retention?.totalUsers != null
-          ? `${retention.totalCohorts} cohorts · ${retention.totalUsers.toLocaleString()} users`
-          : "Weighted average retention across all cohorts",
+          ? `D7 ${retentionD7?.toFixed(1) ?? "--"}% · W4 ${retentionW4?.toFixed(1) ?? "--"}% · ${retention.totalCohorts} cohorts · activity-based, not activation-filtered`
+          : "Activity-based retention; activated-only cohorts are not instrumented yet",
         icon: <TrendingUp className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
@@ -1688,7 +1753,7 @@ export default function AnalyticsPage() {
         ),
       },
     ];
-  }, [retentionView, retention]);
+  }, [retentionView, retention, retentionD7, retentionW4]);
 
   // ─────────────────────────────────────────────────────────────────────
   //  Unified single-grid items
@@ -1704,6 +1769,145 @@ export default function AnalyticsPage() {
   const cpuMobile = profitability?.summary.avgCostPerUserMobile ?? null;
   const cpuDesktop = profitability?.summary.avgCostPerUserDesktop ?? null;
   const totalFirebaseUsers = dailyNewUsers?.totalUsers ?? null;
+  const goalProgressPct = totalFirebaseUsers != null
+    ? Math.min(100, (totalFirebaseUsers / SOFTWARE_USER_GOAL) * 100)
+    : null;
+
+  const growthGoalItems = useMemo<ChartItem[]>(() => {
+    const kFactorValue = kFactorData?.available && kFactorData.kFactor != null
+      ? kFactorData.kFactor.toFixed(2)
+      : "Not tracked";
+    const kFactorSubtitle = kFactorData?.available && kFactorData.kFactor != null
+      ? "Target ≥0.60"
+      : kFactorData?.proxy
+        ? `${kFactorData.proxy.sharesPerNewUser.toFixed(2)} shares/user · conversion missing`
+        : "Referral conversion is not instrumented yet";
+
+    return [
+      {
+        id: "header-1m-growth",
+        title: "Path to 1M Software Users",
+        subtitle: totalFirebaseUsers != null && goalProgressPct != null
+          ? `${totalFirebaseUsers.toLocaleString()} of ${SOFTWARE_USER_GOAL.toLocaleString()} (${goalProgressPct.toFixed(1)}%) · acquisition → activation → retention → virality`
+          : `Goal: ${SOFTWARE_USER_GOAL.toLocaleString()} software users · acquisition → activation → retention → virality`,
+        variant: "header",
+        initialLayout: { cols: 12, rows: 1 },
+        removable: false,
+        render: () => null,
+      },
+      {
+        id: "kpi-weekly-new-users",
+        title: "Weekly New Users",
+        variant: "kpi",
+        icon: <Users className="h-3.5 w-3.5" />,
+        periodChange: latestPeriodChange(weeklyNewUsersData, (point) => point.users, "vs previous complete week"),
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className="text-2xl font-bold">
+              {latestWeeklyNewUsers?.users.toLocaleString() ?? "--"}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">All signups · target +7–10% WoW</p>
+          </div>
+        ),
+      },
+      {
+        id: "kpi-weekly-activated-users",
+        title: "Weekly Activated Users",
+        variant: "kpi",
+        icon: <Target className="h-3.5 w-3.5" />,
+        periodChange: latestPeriodChange(weeklyActivationData, (point) => point.activated, "vs previous mature cohort week"),
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className="text-2xl font-bold">
+              {latestWeeklyActivation?.activated.toLocaleString() ?? "--"}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {latestWeeklyActivation
+                ? `${latestWeeklyActivation.rate.toFixed(1)}% activation · Memory in 7d`
+                : "Memory within 7 days of signup"}
+            </p>
+          </div>
+        ),
+      },
+      {
+        id: "kpi-w4-retention",
+        title: "W4 Retention",
+        variant: "kpi",
+        icon: <TrendingUp className="h-3.5 w-3.5" />,
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className={`text-2xl font-bold ${
+              growthRetentionW4 == null
+                ? ""
+                : growthRetentionW4 >= 40
+                  ? "text-green-600"
+                  : growthRetentionW4 < 25
+                    ? "text-red-600"
+                    : ""
+            }`}>
+              {growthRetentionLoading
+                ? "..."
+                : growthRetentionW4 != null
+                  ? `${growthRetentionW4.toFixed(1)}%`
+                  : "--"}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">macOS activity · not activation-filtered</p>
+          </div>
+        ),
+      },
+      {
+        id: "kpi-k-factor",
+        title: "K-Factor",
+        variant: "kpi",
+        icon: <Share2 className="h-3.5 w-3.5" />,
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className="text-2xl font-bold">{kFactorLoading ? "..." : kFactorValue}</div>
+            <p className="truncate text-xs text-muted-foreground">{kFactorSubtitle}</p>
+          </div>
+        ),
+      },
+      {
+        id: "chart-weekly-new-users",
+        title: "Weekly New Software Users",
+        subtitle: "All-software Firebase signups · latest 12 completed weeks",
+        icon: <Users className="h-4 w-4" />,
+        periodChange: latestPeriodChange(weeklyNewUsersData, (point) => point.users, "vs previous complete week"),
+        initialLayout: { cols: 12, rows: 4 },
+        removable: false,
+        render: () => (
+          dailyNewUsersLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : weeklyNewUsersData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyNewUsersData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => `Week of ${fullDate(value)}`}
+                  formatter={(value: number) => [value.toLocaleString(), "New users"]} />
+                <Bar dataKey="users" name="New users" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground">No completed-week data available</div>
+          )
+        ),
+      },
+    ];
+  }, [dailyNewUsersLoading, goalProgressPct, growthRetentionLoading, growthRetentionW4,
+    kFactorData, kFactorLoading, latestWeeklyActivation, latestWeeklyNewUsers,
+    totalFirebaseUsers, weeklyActivationData, weeklyNewUsersData]);
 
   const topKpiAndNewWidgets = useMemo<ChartItem[]>(() => {
     return [
@@ -1802,21 +2006,6 @@ export default function AnalyticsPage() {
         ),
       },
       {
-        id: "kpi-total-users-firebase",
-        title: "Total Users (Firebase)",
-        variant: "kpi",
-        icon: <Users className="h-3.5 w-3.5" />,
-        initialLayout: { cols: 3, rows: 1 },
-        render: () => (
-          <div>
-            <div className="text-2xl font-bold">
-              {totalFirebaseUsers != null ? totalFirebaseUsers.toLocaleString() : "--"}
-            </div>
-            <p className="text-xs text-muted-foreground">All-time signups</p>
-          </div>
-        ),
-      },
-      {
         id: "chart-total-users-cumulative",
         title: "Total Users — All-time growth",
         periodChange: latestPeriodChange(allDailyData, (point) => point.cumulative, "vs previous day"),
@@ -1847,7 +2036,7 @@ export default function AnalyticsPage() {
         ),
       },
     ];
-  }, [mrr, arr, totalSubs, monthlySubs, annualSubs, totalConversations, mrrGrowthPct, cpuMobile, cpuDesktop, profitDays, totalFirebaseUsers, allDailyData]);
+  }, [mrr, arr, totalSubs, monthlySubs, annualSubs, totalConversations, mrrGrowthPct, cpuMobile, cpuDesktop, profitDays, allDailyData]);
 
   // Section headers + per-section control widgets that sit inline between
   // groups of charts. They are full-width by default so the user sees a
@@ -2128,14 +2317,6 @@ export default function AnalyticsPage() {
     render: () => null,
   };
 
-  const retentionHeader: ChartItem = {
-    id: "header-retention",
-    title: "Retention",
-    variant: "header",
-    initialLayout: { cols: 12, rows: 1 },
-    render: () => null,
-  };
-
   const retentionControls: ChartItem = {
     id: "controls-retention",
     title: "Retention controls",
@@ -2236,11 +2417,23 @@ export default function AnalyticsPage() {
     render: () => null,
   };
 
-  // Order: AI prompt → top KPIs → cost-per-user KPIs → total-users chart →
-  // each section's header + controls + charts in original order. The user
-  // can drag any item anywhere; this is just the default layout.
+  // Put the metrics that answer "are we compounding toward 1M?" first.
+  // Everything remains draggable; orderRevision applies this priority once
+  // without discarding a user's saved sizes or later rearrangements.
   const unifiedItems = useMemo<ChartItem[]>(() => {
+    const activationChart = viralCharts.find((item) => item.id === "viral-activation");
+    const growthAccountingChart = viralCharts.find((item) => item.id === "viral-growth-accounting");
+    const remainingViralCharts = viralCharts.filter(
+      (item) => item.id !== "viral-activation" && item.id !== "viral-growth-accounting",
+    );
+
     return [
+      ...growthGoalItems,
+      ...(activationChart ? [activationChart] : []),
+      retentionControls,
+      ...(retentionView === "cohorts" ? [cohortTableItem] : retentionCharts),
+      ...(growthAccountingChart ? [growthAccountingChart] : []),
+
       ...responseReliabilityItems,
       ...topKpiAndNewWidgets,
 
@@ -2264,17 +2457,13 @@ export default function AnalyticsPage() {
       ...ratingsAndUsageCharts,
 
       viralHeader,
-      ...viralCharts,
-
-      retentionHeader,
-      retentionControls,
-      ...(retentionView === "cohorts" ? [cohortTableItem] : retentionCharts),
+      ...remainingViralCharts,
 
       chatRatingsHeader,
       ...chatRatingsItems,
     ];
   }, [
-    responseReliabilityItems, topKpiAndNewWidgets, profitCharts, revenueCharts,
+    growthGoalItems, responseReliabilityItems, topKpiAndNewWidgets, profitCharts, revenueCharts,
     macosKpis, macosGrowthCharts,
     notificationKpis, notificationCharts, ratingsAndUsageCharts, viralCharts,
     retentionView, retentionCharts, chatRatingsItems,
@@ -2327,7 +2516,12 @@ export default function AnalyticsPage() {
           <span>Some data sources failed to load. Numbers may be incomplete.</span>
         </div>
       )}
-      <ResizableChartGrid storageKey="admin:unified:v1" items={unifiedItems} />
+      <ResizableChartGrid
+        storageKey="admin:unified:v1"
+        items={unifiedItems}
+        orderRevision={ONE_MILLION_ORDER_REVISION}
+        revealOnOrderRevision={ONE_MILLION_PRIORITY_IDS}
+      />
     </div>
   );
 }
