@@ -32,7 +32,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 import database.conversations as conversations_db
 import database.users as users_db
-from models.conversation import BulkAssignSegmentsRequest, SpeakerLabelSuggestion
+from models.conversation import BulkAssignSegmentsRequest, ConversationStatus, SpeakerLabelSuggestion
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -214,7 +214,12 @@ def suggestion(speaker_id=1, name='Alex'):
 
 
 def conversation(segments, suggestions):
-    return SimpleNamespace(id='c1', transcript_segments=segments, speaker_label_suggestions=suggestions)
+    return SimpleNamespace(
+        id='c1',
+        transcript_segments=segments,
+        speaker_label_suggestions=suggestions,
+        status=ConversationStatus.completed,
+    )
 
 
 class _Recorder:
