@@ -10774,5 +10774,11 @@
     "pinAsBaseline": "بنیاد کے طور پر پن کریں",
     "unpinAsBaseline": "بنیاد سے ان پن کریں",
     "baselineMemory": "بنیادی یادداشت",
-    "alwaysInContext": "ہمیشہ سیاق میں"
+    "alwaysInContext": "ہمیشہ سیاق میں",
+    "accountCutoverUpdateRequiredTitle": "التحديث مطلوب",
+    "accountCutoverUpdateRequiredMessage": "ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.",
+    "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
+    "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
+    "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
+    "accountCutoverOpenStore": "فتح المتجر"
 }

@@ -3208,5 +3208,11 @@
     "pinAsBaseline": "기준으로 고정",
     "unpinAsBaseline": "기준에서 고정 해제",
     "baselineMemory": "기준 메모리",
-    "alwaysInContext": "항상 컨텍스트에 포함"
+    "alwaysInContext": "항상 컨텍스트에 포함",
+    "accountCutoverUpdateRequiredTitle": "업데이트가 필요합니다",
+    "accountCutoverUpdateRequiredMessage": "계정 마이그레이션 이후에도 계속하려면 최신 Omi 앱을 설치하세요.",
+    "accountCutoverMigrationInProgressTitle": "마이그레이션 진행 중",
+    "accountCutoverMigrationInProgressMessage": "계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.",
+    "accountCutoverMigrationRollbackMessage": "마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.",
+    "accountCutoverOpenStore": "스토어 열기"
 }

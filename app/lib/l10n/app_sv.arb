@@ -3208,5 +3208,11 @@
     "pinAsBaseline": "Fäst som utgångspunkt",
     "unpinAsBaseline": "Lossa från utgångspunkt",
     "baselineMemory": "Utgångsminne",
-    "alwaysInContext": "Alltid i kontexten"
+    "alwaysInContext": "Alltid i kontexten",
+    "accountCutoverUpdateRequiredTitle": "Uppdatering krävs",
+    "accountCutoverUpdateRequiredMessage": "Installera den senaste Omi-appen för att fortsätta efter kontomigreringen.",
+    "accountCutoverMigrationInProgressTitle": "Migrering pågår",
+    "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
+    "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
+    "accountCutoverOpenStore": "Öppna butik"
 }

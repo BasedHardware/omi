@@ -994,11 +994,8 @@ import XCTest
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
     // omi-test-quality: source-inspection -- static contract: geometry inside
     // the LazyVStack must not feed transcript layout values back into state;
-    // the behavioral scroll/active-mark coverage lives in
-    // ChatPromptTimelineTests and ChatScrollLiveEdgeTests.
-    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
-    XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
-    XCTAssertTrue(source.contains("ChatPromptRowAnchorReporter"))
+    // the behavioral scroll coverage lives in ChatScrollLiveEdgeTests.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: "))
     // omi-test-quality: source-inspection -- static contract: a local send may
     // enter follow mode, but must never clear the reader's in-flight gesture
     // latch to do it; the behavioral coverage is in
@@ -1024,8 +1021,7 @@ import XCTest
       scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
     XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
-    XCTAssertTrue(scrollSource.contains("documentFrameObservation"))
-    XCTAssertTrue(scrollSource.contains("documentHeight: documentHeight"))
+    XCTAssertTrue(scrollSource.contains(".onChange(of: contentChangeToken)"))
     XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
     XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
   }
@@ -1611,7 +1607,7 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
     XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
     XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatBubbleSource.contains(".frame(height: compact ? 34 : nil)"))
+    XCTAssertTrue(chatBubbleSource.contains("minimumHeight: compact ? 34 : nil"))
     XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
     XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
@@ -1886,14 +1882,6 @@ import XCTest
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
-  }
-
-  private func chatPageSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

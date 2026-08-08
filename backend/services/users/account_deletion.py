@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
-
 import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
@@ -10,9 +8,6 @@ from database import vector_db
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
-import google.auth
-import google.auth.transport.requests
-import httpx
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
@@ -34,6 +29,7 @@ from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_d
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
+from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
 
 logger = logging.getLogger(__name__)
 
@@ -52,59 +48,6 @@ class PurgeResult(TypedDict):
 
 ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
-
-
-def _gce_project_id() -> str | None:
-    return (
-        os.getenv('GCE_PROJECT_ID')
-        or os.getenv('GOOGLE_CLOUD_PROJECT')
-        or os.getenv('FIREBASE_PROJECT_ID')
-        or os.getenv('GCP_PROJECT_ID')
-    )
-
-
-def delete_agent_vm_for_account(uid: str) -> None:
-    """Delete the owner VM before the Firestore pointer becomes unreachable.
-
-    Provisioning rechecks the durable deletion marker before and after GCE
-    creation, so a create already in flight either loses before insert or
-    deletes its late-created instance here/on its post-create fence.
-    """
-    vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
-    if not isinstance(vm, dict) or not vm.get('vmName'):
-        return
-    project = _gce_project_id()
-    if not project:
-        raise RuntimeError('GCE project is not configured for account-deletion VM cleanup')
-    vm_name = str(vm['vmName'])
-    zone = str(vm.get('zone') or 'us-central1-a')
-    credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
-    credentials.refresh(google.auth.transport.requests.Request())
-    headers = {'Authorization': f'Bearer {credentials.token}'}
-    instance_url = f'https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}'
-    with httpx.Client(timeout=180) as client:
-        response = client.delete(instance_url, headers=headers)
-        if response.status_code == 404:
-            users_db.clear_late_agent_vm_cleanup(uid, vm_name)
-            return
-        response.raise_for_status()
-        operation = response.json().get('name')
-        if not operation:
-            return
-        operation_url = (
-            f'https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/operations/{operation}'
-        )
-        for _ in range(36):
-            status_response = client.get(operation_url, headers=headers)
-            status_response.raise_for_status()
-            result = status_response.json()
-            if result.get('status') == 'DONE':
-                if result.get('error'):
-                    raise RuntimeError(f'GCE Agent VM deletion failed: {result["error"]}')
-                users_db.clear_late_agent_vm_cleanup(uid, vm_name)
-                return
-            time.sleep(5)
-    raise RuntimeError('GCE Agent VM deletion timed out')
 
 
 def delete_account_credentials(uid: str) -> None:

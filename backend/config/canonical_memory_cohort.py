@@ -18,9 +18,10 @@ DEV_WHAT_MATTERS_NOW_SMOKE_UID = 'omi-dev-what-matters-now-smoke-v1'
 
 CANONICAL_MEMORY_USERS: frozenset[str] = frozenset(
     {
-        "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com (prod Firebase: based-hardware)
         LOCAL_CHAT_FIRST_E2E_ENABLED_UID,
         DEV_WHAT_MATTERS_NOW_SMOKE_UID,
+        # Human dogfood is paused while the memory/task migration is redesigned.
+        # Add accounts back only through an explicit rollout review.
         # Next dogfood (re-enable soon):
         # "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",  # kodjima33@gmail.com (prod Firebase: based-hardware)
     }
