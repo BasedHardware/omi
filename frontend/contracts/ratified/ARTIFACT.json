@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.1.1"
+  },
+  "provenanceSha256": "5f6fd0d845af75e04ccf79c6afa67e6934927a49ffb4399a19362a9244c9f481",
+  "sourceDigest": "060e3a44f36e3e0126fd2ef38edd4b8fb2b7dbcb123c007bc58bd13e34cef153",
+  "tarballSha256": "0604820d02541a904124476fc75eda664195881444ef6a6f6424cdbd1b403de1",
+  "files": [
+    "package/PROVENANCE.json",
+    "package/README.md",
+    "package/dist/pagination/cursor.d.ts",
+    "package/dist/pagination/cursor.js",
+    "package/dist/projections/synthesized.d.ts",
+    "package/dist/projections/synthesized.js",
+    "package/dist/recall/trace.d.ts",
+    "package/dist/recall/trace.js",
+    "package/dist/wire/json.d.ts",
+    "package/dist/wire/json.js",
+    "package/fixtures/manifest.json",
+    "package/fixtures/page-conformance.json",
+    "package/fixtures/read-page-windows.json",
+    "package/fixtures/recall-completeness.json",
+    "package/fixtures/recall-trace.json",
+    "package/fixtures/status-matrix.json",
+    "package/package.json"
+  ]
+}

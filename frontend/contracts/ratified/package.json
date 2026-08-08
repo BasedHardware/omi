@@ -1,0 +1,52 @@
+{
+  "name": "@omi-core/ratified-contracts",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Reviewed Omi client/backend contract seam",
+  "packageManager": "pnpm@10.0.0",
+  "type": "module",
+  "exports": {
+    "./pagination/cursor": {
+      "types": "./dist/pagination/cursor.d.ts",
+      "import": "./dist/pagination/cursor.js"
+    },
+    "./projections/synthesized": {
+      "types": "./dist/projections/synthesized.d.ts",
+      "import": "./dist/projections/synthesized.js"
+    },
+    "./recall/trace": {
+      "types": "./dist/recall/trace.d.ts",
+      "import": "./dist/recall/trace.js"
+    }
+  },
+  "files": [
+    "dist/pagination/cursor.js",
+    "dist/pagination/cursor.d.ts",
+    "dist/projections/synthesized.js",
+    "dist/projections/synthesized.d.ts",
+    "dist/recall/trace.js",
+    "dist/recall/trace.d.ts",
+    "dist/wire/json.js",
+    "dist/wire/json.d.ts",
+    "fixtures/manifest.json",
+    "fixtures/read-page-windows.json",
+    "fixtures/recall-completeness.json",
+    "fixtures/recall-trace.json",
+    "fixtures/page-conformance.json",
+    "fixtures/status-matrix.json",
+    "PROVENANCE.json"
+  ],
+  "scripts": {
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
+    "test": "node --test test/*.test.mjs",
+    "check:types": "tsc -p fixtures/clean-consumer/tsconfig.json --noEmit",
+    "check:markers": "node scripts/check-domain-markers.mjs",
+    "check:provenance": "node scripts/provenance.mjs --check",
+    "check:package": "node scripts/package-boundary.mjs --check",
+    "verify": "pnpm --ignore-workspace run build && pnpm --ignore-workspace run test && pnpm --ignore-workspace run check:types && pnpm --ignore-workspace run check:markers && pnpm --ignore-workspace run check:provenance && pnpm --ignore-workspace run check:package",
+    "verify:ci": "node scripts/verify-ci.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    "read-page-windows.json",
+    "recall-completeness.json",
+    "recall-trace.json",
+    "page-conformance.json",
+    "status-matrix.json"
+  ]
+}
