@@ -6,10 +6,10 @@ import type { ProductionMemoryStore } from "./memory-fixtures.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 
 type Locale = string;
-type RunOperation = (operation: () => Promise<void>) => Promise<void>;
+type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 
 function splitProvenance(content: string): { prefix: string | null; text: string } {
-  const match = /^([a-z][a-z0-9_-]{1,30}):\s+(.+)$/i.exec(content);
+  const match = /^([a-z][a-z0-9_-]{1,80}):\s+([\s\S]+)$/i.exec(content);
   return match ? { prefix: `${match[1]}:`, text: match[2] ?? "" } : { prefix: null, text: content };
 }
 
@@ -32,33 +32,42 @@ function MemoryCard({ memory, store, locale, run }: {
   const [draft, setDraft] = useState(memory.content);
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
-  const isLong = memory.content.length > 240;
   // Split the stored value first, then collapse only its body. This keeps the
   // provenance prefix visible without ever changing the value sent to a store.
   const { prefix, text } = splitProvenance(memory.content);
+  const isLong = text.length > 240;
   const visibleText = !expanded && isLong ? `${text.slice(0, 240)}…` : text;
   const targetVisibility = memory.visibility === "public" ? "private" : "public";
   useEffect(() => setDraft(memory.content), [memory.content]);
 
-  const save = (): void => {
-    const value = draft.trim();
+  const cancelEdit = (): void => {
+    setDraft(memory.content);
     setEditing(false);
-    if (value && value !== memory.content) void run(() => store.patch(memory.id, { content: value }));
+  };
+  const save = async (): Promise<void> => {
+    const value = draft.trim();
+    if (!value || value === memory.content) { setEditing(false); return; }
+    if (await run(() => store.patch(memory.id, { content: value }))) setEditing(false);
   };
   return (
-    <article className={`memory-card${memory.locked ? " is-locked" : ""}`} data-memory-id={memory.id}>
-      <div className="memory-meta">
+    <article className={`memory-card${memory.locked ? " is-locked" : ""}`} data-memory-id={memory.id} data-long={isLong || undefined}>
+      <header className="memory-card-header">
         <span className="memory-provenance">{prefix ?? memory.category}</span>
-        <span>{t(locale, "memories.capturedOn", { date: formatDate(memory.updatedAt, locale) })}</span>
-        <span>{memory.visibility === "public" ? t(locale, "memories.public") : t(locale, "memories.private")}</span>
-      </div>
+        <div className="memory-meta">
+          <span>{t(locale, "memories.capturedOn", { date: formatDate(memory.updatedAt, locale) })}</span>
+          <span className="memory-visibility">{memory.visibility === "public" ? t(locale, "memories.public") : t(locale, "memories.private")}</span>
+        </div>
+      </header>
       {memory.locked ? (
         <>
           <p className="memory-content locked-content">{visibleText}</p>
           <p className="locked-explanation">{t(locale, "locked.body")}</p>
         </>
       ) : editing ? (
-        <textarea className="memory-editor" value={draft} aria-label={t(locale, "memories.edit")} onChange={(event) => setDraft(event.target.value)} />
+        <textarea className="memory-editor" value={draft} aria-label={t(locale, "memories.edit")} autoFocus onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Escape") cancelEdit();
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void save();
+        }} />
       ) : (
         <p className="memory-content">{visibleText}</p>
       )}
@@ -72,10 +81,10 @@ function MemoryCard({ memory, store, locale, run }: {
           </>
         ) : (
           <>
-            <button type="button" onClick={() => setEditing((value) => !value)} aria-label={t(locale, "memories.edit")}>
+            <button type="button" onClick={() => editing ? cancelEdit() : setEditing(true)} aria-label={t(locale, "memories.edit")}>
               {editing ? t(locale, "common.cancel") : t(locale, "common.edit")}
             </button>
-            {editing && <button type="button" onClick={save}>{t(locale, "common.save")}</button>}
+            {editing && <button type="button" onClick={() => void save()}>{t(locale, "common.save")}</button>}
             <button type="button" onClick={() => void run(() => store.patch(memory.id, { visibility: targetVisibility }))}>
               {targetVisibility === "public" ? t(locale, "memories.makePublic") : t(locale, "memories.makePrivate")}
             </button>
@@ -84,7 +93,7 @@ function MemoryCard({ memory, store, locale, run }: {
         {isLong && <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? t(locale, "content.showLess") : t(locale, "content.showMore")}
         </button>}
-        <button type="button" onClick={() => void run(() => store.delete(memory.id))} aria-label={t(locale, "common.delete")}>{t(locale, "common.delete")}</button>
+        <button className="danger-action" type="button" onClick={() => { if (globalThis.confirm(t(locale, "memories.deleteConfirm"))) void run(() => store.delete(memory.id)); }} aria-label={t(locale, "common.delete")}>{t(locale, "common.delete")}</button>
       </div>
     </article>
   );
@@ -101,6 +110,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
   const [draftVisibility, setDraftVisibility] = useState<"public" | "private">("private");
+  const [composerOpen, setComposerOpen] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
@@ -122,9 +132,11 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
     try {
       await operation();
       await reload();
+      return true;
     } catch {
       setOperationError(t(locale, "lifecycle.error"));
       setStatus(store.status());
+      return false;
     }
   }, [locale, reload, store]);
 
@@ -159,36 +171,43 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
     return t(locale, "queue.queuedCount", { count });
   }, [locale, status]);
 
-  const add = (): void => {
+  const add = async (): Promise<void> => {
     const content = draft.trim();
     if (!content) return;
-    setDraft("");
-    void run(() => store.create(content, { visibility: draftVisibility }));
+    if (await run(() => store.create(content, { visibility: draftVisibility }))) {
+      setDraft((current) => current.trim() === content ? "" : current);
+      setComposerOpen(false);
+    }
   };
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
       <ProductionChrome locale={locale} active="memories" placement="top" />
-      <header className="production-header">
+      <header className="production-header memories-header">
         <div><p className="eyebrow">{t(locale, "nav.memories")}</p><h1>{t(locale, "memories.title")}</h1><p>{t(locale, "memories.subtitle")}</p></div>
-        {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
+        <div className="header-actions">
+          {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
+          <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} onClick={() => setComposerOpen((open) => !open)}>{composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")}</button>
+        </div>
       </header>
-      {fixture && <p className="qa-label">{t(locale, "qa.fixtureLabel", { name: t(locale, "qa.syntheticData"), fixture })}</p>}
-      {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-      {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-      {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-      <section className="memory-create" aria-label={t(locale, "memories.create")}>
-        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t(locale, "memories.create")} aria-label={t(locale, "memories.create")} />
+      <div className="surface-notices" aria-live="polite">
+        {fixture && <p className="qa-label">{t(locale, "qa.fixtureLabel", { name: t(locale, "qa.syntheticData"), fixture })}</p>}
+        {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
+        {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
+        {operationError && <div className="operation-error" role="alert">{operationError}</div>}
+      </div>
+      {composerOpen && <form className="memory-create" aria-label={t(locale, "memories.create")} onSubmit={(event) => { event.preventDefault(); void add(); }}>
+        <textarea autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t(locale, "memories.create")} aria-label={t(locale, "memories.create")} />
         <label className="visibility-control">{t(locale, "memories.visibility")}
           <select value={draftVisibility} onChange={(event) => setDraftVisibility(event.target.value as "public" | "private")}>
             <option value="private">{t(locale, "memories.private")}</option>
             <option value="public">{t(locale, "memories.public")}</option>
           </select>
         </label>
-        <button type="button" onClick={add} disabled={!draft.trim()}>{t(locale, "common.save")}</button>
-      </section>
+        <button type="submit" disabled={!draft.trim()}>{t(locale, "common.save")}</button>
+      </form>}
       {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "memories.emptyBody")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{rows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
-      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{letter.summary}</span><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(letter.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(letter.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
       <ProductionChrome locale={locale} active="memories" placement="bottom" />
     </main>
   );

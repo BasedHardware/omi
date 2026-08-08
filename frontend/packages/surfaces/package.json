@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "dev": "vite --port 4650",
+    "dev:lab": "vite --port 4650 --open '/?lab=1'",
     "test": "node --test test/*.test.mjs",
     "lint": "echo surfaces:no-lint-yet"
   },

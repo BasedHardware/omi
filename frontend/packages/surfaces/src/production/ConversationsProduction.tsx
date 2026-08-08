@@ -7,7 +7,8 @@ import { ProductionChrome } from "./ProductionChrome.js";
 import "./conversations.css";
 
 type Locale = string;
-type RunOperation = (operation: () => Promise<void>) => Promise<void>;
+type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
+type ConversationFilter = "all" | "starred" | `folder:${string}`;
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
   switch (status.refresh.phase) {
@@ -105,11 +106,9 @@ function ConversationRow({ conversation, locale, run, store, fixture }: {
   const timestamp = displayTimestamp(conversation);
   return (
     <article className={`conversation-row${conversation.isLocked ? " is-locked" : ""}${conversation.discarded ? " is-discarded" : ""}`} data-conversation-id={conversation.id}>
+      <span className="conversation-avatar" aria-hidden={true} />
       <a className="conversation-row-main" href={conversationHref(conversation.id, fixture)}>
-        <h3 className="conversation-row-title">
-          {title}
-          {conversation.starred && <span className="conversation-star" aria-label={t(locale, "conversations.star")}>★</span>}
-        </h3>
+        <h3 className="conversation-row-title">{title}</h3>
         <div className="conversation-row-meta">
           <span>{timeLabel(timestamp, locale, Boolean(fixture))}</span>
           {rowDuration && <span>{rowDuration}</span>}
@@ -120,12 +119,12 @@ function ConversationRow({ conversation, locale, run, store, fixture }: {
       <div className="conversation-row-actions" aria-label={t(locale, "conversations.title")}>
         <button
           type="button"
-          className="conversation-star"
+          className={`conversation-star${conversation.starred ? " is-starred" : ""}`}
           disabled={!canPatch}
           aria-label={conversation.starred ? t(locale, "conversations.unstar") : t(locale, "conversations.star")}
           onClick={() => void run(() => store.patch(conversation.id, { starred: !conversation.starred }))}
         >
-          {conversation.starred ? t(locale, "conversations.unstar") : t(locale, "conversations.star")}
+          <span aria-hidden={true} />
         </button>
       </div>
     </article>
@@ -150,11 +149,10 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   const timestamp = displayTimestamp(conversation);
   const attribution = sourceAttribution(conversation.source, locale);
   const isLong = summary.length > 320;
-  const saveTitle = (): void => {
+  const saveTitle = async (): Promise<void> => {
     const next = titleDraft.trim();
     if (!canPatch || !next || next === conversation.title) { setEditingTitle(false); return; }
-    setEditingTitle(false);
-    void run(() => store.patch(conversation.id, { title: next }));
+    if (await run(() => store.patch(conversation.id, { title: next }))) setEditingTitle(false);
   };
   return (
     <section className="conversation-detail" data-conversation-detail={conversation.id}>
@@ -163,9 +161,18 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
         <div className="conversation-detail-title-editor">
           {editingTitle ? (
             <>
-              <input value={titleDraft} aria-label={t(locale, "conversations.editTitle")} onChange={(event) => setTitleDraft(event.target.value)} />
+              <input
+                autoFocus
+                value={titleDraft}
+                aria-label={t(locale, "conversations.editTitle")}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void saveTitle();
+                  if (event.key === "Escape") { setTitleDraft(conversation.title); setEditingTitle(false); }
+                }}
+              />
               <div className="conversation-detail-actions">
-                <button type="button" onClick={saveTitle} disabled={!canPatch || !titleDraft.trim()}>{t(locale, "conversations.saveTitle")}</button>
+                <button type="button" onClick={() => void saveTitle()} disabled={!canPatch || !titleDraft.trim()}>{t(locale, "conversations.saveTitle")}</button>
                 <button type="button" onClick={() => { setTitleDraft(conversation.title); setEditingTitle(false); }}>{t(locale, "common.cancel")}</button>
               </div>
             </>
@@ -173,11 +180,6 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
         </div>
         {!conversation.isLocked && !conversation.discarded && <button type="button" onClick={() => setEditingTitle(true)}>{t(locale, "conversations.editTitle")}</button>}
       </header>
-      <div className="conversation-summary">
-        <h3>{t(locale, "conversations.detailSummary")}</h3>
-        <p className={`conversation-long-body${expanded ? " is-expanded" : ""}`}>{summary}</p>
-        {isLong && <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? t(locale, "conversations.showLess") : t(locale, "conversations.showMore")}</button>}
-      </div>
       {conversation.isLocked && <p className="locked-explanation">{t(locale, "conversations.lockedBody")}</p>}
       {conversation.discarded && <p className="locked-explanation">{t(locale, "conversations.discardedBody")}</p>}
       <dl className="conversation-detail-meta">
@@ -187,6 +189,11 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
         <div><dt>{t(locale, "conversations.folder")}</dt><dd>{folderLabel(conversation.folderId, folders, locale)}</dd></div>
       </dl>
       {attribution && <p className="conversation-source">{attribution}</p>}
+      <section className="conversation-summary" aria-labelledby="conversation-summary-heading">
+        <h3 id="conversation-summary-heading">{t(locale, "conversations.detailSummary")}</h3>
+        <p className={`conversation-long-body${expanded ? " is-expanded" : ""}`}>{summary}</p>
+        {isLong && <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? t(locale, "conversations.showLess") : t(locale, "conversations.showMore")}</button>}
+      </section>
       {canPatch && <div className="conversation-detail-actions">
         <button type="button" onClick={() => void run(() => store.patch(conversation.id, { starred: !conversation.starred }))}>{conversation.starred ? t(locale, "conversations.unstar") : t(locale, "conversations.star")}</button>
         <>
@@ -226,7 +233,8 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
   const [dead, setDead] = useState<Awaited<ReturnType<ProductionConversationStore["deadLetters"]>>>([]);
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "starred">("all");
+  const [filter, setFilter] = useState<ConversationFilter>("all");
+  const [query, setQuery] = useState("");
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -245,8 +253,8 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
 
   const run = useCallback<RunOperation>(async (operation) => {
     setOperationError(null);
-    try { await operation(); await reload(); }
-    catch { setOperationError(t(locale, "lifecycle.error")); setStatus(store.status()); }
+    try { await operation(); await reload(); return true; }
+    catch { setOperationError(t(locale, "lifecycle.error")); setStatus(store.status()); return false; }
   }, [locale, reload, store]);
 
   useEffect(() => {
@@ -274,7 +282,16 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
     return t(locale, "queue.queuedCount", { count });
   }, [locale, status]);
   const selected = detailId ? rows.find((row) => row.id === detailId) : undefined;
-  const visibleRows = filter === "starred" ? rows.filter((row) => row.starred) : rows;
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    const folderId = filter.startsWith("folder:") ? filter.slice("folder:".length) : null;
+    const scopedRows = filter === "starred" ? rows.filter((row) => row.starred) : rows;
+    return scopedRows.filter((row) => {
+      if (folderId !== null && row.folderId !== folderId) return false;
+      if (!needle) return true;
+      return `${row.title} ${row.overview}`.toLocaleLowerCase().includes(needle);
+    });
+  }, [filter, query, rows]);
   const dayGroups = useMemo(() => {
     const groups = new Map<string, { label: string; rows: Conversation[] }>();
     for (const row of visibleRows) {
@@ -299,9 +316,24 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
       {operationError && <div className="operation-error" role="alert">{operationError}</div>}
       {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state">{t(locale, "conversations.detailNotFound")}</p> : <>
+        <div className="conversation-controls">
+          <label className="conversation-search">
+            <span className="conversation-search-icon" aria-hidden={true} />
+            <span className="visually-hidden">{t(locale, "conversations.filterSavedPlaceholder")}</span>
+            <input
+              type="search"
+              value={query}
+              placeholder={t(locale, "conversations.filterSavedPlaceholder")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        </div>
         <div className="conversation-filter" aria-label={t(locale, "conversations.title")}>
           <button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>{t(locale, "conversations.all")}</button>
           <button type="button" aria-pressed={filter === "starred"} onClick={() => setFilter("starred")}>{t(locale, "conversations.starred")}</button>
+          {folders.filter((folder) => !folder.isSystem).map((folder) => (
+            <button key={folder.id} type="button" aria-pressed={filter === `folder:${folder.id}`} onClick={() => setFilter(`folder:${folder.id}`)}>{folder.name}</button>
+          ))}
         </div>
         {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "conversations.emptyBody")}</p> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
@@ -310,7 +342,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
           </section>)}
         </section>}
       </>}
-      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{letter.summary}</span><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{t(locale, "dead.remove")}</button></div>)}</section>}
       <ProductionChrome locale={locale} active="conversations" placement="bottom" />
     </main>
   );

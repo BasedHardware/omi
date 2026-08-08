@@ -153,9 +153,10 @@ if (existsSync(productionRoot)) {
     );
     const isSafeAttribute = (name) =>
       name === "className" || name === "class" || name === "id" || name === "role" || name === "aria-current" ||
+      name === "aria-hidden" || name === "aria-disabled" || name === "aria-live" ||
       name === "name" || name === "type" || name === "value" || name === "href" ||
       name === "src" || name === "style" || name === "key" || name === "active" || name === "placement" ||
-      name === "aria-labelledby" || name.startsWith("data-");
+      name === "aria-labelledby" || name === "d" || name === "viewBox" || name === "focusable" || name.startsWith("data-");
     const isNonCopyLiteral = (value) => /^[+×★☆]$/.test(value.trim());
     const reportVisibleLiteral = (node, context) => {
       const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
