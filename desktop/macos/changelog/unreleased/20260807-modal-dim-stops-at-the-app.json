@@ -1,0 +1,3 @@
+{
+  "change": "Fixed modals darkening a rectangle of your desktop instead of the app — the dim now stops at the app's own panels"
+}

@@ -58,7 +58,7 @@ def _ok(tool_name: str, text: str) -> dict:
 
 
 class SearchConversationsRequest(BaseModel):
-    query: str = Field(description="Semantic search query")
+    query: str = Field(description="Natural-language topic, canonical conversation UUID, or h.omi.me share URL")
     start_date: Optional[str] = Field(default=None, description="ISO date with timezone")
     end_date: Optional[str] = Field(default=None, description="ISO date with timezone")
     limit: int = Field(default=5, ge=1, le=20)

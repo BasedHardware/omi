@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Vaš plan se obnavlja na {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Besplatni plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,22 @@
     "whisperModelSizeLarge": "Veliki",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
-    "whisperModelSizeTiny": "Sićušni"
+    "whisperModelSizeTiny": "Sićušni",
+    "planSheetChooseYourPlan": "Odaberite svoj plan da otključate neograničeni Omi.",
+    "availableOnMacMobileWeb": "Dostupno na Macu, mobitelu i webu",
+    "popularBadge": "POPULARNO",
+    "worksOnDesktop": "Radi na desktopu",
+    "noDesktopAccess": "Ne radi na desktopu",
+    "annualBillingSummary": "{months} mjeseci / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} mjesec besplatno} few{{count} mjeseca besplatno} other{{count} mjeseci besplatno}}",
+    "freemiumLimitsIntro": "Omi je besplatan, ali besplatna verzija ima ograničenja koja utiču na vaše iskustvo:",
+    "downgradeLimitDelayNotRealTime": "Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)",
+    "downgradeToFreemiumAction": "Pređite na besplatnu verziju",
+    "getFreeUnlimitedAccess": "Ostvarite besplatan neograničen pristup",
+    "shareDataForTraining": "Dijelite podatke za treniranje",
+    "yourRequestUnderReview": "Vaš zahtjev je na pregledu",
+    "pinAsBaseline": "Prikači kao osnovu",
+    "unpinAsBaseline": "Otkači s osnove",
+    "baselineMemory": "Osnovna memorija",
+    "alwaysInContext": "Uvijek u kontekstu"
 }

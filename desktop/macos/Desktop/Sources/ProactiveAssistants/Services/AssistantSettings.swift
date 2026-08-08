@@ -90,13 +90,23 @@ class AssistantSettings {
   }
 
   /// Delay in seconds before analyzing after an app switch (0 = instant, 60 = 1 min, 300 = 5 min)
+  ///
+  /// Zero is a real setting here — "Instant" — so the floor is `0`, not `1`. Below it there is no
+  /// meaning, and a negative value is refused on write and healed on read for the reason spelled out
+  /// on `TaskAssistantSettings.extractionInterval`: normalising only on read let the store hold a
+  /// number the app never honoured, which the next push to the account then overwrote.
   var analysisDelay: Int {
     get {
-      let value = UserDefaults.standard.integer(forKey: analysisDelayKey)
-      return value >= 0 ? value : defaultAnalysisDelay
+      let stored = UserDefaults.standard.integer(forKey: analysisDelayKey)
+      guard stored >= 0 else {
+        UserDefaults.standard.set(defaultAnalysisDelay, forKey: analysisDelayKey)
+        return defaultAnalysisDelay
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: analysisDelayKey)
+      let delay = newValue >= 0 ? newValue : defaultAnalysisDelay
+      UserDefaults.standard.set(delay, forKey: analysisDelayKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

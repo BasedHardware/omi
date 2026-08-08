@@ -41,8 +41,6 @@ const SESSION_POLL_MAX_ATTEMPTS = 60 // ~5 min
 const MANUAL_SESSION_WAIT_MS = 10_000
 const MANUAL_SESSION_POLL_MS = 500
 /** Manual retry: 3 attempts, 5s between (Mac's generateNow backoff). */
-const MANUAL_MAX_ATTEMPTS = 3
-const MANUAL_BACKOFF_MS = 5_000
 
 let isGenerating = false
 let timer: ReturnType<typeof setInterval> | null = null
@@ -116,7 +114,7 @@ export async function runGoalGenerationIfDue(): Promise<void> {
 /**
  * Manual phase 1 (Suggest button IPC): GENERATE a candidate for the renderer to
  * preview. Bypasses the day + count gates — the user asked directly — but waits
- * briefly for a session and retries a transport failure 3× / 5s. Does NOT create
+ * briefly for a session. The Gemini wire layer is the only retry owner. Does NOT create
  * the goal (that is `acceptGoalCandidate`, after the user accepts the preview).
  */
 export async function generateGoalCandidateNow(): Promise<CandidateResult> {
@@ -125,24 +123,12 @@ export async function generateGoalCandidateNow(): Promise<CandidateResult> {
   while (!getBackendSession() && Date.now() < deadline) await sleep(MANUAL_SESSION_POLL_MS)
   if (!getBackendSession()) return { status: 'skipped', reason: 'no_session' }
 
-  let lastError: unknown
-  for (let attempt = 0; attempt < MANUAL_MAX_ATTEMPTS; attempt++) {
-    try {
-      // A skip (insufficient context / invalid model output) won't change in 5s —
-      // return it rather than burn retries. Only transport throws are retried.
-      return await generateGoalCandidate()
-    } catch (e) {
-      lastError = e
-      if (attempt < MANUAL_MAX_ATTEMPTS - 1) await sleep(MANUAL_BACKOFF_MS)
-    }
+  try {
+    return await generateGoalCandidate()
+  } catch (error) {
+    console.warn('[goals] manual generation failed:', error instanceof Error ? error.name : 'Error')
+    return { status: 'skipped', reason: 'invalid_suggestion' }
   }
-  console.warn(
-    '[goals] manual generation failed after retries:',
-    lastError instanceof Error ? lastError.name : 'Error'
-  )
-  // No CandidateResult reason for transport error — surface as invalid_suggestion
-  // (the renderer toasts a generic "try again"); the log carries the real cause.
-  return { status: 'skipped', reason: 'invalid_suggestion' }
 }
 
 /**

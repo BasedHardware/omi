@@ -15,6 +15,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -399,9 +400,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
               final content = child!;
+              final guidedContent = BluetoothGuidanceListener(child: content);
               return PlatformService.isIOS && Env.posthogApiKey != null
-                  ? RageClickContextTracker(child: content)
-                  : content;
+                  ? RageClickContextTracker(child: guidedContent)
+                  : guidedContent;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,
