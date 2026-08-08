@@ -128,9 +128,7 @@ def test_missing_period_end_is_still_pending_cancellation(subscription_module):
     assert subscription_module.is_pending_cancellation(subscription, now=200)
 
 
-def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(
-    monkeypatch, subscription_module
-):
+def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypatch, subscription_module):
     """A cancel-at-period-end Stripe subscription must block a different target
     price even when the local Firestore record is missing/basic (lag or recovery).
     Same-price reactivation stays allowed in that branch."""
