@@ -236,13 +236,11 @@ class PageContext(BaseModel):
             parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValueError(
-                f"{field_name} must be ISO-8601 with timezone "
-                f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
             ) from exc
         if parsed.tzinfo is None:
             raise ValueError(
-                f"{field_name} must include a timezone offset "
-                f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
             )
         return stripped
 

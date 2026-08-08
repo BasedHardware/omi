@@ -166,9 +166,7 @@ def get_memories_tool(
     if blocked:
         return blocked
 
-    start_date, end_date, scope_err = apply_chat_scope_dates(
-        chat_scope_from_config(configurable), start_date, end_date
-    )
+    start_date, end_date, scope_err = apply_chat_scope_dates(chat_scope_from_config(configurable), start_date, end_date)
     if scope_err:
         return f"Error: {scope_err}"
 
@@ -409,7 +407,9 @@ def search_memories_tool(
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit * 3 if (scope_start_dt or scope_end_dt) else limit)
+        matches = MemoryService(db_client=firestore_db).search(
+            uid, query, limit=limit * 3 if (scope_start_dt or scope_end_dt) else limit
+        )
         if scope_start_dt or scope_end_dt:
             matches = [
                 m

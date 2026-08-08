@@ -501,10 +501,7 @@ def search_conversations_tool(
 
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
-        return (
-            f"Error: Chat is scoped to conversation {scoped_id}; "
-            f"cannot load a different conversation reference."
-        )
+        return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
 
     try:
         keyword_ids: List[str] = []

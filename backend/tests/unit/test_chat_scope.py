@@ -90,10 +90,14 @@ def test_get_conversations_tool_honors_conversation_scope():
     with (
         patch.object(tools.conversations_db, "get_conversation", return_value=conv) as get_one,
         patch.object(tools.conversations_db, "get_conversations") as get_many,
-        patch.object(tools, "deserialize_conversation", side_effect=lambda d: MagicMock(
-            model_dump=lambda: dict(d),
-            transcript_segments=[],
-        )),
+        patch.object(
+            tools,
+            "deserialize_conversation",
+            side_effect=lambda d: MagicMock(
+                model_dump=lambda: dict(d),
+                transcript_segments=[],
+            ),
+        ),
         patch.object(tools, "conversations_to_string", return_value="SCOPED_ONLY"),
         patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
