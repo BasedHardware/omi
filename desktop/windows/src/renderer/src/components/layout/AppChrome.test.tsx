@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 // The real Sidebar pulls in Firebase, the R3F orb and window.omi IPC. This suite is
 // about WHETHER the rail mounts, not what's in it.
 vi.mock('./Sidebar', () => ({ Sidebar: () => <div data-testid="sidebar" /> }))
+vi.mock('../../pages/Home', () => ({ Home: () => null }))
 
 import { AppChrome } from './AppChrome'
 import { setPreferences } from '../../lib/preferences'

@@ -1,3 +1,18 @@
+export type SignGloss = {
+  gloss: string
+  duration: number
+  timestamp: number
+  swr?: string
+}
+
+export type TranslationResult = {
+  originalText: string
+  poseUrl?: string
+  assetType?: 'video' | 'pose'
+  glosses: SignGloss[]
+  swrFull?: string
+}
+
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 import type { ChatContentBlock } from './chatContent'
@@ -1132,6 +1147,9 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
+  signLanguageSetEnabled: (enabled: boolean) => void
+  signLanguageGetEnabled: () => Promise<boolean>
   // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */
