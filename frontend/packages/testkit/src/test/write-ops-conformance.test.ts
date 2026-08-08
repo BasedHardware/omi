@@ -23,7 +23,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyWriteOpsResponse, buildWriteOpEnvelope } from "@omi-core/adapters-platform";
+import { classifyWriteOpsResponse, buildWriteOpEnvelope, isControlUnavailable } from "@omi-core/adapters-platform";
 import type { HttpResponse, WriteFailure } from "@omi-core/contracts";
 
 import { readRatifiedCorpus, readRatifiedWriteOpsSchema } from "../ratified-fixtures.js";
@@ -149,5 +149,30 @@ test("no word slug appears anywhere in a serialized envelope", () => {
     assert.match(parsed.write_id, /^[0-9a-f]{64}$/, row.name);
     assert.ok(!row.requestBody.includes("opId"), `${row.name}: opId must stay client-private`);
     assert.ok(!row.requestBody.includes("op_id"), `${row.name}: opId must stay client-private`);
+  }
+});
+
+test("control_unavailable keeps the op queued AND tells the binding to refresh control state", () => {
+  // COORD-fable-rulings-wave2 W1. Two assertions, because the taxonomy answer
+  // alone is not the whole obligation: `retryable` is right (never a dead
+  // letter), and it is also indistinguishable from a plain 503, which after a
+  // rollback means retrying in place against a platform that can never accept.
+  //
+  // red-proof: make `isControlUnavailable` return false unconditionally and this
+  // goes red. APPLIED AND OBSERVED RED.
+  // red-proof: classify control_unavailable as permanent/stale_epoch — the
+  // collapse the ruling names as the expensive one — and the first assertion
+  // goes red. APPLIED AND OBSERVED RED.
+  const rows = corpus.filter((row) => row.wireOutcome === "control_unavailable");
+  assert.ok(rows.length >= 1, "the corpus must carry a control_unavailable row");
+  for (const row of rows) {
+    const response = asResponse(row);
+    assert.deepEqual(classifyWriteOpsResponse(response, "corpus"), { kind: "retryable", detail: "corpus" }, row.name);
+    assert.equal(isControlUnavailable(response), true, row.name);
+  }
+  // And nothing else on this wire may read as control-unavailable — most
+  // importantly not stale_epoch, which the client dead-letters permanently.
+  for (const row of corpus.filter((entry) => entry.wireOutcome !== "control_unavailable")) {
+    assert.equal(isControlUnavailable(asResponse(row)), false, row.name);
   }
 });
