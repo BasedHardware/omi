@@ -114,6 +114,8 @@ Future<Map<String, String>> buildHeaders({
   required bool requireAuthCheck,
   Map<String, String> fromHeaders = const {},
   bool expireTerminalSession = true,
+  String? url,
+  String? method,
 }) async {
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
@@ -124,11 +126,13 @@ Future<Map<String, String>> buildHeaders({
     ...fromHeaders,
   };
 
-  final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
-  // Generation-zero remains compatible without the header; positive generations
-  // must present matching metadata on mutating requests.
-  if (accountGeneration > 0) {
-    headers['X-Account-Generation'] = accountGeneration.toString();
+  if (shouldAttachAccountGenerationHeader(url: url, method: method, requireAuthCheck: requireAuthCheck)) {
+    final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
+    // Generation-zero remains compatible without the header; positive generations
+    // must present matching metadata on mutating Omi API requests.
+    if (accountGeneration > 0) {
+      headers['X-Account-Generation'] = accountGeneration.toString();
+    }
   }
 
   if (requireAuthCheck) {
@@ -143,10 +147,23 @@ Future<Map<String, String>> buildHeaders({
 bool _isRequiredAuthCheck(String url) {
   // Agent VM endpoints always hit prod even when app uses dev
   if (url.contains('api.omi.me')) return true;
-  if (url.contains(Env.apiBaseUrl!)) {
+  final base = Env.apiBaseUrl;
+  if (base != null && base.isNotEmpty && url.contains(base)) {
     return true;
   }
   return false;
+}
+
+const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};
+
+/// `X-Account-Generation` is only for authenticated Omi API mutation traffic —
+/// never arbitrary third-party hosts (e.g. firmware zip downloads).
+@visibleForTesting
+bool shouldAttachAccountGenerationHeader({String? url, String? method, required bool requireAuthCheck}) {
+  if (!requireAuthCheck) return false;
+  if (url != null && url.isNotEmpty && !_isRequiredAuthCheck(url)) return false;
+  if (method == null || method.isEmpty) return false;
+  return _mutatingHttpMethods.contains(method.toUpperCase());
 }
 
 Future<http.StreamedResponse> makeRawApiCall({
@@ -156,7 +173,12 @@ Future<http.StreamedResponse> makeRawApiCall({
 }) async {
   final requireAuthCheck = _isRequiredAuthCheck(url);
   try {
-    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    var builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
     var response = await HttpPoolManager.instance.sendStreaming(request);
@@ -167,7 +189,7 @@ Future<http.StreamedResponse> makeRawApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = http.Request(method, Uri.parse(url));
           request.headers.addAll(builtHeaders);
           return HttpPoolManager.instance.sendStreaming(request);
@@ -300,6 +322,8 @@ Future<http.Response?> makeApiCall({
       requireAuthCheck: requireAuthCheck,
       fromHeaders: headers,
       expireTerminalSession: signOutOn401,
+      url: url,
+      method: method,
     );
 
     final effectiveTimeout =
@@ -322,6 +346,8 @@ Future<http.Response?> makeApiCall({
             requireAuthCheck: true,
             fromHeaders: headers,
             expireTerminalSession: signOutOn401,
+            url: url,
+            method: method,
           );
           return HttpPoolManager.instance.send(
             () => _buildRequest(url, builtHeaders, body, method),
@@ -436,7 +462,12 @@ Future<http.Response> makeMultipartApiCall({
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -456,7 +487,7 @@ Future<http.Response> makeMultipartApiCall({
         statusCode: (value) => value.statusCode,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = await _buildMultipartRequest(
             url: url,
             files: files,
@@ -500,7 +531,12 @@ Future<http.Response> makeMultipartApiCallUnpooled({
   final client = http.Client();
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -521,7 +557,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
         statusCode: (value) => value.statusCode,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = await _buildMultipartRequest(
             url: url,
             files: files,
@@ -562,7 +598,12 @@ Stream<String> makeStreamingApiCall({
 }) async* {
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
-    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    var builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: method,
+    );
 
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
@@ -581,7 +622,7 @@ Stream<String> makeStreamingApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
           request = http.Request(method, Uri.parse(url));
           request.headers.addAll(builtHeaders);
           if (body.isNotEmpty) {
@@ -653,7 +694,12 @@ Stream<String> makeMultipartStreamingApiCall({
 }) async* {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      url: url,
+      method: 'POST',
+    );
 
     var request = await _buildMultipartRequest(
       url: url,
@@ -673,7 +719,7 @@ Stream<String> makeMultipartStreamingApiCall({
         disposeUnauthorizedResponse: _drainStreamedResponse,
         expireTerminalSession: true,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: 'POST');
           request = await _buildMultipartRequest(
             url: url,
             files: files,

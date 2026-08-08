@@ -3,6 +3,14 @@
 /// LIFECYCLE: permanent
 library;
 
+class AccountCutoverControlParseException implements Exception {
+  const AccountCutoverControlParseException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'AccountCutoverControlParseException: $message';
+}
+
 enum AccountCutoverState {
   legacy,
   migrating,
@@ -31,8 +39,9 @@ AccountCutoverState parseAccountCutoverState(String? raw) {
     case 'rolled_back_stranded':
       return AccountCutoverState.rolledBackStranded;
     case 'legacy':
-    default:
       return AccountCutoverState.legacy;
+    default:
+      throw AccountCutoverControlParseException('unsupported cutover state: $raw');
   }
 }
 
@@ -43,8 +52,9 @@ AccountCutoverClientAction parseAccountCutoverClientAction(String? raw) {
     case 'migration_maintenance':
       return AccountCutoverClientAction.migrationMaintenance;
     case 'none':
-    default:
       return AccountCutoverClientAction.none;
+    default:
+      throw AccountCutoverControlParseException('unsupported client_action: $raw');
   }
 }
 
@@ -55,9 +65,24 @@ OfflineQueueInstruction parseOfflineQueueInstruction(String? raw) {
     case 'quarantine':
       return OfflineQueueInstruction.quarantine;
     case 'none':
-    default:
       return OfflineQueueInstruction.none;
+    default:
+      throw AccountCutoverControlParseException('unsupported offline_queue_instruction: $raw');
   }
+}
+
+bool _requireBool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is bool) return value;
+  throw AccountCutoverControlParseException('expected boolean for $key, got ${value.runtimeType}');
+}
+
+int _requireNonNegativeInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is num && value == value.roundToDouble() && value >= 0) {
+    return value.toInt();
+  }
+  throw AccountCutoverControlParseException('expected non-negative int for $key, got $value');
 }
 
 class AccountCutoverControl {
@@ -98,20 +123,47 @@ class AccountCutoverControl {
         authBootstrapReachable: true,
       );
 
-  factory AccountCutoverControl.fromJson(Map<String, dynamic> json) {
+  /// Fail-closed maintenance projection used when control is unavailable,
+  /// malformed, or a refresh fails after an authoritative projection was seen.
+  /// Retains generation fields from [retaining] so mutations keep presenting
+  /// the last known `X-Account-Generation`.
+  factory AccountCutoverControl.unavailable({AccountCutoverControl? retaining}) {
     return AccountCutoverControl(
-      state: parseAccountCutoverState(json['state'] as String?),
-      accountGeneration: (json['account_generation'] as num?)?.toInt() ?? 0,
-      uiGeneration: (json['ui_generation'] as num?)?.toInt() ?? 0,
-      apiGeneration: (json['api_generation'] as num?)?.toInt() ?? 0,
-      clientAction: parseAccountCutoverClientAction(json['client_action'] as String?),
-      offlineQueueInstruction: parseOfflineQueueInstruction(json['offline_queue_instruction'] as String?),
-      strandedNewData: json['stranded_new_data'] == true,
-      legacyWritesAllowed: json['legacy_writes_allowed'] != false,
-      productTrafficAllowed: json['product_traffic_allowed'] != false,
-      authBootstrapReachable: json['auth_bootstrap_reachable'] != false,
+      state: retaining?.state ?? AccountCutoverState.migrating,
+      accountGeneration: retaining?.accountGeneration ?? 0,
+      uiGeneration: retaining?.uiGeneration ?? 0,
+      apiGeneration: retaining?.apiGeneration ?? 0,
+      clientAction: AccountCutoverClientAction.migrationMaintenance,
+      offlineQueueInstruction: OfflineQueueInstruction.quarantine,
+      strandedNewData: retaining?.strandedNewData ?? false,
+      legacyWritesAllowed: false,
+      productTrafficAllowed: false,
+      authBootstrapReachable: true,
     );
   }
 
-  bool get blocksProductTraffic => clientAction != AccountCutoverClientAction.none || productTrafficAllowed == false;
+  factory AccountCutoverControl.fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('state') ||
+        !json.containsKey('client_action') ||
+        !json.containsKey('offline_queue_instruction') ||
+        !json.containsKey('account_generation') ||
+        !json.containsKey('product_traffic_allowed') ||
+        !json.containsKey('legacy_writes_allowed') ||
+        !json.containsKey('auth_bootstrap_reachable')) {
+      throw const AccountCutoverControlParseException('incomplete cutover control projection');
+    }
+
+    return AccountCutoverControl(
+      state: parseAccountCutoverState(json['state'] as String?),
+      accountGeneration: _requireNonNegativeInt(json, 'account_generation'),
+      uiGeneration: json.containsKey('ui_generation') ? _requireNonNegativeInt(json, 'ui_generation') : 0,
+      apiGeneration: json.containsKey('api_generation') ? _requireNonNegativeInt(json, 'api_generation') : 0,
+      clientAction: parseAccountCutoverClientAction(json['client_action'] as String?),
+      offlineQueueInstruction: parseOfflineQueueInstruction(json['offline_queue_instruction'] as String?),
+      strandedNewData: json.containsKey('stranded_new_data') ? _requireBool(json, 'stranded_new_data') : false,
+      legacyWritesAllowed: _requireBool(json, 'legacy_writes_allowed'),
+      productTrafficAllowed: _requireBool(json, 'product_traffic_allowed'),
+      authBootstrapReachable: _requireBool(json, 'auth_bootstrap_reachable'),
+    );
+  }
 }

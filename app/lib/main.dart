@@ -15,7 +15,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
-import 'package:omi/services/account_cutover/account_cutover_control_client.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -175,8 +174,9 @@ Future _init() async {
       await AuthService.instance.restoreOnboardingState();
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
-    final cutoverControl = await AccountCutoverControlClient().fetchControl();
-    AccountCutoverRuntime.instance.apply(cutoverControl);
+    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(
+      FirebaseAuth.instance.currentUser?.uid,
+    );
   }
   initOpus(await opus_flutter.load());
 
@@ -253,10 +253,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     ApiClient.dispose();
   }
 
-  Future<void> _refreshAccountCutoverControl() async {
-    if (!AuthService.instance.isSignedIn()) return;
-    final cutoverControl = await AccountCutoverControlClient().fetchControl();
-    AccountCutoverRuntime.instance.apply(cutoverControl);
+  Future<void> _refreshAccountCutoverThenWakeUploads() async {
+    if (!AuthService.instance.isSignedIn()) {
+      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(null);
+      return;
+    }
+    // Apply fresh cutover control before waking WAL recovery so a stale
+    // legacy/allow projection cannot admit one offline upload.
+    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(
+      FirebaseAuth.instance.currentUser?.uid,
+    );
+    SyncReconciler.instance.onForeground();
+    unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
   }
 
   @override
@@ -264,10 +272,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
-      // Resume the upload reconciler at fast cadence and check immediately.
-      SyncReconciler.instance.onForeground();
-      SyncUploadGate.instance.reconcileFairUseStatus();
-      unawaited(_refreshAccountCutoverControl());
+      unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
