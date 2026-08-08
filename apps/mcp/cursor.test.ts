@@ -57,7 +57,7 @@ const rotatedKeyset: McpCursorSigningKeyset = {
 };
 
 const opaqueVisibleKeyset = (stableVisibleSortTuple: readonly [number, string]) =>
-  asOpaqueVisibleKeyset(Buffer.from(digest(JSON.stringify(stableVisibleSortTuple)), "hex").toString("base64url"));
+  asOpaqueVisibleKeyset(`vk1_${digest(JSON.stringify(stableVisibleSortTuple))}`);
 
 const LAST_VISIBLE_KEYSET = opaqueVisibleKeyset([1_799_999_900_000, "visible-item-9"]);
 
@@ -182,6 +182,7 @@ describe("MCP signed keyset cursor", () => {
     const serialized = JSON.stringify(decodedPayload(cursor));
 
     for (const raw of Object.values(rawBindingValues)) expect(serialized).not.toContain(raw);
+    expect(serialized).not.toContain("visible-item-9");
     expect(serialized).toContain(bindings().visibility_digest);
     expect(serialized).toContain(LAST_VISIBLE_KEYSET);
     expect(Buffer.byteLength(cursor, "utf8")).toBeLessThanOrEqual(MAX_MCP_CURSOR_ENCODED_BYTES);
@@ -196,12 +197,20 @@ describe("MCP signed keyset cursor", () => {
     const unknownBinding = JSON.stringify({ ...payload, bindings: { ...bindingsPayload, user_id: "must-not-survive" } });
     const malformedDigest = JSON.stringify({ ...payload, bindings: { ...bindingsPayload, query_digest: "not-a-digest" } });
     const oversizedKey = JSON.stringify({ ...payload, last_visible_key: "A".repeat(513) });
+    const rawVisibleKey = JSON.stringify({ ...payload, last_visible_key: "raw-owner-id_123" });
 
-    for (const payloadText of [nonCanonical, unknownTopLevel, unknownBinding, malformedDigest, oversizedKey]) {
+    for (const payloadText of [nonCanonical, unknownTopLevel, unknownBinding, malformedDigest, oversizedKey, rawVisibleKey]) {
       expectInvalid(() => verifyMcpCursor(resign(cursor, payloadText), verification(), oldKeyset));
     }
     expect(() => issueMcpCursor({
       last_visible_key: "A".repeat(513) as ReturnType<typeof asOpaqueVisibleKeyset>,
+      bindings: bindings(),
+      issued_at_epoch_seconds: 1_800_000_000,
+      ttl_seconds: 300,
+    }, oldKeyset)).toThrow(TypeError);
+    expect(() => asOpaqueVisibleKeyset("raw-owner-id_123")).toThrow(TypeError);
+    expect(() => issueMcpCursor({
+      last_visible_key: "raw-owner-id_123" as ReturnType<typeof asOpaqueVisibleKeyset>,
       bindings: bindings(),
       issued_at_epoch_seconds: 1_800_000_000,
       ttl_seconds: 300,
@@ -256,7 +265,125 @@ describe("MCP signed keyset cursor", () => {
     const absentCursor = cursorForPage(withoutHidden);
     const hiddenCursor = cursorForPage(withHidden);
     expect(hiddenCursor).toBe(absentCursor);
-    expect(hiddenCursor).not.toContain("private-row-must-not-bind");
+    expect(JSON.stringify(decodedPayload(hiddenCursor))).not.toContain("private-row-must-not-bind");
     expect(cursorForPage(changedVisible)).not.toBe(absentCursor);
+  });
+
+  test("rejects accessor, inherited, class, and proxy verification inputs without invoking getters or data", () => {
+    const cursor = issue();
+    let ownerGetterCalls = 0;
+    let clockGetterCalls = 0;
+    let dataCalls = 0;
+    const getterBindings = { ...bindings() };
+    Object.defineProperty(getterBindings, "owner_digest", {
+      enumerable: true,
+      get: () => { ownerGetterCalls++; return digest("cross-owner"); },
+    });
+    const getterClock = { bindings: bindings() } as Record<string, unknown>;
+    Object.defineProperty(getterClock, "now_epoch_seconds", {
+      enumerable: true,
+      get: () => { clockGetterCalls++; return 1_800_000_301; },
+    });
+    class VerificationClass {
+      bindings = bindings();
+      now_epoch_seconds = 1_800_000_120;
+    }
+    const inherited = Object.create(verification()) as ReturnType<typeof verification>;
+    const proxied = new Proxy(verification(), {});
+
+    for (const request of [
+      { bindings: getterBindings, now_epoch_seconds: 1_800_000_120 },
+      getterClock,
+      new VerificationClass(),
+      inherited,
+      proxied,
+    ]) {
+      expect(() => readAfterMcpCursorValidation(
+        cursor,
+        request as ReturnType<typeof verification>,
+        oldKeyset,
+        () => { dataCalls++; },
+      )).toThrow(TypeError);
+    }
+    expect(ownerGetterCalls).toBe(0);
+    expect(clockGetterCalls).toBe(0);
+    expect(dataCalls).toBe(0);
+
+    const mutableBindings = { ...bindings() };
+    const mutableRequest = { bindings: mutableBindings, now_epoch_seconds: 1_800_000_120 };
+    const snapshottedOwner = readAfterMcpCursorValidation(cursor, mutableRequest, oldKeyset, (claims) => {
+      mutableBindings.owner_digest = digest("mutated-after-validation");
+      mutableRequest.now_epoch_seconds = 1_800_000_301;
+      return claims.bindings.owner_digest;
+    });
+    expect(snapshottedOwner).toBe(bindings().owner_digest);
+  });
+
+  test("snapshots issue inputs and signing secrets, and rejects their accessors without invocation", () => {
+    let issueGetterCalls = 0;
+    let secretGetterCalls = 0;
+    let activeKeyGetterCalls = 0;
+    const issueBindings = { ...bindings() };
+    const mutableSecret = new Uint8Array(32).fill(17);
+    const issueRequest = {
+      last_visible_key: LAST_VISIBLE_KEYSET,
+      bindings: issueBindings,
+      issued_at_epoch_seconds: 1_800_000_000,
+      ttl_seconds: 300,
+    };
+    const mutableKeyset: McpCursorSigningKeyset = {
+      active_key_id: "cursor-old",
+      keys: [{ key_id: "cursor-old", secret: mutableSecret }],
+    };
+    const cursor = issueMcpCursor(issueRequest, mutableKeyset);
+
+    issueBindings.owner_digest = digest("mutated-owner");
+    issueRequest.issued_at_epoch_seconds = 1_800_000_999;
+    mutableSecret.fill(0);
+    const claims = verifyMcpCursor(cursor, verification(), {
+      active_key_id: "cursor-old",
+      keys: [{ key_id: "cursor-old", secret: new Uint8Array(32).fill(17) }],
+    });
+    expect(claims.bindings.owner_digest).toBe(bindings().owner_digest);
+    expect(claims.issued_at_epoch_seconds).toBe(1_800_000_000);
+
+    const getterIssueRequest = { ...issueRequest, bindings: bindings() } as Record<string, unknown>;
+    Object.defineProperty(getterIssueRequest, "issued_at_epoch_seconds", {
+      enumerable: true,
+      get: () => { issueGetterCalls++; return 1_800_000_000; },
+    });
+    const getterKey = { key_id: "cursor-old" } as Record<string, unknown>;
+    Object.defineProperty(getterKey, "secret", {
+      enumerable: true,
+      get: () => { secretGetterCalls++; return OLD_SECRET; },
+    });
+    const getterKeyset = { keys: oldKeyset.keys } as Record<string, unknown>;
+    Object.defineProperty(getterKeyset, "active_key_id", {
+      enumerable: true,
+      get: () => { activeKeyGetterCalls++; return "cursor-old"; },
+    });
+    expect(() => issueMcpCursor(
+      getterIssueRequest as Parameters<typeof issueMcpCursor>[0],
+      oldKeyset,
+    )).toThrow(TypeError);
+    expect(() => issueMcpCursor(issueRequest, {
+      active_key_id: "cursor-old",
+      keys: [getterKey as unknown as McpCursorSigningKeyset["keys"][number]],
+    })).toThrow(TypeError);
+    expect(() => issueMcpCursor(
+      issueRequest,
+      getterKeyset as unknown as McpCursorSigningKeyset,
+    )).toThrow(TypeError);
+    expect(() => issueMcpCursor(issueRequest, {
+      active_key_id: "cursor-old",
+      keys: new Array(0xffff_ffff) as McpCursorSigningKeyset["keys"],
+    })).toThrow(TypeError);
+    expect(() => issueMcpCursor(issueRequest, {
+      active_key_id: "cursor-old",
+      keys: [{ key_id: "cursor-old", secret: new Uint8Array(4_097) }],
+    })).toThrow(TypeError);
+    expect(issueGetterCalls).toBe(0);
+    expect(secretGetterCalls).toBe(0);
+    expect(activeKeyGetterCalls).toBe(0);
   });
 });

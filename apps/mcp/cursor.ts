@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 /**
  * Protocol-local port of the HMAC keyset-cursor behavior ruled by ADR-004 and
@@ -10,14 +11,15 @@ const CURSOR_VERSION = 1;
 const SIGNATURE_BYTES = 32;
 const MAX_SIGNING_KEYS = 8;
 const MIN_SIGNING_SECRET_BYTES = 32;
+const MAX_SIGNING_SECRET_BYTES = 4_096;
 const MAX_PAYLOAD_BYTES = 3_072;
-const MAX_LAST_VISIBLE_KEY_BYTES = 512;
 const MAX_CURSOR_TTL_SECONDS = 86_400;
 export const MAX_MCP_CURSOR_ENCODED_BYTES = 4_096;
 
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-const OPAQUE_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
+const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
+const OPAQUE_VISIBLE_KEYSET_PATTERN = /^vk1_[a-f0-9]{64}$/;
 const DUMMY_SECRET = new Uint8Array(MIN_SIGNING_SECRET_BYTES);
 const DUMMY_SIGNATURE = new Uint8Array(SIGNATURE_BYTES);
 declare const opaqueVisibleKeysetBrand: unique symbol;
@@ -49,8 +51,9 @@ export interface McpCursorBindings {
 }
 
 /**
- * A service-produced opaque encoding of the deterministic stable sort keyset
- * for the last *visible* row. It is never an offset, raw row ID, or content.
+ * A service-produced `vk1_<sha256>` HMAC/digest handle for the deterministic
+ * stable sort keyset of the last *visible* row. The service resolves it back to
+ * that visible tuple; it is never an offset, raw row ID, or content.
  */
 export type OpaqueVisibleKeyset = string & { readonly [opaqueVisibleKeysetBrand]: true };
 
@@ -138,14 +141,51 @@ const PAYLOAD_KEYS = Object.freeze([
 
 const invalid = (): never => { throw new InvalidMcpCursorError(); };
 const configurationError = (message: string): never => { throw new TypeError(message); };
+type Reject = (message: string) => never;
+const rejectInvalidCursor: Reject = () => invalid();
 
-const isExactPlainObject = (value: unknown, expectedKeys: readonly string[]): value is Record<string, unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Object.keys(descriptors).sort();
+const snapshotExactDataDescriptors = (
+  value: unknown,
+  expectedKeys: readonly string[],
+  reject: Reject,
+): Readonly<Record<string, PropertyDescriptor & { readonly value: unknown }>> => {
+  if (value === null || typeof value !== "object" || isProxy(value) || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) return reject("expected an exact plain object");
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some((key) => typeof key === "symbol")) return reject("symbol keys are not allowed");
+  const keys = (ownKeys as string[]).sort();
   const expected = [...expectedKeys].sort();
-  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) return false;
-  return Object.values(descriptors).every((descriptor) => "value" in descriptor && descriptor.enumerable);
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) return reject("unexpected object fields");
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return reject("only enumerable own data properties are allowed");
+  }
+  return descriptors as Readonly<Record<string, PropertyDescriptor & { readonly value: unknown }>>;
+};
+
+const snapshotExactArray = (value: unknown, maxLength: number, reject: Reject): readonly unknown[] => {
+  if (value === null || typeof value !== "object" || isProxy(value) || !Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Array.prototype) return reject("expected an exact plain array");
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some((key) => typeof key === "symbol")) return reject("symbol array keys are not allowed");
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (!lengthDescriptor || !("value" in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value)
+    || lengthDescriptor.value < 0 || lengthDescriptor.value > maxLength) return reject("invalid array length");
+  const length = lengthDescriptor.value as number;
+  const expectedKeys = ["length", ...Array.from({ length }, (_, index) => String(index))].sort();
+  const keys = (ownKeys as string[]).sort();
+  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
+    return reject("sparse or extended arrays are not allowed");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const snapshot: unknown[] = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return reject("array accessors are not allowed");
+    snapshot.push(descriptor.value);
+  }
+  return Object.freeze(snapshot);
 };
 
 const canonicalJson = (value: JsonValue): string => {
@@ -164,7 +204,7 @@ const canonicalJson = (value: JsonValue): string => {
 const encodeBase64Url = (value: Uint8Array): string => Buffer.from(value).toString("base64url");
 
 const decodeCanonicalBase64Url = (value: string, maxBytes: number): Uint8Array | null => {
-  if (!value || !OPAQUE_KEY_PATTERN.test(value) || value.length % 4 === 1) return null;
+  if (!value || !BASE64URL_PATTERN.test(value) || value.length % 4 === 1) return null;
   try {
     const decoded = Buffer.from(value, "base64url");
     if (decoded.byteLength > maxBytes || decoded.toString("base64url") !== value) return null;
@@ -183,56 +223,83 @@ const normalizeSigningKeyset = (keyset: McpCursorSigningKeyset): {
   readonly activeKey: McpCursorSigningKey;
   readonly keys: ReadonlyMap<string, McpCursorSigningKey>;
 } => {
-  if (keyset === null || typeof keyset !== "object" || !Array.isArray(keyset.keys)
-    || !KEY_ID_PATTERN.test(keyset.active_key_id)
-    || keyset.keys.length < 1 || keyset.keys.length > MAX_SIGNING_KEYS) {
-    return configurationError("invalid MCP cursor signing keyset");
-  }
+  const keysetDescriptors = snapshotExactDataDescriptors(keyset, ["active_key_id", "keys"], configurationError);
+  const activeKeyId = keysetDescriptors.active_key_id!.value;
+  const candidates = snapshotExactArray(keysetDescriptors.keys!.value, MAX_SIGNING_KEYS, configurationError);
+  if (typeof activeKeyId !== "string" || !KEY_ID_PATTERN.test(activeKeyId)
+    || candidates.length < 1 || candidates.length > MAX_SIGNING_KEYS) return configurationError("invalid MCP cursor signing keyset");
   const keys = new Map<string, McpCursorSigningKey>();
-  for (const candidate of keyset.keys) {
-    if (candidate === null || typeof candidate !== "object" || !KEY_ID_PATTERN.test(candidate.key_id)
-      || !(candidate.secret instanceof Uint8Array) || candidate.secret.byteLength < MIN_SIGNING_SECRET_BYTES
-      || keys.has(candidate.key_id)) {
-      return configurationError("invalid MCP cursor signing keyset");
-    }
-    keys.set(candidate.key_id, Object.freeze({ key_id: candidate.key_id, secret: new Uint8Array(candidate.secret) }));
+  for (const candidate of candidates) {
+    const descriptors = snapshotExactDataDescriptors(candidate, ["key_id", "secret"], configurationError);
+    const keyId = descriptors.key_id!.value;
+    const secret = descriptors.secret!.value;
+    if (typeof keyId !== "string" || !KEY_ID_PATTERN.test(keyId)
+      || !(secret instanceof Uint8Array) || isProxy(secret)
+      || (Object.getPrototypeOf(secret) !== Uint8Array.prototype && !Buffer.isBuffer(secret))
+      || secret.byteLength < MIN_SIGNING_SECRET_BYTES || secret.byteLength > MAX_SIGNING_SECRET_BYTES
+      || secret.buffer instanceof SharedArrayBuffer
+      || keys.has(keyId)) return configurationError("invalid MCP cursor signing keyset");
+    keys.set(keyId, Object.freeze({ key_id: keyId, secret: new Uint8Array(secret) }));
   }
-  const activeKey = keys.get(keyset.active_key_id);
+  const activeKey = keys.get(activeKeyId);
   if (!activeKey) return configurationError("active MCP cursor signing key is absent");
   return { activeKey, keys };
 };
 
-const validateBindings = (value: unknown): value is McpCursorBindings => {
-  if (!isExactPlainObject(value, BINDING_KEYS)) return false;
-  return BINDING_KEYS.every((key) => typeof value[key] === "string" && DIGEST_PATTERN.test(value[key]));
-};
-
-const assertIssueBindings = (value: unknown): asserts value is McpCursorBindings => {
-  if (!validateBindings(value)) configurationError("cursor bindings must be exact SHA-256 digests");
-};
-
-const validateExpected = (request: VerifyMcpCursorRequest): void => {
-  if (request === null || typeof request !== "object" || !validateBindings(request.bindings)
-    || !Number.isSafeInteger(request.now_epoch_seconds) || request.now_epoch_seconds < 0) {
-    configurationError("invalid MCP cursor verification context");
+const snapshotBindings = (value: unknown, reject: Reject): Readonly<McpCursorBindings> => {
+  const descriptors = snapshotExactDataDescriptors(value, BINDING_KEYS, reject);
+  const snapshot = {} as Record<keyof McpCursorBindings, string>;
+  for (const key of BINDING_KEYS) {
+    const field = descriptors[key]!.value;
+    if (typeof field !== "string" || !DIGEST_PATTERN.test(field)) return reject("cursor bindings must be exact SHA-256 digests");
+    snapshot[key] = field;
   }
+  return Object.freeze(snapshot);
 };
 
-const validateOpaqueLastVisibleKey = (value: unknown): value is OpaqueVisibleKeyset => {
-  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > MAX_LAST_VISIBLE_KEY_BYTES) return false;
-  const decoded = decodeCanonicalBase64Url(value, MAX_LAST_VISIBLE_KEY_BYTES);
-  return decoded !== null && decoded.byteLength >= 16;
+const snapshotIssueRequest = (request: IssueMcpCursorRequest): Readonly<IssueMcpCursorRequest> => {
+  const descriptors = snapshotExactDataDescriptors(
+    request,
+    ["last_visible_key", "bindings", "issued_at_epoch_seconds", "ttl_seconds"],
+    configurationError,
+  );
+  const lastVisibleKey = descriptors.last_visible_key!.value;
+  const issuedAt = descriptors.issued_at_epoch_seconds!.value;
+  const ttl = descriptors.ttl_seconds!.value;
+  if (!validateOpaqueLastVisibleKey(lastVisibleKey)) configurationError("last visible key must be a content-free stable-visible-keyset token");
+  if (!Number.isSafeInteger(issuedAt) || (issuedAt as number) < 0
+    || !Number.isSafeInteger(ttl) || (ttl as number) < 1 || (ttl as number) > MAX_CURSOR_TTL_SECONDS
+    || (issuedAt as number) > Number.MAX_SAFE_INTEGER - (ttl as number)) configurationError("invalid MCP cursor lifetime");
+  return Object.freeze({
+    last_visible_key: lastVisibleKey,
+    bindings: snapshotBindings(descriptors.bindings!.value, configurationError),
+    issued_at_epoch_seconds: issuedAt as number,
+    ttl_seconds: ttl as number,
+  });
 };
+
+const snapshotVerifyRequest = (request: VerifyMcpCursorRequest): Readonly<VerifyMcpCursorRequest> => {
+  const descriptors = snapshotExactDataDescriptors(request, ["bindings", "now_epoch_seconds"], configurationError);
+  const now = descriptors.now_epoch_seconds!.value;
+  if (!Number.isSafeInteger(now) || (now as number) < 0) configurationError("invalid MCP cursor verification context");
+  return Object.freeze({
+    bindings: snapshotBindings(descriptors.bindings!.value, configurationError),
+    now_epoch_seconds: now as number,
+  });
+};
+
+const validateOpaqueLastVisibleKey = (value: unknown): value is OpaqueVisibleKeyset =>
+  typeof value === "string" && OPAQUE_VISIBLE_KEYSET_PATTERN.test(value);
 
 /**
  * Makes the caller acknowledge the stable-visible-keyset boundary before a
- * value can be issued. This validates only the bounded opaque wire encoding;
- * the page adapter remains responsible for deriving it solely from visible
- * rows in the endpoint's declared deterministic sort order.
+ * value can be issued. This validates the fixed content-free token grammar;
+ * the page adapter remains responsible for deriving and resolving the handle
+ * solely from visible rows in the endpoint's deterministic sort order.
  */
 export const asOpaqueVisibleKeyset = (encodedStableVisibleKeyset: string): OpaqueVisibleKeyset => {
   if (!validateOpaqueLastVisibleKey(encodedStableVisibleKeyset)) {
-    return configurationError("last visible keyset must be an opaque bounded token");
+    return configurationError("last visible keyset must be a content-free vk1 digest token");
   }
   return encodedStableVisibleKeyset;
 };
@@ -247,21 +314,30 @@ const parsePayload = (encodedPayload: string): CursorPayload => {
   } catch {
     return invalid();
   }
-  if (!isExactPlainObject(value, PAYLOAD_KEYS) || !validateBindings(value.bindings)
-    || value.version !== CURSOR_VERSION
-    || !Number.isSafeInteger(value.issued_at_epoch_seconds) || value.issued_at_epoch_seconds < 0
-    || !Number.isSafeInteger(value.expires_at_epoch_seconds) || value.expires_at_epoch_seconds < 0
-    || !validateOpaqueLastVisibleKey(value.last_visible_key)) {
-    return invalid();
-  }
+  const descriptors = snapshotExactDataDescriptors(value, PAYLOAD_KEYS, rejectInvalidCursor);
+  const version = descriptors.version!.value;
+  const issuedAt = descriptors.issued_at_epoch_seconds!.value;
+  const expiresAt = descriptors.expires_at_epoch_seconds!.value;
+  const lastVisibleKey = descriptors.last_visible_key!.value;
+  if (version !== CURSOR_VERSION
+    || !Number.isSafeInteger(issuedAt) || (issuedAt as number) < 0
+    || !Number.isSafeInteger(expiresAt) || (expiresAt as number) < 0
+    || !validateOpaqueLastVisibleKey(lastVisibleKey)) return invalid();
+  const payload: CursorPayload = Object.freeze({
+    version: CURSOR_VERSION,
+    issued_at_epoch_seconds: issuedAt as number,
+    expires_at_epoch_seconds: expiresAt as number,
+    last_visible_key: lastVisibleKey,
+    bindings: snapshotBindings(descriptors.bindings!.value, rejectInvalidCursor),
+  });
   let canonical: string;
   try {
-    canonical = canonicalJson(value as unknown as JsonValue);
+    canonical = canonicalJson(payload as unknown as JsonValue);
   } catch {
     return invalid();
   }
   if (canonical !== text) return invalid();
-  return value as unknown as CursorPayload;
+  return payload;
 };
 
 const digestEquals = (left: string, right: string): boolean =>
@@ -277,21 +353,14 @@ export const issueMcpCursor = (
   request: IssueMcpCursorRequest,
   signingKeyset: McpCursorSigningKeyset,
 ): string => {
+  const snapshot = snapshotIssueRequest(request);
   const { activeKey } = normalizeSigningKeyset(signingKeyset);
-  assertIssueBindings(request.bindings);
-  if (!validateOpaqueLastVisibleKey(request.last_visible_key)) configurationError("last visible key must be an opaque bounded token");
-  if (!Number.isSafeInteger(request.issued_at_epoch_seconds) || request.issued_at_epoch_seconds < 0
-    || !Number.isSafeInteger(request.ttl_seconds) || request.ttl_seconds < 1
-    || request.ttl_seconds > MAX_CURSOR_TTL_SECONDS
-    || request.issued_at_epoch_seconds > Number.MAX_SAFE_INTEGER - request.ttl_seconds) {
-    return configurationError("invalid MCP cursor lifetime");
-  }
   const payload: CursorPayload = {
     version: CURSOR_VERSION,
-    issued_at_epoch_seconds: request.issued_at_epoch_seconds,
-    expires_at_epoch_seconds: request.issued_at_epoch_seconds + request.ttl_seconds,
-    last_visible_key: request.last_visible_key,
-    bindings: { ...request.bindings },
+    issued_at_epoch_seconds: snapshot.issued_at_epoch_seconds,
+    expires_at_epoch_seconds: snapshot.issued_at_epoch_seconds + snapshot.ttl_seconds,
+    last_visible_key: snapshot.last_visible_key,
+    bindings: snapshot.bindings,
   };
   const encodedPayload = encodeBase64Url(Buffer.from(canonicalJson(payload as unknown as JsonValue), "utf8"));
   const encodedSignature = encodeBase64Url(signature(CURSOR_PREFIX, activeKey.key_id, encodedPayload, activeKey.secret));
@@ -305,7 +374,7 @@ export const verifyMcpCursor = (
   request: VerifyMcpCursorRequest,
   signingKeyset: McpCursorSigningKeyset,
 ): Readonly<McpCursorClaims> => {
-  validateExpected(request);
+  const snapshot = snapshotVerifyRequest(request);
   const { keys } = normalizeSigningKeyset(signingKeyset);
   if (typeof cursor !== "string" || Buffer.byteLength(cursor, "utf8") > MAX_MCP_CURSOR_ENCODED_BYTES) return invalid();
   const parts = cursor.split(".");
@@ -325,9 +394,9 @@ export const verifyMcpCursor = (
   const payload = parsePayload(encodedPayload);
   const ttl = payload.expires_at_epoch_seconds - payload.issued_at_epoch_seconds;
   if (ttl < 1 || ttl > MAX_CURSOR_TTL_SECONDS
-    || request.now_epoch_seconds < payload.issued_at_epoch_seconds
-    || request.now_epoch_seconds >= payload.expires_at_epoch_seconds
-    || !bindingsEqual(payload.bindings, request.bindings)) {
+    || snapshot.now_epoch_seconds < payload.issued_at_epoch_seconds
+    || snapshot.now_epoch_seconds >= payload.expires_at_epoch_seconds
+    || !bindingsEqual(payload.bindings, snapshot.bindings)) {
     return invalid();
   }
   const bindings = Object.freeze({ ...payload.bindings });
