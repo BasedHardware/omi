@@ -280,6 +280,16 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: automated-main-write-admission
+    command: ["python3", ".github/scripts/check_automated_main_write_admission.py"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/scripts/check_automated_main_write_admission.py", ".github/scripts/test_check_automated_main_write_admission.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a workflow that opens its own PR against main and merges it must open that PR with an app token so checks fire, and merge it with --merge so main stays revertible"
+  - id: automated-main-write-admission-fixtures
+    command: ["python3", ".github/scripts/test_check_automated_main_write_admission.py"]
+    triggers: [".github/scripts/check_automated_main_write_admission.py", ".github/scripts/test_check_automated_main_write_admission.py"]
+    lanes: ["local", "ci"]
+    reason: "the admission guard's own mutation cases must keep proving it rejects default-token PR creation and a squashed automated merge"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
