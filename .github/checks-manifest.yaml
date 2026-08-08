@@ -481,6 +481,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "named bundles must keep copying the canonical app icon, and the regression test must remain an executable deterministic check"
+  - id: desktop-local-dev-entitlements
+    command: ["bash", "desktop/macos/tests/test-prepare-local-dev-entitlements.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/prepare-local-dev-entitlements.sh", "desktop/macos/tests/test-prepare-local-dev-entitlements.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "local dev signing granted disable-library-validation only for the literal `-` identity, so the documented self-signed 'Omi Local Dev Signing' identity (TeamIdentifier=not set) built bundles dyld refused to launch while `codesign --verify` passed and `open -a` exited 0; this suite had no runner, so nothing caught it"
   - id: desktop-swift-format-wrapper
     command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
     triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
@@ -491,6 +497,17 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/tests/test-launch-env-forwarding.sh"]
     lanes: ["local", "ci"]
     reason: "`open` launches from launchd, so a documented run.sh env override that is not passed with `open --env` silently does nothing; caught OMI_FORCE_CANONICAL_MEMORY_ATLAS being documented but never forwarded"
+  - id: desktop-agent-runtime-payload
+    command: ["bash", "desktop/macos/tests/test-fast-dev-bundle.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a bundle built without Contents/Resources/pi-mono-extension accepted every chat turn and failed all of them (pi-mono exited 1 on `Unknown provider \"omi\"`); the fast lane reused it because the source fingerprint still matched, so packaging must verify the installed payload and not just its inputs"
+  - id: desktop-signed-artifact-smoke
+    command: ["bash", "desktop/macos/tests/test-signed-artifact-smoke.sh"]
+    triggers: ["desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the release lane shared the dev lane's blind spot: a present-but-empty pi-mono-extension satisfied its directory-exists check and still shipped an artifact that failed every chat turn"
   - id: desktop-main-actor-xctest-hooks
     command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
     triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]

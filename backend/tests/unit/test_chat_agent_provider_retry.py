@@ -511,7 +511,7 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
             )
         ]
 
-    assert chunks == ['data: managed answer', None]
+    assert chunks == [f'think: {agentic_mod.AGENT_STREAM_SETUP_PROGRESS}', 'data: managed answer', None]
     assert callback_data['answer'] == 'managed answer'
     assert seen['system'].startswith('SYSTEM')
     assert '<url_fetching_instructions>' in seen['system']
@@ -565,7 +565,7 @@ async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
             )
         ]
 
-    assert chunks == ['data: direct answer', None]
+    assert chunks == [f'think: {agentic_mod.AGENT_STREAM_SETUP_PROGRESS}', 'data: direct answer', None]
     assert seen['direct'] is True
 
 

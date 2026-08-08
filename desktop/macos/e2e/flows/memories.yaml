@@ -6,8 +6,17 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  # The hub page itself: it mounts the switcher S1/S3/S5/S6 press, branches to the three views, and
+  # resolves the Brain Map cohort S5 lands on. Extracted from `DesktopHomeView` — these steps walked
+  # it before it had its own file.
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  # The Add/Edit forms, exercised by S2c. `memory-crud` writes straight to the view model, so these
+  # two sheets have no other flow that opens them.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryEditorSheets.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryProvenance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
@@ -28,8 +37,11 @@ preconditions:
 
 steps:
   - id: S1
-    name: Open the Memory destination menu
-    do: "Click the Memory button in the top nav bar (agent-swift find text 'Memory' click). Verify its menu exposes Memories, Conversations, and Brain Map."
+    name: Open the Memory hub and read its own switcher
+    # There is no `Memory` pill and no hover menu any more. The bar carries one `Library` pill, and
+    # the hub's three views are a switcher on the page itself — see `MemoryHubPage` /
+    # `MemoryHubSwitcher` and the note at the top of `TopNavigationDestinations`.
+    do: "Click the Library pill in the top bar (accessibility identifier top-navigation-1). Verify the hub page opens with its own switcher above the content, reading Conversations, Memories, Brain Map — on the page, not hanging off the bar, and with no hover needed to see them."
     expect:
       text_visible:
         - Memories
@@ -38,7 +50,7 @@ steps:
 
   - id: S2
     name: Select and verify Memories
-    do: "Choose Memories from the Memory menu. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
+    do: "Choose Memories in the hub's switcher. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
     expect:
       interactive_count: { min: 4 }
 
@@ -48,9 +60,20 @@ steps:
     expect:
       interactive_count: { min: 1 }
 
+  - id: S2c
+    name: The two memory text sheets open, gate Save, and dismiss
+    # `memory-crud` creates and edits straight through the view model, so the sheets themselves
+    # (`MemoryEditorSheets`) are only ever opened here. Deliberately no Save: what has no other
+    # coverage is the form — that it is presented over a bounded dim, that Save refuses an empty
+    # editor, that Edit arrives pre-filled, and that both ways out work. Persistence is
+    # `memory-crud`'s to prove, and this flow runs against a real account.
+    do: "Press Add on the Memories page. Verify the 'Add Memory' sheet appears centred over a dimmed page, that Save is disabled while the editor is empty, and that typing a character enables it. Press Escape and verify the sheet closes. Open a memory's detail panel, press Edit, and verify the 'Edit Memory' sheet opens pre-filled with that memory's exact text. Press Cancel and verify the memory is unchanged in the list."
+    expect:
+      interactive_count: { min: 3 }
+
   - id: S3
     name: Select Conversations
-    do: "Open the Memory menu and choose Conversations. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
+    do: "Choose Conversations in the hub's switcher. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
     expect:
       text_visible:
         - Conversations
@@ -63,14 +86,17 @@ steps:
 
   - id: S5
     name: Select Brain Map
-    do: "Open the Memory menu and choose Brain Map. Verify Brain Map renders with an interactive node graph visualization showing connected entities."
+    # The hub resolves which of the two Brain Map surfaces this account gets, and must mount neither
+    # until it knows: a one-frame appearance of the legacy graph latches the shared view model and
+    # leaves the atlas permanently blank. Watch for the placeholder, not just the end state.
+    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_cohort), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
     expect:
       text_visible:
         - Brain Map
 
   - id: S6
     name: Return to Memories
-    do: "Open the Memory menu and choose Memories. Verify the memory list is visible with the shared search and filter controls."
+    do: "Choose Memories in the hub's switcher. Verify the memory list is visible with the shared search and filter controls."
     expect:
       text_visible:
         - Memories

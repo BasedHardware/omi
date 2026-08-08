@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/services/agent_vm_lifecycle.py": 1682,
+    "backend/services/agent_vm_lifecycle.py": 1681,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {

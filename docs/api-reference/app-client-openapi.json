@@ -25572,7 +25572,7 @@
     },
     "/v1/agent/vm-status": {
       "get": {
-        "description": "Return the user's agent VM info from Firestore.",
+        "description": "Return the user's agent VM info from Firestore.\n\nTools paths do not probe GCE (reconciler authority). They still refuse to\nreport eternal ``ready`` while reconciler demand/missing/lease state is\nalready recorded — that is the shared read contract with desktop status.",
         "operationId": "get_vm_status_v1_agent_vm_status_get",
         "parameters": [
           {

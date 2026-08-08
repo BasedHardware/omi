@@ -5,6 +5,12 @@ description: Apps/Integrations marketplace flow — browse apps, filter by categ
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  # S5b is the only place either of these is exercised where it can actually fail. `AppsPage`
+  # presents its connector sheet with `.dismissableSheet`, which mounts a `ShellModalScrim`; Apps
+  # rides on `PageGlassLane`'s panel, so the bounds it inherits are `.ownSurface` — the tightest
+  # paint bound there is, and therefore the one with the most wallpaper left outside it to click.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/DismissableSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellModalScrim.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPageHeaderControls.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ManualInstallationDisclosure.swift
@@ -16,7 +22,7 @@ preconditions:
 steps:
   - id: S1
     name: Navigate to Apps page
-    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons."
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8; the sidebar this step used to name no longer exists). Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons."
     expect:
       interactive_count: { min: 10 }
       text_visible:
@@ -46,10 +52,31 @@ steps:
     expect:
       interactive_count: { min: 5 }
 
+  - id: S5b
+    name: Clicking bare wallpaper outside the panel dismisses the sheet
+    # The assertion nothing hermetic can make, and the reason this step exists rather than a unit
+    # test. `ShellModalScrim` splits a modal in two: an invisible barrier at the *host's* full size
+    # that swallows clicks and carries the dismiss gesture, and a *painted* dim bounded to the
+    # surface `PageGlassLane` published. Delete the barrier and a sheet still dismisses everywhere
+    # the paint reaches, so only a click on wallpaper the dim never covers can prove it survived
+    # being bounded. An `NSHostingView.hitTest` test cannot make it: the hosting view claims any
+    # in-bounds point whether or not any content accepts it, so it passes with the barrier removed.
+    do: "With the Apps page open, click a connector row (e.g. Gmail) so its import sheet is presented. Verify the dim is a rounded rectangle that stops at the Apps panel's own edges — the desktop around the panel must be undimmed, with no hard-edged dark rectangle stamped on it. Then click bare wallpaper well outside the panel: level with the sheet, beyond the panel's left or right edge, on a point that is visibly undimmed. The sheet must close."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5c
+    name: The dismiss came from the scrim's host-scale barrier
+    # Names the item-based modifier specifically: the connector sheet is presented by
+    # `.dismissableSheet(item:)`, and only its background tap logs this line.
+    log.expect:
+      contains:
+        - "DISMISSABLE_SHEET: Background tapped, dismissing item"
+
   - id: S6
-    name: Return to Dashboard
-    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    name: Return to Home
+    do: "Click the Home pill in the top bar (accessibility identifier top-navigation-0) to leave Apps. Verify the query surface loads with the top bar visible."
     expect:
       interactive_count: { min: 5 }
       text_visible:
-        - Dashboard
+        - Home

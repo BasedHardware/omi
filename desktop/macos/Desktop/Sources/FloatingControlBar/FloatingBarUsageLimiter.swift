@@ -15,8 +15,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
   /// Server-reported quota snapshot, plus an optimistic local delta for queries
   /// sent since the last server sync.
-  private(set) var serverQuota: APIClient.ChatUsageQuota?
-  private(set) var optimisticDelta: Int = 0
+  @Published private(set) var serverQuota: APIClient.ChatUsageQuota?
+  @Published private(set) var optimisticDelta: Int = 0
 
   init() {
     hasPaidPlan =

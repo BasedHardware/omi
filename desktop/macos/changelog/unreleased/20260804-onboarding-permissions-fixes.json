@@ -1,0 +1,3 @@
+{
+  "change": "Fixed setup getting stuck when a permission was granted after a delay, and Omi now offers to reopen itself when screen access needs a restart to take effect"
+}
