@@ -1627,9 +1627,27 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
             return None
 
     cutovers: list[Mapping[str, Any]] = []
+    vm = {
+        "vmName": "omi-agent-user",
+        "zone": "us-central1-a",
+        "status": "stopped",
+        "instanceId": "old-id",
+        "authToken": "old-token",
+        "reconcile": {
+            "state": "quarantined",
+            "releaseId": RELEASE.release_id,
+            "lastError": "RuntimeError",
+            "durableMigration": migration_id,
+        },
+    }
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {"agentVm": vm},
+            ("users", "dev-user", "agentVmMigrations", migration_id): journal,
+        }
+    )
     monkeypatch.setattr(reconciler, "GceAgentVmClient", RecoveryApi)
-    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
-    monkeypatch.setattr(reconciler, "active_boot_image_migration", lambda *_args: journal)
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
     monkeypatch.setattr(reconciler, "begin_boot_image_migration", lambda *_args: dict(journal))
     monkeypatch.setattr(reconciler, "recover_missing_boot_image_candidate", lambda *_args: True)
     monkeypatch.setattr(reconciler, "record_boot_image_state_disks", lambda *_args: True)
@@ -1641,13 +1659,7 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
     result = asyncio.run(
         reconciler.reconcile_one(
             "dev-user",
-            {
-                "vmName": "omi-agent-user",
-                "zone": "us-central1-a",
-                "status": "stopped",
-                "authToken": "old-token",
-                "reconcile": {"durableMigration": migration_id},
-            },
+            vm,
             RELEASE,
             owner="worker",
             project="project",
@@ -1656,7 +1668,82 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
     )
 
     assert result.state == "migrated"
+    assert client.transactions[0].updates[-1][1]["agentVm.reconcile.state"] == "claimed"
     assert cutovers and cutovers[-1]["instanceId"] == "candidate-id"
+
+
+def test_terminal_quarantine_with_non_pre_cutover_journal_stays_fail_closed(monkeypatch):
+    migration_id = "7" * 24
+
+    class StaleJournalApi(FakeApi):
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {"id": "old-id", "status": "TERMINATED"}
+
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", StaleJournalApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_boot_image_migration", lambda *_args: {"state": "cutover"})
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "dev-user",
+            {
+                "vmName": "omi-agent-user",
+                "zone": "us-central1-a",
+                "status": "ready",
+                "authToken": "old-token",
+                "reconcile": {
+                    "state": "quarantined",
+                    "releaseId": RELEASE.release_id,
+                    "lastError": "RuntimeError",
+                    "durableMigration": migration_id,
+                },
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result == reconciler.ReconcileResult("dev-user", "quarantined", "RuntimeError")
+
+
+def test_quarantine_lease_rejects_non_pre_cutover_journal(monkeypatch):
+    migration_id = "8" * 24
+    vm = {
+        "vmName": "omi-agent-user",
+        "instanceId": "old-id",
+        "authToken": "old-token",
+        "reconcile": {
+            "state": "quarantined",
+            "releaseId": RELEASE.release_id,
+            "durableMigration": migration_id,
+        },
+    }
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {"agentVm": vm},
+            ("users", "dev-user", "agentVmMigrations", migration_id): {
+                "migrationId": migration_id,
+                "state": "cutover",
+                "oldVmName": vm["vmName"],
+                "oldInstanceId": vm["instanceId"],
+                "oldAuthToken": vm["authToken"],
+                "targetRelease": RELEASE.release_id,
+            },
+        }
+    )
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+
+    assert not lifecycle.claim_vm_lease(
+        "dev-user",
+        vm["vmName"],
+        vm["authToken"],
+        "worker",
+        RELEASE.release_id,
+        migration_id,
+        now=100.0,
+    )
+    assert client.transactions[0].updates == []
 
 
 def test_boot_image_migration_never_creates_for_an_active_session(monkeypatch):
