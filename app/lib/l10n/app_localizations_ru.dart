@@ -1882,7 +1882,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get signInWithGoogle => 'Войти с Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Войти с SSO';
 
   @override
   String get byContinuingAgree => 'Продолжая, вы соглашаетесь с нашей ';

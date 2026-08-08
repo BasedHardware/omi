@@ -1887,7 +1887,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get signInWithGoogle => 'Iniciar sessió amb Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Iniciar sessió amb SSO';
 
   @override
   String get byContinuingAgree => 'En continuar, accepteu la nostra ';

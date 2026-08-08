@@ -1884,7 +1884,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get signInWithGoogle => 'Conectare cu Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Conectare cu SSO';
 
   @override
   String get byContinuingAgree => 'Prin continuare, ești de acord cu ';

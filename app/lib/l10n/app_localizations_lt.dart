@@ -1873,7 +1873,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get signInWithGoogle => 'Prisijungti su Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Prisijungti su SSO';
 
   @override
   String get byContinuingAgree => 'Tęsdami sutinkate su mūsų ';

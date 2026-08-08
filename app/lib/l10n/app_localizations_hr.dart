@@ -1876,7 +1876,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get signInWithGoogle => 'Prijavi se sa Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Prijavi se sa SSO';
 
   @override
   String get byContinuingAgree => 'Nastavljanjem, slažeš se sa našim ';

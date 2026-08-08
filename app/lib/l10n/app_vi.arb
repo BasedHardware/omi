@@ -3219,5 +3219,6 @@
     "accountCutoverMigrationInProgressTitle": "Đang di chuyển",
     "accountCutoverMigrationInProgressMessage": "Tài khoản của bạn đang được di chuyển. Các tính năng sản phẩm tạm dừng cho đến khi hoàn tất.",
     "accountCutoverMigrationRollbackMessage": "Tài khoản của bạn đang bảo trì sau khi hoàn tác di chuyển. Một số dữ liệu mới hơn có thể bị cô lập.",
-    "accountCutoverOpenStore": "Mở cửa hàng"
+    "accountCutoverOpenStore": "Mở cửa hàng",
+    "signInWithSSO": "Đăng nhập bằng SSO"
 }

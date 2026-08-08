@@ -1872,7 +1872,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get signInWithGoogle => 'Google দিয়ে সাইন ইন করুন';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'SSO দিয়ে সাইন ইন করুন';
 
   @override
   String get byContinuingAgree => 'চালিয়ে যাওয়ার মাধ্যমে আপনি সম্মত হচ্ছেন ';

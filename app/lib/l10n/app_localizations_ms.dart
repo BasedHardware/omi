@@ -1880,7 +1880,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get signInWithGoogle => 'Log masuk dengan Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Log masuk dengan SSO';
 
   @override
   String get byContinuingAgree => 'Dengan meneruskan, anda bersetuju dengan ';

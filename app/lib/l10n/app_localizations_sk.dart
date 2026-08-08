@@ -1879,7 +1879,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get signInWithGoogle => 'Prihlásiť sa cez Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Prihlásiť sa cez SSO';
 
   @override
   String get byContinuingAgree => 'Pokračovaním súhlasíte s našimi ';

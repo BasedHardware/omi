@@ -1864,7 +1864,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get signInWithGoogle => 'ลงชื่อเข้าใช้ด้วย Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'ลงชื่อเข้าใช้ด้วย SSO';
 
   @override
   String get byContinuingAgree => 'การดำเนินการต่อแสดงว่าคุณยอมรับ ';

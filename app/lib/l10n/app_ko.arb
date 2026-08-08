@@ -3214,5 +3214,6 @@
     "accountCutoverMigrationInProgressTitle": "마이그레이션 진행 중",
     "accountCutoverMigrationInProgressMessage": "계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.",
     "accountCutoverMigrationRollbackMessage": "마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.",
-    "accountCutoverOpenStore": "스토어 열기"
+    "accountCutoverOpenStore": "스토어 열기",
+    "signInWithSSO": "SSO로 로그인"
 }

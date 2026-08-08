@@ -1840,7 +1840,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signInWithGoogle => 'Googleでサインイン';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'SSOでサインイン';
 
   @override
   String get byContinuingAgree => '続行することで、';

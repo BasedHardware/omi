@@ -1887,7 +1887,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get signInWithGoogle => 'Bejelentkezés Google-lel';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Bejelentkezés SSO-lel';
 
   @override
   String get byContinuingAgree => 'A folytatással elfogadod az ';

@@ -1878,7 +1878,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get signInWithGoogle => 'Google ದ್ವಾರಾ ಸೈನ್ ಇನ್ ಮಾಡಿ';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'SSO ದ್ವಾರಾ ಸೈನ್ ಇನ್ ಮಾಡಿ';
 
   @override
   String get byContinuingAgree => 'ಮುಂದುವರಿಸುವುದರ ಮೂಲಕ, ನೀವು ನಮ್ಮ ಸ್ವೀಕರಿಸುವಿರಿ ';

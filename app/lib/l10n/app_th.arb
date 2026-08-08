@@ -3214,5 +3214,6 @@
     "accountCutoverMigrationInProgressTitle": "กำลังย้ายข้อมูล",
     "accountCutoverMigrationInProgressMessage": "บัญชีของคุณกำลังย้าย ฟีเจอร์ผลิตภัณฑ์จะหยุดชั่วคราวจนกว่าการย้ายจะเสร็จ",
     "accountCutoverMigrationRollbackMessage": "บัญชีของคุณอยู่ในโหมดบำรุงรักษาหลังการย้อนกลับการย้าย ข้อมูลที่ใหม่กว่าบางส่วนอาจถูกแยกไว้",
-    "accountCutoverOpenStore": "เปิดสโตร์"
+    "accountCutoverOpenStore": "เปิดสโตร์",
+    "signInWithSSO": "ลงชื่อเข้าใช้ด้วย SSO"
 }

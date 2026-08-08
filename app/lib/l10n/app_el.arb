@@ -3214,5 +3214,6 @@
     "accountCutoverMigrationInProgressTitle": "Η μετεγκατάσταση είναι σε εξέλιξη",
     "accountCutoverMigrationInProgressMessage": "Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.",
     "accountCutoverMigrationRollbackMessage": "Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.",
-    "accountCutoverOpenStore": "Άνοιγμα καταστήματος"
+    "accountCutoverOpenStore": "Άνοιγμα καταστήματος",
+    "signInWithSSO": "Σύνδεση με SSO"
 }

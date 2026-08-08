@@ -1879,7 +1879,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get signInWithGoogle => 'Google ile Giriş Yap';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'SSO ile Giriş Yap';
 
   @override
   String get byContinuingAgree => 'Devam ederek ';

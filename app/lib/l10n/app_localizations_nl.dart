@@ -1879,7 +1879,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get signInWithGoogle => 'Inloggen met Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Inloggen met SSO';
 
   @override
   String get byContinuingAgree => 'Door verder te gaan, ga je akkoord met ons ';

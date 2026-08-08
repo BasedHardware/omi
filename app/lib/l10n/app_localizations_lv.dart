@@ -1878,7 +1878,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get signInWithGoogle => 'Pierakstīties ar Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Pierakstīties ar SSO';
 
   @override
   String get byContinuingAgree => 'Turpinot, jūs piekrītat mūsu ';

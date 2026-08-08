@@ -3214,5 +3214,6 @@
     "accountCutoverMigrationInProgressTitle": "Migratie bezig",
     "accountCutoverMigrationInProgressMessage": "Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.",
     "accountCutoverMigrationRollbackMessage": "Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.",
-    "accountCutoverOpenStore": "Store openen"
+    "accountCutoverOpenStore": "Store openen",
+    "signInWithSSO": "Inloggen met SSO"
 }

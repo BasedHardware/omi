@@ -1890,7 +1890,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get signInWithGoogle => 'Mit Google anmelden';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Mit SSO anmelden';
 
   @override
   String get byContinuingAgree => 'Wenn Sie fortfahren, stimmen Sie unseren ';

@@ -1877,7 +1877,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get signInWithGoogle => 'Zaloguj się przez Google';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'Zaloguj się przez SSO';
 
   @override
   String get byContinuingAgree => 'Kontynuując, zgadzasz się z naszą ';

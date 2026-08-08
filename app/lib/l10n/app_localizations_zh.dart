@@ -1838,7 +1838,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signInWithGoogle => '通过 Google 登录';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => '通过 SSO 登录';
 
   @override
   String get byContinuingAgree => '继续即表示您同意我们的 ';

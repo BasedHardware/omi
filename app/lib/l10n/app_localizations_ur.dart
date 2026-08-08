@@ -1873,7 +1873,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get signInWithGoogle => 'Google کے ساتھ سائن ان کریں';
 
   @override
-  String get signInWithSSO => 'Sign in with SSO';
+  String get signInWithSSO => 'SSO کے ساتھ سائن ان کریں';
 
   @override
   String get byContinuingAgree => 'جاری رکھ کر، آپ ہمارے سے متفق ہیں ';
