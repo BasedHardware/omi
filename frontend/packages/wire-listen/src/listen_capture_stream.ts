@@ -37,14 +37,26 @@
  * RESERVED close: `LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION` (= 4020).
  * Another agent implements the server emit; this package only reserves the
  * number next to the existing close-code table and refuses retry.
+ *
+ * Transcript accumulation (client-side; protocol is silent on render order):
+ * - Segments with an id are keyed by that id. A redelivered id after reconnect
+ *   replaces the prior entry (no duplicate rows). A same-id revision with new
+ *   text is last-writer-wins.
+ * - The snapshot a surface renders is ordered by `(start, end, id)` — content
+ *   order, not arrival order — so out-of-order frames still paint coherently.
+ * - Null/missing segment ids have no identity on the wire; each is kept as its
+ *   own row (protocol INV-LISTEN segment-id-dedupe only applies when id ≠ null).
  */
 
-import type { FallbackSink } from "@omi-core/contracts";
+import type { FallbackRecord, FallbackSink } from "@omi-core/contracts";
+import { isDegraded } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
+import { degrade } from "@omi-core/kernel";
 import { unwrapDecoded } from "./invariants.js";
 import {
   LISTEN_CLOSE_CODES,
   decode,
+  shouldRetryAfterClose,
   type EntitlementEvent,
   type EntitlementLimit,
   type EntitlementUsage,
@@ -80,17 +92,53 @@ export type ListenStreamConnectionState =
   | { readonly status: "closed"; readonly code: number };
 
 /**
- * Client-side port a surface binds to: transcript segments, connection state,
- * and entitlement state. Domain-prefixed so barrel `export *` cannot collide.
+ * Retry / entitlement advice for a close code. Derived from the generated
+ * close-code table; unknown codes fail-open as retryable (same as
+ * `shouldRetryAfterClose`).
+ */
+export interface ListenCaptureCloseAdvice {
+  readonly code: number;
+  readonly clientShouldRetry: boolean;
+  /** True iff this is the reserved entitlement-exhaustion close (4020). */
+  readonly entitlementExhaustion: boolean;
+}
+
+/** Observable evidence that the port dropped or substituted mid-stream. */
+export type ListenCaptureDegradation = FallbackRecord;
+
+/**
+ * Client-side port a surface binds to: coherent transcript, connection state,
+ * entitlement state, and degradation. Domain-prefixed so barrel `export *`
+ * cannot collide.
  */
 export interface ListenCaptureStreamPort {
+  /** Current coherent transcript — ordered for direct render. */
+  getTranscriptSegments(): readonly TranscriptSegment[];
+  /**
+   * Fires with the full ordered transcript after each successful segment apply.
+   * Does not replay on subscribe (pull via `getTranscriptSegments` instead).
+   */
   subscribeTranscriptSegments(
     listener: (segments: readonly TranscriptSegment[]) => void,
   ): () => void;
   observeConnectionState(listener: (state: ListenStreamConnectionState) => void): () => void;
   observeEntitlementState(listener: (payload: ListenEntitlementPayload | null) => void): () => void;
+  /**
+   * Latest degradation evidence (malformed / unknown frame dropped while
+   * keeping the stream). `null` before any degradation. Emits current value
+   * immediately on subscribe.
+   */
+  observeListenCaptureDegradation(
+    listener: (degradation: ListenCaptureDegradation | null) => void,
+  ): () => void;
+  getListenCaptureDegradation(): ListenCaptureDegradation | null;
   getConnectionState(): ListenStreamConnectionState;
   getEntitlementState(): ListenEntitlementPayload | null;
+  /**
+   * Close advice for the current closed state, or `null` while idle/open.
+   * Entitlement exhaustion (4020) is distinguishable and marked do-not-retry.
+   */
+  getListenCaptureCloseAdvice(): ListenCaptureCloseAdvice | null;
 }
 
 export interface ListenCaptureStreamIngest {
@@ -98,6 +146,11 @@ export interface ListenCaptureStreamIngest {
   acceptTextFrame(raw: string): void;
   /** Push a WebSocket close code observed by the shell transport. */
   acceptClose(code: number): void;
+  /**
+   * Re-open after a close. Preserves the accumulated transcript (and
+   * entitlement). Does not clear degradation evidence. No-op while not closed.
+   */
+  acceptReconnect(): void;
 }
 
 export interface ListenCaptureStreamHandle {
@@ -123,9 +176,32 @@ export function listenEntitlementPayloadFromEvent(event: EntitlementEvent): List
   };
 }
 
+/** Close-code advice a surface uses to decide retry vs upgrade UI. */
+export function listenCaptureCloseAdvice(code: number): ListenCaptureCloseAdvice {
+  return {
+    code,
+    clientShouldRetry: shouldRetryAfterClose(code),
+    entitlementExhaustion: code === LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION,
+  };
+}
+
+function listenCaptureSegmentSortKey(segment: TranscriptSegment): [number, number, string] {
+  const id = segment.id ?? "";
+  return [segment.start, segment.end, id];
+}
+
+function listenCaptureCompareSegments(a: TranscriptSegment, b: TranscriptSegment): number {
+  const [as, ae, ai] = listenCaptureSegmentSortKey(a);
+  const [bs, be, bi] = listenCaptureSegmentSortKey(b);
+  if (as !== bs) return as - bs;
+  if (ae !== be) return ae - be;
+  return ai < bi ? -1 : ai > bi ? 1 : 0;
+}
+
 /**
  * Pure adapter: shell feeds text frames / close codes; surfaces subscribe.
  * Entitlement frames must pass the schema Validator (extra keys rejected).
+ * Malformed frames are dropped via `degrade()` — stream and transcript survive.
  */
 export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): ListenCaptureStreamHandle {
   const validator = new Validator(deps.schema);
@@ -134,10 +210,27 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
 
   let connection: ListenStreamConnectionState = { status: "idle" };
   let entitlement: ListenEntitlementPayload | null = null;
+  let degradation: ListenCaptureDegradation | null = null;
+  /** Id → segment. Last writer wins on same id (revision / reconnect redelivery). */
+  const segmentsById = new Map<string, TranscriptSegment>();
+  /** Rows with null/missing id — no wire identity; each arrival is its own row. */
+  const anonymousSegments: TranscriptSegment[] = [];
 
   const transcriptListeners = new Set<(segments: readonly TranscriptSegment[]) => void>();
   const connectionListeners = new Set<(state: ListenStreamConnectionState) => void>();
   const entitlementListeners = new Set<(payload: ListenEntitlementPayload | null) => void>();
+  const degradationListeners = new Set<(d: ListenCaptureDegradation | null) => void>();
+
+  function snapshotTranscript(): TranscriptSegment[] {
+    const rows = [...segmentsById.values(), ...anonymousSegments];
+    rows.sort(listenCaptureCompareSegments);
+    return rows;
+  }
+
+  function publishTranscript(): void {
+    const snapshot = snapshotTranscript();
+    for (const listener of transcriptListeners) listener(snapshot);
+  }
 
   function setConnection(next: ListenStreamConnectionState): void {
     connection = next;
@@ -149,7 +242,35 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
     for (const listener of entitlementListeners) listener(entitlement);
   }
 
+  function setDegradation(next: ListenCaptureDegradation): void {
+    degradation = next;
+    for (const listener of degradationListeners) listener(degradation);
+  }
+
+  function recordDrop(fallback: Omit<FallbackRecord, "at">, substituted: "dropped_keep_stream"): void {
+    // Fallback path: substitute "keep current transcript + stay connected".
+    const degraded = degrade(
+      deps.sink,
+      { ...fallback, at: deps.env.now() },
+      substituted,
+    );
+    setDegradation(degraded.fallback);
+  }
+
+  function applySegment(segment: TranscriptSegment): void {
+    const id = segment.id;
+    if (id != null && id !== "") {
+      // Last writer wins: same id with new text revises in place (reconnect
+      // redelivery of an unchanged id is a no-op for content; a revision
+      // replaces the prior text under the same id).
+      segmentsById.set(id, segment);
+      return;
+    }
+    anonymousSegments.push(segment);
+  }
+
   const port: ListenCaptureStreamPort = {
+    getTranscriptSegments: () => snapshotTranscript(),
     subscribeTranscriptSegments(listener) {
       transcriptListeners.add(listener);
       return () => void transcriptListeners.delete(listener);
@@ -164,31 +285,98 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
       listener(entitlement);
       return () => void entitlementListeners.delete(listener);
     },
+    observeListenCaptureDegradation(listener) {
+      degradationListeners.add(listener);
+      listener(degradation);
+      return () => void degradationListeners.delete(listener);
+    },
+    getListenCaptureDegradation: () => degradation,
     getConnectionState: () => connection,
     getEntitlementState: () => entitlement,
+    getListenCaptureCloseAdvice: () =>
+      connection.status === "closed" ? listenCaptureCloseAdvice(connection.code) : null,
   };
 
   const ingest: ListenCaptureStreamIngest = {
     acceptTextFrame(raw: string) {
       if (connection.status === "closed") return;
-      const unwrapped = unwrapDecoded(decode(deps.sink, deps.env.now(), raw));
-      if (unwrapped.kind === "invalid") return;
+
+      const decoded = decode(deps.sink, deps.env.now(), raw);
+      const unwrapped = unwrapDecoded(decoded);
+
+      if (unwrapped.kind === "invalid") {
+        recordDrop(
+          {
+            path: "listen.capture.malformed-frame",
+            from: `invalid:${unwrapped.reason}`,
+            to: "dropped_keep_stream",
+            detail: `dropped malformed listen frame (${unwrapped.reason})`,
+          },
+          "dropped_keep_stream",
+        );
+        return;
+      }
+
+      if (unwrapped.kind === "unknown_event") {
+        // Decode already emitted Degraded telemetry (INV-LISTEN-006); surface it
+        // without double-recording.
+        if (isDegraded(decoded)) {
+          setDegradation(decoded.fallback);
+        } else {
+          recordDrop(
+            {
+              path: "listen.capture.unknown-frame",
+              from: unwrapped.type,
+              to: "dropped_keep_stream",
+              detail: `dropped unknown listen frame type: ${unwrapped.type}`,
+            },
+            "dropped_keep_stream",
+          );
+        }
+        return;
+      }
 
       if (connection.status === "idle") setConnection({ status: "open" });
 
+      if (unwrapped.kind === "heartbeat") return;
+
       if (unwrapped.kind === "transcript_batch") {
-        for (const listener of transcriptListeners) listener(unwrapped.segments);
+        for (const segment of unwrapped.segments) applySegment(segment);
+        publishTranscript();
         return;
       }
 
       if (unwrapped.kind === "event" && unwrapped.event.type === "entitlement") {
         const errors = validator.validate(entitlementDef, unwrapped.event, "entitlement");
-        if (errors.length > 0) return;
+        if (errors.length > 0) {
+          recordDrop(
+            {
+              path: "listen.capture.malformed-entitlement",
+              from: "entitlement",
+              to: "dropped_keep_stream",
+              detail: errors.join("; "),
+            },
+            "dropped_keep_stream",
+          );
+          return;
+        }
+        // Mid-session entitlement does NOT terminate the transcript or close
+        // the socket — especially state=transcription_paused_capture_continuing.
         setEntitlement(listenEntitlementPayloadFromEvent(unwrapped.event));
+        return;
       }
+
+      // Other validated events are acknowledged by opening the stream above;
+      // transcript accumulation only cares about transcript_batch frames.
     },
     acceptClose(code: number) {
       setConnection({ status: "closed", code });
+    },
+    acceptReconnect() {
+      if (connection.status !== "closed") return;
+      // Transcript (and entitlement) intentionally preserved — reconnect must
+      // neither lose nor double accumulated segments.
+      setConnection({ status: "open" });
     },
   };
 
