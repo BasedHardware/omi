@@ -151,6 +151,11 @@
 	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone so you can share audio explanations of Bugs you find, and for voice commands.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

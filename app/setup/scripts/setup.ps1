@@ -46,46 +46,43 @@ function SetupFirebase {
     New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
     
     # Copy files
-    Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_dev.dart"
-    Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/dev/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Dev/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Runner/"
+    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
+    Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/dev/google-services.json"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Dev/GoogleService-Info.plist"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Runner/GoogleService-Info.plist"
 
     # Mocking setup
     New-Item -ItemType Directory -Force -Path "android/app/src/prod/", "ios/Config/Prod/"
-    Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_prod.dart"
-    Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/prod/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Prod/"
+    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
+    Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/prod/google-services.json"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Prod/GoogleService-Info.plist"
 }
 
 
-function SetupFirebaseWithServiceAccount {
+function SetupFirebaseWithServiceAccountIos {
     dart pub global activate flutterfire_cli
 
-    # Dev configuration
     flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_dev.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.development" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/dev/" `
-        --ios-out="ios/Config/Dev/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
-
-    # Prod configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
+        --platforms="ios" `
         --out="lib/firebase_options_prod.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/prod/" `
+        --ios-bundle-id="com.friend-app-with-wearable.ios12.beta" `
         --ios-out="ios/Config/Prod/" `
         --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
+        --project="based-hardware" `
         --ios-target="Runner" `
+        --yes
+}
+
+function SetupFirebaseWithServiceAccountAndroid {
+    dart pub global activate flutterfire_cli
+
+    flutterfire config `
+        --platforms="android" `
+        --out="lib/firebase_options_prod.dart" `
+        --android-app-id="com.friend.ios" `
+        --android-out="android/app/src/prod/" `
+        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
+        --project="based-hardware" `
         --yes
 }
 
@@ -104,10 +101,23 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
-    $API_BASE_URL = "https://api.omiapi.com/"
+    param(
+        [string]$Profile = "local_dev",
+        [string]$ApiBaseUrl = ""
+    )
+    if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+        $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "10.0.2.2" }
+        $ApiBaseUrl = "http://$devHost`:8000/"
+    }
+    if ($Profile -eq "mobile_beta") {
+        $ApiBaseUrl = if ($env:OMI_BETA_API_BASE_URL) { $env:OMI_BETA_API_BASE_URL } else { "https://api.omiapi.com/" }
+        $envFile = ".env"
+    } else {
+        $envFile = ".dev.env"
+    }
     # Using Set-Content with UTF8 encoding
-    $content = "API_BASE_URL=$API_BASE_URL"
-    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
+    $content = "API_BASE_URL=$ApiBaseUrl`nUSE_WEB_AUTH=true`nUSE_AUTH_CUSTOM_TOKEN=true"
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) $envFile), $content, [System.Text.Encoding]::UTF8)
 }
 
 function SetupKeystoreAndroid {
@@ -128,7 +138,25 @@ function BuildiOS {
 }
 
 function RunDev {
-    flutter run --flavor dev
+    $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "10.0.2.2" }
+    $apiBaseUrl = if ($env:OMI_LOCAL_API_BASE_URL) { $env:OMI_LOCAL_API_BASE_URL } else { "http://$devHost`:8000/" }
+    $flutterArgs = @(
+        "run", "--flavor", "dev",
+        "--dart-define=OMI_APP_PROFILE=local_dev",
+        "--dart-define=OMI_API_BASE_URL=$apiBaseUrl",
+        "--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$devHost"
+    )
+    & flutter @flutterArgs
+}
+
+function RunAndroidBeta {
+    $apiBaseUrl = if ($env:OMI_BETA_API_BASE_URL) { $env:OMI_BETA_API_BASE_URL } else { "https://api.omiapi.com/" }
+    $flutterArgs = @(
+        "run", "--flavor", "prod",
+        "--dart-define=OMI_APP_PROFILE=mobile_beta",
+        "--dart-define=OMI_API_BASE_URL=$apiBaseUrl"
+    )
+    & flutter @flutterArgs
 }
 
 # Function to show menu and get platform choice
@@ -169,10 +197,24 @@ switch ($platform.ToLower()) {
     }
     "android" {
         Write-Host "`nSetting up Android platform..."
-        SetupKeystoreAndroid
-        SetupFirebase
-        SetupAppEnv
-        Build
+        if ($args.Count -gt 1 -and $args[1].ToLower() -eq "beta") {
+            if ([string]::IsNullOrWhiteSpace($env:FIREBASE_SERVICE_ACCOUNT_KEY)) {
+                Write-Error "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY"
+                exit 1
+            }
+            SetupKeystoreAndroid
+            SetupFirebase
+            SetupFirebaseWithServiceAccountAndroid
+            SetupAppEnv -Profile "mobile_beta"
+            Build
+            RunAndroidBeta
+        } else {
+            SetupKeystoreAndroid
+            SetupFirebase
+            SetupAppEnv -Profile "local_dev"
+            Build
+            RunDev
+        }
     }
     default {
         Write-Host "Unexpected platform '$platform'. Please use 'ios' or 'android'"
