@@ -107,7 +107,11 @@ class CanonicalTaskCreate(BaseModel):
         return self
 
     def storage_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode='python', exclude_none=True)
+        payload = self.model_dump(mode='python', exclude_none=True)
+        payload['provenance'] = [
+            ref.model_dump(mode='python', exclude_none=True, exclude_defaults=True) for ref in self.provenance
+        ]
+        return payload
 
 
 class CanonicalTaskUpdate(BaseModel):
@@ -149,6 +153,10 @@ class CanonicalTaskUpdate(BaseModel):
 
     def storage_payload(self) -> dict[str, Any]:
         payload = self.model_dump(mode='python', exclude_unset=True)
+        if self.provenance is not None:
+            payload['provenance'] = [
+                ref.model_dump(mode='python', exclude_none=True, exclude_defaults=True) for ref in self.provenance
+            ]
         return {
             key: value
             for key, value in payload.items()
