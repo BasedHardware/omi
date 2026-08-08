@@ -225,12 +225,22 @@ serve → selection falls back to Modulate → `transcription_service_unavailabl
 on-prem deployment serves live STT **only in single-language English** (user pref
 `transcription_preferences.single_language_mode=true`, or `onboarding_mode`).
 
-**On-prem multilingual live STT (REQUIRED — tracked as a debt):** replace Modulate with the
-multilingual self-hosted model **`parakeet-1.1b-rnnt-multilingual`** (available via NVIDIA NIM;
-`backend/parakeet/Dockerfile.nim` already targets `nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual`).
-This needs a backend **policy update** in `config/stt_provider_policy.py`
-(`PARAKEET_MODEL_BY_SURFACE[STREAMING]` + `PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL`) to register the
-multilingual model and its languages. Deepgram-self-hosted is the other policy-enabled streaming option.
+**On-prem multilingual live STT — now deployment-selectable.** The multilingual self-hosted model
+**`nvidia/parakeet-1-1b-rnnt-multilingual`** (NVIDIA NIM; `backend/parakeet/Dockerfile.nim` targets
+`nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual`) is registered in `config/stt_provider_policy.py`
+(`APPROVED_STREAMING_PARAKEET_MODELS` + `PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL`) and picked at deploy
+time via **`PARAKEET_STREAM_MODEL`**: set it to that model and `parakeet_supports_language()` reports
+its locales, so live streaming/PTT serve `es`/`it`/`fr`/`de`/`pt`/… (covered by
+`test_streaming_multilingual_model_enables_its_locales`). An unrecognized value falls back to the
+en-only default — a typo cannot silently disable or widen the surface. Deepgram-self-hosted is the
+other policy-enabled streaming option.
+
+**Set `PARAKEET_STREAM_MODEL` in BOTH places.** The backend reads it for *routing*
+(`streaming_parakeet_model()`) and the Parakeet deployment reads it to *load* the model; the two are
+read independently. Setting it on only one side silently mis-routes — the backend would offer a
+language the deployed model cannot serve, or refuse one it actually supports. The compose
+datacenter-alternative sets `PARAKEET_STREAM_MODEL` on the `parakeet` service env; mirror the same
+value in `backend.env`.
 
 ### Full live pipeline E2E (all inference services + backend + pusher)
 
