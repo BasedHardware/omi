@@ -177,10 +177,27 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
  * question, and it lives in
  * `integration/adversarial/cross-door-identity.test.ts`.
  *
- * ESCAPE HATCH: `// wire-path-ok(<reason>)` anywhere in the file. It is
- * file-scoped because the finding is file-scoped — "this file stands up a
- * server AND names a registered path" is a statement about the file, so the
- * justification belongs at that granularity.
+ * ESCAPE HATCH: `// wire-path-ok(<reason>)` on the server-construction line, or
+ * in the comment block directly above it.
+ *
+ * IT USED TO BE FILE-SCOPED, and the argument for that was wrong in a way worth
+ * keeping: "the finding is file-scoped, so the justification belongs at that
+ * granularity." True of the finding, false of the exemption. A file-wide marker
+ * is checked `text.includes(...)` unconditionally and forever, so the first
+ * legitimate hatch turns the whole file into a PERMANENT BLIND SPOT — a rogue
+ * door added to it later is exempted silently, by a comment written about
+ * something else, possibly years earlier.
+ *
+ * That is not theoretical. A non-author audit demonstrated it: it edited the one
+ * hatched file in the tree (`integration/adversarial/live-server.ts`, hatched for
+ * a free-port probe) so the probe's handler actually answered `/v1/memories` with
+ * a raw fixture id — the exact defect class this rule exists to catch — and the
+ * lint stayed GREEN.
+ *
+ * It is also the standing §8 rule, restated: when you narrow a guard and add a
+ * compensating mechanism, the compensating mechanism must be at least as strong
+ * on the axis that matters. Rule 16's `port-composition-ok` was already
+ * per-site, four lines up in this same file. Rule 17 simply did not copy it.
  */
 interface WirePathRegistryRow {
   /** The settled path, spelled exactly as the route registers it. */
@@ -207,6 +224,27 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
   },
 ];
 const wirePathAllowMarker = "wire-path-ok(";
+/**
+ * `code.includes("/v1/memories")` also matches `/v1/memories-legacy-export`,
+ * which is a DIFFERENT route that merely starts with the registered one. Found
+ * by the non-author audit, which built the collision rather than assuming it.
+ * No such path exists in the tree today; the check is here so the first one
+ * added does not arrive as a mystery failure in an unrelated file.
+ *
+ * A trailing `/` still counts as the same path — `/v1/memories/` is the
+ * registered route's own trailing-slash case, which the real route answers 404
+ * and a rogue door might answer 200. Exempting it would exempt a real defect.
+ */
+const namesWirePath = (code: string, wirePath: string): boolean => {
+  let from = 0;
+  for (;;) {
+    const at = code.indexOf(wirePath, from);
+    if (at < 0) return false;
+    const next = code[at + wirePath.length];
+    if (next === undefined || !/[A-Za-z0-9_-]/.test(next)) return true;
+    from = at + 1;
+  }
+};
 const serverConstructionPatterns: readonly RegExp[] = [
   /\bBun\.serve\s*\(/,
   /\bDeno\.serve\s*\(/,
@@ -279,25 +317,55 @@ for (const file of files(root)) {
   // ── Rule 17: a settled wire path is served by exactly one route module ────
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
     const code = withoutComments(text);
-    const hatched = text.includes(wirePathAllowMarker);
-    const standsUpAServer = serverConstructionPatterns.some((pattern) => pattern.test(code));
+    const rawLines = text.split("\n");
+    const codeLines = code.split("\n");
+
+    // Every line that stands up a server. The hatch is judged against each of
+    // these, not against the file, so one justified server cannot exempt the
+    // next one somebody adds.
+    const serverSites = codeLines
+      .map((line, index) => (serverConstructionPatterns.some((p) => p.test(line)) ? index : -1))
+      .filter((index) => index >= 0);
+
+    /**
+     * The marker on the construction line, or anywhere in the comment block
+     * immediately above it. Walking the block matters: the tree's one real hatch
+     * is a four-line `//` comment whose marker sits on the FIRST line, so
+     * checking only `index - 1` (rule 16's rule, adequate for a one-line
+     * justification) would reject a hatch that is correctly placed.
+     */
+    const hatchedAt = (index: number): boolean => {
+      if ((rawLines[index] ?? "").includes(wirePathAllowMarker)) return true;
+      for (let above = index - 1; above >= 0; above -= 1) {
+        const line = (rawLines[above] ?? "").trim();
+        const isComment = line.startsWith("//") || line.startsWith("*") || line.startsWith("/*");
+        if (!isComment) return false;
+        if (line.includes(wirePathAllowMarker)) return true;
+      }
+      return false;
+    };
+
+    const unhatchedSite = serverSites.find((index) => !hatchedAt(index));
+    const standsUpAServer = serverSites.length > 0;
     for (const row of WIRE_PATH_REGISTRY) {
-      if (shown === row.servedBy && code.includes(row.wirePath)) {
+      if (shown === row.servedBy && namesWirePath(code, row.wirePath)) {
         wirePathServedBySeen.add(row.wirePath);
       }
-      if (!standsUpAServer || !code.includes(row.wirePath)) continue;
-      if (shown === row.servedBy || hatched) continue;
+      if (!standsUpAServer || !namesWirePath(code, row.wirePath)) continue;
+      if (shown === row.servedBy || unhatchedSite === undefined) continue;
       const reachesRegisteredRoute = row.boundVia.some((specifier) =>
         new RegExp(`from\\s+["'][^"']*${specifier}["']`).test(code));
       if (reachesRegisteredRoute) continue;
       failures.push(
-        `${shown}: stands up an HTTP server and names the registered wire path `
+        `${shown}:${unhatchedSite + 1}: stands up an HTTP server and names the registered wire path `
         + `\`${row.wirePath}\` without reaching its registered route module `
         + `(${row.servedBy}). A settled wire path is SERVED by exactly one route module `
         + `(rule 17). ${row.reason} `
-        + `Import and register the real route instead of answering the path here. If this `
-        + `file genuinely does not serve that path, justify it with `
-        + `// ${wirePathAllowMarker}<reason>) anywhere in the file.`,
+        + `Import and register the real route instead of answering the path here. If THIS `
+        + `server genuinely does not serve that path, justify it with `
+        + `// ${wirePathAllowMarker}<reason>) on that line or the comment block above it. `
+        + `The hatch is per server, not per file: a file-wide one would exempt the next `
+        + `server somebody adds here.`,
       );
     }
   }

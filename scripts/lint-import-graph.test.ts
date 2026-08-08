@@ -221,6 +221,64 @@ test("rule 17 does not fire on a file that only CALLS the path (a client, not a 
   );
 });
 
+/**
+ * THE HATCH IS PER SERVER, NOT PER FILE.
+ *
+ * A non-author audit HELD rule 17's promotion on exactly this. The hatch was
+ * `text.includes(marker)` — file-wide, unconditional, permanent — so the first
+ * legitimate justification turned the whole file into a blind spot. The audit
+ * proved it by editing the tree's one hatched file so a second server there
+ * really did answer the registered path with a raw fixture id: lint stayed
+ * green. These two tests are that mutation and its converse, mechanised.
+ */
+test("rule 17: a hatched server does not exempt a second, unhatched server in the same file", () => {
+  withWirePathFixture(
+    [
+      "const probe = Bun.serve({",
+      "  hostname: \"127.0.0.1\",",
+      "  port: 0,",
+      "  // wire-path-ok(a port probe that answers a constant empty body)",
+      "  fetch: () => new Response(\"\"),",
+      "});",
+      "void probe;",
+      "const rogue = Bun.serve({",
+      "  hostname: \"127.0.0.1\",",
+      "  port: 0,",
+      "  fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ items: [{ id: \"retrieval-node-v1:seed-0000\" }] })",
+      "    : new Response(\"\", { status: 404 }),",
+      "});",
+      "void rogue;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17 does not fire on a DIFFERENT route that merely starts with a registered path", () => {
+  // `/v1/memories-legacy-export` contains `/v1/memories` as a substring and is
+  // not it. No such path exists in the tree today; the guard is here so the
+  // first one added does not arrive as a mystery failure somewhere unrelated.
+  withWirePathFixture(
+    [
+      "const server = Bun.serve({",
+      "  hostname: \"127.0.0.1\",",
+      "  port: 0,",
+      "  fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories-legacy-export\"",
+      "    ? Response.json({ ok: true })",
+      "    : new Response(\"\", { status: 404 }),",
+      "});",
+      "void server;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("T0 adversarial tripwire catches each prohibited path fragment", () => {
   const fixture = join(platformRoot, "scripts", "import-graph-tripwire-fixture.json");
   const fragments = ["." + "private", "bench" + "mark"];
