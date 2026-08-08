@@ -22,7 +22,10 @@ const copyPlainJson = (value: unknown, active: WeakSet<object>): unknown => {
   if (keys.some((key) => typeof key === "symbol")) throw new TypeError("plain JSON rejects symbol keys");
   if (isArray) {
     const strings = keys as string[];
-    if (strings.some((key) => key !== "length" && !arrayIndex.test(key))) throw new TypeError("plain JSON rejects array properties");
+    if (strings.length !== value.length + 1
+      || strings.some((key) => key !== "length" && (!arrayIndex.test(key) || Number(key) >= value.length))) {
+      throw new TypeError("plain JSON rejects array properties");
+    }
     for (let index = 0; index < value.length; index++) if (!Object.prototype.hasOwnProperty.call(value, String(index))) {
       throw new TypeError("plain JSON rejects sparse arrays");
     }

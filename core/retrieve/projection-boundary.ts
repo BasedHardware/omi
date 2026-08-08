@@ -1,7 +1,11 @@
+// domain-pending(DIV-DOMX-001)
 import { sha256CanonicalRedacted } from "../ledger";
 import type { PolicyClass, TreeInputSnapshot } from "./index";
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMX-006)
 import { APPLICATION_DEFAULT_SYNTHESIZED_POLICY, isApplicationGrantProjectedTreeInput, type ApplicationGrantProjectedTreeInputSnapshot } from "./authorization-boundary";
-import type { RenderNode } from "./render";
+import { isProducedRenderNode, type RenderNode } from "./render";
 import { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
 
 // domain-pending(DIV-DOMCORE-001)
@@ -36,6 +40,8 @@ export interface SynthesizedCitation {
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-DOMX-005)
 export interface OwnerBoundSynthesizedProjectionEnvelope {
   owner_account_id: string;
   graph_generation: string;
@@ -85,10 +91,12 @@ const freezeEnvelope = (value: OwnerBoundSynthesizedProjectionEnvelope): OwnerBo
 /**
  * Internal L2+ boundary only. It deliberately retains identifiers needed to
  * verify provenance, but never retains excerpts, event payloads, source rows,
- * caller-provided tiers, or references to mutable input objects.
+ * caller-provided classification labels, or references to mutable input objects.
  */
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-DOMX-005)
 export const buildOwnerBoundSynthesizedProjection = (
   input: ApplicationGrantProjectedTreeInputSnapshot,
   render: RenderNode,
@@ -103,6 +111,7 @@ export const buildOwnerBoundSynthesizedProjection = (
   if (render.stale) fail("render_stale");
   if (!render.node_id || !render.render_generation || !render.render_hash || !render.rendered_from_digest) fail("render_identity_invalid");
 
+  // domain-pending(DIV-DOMX-001)
   const expectedRenderHash = sha256CanonicalRedacted({
     owner_account_id: render.owner_account_id,
     graph_generation: render.graph_generation,
@@ -117,6 +126,7 @@ export const buildOwnerBoundSynthesizedProjection = (
     effective_policy: render.effective_policy,
   });
   if (render.render_hash !== expectedRenderHash || render.render_generation !== `render-v1:${render.render_hash}`) fail("render_identity_invalid");
+  if (!isProducedRenderNode(render)) fail("render_identity_invalid");
 
   const memberIds = [...render.rendered_from_manifest.live_member_revisions].sort();
   if (memberIds.length === 0 || !exactStrings(memberIds, sortedUnique(memberIds))) fail("claim_revision_mismatch");

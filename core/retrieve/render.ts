@@ -1,4 +1,5 @@
 import { compareStrings } from "../order";
+// domain-pending(DIV-DOMX-001)
 import { sha256CanonicalRedacted } from "../ledger";
 import { policyPartitionLabel, type PolicyClass, type TreeInputSnapshot } from "./index";
 import type { DependencyManifest, StructuralNode, StructuralTree } from "./tree";
@@ -30,7 +31,7 @@ export interface RenderNode {
   stale: boolean;
   source_language: string;
 }
-/** Narrow core-side port. The driver ModelPort structurally implements it, but core never imports drivers. */
+/** Narrow internal port. The driver ModelPort structurally implements it, but this module never imports drivers. */
 export interface RenderModelPort {
   render(request: { strategy: string; version: string; input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }>;
 }
@@ -38,6 +39,10 @@ export interface RenderOptions { strategy: string; model_version: string; prompt
 export type RenderCache = ReadonlyMap<string, RenderNode>;
 
 const producedRenderNodes = new WeakSet<object>();
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+export const isProducedRenderNode = (value: unknown): value is RenderNode =>
+  value !== null && typeof value === "object" && Object.isFrozen(value) && producedRenderNodes.has(value);
 const nodeClaims = (node: StructuralNode, input: TreeInputSnapshot) => node.member_claim_revision_ids.map((id) => input.claims.find((claim) => claim.claim_revision_id === id)).filter((claim): claim is NonNullable<typeof claim> => claim !== undefined);
 const immutableClone = <Value>(value: Value): Value => deepFreezePlainJson(normalizePlainJson(value));
 const samePolicy = (left: PolicyClass, right: PolicyClass): boolean =>
@@ -56,6 +61,7 @@ const renderNodeKeys = [
 ] as const;
 const exactStrings = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
+// domain-pending(DIV-DOMX-001)
 const renderHash = (render: Pick<RenderNode,
   "owner_account_id" | "graph_generation" | "reader_projection_digest" | "projection_authorization_digest"
   | "projected_content_digest" | "node_id" | "rendered_from_digest" | "rendered_from_manifest"
@@ -179,6 +185,7 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     // dependency record used for later parent invalidation, not a request-only copy.
     const nodeWithChildHashes = withChildRenderHashes({ ...tree, nodes: [node] }, children).nodes[0]!;
     const manifest = immutableClone(node.dependency_manifest);
+    // domain-pending(DIV-DOMX-001)
     const rendered_from_digest = sha256CanonicalRedacted({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
       reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
       projected_content_digest: input.projected_content_digest,

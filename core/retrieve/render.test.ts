@@ -1,3 +1,8 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-005)
 import { expect, test } from "bun:test";
 import { projectTreeInputSnapshot } from "./index";
 import { renderStructuralTree, restrictivePolicyJoin, validateRestrictiveJoin } from "./render";
@@ -108,4 +113,25 @@ test("R2 concurrent roots render each node once and retain only returned child h
   (broken.nodes[0] as { child_node_ids: string[] }).child_node_ids = ["missing"];
   await expect(renderStructuralTree(broken, input, { render: async () => ({ summary_text: "no", citations: [] }) }, options()))
     .rejects.toThrow("incomplete child provenance");
+});
+
+test("R2 rejects non-index array state before model or cache semantics can observe it", async () => {
+  const { input, tree } = inputAndTree();
+  const smuggledInput = structuredClone(input);
+  const evidenceRefs = smuggledInput.claims[0]!.evidence_refs as string[];
+  Object.defineProperty(evidenceRefs, "4294967295", { value: "smuggled", enumerable: true });
+  let calls = 0;
+  await expect(renderStructuralTree(tree, smuggledInput, {
+    render: async () => { calls++; return { summary_text: "must-not-run", citations: [] }; },
+  }, options())).rejects.toThrow("plain JSON rejects array properties");
+  expect(calls).toBe(0);
+
+  const leaf = buildDeterministicAnchors(input).nodes.find((node) => node.child_node_ids.length === 0)!;
+  const citations = ["e1"];
+  Object.defineProperty(citations, "4294967295", { value: "smuggled", enumerable: true });
+  const failed = await renderStructuralTree({ input_generation: input.graph_generation, nodes: [leaf] }, input, {
+    render: async () => ({ summary_text: "invalid", citations }),
+  }, options());
+  expect(failed[0]!.status).toBe("failed");
+  expect(JSON.stringify(failed)).not.toContain("smuggled");
 });

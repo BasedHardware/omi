@@ -1,3 +1,11 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMCORE-007)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-006)
 import { expect, test } from "bun:test";
 import {
   ApplicationReadDenied,
@@ -103,6 +111,18 @@ test("authorization rejects every malformed runtime shape before store access", 
     })).toThrow();
     expect(storeCalls).toBe(0);
   }
+});
+
+test("authorization rejects non-index scope properties before store access", () => {
+  const request = allowed();
+  const scopes = [...request.credential.scopes];
+  Object.defineProperty(scopes, "4294967295", { value: "smuggled.scope", enumerable: true });
+  let storeCalls = 0;
+  expect(() => readAfterApplicationAuthorization({ ...request, credential: { ...request.credential, scopes } }, () => {
+    storeCalls++;
+    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+  })).toThrow("plain JSON rejects array properties");
+  expect(storeCalls).toBe(0);
 });
 
 test("application projection factory is branded, owner-bound, and canonical/default only", () => {
@@ -234,6 +254,47 @@ test("visible generic event-chain faults fail closed", () => {
     ...item, evidence: { ...item.evidence, event_revision_id: "missing-event" },
   }));
   expect(() => readAfterApplicationAuthorization(allowed(), load(missingEvent))).toThrow("projection_binding_mismatch");
+});
+
+test("later private evidence revisions cannot suppress a visible generic predecessor", () => {
+  const absent = snapshot();
+  absent.evidence = absent.evidence!.map((item) => ({ ...item, commit_sequence: 1 }));
+  const hidden = structuredClone(absent);
+  hidden.evidence = [...hidden.evidence!, {
+    revision_id: "e:private-head",
+    commit_sequence: 2,
+    evidence: {
+      ...hidden.evidence![0]!.evidence,
+      excerpt: "hidden replacement",
+      policy_labels: ["sensitivity:private"],
+    },
+  }];
+  const absentProjection = readAfterApplicationAuthorization(allowed(), load(absent));
+  const hiddenProjection = readAfterApplicationAuthorization(allowed(), load(hidden));
+  expect(JSON.stringify(hiddenProjection)).toBe(JSON.stringify(absentProjection));
+  expect(hiddenProjection.projected_content_digest).toBe(absentProjection.projected_content_digest);
+  expect(hiddenProjection.graph_generation).toBe(absentProjection.graph_generation);
+});
+
+test("malformed or foreign visible evidence heads fail closed", () => {
+  const tied = snapshot();
+  tied.evidence = [
+    { ...tied.evidence![0]!, revision_id: "e:r1", commit_sequence: 2 },
+    { ...tied.evidence![0]!, revision_id: "e:r2", commit_sequence: 2 },
+  ];
+  expect(() => readAfterApplicationAuthorization(allowed(), load(tied))).toThrow("projection_binding_mismatch");
+
+  const foreign = snapshot();
+  foreign.events = [...foreign.events!, {
+    revision_id: "event:foreign",
+    event: { ...foreign.events![0]!.event, event_id: "event:foreign", event_revision_id: "event:foreign", owner_account_id: "owner:b" },
+  }];
+  foreign.evidence = [
+    { ...foreign.evidence![0]!, revision_id: "e:r1", commit_sequence: 1 },
+    { ...foreign.evidence![0]!, revision_id: "e:r2", commit_sequence: 2,
+      evidence: { ...foreign.evidence![0]!.evidence, event_revision_id: "event:foreign" } },
+  ];
+  expect(() => readAfterApplicationAuthorization(allowed(), load(foreign))).toThrow("projection_binding_mismatch");
 });
 
 test("hidden identity constraints cannot rename or coalesce visible application topology", () => {

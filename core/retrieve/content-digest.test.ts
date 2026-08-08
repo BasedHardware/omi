@@ -32,3 +32,18 @@ test("content digest permits acyclic shared values and hashes them by JSON value
   expect(Object.keys(normalized)).toEqual(["left", "negative_zero", "right"]);
   expect(Object.is(normalized.negative_zero, -0)).toBe(false);
 });
+
+test("plain arrays accept only length and every own in-range index", () => {
+  const nonIndex: unknown[] = ["x"];
+  Object.defineProperty(nonIndex, "4294967295", { value: "smuggled", enumerable: true });
+  const hole = new Array(2);
+  hole[1] = "x";
+  const nonEnumerable: unknown[] = ["x"];
+  Object.defineProperty(nonEnumerable, "hidden", { value: "smuggled", enumerable: false });
+  const symbol: unknown[] = ["x"];
+  Object.defineProperty(symbol, Symbol("hidden"), { value: "smuggled", enumerable: true });
+  for (const value of [nonIndex, hole, nonEnumerable, symbol]) {
+    expect(() => normalizePlainJson(value)).toThrow();
+    expect(() => sha256CanonicalContent(value)).toThrow();
+  }
+});

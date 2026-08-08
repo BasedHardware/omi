@@ -1,3 +1,4 @@
+// domain-pending(DIV-DOMX-001)
 import { sha256CanonicalRedacted } from "../ledger";
 import { genericPolicyClassifier, projectTreeInputSnapshot, type GraphSnapshot, type PolicyClass, type TreeInputSnapshot } from "./index";
 import { sha256CanonicalContent } from "./content-digest";
@@ -189,6 +190,7 @@ const hasExactOwnOwner = (value: object, ownerAccountId: string): boolean =>
   Object.prototype.hasOwnProperty.call(value, "owner_account_id")
   && (value as { owner_account_id?: unknown }).owner_account_id === ownerAccountId;
 
+// domain-pending(DIV-DOMCORE-007)
 const validateVisibleTenantLineage = (
   snapshot: GraphSnapshot,
   claims: TreeInputSnapshot["claims"],
@@ -198,6 +200,7 @@ const validateVisibleTenantLineage = (
   for (const claim of claims) {
     const rawClaims = snapshot.claims.filter((item) => item.revision_id === claim.claim_revision_id);
     if (rawClaims.length !== 1 || !hasExactOwnOwner(rawClaims[0]!.claim, ownerAccountId)) deny("projection_binding_mismatch");
+    // domain-pending(DIV-DOMCORE-007)
     for (const argument of claim.arguments) if (argument.value.kind === "entity_ref") {
       const entities = snapshot.entities.filter((item) => item.entity.entity_id === argument.value.ref);
       if (entities.length !== 1 || !hasExactOwnOwner(entities[0]!.entity, ownerAccountId)) deny("projection_binding_mismatch");
@@ -216,34 +219,45 @@ const validateVisibleTenantLineage = (
 
 const currentApplicationEvidence = (
   revisions: NonNullable<GraphSnapshot["evidence"]>,
+  candidateEvidenceIds: ReadonlySet<string>,
 ): Map<string, NonNullable<GraphSnapshot["evidence"]>[number]> => {
   const grouped = new Map<string, NonNullable<GraphSnapshot["evidence"]>[number][]>();
-  for (const revision of revisions) grouped.set(revision.evidence.evidence_id, [...(grouped.get(revision.evidence.evidence_id) ?? []), revision]);
+  for (const revision of revisions) {
+    if (!candidateEvidenceIds.has(revision.evidence.evidence_id) || !hasOnlyGenericPolicyLabels(revision.evidence.policy_labels)) continue;
+    grouped.set(revision.evidence.evidence_id, [...(grouped.get(revision.evidence.evidence_id) ?? []), revision]);
+  }
   const current = new Map<string, NonNullable<GraphSnapshot["evidence"]>[number]>();
   for (const [evidenceId, members] of grouped) {
     if (members.length === 1) {
       current.set(evidenceId, members[0]!);
       continue;
     }
-    if (members.some((member) => member.commit_sequence === undefined)) continue;
+    if (members.some((member) => member.commit_sequence === undefined)) deny("projection_binding_mismatch");
     const greatest = Math.max(...members.map((member) => member.commit_sequence!));
     const heads = members.filter((member) => member.commit_sequence === greatest);
-    if (heads.length === 1) current.set(evidenceId, heads[0]!);
+    if (heads.length !== 1) deny("projection_binding_mismatch");
+    current.set(evidenceId, heads[0]!);
   }
   return current;
 };
 
 /** Builds the only graph allowed to influence application-default topology. */
+// domain-pending(DIV-DOMCORE-007)
 const applicationVisibleClosure = (snapshot: GraphSnapshot): GraphSnapshot => {
-  const currentEvidence = currentApplicationEvidence(snapshot.evidence ?? []);
-  const claims = snapshot.claims.filter((item) => {
+  const candidateClaims = snapshot.claims.filter((item) => {
     if (item.placement_status !== "canonical" || item.claim.lifecycle !== "canonical" || item.claim.scope.locality !== "durable") return false;
+    return isApplicationDefaultPolicy(genericPolicyClassifier.classify(item.claim, []))
+      && hasOnlyGenericPolicyLabels(item.claim.policy_labels);
+  });
+  const candidateEvidenceIds = new Set(candidateClaims.flatMap((item) => item.claim.evidence_refs));
+  const currentEvidence = currentApplicationEvidence(snapshot.evidence ?? [], candidateEvidenceIds);
+  const claims = candidateClaims.filter((item) => {
     const evidence = item.claim.evidence_refs.flatMap((ref) => {
       const revision = currentEvidence.get(ref);
       return revision ? [revision.evidence] : [];
     });
-    return isApplicationDefaultPolicy(genericPolicyClassifier.classify(item.claim, evidence))
-      && hasOnlyGenericPolicyLabels(item.claim.policy_labels)
+    return evidence.length === item.claim.evidence_refs.length
+      && isApplicationDefaultPolicy(genericPolicyClassifier.classify(item.claim, evidence))
       && evidence.every((entry) => hasOnlyGenericPolicyLabels(entry.policy_labels));
   });
   const claimIds = new Set(claims.map((item) => item.revision_id));
@@ -254,6 +268,7 @@ const applicationVisibleClosure = (snapshot: GraphSnapshot): GraphSnapshot => {
   });
   const eventIds = new Set(evidence.map((item) => item.evidence.event_revision_id));
   const events = (snapshot.events ?? []).filter((item) => eventIds.has(item.revision_id) || eventIds.has(item.event.event_revision_id));
+  // domain-pending(DIV-DOMCORE-007)
   const entityIds = new Set(claims.flatMap((item) => item.claim.arguments.flatMap((argument) =>
     argument.value.kind === "entity_ref" ? [argument.value.ref] : [])));
   const predicateIds = new Set(claims.flatMap((item) => item.claim.predicate_id ? [item.claim.predicate_id] : []));
@@ -306,6 +321,7 @@ export const readAfterApplicationAuthorization = (
 
   // domain-pending(DIV-DOMAPPS-001)
   // domain-pending(DIV-DOMAPPS-006)
+  // domain-pending(DIV-DOMX-001)
   const principalDigest = sha256CanonicalRedacted({
     kind: "application-key-principal",
     owner_account_id: request.owner_account_id,
@@ -314,6 +330,7 @@ export const readAfterApplicationAuthorization = (
   });
   // domain-pending(DIV-DOMAPPS-001)
   // domain-pending(DIV-DOMAPPS-006)
+  // domain-pending(DIV-DOMX-001)
   const authorizationDigest = sha256CanonicalRedacted({
     owner_account_id: request.owner_account_id,
     app_id: credential.app_id,
@@ -401,6 +418,7 @@ const projectApplicationDefaultReadTreeInput = (
   });
   const projected = {
     ...input,
+    // domain-pending(DIV-DOMX-001)
     graph_generation: sha256CanonicalRedacted({
       projection_version: "application-default-generic-v1",
       projection_authorization_digest: authorization.authorization_digest,

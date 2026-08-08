@@ -1,4 +1,14 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMCORE-007)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-006)
+// domain-pending(DIV-DOMX-005)
 import { expect, test } from "bun:test";
+// domain-pending(DIV-DOMX-001)
 import { sha256CanonicalRedacted } from "../ledger";
 import type { TreeInputSnapshot } from "./index";
 import {
@@ -71,6 +81,8 @@ test("projection binds owner, generations, exact claims, citations, policy, and 
   expect(envelope.citations).toEqual([{ evidence_id: "e1", event_revision_id: "event", capture_session_id: "capture", claim_revision_ids: envelope.live_claim_revision_ids }]);
   expect(envelope.synthesized_summary).toBe("A synthesized summary.");
   const serialized = JSON.stringify(envelope);
+  // domain-pending(DIV-DOMAPPS-007)
+  // domain-pending(DIV-DOMX-005)
   for (const hidden of ["excerpt", "payload", "range", "raw", "tier", "source_identity_ref", "source_unit_ref"]) expect(serialized).not.toContain(hidden);
   expect(Object.isFrozen(envelope)).toBe(true);
   expect(Object.isFrozen(envelope.citations)).toBe(true);
@@ -105,21 +117,21 @@ test("copying every discoverable runtime brand cannot forge a projected input", 
   denial(forged, render, "authorization_binding_mismatch");
 });
 
-test("projection rejects claim, policy, and complete-citation mismatches", async () => {
+test("projection provenance rejects every cloned and publicly re-signed render", async () => {
   const { input, render } = await renderedFixture();
-  denial(input, resign(render, { rendered_from_manifest: { ...render.rendered_from_manifest, live_member_revisions: ["missing"] } }), "claim_revision_mismatch");
-  denial(input, resign(render, { effective_policy: { ...render.effective_policy, sensitivity: "restricted" } }), "policy_mismatch");
-  denial(input, resign(render, { citations: [] }), "citation_mismatch");
-  denial(input, resign(render, { citations: [...render.citations, "evidence:uncited"] }), "citation_mismatch");
+  denial(input, resign(render, { rendered_from_manifest: { ...render.rendered_from_manifest, live_member_revisions: ["missing"] } }), "render_identity_invalid");
+  denial(input, resign(render, { effective_policy: { ...render.effective_policy, sensitivity: "restricted" } }), "render_identity_invalid");
+  denial(input, resign(render, { citations: [] }), "render_identity_invalid");
+  denial(input, resign(render, { citations: [...render.citations, "evidence:uncited"] }), "render_identity_invalid");
+  denial(input, resign(structuredClone(render), { summary_text: "cloned-and-re-signed-summary" }), "render_identity_invalid");
 });
 
 test("projection is detached from later mutation of citation inputs", async () => {
   const { input, render } = await renderedFixture();
   const mutableInput = input;
-  const mutableRender = structuredClone(render) as RenderNode;
-  const envelope = buildOwnerBoundSynthesizedProjection(mutableInput, mutableRender);
+  const envelope = buildOwnerBoundSynthesizedProjection(mutableInput, render);
   expect(() => { (mutableInput.evidence_index[0] as { event_revision_id: string }).event_revision_id = "event:mutated"; }).toThrow();
-  (mutableRender.citations as string[])[0] = "evidence:mutated";
+  expect(() => { (render.citations as string[])[0] = "evidence:mutated"; }).toThrow();
   expect(envelope.citations[0]!.event_revision_id).toBe("event");
   expect(envelope.citations[0]!.evidence_id).toBe("e1");
 });
@@ -270,6 +282,16 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
   }, options, new Map([[seed.rendered_from_digest, extraField]]));
   expect(calls).toBeGreaterThan(0);
   expect(JSON.stringify(exactRenders)).not.toContain("must-never-survive-cache-validation");
+
+  const smuggledCitations = [...seed.citations];
+  Object.defineProperty(smuggledCitations, "4294967295", { value: "cache-smuggled", enumerable: true });
+  calls = 0;
+  const smuggledCache = Object.freeze({ ...seed, citations: smuggledCitations });
+  const smuggledRenders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "smuggle-recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, smuggledCache]]));
+  expect(calls).toBeGreaterThan(0);
+  expect(JSON.stringify(smuggledRenders)).not.toContain("cache-smuggled");
 });
 
 test("cache admission requires the exact produced object in the exact context", async () => {
