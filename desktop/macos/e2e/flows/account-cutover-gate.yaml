@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
 preconditions:
