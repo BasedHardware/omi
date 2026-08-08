@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "bridgeName": "OmiShellBridge",
+  "comment": "Single source of truth for the macOS shell <-> TS surface bridge. Edit this file, run `node codegen/generate.mjs`, never edit the .generated.* files.",
+  "types": {
+    "CaptureState": {
+      "kind": "enum",
+      "cases": ["idle", "starting", "recording", "error"]
+    },
+    "StartCaptureParams": {
+      "kind": "struct",
+      "fields": {
+        "deviceId": { "type": "string", "optional": true },
+        "sampleRateHz": { "type": "int" }
+      }
+    },
+    "StartCaptureResult": {
+      "kind": "struct",
+      "fields": {
+        "sessionId": { "type": "string" },
+        "state": { "type": "CaptureState" }
+      }
+    },
+    "ReadSettingParams": {
+      "kind": "struct",
+      "fields": {
+        "key": { "type": "string" }
+      }
+    },
+    "ReadSettingResult": {
+      "kind": "struct",
+      "fields": {
+        "key": { "type": "string" },
+        "value": { "type": "string", "optional": true }
+      }
+    },
+    "OpenExternalParams": {
+      "kind": "struct",
+      "fields": {
+        "url": { "type": "string" }
+      }
+    },
+    "OpenExternalResult": {
+      "kind": "struct",
+      "fields": {
+        "opened": { "type": "bool" }
+      }
+    },
+    "CaptureStatusEvent": {
+      "kind": "struct",
+      "fields": {
+        "sessionId": { "type": "string", "optional": true },
+        "state": { "type": "CaptureState" },
+        "elapsedMs": { "type": "int" },
+        "levelDb": { "type": "double" }
+      }
+    }
+  },
+  "requests": {
+    "startCapture": { "params": "StartCaptureParams", "result": "StartCaptureResult" },
+    "readSetting": { "params": "ReadSettingParams", "result": "ReadSettingResult" },
+    "openExternal": { "params": "OpenExternalParams", "result": "OpenExternalResult" }
+  },
+  "events": {
+    "captureStatus": { "payload": "CaptureStatusEvent" }
+  }
+}
