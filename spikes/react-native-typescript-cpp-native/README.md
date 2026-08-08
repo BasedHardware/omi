@@ -291,9 +291,32 @@ This spike also contains `rn-runtime/`, a fresh bare React Native 0.79.2 shell g
 - `npm install` completed: 902 packages installed.
 - New Architecture/codegen ran during CocoaPods setup.
 
-### Blocked native builds
+### Native build results
 
 - **iOS**: `pod install` reached React Native's `glog` build, then failed because the configured Xcode Beta toolchain compiler could not create executables (`C compiler cannot create executables`).
-- **Android**: `./gradlew assembleDebug --no-daemon` stopped before Gradle because no Java Runtime is installed.
+- **Android**: after using Homebrew OpenJDK 17 and the local Android SDK, `./gradlew assembleDebug --no-daemon` completed successfully. The debug APK was built through the RN New Architecture/CMake path.
 
-Therefore the spike now proves the RN shell can be generated and dependencies resolved, but it still does not prove a successful iOS/Android binary or a real C++ TurboModule call. Those require fixing the local native toolchains first.
+The Android result is real shell/build evidence, but this spike still does not prove a real C++ TurboModule call, BLE hardware, or iOS binary execution.
+
+---
+
+## 10. Observability Decision
+
+The observability shape follows the current Omi-v4 decision record, without importing Omi-v4 production code:
+
+```text
+React Native client
+  └─ local diagnostics only; no raw audio, prompts, transcripts, paths, or titles
+
+Rust/Cloudflare Worker
+  ├─ Workers Observability: structured invocation logs + metrics
+  ├─ Better Stack: uptime, incidents, on-call, and optional log sink
+  ├─ Better Stack heartbeat: emitted only after a successful cron batch
+  └─ Better Stack Errors: Sentry-compatible error envelopes
+```
+
+**Choice:** use **Better Stack** as the operational product for uptime, incidents, logs, heartbeat monitoring, and worker error intake. Keep Cloudflare Workers Observability enabled as the native first-party source. Do not put Better Stack credentials in the client or repository; configure them as Worker secrets.
+
+**Privacy boundary:** client telemetry is not required for the TypeScript/RN architecture. If crash reporting is later enabled, send crash signatures and bounded diagnostics only—never ambient audio, transcripts, prompts, user IDs, file paths, or window titles.
+
+**Omi-v4 evidence checked:** Workers Observability is enabled in `worker-rs/wrangler.toml`; Better Stack is used for the heartbeat, Tail log export, and Sentry-compatible worker errors. The Flutter client is currently unwired. This spike adopts the server-side decision and keeps the client boundary intentionally inert.
