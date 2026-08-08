@@ -61,6 +61,16 @@ from services.agent_vm_lifecycle import (
     update_vm_reconcile,
     validate_release_manifest,
 )
+from services.agent_vm_migration_control import (
+    BootImageMigrationPlan,
+    boot_image_candidate_name as _boot_image_candidate_name,
+    boot_image_migration_id as _boot_image_migration_id,
+    boot_image_migration_plan as _boot_image_migration_plan,
+    owner_disk_label as _owner_disk_label,
+    source_clone_disk_name as _source_clone_disk_name,
+    state_disk_name as _state_disk_name,
+    supersede_rolled_back_boot_image_migration,
+)
 from utils.env_loader import firebase_admin_options
 from utils.observability.fallback import record_fallback
 
@@ -88,59 +98,6 @@ class ReconcileResult:
     uid: str
     state: str
     detail: str = ""
-
-
-@dataclass(frozen=True)
-class BootImageMigrationPlan:
-    """An explicit, dev-only plan for replacing stopped boot-image-drift VMs.
-
-    This plan deliberately does not inherit the normal release rollout.  A
-    release publication must never become a destructive migration merely
-    because it happens to carry a new immutable boot image.
-    """
-
-    allowed_uids: frozenset[str]
-    max_concurrency: int
-    soak_seconds: int
-
-
-def _boot_image_migration_plan(raw: Mapping[str, Any], release: AgentVmRelease) -> BootImageMigrationPlan | None:
-    """Return a safe replacement plan, or ``None`` when migration is disabled.
-
-    The plan lives in a separately named manifest section and is accepted only
-    for development.  Production is hard-disabled in code even if a manifest
-    is malformed or accidentally promoted with this section present.
-    """
-    migration = raw.get("bootImageMigration")
-    if not isinstance(migration, Mapping) or migration.get("enabled") is not True:
-        return None
-    if release.environment != "development" or os.getenv("AGENT_VM_ENVIRONMENT", "").strip() != "development":
-        raise ValueError("boot-image migration is development-only")
-    if os.getenv("GCE_PROJECT_ID", "").strip() != "based-hardware-dev":
-        raise ValueError("boot-image migration requires the approved development project")
-    owners = migration.get("allowedUids")
-    if not isinstance(owners, list) or not owners or not all(isinstance(uid, str) and uid.strip() for uid in owners):
-        raise ValueError("boot-image migration requires a non-empty allowedUids list")
-    max_concurrency = migration.get("maxConcurrency", 1)
-    soak_seconds = migration.get("soakSeconds", 600)
-    if not isinstance(max_concurrency, int) or max_concurrency != 1:
-        raise ValueError("boot-image migration maxConcurrency must be exactly 1")
-    if not isinstance(soak_seconds, int) or soak_seconds < 60:
-        raise ValueError("boot-image migration soakSeconds must be at least 60")
-    return BootImageMigrationPlan(frozenset(owners), max_concurrency, soak_seconds)
-
-
-def _boot_image_migration_id(uid: str, vm_name: str, instance_id: str, release_id: str) -> str:
-    return hashlib.sha256(f"{uid}:{vm_name}:{instance_id}:{release_id}".encode()).hexdigest()[:24]
-
-
-def _boot_image_candidate_name(vm_name: str, migration_id: str) -> str:
-    if not _MIGRATION_ID.fullmatch(migration_id):
-        raise ValueError("boot-image migration id is invalid")
-    suffix = f"-m-{migration_id[:12]}"
-    # GCE names are limited to 63 characters and the predecessor identity is
-    # also recorded independently in the durable migration journal.
-    return f"{vm_name[: 63 - len(suffix)]}{suffix}"
 
 
 def _disk_attachment(instance: Mapping[str, Any], device_name: str) -> Mapping[str, Any] | None:
@@ -180,18 +137,6 @@ def _normalized_disk_users(disk: Mapping[str, Any]) -> list[str] | None:
     if not isinstance(users, list):
         return None
     return [str(user).split("/compute/v1/")[-1] for user in users]
-
-
-def _state_disk_name(migration_id: str) -> str:
-    return f"omi-agent-state-{migration_id[:16]}"
-
-
-def _source_clone_disk_name(migration_id: str) -> str:
-    return f"omi-agent-source-{migration_id[:16]}"
-
-
-def _owner_disk_label(uid: str) -> str:
-    return hashlib.sha256(uid.encode()).hexdigest()[:20]
 
 
 def _disk_source(project: str, zone: str, disk_name: str) -> str:
@@ -696,6 +641,23 @@ async def _replace_stopped_boot_image_drift(
         state_disk_name = str(recovery_journal.get("stateDiskName") or "")
         state_disk_reused = recovery_journal.get("stateDiskReused") is True
         source_clone_name = str(recovery_journal.get("sourceCloneDiskName") or "")
+        supersession = await supersede_rolled_back_boot_image_migration(
+            uid=uid,
+            vm_name=vm_name,
+            zone=zone,
+            auth_token=auth_token,
+            owner=owner,
+            old_instance_id=old_instance_id,
+            replacement_release_id=release.release_id,
+            recovery_journal=recovery_journal,
+            owner_label=_owner_disk_label(uid),
+            cleanup_context=cleanup_context,
+            rollback=lambda context: _rollback_failed_boot_image_candidate(api, uid, vm_name, context),
+        )
+        if supersession == "stale":
+            return ReconcileResult(uid, "stale", "failed migration supersession fence changed")
+        if supersession == "superseded":
+            return ReconcileResult(uid, "retry", "superseded a rolled-back migration from an older release")
         if (
             not _MIGRATION_ID.fullmatch(migration_id)
             or recovery_journal.get("oldVmName") != vm_name
