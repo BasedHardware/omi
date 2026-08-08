@@ -28,10 +28,10 @@ fi
 # The repository firebase.json intentionally has stable shared ports. Generate
 # a minimal config for this one local run instead, so it cannot collide with a
 # developer emulator or any other test worktree.
-emulator_port="$(node -e 'const net = require("net"); const server = net.createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')"
+emulator_port="$(bun -e 'const net = require("net"); const server = net.createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')"
 emulator_config="$(mktemp "${TMPDIR:-/tmp}/omi-listen-pusher-firebase.XXXXXX")"
 trap 'rm -f "$emulator_config"' EXIT
-node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
+bun -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
   "$emulator_config" "$emulator_port"
 
 # CI passes ``--state-dir`` (and any other runner argument) to the listen-pusher
@@ -45,5 +45,5 @@ done
 
 runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v"
 
-npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
+bunx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
   "$runner_command"

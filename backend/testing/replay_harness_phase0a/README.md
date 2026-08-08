@@ -111,11 +111,14 @@ or third-party attestation of real kernel egress or of an OS listener:
 ## How to run
 
 ```bash
-npm run test:replay-harness-phase0a:emulator
+bun run test:replay-harness-phase0a:emulator
 ```
 
-Requires: backend `.venv` (`backend/scripts/sync-python-deps.sh`), Node
-dependencies (`npm ci`), Java 21+ (Firestore emulator), Redis, Firebase CLI.
+Requires: backend `.venv` (`backend/scripts/sync-python-deps.sh`), Bun 1.3.14
+(the root `packageManager` pin; install/activate it and verify `bun --version`), root dependencies
+(`bun install --frozen-lockfile --ignore-scripts`), Node.js 22 (`firebase-tools` keeps its
+`#!/usr/bin/env node` shebang, so `bunx firebase` still needs a Node runtime on `PATH`),
+Java 21+ (Firestore emulator), Redis, Firebase CLI.
 
 The runner:
 1. Starts a Firebase Firestore emulator on a random loopback port.

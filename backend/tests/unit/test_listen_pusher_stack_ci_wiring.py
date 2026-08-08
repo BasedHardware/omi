@@ -21,15 +21,14 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
     assert 'uv venv .venv' in job
     assert 'uv pip sync pylock.toml --python .venv/bin/python' in job
-    assert 'uses: actions/setup-node@v7' in job
-    assert "node-version: '22'" in job
-    assert 'cache-dependency-path: package-lock.json' in job
-    assert 'npm ci --ignore-scripts --prefer-offline --no-audit --fund=false' in job
+    assert 'uses: oven-sh/setup-bun@v2' in job
+    assert 'bun-version: 1.3.14' in job
+    assert 'bun install --frozen-lockfile --ignore-scripts' in job
     assert 'for attempt in 1 2 3' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
     assert 'sudo apt-get install --yes redis-server' in job
-    assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
+    assert 'bun run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
     assert 'name: Show listen gauntlet process diagnostics on failure' in job
     assert 'if: failure()' in job
     assert "find \"$state_dir\" -type f \\( -name '*.log' -o -name '*.jsonl' \\) -print -exec tail -n 160 {} \\;" in job
@@ -94,7 +93,7 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     assert 'github.event.pull_request.base.sha' in scope
     assert 'github.event.merge_group.base_sha' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
-    assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+    assert "^(backend/|package\\.json$|bun\\.lock$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
 
     for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
         job = workflow.split(f'  {job_name}:\n', 1)[1]

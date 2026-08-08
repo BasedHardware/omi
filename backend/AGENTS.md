@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), and optional Redis.
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
@@ -21,7 +21,7 @@ When intentionally changing backend Python dependencies, edit the relevant `requ
 ./scripts/update-python-lock.sh
 ```
 
-By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
+By default, lock refresh preserves existing package versions. Set `PYLOCK_UPGRADE=1` only for intentional upgrades.
 
 Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` (default STT), `DEEPGRAM_API_KEY` with its self-hosted endpoint, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. Dev desktop deploys use `FIREBASE_AUTH_CREDENTIALS_PATH` only for Firebase token verification, leaving Google clients on dev Cloud Run ADC.
 
@@ -221,7 +221,7 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.
 ```bash
 bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
-npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
+bun run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
 **Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push intentionally keeps its own 40-file cap and runs changed test files when a broad selector exceeds that budget. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. Local `test.sh` runs the selected set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.

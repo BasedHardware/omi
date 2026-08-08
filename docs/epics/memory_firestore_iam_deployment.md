@@ -71,16 +71,18 @@ Before enabling memory writes for any production user:
 Local Firebase emulator validation is now wired for the memory vector repair/purge outbox writer, client-rule denial, and transactional lease contention:
 
 ```bash
-npm run test:memory-vector-repair-outbox:emulator
-npm run test:memory-vector-repair-outbox-rules:emulator
-npm run test:memory-vector-repair-outbox-lease:emulator
+bun run test:memory-vector-repair-outbox:emulator
+bun run test:memory-vector-repair-outbox-rules:emulator
+bun run test:memory-vector-repair-outbox-lease:emulator
 ```
 
 Prerequisites:
 
 - Firebase CLI (`firebase`) / `firebase-tools`
 - Java runtime (`java`) for the Firebase emulator
-- npm dependencies installed from the repository root (`npm install` when `node_modules` is absent)
+- Bun 1.3.14 (the root `packageManager` pin; install/activate it and verify `bun --version`)
+- Root dependencies installed with `bun install --frozen-lockfile --ignore-scripts`
+- Node.js 22 on `PATH` (`firebase-tools` keeps its `#!/usr/bin/env node` shebang, so Bun runs the Firebase CLI under Node)
 - Python backend dependencies including `google-cloud-firestore`
 
 What this gate proves locally:
@@ -320,8 +322,8 @@ pytest tests/unit/test_memory_firestore_security_rules.py tests/unit/test_memory
 Cloud IAM and deployed Security Rules remain future gates until production project access is available. Local Firebase emulator validation is available through:
 
 ```bash
-npm run test:memory-vector-repair-outbox:emulator
-npm run test:memory-vector-repair-outbox-rules:emulator
-npm run test:memory-vector-repair-outbox-lease:emulator
+bun run test:memory-vector-repair-outbox:emulator
+bun run test:memory-vector-repair-outbox-rules:emulator
+bun run test:memory-vector-repair-outbox-lease:emulator
 cd backend && pytest tests/unit/test_memory_firestore_security_rules.py tests/unit/test_memory_firestore_iam_deployment_doc.py tests/unit/test_memory_vector_repair_outbox_emulator_harness.py -q
 ```
