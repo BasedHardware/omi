@@ -1638,6 +1638,8 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
             "releaseId": RELEASE.release_id,
             "lastError": "RuntimeError",
             "durableMigration": migration_id,
+            "drainRequested": True,
+            "drainRequestedAt": 90.0,
         },
     }
     client = StrictFirestore(
@@ -2039,6 +2041,113 @@ def test_boot_image_migration_cas_rejects_ready_legacy_status_with_new_demand(mo
         is None
     )
     assert not client.transactions[-1].updates
+
+
+def test_boot_image_migration_recovery_drain_requires_exact_durable_marker(monkeypatch):
+    migration_id = "8" * 24
+    migration = {
+        "migrationId": migration_id,
+        "state": "candidate_creating",
+        "oldVmName": "omi-agent-user",
+        "oldAuthToken": "old-token",
+        "oldInstanceId": "old-id",
+        "candidateVmName": "candidate",
+        "candidateAuthToken": "candidate-token",
+        "targetRelease": RELEASE.release_id,
+        "targetBootImage": RELEASE.boot_image,
+        "soakSeconds": 60,
+    }
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {
+                "agentVm": {
+                    "vmName": "omi-agent-user",
+                    "zone": "us-central1-a",
+                    "status": "ready",
+                    "instanceId": "old-id",
+                    "authToken": "old-token",
+                    "reconcile": {
+                        "lease": {"owner": "worker", "expiresAt": 200.0},
+                        "durableMigration": "9" * 24,
+                        "drainRequested": True,
+                    },
+                }
+            },
+            ("users", "dev-user", "agentVmMigrations", migration_id): migration,
+        }
+    )
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+
+    assert (
+        lifecycle.begin_boot_image_migration(
+            "dev-user",
+            "omi-agent-user",
+            "us-central1-a",
+            "old-token",
+            "worker",
+            migration_id,
+            migration,
+            now=100.0,
+        )
+        is None
+    )
+    assert not client.transactions[-1].updates
+
+
+def test_boot_image_migration_recovery_atomically_replaces_crash_retained_drain(monkeypatch):
+    migration_id = "8" * 24
+    migration = {
+        "migrationId": migration_id,
+        "state": "candidate_creating",
+        "oldVmName": "omi-agent-user",
+        "oldAuthToken": "old-token",
+        "oldInstanceId": "old-id",
+        "candidateVmName": "candidate",
+        "candidateAuthToken": "candidate-token",
+        "targetRelease": RELEASE.release_id,
+        "targetBootImage": RELEASE.boot_image,
+        "soakSeconds": 60,
+    }
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {
+                "agentVm": {
+                    "vmName": "omi-agent-user",
+                    "zone": "us-central1-a",
+                    "status": "ready",
+                    "instanceId": "old-id",
+                    "authToken": "old-token",
+                    "reconcile": {
+                        "state": "claimed",
+                        "lease": {"owner": "worker", "expiresAt": 200.0},
+                        "durableMigration": migration_id,
+                        "drainRequested": True,
+                        "drainRequestedAt": 90.0,
+                    },
+                }
+            },
+            ("users", "dev-user", "agentVmMigrations", migration_id): migration,
+        }
+    )
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+
+    assert (
+        lifecycle.begin_boot_image_migration(
+            "dev-user",
+            "omi-agent-user",
+            "us-central1-a",
+            "old-token",
+            "worker",
+            migration_id,
+            migration,
+            now=100.0,
+        )
+        == migration
+    )
+    recovery_update = client.transactions[-1].updates[-1][1]
+    assert recovery_update["agentVm.reconcile.state"] == "migration_claimed"
+    assert recovery_update["agentVm.reconcile.drainRequested"] is lifecycle.DELETE_FIELD
+    assert recovery_update["agentVm.reconcile.drainRequestedAt"] is lifecycle.DELETE_FIELD
 
 
 def test_boot_image_migration_completion_requires_candidate_pointer_and_lease(monkeypatch):

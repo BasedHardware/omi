@@ -700,6 +700,7 @@ def _migration_matches(
     owner: str,
     now: float,
     instance_id: str | None = None,
+    allow_drain_requested: bool = False,
 ) -> bool:
     """Validate the active pointer and reconciler lease for a migration CAS."""
     reconcile = vm.get("reconcile")
@@ -710,7 +711,7 @@ def _migration_matches(
         or vm.get("authToken") != auth_token
         or (instance_id is not None and str(vm.get("instanceId") or "") != instance_id)
         or bool(reconcile.get("startRequested"))
-        or bool(reconcile.get("drainRequested"))
+        or (bool(reconcile.get("drainRequested")) and not allow_drain_requested)
     ):
         return False
     lease = reconcile.get("lease")
@@ -770,11 +771,37 @@ def _begin_boot_image_migration_txn(
         return None
     snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    existing = migration_ref.get(transaction=transaction)
+    current = existing.to_dict() if existing.exists else None
+    durable_migration_id = migration.get("migrationId")
+    reconcile = vm.get("reconcile") if isinstance(vm, dict) else None
+    existing_matches = isinstance(current, dict) and (
+        current.get("oldVmName") == vm_name
+        and current.get("oldAuthToken") == auth_token
+        and current.get("oldInstanceId") == migration.get("oldInstanceId")
+        and current.get("candidateVmName") == migration.get("candidateVmName")
+        and current.get("targetRelease") == migration.get("targetRelease")
+    )
+    recovering_pre_cutover = (
+        existing_matches
+        and isinstance(current, dict)
+        and isinstance(reconcile, Mapping)
+        and reconcile.get("durableMigration") == durable_migration_id
+        and current.get("migrationId") == durable_migration_id
+        and current.get("state") in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+        and current.get("candidateAuthToken") == migration.get("candidateAuthToken")
+        and current.get("targetBootImage") == migration.get("targetBootImage")
+    )
     if not isinstance(vm, dict) or not _migration_matches(
-        vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now
+        vm,
+        vm_name=vm_name,
+        zone=zone,
+        auth_token=auth_token,
+        owner=owner,
+        now=now,
+        allow_drain_requested=recovering_pre_cutover,
     ):
         return None
-    durable_migration_id = migration.get("migrationId")
     old_instance_id = str(migration.get("oldInstanceId") or "")
     if not isinstance(durable_migration_id, str) or not durable_migration_id or not old_instance_id:
         return None
@@ -783,17 +810,22 @@ def _begin_boot_image_migration_txn(
         return None
     if str(vm.get("status") or "") not in {"stopped", "ready"}:
         return None
-    existing = migration_ref.get(transaction=transaction)
     if existing.exists:
-        current = existing.to_dict() or {}
-        if not (
-            current.get("oldVmName") == vm_name
-            and current.get("oldAuthToken") == auth_token
-            and current.get("oldInstanceId") == migration.get("oldInstanceId")
-            and current.get("candidateVmName") == migration.get("candidateVmName")
-            and current.get("targetRelease") == migration.get("targetRelease")
-        ):
+        if not existing_matches:
             return None
+        assert isinstance(current, dict)
+        if recovering_pre_cutover:
+            # Atomically exchange the crash-retained drain marker for the
+            # migration state. Both block new admission, while later journal
+            # transitions continue to reject unrelated drain requests.
+            transaction.update(
+                user_ref,
+                {
+                    "agentVm.reconcile.state": "migration_claimed",
+                    "agentVm.reconcile.drainRequested": DELETE_FIELD,
+                    "agentVm.reconcile.drainRequestedAt": DELETE_FIELD,
+                },
+            )
         # A terminal candidate cleanup is explicitly retryable.  Reuse the
         # durable candidate name/token but remove its old provider identity so
         # the next creation can be recorded under the same fenced journal.
