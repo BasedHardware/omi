@@ -61,18 +61,12 @@ def test_raise_if_x_sync_job_failed_on_listing_errors():
 
 def test_raise_if_x_sync_job_failed_when_every_user_fails():
     with pytest.raises(RuntimeError, match="synced 0/2"):
-        raise_if_x_sync_job_failed(
-            {"users": 2, "synced": 0, "new_posts": 0, "failed": 2, "errors": []}
-        )
+        raise_if_x_sync_job_failed({"users": 2, "synced": 0, "new_posts": 0, "failed": 2, "errors": []})
 
 
 def test_raise_if_x_sync_job_failed_allows_partial_and_empty_success():
-    raise_if_x_sync_job_failed(
-        {"users": 0, "synced": 0, "new_posts": 0, "failed": 0, "errors": []}
-    )
-    raise_if_x_sync_job_failed(
-        {"users": 3, "synced": 2, "new_posts": 1, "failed": 1, "errors": []}
-    )
+    raise_if_x_sync_job_failed({"users": 0, "synced": 0, "new_posts": 0, "failed": 0, "errors": []})
+    raise_if_x_sync_job_failed({"users": 3, "synced": 2, "new_posts": 1, "failed": 1, "errors": []})
 
 
 def test_entrypoint_wires_raise_after_asyncio_run():
