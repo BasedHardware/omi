@@ -17,10 +17,13 @@ const IOS_OUT = {
   envVar: "OMI_IOS_SHELL_DIR",
   path: "app/test/bridge_http_conformance_generated_test.dart",
 };
-const macDir = process.env[MAC_OUT.envVar] ??
-  path.join(ROOT, "../../omi-frontend-unification-and-microapps-project-tracker/prototypes/macos-webview-shell");
-const iosDir = process.env[IOS_OUT.envVar] ??
-  path.join(ROOT, "../../omi-frontend-unification-and-microapps-project-tracker/prototypes/flutter-webview");
+// The shells are in-repo since PR-6 promotion (core/shells/). Resolving them
+// here rather than in a sibling tracker checkout is what makes these gates
+// actually RUN: before promotion both hosts resolved to a path that does not
+// exist inside a worktree, so `emit()` took its SKIP branch and the drift and
+// conformance checks were silently inert in every `pnpm verify`.
+const macDir = process.env[MAC_OUT.envVar] ?? path.join(ROOT, "shells/macos");
+const iosDir = process.env[IOS_OUT.envVar] ?? path.join(ROOT, "shells/ios");
 const check = process.argv.includes("--check");
 
 function fail(message) {

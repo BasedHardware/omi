@@ -22,7 +22,21 @@ const failures = [];
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === "dist" || name === ".turbo") continue;
+    // Build OUTPUT is not source. The native shells under shells/ emit .build
+    // (swiftc app bundles, which embed the compiled surface JS), build/,
+    // .dart_tool/ and Pods/ — scanning those makes the gate report the bundled
+    // surface bundle as a rule-3 violation, i.e. it fails on its own artifacts.
+    if (
+      name === "node_modules" ||
+      name === "dist" ||
+      name === ".turbo" ||
+      name === ".build" ||
+      name === "build" ||
+      name === ".dart_tool" ||
+      name === "Pods"
+    ) {
+      continue;
+    }
     const p = join(dir, name);
     if (statSync(p).isDirectory()) yield* walk(p);
     else if (SOURCE_RE.test(name)) yield p;
