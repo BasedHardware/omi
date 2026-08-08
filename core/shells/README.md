@@ -93,5 +93,12 @@ window composited; `simctl` proves both. A byte-identical "success" pair is a fa
 - macOS shell: `swiftc` only — no Xcode project, no SwiftPM, unsigned scratch bundle.
   Bundle names must match `omi-on-<scratch>`; a shipping `Omi` / `Omi Beta` bundle is
   never touched.
-- iOS shell: **Flutter >= 3.44** (pubspec needs Dart `^3.12.2`). An older Flutter fails
-  with a confusing "version solving failed"; `dev-run-ios.sh` warns explicitly.
+- iOS shell: **Flutter 3.44.5** (pubspec needs Dart `^3.12.2`). An older Flutter fails
+  with a confusing "version solving failed"; `dev-run-ios.sh` warns explicitly. This
+  machine's mise default is 3.41.9, which does NOT work — use the explicit path and do
+  not change the global default, other work depends on it:
+
+  ```bash
+  FLUTTER_BIN=/Users/dazheng/.local/share/mise/installs/flutter/3.44.5/bin/flutter \
+    core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4801
+  ```
