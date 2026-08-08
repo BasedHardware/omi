@@ -7,6 +7,7 @@ export * from "./snapshot.js";
 export * from "./bridge/durable-log.js";
 export * from "./bridge/http.js";
 export * from "./bridge/stream.js";
+export * from "./domain/chat.js";
 export * from "./domain/conversations.js";
 export * from "./domain/folders.js";
 export * from "./domain/memories.js";
