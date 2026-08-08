@@ -260,8 +260,37 @@ export const WRITE_ERRORS = Object.freeze({
   write_id_reuse: Object.freeze({ status: 409, body: '{"error":"write_id_reuse"}' }),
   /** `base_revision` precondition failed: a genuine concurrent edit. */
   conflict: Object.freeze({ status: 409, body: '{"error":"conflict"}' }),
-  /** Migration window or missing control state. Carries `retry-after`. */
-  maintenance: Object.freeze({ status: 503, body: '{"error":"maintenance"}' }),
+  /**
+   * Migration window, or control state that cannot authorize a decision about
+   * this write at all. Carries `retry-after`.
+   *
+   * **`body` IS DELIBERATELY `null`: this contract does NOT ratify the 503
+   * body, and must not, yet.**
+   *
+   * The serving side already spells it, in
+   * `platform/apps/service/control/fence-http.ts`, as
+   * `{"error":"maintenance","refusal_outcome":"control_unavailable"}` — and
+   * that spelling carries a live escalation to fable
+   * (`data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md` §1): whether
+   * `refusal_outcome` is a FIVE-value enum, or whether the availability case
+   * carries no `refusal_outcome` at all and relies on the 503 alone.
+   * `backend:ADR-010` §3 names four outcomes; this is a fifth situation and
+   * none of the four.
+   *
+   * That escalation names this landing by name as the thing it blocks, because
+   * ratifying a byte string is what would make it expensive to reverse. So the
+   * contract binds what IS settled — the status, the `retry-after`, and the
+   * client obligation — and leaves the body to the serving side until fable
+   * rules. Reversal cost today: one line in `fence-http.ts`. Reversal cost had
+   * this contract fixed the bytes: a breaking contract bump.
+   *
+   * The client obligation does not depend on the ruling either way: a 503 is
+   * BACKPRESSURE, never evidence. Nothing is recorded server-side and the op
+   * must NOT be dead-lettered. Collapsing it onto `stale_epoch` would turn an
+   * ordinary migration window into a permanent lost edit for every account
+   * being migrated — which is the single worst outcome available on this wire.
+   */
+  maintenance: Object.freeze({ status: 503, body: null }),
 });
 
 /**
