@@ -262,6 +262,28 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
         self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
 
+    def test_requires_private_agent_vm_readiness_on_each_request_service(self) -> None:
+        contracts = (
+            "--network=default",
+            "--subnet=default",
+            "--vpc-egress=private-ranges-only",
+            "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
+        )
+        for workflow, production, step in (
+            (self.dev, False, "Deploy desktop-backend to Cloud Run"),
+            (self.prod, True, "Deploy production candidate at zero traffic"),
+        ):
+            with self.subTest(production=production):
+                start = workflow.index(f"      - name: {step}\n")
+                end = workflow.find("\n      - ", start + 1)
+                block = workflow[start:] if end < 0 else workflow[start:end]
+                for contract in contracts:
+                    with self.subTest(contract=contract):
+                        mutated_block = block.replace(contract, "", 1)
+                        mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                        self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
+
     def test_rejects_beta_qualification_without_development_python_health(self) -> None:
         mutated = self.qualification.replace(
             "https://api.omiapi.com/v1/health",

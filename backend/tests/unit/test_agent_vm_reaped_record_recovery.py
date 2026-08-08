@@ -93,3 +93,36 @@ class TestVmEnsureRequestsReconciliation:
 
         assert response == {"has_vm": True, "status": "updating"}
         assert requests == [("uid-transient", "omi-agent-reaped", "token")]
+
+    def test_vm_status_demotes_ready_while_reconciler_marks_missing(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(
+            agent_tools,
+            "get_agent_vm",
+            lambda _uid: {
+                **READY_VM,
+                "authToken": "token",
+                "reconcile": {"state": "missing", "missingSince": 1.0},
+            },
+        )
+
+        response = agent_tools.get_vm_status(uid="uid-missing")
+
+        assert response == {"has_vm": True, "status": "updating"}
+
+    def test_vm_status_reports_ready_only_when_cache_is_uncontested(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(agent_tools, "get_agent_vm", lambda _uid: {**READY_VM, "authToken": "token"})
+
+        response = agent_tools.get_vm_status(uid="uid-ready")
+
+        assert response == {"has_vm": True, "status": "ready"}
+
+    def test_vm_status_demotes_ready_with_unknown_placeholder_ip(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(
+            agent_tools,
+            "get_agent_vm",
+            lambda _uid: {**READY_VM, "authToken": "token", "ip": "unknown"},
+        )
+
+        response = agent_tools.get_vm_status(uid="uid-poisoned")
+
+        assert response == {"has_vm": True, "status": "updating"}

@@ -48,6 +48,23 @@ class PublicSharedConversationChatGatewayUnavailable(Exception):
     pass
 
 
+class GatewayDirectModelSurfaceBlocked(RuntimeError):
+    """A direct-provider LLM surface ran while feature mode requires the gateway.
+
+    Callers should treat this as a typed, user-safe failure for that surface — not as an
+    unexpected crash that falls through to the generic chat canned reply.
+    """
+
+    def __init__(self, surface: str) -> None:
+        self.surface = surface
+        self.error_code = f'{surface.split(".", 1)[0]}_gateway_blocked'
+        super().__init__(
+            f'{surface} is a direct provider LLM surface and is blocked while '
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
+            f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
+        )
+
+
 class GatewayContextChatOpenAI(ChatOpenAI):
     """A shared client that adds user attribution at invocation time."""
 
@@ -132,11 +149,7 @@ def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> N
     if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
         record_direct_exception_surface(surface=surface, reason='acknowledged')
         return
-    raise RuntimeError(
-        f'{surface} is a direct provider LLM surface and is blocked while '
-        f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
-        f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
-    )
+    raise GatewayDirectModelSurfaceBlocked(surface)
 
 
 def _is_local_or_dev_runtime() -> bool:

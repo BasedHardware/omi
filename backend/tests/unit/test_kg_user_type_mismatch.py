@@ -261,6 +261,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.conversations.factory",
         "utils.conversations.transcript_for_llm",
         "utils.conversations.transcript_chunks",
+        "utils.conversations.transcript_for_llm",
         "utils.conversations.memory_extraction_telemetry",
         "utils.memory.canonical_activation",
         "utils.memory.memory_service",

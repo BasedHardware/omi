@@ -131,6 +131,12 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
                 ('user-1',),
                 {},
             ),
+            (
+                dependencies.db_executor,
+                dependencies._enforce_cutover_http_if_request,
+                ('user-1', None),
+                {},
+            ),
         ]
 
 
@@ -173,9 +179,11 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         assert [(executor, fn) for executor, fn, _args, _kwargs in calls] == [
             (dependencies.db_executor, lookup_mcp),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
             (dependencies.critical_executor, check_rate_limit),
             (dependencies.db_executor, lookup_dev),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
         ]
         assert rate_limit_calls == [
             {

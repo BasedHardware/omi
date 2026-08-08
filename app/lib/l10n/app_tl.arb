@@ -10774,5 +10774,11 @@
     "pinAsBaseline": "I-pin bilang baseline",
     "unpinAsBaseline": "Alisin sa baseline",
     "baselineMemory": "Baseline na memorya",
-    "alwaysInContext": "Palaging nasa konteksto"
+    "alwaysInContext": "Palaging nasa konteksto",
+    "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
+    "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
+    "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
+    "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
+    "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
+    "accountCutoverOpenStore": "Buka toko"
 }

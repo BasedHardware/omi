@@ -61,7 +61,8 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .failedToStart:
         return .failed(.bridgeStartFailed)
-      case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .processExited, .restarting:
+      case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
+        .processExited, .restarting:
         return .failed(.bridgeUnavailable)
       case .outOfMemory:
         return .failed(.resourceExhausted)
@@ -241,6 +242,16 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
       return ChatQueryErrorDetail(
         errorCode: classified.code.rawValue,
         retryable: classified.retryable,
+        failureCode: nil,
+        failureSource: nil,
+        adapterId: nil,
+        provider: nil)
+    case .agentRuntimePayloadIncomplete:
+      // The missing components are diagnostics for the local log only; PostHog
+      // gets the bounded code.
+      return ChatQueryErrorDetail(
+        errorCode: AgentErrorCode.runtimeInstallIncomplete.rawValue,
+        retryable: false,
         failureCode: nil,
         failureSource: nil,
         adapterId: nil,
@@ -591,6 +602,9 @@ enum ChatVisibleTurnCompletion {
   ) async -> Bool {
     guard lifecycle.complete() else { return false }
     guard telemetryAttempt.complete(metrics: metrics) else { return false }
+    // The answer is on screen and the lifecycle guard above has already refused re-entry, so this
+    // is the one moment per turn at which the turn is visibly done.
+    OmiUISound.play(.complete)
     afterTerminal()
     return await journalCommit()
   }

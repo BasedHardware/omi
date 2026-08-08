@@ -19,6 +19,7 @@ from utils.llm.gateway_client import (
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
+    GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
     should_route_features_through_gateway,
@@ -379,8 +380,10 @@ def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
 
     try:
         raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
-    except RuntimeError as exc:
+    except GatewayDirectModelSurfaceBlocked as exc:
         assert 'file_chat.openai_files' in str(exc)
+        assert exc.error_code == 'file_chat_gateway_blocked'
+        assert exc.surface == 'file_chat.openai_files'
     else:
         raise AssertionError('expected direct model surface to be blocked')
 

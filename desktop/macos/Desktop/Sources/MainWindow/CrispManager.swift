@@ -1,8 +1,42 @@
 import AppKit
 import Foundation
 
+/// **Where a founder reply opens, named once.**
+///
+/// `CrispManager` has always polled for support replies and fired a "Help from Founder" banner
+/// about them. Tapping that banner used to record an analytics event and stop there, because the
+/// page it was about — `HelpPage` — had no route anything wrote to. Both halves now read this: the
+/// banner's tap opens it, and `ShellDestination.help` names the same page as the Settings row the
+/// user can reach on their own, so a notification cannot drift away from the surface it means.
+@MainActor
+enum SupportThreadRoute {
+  /// The assistant id `CrispManager` sends support replies under. Tap routing keys on this rather
+  /// than on the banner's title, which is display copy and free to change.
+  static let assistantId = "crisp"
+
+  /// The page a support reply opens.
+  static let destination: ShellDestination = .help
+
+  /// Reveal the main window and land on the support thread.
+  ///
+  /// The window is revealed first: a reply can arrive with the main window closed, which is when a
+  /// banner is doing the most work. `openMainAppWindow` is the one summon chokepoint that actually
+  /// activates the app — `NSApp.delegate as? AppDelegate` is nil under SwiftUI's delegate adaptor.
+  static func open() {
+    AppDelegate.summonWindowTarget()?.openMainAppWindow()
+    NotificationCenter.default.post(
+      name: .navigateToSidebarItem,
+      object: nil,
+      userInfo: [
+        "rawValue": SidebarNavItem.settings.rawValue,
+        "settingsSection": (destination.settingsSection ?? .help).rawValue,
+      ]
+    )
+  }
+}
+
 /// Fetches Crisp operator messages on app activation and Cmd+R,
-/// fires macOS notifications, and tracks unread count for the sidebar badge.
+/// fires macOS notifications, and tracks unread count for the Settings `Help` row's badge.
 @MainActor
 class CrispManager: ObservableObject {
   static let shared = CrispManager()
@@ -16,7 +50,8 @@ class CrispManager: ObservableObject {
     UInt64(now.timeIntervalSince1970 * 1000)
   }
 
-  /// Number of unread operator messages (shown as badge in sidebar)
+  /// Number of unread operator messages, drawn as the badge on the Settings `Help` row
+  /// (`SettingsSidebar`). Until that row existed this count had no reader anywhere in the app.
   @Published private(set) var unreadCount = 0
 
   /// Whether the user is currently viewing the Help tab
@@ -184,7 +219,7 @@ class CrispManager: ObservableObject {
             ownerID: ownerID,
             title: "Help from Founder",
             message: preview,
-            assistantId: "crisp",
+            assistantId: SupportThreadRoute.assistantId,
             respectFrequency: false
           )
         }
