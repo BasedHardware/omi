@@ -1,0 +1,78 @@
+From c9e30f9146259586ea30704742e9958b3d7ea7b7 Mon Sep 17 00:00:00 2001
+From: David Zhang <david.d.zhang@gmail.com>
+Date: Sat, 8 Aug 2026 01:26:30 -0400
+Subject: [PATCH 2/2] draft(auth): recheck expiry after grant lookup
+
+---
+ core/retrieve/authorization-boundary.test.ts | 44 ++++++++++++++++++++
+ core/retrieve/authorization-boundary.ts      |  2 +
+ 2 files changed, 46 insertions(+)
+
+diff --git a/core/retrieve/authorization-boundary.test.ts b/core/retrieve/authorization-boundary.test.ts
+index 7f62320..4cbc281 100644
+--- a/core/retrieve/authorization-boundary.test.ts
++++ b/core/retrieve/authorization-boundary.test.ts
+@@ -694,6 +694,50 @@ test("injected clock and grant lookup failures deny before store access", () =>
+   expect(storeCalls).toBe(0);
+ });
+ 
++test("authorization rechecks expiry after grant lookup before evidence or store access", () => {
++  const request: ApplicationMemoryReadAuthorizationRequest = {
++    ...allowed(),
++    verified_principal: {
++      ...allowed().verified_principal,
++      authentication_expires_at_epoch_seconds: NOW + 1,
++    },
++  };
++  const runInspection = (): { readonly lookupCalls: number; readonly clockCalls: number } => {
++    let currentTime = NOW;
++    let lookupCalls = 0;
++    let clockCalls = 0;
++    expect(() => inspectAuthorization(request, () => {
++      lookupCalls++;
++      currentTime = NOW + 1;
++      return grantFor(request);
++    }, () => {
++      clockCalls++;
++      return currentTime;
++    })).toThrow("authentication_expired");
++    return { lookupCalls, clockCalls };
++  };
++  expect(runInspection()).toEqual({ lookupCalls: 1, clockCalls: 2 });
++
++  let currentTime = NOW;
++  let lookupCalls = 0;
++  let clockCalls = 0;
++  let storeCalls = 0;
++  expect(() => authorizeAndRead(request, () => {
++    lookupCalls++;
++    currentTime = NOW + 1;
++    return grantFor(request);
++  }, () => {
++    clockCalls++;
++    return currentTime;
++  }, (_context) => {
++    storeCalls++;
++    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++  })).toThrow("authentication_expired");
++  expect(lookupCalls).toBe(1);
++  expect(clockCalls).toBe(2);
++  expect(storeCalls).toBe(0);
++});
++
+ test("authorization rejects every malformed runtime shape before store access", () => {
+   const base = allowed();
+   const withoutKey = (value: object, key: string): Record<string, unknown> =>
+diff --git a/core/retrieve/authorization-boundary.ts b/core/retrieve/authorization-boundary.ts
+index 3b4b064..85a0081 100644
+--- a/core/retrieve/authorization-boundary.ts
++++ b/core/retrieve/authorization-boundary.ts
+@@ -558,6 +558,8 @@ const authorizeApplicationMemoryRead = (
+     grant_state_digest: grantStateDigest,
+     account_head_digest: accountHeadDigest,
+   })) as AuthorizedContextDigestCoordinates;
++  const refreshedNow = readInjectedNow(stableClock);
++  if (principal.authentication_expires_at_epoch_seconds <= refreshedNow) deny("authentication_expired");
+   const context = deepFreezePlainJson(normalizePlainJson({
+     principal_id: principal.principal_id,
+     owner_account_id: request.owner_account_id,

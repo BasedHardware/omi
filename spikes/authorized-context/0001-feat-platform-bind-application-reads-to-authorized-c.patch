@@ -1,0 +1,1555 @@
+From 4871f99c5d6a12a618a7afc2d8046f85c4b4f212 Mon Sep 17 00:00:00 2001
+From: David Zhang <david.d.zhang@gmail.com>
+Date: Fri, 7 Aug 2026 23:44:38 -0400
+Subject: [PATCH 1/2] feat(platform): bind application reads to authorized
+ context
+
+---
+ core/retrieve/authorization-boundary.test.ts | 626 ++++++++++++++++---
+ core/retrieve/authorization-boundary.ts      | 398 +++++++++---
+ core/retrieve/projection-boundary.test.ts    |  67 +-
+ 3 files changed, 884 insertions(+), 207 deletions(-)
+
+diff --git a/core/retrieve/authorization-boundary.test.ts b/core/retrieve/authorization-boundary.test.ts
+index 9dcf6c4..7f62320 100644
+--- a/core/retrieve/authorization-boundary.test.ts
++++ b/core/retrieve/authorization-boundary.test.ts
+@@ -10,59 +10,116 @@ import { expect, test } from "bun:test";
+ import { sha256CanonicalRedacted } from "../ledger";
+ import {
+   ApplicationReadDenied,
+-  inspectApplicationMemoryReadAuthorization,
+-  readAfterApplicationAuthorization,
++  inspectApplicationMemoryReadAuthorization as inspectAuthorization,
++  isAuthorizedContext,
++  readAfterApplicationAuthorization as authorizeAndRead,
++  type ApplicationProjectionLoader,
+   type ApplicationMemoryReadAuthorizationRequest,
++  type AuthorizedContext,
+   type PersistedApplicationMemoryGrant,
+ } from "./authorization-boundary";
+ import { snapshot } from "./tree.fixture";
+ import { genericPolicyClassifier } from "./index";
+ import { buildDeterministicAnchors } from "./tree";
+ 
++const NOW = 1_800_000_000;
+ const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
+   owner_account_id: "owner",
++  verified_principal: {
++    principal_id: "principal:qa",
++    owner_account_id: "owner",
++    authentication_strength: "qa-verified",
++    authentication_expires_at_epoch_seconds: NOW + 100,
++  },
+   credential: {
++    principal_id: "principal:qa",
+     owner_account_id: "owner",
+     credential_kind: "mcp_api_key",
+     app_id: "app:a",
+     key_id: "key:a",
++    credential_generation: 3,
+     scopes: ["memories.read"],
+     active: true,
+   },
+-  persisted_grant: {
+-    owner_account_id: "owner",
+-    consumer: "mcp",
+-    app_id: "app:a",
+-    key_id: "key:a",
+-    enabled: true,
+-    default_read: true,
+-    scopes: ["memories.read"],
+-  },
++  capability: "memories.read",
++  account_authority_epoch: 7,
++});
++const grantFor = (request = allowed()): PersistedApplicationMemoryGrant => ({
++  grant_id: "grant:qa",
++  grant_version: 11,
++  lifecycle: "active",
++  owner_account_id: request.owner_account_id,
++  consumer: "mcp",
++  app_id: request.credential.app_id!,
++  key_id: request.credential.key_id!,
++  credential_generation: request.credential.credential_generation,
++  capability: request.capability,
++  enabled: true,
++  default_read: true,
++  scopes: ["memories.read"],
+ });
+-const load = (graph = snapshot(), options: { account_timezone: string } = { account_timezone: "UTC" }) =>
+-  () => ({ snapshot: graph, options });
++const load = (graph = snapshot(), options: { account_timezone: string } = { account_timezone: "UTC" }): ApplicationProjectionLoader =>
++  (_context) => ({ snapshot: graph, options });
+ const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+ const persistedGrantStateDigest = (grant: PersistedApplicationMemoryGrant): string => sha256CanonicalRedacted({
++  grant_id: grant.grant_id,
++  grant_version: grant.grant_version,
++  lifecycle: grant.lifecycle,
+   owner_account_id: grant.owner_account_id,
+   consumer: grant.consumer,
+   app_id: grant.app_id,
+   key_id: grant.key_id,
++  credential_generation: grant.credential_generation,
++  capability: grant.capability,
+   enabled: grant.enabled,
+   default_read: grant.default_read,
+   scopes: normalizedStrings(grant.scopes),
+ });
++const inspectAllowed = (
++  request = allowed(),
++  grant: PersistedApplicationMemoryGrant | null = grantFor(request),
++  now = NOW,
++) => inspectAuthorization(request, () => grant, () => now);
++const readAuthorized = (
++  request: ApplicationMemoryReadAuthorizationRequest,
++  loadStore: ApplicationProjectionLoader,
++  grant: PersistedApplicationMemoryGrant | null = grantFor(request),
++  now = NOW,
++) => authorizeAndRead(request, () => grant, () => now, loadStore);
++// Compatibility helper for projection-behavior tests below; all authority is
++// still supplied through the exact injected lookup.
++const readAfterApplicationAuthorization = (
++  request: ApplicationMemoryReadAuthorizationRequest,
++  loadStore: ApplicationProjectionLoader,
++) => readAuthorized(request, loadStore);
+ 
+-test("application read requires scope and exact active persisted grant before store access", () => {
+-  const evidence = inspectApplicationMemoryReadAuthorization(allowed());
+-  let storeCalls = 0;
+-  const result = readAfterApplicationAuthorization(allowed(), () => {
+-    storeCalls++;
++test("exact grant lookup precedes a store that receives only the branded context", () => {
++  const request = allowed();
++  const order: string[] = [];
++  let receivedContext: AuthorizedContext | null = null;
++  const result = authorizeAndRead(request, (key) => {
++    order.push("lookup");
++    expect(key).toEqual({
++      owner_account_id: "owner",
++      app_id: "app:a",
++      key_id: "key:a",
++      credential_generation: 3,
++      capability: "memories.read",
++    });
++    expect(Object.isFrozen(key)).toBe(true);
++    return grantFor(request);
++  }, () => NOW, (...args: [AuthorizedContext]) => {
++    const context = args[0];
++    order.push("store");
++    receivedContext = context;
++    expect(args.length).toBe(1);
+     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+   });
+-  expect(result.reader_projection_digest).not.toContain("owner");
+-  expect(result.reader_projection_digest).toBe(evidence.principal_digest);
+-  expect(result.projection_authorization_digest).toBe(evidence.authorization_digest);
+-  expect(storeCalls).toBe(1);
++  expect(order).toEqual(["lookup", "store"]);
++  expect(receivedContext).not.toBeNull();
++  expect(isAuthorizedContext(receivedContext)).toBe(true);
++  expect(result.reader_projection_digest).toBe(receivedContext!.digest_coordinates.owner_identity_digest);
++  expect(result.projection_authorization_digest).toBe(receivedContext!.digest_coordinates.authorization_state_digest);
+ });
+ 
+ test("authorization inspection is detached immutable evidence, never store authority", () => {
+@@ -72,66 +129,104 @@ test("authorization inspection is detached immutable evidence, never store autho
+       ...allowed().credential,
+       scopes: ["z.read", "memories.read", "a.read", "memories.read"],
+     },
+-    persisted_grant: {
+-      ...allowed().persisted_grant!,
+-      scopes: ["z.read", "memories.read", "a.read", "memories.read"],
+-    },
+   };
+-  const evidence = inspectApplicationMemoryReadAuthorization(request);
+-  const principalDigest = sha256CanonicalRedacted({
+-    kind: "application-key-principal",
++  const grant = { ...grantFor(request), scopes: ["z.read", "memories.read", "a.read", "memories.read"] };
++  const normalizedGrant = {
++    grant_id: "grant:qa",
++    grant_version: 11,
++    lifecycle: "active",
+     owner_account_id: "owner",
++    consumer: "mcp",
+     app_id: "app:a",
+     key_id: "key:a",
+-  });
+-  expect(inspectApplicationMemoryReadAuthorization.length).toBe(1);
++    credential_generation: 3,
++    capability: "memories.read",
++    enabled: true,
++    default_read: true,
++    scopes: ["a.read", "memories.read", "z.read"],
++  };
++  const evidence = inspectAuthorization(request, () => grant, () => NOW);
++  expect(inspectAuthorization.length).toBe(3);
+   expect(evidence).toEqual({
+-    owner_account_id: "owner",
+-    app_id: "app:a",
+-    key_id: "key:a",
+-    principal_digest: principalDigest,
+-    authorization_digest: sha256CanonicalRedacted({
++    owner_identity_digest: sha256CanonicalRedacted({ principal_id: "principal:qa", owner_account_id: "owner" }),
++    application_identity_digest: sha256CanonicalRedacted({ app_id: "app:a" }),
++    credential_identity_digest: sha256CanonicalRedacted({
++      app_id: "app:a", credential_kind: "mcp_api_key", key_id: "key:a", credential_generation: 3,
++    }),
++    authorization_state_digest: sha256CanonicalRedacted({
++      principal_id: "principal:qa",
+       owner_account_id: "owner",
+       app_id: "app:a",
+       key_id: "key:a",
+-      credential_scopes: ["a.read", "memories.read", "z.read"],
+       credential_kind: "mcp_api_key",
+-      grant_consumer: "mcp",
+-      grant_enabled: true,
+-      grant_default_read: true,
+-      grant_scopes: ["a.read", "memories.read", "z.read"],
+-      principal_digest: principalDigest,
++      credential_generation: 3,
++      credential_scopes: ["a.read", "memories.read", "z.read"],
++      capability: "memories.read",
++      persisted_grant: normalizedGrant,
++      account_authority_epoch: 7,
++      authentication_strength: "qa-verified",
++      authentication_expires_at_epoch_seconds: NOW + 100,
+       projection_policy_classes: [{ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }],
+       projection: { default_synthesized: true, archive_read: false, raw_read: false },
+     }),
+-    persisted_grant_state_digest: persistedGrantStateDigest(request.persisted_grant!),
++    grant_state_digest: persistedGrantStateDigest(grant),
++    account_head_digest: sha256CanonicalRedacted({ owner_account_id: "owner", account_authority_epoch: 7 }),
+   });
+   expect(Object.isFrozen(evidence)).toBe(true);
++  const serializedEvidence = JSON.stringify(evidence);
++  for (const raw of ["principal:qa", "owner", "app:a", "key:a", "grant:qa"]) {
++    expect(serializedEvidence).not.toContain(JSON.stringify(raw));
++  }
+ 
+   request.owner_account_id = "owner:mutated";
+   request.credential.app_id = "app:mutated";
+-  request.persisted_grant!.scopes = ["mutated.read"];
+-  expect(evidence.owner_account_id).toBe("owner");
+-  expect(evidence.app_id).toBe("app:a");
+-  expect(Reflect.set(evidence as unknown as object, "owner_account_id", "owner:forged")).toBe(false);
++  grant.scopes = ["mutated.read"];
++  expect(evidence.application_identity_digest).toBe(sha256CanonicalRedacted({ app_id: "app:a" }));
++  expect(Reflect.set(evidence as unknown as object, "application_identity_digest", "forged")).toBe(false);
+ 
++  let context!: AuthorizedContext;
++  readAuthorized(allowed(), (authorized) => {
++    context = authorized;
++    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++  });
++  expect(isAuthorizedContext(context)).toBe(true);
++  expect(Object.isFrozen(context)).toBe(true);
++  expect(Object.isFrozen(context.digest_coordinates)).toBe(true);
++  const forgeries: unknown[] = [
++    structuredClone(context),
++    { ...context },
++    Object.create(context),
++    new Proxy(context, {}),
++  ];
++  for (const forged of forgeries) expect(isAuthorizedContext(forged)).toBe(false);
++
++  let lookupCalls = 0;
+   let storeCalls = 0;
+-  expect(() => readAfterApplicationAuthorization(evidence as never, () => {
++  expect(() => authorizeAndRead(evidence as never, () => {
++    lookupCalls++;
++    return grantFor();
++  }, () => NOW, () => {
+     storeCalls++;
+     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+   })).toThrow("projection_binding_mismatch");
++  expect(lookupCalls).toBe(0);
+   expect(storeCalls).toBe(0);
+ });
+ 
+ test("persisted grant state digest commits every normalized grant field", () => {
+-  const grant = allowed().persisted_grant!;
+-  const baseline = inspectApplicationMemoryReadAuthorization(allowed()).persisted_grant_state_digest;
++  const grant = grantFor();
++  const baseline = inspectAllowed().grant_state_digest;
+   expect(baseline).toBe(persistedGrantStateDigest(grant));
+   const changes: readonly [keyof PersistedApplicationMemoryGrant, PersistedApplicationMemoryGrant][] = [
++    ["grant_id", { ...grant, grant_id: "grant:changed" }],
++    ["grant_version", { ...grant, grant_version: 12 }],
++    ["lifecycle", { ...grant, lifecycle: "inactive" }],
+     ["owner_account_id", { ...grant, owner_account_id: "owner:b" }],
+     ["consumer", { ...grant, consumer: "developer_api" }],
+     ["app_id", { ...grant, app_id: "app:b" }],
+     ["key_id", { ...grant, key_id: "key:b" }],
++    ["credential_generation", { ...grant, credential_generation: 4 }],
++    ["capability", { ...grant, capability: "other.read" }],
+     ["enabled", { ...grant, enabled: false }],
+     ["default_read", { ...grant, default_read: false }],
+     ["scopes", { ...grant, scopes: ["memories.read", "other.read"] }],
+@@ -139,11 +234,120 @@ test("persisted grant state digest commits every normalized grant field", () =>
+   for (const [field, changed] of changes) {
+     expect(persistedGrantStateDigest(changed), field).not.toBe(baseline);
+   }
+-  expect(inspectApplicationMemoryReadAuthorization({
+-    ...allowed(),
+-    credential: { ...allowed().credential, scopes: ["memories.read", "memories.read"] },
+-    persisted_grant: { ...grant, scopes: ["memories.read", "memories.read"] },
+-  }).persisted_grant_state_digest).toBe(baseline);
++  const duplicateScopeRequest = {
++    ...allowed(), credential: { ...allowed().credential, scopes: ["memories.read", "memories.read"] },
++  };
++  expect(inspectAuthorization(
++    duplicateScopeRequest,
++    () => ({ ...grant, scopes: ["memories.read", "memories.read"] }),
++    () => NOW,
++  ).grant_state_digest).toBe(baseline);
++});
++
++test("authorization coordinates commit material authority and exclude only the ambient clock", () => {
++  const baseRequest = allowed();
++  const baseGrant = grantFor(baseRequest);
++  const baseline = inspectAuthorization(baseRequest, () => baseGrant, () => NOW);
++  const changedPrincipal: ApplicationMemoryReadAuthorizationRequest = {
++    ...baseRequest,
++    verified_principal: { ...baseRequest.verified_principal, principal_id: "principal:changed" },
++    credential: { ...baseRequest.credential, principal_id: "principal:changed" },
++  };
++  const changedOwner: ApplicationMemoryReadAuthorizationRequest = {
++    ...baseRequest,
++    owner_account_id: "owner:changed",
++    verified_principal: { ...baseRequest.verified_principal, owner_account_id: "owner:changed" },
++    credential: { ...baseRequest.credential, owner_account_id: "owner:changed" },
++  };
++  const changedApp: ApplicationMemoryReadAuthorizationRequest = {
++    ...baseRequest,
++    credential: { ...baseRequest.credential, app_id: "app:changed" },
++  };
++  const changedKey: ApplicationMemoryReadAuthorizationRequest = {
++    ...baseRequest,
++    credential: { ...baseRequest.credential, key_id: "key:changed" },
++  };
++  const changedGeneration: ApplicationMemoryReadAuthorizationRequest = {
++    ...baseRequest,
++    credential: { ...baseRequest.credential, credential_generation: 4 },
++  };
++  const changes: readonly {
++    readonly label: string;
++    readonly request: ApplicationMemoryReadAuthorizationRequest;
++    readonly grant: PersistedApplicationMemoryGrant;
++  }[] = [
++    { label: "principal", request: changedPrincipal, grant: baseGrant },
++    { label: "owner", request: changedOwner, grant: { ...baseGrant, owner_account_id: "owner:changed" } },
++    { label: "application", request: changedApp, grant: { ...baseGrant, app_id: "app:changed" } },
++    { label: "key", request: changedKey, grant: { ...baseGrant, key_id: "key:changed" } },
++    { label: "credential generation", request: changedGeneration, grant: { ...baseGrant, credential_generation: 4 } },
++    {
++      label: "credential scopes",
++      request: { ...baseRequest, credential: { ...baseRequest.credential, scopes: ["memories.read", "extra.read"] } },
++      grant: baseGrant,
++    },
++    { label: "grant id", request: baseRequest, grant: { ...baseGrant, grant_id: "grant:changed" } },
++    { label: "grant version", request: baseRequest, grant: { ...baseGrant, grant_version: 12 } },
++    { label: "grant scopes", request: baseRequest, grant: { ...baseGrant, scopes: ["memories.read", "extra.read"] } },
++    { label: "account epoch", request: { ...baseRequest, account_authority_epoch: 8 }, grant: baseGrant },
++    {
++      label: "authentication strength",
++      request: {
++        ...baseRequest,
++        verified_principal: { ...baseRequest.verified_principal, authentication_strength: "qa-hardware-verified" },
++      },
++      grant: baseGrant,
++    },
++    {
++      label: "authentication expiry",
++      request: {
++        ...baseRequest,
++        verified_principal: {
++          ...baseRequest.verified_principal,
++          authentication_expires_at_epoch_seconds: NOW + 101,
++        },
++      },
++      grant: baseGrant,
++    },
++  ];
++  for (const change of changes) {
++    const evidence = inspectAuthorization(change.request, () => change.grant, () => NOW);
++    expect(evidence.authorization_state_digest, change.label).not.toBe(baseline.authorization_state_digest);
++  }
++
++  const principalEvidence = inspectAuthorization(changedPrincipal, () => baseGrant, () => NOW);
++  expect(principalEvidence.owner_identity_digest).not.toBe(baseline.owner_identity_digest);
++  const ownerEvidence = inspectAuthorization(changedOwner, () => ({ ...baseGrant, owner_account_id: "owner:changed" }), () => NOW);
++  expect(ownerEvidence.account_head_digest).not.toBe(baseline.account_head_digest);
++  const appEvidence = inspectAuthorization(changedApp, () => ({ ...baseGrant, app_id: "app:changed" }), () => NOW);
++  expect(appEvidence.application_identity_digest).not.toBe(baseline.application_identity_digest);
++  expect(appEvidence.credential_identity_digest).not.toBe(baseline.credential_identity_digest);
++  const keyEvidence = inspectAuthorization(changedKey, () => ({ ...baseGrant, key_id: "key:changed" }), () => NOW);
++  expect(keyEvidence.credential_identity_digest).not.toBe(baseline.credential_identity_digest);
++  const generationEvidence = inspectAuthorization(
++    changedGeneration,
++    () => ({ ...baseGrant, credential_generation: 4 }),
++    () => NOW,
++  );
++  expect(generationEvidence.credential_identity_digest).not.toBe(baseline.credential_identity_digest);
++
++  expect(inspectAuthorization(baseRequest, () => baseGrant, () => NOW + 1)).toEqual(baseline);
++  expect(inspectAuthorization(
++    { ...baseRequest, credential: { ...baseRequest.credential, scopes: ["memories.read", "memories.read"] } },
++    () => ({ ...baseGrant, scopes: ["memories.read", "memories.read"] }),
++    () => NOW,
++  )).toEqual(baseline);
++  expect(inspectAuthorization(
++    {
++      ...baseRequest,
++      verified_principal: {
++        ...baseRequest.verified_principal,
++        authentication_expires_at_epoch_seconds: NOW + 1,
++      },
++    },
++    () => baseGrant,
++    () => NOW,
++  ).authorization_state_digest).not.toBe(baseline.authorization_state_digest);
+ });
+ 
+ test("inspection and projection wrapper have parity for allowed identity and scope permutations", () => {
+@@ -153,16 +357,28 @@ test("inspection and projection wrapper have parity for allowed identity and sco
+     {
+       ...base,
+       credential: { ...base.credential, scopes: ["extra.read", "memories.read", "memories.read"] },
+-      persisted_grant: { ...base.persisted_grant!, scopes: ["memories.read", "extra.read"] },
+     },
+     {
+       owner_account_id: "owner:b",
+-      credential: { ...base.credential, owner_account_id: "owner:b", app_id: "app:b", key_id: "key:b" },
+-      persisted_grant: { ...base.persisted_grant!, owner_account_id: "owner:b", app_id: "app:b", key_id: "key:b" },
++      verified_principal: { ...base.verified_principal, principal_id: "principal:b", owner_account_id: "owner:b" },
++      credential: {
++        ...base.credential,
++        principal_id: "principal:b",
++        owner_account_id: "owner:b",
++        app_id: "app:b",
++        key_id: "key:b",
++        credential_generation: 4,
++      },
++      capability: "memories.read",
++      account_authority_epoch: 8,
+     },
+   ];
+   for (const request of requests) {
+-    const evidence = inspectApplicationMemoryReadAuthorization(request);
++    const grant = {
++      ...grantFor(request),
++      scopes: request.credential.scopes.includes("extra.read") ? ["memories.read", "extra.read"] : ["memories.read"],
++    };
++    const evidence = inspectAuthorization(request, () => grant, () => NOW);
+     let storeCalls = 0;
+     const graph = request.owner_account_id === "owner" ? snapshot() : {
+       owner_account_id: request.owner_account_id,
+@@ -171,40 +387,95 @@ test("inspection and projection wrapper have parity for allowed identity and sco
+       entities: [],
+       adjacency: [],
+     };
+-    const projection = readAfterApplicationAuthorization(request, () => {
++    const projection = authorizeAndRead(request, () => grant, () => NOW, (_context) => {
+       storeCalls++;
+       return { snapshot: graph, options: { account_timezone: "UTC" } };
+     });
+-    expect(projection.reader_projection_digest).toBe(evidence.principal_digest);
+-    expect(projection.projection_authorization_digest).toBe(evidence.authorization_digest);
++    expect(projection.reader_projection_digest).toBe(evidence.owner_identity_digest);
++    expect(projection.projection_authorization_digest).toBe(evidence.authorization_state_digest);
+     expect(storeCalls).toBe(1);
+   }
+ });
+ 
+ test("application read denials all occur before the supplied store callback", () => {
+   const base = allowed();
+-  const cases: readonly [string, ApplicationMemoryReadAuthorizationRequest, ApplicationReadDenied["reason"]][] = [
+-    ["oauth identity unresolved", { ...base, credential: { ...base.credential, credential_kind: "oauth" } }, "unsupported_credential_kind"],
+-    ["developer key grammar unsupported", { ...base, credential: { ...base.credential, credential_kind: "developer_api_key" } }, "unsupported_credential_kind"],
+-    ["scope absent independently of grant", { ...base, credential: { ...base.credential, scopes: [] } }, "missing_scope"],
+-    ["owner absent", { ...base, owner_account_id: "" }, "unresolvable_identity"],
+-    ["app absent", { ...base, credential: { ...base.credential, app_id: null } }, "unresolvable_identity"],
+-    ["key absent", { ...base, credential: { ...base.credential, key_id: null } }, "unresolvable_identity"],
+-    ["credential deleted", { ...base, credential: { ...base.credential, active: false } }, "inactive_credential"],
+-    ["grant absent independently of scope", { ...base, persisted_grant: null }, "missing_grant"],
+-    ["developer grant unsupported", { ...base, persisted_grant: { ...base.persisted_grant!, consumer: "developer_api" } }, "unsupported_credential_kind"],
+-    ["cross-owner credential", { ...base, credential: { ...base.credential, owner_account_id: "owner:b" } }, "grant_identity_mismatch"],
+-    ["cross-owner grant", { ...base, persisted_grant: { ...base.persisted_grant!, owner_account_id: "owner:b" } }, "grant_identity_mismatch"],
+-    ["wrong app", { ...base, persisted_grant: { ...base.persisted_grant!, app_id: "app:b" } }, "grant_identity_mismatch"],
+-    ["wrong key", { ...base, persisted_grant: { ...base.persisted_grant!, key_id: "key:b" } }, "grant_identity_mismatch"],
+-    ["grant disabled", { ...base, persisted_grant: { ...base.persisted_grant!, enabled: false } }, "inactive_grant"],
+-    ["default read disabled", { ...base, persisted_grant: { ...base.persisted_grant!, default_read: false } }, "inactive_grant"],
+-    ["grant lacks read scope", { ...base, persisted_grant: { ...base.persisted_grant!, scopes: [] } }, "grant_scope_mismatch"],
++  const baseGrant = grantFor(base);
++  const cases: readonly [
++    string,
++    ApplicationMemoryReadAuthorizationRequest,
++    PersistedApplicationMemoryGrant | null,
++    ApplicationReadDenied["reason"],
++  ][] = [
++    ["oauth identity unresolved", { ...base, credential: { ...base.credential, credential_kind: "oauth" } }, baseGrant, "unsupported_credential_kind"],
++    ["developer key grammar unsupported", { ...base, credential: { ...base.credential, credential_kind: "developer_api_key" } }, baseGrant, "unsupported_credential_kind"],
++    ["unsupported capability", { ...base, capability: "other.read" } as never, baseGrant, "unsupported_capability"],
++    ["scope absent independently of grant", { ...base, credential: { ...base.credential, scopes: [] } }, baseGrant, "missing_scope"],
++    ["owner absent", { ...base, owner_account_id: "" }, baseGrant, "unresolvable_identity"],
++    ["principal absent", { ...base, verified_principal: { ...base.verified_principal, principal_id: "" } }, baseGrant, "unresolvable_identity"],
++    ["owner oversized", { ...base, owner_account_id: "o".repeat(513) }, baseGrant, "unresolvable_identity"],
++    ["principal oversized", {
++      ...base,
++      verified_principal: { ...base.verified_principal, principal_id: "p".repeat(513) },
++      credential: { ...base.credential, principal_id: "p".repeat(513) },
++    }, baseGrant, "unresolvable_identity"],
++    ["app absent", { ...base, credential: { ...base.credential, app_id: null } }, baseGrant, "unresolvable_identity"],
++    ["key absent", { ...base, credential: { ...base.credential, key_id: null } }, baseGrant, "unresolvable_identity"],
++    ["principal collapsed to owner", {
++      ...base,
++      verified_principal: { ...base.verified_principal, principal_id: "owner" },
++      credential: { ...base.credential, principal_id: "owner" },
++    }, baseGrant, "principal_owner_mismatch"],
++    ["principal owner mismatch", { ...base, verified_principal: { ...base.verified_principal, owner_account_id: "owner:b" } }, baseGrant, "principal_owner_mismatch"],
++    ["credential principal mismatch", { ...base, credential: { ...base.credential, principal_id: "principal:b" } }, baseGrant, "principal_owner_mismatch"],
++    ["credential owner mismatch", { ...base, credential: { ...base.credential, owner_account_id: "owner:b" } }, baseGrant, "principal_owner_mismatch"],
++    ["bad credential generation", { ...base, credential: { ...base.credential, credential_generation: 0 } }, baseGrant, "invalid_credential_generation"],
++    ["fractional credential generation", { ...base, credential: { ...base.credential, credential_generation: 1.5 } }, baseGrant, "invalid_credential_generation"],
++    ["unsafe credential generation", {
++      ...base, credential: { ...base.credential, credential_generation: Number.MAX_SAFE_INTEGER + 1 },
++    }, baseGrant, "invalid_credential_generation"],
++    ["credential deleted", { ...base, credential: { ...base.credential, active: false } }, baseGrant, "inactive_credential"],
++    ["bad account epoch", { ...base, account_authority_epoch: 0 }, baseGrant, "invalid_account_authority_epoch"],
++    ["fractional account epoch", { ...base, account_authority_epoch: 1.5 }, baseGrant, "invalid_account_authority_epoch"],
++    ["unsafe account epoch", { ...base, account_authority_epoch: Number.MAX_SAFE_INTEGER + 1 }, baseGrant, "invalid_account_authority_epoch"],
++    ["missing auth strength", { ...base, verified_principal: { ...base.verified_principal, authentication_strength: "" } }, baseGrant, "malformed_authentication"],
++    ["oversized auth strength", {
++      ...base, verified_principal: { ...base.verified_principal, authentication_strength: "s".repeat(129) },
++    }, baseGrant, "malformed_authentication"],
++    ["fractional auth expiry", {
++      ...base, verified_principal: { ...base.verified_principal, authentication_expires_at_epoch_seconds: NOW + 0.5 },
++    }, baseGrant, "malformed_authentication"],
++    ["unsafe auth expiry", {
++      ...base,
++      verified_principal: {
++        ...base.verified_principal,
++        authentication_expires_at_epoch_seconds: Number.MAX_SAFE_INTEGER + 1,
++      },
++    }, baseGrant, "malformed_authentication"],
++    ["expired at boundary", {
++      ...base,
++      verified_principal: { ...base.verified_principal, authentication_expires_at_epoch_seconds: NOW },
++    }, baseGrant, "authentication_expired"],
++    ["grant absent independently of scope", base, null, "missing_grant"],
++    ["developer grant unsupported", base, { ...baseGrant, consumer: "developer_api" }, "unsupported_credential_kind"],
++    ["grant id absent", base, { ...baseGrant, grant_id: "" }, "malformed_grant"],
++    ["grant id oversized", base, { ...baseGrant, grant_id: "g".repeat(513) }, "malformed_grant"],
++    ["grant version invalid", base, { ...baseGrant, grant_version: 0 }, "invalid_grant_version"],
++    ["grant version fractional", base, { ...baseGrant, grant_version: 1.5 }, "invalid_grant_version"],
++    ["grant version unsafe", base, { ...baseGrant, grant_version: Number.MAX_SAFE_INTEGER + 1 }, "invalid_grant_version"],
++    ["cross-owner grant", base, { ...baseGrant, owner_account_id: "owner:b" }, "grant_identity_mismatch"],
++    ["wrong app", base, { ...baseGrant, app_id: "app:b" }, "grant_identity_mismatch"],
++    ["wrong key", base, { ...baseGrant, key_id: "key:b" }, "grant_identity_mismatch"],
++    ["wrong generation", base, { ...baseGrant, credential_generation: 4 }, "grant_identity_mismatch"],
++    ["wrong grant capability", base, { ...baseGrant, capability: "other.read" }, "grant_identity_mismatch"],
++    ["grant lifecycle inactive", base, { ...baseGrant, lifecycle: "inactive" }, "inactive_grant"],
++    ["grant disabled", base, { ...baseGrant, enabled: false }, "inactive_grant"],
++    ["default read disabled", base, { ...baseGrant, default_read: false }, "inactive_grant"],
++    ["grant lacks read scope", base, { ...baseGrant, scopes: [] }, "grant_scope_mismatch"],
+   ];
+-  for (const [label, request, reason] of cases) {
++  for (const [label, request, grant, reason] of cases) {
+     let inspectionError: unknown;
+     try {
+-      inspectApplicationMemoryReadAuthorization(request);
++      inspectAuthorization(request, () => grant, () => NOW);
+     } catch (error) {
+       inspectionError = error;
+     }
+@@ -213,7 +484,10 @@ test("application read denials all occur before the supplied store callback", ()
+ 
+     let storeCalls = 0;
+     try {
+-      readAfterApplicationAuthorization(request, () => { storeCalls++; return { snapshot: snapshot(), options: { account_timezone: "UTC" } }; });
++      authorizeAndRead(request, () => grant, () => NOW, (_context) => {
++        storeCalls++;
++        return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++      });
+       throw new Error(`expected denial: ${label}`);
+     } catch (error) {
+       expect(error).toBeInstanceOf(ApplicationReadDenied);
+@@ -241,7 +515,7 @@ test("authorization inspection and wrapper reject accessors and proxies without
+     () => {
+       let calls = 0;
+       const request = allowed();
+-      Object.defineProperty(request.persisted_grant!, "scopes", { enumerable: true, get: () => { calls++; return ["memories.read"]; } });
++      Object.defineProperty(request.verified_principal, "authentication_strength", { enumerable: true, get: () => { calls++; return "qa-verified"; } });
+       return { request, calls: () => calls };
+     },
+     () => {
+@@ -269,56 +543,189 @@ test("authorization inspection and wrapper reject accessors and proxies without
+     () => {
+       let calls = 0;
+       const base = allowed();
+-      const persisted_grant = new Proxy(base.persisted_grant!, {
++      const verified_principal = new Proxy(base.verified_principal, {
+         get: () => { calls++; return undefined; },
+         ownKeys: () => { calls++; return []; },
+         getPrototypeOf: () => { calls++; return Object.prototype; },
+         getOwnPropertyDescriptor: () => { calls++; return undefined; },
+       });
+-      return { request: { ...base, persisted_grant }, calls: () => calls };
++      return { request: { ...base, verified_principal }, calls: () => calls };
+     },
+   ];
+ 
+   for (const makeHostile of hostileInputs) {
+     const hostile = makeHostile();
+-    expect(() => inspectApplicationMemoryReadAuthorization(hostile.request)).toThrow();
++    let lookupCalls = 0;
++    expect(() => inspectAuthorization(hostile.request, () => {
++      lookupCalls++;
++      return grantFor();
++    }, () => NOW)).toThrow();
+     let storeCalls = 0;
+-    expect(() => readAfterApplicationAuthorization(hostile.request, () => {
++    expect(() => authorizeAndRead(hostile.request, () => {
++      lookupCalls++;
++      return grantFor();
++    }, () => NOW, (_context) => {
+       storeCalls++;
+       return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+     })).toThrow();
+     expect(hostile.calls()).toBe(0);
++    expect(lookupCalls).toBe(0);
++    expect(storeCalls).toBe(0);
++  }
++});
++
++test("grant lookup results are snapshotted and hostile values fail closed before store access", () => {
++  const hostileResults: readonly (() => { readonly value: unknown; readonly calls: () => number })[] = [
++    () => {
++      let calls = 0;
++      const value = grantFor();
++      Object.defineProperty(value, "scopes", { enumerable: true, get: () => { calls++; return ["memories.read"]; } });
++      return { value, calls: () => calls };
++    },
++    () => {
++      let calls = 0;
++      const value = new Proxy(grantFor(), {
++        get: () => { calls++; return undefined; },
++        ownKeys: () => { calls++; return []; },
++        getPrototypeOf: () => { calls++; return Object.prototype; },
++        getOwnPropertyDescriptor: () => { calls++; return undefined; },
++      });
++      return { value, calls: () => calls };
++    },
++    () => {
++      class GrantRecord {}
++      return { value: Object.assign(new GrantRecord(), grantFor()), calls: () => 0 };
++    },
++    () => ({ value: { ...grantFor(), extra: true }, calls: () => 0 }),
++    () => ({ value: { ...grantFor(), grant_version: "11" }, calls: () => 0 }),
++  ];
++  for (const makeHostile of hostileResults) {
++    const hostile = makeHostile();
++    let storeCalls = 0;
++    expect(() => authorizeAndRead(allowed(), () => hostile.value, () => NOW, (_context) => {
++      storeCalls++;
++      return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++    })).toThrow("malformed_grant");
++    expect(hostile.calls()).toBe(0);
++    expect(storeCalls).toBe(0);
++  }
++
++  const mutableGrant = grantFor();
++  authorizeAndRead(allowed(), () => mutableGrant, () => NOW, (context) => {
++    mutableGrant.grant_id = "grant:mutated-after-lookup";
++    mutableGrant.scopes = [];
++    expect(context.grant_id).toBe("grant:qa");
++    expect(context.digest_coordinates.grant_state_digest).toBe(persistedGrantStateDigest(grantFor()));
++    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++  });
++});
++
++test("trusted lookup and clock callbacks reject proxies and accessors without invocation", () => {
++  const callbackCases: readonly (() => { readonly lookup: () => unknown; readonly clock: () => number; readonly calls: () => number })[] = [
++    () => {
++      let calls = 0;
++      const lookup = new Proxy(() => grantFor(), { apply: () => { calls++; return grantFor(); } });
++      return { lookup, clock: () => NOW, calls: () => calls };
++    },
++    () => {
++      let calls = 0;
++      const clock = new Proxy(() => NOW, { apply: () => { calls++; return NOW; } });
++      return { lookup: () => grantFor(), clock, calls: () => calls };
++    },
++    () => {
++      let calls = 0;
++      const lookup = () => grantFor();
++      Object.defineProperty(lookup, "poison", { get: () => { calls++; return "evil"; } });
++      return { lookup, clock: () => NOW, calls: () => calls };
++    },
++    () => {
++      let calls = 0;
++      const clock = () => NOW;
++      Object.defineProperty(clock, "poison", { get: () => { calls++; return "evil"; } });
++      return { lookup: () => grantFor(), clock, calls: () => calls };
++    },
++  ];
++  for (const makeCase of callbackCases) {
++    const hostile = makeCase();
++    let storeCalls = 0;
++    expect(() => authorizeAndRead(allowed(), hostile.lookup, hostile.clock, (_context) => {
++      storeCalls++;
++      return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++    })).toThrow("projection_binding_mismatch");
++    expect(hostile.calls()).toBe(0);
+     expect(storeCalls).toBe(0);
+   }
+ });
+ 
++test("injected clock and grant lookup failures deny before store access", () => {
++  const invalidTimes = [Number.NaN, -1, 0.5, Number.MAX_SAFE_INTEGER + 1];
++  for (const now of invalidTimes) {
++    let lookupCalls = 0;
++    let storeCalls = 0;
++    expect(() => authorizeAndRead(allowed(), () => {
++      lookupCalls++;
++      return grantFor();
++    }, () => now, (_context) => {
++      storeCalls++;
++      return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++    })).toThrow("malformed_authentication");
++    expect(lookupCalls).toBe(0);
++    expect(storeCalls).toBe(0);
++  }
++
++  let lookupCalls = 0;
++  let storeCalls = 0;
++  expect(() => authorizeAndRead(allowed(), () => {
++    lookupCalls++;
++    return grantFor();
++  }, () => { throw new Error("clock unavailable"); }, (_context) => {
++    storeCalls++;
++    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++  })).toThrow("malformed_authentication");
++  expect(lookupCalls).toBe(0);
++  expect(storeCalls).toBe(0);
++
++  expect(() => authorizeAndRead(allowed(), () => {
++    throw new Error("grant store unavailable");
++  }, () => NOW, (_context) => {
++    storeCalls++;
++    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
++  })).toThrow("missing_grant");
++  expect(storeCalls).toBe(0);
++});
++
+ test("authorization rejects every malformed runtime shape before store access", () => {
+   const base = allowed();
+   const withoutKey = (value: object, key: string): Record<string, unknown> =>
+     Object.fromEntries(Object.entries(value).filter(([candidate]) => candidate !== key));
+   const malformed: unknown[] = [
+-    ...["owner_account_id", "credential", "persisted_grant"].map((key) => withoutKey(base, key)),
+-    ...["owner_account_id", "credential_kind", "app_id", "key_id", "scopes", "active"]
++    ...["owner_account_id", "verified_principal", "credential", "capability", "account_authority_epoch"].map((key) => withoutKey(base, key)),
++    ...["principal_id", "owner_account_id", "authentication_strength", "authentication_expires_at_epoch_seconds"]
++      .map((key) => ({ ...base, verified_principal: withoutKey(base.verified_principal, key) })),
++    ...["principal_id", "owner_account_id", "credential_kind", "app_id", "key_id", "credential_generation", "scopes", "active"]
+       .map((key) => ({ ...base, credential: withoutKey(base.credential, key) })),
+-    ...["owner_account_id", "consumer", "app_id", "key_id", "enabled", "default_read", "scopes"]
+-      .map((key) => ({ ...base, persisted_grant: withoutKey(base.persisted_grant!, key) })),
+     { ...base, extra: true },
++    { ...base, persisted_grant: grantFor() },
++    { ...base, verified_principal: { ...base.verified_principal, extra: true } },
+     { ...base, credential: { ...base.credential, extra: true } },
++    { ...base, verified_principal: { ...base.verified_principal, authentication_expires_at_epoch_seconds: "never" } },
+     { ...base, credential: { ...base.credential, active: "false" } },
++    { ...base, credential: { ...base.credential, credential_generation: "3" } },
+     { ...base, credential: { ...base.credential, scopes: "memories.read" } },
+     { ...base, credential: { ...base.credential, scopes: ["memories.read", 7] } },
+-    { ...base, persisted_grant: { ...base.persisted_grant!, extra: true } },
+-    { ...base, persisted_grant: { ...base.persisted_grant!, enabled: 1 } },
+-    { ...base, persisted_grant: { ...base.persisted_grant!, default_read: "false" } },
+-    { ...base, persisted_grant: { ...base.persisted_grant!, scopes: "memories.read" } },
+-    { ...base, persisted_grant: { ...base.persisted_grant!, scopes: ["memories.read", false] } },
++    { ...base, account_authority_epoch: "7" },
+   ];
+   for (const request of malformed) {
++    let lookupCalls = 0;
+     let storeCalls = 0;
+-    expect(() => readAfterApplicationAuthorization(request as never, () => {
++    expect(() => authorizeAndRead(request as never, () => {
++      lookupCalls++;
++      return grantFor();
++    }, () => NOW, (_context) => {
+       storeCalls++;
+       return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+     })).toThrow();
++    expect(lookupCalls).toBe(0);
+     expect(storeCalls).toBe(0);
+   }
+ });
+@@ -327,11 +734,16 @@ test("authorization rejects non-index scope properties before store access", ()
+   const request = allowed();
+   const scopes = [...request.credential.scopes];
+   Object.defineProperty(scopes, "4294967295", { value: "smuggled.scope", enumerable: true });
++  let lookupCalls = 0;
+   let storeCalls = 0;
+-  expect(() => readAfterApplicationAuthorization({ ...request, credential: { ...request.credential, scopes } }, () => {
++  expect(() => authorizeAndRead({ ...request, credential: { ...request.credential, scopes } }, () => {
++    lookupCalls++;
++    return grantFor();
++  }, () => NOW, (_context) => {
+     storeCalls++;
+     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+   })).toThrow("plain JSON rejects array properties");
++  expect(lookupCalls).toBe(0);
+   expect(storeCalls).toBe(0);
+ });
+ 
+@@ -359,20 +771,23 @@ test("application projection factory is branded, owner-bound, and canonical/defa
+ test("owner status never substitutes for the application grant", () => {
+   const request = allowed();
+   let storeCalls = 0;
+-  expect(() => readAfterApplicationAuthorization({ ...request, persisted_grant: null }, () => {
++  expect(() => authorizeAndRead(request, () => null, () => NOW, (_context) => {
+     storeCalls++;
+     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+   })).toThrow(ApplicationReadDenied);
+   expect(storeCalls).toBe(0);
+ });
+ 
+-test("authorization invokes a zero-authority loader and returns its internally projected snapshot", () => {
++test("authorization invokes a branded-context loader and returns its internally projected snapshot", () => {
+   let receivedArguments = -1;
+-  const projected = readAfterApplicationAuthorization(allowed(), function (...args: unknown[]) {
++  let receivedContext: unknown;
++  const projected = readAfterApplicationAuthorization(allowed(), function (...args: [AuthorizedContext]) {
+     receivedArguments = args.length;
++    receivedContext = args[0];
+     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+-  } as never);
+-  expect(receivedArguments).toBe(0);
++  });
++  expect(receivedArguments).toBe(1);
++  expect(isAuthorizedContext(receivedContext)).toBe(true);
+   expect(projected.claims.map((claim) => claim.claim_revision_id)).toEqual(["a"]);
+ });
+ 
+@@ -538,7 +953,10 @@ test("hidden identity constraints cannot rename or coalesce visible application
+     entity: { ...withoutConstraint.entities[0]!.entity, entity_id: "entity:hidden", entity_revision_id: "entity:hidden", handle: "hidden" },
+   }];
+   const withConstraint = structuredClone(withoutConstraint);
+-  const endpoints = [{ kind: "entity" as const, entity_id: "entity" }, { kind: "entity" as const, entity_id: "entity:hidden" }] as const;
++  const endpoints: [{ kind: "entity"; entity_id: string }, { kind: "entity"; entity_id: string }] = [
++    { kind: "entity", entity_id: "entity" },
++    { kind: "entity", entity_id: "entity:hidden" },
++  ];
+   withConstraint.identity_constraints = [{
+     revision_id: "constraint:hidden",
+     constraint: {
+diff --git a/core/retrieve/authorization-boundary.ts b/core/retrieve/authorization-boundary.ts
+index 381b8a3..3b4b064 100644
+--- a/core/retrieve/authorization-boundary.ts
++++ b/core/retrieve/authorization-boundary.ts
+@@ -1,10 +1,13 @@
+ // domain-pending(DIV-DOMX-001)
+ import { sha256CanonicalRedacted } from "../ledger";
++import { isProxy } from "node:util/types";
+ import { genericPolicyClassifier, projectTreeInputSnapshot, type GraphSnapshot, type PolicyClass, type TreeInputSnapshot } from "./index";
+ import { sha256CanonicalContent } from "./content-digest";
+ import { deepFreezePlainJson, normalizePlainJson } from "./plain-json";
+ 
+ const projectedInputs = new WeakSet<object>();
++const authorizedContexts = new WeakSet<object>();
++declare const authorizedContextBrand: unique symbol;
+ // domain-pending(DIV-DOMCORE-001)
+ // domain-pending(DIV-DOMAPPS-001)
+ export const APPLICATION_DEFAULT_SYNTHESIZED_POLICY: Readonly<PolicyClass> = Object.freeze({
+@@ -13,9 +16,19 @@ export const APPLICATION_DEFAULT_SYNTHESIZED_POLICY: Readonly<PolicyClass> = Obj
+   capture_class: "generic",
+ });
+ 
++// domain-pending(DIV-DOMAPPS-006)
++export interface VerifiedApplicationPrincipal {
++  principal_id: string;
++  owner_account_id: string;
++  /** Opaque authentication strength from the verifying adapter. */
++  authentication_strength: string;
++  authentication_expires_at_epoch_seconds: number;
++}
++
+ // domain-pending(DIV-DOMAPPS-001)
+ // domain-pending(DIV-DOMAPPS-006)
+ export interface ResolvedApplicationCredential {
++  principal_id: string | null;
+   owner_account_id: string | null;
+   // domain-pending(DIV-DOMAPPS-006)
+   credential_kind: "mcp_api_key" | "oauth" | "developer_api_key";
+@@ -23,6 +36,7 @@ export interface ResolvedApplicationCredential {
+   app_id: string | null;
+   // domain-pending(DIV-DOMAPPS-006)
+   key_id: string | null;
++  credential_generation: number;
+   scopes: readonly string[];
+   /** `false` means the credential lookup found no currently usable key. */
+   active: boolean;
+@@ -33,6 +47,12 @@ export interface ResolvedApplicationCredential {
+ // domain-pending(DIV-DOMAPPS-006)
+ // domain-pending(DIV-DOMX-006)
+ export interface PersistedApplicationMemoryGrant {
++  // domain-pending(DIV-DOMX-006)
++  grant_id: string;
++  // domain-pending(DIV-DOMX-006)
++  grant_version: number;
++  // domain-pending(DIV-DOMX-006)
++  lifecycle: string;
+   owner_account_id: string;
+   // domain-pending(DIV-DOMAPPS-006)
+   consumer: "mcp" | "developer_api";
+@@ -40,6 +60,9 @@ export interface PersistedApplicationMemoryGrant {
+   app_id: string;
+   // domain-pending(DIV-DOMAPPS-006)
+   key_id: string;
++  credential_generation: number;
++  // domain-pending(DIV-DOMCORE-001)
++  capability: string;
+   enabled: boolean;
+   default_read: boolean;
+   scopes: readonly string[];
+@@ -50,11 +73,34 @@ export interface PersistedApplicationMemoryGrant {
+ // domain-pending(DIV-DOMAPPS-006)
+ export interface ApplicationMemoryReadAuthorizationRequest {
+   owner_account_id: string;
++  verified_principal: VerifiedApplicationPrincipal;
+   credential: ResolvedApplicationCredential;
+-  // domain-pending(DIV-DOMX-006)
+-  persisted_grant: PersistedApplicationMemoryGrant | null;
++  // domain-pending(DIV-DOMCORE-001)
++  capability: "memories.read";
++  account_authority_epoch: number;
+ }
+ 
++// domain-pending(DIV-DOMCORE-001)
++// domain-pending(DIV-DOMAPPS-001)
++// domain-pending(DIV-DOMAPPS-006)
++export interface ApplicationMemoryReadGrantLookupKey {
++  readonly owner_account_id: string;
++  readonly app_id: string;
++  readonly key_id: string;
++  readonly credential_generation: number;
++  readonly capability: "memories.read";
++}
++
++// domain-pending(DIV-DOMCORE-001)
++// domain-pending(DIV-DOMAPPS-001)
++// domain-pending(DIV-DOMAPPS-006)
++// domain-pending(DIV-DOMX-006)
++export type PersistedApplicationMemoryGrantLookup = (
++  key: ApplicationMemoryReadGrantLookupKey,
++) => unknown;
++
++export type ApplicationAuthorizationClock = () => number;
++
+ // domain-pending(DIV-DOMCORE-001)
+ // domain-pending(DIV-DOMAPPS-001)
+ // domain-pending(DIV-DOMAPPS-006)
+@@ -63,16 +109,41 @@ export interface ApplicationMemoryReadAuthorizationRequest {
+  * Detached evidence that the application memory-read gate passed. This is an
+  * internal comparison/attestation input, not authority and never a wire DTO.
+  */
+-export interface ApplicationMemoryReadAuthorizationEvidence {
++export interface AuthorizedContextDigestCoordinates {
++  readonly owner_identity_digest: string;
++  readonly application_identity_digest: string;
++  readonly credential_identity_digest: string;
++  readonly authorization_state_digest: string;
++  readonly grant_state_digest: string;
++  readonly account_head_digest: string;
++}
++
++export type ApplicationMemoryReadAuthorizationEvidence = AuthorizedContextDigestCoordinates;
++
++/**
++ * Unforgeable within this module: the private type member prevents ordinary
++ * structural construction and the private WeakSet is the runtime authority.
++ */
++// domain-pending(DIV-DOMCORE-001)
++// domain-pending(DIV-DOMAPPS-001)
++// domain-pending(DIV-DOMAPPS-006)
++// domain-pending(DIV-DOMX-006)
++export interface AuthorizedContext {
++  readonly [authorizedContextBrand]: true;
++  readonly principal_id: string;
+   readonly owner_account_id: string;
+-  // domain-pending(DIV-DOMAPPS-001)
+   readonly app_id: string;
+-  // domain-pending(DIV-DOMAPPS-006)
+   readonly key_id: string;
+-  /** Opaque non-owner principal; it grants no authority by itself. */
+-  readonly principal_digest: string;
+-  readonly authorization_digest: string;
+-  readonly persisted_grant_state_digest: string;
++  readonly credential_kind: "mcp_api_key";
++  readonly credential_generation: number;
++  readonly capability: "memories.read";
++  readonly grant_id: string;
++  readonly grant_version: number;
++  readonly grant_lifecycle: "active";
++  readonly account_authority_epoch: number;
++  readonly authentication_strength: string;
++  readonly authentication_expires_at_epoch_seconds: number;
++  readonly digest_coordinates: AuthorizedContextDigestCoordinates;
+ }
+ 
+ // domain-pending(DIV-DOMCORE-001)
+@@ -93,16 +164,24 @@ export interface ApplicationProjectionLoad {
+ 
+ // domain-pending(DIV-DOMCORE-001)
+ // domain-pending(DIV-DOMAPPS-001)
+-export type ApplicationProjectionLoader = () => ApplicationProjectionLoad;
++export type ApplicationProjectionLoader = (context: AuthorizedContext) => ApplicationProjectionLoad;
+ 
+ // domain-pending(DIV-DOMAPPS-001)
+ // domain-pending(DIV-DOMX-006)
+ export type ApplicationReadDenial =
+   | "unsupported_credential_kind"
++  | "unsupported_capability"
+   | "missing_scope"
+   | "unresolvable_identity"
++  | "principal_owner_mismatch"
++  | "invalid_credential_generation"
+   | "inactive_credential"
++  | "invalid_account_authority_epoch"
++  | "malformed_authentication"
++  | "authentication_expired"
+   | "missing_grant"
++  | "malformed_grant"
++  | "invalid_grant_version"
+   | "grant_identity_mismatch"
+   | "inactive_grant"
+   | "grant_scope_mismatch"
+@@ -118,6 +197,8 @@ export class ApplicationReadDenied extends Error {
+ 
+ // domain-pending(DIV-DOMCORE-001)
+ const REQUIRED_MEMORY_READ_SCOPE = "memories.read";
++const MAX_AUTHORIZATION_ID_LENGTH = 512;
++const MAX_AUTHENTICATION_STRENGTH_LENGTH = 128;
+ const deny = (reason: ApplicationReadDenial): never => { throw new ApplicationReadDenied(reason); };
+ const hasExactRecordKeys = (value: object, keys: readonly string[]): boolean => {
+   const actual = Object.keys(value).sort();
+@@ -126,30 +207,79 @@ const hasExactRecordKeys = (value: object, keys: readonly string[]): boolean =>
+ };
+ const isStringOrNull = (value: unknown): value is string | null => value === null || typeof value === "string";
+ const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
++const isNonEmptyBoundedString = (value: unknown, maximum: number): value is string =>
++  typeof value === "string" && value.length > 0 && value.length <= maximum;
++const isPositiveSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
++const isNonNegativeSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+ const requireAuthorizationRequestShape = (value: unknown): ApplicationMemoryReadAuthorizationRequest => {
+   if (value === null || typeof value !== "object" || Array.isArray(value)
+-    || !hasExactRecordKeys(value, ["owner_account_id", "credential", "persisted_grant"])) deny("projection_binding_mismatch");
++    || !hasExactRecordKeys(value, ["owner_account_id", "verified_principal", "credential", "capability", "account_authority_epoch"])) deny("projection_binding_mismatch");
+   const record = value as Record<string, unknown>;
+-  const credential = record.credential;
+-  if (typeof record.owner_account_id !== "string" || credential === null || typeof credential !== "object" || Array.isArray(credential)
+-    || !hasExactRecordKeys(credential, ["owner_account_id", "credential_kind", "app_id", "key_id", "scopes", "active"])) deny("projection_binding_mismatch");
++  const principal = record["verified_principal"];
++  if (principal === null || typeof principal !== "object" || Array.isArray(principal)
++    || !hasExactRecordKeys(principal, ["principal_id", "owner_account_id", "authentication_strength", "authentication_expires_at_epoch_seconds"])) deny("projection_binding_mismatch");
++  const principalRecord = principal as Record<string, unknown>;
++  if (typeof principalRecord["principal_id"] !== "string" || typeof principalRecord["owner_account_id"] !== "string"
++    || typeof principalRecord["authentication_strength"] !== "string"
++    || typeof principalRecord["authentication_expires_at_epoch_seconds"] !== "number") deny("projection_binding_mismatch");
++  const credential = record["credential"];
++  if (typeof record["owner_account_id"] !== "string" || credential === null || typeof credential !== "object" || Array.isArray(credential)
++    || typeof record["capability"] !== "string" || typeof record["account_authority_epoch"] !== "number"
++    || !hasExactRecordKeys(credential, ["principal_id", "owner_account_id", "credential_kind", "app_id", "key_id", "credential_generation", "scopes", "active"])) deny("projection_binding_mismatch");
+   const credentialRecord = credential as Record<string, unknown>;
+-  if (!isStringOrNull(credentialRecord.owner_account_id) || typeof credentialRecord.credential_kind !== "string"
+-    || !isStringOrNull(credentialRecord.app_id) || !isStringOrNull(credentialRecord.key_id)
+-    || !isStringArray(credentialRecord.scopes) || typeof credentialRecord.active !== "boolean") deny("projection_binding_mismatch");
+-  const grant = record.persisted_grant;
+-  if (grant !== null) {
+-    if (typeof grant !== "object" || Array.isArray(grant)
+-      || !hasExactRecordKeys(grant, ["owner_account_id", "consumer", "app_id", "key_id", "enabled", "default_read", "scopes"])) deny("projection_binding_mismatch");
+-    const grantRecord = grant as Record<string, unknown>;
+-    if (typeof grantRecord.owner_account_id !== "string" || typeof grantRecord.consumer !== "string"
+-      || typeof grantRecord.app_id !== "string" || typeof grantRecord.key_id !== "string"
+-      || typeof grantRecord.enabled !== "boolean" || typeof grantRecord.default_read !== "boolean"
+-      || !isStringArray(grantRecord.scopes)) deny("projection_binding_mismatch");
+-  }
++  if (!isStringOrNull(credentialRecord["principal_id"]) || !isStringOrNull(credentialRecord["owner_account_id"])
++    || typeof credentialRecord["credential_kind"] !== "string"
++    || !isStringOrNull(credentialRecord["app_id"]) || !isStringOrNull(credentialRecord["key_id"])
++    || typeof credentialRecord["credential_generation"] !== "number"
++    || !isStringArray(credentialRecord["scopes"]) || typeof credentialRecord["active"] !== "boolean") deny("projection_binding_mismatch");
+   return value as ApplicationMemoryReadAuthorizationRequest;
+ };
+-const isResolved = (value: string | null): value is string => typeof value === "string" && value.length > 0;
++
++// domain-pending(DIV-DOMCORE-001)
++// domain-pending(DIV-DOMAPPS-001)
++// domain-pending(DIV-DOMAPPS-006)
++// domain-pending(DIV-DOMX-006)
++const normalizePersistedGrant = (value: unknown): PersistedApplicationMemoryGrant | null => {
++  if (value === null) return null;
++  let normalized: unknown;
++  try {
++    normalized = normalizePlainJson(value);
++  } catch {
++    deny("malformed_grant");
++  }
++  if (normalized === null || typeof normalized !== "object" || Array.isArray(normalized)
++    || !hasExactRecordKeys(normalized, [
++      "grant_id", "grant_version", "lifecycle", "owner_account_id", "consumer", "app_id", "key_id",
++      "credential_generation", "capability", "enabled", "default_read", "scopes",
++    ])) deny("malformed_grant");
++  const record = normalized as Record<string, unknown>;
++  if (typeof record["grant_id"] !== "string" || typeof record["grant_version"] !== "number" || typeof record["lifecycle"] !== "string"
++    || typeof record["owner_account_id"] !== "string" || typeof record["consumer"] !== "string"
++    || typeof record["app_id"] !== "string" || typeof record["key_id"] !== "string"
++    || typeof record["credential_generation"] !== "number" || typeof record["capability"] !== "string"
++    || typeof record["enabled"] !== "boolean" || typeof record["default_read"] !== "boolean"
++    || !isStringArray(record["scopes"])) deny("malformed_grant");
++  return normalized as PersistedApplicationMemoryGrant;
++};
++
++const readInjectedNow = (clock: ApplicationAuthorizationClock): number => {
++  let now: unknown;
++  try {
++    now = clock();
++  } catch {
++    deny("malformed_authentication");
++  }
++  if (!isNonNegativeSafeInteger(now)) deny("malformed_authentication");
++  return now as number;
++};
++const snapshotTrustedCallback = <Callback extends (...arguments_: never[]) => unknown>(callback: Callback): Callback => {
++  if (typeof callback !== "function" || isProxy(callback)) deny("projection_binding_mismatch");
++  for (const key of Reflect.ownKeys(callback)) {
++    const descriptor = Object.getOwnPropertyDescriptor(callback, key);
++    if (!descriptor || !("value" in descriptor)) deny("projection_binding_mismatch");
++  }
++  return callback;
++};
+ const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+ const genericPolicyLabels = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
+ const hasOnlyGenericPolicyLabels = (labels: readonly string[]): boolean => labels.every((label) => genericPolicyLabels.has(label));
+@@ -208,7 +338,8 @@ const validateVisibleTenantLineage = (
+     if (rawClaims.length !== 1 || !hasExactOwnOwner(rawClaims[0]!.claim, ownerAccountId)) deny("projection_binding_mismatch");
+     // domain-pending(DIV-DOMCORE-007)
+     for (const argument of claim.arguments) if (argument.value.kind === "entity_ref") {
+-      const entities = snapshot.entities.filter((item) => item.entity.entity_id === argument.value.ref);
++      const entityId = argument.value.ref;
++      const entities = snapshot.entities.filter((item) => item.entity.entity_id === entityId);
+       if (entities.length !== 1 || !hasExactOwnOwner(entities[0]!.entity, ownerAccountId)) deny("projection_binding_mismatch");
+     }
+     if (claim.predicate_id !== null) {
+@@ -295,110 +426,198 @@ const applicationVisibleClosure = (snapshot: GraphSnapshot): GraphSnapshot => {
+   };
+ };
+ 
+-/**
+- * Inspects the pure application authorization gate without reading a store or
+- * invoking a model. The returned evidence grants no authority: only
+- * readAfterApplicationAuthorization can proceed to the positive projection.
+- */
+ // domain-pending(DIV-DOMCORE-001)
+ // domain-pending(DIV-DOMAPPS-001)
+ // domain-pending(DIV-DOMAPPS-006)
+ // domain-pending(DIV-DOMX-006)
+-export const inspectApplicationMemoryReadAuthorization = (
++export const isAuthorizedContext = (value: unknown): value is AuthorizedContext =>
++  value !== null && typeof value === "object" && authorizedContexts.has(value);
++
++const authorizeApplicationMemoryRead = (
+   request: ApplicationMemoryReadAuthorizationRequest,
+-): ApplicationMemoryReadAuthorizationEvidence => {
++  lookupGrant: PersistedApplicationMemoryGrantLookup,
++  clock: ApplicationAuthorizationClock,
++): AuthorizedContext => {
++  const stableLookupGrant = snapshotTrustedCallback(lookupGrant);
++  const stableClock = snapshotTrustedCallback(clock);
+   request = requireAuthorizationRequestShape(normalizePlainJson(request));
++  const principal = request.verified_principal;
+   const credential = request.credential;
+   if (credential.credential_kind !== "mcp_api_key") deny("unsupported_credential_kind");
++  if (request.capability !== REQUIRED_MEMORY_READ_SCOPE) deny("unsupported_capability");
+   if (!credential.scopes.includes(REQUIRED_MEMORY_READ_SCOPE)) deny("missing_scope");
+-  if (!isResolved(request.owner_account_id) || !isResolved(credential.owner_account_id) || !isResolved(credential.app_id) || !isResolved(credential.key_id)) deny("unresolvable_identity");
++  if (!isNonEmptyBoundedString(request.owner_account_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(principal.principal_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(principal.owner_account_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(credential.principal_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(credential.owner_account_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(credential.app_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(credential.key_id, MAX_AUTHORIZATION_ID_LENGTH)) deny("unresolvable_identity");
++  if (principal.principal_id === request.owner_account_id
++    || principal.owner_account_id !== request.owner_account_id
++    || credential.principal_id !== principal.principal_id
++    || credential.owner_account_id !== request.owner_account_id) deny("principal_owner_mismatch");
++  if (!isPositiveSafeInteger(credential.credential_generation)) deny("invalid_credential_generation");
+   if (!credential.active) deny("inactive_credential");
++  if (!isPositiveSafeInteger(request.account_authority_epoch)) deny("invalid_account_authority_epoch");
++  if (!isNonEmptyBoundedString(principal.authentication_strength, MAX_AUTHENTICATION_STRENGTH_LENGTH)
++    || !isPositiveSafeInteger(principal.authentication_expires_at_epoch_seconds)) deny("malformed_authentication");
++  const now = readInjectedNow(stableClock);
++  if (principal.authentication_expires_at_epoch_seconds <= now) deny("authentication_expired");
+ 
+-  const grant = request.persisted_grant;
+-  if (grant === null) deny("missing_grant");
++  const lookupKey = deepFreezePlainJson(normalizePlainJson({
++    owner_account_id: request.owner_account_id,
++    app_id: credential.app_id,
++    key_id: credential.key_id,
++    credential_generation: credential.credential_generation,
++    capability: request.capability,
++  })) as ApplicationMemoryReadGrantLookupKey;
++  let lookedUp: unknown;
++  try {
++    lookedUp = stableLookupGrant(lookupKey);
++  } catch {
++    deny("missing_grant");
++  }
++  const grant = normalizePersistedGrant(lookedUp) ?? deny("missing_grant");
+   if (grant.consumer !== "mcp") deny("unsupported_credential_kind");
+-  if (grant.owner_account_id !== request.owner_account_id
+-    || credential.owner_account_id !== request.owner_account_id
+-    || grant.owner_account_id !== credential.owner_account_id
++  if (!isNonEmptyBoundedString(grant.grant_id, MAX_AUTHORIZATION_ID_LENGTH)
++    || !isNonEmptyBoundedString(grant.lifecycle, MAX_AUTHORIZATION_ID_LENGTH)) deny("malformed_grant");
++  if (!isPositiveSafeInteger(grant.grant_version)) deny("invalid_grant_version");
++  if (!isPositiveSafeInteger(grant.credential_generation)
++    || grant.owner_account_id !== request.owner_account_id
+     || grant.app_id !== credential.app_id
+-    || grant.key_id !== credential.key_id) deny("grant_identity_mismatch");
+-  if (!grant.enabled || !grant.default_read) deny("inactive_grant");
++    || grant.key_id !== credential.key_id
++    || grant.credential_generation !== credential.credential_generation
++    || grant.capability !== request.capability) deny("grant_identity_mismatch");
++  if (grant.lifecycle !== "active" || !grant.enabled || !grant.default_read) deny("inactive_grant");
+   if (!grant.scopes.includes(REQUIRED_MEMORY_READ_SCOPE)) deny("grant_scope_mismatch");
+ 
++  const normalizedGrantState = {
++    grant_id: grant.grant_id,
++    grant_version: grant.grant_version,
++    lifecycle: grant.lifecycle,
++    owner_account_id: grant.owner_account_id,
++    consumer: grant.consumer,
++    app_id: grant.app_id,
++    key_id: grant.key_id,
++    credential_generation: grant.credential_generation,
++    capability: grant.capability,
++    enabled: grant.enabled,
++    default_read: grant.default_read,
++    scopes: normalizedStrings(grant.scopes),
++  };
++  // domain-pending(DIV-DOMX-001)
++  const ownerIdentityDigest = sha256CanonicalRedacted({
++    principal_id: principal.principal_id,
++    owner_account_id: request.owner_account_id,
++  });
+   // domain-pending(DIV-DOMAPPS-001)
++  // domain-pending(DIV-DOMX-001)
++  const applicationIdentityDigest = sha256CanonicalRedacted({ app_id: credential.app_id });
+   // domain-pending(DIV-DOMAPPS-006)
+   // domain-pending(DIV-DOMX-001)
+-  const principalDigest = sha256CanonicalRedacted({
+-    kind: "application-key-principal",
+-    owner_account_id: request.owner_account_id,
++  const credentialIdentityDigest = sha256CanonicalRedacted({
+     app_id: credential.app_id,
++    credential_kind: credential.credential_kind,
+     key_id: credential.key_id,
++    credential_generation: credential.credential_generation,
++  });
++  // domain-pending(DIV-DOMX-001)
++  const grantStateDigest = sha256CanonicalRedacted(normalizedGrantState);
++  // domain-pending(DIV-DOMX-001)
++  const accountHeadDigest = sha256CanonicalRedacted({
++    owner_account_id: request.owner_account_id,
++    account_authority_epoch: request.account_authority_epoch,
+   });
++  // Ambient `now` is deliberately absent. Expiry is authoritative input and
++  // therefore remains part of the reusable authorization coordinate.
+   // domain-pending(DIV-DOMAPPS-001)
+   // domain-pending(DIV-DOMAPPS-006)
+   // domain-pending(DIV-DOMX-001)
+   const authorizationDigest = sha256CanonicalRedacted({
++    principal_id: principal.principal_id,
+     owner_account_id: request.owner_account_id,
+     app_id: credential.app_id,
+     key_id: credential.key_id,
+-    credential_scopes: normalizedStrings(credential.scopes),
+     credential_kind: credential.credential_kind,
+-    grant_consumer: grant.consumer,
+-    grant_enabled: grant.enabled,
+-    grant_default_read: grant.default_read,
+-    grant_scopes: normalizedStrings(grant.scopes),
+-    principal_digest: principalDigest,
++    credential_generation: credential.credential_generation,
++    credential_scopes: normalizedStrings(credential.scopes),
++    capability: request.capability,
++    persisted_grant: normalizedGrantState,
++    account_authority_epoch: request.account_authority_epoch,
++    authentication_strength: principal.authentication_strength,
++    authentication_expires_at_epoch_seconds: principal.authentication_expires_at_epoch_seconds,
+     projection_policy_classes: [APPLICATION_DEFAULT_SYNTHESIZED_POLICY],
+     projection: { default_synthesized: true, archive_read: false, raw_read: false },
+   });
+-  // Keep this digest separate from the combined authorization digest so a
+-  // cursor can attest the entire persisted grant state without treating the
+-  // evidence as reusable authority.
+-  // domain-pending(DIV-DOMAPPS-001)
+-  // domain-pending(DIV-DOMAPPS-006)
+-  // domain-pending(DIV-DOMX-001)
+-  const persistedGrantStateDigest = sha256CanonicalRedacted({
+-    owner_account_id: grant.owner_account_id,
+-    consumer: grant.consumer,
+-    app_id: grant.app_id,
+-    key_id: grant.key_id,
+-    enabled: grant.enabled,
+-    default_read: grant.default_read,
+-    scopes: normalizedStrings(grant.scopes),
+-  });
+-  const evidence: ApplicationMemoryReadAuthorizationEvidence = {
+-    owner_account_id: String(request.owner_account_id),
+-    app_id: String(credential.app_id),
+-    key_id: String(credential.key_id),
+-    principal_digest: principalDigest,
+-    authorization_digest: authorizationDigest,
+-    persisted_grant_state_digest: persistedGrantStateDigest,
+-  };
+-  return deepFreezePlainJson(normalizePlainJson(evidence));
++  const digestCoordinates = deepFreezePlainJson(normalizePlainJson({
++    owner_identity_digest: ownerIdentityDigest,
++    application_identity_digest: applicationIdentityDigest,
++    credential_identity_digest: credentialIdentityDigest,
++    authorization_state_digest: authorizationDigest,
++    grant_state_digest: grantStateDigest,
++    account_head_digest: accountHeadDigest,
++  })) as AuthorizedContextDigestCoordinates;
++  const context = deepFreezePlainJson(normalizePlainJson({
++    principal_id: principal.principal_id,
++    owner_account_id: request.owner_account_id,
++    app_id: credential.app_id,
++    key_id: credential.key_id,
++    credential_kind: credential.credential_kind,
++    credential_generation: credential.credential_generation,
++    capability: request.capability,
++    grant_id: grant.grant_id,
++    grant_version: grant.grant_version,
++    grant_lifecycle: grant.lifecycle,
++    account_authority_epoch: request.account_authority_epoch,
++    authentication_strength: principal.authentication_strength,
++    authentication_expires_at_epoch_seconds: principal.authentication_expires_at_epoch_seconds,
++    digest_coordinates: digestCoordinates,
++  })) as unknown as AuthorizedContext;
++  authorizedContexts.add(context);
++  return context;
+ };
+ 
++/**
++ * Runs the exact authorization/lookup path without reading a domain store or
++ * invoking a model. Digest-only evidence is detached and never authority.
++ */
++// domain-pending(DIV-DOMCORE-001)
++// domain-pending(DIV-DOMAPPS-001)
++// domain-pending(DIV-DOMAPPS-006)
++// domain-pending(DIV-DOMX-006)
++export const inspectApplicationMemoryReadAuthorization = (
++  request: ApplicationMemoryReadAuthorizationRequest,
++  lookupGrant: PersistedApplicationMemoryGrantLookup,
++  clock: ApplicationAuthorizationClock,
++): AuthorizedContextDigestCoordinates =>
++  authorizeApplicationMemoryRead(request, lookupGrant, clock).digest_coordinates;
++
+ /**
+  * The only positive application store/projection wrapper. Scope and persisted
+- * grant are checked before the supplied zero-authority loader can run.
++ * grant are checked before the supplied branded-context loader can run.
+  */
+ // domain-pending(DIV-DOMCORE-001)
+ // domain-pending(DIV-DOMAPPS-001)
+ // domain-pending(DIV-DOMAPPS-006)
+ export const readAfterApplicationAuthorization = (
+   request: ApplicationMemoryReadAuthorizationRequest,
++  lookupGrant: PersistedApplicationMemoryGrantLookup,
++  clock: ApplicationAuthorizationClock,
+   loadStore: ApplicationProjectionLoader,
+ ): ApplicationGrantProjectedTreeInputSnapshot => {
+-  const authorization = inspectApplicationMemoryReadAuthorization(request);
+-  const loaded: unknown = normalizePlainJson(loadStore());
++  const authorization = authorizeApplicationMemoryRead(request, lookupGrant, clock);
++  const loaded: unknown = normalizePlainJson(loadStore(authorization));
+   if (loaded === null || typeof loaded !== "object" || Array.isArray(loaded)
+     || !hasExactRecordKeys(loaded, ["snapshot", "options"])) deny("projection_binding_mismatch");
+   const loadRecord = loaded as Record<string, unknown>;
+-  const loadOptions = loadRecord.options;
+-  if (loadRecord.snapshot === null || typeof loadRecord.snapshot !== "object" || Array.isArray(loadRecord.snapshot)
++  const loadOptions = loadRecord["options"];
++  const loadedSnapshot = loadRecord["snapshot"];
++  if (loadedSnapshot === null || typeof loadedSnapshot !== "object" || Array.isArray(loadedSnapshot)
+     || loadOptions === null || typeof loadOptions !== "object" || Array.isArray(loadOptions)
+     || !hasExactRecordKeys(loadOptions, ["account_timezone"])
+-    || typeof (loadOptions as Record<string, unknown>).account_timezone !== "string") deny("projection_binding_mismatch");
+-  return projectApplicationDefaultReadTreeInput(loadRecord.snapshot as GraphSnapshot, loadOptions as { account_timezone: string }, authorization);
++    || typeof (loadOptions as Record<string, unknown>)["account_timezone"] !== "string") deny("projection_binding_mismatch");
++  return projectApplicationDefaultReadTreeInput(loadedSnapshot as GraphSnapshot, loadOptions as { account_timezone: string }, authorization);
+ };
+ 
+ /**
+@@ -411,9 +630,10 @@ export const readAfterApplicationAuthorization = (
+ const projectApplicationDefaultReadTreeInput = (
+   snapshot: GraphSnapshot,
+   options: { account_timezone: string },
+-  authorization: ApplicationMemoryReadAuthorizationEvidence,
++  authorization: AuthorizedContext,
+ ): ApplicationGrantProjectedTreeInputSnapshot => {
+-  if (snapshot.owner_account_id !== authorization.owner_account_id
++  if (!isAuthorizedContext(authorization)
++    || snapshot.owner_account_id !== authorization.owner_account_id
+     || typeof options.account_timezone !== "string"
+     || options.account_timezone.length === 0
+     || Object.keys(options).some((key) => key !== "account_timezone")) deny("projection_binding_mismatch");
+@@ -457,7 +677,7 @@ const projectApplicationDefaultReadTreeInput = (
+     // domain-pending(DIV-DOMX-001)
+     graph_generation: sha256CanonicalRedacted({
+       projection_version: "application-default-generic-v1",
+-      projection_authorization_digest: authorization.authorization_digest,
++      projection_authorization_digest: authorization.digest_coordinates.authorization_state_digest,
+       projected_content_digest,
+       account_timezone: input.account_timezone,
+       classifier_version: input.classifier_version,
+@@ -465,8 +685,8 @@ const projectApplicationDefaultReadTreeInput = (
+       live_claim_revision_ids: [...visibleClaimIds].sort(),
+       evidence_ids: [...visibleEvidenceIds].sort(),
+     }),
+-    reader_projection_digest: authorization.principal_digest,
+-    projection_authorization_digest: authorization.authorization_digest,
++    reader_projection_digest: authorization.digest_coordinates.owner_identity_digest,
++    projection_authorization_digest: authorization.digest_coordinates.authorization_state_digest,
+     projected_content_digest,
+     claims,
+     identity_constraints,
+diff --git a/core/retrieve/projection-boundary.test.ts b/core/retrieve/projection-boundary.test.ts
+index 2750b30..3045f34 100644
+--- a/core/retrieve/projection-boundary.test.ts
++++ b/core/retrieve/projection-boundary.test.ts
+@@ -9,12 +9,13 @@
+ // domain-pending(DIV-DOMX-005)
+ import { expect, test } from "bun:test";
+ // domain-pending(DIV-DOMX-001)
+-import { sha256CanonicalRedacted } from "../ledger";
++import { sha256CanonicalRedacted, type CanonicalJson } from "../ledger";
+ import type { TreeInputSnapshot } from "./index";
+ import {
+   readAfterApplicationAuthorization,
+   type ApplicationGrantProjectedTreeInputSnapshot,
+   type ApplicationMemoryReadAuthorizationRequest,
++  type PersistedApplicationMemoryGrant,
+ } from "./authorization-boundary";
+ import { buildOwnerBoundSynthesizedProjection, SynthesizedProjectionDenied } from "./projection-boundary";
+ import { renderStructuralTree, type RenderNode } from "./render";
+@@ -23,14 +24,56 @@ import { snapshot } from "./tree.fixture";
+ 
+ const authorizationRequest = (appId = "app:a"): ApplicationMemoryReadAuthorizationRequest => ({
+   owner_account_id: "owner",
+-  credential: { owner_account_id: "owner", credential_kind: "mcp_api_key", app_id: appId, key_id: `key:${appId}`, scopes: ["memories.read"], active: true },
+-  persisted_grant: { owner_account_id: "owner", consumer: "mcp", app_id: appId, key_id: `key:${appId}`, enabled: true, default_read: true, scopes: ["memories.read"] },
++  verified_principal: {
++    principal_id: "principal:qa",
++    owner_account_id: "owner",
++    authentication_strength: "qa-verified",
++    authentication_expires_at_epoch_seconds: 1_800_000_100,
++  },
++  credential: {
++    principal_id: "principal:qa",
++    owner_account_id: "owner",
++    credential_kind: "mcp_api_key",
++    app_id: appId,
++    key_id: `key:${appId}`,
++    credential_generation: 3,
++    scopes: ["memories.read"],
++    active: true,
++  },
++  capability: "memories.read",
++  account_authority_epoch: 7,
+ });
+ 
++const authorizationGrant = (request: ApplicationMemoryReadAuthorizationRequest): PersistedApplicationMemoryGrant => ({
++  grant_id: `grant:${request.credential.app_id}`,
++  grant_version: 11,
++  lifecycle: "active",
++  owner_account_id: request.owner_account_id,
++  consumer: "mcp",
++  app_id: request.credential.app_id!,
++  key_id: request.credential.key_id!,
++  credential_generation: request.credential.credential_generation,
++  capability: request.capability,
++  enabled: true,
++  default_read: true,
++  scopes: ["memories.read"],
++});
++
++const projectGraph = (
++  graph: ReturnType<typeof snapshot>,
++  appId = "app:a",
++): ApplicationGrantProjectedTreeInputSnapshot => {
++  const request = authorizationRequest(appId);
++  return readAfterApplicationAuthorization(
++    request,
++    () => authorizationGrant(request),
++    () => 1_800_000_000,
++    (_context) => ({ snapshot: graph, options: { account_timezone: "UTC" } }),
++  );
++};
++
+ const projectedInput = (appId = "app:a"): ApplicationGrantProjectedTreeInputSnapshot =>
+-  readAfterApplicationAuthorization(authorizationRequest(appId), () => ({
+-    snapshot: snapshot(), options: { account_timezone: "UTC" },
+-  }));
++  projectGraph(snapshot(), appId);
+ 
+ const renderedFixture = async (appId = "app:a"): Promise<{ input: ApplicationGrantProjectedTreeInputSnapshot; render: RenderNode }> => {
+   const input = projectedInput(appId);
+@@ -55,7 +98,7 @@ const resign = (render: RenderNode, patch: Partial<RenderNode>): RenderNode => {
+     summary_text: changed.summary_text,
+     citations: [...changed.citations].sort(),
+     effective_policy: changed.effective_policy,
+-  });
++  } as unknown as CanonicalJson);
+   return { ...changed, render_hash, render_generation: `render-v1:${render_hash}` };
+ };
+ 
+@@ -192,9 +235,7 @@ test("cache identity changes when projected content changes without a graph fron
+   secondGraph.claims = secondGraph.claims.map((item) => item.revision_id === "a"
+     ? { ...item, claim: { ...item.claim, predicate: "changed-predicate" } }
+     : item);
+-  const project = (graph: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), () => ({
+-    snapshot: graph, options: { account_timezone: "UTC" },
+-  }));
++  const project = (graph: ReturnType<typeof snapshot>) => projectGraph(graph);
+   const firstInput = project(firstGraph);
+   const secondInput = project(secondGraph);
+   const firstRenders = await renderStructuralTree(buildDeterministicAnchors(firstInput), firstInput, {
+@@ -243,7 +284,7 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
+     summary_text: seed.summary_text,
+     citations: seed.citations,
+     effective_policy: seed.effective_policy,
+-  });
++  } as unknown as CanonicalJson);
+   const poisoned = { ...seed, rendered_from_manifest: poisonedManifest, render_hash: poisonedHash, render_generation: `render-v1:${poisonedHash}` };
+   let calls = 0;
+   const renders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+@@ -352,9 +393,7 @@ test("shared-reference and distinct-by-value graphs have identical model and cac
+     }];
+     return value;
+   };
+-  const project = (value: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), () => ({
+-    snapshot: value, options: { account_timezone: "UTC" },
+-  }));
++  const project = (value: ReturnType<typeof snapshot>) => projectGraph(value);
+   const shared = project(graph(true));
+   const distinct = project(graph(false));
+   expect(shared.projected_content_digest).toBe(distinct.projected_content_digest);
