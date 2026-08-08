@@ -576,13 +576,12 @@ actor TaskAssistant: ProactiveAssistant {
     localRecord: StagedTaskRecord?,
     windowTitle: String? = nil
   ) async {
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else { return }
     guard let localRecord, let localID = localRecord.id else {
       log("Task: Capture outbox persistence failed; refusing an untracked backend write")
       return
     }
     do {
-      // Hide the row before mode resolution. A transient backend failure must
-      // leave retry state, never an independently actionable local Candidate.
       let control = try await APIClient.shared.getCandidateWorkflowControl()
       guard let mode = control.workflowMode else {
         log("Task: Workflow control omitted mode; capture remains retryable")

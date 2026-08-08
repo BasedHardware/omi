@@ -128,7 +128,7 @@ final class SettingsGlassChromeTests: XCTestCase {
   func testHelpWebViewDoesNotFlashOpaqueWhiteWhileLoading() throws {
     let helpSource = try XCTUnwrap(
       try restyledSources().first(where: { $0.0 == "MainWindow/HelpPage.swift" })?.1)
-    XCTAssertTrue(helpSource.contains("webView.setValue(false, forKey: \"opaque\")"))
+    XCTAssertTrue(helpSource.contains("webView.setValue(false, forKeyPath: \"opaque\")"))
     XCTAssertTrue(helpSource.contains("webView.underPageBackgroundColor = .clear"))
   }
 
