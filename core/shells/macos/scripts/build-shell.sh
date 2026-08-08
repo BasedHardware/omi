@@ -50,7 +50,7 @@ node "$here/codegen/generate.mjs" >/dev/null
 
 swiftc -O \
   -target arm64-apple-macosx13.0 \
-  -framework AppKit -framework WebKit -framework Network \
+  -framework AppKit -framework WebKit -framework Network -framework Security \
   -o "$app/Contents/MacOS/$app_name" \
   "$here"/shell/Sources/OmiShell/*.swift
 
