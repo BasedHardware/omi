@@ -163,8 +163,8 @@ test("loadMore appends the next keyset page in server order and stops at the ter
   await store.loadMore();
   assert.equal(http.paths.length, 2, "no request is issued without a cursor");
   assert.deepEqual(http.paths, [
-    "/v1/memories/recall?limit=100",
-    "/v1/memories/recall?limit=100&cursor=cursor-1",
+    "/v1/memories?limit=100",
+    "/v1/memories?limit=100&cursor=cursor-1",
   ]);
 });
 

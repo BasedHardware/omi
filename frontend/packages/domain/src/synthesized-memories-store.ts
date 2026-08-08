@@ -157,7 +157,16 @@ export class SynthesizedMemoriesStore {
       this.notify();
       return;
     }
-    const appended = [...this.items, ...synthesizedMemoryItemsFromPage(outcome.page)];
+    // Dedupe by id, keeping the FIRST occurrence, i.e. the earlier page.
+    //
+    // `walkSynthesizedMemoryPages` refuses a walk with repeated ids outright,
+    // because a broken keyset guarantee makes the whole SET unreliable and a
+    // set is what licenses deletion. Here nothing is being deleted — this is
+    // incremental display — so refusing to render is the wrong trade: the user
+    // would lose a working feed over a server hiccup. Keeping the first
+    // occurrence preserves deterministic server order and cannot double a row.
+    // The two answers differ because the two decisions differ.
+    const appended = dedupeById([...this.items, ...synthesizedMemoryItemsFromPage(outcome.page)]);
     this.items = appended;
     this.recallState = synthesizedRecallStateFromPage(outcome.page);
     this.nextCursor = outcome.page.window.hasMore ? outcome.page.window.nextCursor : null;
@@ -189,6 +198,18 @@ export class SynthesizedMemoriesStore {
  * repairs. Salvaging individual rows out of a damaged blob would put items on
  * screen that no server ever sent.
  */
+/** First occurrence wins, so deterministic server order survives. */
+function dedupeById(items: readonly SynthesizedMemoryItem[]): readonly SynthesizedMemoryItem[] {
+  const seen = new Set<string>();
+  const out: SynthesizedMemoryItem[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
 function readCachedItems(raw: string | null): readonly SynthesizedMemoryItem[] {
   if (raw === null) return [];
   try {

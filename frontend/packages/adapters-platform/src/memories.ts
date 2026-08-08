@@ -49,14 +49,18 @@ import {
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
 /**
- * The recall page route. PROVISIONAL: at the time of writing the platform
- * service's Hono shell exposes only `/health` and `/ready`
- * (`apps/service/app.ts` on the backend SoT), so no route is ratified yet.
- * Every entry point takes an override, and nothing in this package hardcodes
- * a base URL — the transport binding owns that (ADR-008 §3).
- * See `blocked/FE-CORE-recall-endpoint-path.md`.
+ * The recall page route, as published by BE-SURFACE and adopted here.
+ *
+ * `GET /v1/memories?limit=&cursor=`, `Authorization: Bearer <token>`, `limit`
+ * defaults to 25 server-side and caps at 100. Their spelling won, per the
+ * blocked note — settled 2026-08-08, so this is no longer provisional.
+ *
+ * Auth is deliberately absent from this package: the transport binding owns
+ * the base URL and the token (ADR-008 §3), which is what lets a shell repoint
+ * at a local backend without a rebuild. Every entry point still takes a `path`
+ * override.
  */
-export const PLATFORM_MEMORY_RECALL_PATH = "/v1/memories/recall";
+export const PLATFORM_MEMORY_RECALL_PATH = "/v1/memories";
 
 /**
  * The backend's `MAX_PAGE_LIMIT` (`core/retrieve/application-read.ts`). Asking
@@ -73,6 +77,18 @@ export const PLATFORM_MEMORY_RECALL_MAX_LIMIT = 100;
  * a walk that did not terminate can never claim completeness.
  */
 export const PLATFORM_MEMORY_RECALL_MAX_PAGES = 200;
+
+/**
+ * Ceiling on items accumulated across a whole-set walk.
+ *
+ * Each individual page is already bounded by the contract's
+ * `MAX_SYNTHESIZED_PAGE_JSON_CODE_UNITS`, but 200 pages of the maximum size is
+ * not a bound any client should agree to hold in memory. A walk that exceeds
+ * this has been handed something we did not ask for, so it fails the walk
+ * rather than truncating: a truncated walk that still terminated would look
+ * exactly like a complete one.
+ */
+export const PLATFORM_MEMORY_RECALL_MAX_WALK_ITEMS = 20_000;
 
 /** Which of the two contract boundaries actually validated this body. */
 export type PlatformRecallParseBoundary =
@@ -240,6 +256,7 @@ export interface PlatformRecallWalkRequest {
   readonly limit?: number;
   readonly path?: string;
   readonly maxPages?: number;
+  readonly maxItems?: number;
 }
 
 /**
@@ -266,16 +283,32 @@ export interface PlatformRecallWalkRequest {
  * complete-terminal page, claim the whole set, and delete every local row the
  * degraded projection failed to return.
  *
- * Returns `null` when the walk could not be completed honestly at all (any
- * `http-error` or `unreadable`), because a partial walk's items are not a
- * page and must not be presented as one.
+ * Returns `null` when the walk could not be completed honestly at all — any
+ * `http-error`, any `unreadable` page, a REPEATED ITEM ID, or a walk that
+ * exceeded its item ceiling — because a partial or incoherent walk's items are
+ * not a page and must not be presented as one.
+ *
+ * ON REPEATED IDS, which is the hostile case worth naming. A keyset cursor
+ * exists to make a walk duplicate-free. If page two returns an id page one
+ * already gave us, the server has broken that guarantee, and the most likely
+ * cause is the cousin of a bug we already found and fixed in our own fixture
+ * server: an unrecognized cursor silently decoding to "start from the
+ * beginning". Against such a server the walk re-reads page one forever, and if
+ * it ever happens to land on a complete-terminal page, we would claim the whole
+ * set from a duplicate-riddled prefix and reconcile against it. `wholeSet:
+ * false` is NOT a sufficient response — the set semantics of the entire walk
+ * are unreliable once ordering is violated, so the honest answer is that we do
+ * not know anything, which is `null`.
  */
 export async function walkSynthesizedMemoryPages(
   http: HttpClient,
   request: PlatformRecallWalkRequest = {},
 ): Promise<SynthesizedMemoryWalk | null> {
   const maxPages = request.maxPages ?? PLATFORM_MEMORY_RECALL_MAX_PAGES;
+  const maxItems = request.maxItems ?? PLATFORM_MEMORY_RECALL_MAX_WALK_ITEMS;
   const items: SynthesizedMemoryItem[] = [];
+  const seenIds = new Set<string>();
+  const seenCursors = new Set<string>();
   let cursor: string | null = null;
   let pages = 0;
   let everyPageCompleteRecall = true;
@@ -291,7 +324,14 @@ export async function walkSynthesizedMemoryPages(
     if (outcome.kind !== "page") return null;
     pages += 1;
 
-    items.push(...synthesizedMemoryItemsFromPage(outcome.page));
+    const pageItems = synthesizedMemoryItemsFromPage(outcome.page);
+    for (const item of pageItems) {
+      // Duplicate across pages: the keyset guarantee is broken. See the header.
+      if (seenIds.has(item.id)) return null;
+      seenIds.add(item.id);
+    }
+    if (items.length + pageItems.length > maxItems) return null;
+    items.push(...pageItems);
     lastRecall = synthesizedRecallStateFromPage(outcome.page);
     if (outcome.page.completeness.status !== "complete") everyPageCompleteRecall = false;
 
@@ -308,6 +348,13 @@ export async function walkSynthesizedMemoryPages(
     }
     // The contract guarantees a continuation window carries a cursor; the
     // validator already rejected `hasMore` without one, so this is total.
+    //
+    // A cursor we have already followed means the server is cycling us through
+    // the same window. Duplicate ids usually catch this first, but not when the
+    // repeated page is EMPTY of new ids for another reason, so the cursor cycle
+    // is checked independently rather than relied on transitively.
+    if (seenCursors.has(window.nextCursor)) return null;
+    seenCursors.add(window.nextCursor);
     cursor = window.nextCursor;
   }
 

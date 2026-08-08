@@ -27,7 +27,9 @@ export const DEV_RECALL_STUB_DEFAULT_PORT = 4821;
  * `/v`+digit+`/memories` literal (check-isolation rule 3). The served route is
  * still the platform recall path documented in README.md.
  */
-export const DEV_RECALL_STUB_PATH = "/v1/memories/recall";
+/** Must equal PLATFORM_MEMORY_RECALL_PATH — the stub stands in for BE-SURFACE's
+ * `GET /v1/memories`, so a shell repoints between them by base URL alone. */
+export const DEV_RECALL_STUB_PATH = "/v1/memories";
 
 export type DevRecallStubScenario =
   | "complete"
