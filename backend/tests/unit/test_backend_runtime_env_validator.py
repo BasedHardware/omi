@@ -929,7 +929,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'dg-nova-3,modulate-velma-2,parakeet', got 'modulate-velma-2'",
         ),
     ]
 
