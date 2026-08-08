@@ -607,7 +607,7 @@ const snapshotDataProperties = (
   return Object.freeze(output);
 };
 
-const NATIVE_DATABASE_QUERY = Database.prototype.query;
+const NATIVE_DATABASE_PREPARE = Database.prototype.prepare;
 const NATIVE_DATABASE_EXEC = Database.prototype.exec;
 const NATIVE_DATABASE_TRANSACTION = Database.prototype.transaction;
 const NATIVE_DATABASE_IN_TRANSACTION = Object.getOwnPropertyDescriptor(
@@ -625,10 +625,10 @@ const captureNativeDatabase = (input: unknown): Database => {
     || Object.getPrototypeOf(input) !== Database.prototype) {
     return fail("db must have the exact native SQLite Database prototype");
   }
-  for (const name of ["query", "exec", "transaction", "close", "inTransaction"] as const) {
+  for (const name of ["query", "prepare", "exec", "transaction", "close", "inTransaction"] as const) {
     if (Object.prototype.hasOwnProperty.call(input, name)) return fail(`db rejects own ${name} shadows`);
   }
-  if (typeof NATIVE_DATABASE_QUERY !== "function" || typeof NATIVE_DATABASE_EXEC !== "function"
+  if (typeof NATIVE_DATABASE_PREPARE !== "function" || typeof NATIVE_DATABASE_EXEC !== "function"
     || typeof NATIVE_DATABASE_TRANSACTION !== "function" || typeof NATIVE_DATABASE_IN_TRANSACTION !== "function") {
     return fail("native SQLite Database operations are unavailable");
   }
@@ -643,7 +643,11 @@ const captureNativeDatabase = (input: unknown): Database => {
   const facade = Object.create(null) as Record<PropertyKey, unknown>;
   Object.defineProperties(facade, {
     query: {
-      value: ((sql: string) => Reflect.apply(NATIVE_DATABASE_QUERY, database, [sql])) as Database["query"],
+      // `Database.query` returns a shared mutable statement cached by SQL text.
+      // `prepare` returns a fresh statement, kept private behind this facade,
+      // so caller-held cached statements and their writable get/all/run methods
+      // can never alias a ledger or coherent-loader statement.
+      value: ((sql: string) => Reflect.apply(NATIVE_DATABASE_PREPARE, database, [sql])) as Database["query"],
       enumerable: true,
     },
     exec: {

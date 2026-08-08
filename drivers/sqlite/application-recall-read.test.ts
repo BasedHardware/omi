@@ -9,6 +9,9 @@
 // domain-pending(DIV-DOMX-005)
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { Evidence, L1Event, ProvisionalClaim, SourceIdentityRef } from "../../core/schema";
 import type { DurableStmItem } from "./stm";
@@ -769,7 +772,7 @@ describe("native SQLite ownership", () => {
     })).toThrow("exact native SQLite Database prototype");
     Reflect.apply(Database.prototype.close, subclass, []);
 
-    for (const name of ["query", "exec", "transaction", "close"] as const) {
+    for (const name of ["query", "prepare", "exec", "transaction", "close"] as const) {
       const target = fixture();
       Object.defineProperty(target.db, name, {
         configurable: true,
@@ -814,12 +817,84 @@ describe("native SQLite ownership", () => {
     });
   });
 
-  test("post-factory exec and transaction shadows cannot redirect the loader", () => {
+  test("a poisoned cached graph-head statement cannot mix in another database", () => {
+    const primary = fixture();
+    addRow(primary, "1");
+    insertDerivation(primary, "primary:7", OWNER, 7);
+    primary.db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(OWNER, "primary:7", 7);
+
+    const other = fixture();
+    insertDerivation(other, "other:99", OWNER, 99);
+    other.db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(OWNER, "other:99", 99);
+
+    const loader = loadFor(primary);
+    const graphHeadSql = "SELECT commit_id, sequence FROM graph_heads WHERE owner_account_id = ?";
+    const cachedStatement = primary.db.query(graphHeadSql);
+    expect(primary.db.query(graphHeadSql)).toBe(cachedStatement);
+    let poisonCalls = 0;
+    Object.defineProperty(cachedStatement, "get", {
+      configurable: true,
+      value: (ownerAccountId: string) => {
+        poisonCalls += 1;
+        return other.db.query(graphHeadSql).get(ownerAccountId);
+      },
+    });
+
+    const result = loader();
+    expect(poisonCalls).toBe(0);
+    expect(result.internal_coverage.durable).toMatchObject({
+      graph_generation: 7,
+      ledger_head: { commit_id: "primary:7", sequence: 7 },
+    });
+  });
+
+  test("a poisoned cached total_changes statement cannot execute SQLite side effects", () => {
+    const target = fixture();
+    addRow(target, "1");
+    const loader = loadFor(target);
+    const poisonRoot = mkdtempSync(join(tmpdir(), "omi-sqlite-qa-statement-poison-"));
+    const poisonPath = join(poisonRoot, "attached.sqlite");
+    const totalChangesSql = "SELECT total_changes() AS count";
+    const cachedStatement = target.db.query(totalChangesSql);
+    expect(target.db.query(totalChangesSql)).toBe(cachedStatement);
+    const originalGet = cachedStatement.get;
+    const cacheSizeBefore = target.db.query("PRAGMA cache_size").get();
+    const databasesBefore = target.db.query("PRAGMA database_list").all();
+    let poisonCalls = 0;
+    Object.defineProperty(cachedStatement, "get", {
+      configurable: true,
+      value: () => {
+        poisonCalls += 1;
+        target.db.query("ATTACH DATABASE ? AS statement_poison").run(poisonPath);
+        target.db.exec("CREATE TABLE statement_poison.attack (value TEXT); PRAGMA cache_size = 37;");
+        target.db.exec("DETACH DATABASE statement_poison;");
+        return Reflect.apply(originalGet, cachedStatement, []);
+      },
+    });
+
+    try {
+      expect(loader().stm_rows.map((item) => item.id)).toEqual(["claim:1"]);
+      expect(poisonCalls).toBe(0);
+      expect(existsSync(poisonPath)).toBe(false);
+      expect(target.db.query("PRAGMA cache_size").get()).toEqual(cacheSizeBefore);
+      expect(target.db.query("PRAGMA database_list").all()).toEqual(databasesBefore);
+    } finally {
+      try { target.db.exec("DETACH DATABASE statement_poison;"); } catch {}
+      target.db.close();
+      rmSync(poisonRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("post-factory prepare, exec, and transaction shadows cannot redirect the loader", () => {
     const target = fixture();
     addRow(target, "1");
     const loader = loadFor(target);
     const calls: string[] = [];
     Object.defineProperties(target.db, {
+      prepare: {
+        configurable: true,
+        value: () => { calls.push("prepare"); throw new Error("shadowed prepare"); },
+      },
       exec: {
         configurable: true,
         value: () => { calls.push("exec"); throw new Error("shadowed exec"); },
