@@ -500,6 +500,42 @@ branch-point and unrelated to the self-host work:
   other files rely on the dev-auth bypass; a single global env cannot satisfy both. The file passes
   in isolation with `LOCAL_DEVELOPMENT` unset.
 
+## Testing the Flutter app offline
+
+Same principle as the backend harness (ADR-0026): a **committed, pinned image** and a **repo-root
+mount**, not ad-hoc `docker run` on a stray Flutter image. The image is
+[`Dockerfile.appbuild`](Dockerfile.appbuild) (JDK 21 + Android SDK 36 + NDK + cmake/ninja for the
+`webcrypto` native asset + `jq` for the analyzer ratchet). Pin Flutter to the **CI version** so
+`pubspec.lock` and `gen-l10n` output don't drift (app CI = `subosito/flutter-action` `flutter-version: 3.44.5`):
+
+```bash
+cd deploy/onprem
+docker build -t omi-appbuild:cached --build-arg FLUTTER_VERSION=3.44.5 -f Dockerfile.appbuild ../..
+```
+
+Mount the repo root, use persistent gradle/pub caches (first run compiles the webcrypto native asset
+— a few minutes; later runs reuse it):
+
+```bash
+docker run --rm -v "$(git rev-parse --show-toplevel)":/repo -w /repo/app \
+  -v omi-appbuild-gradle:/root/.gradle -v omi-appbuild-pub:/root/.pub-cache \
+  omi-appbuild:cached bash -lc '
+    git config --global --add safe.directory /repo
+    flutter pub get
+    bash scripts/analyze_ratchet.sh                 # analyzer gate: ERROR=0, WARNING/INFO ratcheted vs analysis_baseline.json
+    flutter gen-l10n                                # must be a NO-OP: `git status app/lib/l10n` stays clean (zero untranslated)
+    bash test.sh test/unit test/widgets             # hermetic suite; test.sh bootstraps gitignored firebase/env files if absent
+  '
+```
+
+Notes:
+- **Pin `FLUTTER_VERSION` to the CI version.** A different Flutter (e.g. an older stray image)
+  downgrades transitive packages in `pubspec.lock` and can shift `gen-l10n` output — false diffs.
+- **`gen-l10n` is part of the gate:** after editing `lib/l10n/*.arb` it must leave the generated
+  `app_localizations_*.dart` unchanged; `git status app/lib/l10n` clean == zero untranslated warnings.
+- The suite is **hermetic** (no live services); `bash test.sh` is the full-suite entry (bootstraps
+  the gitignored `firebase_options_*.dart` / `.dev.env`). Run specific files with `flutter test <path>`.
+
 ## OIDC client (Flutter app) — end-to-end (ADR-0038)
 
 The app can authenticate against the same on-prem Keycloak the backend validates (ADR-0034), with

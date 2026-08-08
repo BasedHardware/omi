@@ -54,3 +54,9 @@ RUN git clone --depth 1 --branch ${FLUTTER_VERSION} https://github.com/flutter/f
  && flutter config --no-analytics \
  && flutter precache --android \
  && flutter --version
+
+# jq: the app test gate `app/scripts/analyze_ratchet.sh` shells out to it to diff analyzer
+# occurrences against analysis_baseline.json. Kept in a late layer so it does not invalidate the
+# expensive SDK/NDK/Flutter layers above. See SELFHOST_NOTES §"Testing the Flutter app offline".
+RUN apt-get update && apt-get install -y --no-install-recommends jq \
+ && rm -rf /var/lib/apt/lists/*
