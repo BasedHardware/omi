@@ -330,8 +330,13 @@ actor KernelJournalBackendSyncDriver {
   }
 
   nonisolated static func boundedDeleteErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -348,8 +353,13 @@ actor KernelJournalBackendSyncDriver {
   }
 
   nonisolated static func boundedReconcileErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -399,6 +409,9 @@ actor KernelJournalBackendSyncDriver {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
     }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
+    }
     await conversationBarrier.beginDelete(conversationId: request.conversationId)
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       await conversationBarrier.endDelete(conversationId: request.conversationId)
@@ -441,6 +454,10 @@ actor KernelJournalBackendSyncDriver {
   func reconcile(_ request: ReconcileRequest) async throws -> ReconcilePage {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
+    }
+    // Reconcile is product-plane traffic; keep it behind the same fence as journal sync.
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
     }
     let page: DesktopMessageReconcilePage
     switch request.targetKind {

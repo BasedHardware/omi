@@ -93,7 +93,7 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertFalse(manager.isProductShellAdmitted)
   }
 
-  func testRefreshFailureRetainsLastConfirmedControl() async {
+  func testRefreshFailureRetainsLastConfirmedControl() async throws {
     final class FetchState: @unchecked Sendable {
       var shouldFail = false
     }
@@ -124,6 +124,19 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertEqual(manager.control.accountGeneration, 7)
     XCTAssertEqual(manager.decision, .migrationMaintenance)
     XCTAssertFalse(manager.allowsOfflineQueueUpload)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let fallback = snapshots.last {
+      ($0["event"] as? String) == "fallback_triggered" && ($0["area"] as? String) == "account_cutover"
+    }
+    XCTAssertEqual(fallback?["from"] as? String, "live_control")
+    XCTAssertEqual(fallback?["to"] as? String, "retained_control")
+    XCTAssertEqual(fallback?["outcome"] as? String, "degraded")
+    XCTAssertEqual(fallback?["failure_class"] as? String, "control_refresh_failed")
   }
 
   func testOwnerChangeResetsToPendingAndDiscardsStaleFetch() async {
@@ -169,15 +182,28 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertTrue(manager.isProductShellAdmitted)
   }
 
-  func testFirstFetchFailureStaysPendingBlocked() async {
+  func testFirstFetchFailureStaysPendingBlockedWithoutFallback() async throws {
     let manager = AccountCutoverControlManager(
       fetchControl: { throw APIError.invalidResponse },
       currentOwnerID: { "owner-a" }
     )
+    func accountCutoverFallbackCount() throws -> Int {
+      let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+      defer { try? FileManager.default.removeItem(at: url) }
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      return snapshots.filter {
+        ($0["event"] as? String) == "fallback_triggered" && ($0["area"] as? String) == "account_cutover"
+      }.count
+    }
+
+    let beforeCount = try accountCutoverFallbackCount()
     await manager.bindCurrentOwnerAndRefresh()
     XCTAssertEqual(manager.bootstrapPhase, .pending)
     XCTAssertTrue(manager.blocksProductTraffic)
     XCTAssertFalse(manager.allowsOfflineQueueUpload)
+    XCTAssertEqual(try accountCutoverFallbackCount(), beforeCount)
   }
 
   func testOfflineUploadAdmissionRequiresReadyAllowingControl() {

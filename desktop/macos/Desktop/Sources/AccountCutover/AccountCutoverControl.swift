@@ -249,6 +249,23 @@ final class AccountCutoverControlManager: ObservableObject {
         "AccountCutoverControl: fetch failed retained_authoritative=\(hasAuthoritativeControl) "
           + "error_type=\(String(reflecting: type(of: error)))"
       )
+      if hasAuthoritativeControl {
+        // Correctness-preserving degraded path: continue with last confirmed
+        // projection instead of failing open to legacyDefault.
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "account_cutover",
+          from: "live_control",
+          to: "retained_control",
+          reason: "other",
+          outcome: .degraded,
+          extra: [
+            "failure_class": "control_refresh_failed",
+            "recovery_action": "retain_last_confirmed",
+            "recovery_result": "degraded",
+            "bootstrap_phase": bootstrapPhase == .ready ? "ready" : "pending",
+          ]
+        )
+      }
     }
   }
 

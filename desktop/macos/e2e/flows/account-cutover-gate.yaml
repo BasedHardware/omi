@@ -9,6 +9,8 @@ covers:
   - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverControl.swift
   - desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
 preconditions:
@@ -30,4 +32,4 @@ steps:
 
   - id: S4
     name: Confirm migration maintenance blocks durable uploads
-    do: "Inject or stub a migrating control with product traffic blocked. Confirm the migration-maintenance overlay blocks product traffic and durable outbox / WAL upload paths (SuggestedTasks, dashboard feedback, recording WAL, kernel journal, candidates) refuse upload until the gate reopens."
+    do: "Inject or stub a migrating control with product traffic blocked. Confirm the migration-maintenance overlay blocks product traffic and durable outbox / WAL upload paths (SuggestedTasks, dashboard feedback, TasksStore unsynced retries, recording WAL, kernel journal sync/delete/reconcile, candidates) refuse upload until the gate reopens."
