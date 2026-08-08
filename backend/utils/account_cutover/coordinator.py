@@ -74,9 +74,9 @@ _CHECKPOINT_FORWARD: dict[AccountCutoverCheckpointPhase, frozenset[AccountCutove
             AccountCutoverCheckpointPhase.failed,
         }
     ),
+    # Terminal ``completed`` is written only by ``complete_to_new``.
     AccountCutoverCheckpointPhase.cutover_ready: frozenset(
         {
-            AccountCutoverCheckpointPhase.completed,
             AccountCutoverCheckpointPhase.paused,
             AccountCutoverCheckpointPhase.failed,
         }
@@ -102,12 +102,36 @@ _CHECKPOINT_FORWARD: dict[AccountCutoverCheckpointPhase, frozenset[AccountCutove
     ),
 }
 
+_MAX_CHECKPOINT_TOKEN_LEN = 128
+
 
 @dataclass(frozen=True)
 class CoordinatorResult:
     record: AccountCutoverRecord
     created: bool
     resumed: bool
+
+
+def _mint_checkpoint_token(explicit: Optional[str] = None) -> str:
+    """Return a validated checkpoint token, minting a fresh one when omitted."""
+
+    if explicit is None:
+        return secrets.token_hex(8)
+    token = str(explicit)
+    if not token or len(token) > _MAX_CHECKPOINT_TOKEN_LEN:
+        raise AccountCutoverTransitionError(
+            'checkpoint token must be 1..128 characters',
+            code='invalid_checkpoint_token',
+        )
+    return token
+
+
+def _rebuild_record(current: AccountCutoverRecord, **updates: object) -> AccountCutoverRecord:
+    """Rebuild through model validation so Field constraints are enforced."""
+
+    payload = current.model_dump()
+    payload.update(updates)
+    return AccountCutoverRecord.model_validate(payload)
 
 
 class AccountCutoverCoordinator:
@@ -141,6 +165,7 @@ class AccountCutoverCoordinator:
         fenced. Undrained items after ``begin`` are accepted bounded loss.
         """
 
+        del reason  # retained for call-site telemetry symmetry with other seams
         current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
         if current.state not in {AccountCutoverState.legacy, AccountCutoverState.rolled_back_stranded}:
             raise AccountCutoverTransitionError(
@@ -149,7 +174,12 @@ class AccountCutoverCoordinator:
             )
         if current.offline_queue_instruction == OfflineQueueInstruction.drain:
             return current
-        updated = current.model_copy(update={'offline_queue_instruction': OfflineQueueInstruction.drain})
+        # Rotate the CAS token on every mutation so concurrent writers collide.
+        updated = _rebuild_record(
+            current,
+            offline_queue_instruction=OfflineQueueInstruction.drain,
+            checkpoint_token=_mint_checkpoint_token(),
+        )
         return self._persist_cas(
             uid,
             updated,
@@ -175,7 +205,7 @@ class AccountCutoverCoordinator:
             )
 
         manifest_id = f'cutover-{uid[:8]}-{secrets.token_hex(4)}'
-        token = secrets.token_hex(8)
+        token = _mint_checkpoint_token()
         request = AccountCutoverTransitionRequest(
             target_state=AccountCutoverState.migrating,
             expected_account_generation=current.account_generation,
@@ -222,6 +252,11 @@ class AccountCutoverCoordinator:
             )
         if phase == current.checkpoint_phase:
             return current
+        if phase == AccountCutoverCheckpointPhase.completed:
+            raise AccountCutoverTransitionError(
+                'completed checkpoint is only written by complete_to_new',
+                code='illegal_checkpoint_transition',
+            )
         allowed = _CHECKPOINT_FORWARD.get(current.checkpoint_phase, frozenset())
         if phase not in allowed:
             raise AccountCutoverTransitionError(
@@ -236,11 +271,11 @@ class AccountCutoverCoordinator:
                     code='destination_backend_unbound',
                 )
 
-        updated = current.model_copy(
-            update={
-                'checkpoint_phase': phase,
-                'checkpoint_token': next_checkpoint_token or current.checkpoint_token or secrets.token_hex(8),
-            }
+        # Always rotate the token so concurrent checkpoint CAS cannot both succeed.
+        updated = _rebuild_record(
+            current,
+            checkpoint_phase=phase,
+            checkpoint_token=_mint_checkpoint_token(next_checkpoint_token),
         )
         return self._persist_cas(
             uid,
@@ -285,7 +320,12 @@ class AccountCutoverCoordinator:
                 'product generations must not regress',
                 code='product_generation_regression',
             )
-        updated = current.model_copy(update={'ui_generation': ui_generation, 'api_generation': api_generation})
+        updated = _rebuild_record(
+            current,
+            ui_generation=ui_generation,
+            api_generation=api_generation,
+            checkpoint_token=_mint_checkpoint_token(),
+        )
         return self._persist_cas(
             uid,
             updated,
@@ -296,6 +336,17 @@ class AccountCutoverCoordinator:
 
     def complete_to_new(self, uid: str, *, expected_account_generation: int) -> AccountCutoverRecord:
         current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
+        # Retry-safe: a lost response after success must not look like failure.
+        if (
+            current.state == AccountCutoverState.new
+            and current.checkpoint_phase == AccountCutoverCheckpointPhase.completed
+        ):
+            if current.account_generation != expected_account_generation:
+                raise AccountCutoverTransitionError(
+                    'account generation fence mismatch',
+                    code='account_generation_mismatch',
+                )
+            return current
         if current.checkpoint_phase != AccountCutoverCheckpointPhase.cutover_ready:
             raise AccountCutoverTransitionError(
                 'complete requires cutover_ready checkpoint',
@@ -311,6 +362,7 @@ class AccountCutoverCoordinator:
             expected_account_generation=expected_account_generation,
             offline_queue_instruction=OfflineQueueInstruction.quarantine,
             checkpoint_phase=AccountCutoverCheckpointPhase.completed,
+            checkpoint_token=_mint_checkpoint_token(),
             reason='complete_forward_migration',
         )
         next_record = apply_cutover_transition(current, request)
@@ -341,6 +393,7 @@ class AccountCutoverCoordinator:
             expected_account_generation=expected_account_generation,
             stranded_new_data=stranded_new_data,
             offline_queue_instruction=OfflineQueueInstruction.quarantine,
+            checkpoint_token=_mint_checkpoint_token(),
             reason='lossy_rollback',
         )
         next_record = apply_cutover_transition(current, request)

@@ -6,12 +6,12 @@ Owns the legacy monorepo foundation for whole-account cohort cutover:
 
 | Module | Responsibility |
 |--------|----------------|
-| `state.py` | Legal transitions: legacy → migrating → new; new → rolled_back_stranded; stranded → migrating |
-| `control.py` | Authenticated bootstrap projection (generations, min builds, client action, offline-queue instruction) |
+| `state.py` | Legal transitions: legacy → migrating → {new \| rolled_back_stranded}; new → rolled_back_stranded; stranded → migrating. No silent `migrating → legacy`. Generation must increase entering migrating/new; fenced states reject drain instructions. |
+| `control.py` | Authenticated bootstrap projection (generations, min builds, client action, offline-queue instruction). Explicit build `0` is preserved; `new` stays blocked until `destination_backend_bound`. |
 | `fence.py` | Generation fence for legacy product writes and background job skip decisions |
 | `access.py` | HTTP/WS fail-closed enforcement; auth/bootstrap/control paths stay reachable |
-| `coordinator.py` | Resumable idempotent forward-migration manifest/checkpoint seam; explicit cohort enrollment; transactional/locked CAS writes; offline drain only pre-fence |
-| `telemetry.py` | Enum-only Prometheus counters + logs (no raw user content) |
+| `coordinator.py` | Resumable idempotent forward-migration manifest/checkpoint seam; explicit cohort enrollment; transactional/locked CAS with per-write token rotation; `completed` only via `complete_to_new`; offline drain only pre-fence |
+| `telemetry.py` | Closed-enum Prometheus counters + logs (unknown reasons → `other`; no raw user content) |
 
 ## Offline-queue protocol
 

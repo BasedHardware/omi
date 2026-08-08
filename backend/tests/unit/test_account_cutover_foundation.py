@@ -26,6 +26,7 @@ from utils.account_cutover.access import (
 from utils.account_cutover.control import build_account_cutover_control
 from utils.account_cutover.coordinator import AccountCutoverCoordinator
 from utils.account_cutover.fence import (
+    AccountCutoverGenerationMismatchError,
     assert_legacy_product_write_allowed,
     background_job_should_skip_account,
     legacy_writes_allowed_for_state,
@@ -53,6 +54,8 @@ def enroll_uid(monkeypatch):
 def test_legal_transitions_cover_accepted_cutover_graph():
     assert AccountCutoverState.migrating in legal_transitions(AccountCutoverState.legacy)
     assert AccountCutoverState.new in legal_transitions(AccountCutoverState.migrating)
+    assert AccountCutoverState.rolled_back_stranded in legal_transitions(AccountCutoverState.migrating)
+    assert AccountCutoverState.legacy not in legal_transitions(AccountCutoverState.migrating)
     assert AccountCutoverState.rolled_back_stranded in legal_transitions(AccountCutoverState.new)
     assert AccountCutoverState.migrating in legal_transitions(AccountCutoverState.rolled_back_stranded)
     assert AccountCutoverState.legacy not in legal_transitions(AccountCutoverState.new)
@@ -143,9 +146,17 @@ def test_legacy_default_remains_compatible():
 
 def test_generation_fence_blocks_migrating_writes():
     record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, account_generation=2)
-    with pytest.raises(Exception):
+    with pytest.raises(AccountCutoverGenerationMismatchError):
         assert_legacy_product_write_allowed(record, expected_account_generation=2)
     assert background_job_should_skip_account(record) is True
+
+
+def test_generation_fence_mismatch_on_legacy_writes():
+    record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.legacy, account_generation=2)
+    with pytest.raises(AccountCutoverGenerationMismatchError) as exc:
+        assert_legacy_product_write_allowed(record, expected_account_generation=1)
+    assert exc.value.code == 'account_generation_mismatch'
+    assert_legacy_product_write_allowed(record, expected_account_generation=2)
 
 
 def test_malformed_cutover_document_fails_closed(fake_db):
@@ -372,3 +383,218 @@ def test_direct_auth_call_api_preserved(monkeypatch):
     monkeypatch.setattr(auth, 'record_client_device', lambda *args, **kwargs: None)
     monkeypatch.setattr(auth, 'validate_byok_request', lambda *args, **kwargs: None)
     assert auth.get_current_user_uid(authorization='Bearer token') == 'direct-uid'
+
+
+def test_uid_document_binding_rejects_mismatched_embedded_uid(fake_db):
+    path = ('users', 'path-uid', 'account_cutover', 'state')
+    fake_db.rows[path] = AccountCutoverRecord(uid='other-uid', state=AccountCutoverState.migrating).persisted_payload()
+    with pytest.raises(MalformedDocError) as exc:
+        account_cutover_db.get_account_cutover_record('path-uid', firestore_client=fake_db)
+    assert 'uid' in exc.value.error_fields
+
+
+def test_cas_requires_token_match_for_existing_document(fake_db, enroll_uid):
+    enroll_uid('cas-uid')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('cas-uid')
+    stale = begun.record.model_copy(update={'checkpoint_phase': AccountCutoverCheckpointPhase.offline_queue_fenced})
+    with pytest.raises(account_cutover_db.AccountCutoverConcurrencyError) as exc:
+        account_cutover_db.cas_set_account_cutover_record(
+            'cas-uid',
+            stale,
+            expected_account_generation=begun.record.account_generation,
+            expected_checkpoint_token=None,
+            require_existing=True,
+            firestore_client=fake_db,
+        )
+    assert exc.value.code == 'cutover_checkpoint_cas_mismatch'
+
+
+def test_checkpoint_rotates_token_and_rejects_completed_phase(fake_db, enroll_uid):
+    enroll_uid('token-uid')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('token-uid')
+    first_token = begun.record.checkpoint_token
+    advanced = coordinator.checkpoint(
+        'token-uid',
+        phase=AccountCutoverCheckpointPhase.offline_queue_fenced,
+        expected_checkpoint_token=first_token,
+    )
+    assert advanced.checkpoint_token != first_token
+    with pytest.raises(AccountCutoverTransitionError) as completed:
+        coordinator.checkpoint(
+            'token-uid',
+            phase=AccountCutoverCheckpointPhase.completed,
+            expected_checkpoint_token=advanced.checkpoint_token,
+        )
+    assert completed.value.code == 'illegal_checkpoint_transition'
+    with pytest.raises(AccountCutoverTransitionError) as oversized:
+        coordinator.checkpoint(
+            'token-uid',
+            phase=AccountCutoverCheckpointPhase.exporting,
+            expected_checkpoint_token=advanced.checkpoint_token,
+            next_checkpoint_token='x' * 129,
+        )
+    assert oversized.value.code == 'invalid_checkpoint_token'
+
+
+def test_complete_to_new_is_idempotent(fake_db, enroll_uid):
+    enroll_uid('complete-uid')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('complete-uid')
+    # Seed a cutover_ready + destination-bound record through CAS.
+    ready = begun.record.model_copy(
+        update={
+            'checkpoint_phase': AccountCutoverCheckpointPhase.cutover_ready,
+            'destination_backend_bound': True,
+            'checkpoint_token': 'ready-token',
+        }
+    )
+    account_cutover_db.cas_set_account_cutover_record(
+        'complete-uid',
+        ready,
+        expected_account_generation=begun.record.account_generation,
+        expected_checkpoint_token=begun.record.checkpoint_token,
+        require_existing=True,
+        firestore_client=fake_db,
+    )
+    first = coordinator.complete_to_new(
+        'complete-uid',
+        expected_account_generation=ready.account_generation,
+    )
+    assert first.state == AccountCutoverState.new
+    assert first.checkpoint_phase == AccountCutoverCheckpointPhase.completed
+    second = coordinator.complete_to_new(
+        'complete-uid',
+        expected_account_generation=first.account_generation,
+    )
+    assert second == first
+
+
+def test_fenced_states_reject_drain_instruction():
+    record = AccountCutoverRecord(
+        uid='u1',
+        state=AccountCutoverState.migrating,
+        account_generation=1,
+        offline_queue_instruction=OfflineQueueInstruction.quarantine,
+    )
+    with pytest.raises(AccountCutoverTransitionError) as exc:
+        apply_cutover_transition(
+            record,
+            AccountCutoverTransitionRequest(
+                target_state=AccountCutoverState.migrating,
+                expected_account_generation=1,
+                offline_queue_instruction=OfflineQueueInstruction.drain,
+                reason='bad-drain',
+            ),
+        )
+    assert exc.value.code == 'illegal_offline_queue_instruction'
+
+
+def test_entering_migrating_requires_generation_increase():
+    record = AccountCutoverRecord(uid='u1', account_generation=3)
+    with pytest.raises(AccountCutoverTransitionError) as exc:
+        apply_cutover_transition(
+            record,
+            AccountCutoverTransitionRequest(
+                target_state=AccountCutoverState.migrating,
+                expected_account_generation=3,
+                next_account_generation=3,
+                reason='no-bump',
+            ),
+        )
+    assert exc.value.code == 'account_generation_regression'
+
+
+def test_new_state_blocks_product_traffic_until_destination_bound():
+    record = AccountCutoverRecord(
+        uid='u1',
+        state=AccountCutoverState.new,
+        account_generation=2,
+        destination_backend_bound=False,
+    )
+    control = build_account_cutover_control(record, platform='ios', client_build=99)
+    assert control.client_action == AccountCutoverClientAction.migration_maintenance
+    assert control.product_traffic_allowed is False
+    assert control.offline_queue_instruction == OfflineQueueInstruction.quarantine
+
+
+def test_explicit_build_zero_is_preserved_over_version_header():
+    record = AccountCutoverRecord(uid='u1')
+    control = build_account_cutover_control(
+        record,
+        platform='ios',
+        x_app_build='0',
+        x_app_version='1+100',
+        minimum_builds={'ios': 1},
+    )
+    assert control.client_action == AccountCutoverClientAction.force_upgrade
+    assert control.product_traffic_allowed is False
+
+
+def test_persisted_payload_uses_config_schema_version():
+    from config.account_cutover import ACCOUNT_CUTOVER_SCHEMA_VERSION
+
+    payload = AccountCutoverRecord(uid='u1').persisted_payload()
+    assert payload['schema_version'] == ACCOUNT_CUTOVER_SCHEMA_VERSION
+
+
+def test_telemetry_bounds_unknown_transition_reason(monkeypatch):
+    from utils.account_cutover import telemetry as cutover_telemetry
+
+    seen: list[str] = []
+
+    class _Labels:
+        def __init__(self, **labels):
+            seen.append(labels['reason'])
+
+        def inc(self):
+            return None
+
+    class _Counter:
+        def labels(self, **labels):
+            return _Labels(**labels)
+
+    monkeypatch.setattr(cutover_telemetry, 'ACCOUNT_CUTOVER_TRANSITIONS_TOTAL', _Counter())
+    cutover_telemetry.record_cutover_transition(
+        from_state='legacy',
+        to_state='migrating',
+        reason='caller supplied free text!!!',
+    )
+    assert seen == ['other']
+    cutover_telemetry.record_cutover_transition(
+        from_state='legacy',
+        to_state='migrating',
+        reason='begin_forward_migration',
+    )
+    assert seen[-1] == 'begin_forward_migration'
+
+
+def test_concurrent_checkpoint_loses_on_stale_token(fake_db, enroll_uid):
+    enroll_uid('race-uid')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('race-uid')
+    token = begun.record.checkpoint_token
+    first = coordinator.checkpoint(
+        'race-uid',
+        phase=AccountCutoverCheckpointPhase.offline_queue_fenced,
+        expected_checkpoint_token=token,
+    )
+    assert first.checkpoint_token != token
+    with pytest.raises(account_cutover_db.AccountCutoverConcurrencyError):
+        # Simulate a racer that still holds the pre-rotation token expectation
+        # while trying to write a divergent phase with the old CAS precondition.
+        stale = begun.record.model_copy(
+            update={
+                'checkpoint_phase': AccountCutoverCheckpointPhase.paused,
+                'checkpoint_token': 'stale-racer-token',
+            }
+        )
+        account_cutover_db.cas_set_account_cutover_record(
+            'race-uid',
+            stale,
+            expected_account_generation=begun.record.account_generation,
+            expected_checkpoint_token=token,
+            require_existing=True,
+            firestore_client=fake_db,
+        )

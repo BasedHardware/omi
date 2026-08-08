@@ -11,10 +11,28 @@ from models.account_cutover import (
 
 _FORWARD: dict[AccountCutoverState, frozenset[AccountCutoverState]] = {
     AccountCutoverState.legacy: frozenset({AccountCutoverState.migrating}),
-    AccountCutoverState.migrating: frozenset({AccountCutoverState.new, AccountCutoverState.legacy}),
+    # Abort during migration goes through rolled_back_stranded (never silent legacy).
+    AccountCutoverState.migrating: frozenset({AccountCutoverState.new, AccountCutoverState.rolled_back_stranded}),
     AccountCutoverState.new: frozenset({AccountCutoverState.rolled_back_stranded}),
     AccountCutoverState.rolled_back_stranded: frozenset({AccountCutoverState.migrating}),
 }
+
+# Drain is illegal once the migration fence is up. Stranded may drain again only
+# via prepare_offline_drain before a later begin — not through arbitrary refresh
+# of ``none`` while still fenced from the prior cutover.
+_QUARANTINE_REQUIRED_STATES = frozenset(
+    {
+        AccountCutoverState.migrating,
+        AccountCutoverState.new,
+    }
+)
+
+_GENERATION_BUMP_STATES = frozenset(
+    {
+        AccountCutoverState.migrating,
+        AccountCutoverState.new,
+    }
+)
 
 
 class AccountCutoverTransitionError(ValueError):
@@ -25,6 +43,23 @@ class AccountCutoverTransitionError(ValueError):
 
 def legal_transitions(state: AccountCutoverState) -> frozenset[AccountCutoverState]:
     return _FORWARD.get(state, frozenset())
+
+
+def _assert_offline_instruction_legal(
+    state: AccountCutoverState,
+    instruction: OfflineQueueInstruction,
+) -> None:
+    if state in _QUARANTINE_REQUIRED_STATES and instruction != OfflineQueueInstruction.quarantine:
+        raise AccountCutoverTransitionError(
+            f'offline_queue_instruction={instruction.value} illegal in fenced state={state.value}',
+            code='illegal_offline_queue_instruction',
+        )
+    if state == AccountCutoverState.rolled_back_stranded and instruction == OfflineQueueInstruction.drain:
+        # Transitions into stranded always quarantine; drain is a separate pre-begin seam.
+        raise AccountCutoverTransitionError(
+            'drain on rolled_back_stranded requires prepare_offline_drain',
+            code='illegal_offline_queue_instruction',
+        )
 
 
 def apply_cutover_transition(
@@ -51,14 +86,21 @@ def apply_cutover_transition(
 
     next_generation = record.account_generation
     if request.next_account_generation is not None:
-        if request.next_account_generation < record.account_generation:
+        next_generation = request.next_account_generation
+    elif request.target_state in _GENERATION_BUMP_STATES:
+        next_generation = record.account_generation + 1
+
+    if request.target_state in _GENERATION_BUMP_STATES:
+        if next_generation <= record.account_generation:
             raise AccountCutoverTransitionError(
-                'next_account_generation must be >= current',
+                'next_account_generation must increase when entering migrating/new',
                 code='account_generation_regression',
             )
-        next_generation = request.next_account_generation
-    elif request.target_state in {AccountCutoverState.migrating, AccountCutoverState.new}:
-        next_generation = record.account_generation + 1
+    elif next_generation < record.account_generation:
+        raise AccountCutoverTransitionError(
+            'next_account_generation must be >= current',
+            code='account_generation_regression',
+        )
 
     stranded = record.stranded_new_data
     if request.stranded_new_data is not None:
@@ -77,6 +119,8 @@ def apply_cutover_transition(
         offline = OfflineQueueInstruction.quarantine
     elif request.target_state == AccountCutoverState.legacy:
         offline = OfflineQueueInstruction.none
+
+    _assert_offline_instruction_legal(request.target_state, offline)
 
     return record.model_copy(
         update={
@@ -99,6 +143,7 @@ def _refresh_same_state(
 ) -> AccountCutoverRecord:
     updates: dict[str, object] = {}
     if request.offline_queue_instruction is not None:
+        _assert_offline_instruction_legal(record.state, request.offline_queue_instruction)
         updates['offline_queue_instruction'] = request.offline_queue_instruction
     if request.checkpoint_phase is not None:
         updates['checkpoint_phase'] = request.checkpoint_phase

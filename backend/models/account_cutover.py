@@ -13,6 +13,11 @@ from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from config.account_cutover import ACCOUNT_CUTOVER_SCHEMA_VERSION
+
+# Persisted schema version is owned by config; keep the model literal aligned.
+assert ACCOUNT_CUTOVER_SCHEMA_VERSION == 1
+
 StableId = Annotated[
     str,
     StringConstraints(strip_whitespace=False, min_length=1, max_length=128, pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$'),
@@ -108,7 +113,7 @@ class AccountCutoverRecord(BaseModel):
 
     def persisted_payload(self) -> dict[str, object]:
         return {
-            'schema_version': self.schema_version,
+            'schema_version': ACCOUNT_CUTOVER_SCHEMA_VERSION,
             'uid': self.uid,
             'state': self.state.value,
             'account_generation': self.account_generation,
