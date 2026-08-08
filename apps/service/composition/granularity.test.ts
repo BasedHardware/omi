@@ -72,8 +72,21 @@ describe("memory read granularity is a parameter of the read, not of the transpo
 
     for (const granularity of ["temporal_leaf", "all_nodes"] as const) {
       const canonical = selectNodesForGranularity(tree.nodes, granularity);
-      const viaMcp = await produceQaRenders(projectSeeded(), granularity);
+      // Mirrors the real door exactly (apps/qa/recall-service.ts): production is
+      // granularity-agnostic, so render the whole tree and select afterwards.
+      // Written 2026-08-08 when this test passed granularity to produceQaRenders
+      // as a second argument that no longer exists — JS ignored it silently, so
+      // the test compared all 17 nodes against a 5-node leaf selection. The
+      // reconciliation is to match the door, not to relax the assertion.
+      const allRenders = await produceQaRenders(projectSeeded());
+      const selectedIds = new Set(canonical.map((structuralNode) => structuralNode.node_id));
+      const viaMcp = allRenders.filter((render) => selectedIds.has(render.node_id));
       expect(sortedIds(viaMcp)).toEqual(sortedIds(canonical));
+      // Non-vacuity: at leaf granularity the door must actually discard rollups,
+      // or the filter above would be proving nothing.
+      if (granularity === "temporal_leaf") {
+        expect(allRenders.length).toBeGreaterThan(viaMcp.length);
+      }
     }
   });
 
