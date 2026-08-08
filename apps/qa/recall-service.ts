@@ -35,8 +35,10 @@ import { isSyntacticallyRedeemableCursor, type QaCursorAdapter } from "./cursor-
 import {
   DEFAULT_READ_ITEM_GRANULARITY,
   isReadItemGranularity,
+  selectNodesForGranularity,
   type ReadItemGranularity,
 } from "../../core/retrieve/granularity";
+import { buildDeterministicAnchors } from "../../core/retrieve/tree";
 import { produceQaRenders } from "./renders";
 
 /**
@@ -118,6 +120,8 @@ export interface QaRecallReader {
   readonly counters: () => Readonly<Record<string, number>>;
 }
 
+const fail = (message: string): never => { throw new TypeError(`QA recall service: ${message}`); };
+
 const digestOf = (label: string, value: unknown): string =>
   sha256CanonicalContent({ version: `qa-recall-${label}-v1`, value });
 
@@ -190,7 +194,15 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
       authorization.resolveAuthorizationRequest(principal),
       () => ({ snapshot: structuredClone(snapshot), options: { account_timezone: accountTimezone } }),
     );
-    const renders = await produceQaRenders(projected, granularity);
+    // Production is granularity-agnostic; selection happens here, after the
+    // whole tree has been rendered, so rollup child-render hashes stay correct
+    // and both doors can be handed the same unfiltered set.
+    const allRenders = await produceQaRenders(projected);
+    const selectedNodeIds = new Set(
+      selectNodesForGranularity(buildDeterministicAnchors(projected).nodes, granularity)
+        .map((structuralNode) => structuralNode.node_id),
+    );
+    const renders = allRenders.filter((render) => selectedNodeIds.has(render.node_id));
 
     // ── The visible-derivation rule ────────────────────────────────────────
     // Everything that can reach the wire is derived from the AUTHORIZED
@@ -213,6 +225,22 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     // `load.coherent_snapshot_digest` is deliberately NOT used anywhere below.
     const visibleGeneration = projected.graph_generation;
     const visibleContent = projected.projected_content_digest;
+    // FAIL CLOSED ON THE COVERAGE ASSUMPTION.
+    //
+    // `qaCoverage` reports STM as `no_eligible` — a CONSTANT, so no storage
+    // cardinality reaches the wire. That is leak-free, and it is only *honest*
+    // while the fixtures genuinely have no STM rows. If any appeared, this path
+    // (which never searches STM) would be claiming completeness it has not
+    // earned, and a wrong `complete: true` is user data loss under rule 12.
+    //
+    // So assert the assumption instead of trusting it. Reading the count here is
+    // a guard that fails the read; it derives no wire value, which is exactly
+    // what the fence's escape hatch is for.
+    // storage-provenance-ok(fail-closed guard on a completeness assumption; no wire value derives from this)
+    if (load.internal_coverage.stm.eligible_items !== 0) {
+      return fail("QA coverage claims no eligible STM work, but STM rows exist");
+    }
+
     const declaredFrontier = `${QA_DECLARED_FRONTIER_PREFIX}${visibleGeneration}`;
     const coverage = qaCoverage(declaredFrontier);
 

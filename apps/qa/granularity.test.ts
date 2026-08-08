@@ -98,11 +98,15 @@ describe("item granularity is an explicit parameter", () => {
     expect(all.page.items).toHaveLength(12);
     expect(leaves.text).not.toBe(all.text);
 
-    // Every leaf item is a single-claim proposition; the hierarchy adds rollups.
+    // Structural, not phrasing-coupled: the shared synthesizer joins one
+    // sentence per member claim with "; ", so a leaf (one claim) has no
+    // separator and a rollup (many claims) does. Asserting the separator rather
+    // than a literal phrase survives a rewording of the QA synthesizer, which is
+    // explicitly placeholder text.
     for (const item of leaves.page.items) {
-      expect(item.text).toContain("over 1 claim(s)");
+      expect(item.text).not.toContain("; ");
     }
-    expect(all.page.items.some((item) => item.text.includes("over 5 claim(s)"))).toBe(true);
+    expect(all.page.items.some((item) => item.text.includes("; "))).toBe(true);
   });
 
   test("the app-facing default is temporal leaves — rollups must be asked for", async () => {
@@ -113,8 +117,9 @@ describe("item granularity is an explicit parameter", () => {
     const instance = await server({ claim_count: 5 });
     const defaulted = await readPage(instance);
     expect(defaulted.page.items).toHaveLength(5);
+    // One claim per item -- no multi-claim rollup reached the default page.
     for (const item of defaulted.page.items) {
-      expect(item.text).toContain("over 1 claim(s)");
+      expect(item.text).not.toContain("; ");
     }
   });
 

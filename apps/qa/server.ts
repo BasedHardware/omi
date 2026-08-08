@@ -10,6 +10,7 @@ import { createBunMcpHttpHandler } from "../mcp/bun-http";
 import { createMcpProtocolHandler } from "../mcp/protocol";
 import type { McpCursorSigningKeyset } from "../mcp/cursor";
 import { createServiceApp } from "../service/app";
+import { QA_CODEC_SECRET, qaReaderScope } from "./codec-scope";
 import { createQaReferenceCodecs } from "./codecs";
 import { createQaCursorAdapter } from "./cursor-bindings";
 import { createQaDevAuthRegistry, type QaPrincipal } from "./dev-auth";
@@ -128,11 +129,15 @@ export const startQaServer = async (options: QaServerOptions = {}): Promise<QaSe
     account_timezone: accountTimezone,
     limits: options.limits ?? { max_items: 256, max_bytes: 4_000_000 },
     codecs: createQaReferenceCodecs({
-      // Reader-scoped: the same internal ref under a different principal yields a
-      // different public reference, so opaque ids cannot be correlated across
-      // readers.
-      secret: new Uint8Array(32).fill(0x3c),
-      reader_scope: `${ownerAccountId}|${appId}|${keyId}`,
+      // Reader-scoped, via the SHARED derivation both doors must use. Scoping
+      // the two doors differently would give the same memory different public
+      // ids while every node-level cross-door assertion kept passing.
+      secret: QA_CODEC_SECRET,
+      reader_scope: qaReaderScope({
+        owner_account_id: ownerAccountId,
+        app_id: appId,
+        key_id: keyId,
+      }),
     }),
     cursor: createQaCursorAdapter({
       signing_keyset: options.signing_keyset ?? DEFAULT_KEYSET,

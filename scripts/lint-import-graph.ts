@@ -84,7 +84,20 @@ for (const file of files(root)) {
   if (shown.startsWith("core/") && /from\s+["'][^"']*drivers\//.test(text)) {
     failures.push(`${shown}: core may not import drivers`);
   }
-  if (shown.startsWith("apps/")) {
+  // The fence protects WIRE COMPOSITION. Two exemptions, both principled rather
+  // than convenient:
+  //
+  //  - Type declarations. An `interface CoherentQaLoad { … internal_coverage … }`
+  //    describes the SHAPE of the loader's output; no value flows and nothing can
+  //    reach a client. Firing there produced six markers whose only honest reason
+  //    would have been "this is a type", which trains people to mark reflexively
+  //    and destroys the signal.
+  //  - Test files. A test asserting the loader's own output is exactly where
+  //    referencing storage internals is correct, and a test cannot ship a leak.
+  //
+  // Everything else under apps/ is composition and stays fenced.
+  const isTestFile = /\.test\.tsx?$/.test(shown);
+  if (shown.startsWith("apps/") && !isTestFile) {
     // Identifiers are matched on the comment-stripped text; the allow marker is
     // matched on the ORIGINAL line, because the marker itself is a comment and
     // stripping first would make it permanently unfindable. Accepted either
@@ -92,10 +105,27 @@ for (const file of files(root)) {
     // justified expressions are often too long for a trailing comment.
     const rawLines = text.split("\n");
     const lines = withoutComments(text).split("\n");
+    // Blank out `interface X { … }` / `type X = { … }` bodies by brace balance,
+    // so a declaration cannot trip a fence about values.
+    let typeDepth = 0;
+    let inTypeDeclaration = false;
+    const typeLines = lines.map((line) => {
+      if (!inTypeDeclaration && /^\s*(export\s+)?(declare\s+)?(interface|type)\s+\w/.test(line)) {
+        inTypeDeclaration = true;
+        typeDepth = 0;
+      }
+      if (!inTypeDeclaration) return line;
+      const opens = (line.match(/\{/g) ?? []).length;
+      const closes = (line.match(/\}/g) ?? []).length;
+      typeDepth += opens - closes;
+      const terminates = (typeDepth <= 0 && (closes > 0 || /;\s*$/.test(line) || /^\s*type\s+\w+\s*=\s*[^{]+;/.test(line)));
+      if (terminates) inTypeDeclaration = false;
+      return "";
+    });
     const justified = (index: number): boolean =>
       (rawLines[index] ?? "").includes(storageProvenanceAllowMarker)
       || (rawLines[index - 1] ?? "").includes(storageProvenanceAllowMarker);
-    lines.forEach((line, index) => {
+    typeLines.forEach((line, index) => {
       if (justified(index)) return;
       for (const identifier of storageProvenanceIdentifiers) {
         if (line.includes(identifier)) {

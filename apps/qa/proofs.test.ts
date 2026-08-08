@@ -8,6 +8,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 
+import { readAfterApplicationAuthorization } from "../../core/retrieve/authorization-boundary";
+import { selectNodesForGranularity } from "../../core/retrieve/granularity";
+import { buildDeterministicAnchors } from "../../core/retrieve/tree";
+import { createSqliteQaRecallLoader } from "../../drivers/sqlite/application-recall-read";
+import { QA_CODEC_SECRET, qaReaderScope } from "./codec-scope";
+import { createQaReferenceCodecs } from "./codecs";
+import { produceQaRenders } from "./renders";
+import { seedQaSnapshot } from "./seed";
+
 import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import { assertLoopbackOnly } from "./loopback";
@@ -414,24 +423,72 @@ describe("PROOF 5 — deterministic server order", () => {
     // all of them green. "Repeatable" is a strictly weaker claim than "correct
     // order", and only this test tells them apart.
     //
+    // This used to extract the node id from the item text, which worked only
+    // because the MCP synthesizer leaked `retrieval-node-v1:<hash>` onto the
+    // wire. The shared synthesizer correctly does not, so the expected order is
+    // now RECOMPUTED independently: seed the same snapshot, project, produce
+    // renders, sort by node id, and derive the public item id through the same
+    // keyed codec the server uses. That pins the documented rule rather than a
+    // fingerprint of today's output.
+    //
     // red-proof: reverse the result of mergeAuthorizedRecallCandidates in
-    // core/retrieve/application-read.ts -- the ascending assertion below fails
-    // while every stability assertion above still passes.
+    // core/retrieve/application-read.ts -- this fails while every stability
+    // assertion above still passes.
     const instance = await server({ claim_count: 6 });
     const result = page(await mcpCall({ url: instance.url, token: instance.token, limit: 100 }));
 
-    // The QA render text embeds the structural node id, which is exactly the
-    // recall kernel's `order_key`. Extracting it lets the proof assert the rule
-    // rather than a fingerprint of today's output.
-    const nodeIds = result.items.map((item) => {
-      const match = /retrieval-node-v1:([a-f0-9]{64})/.exec(item.text);
-      expect(match).not.toBeNull();
-      return match![1]!;
+    const db = new Database(":memory:");
+    seedQaSnapshot(db, {
+      owner_account_id: instance.principal.owner_account_id,
+      account_timezone: "UTC",
+      claim_count: 6,
     });
-    expect(nodeIds.length).toBeGreaterThan(1);
-    expect(nodeIds).toEqual([...nodeIds].sort());
-    expect(new Set(nodeIds).size).toBe(nodeIds.length);
+    const load = createSqliteQaRecallLoader({
+      db,
+      owner_account_id: instance.principal.owner_account_id,
+      account_timezone: "UTC",
+      limits: { max_items: 256, max_bytes: 4_000_000 },
+    })();
+    const projected = readAfterApplicationAuthorization({
+      owner_account_id: instance.principal.owner_account_id,
+      credential: {
+        owner_account_id: instance.principal.owner_account_id,
+        credential_kind: "mcp_api_key",
+        app_id: instance.principal.app_id,
+        key_id: instance.principal.key_id,
+        scopes: ["memories.read"],
+        active: true,
+      },
+      persisted_grant: {
+        owner_account_id: instance.principal.owner_account_id,
+        consumer: "mcp",
+        app_id: instance.principal.app_id,
+        key_id: instance.principal.key_id,
+        enabled: true,
+        default_read: true,
+        scopes: ["memories.read"],
+      },
+      // storage-provenance-ok(test recomputes the same authorized projection the server built)
+    }, () => ({ snapshot: structuredClone(load.durable_snapshot), options: { account_timezone: "UTC" } }));
 
+    const allRenders = await produceQaRenders(projected);
+    const leafIds = new Set(
+      selectNodesForGranularity(buildDeterministicAnchors(projected).nodes, "temporal_leaf")
+        .map((structuralNode) => structuralNode.node_id),
+    );
+    const codecs = createQaReferenceCodecs({
+      secret: QA_CODEC_SECRET,
+      reader_scope: qaReaderScope(instance.principal),
+    });
+    const expectedIds = allRenders
+      .filter((render) => leafIds.has(render.node_id))
+      .sort((left, right) => (left.node_id < right.node_id ? -1 : left.node_id > right.node_id ? 1 : 0))
+      .map((render) => codecs.encodeItemRef(`render:${render.render_hash}`));
+
+    expect(expectedIds.length).toBe(6);
+    expect(result.items.map((item) => item.id)).toEqual(expectedIds);
+
+    // And paging at a different size yields the identical sequence.
     const ids = result.items.map((item) => item.id);
     const paged: string[] = [];
     let cursor: string | null = null;
