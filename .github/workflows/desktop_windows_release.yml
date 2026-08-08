@@ -118,14 +118,10 @@ jobs:
           echo "Latest windows tag: ${LATEST:-none}"
 
           # --- Is there a releasable desktop/windows change since that tag? ---
-          # (git diff --quiet exits 1 on differences; keep it out of a `head`
-          # pipe so pipefail+SIGPIPE can't abort the step.)
-          HAS_CHANGES=false
-          if [ -z "$LATEST" ]; then
-            [ -n "$(git ls-files desktop/windows)" ] && HAS_CHANGES=true
-          elif ! git diff --quiet --diff-filter=ACDMR "${LATEST}..HEAD" -- desktop/windows; then
-            HAS_CHANGES=true
-          fi
+          # A default manual release still needs a runtime change since the
+          # latest tag. The tested classifier excludes docs-only history;
+          # force_release remains the explicit override.
+          HAS_CHANGES=$(python3 .github/scripts/windows_release_paths.py --base "$LATEST")
 
           if [ "$HAS_CHANGES" != "true" ] && [ "$RELEASE_MODE" != "force_release" ]; then
             echo "No releasable desktop/windows changes since ${LATEST:-repo start}."

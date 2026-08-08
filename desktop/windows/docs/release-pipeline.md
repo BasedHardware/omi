@@ -1,20 +1,21 @@
 # Windows release pipeline
 
 The Windows desktop app ships through `.github/workflows/desktop_windows_release.yml`.
-It mirrors the macOS auto-release shape (`.github/workflows/desktop_auto_release.yml`):
-a merge to `main` cuts a version, tags it, and publishes a beta build — the
-difference is Windows has no external CI (no Codemagic), so the same workflow also
-builds the installer on a `windows-latest` runner with electron-builder (NSIS).
+Maintainers cut releases deliberately with `workflow_dispatch`; merges to `main`
+do not tag or publish automatically. Windows has no external CI (no Codemagic),
+so the same workflow plans the version and builds the installer on a
+`windows-latest` runner with electron-builder (NSIS).
 
 ## What it does
 
-On every push to `main` that touches `desktop/windows/**` (or a manual
-`workflow_dispatch`):
+When a maintainer starts `workflow_dispatch`, a default `release_now` run:
 
 1. **plan-and-tag** (Ubuntu)
    - Finds the latest `v*-windows` tag (the version source of truth).
    - Skips if there is no releasable `desktop/windows` change since that tag
-     (unless `release_mode: force_release`).
+     (unless `release_mode: force_release`). Changes confined to
+     `desktop/windows/docs/**` are release-neutral; mixed documentation and app
+     changes still release normally.
    - Computes the next **patch** version (from the latest tag, or the checked-in
      `package.json` version for the very first release).
    - Stamps `desktop/windows/package.json` to that version, commits it, tags the
@@ -71,16 +72,12 @@ every auto-update would 404.
   time and synced back to `main` for humans; even if that sync PR never merges,
   the next release still computes correctly from the tag.
 
-### Loop prevention
+### Release input guard
 
-The bump must not re-trigger the workflow. Three independent guards:
-
-1. Every git write uses `GITHUB_TOKEN`; GitHub does not start new workflow runs
-   for pushes made with `GITHUB_TOKEN`.
-2. The plan job skips any commit whose message starts with
-   `chore(windows): release v`.
-3. The plan job skips when there is no releasable `desktop/windows` change since
-   the latest tag.
+The tested release-path classifier keeps a default manual run from minting a
+new version for docs-only or empty history. `release_mode: force_release` is the
+explicit override when a maintainer needs to publish without a release-bearing
+Windows change.
 
 ### Auto-update
 

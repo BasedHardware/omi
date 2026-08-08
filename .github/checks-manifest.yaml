@@ -445,6 +445,11 @@ checks:
     triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-129 keeps a current-main candidate bound to the checked desktop source while rejecting a newer releasable desktop change"
+  - id: desktop-windows-release-paths
+    command: ["python3", ".github/scripts/test_windows_release_paths.py"]
+    triggers: [".github/scripts/windows_release_paths.py", ".github/scripts/test_windows_release_paths.py", ".github/workflows/desktop_windows_release.yml", "desktop/windows/docs/release-pipeline.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10240: a default manual Windows release must not cut an installer from docs-only history; the planner uses an executable path-classification contract"
   - id: desktop-candidate-tag-transaction
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
