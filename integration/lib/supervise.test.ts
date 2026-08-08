@@ -40,11 +40,18 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port,
   fetch() {
-    // Become HTTP-ready, then fail acceptance by exiting nonzero.
-    queueMicrotask(() => {
+    // Become HTTP-ready, THEN fail acceptance by exiting nonzero.
+    //
+    // The exit must not race the response. A queueMicrotask here runs before
+    // the response is flushed, so the client sees "Empty reply from server",
+    // readiness is never observed, and the poll runs to its own budget - the
+    // test then times out instead of asserting. Give the response time to
+    // reach the wire first; the delay is what makes readiness genuinely
+    // succeed before the nonzero exit, which is the whole point of the case.
+    setTimeout(() => {
       server.stop(true);
       process.exit(1);
-    });
+    }, 250);
     return new Response("ready");
   },
 });
