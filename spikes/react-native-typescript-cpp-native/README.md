@@ -280,3 +280,20 @@ open https://crepuscularity.tsc.hk
 **Conclusion**: **PARTIAL — local boundary shape validated; real RN/web/ASR runtime unvalidated**
 
 The local benchmark shows no meaningful difference between the three simulated adapter shapes at this synthetic boundary. It does not measure React Native, browser, Moonshine, or real C++ module runtime performance. The TypeScript-first architecture with a narrow C++ native-function boundary remains the recommended PoC direction.
+
+## 9. Real React Native Runtime Attempt
+
+This spike also contains `rn-runtime/`, a fresh bare React Native 0.79.2 shell generated with the React Native CLI. It is intentionally separate from production code and contains no BLE dependency or production SDK import.
+
+### Completed
+
+- React Native CLI generated the iOS and Android projects.
+- `npm install` completed: 902 packages installed.
+- New Architecture/codegen ran during CocoaPods setup.
+
+### Blocked native builds
+
+- **iOS**: `pod install` reached React Native's `glog` build, then failed because the configured Xcode Beta toolchain compiler could not create executables (`C compiler cannot create executables`).
+- **Android**: `./gradlew assembleDebug --no-daemon` stopped before Gradle because no Java Runtime is installed.
+
+Therefore the spike now proves the RN shell can be generated and dependencies resolved, but it still does not prove a successful iOS/Android binary or a real C++ TurboModule call. Those require fixing the local native toolchains first.
