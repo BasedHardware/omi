@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omi.me/schema/listen-realtime-protocol/0.2.0.json",
+  "$id": "https://omi.me/schema/listen-realtime-protocol/0.3.0.json",
   "title": "Omi /listen Realtime WebSocket Protocol",
   "description": "Hand-written schema-of-record for the /listen WebSocket wire format. Ported into core/ from prototypes/listen-schema (attribution: overnight spike 2026-08-06) with entitlement frame + reserved close code added per WS-003 / backend-handoff-requirements. JSON Schema describes individual frame payloads; everything JSON Schema cannot express (handshakes, close codes, frame-level non-envelope shapes, sequence invariants) lives under x-omi-* annotation keys.",
   "x-omi-protocol": {
     "spec": "listen-realtime-protocol",
     "baseline": "e0893286f94ecc75aacb4cbc441f653f347e382b",
-    "schema_version": "0.2.0",
+    "schema_version": "0.3.0",
     "transport": "websocket",
     "version_knob": {
       "present": false,
@@ -192,10 +192,10 @@
         "code": 4020,
         "name": "entitlement_upgrade_required",
         "emitted_by_listen": false,
-        "meaning": "Reserved (WS-005 / entitlements contract): WebSocket closed because entitlement requires upgrade. DISTINCT from the mid-session entitlement frame with capture_continues=true (transcription paused, capture continuing \u2014 socket stays open). A preceding entitlement event carries upgrade advice. Close-code number 4020 is provisional pending WS-005 ratification (avoiding collision with dead 4001/4004).",
+        "meaning": "RESERVED (WS-005 / entitlements contract): WebSocket closed for entitlement exhaustion / upgrade-required. DISTINCT from the mid-session entitlement frame with state=transcription_paused_capture_continuing (transcription paused, capture continuing \u2014 socket stays open). A preceding entitlement event carries upgrade advice. Number 4020 avoids collision with reserved-but-dead 4001/4004. Server emit is not implemented at baseline.",
         "client_should_retry": false,
         "client_action": "route to existing plan-upgrade flow; do not reconnect until entitlement changes",
-        "x-omi-provisional": true
+        "x-omi-reserved": true
       }
     ],
     "invariants": [
@@ -280,7 +280,7 @@
         "id": "reserved_entitlement_ws005",
         "locator": "docs/backend-handoff-requirements.md#entitlements",
         "event_count": 1,
-        "note": "FIFTH logical producer, not yet implemented. Reserves the entitlement frame. Field shapes provisional pending WS-005 ratification."
+        "note": "FIFTH logical producer, not yet implemented. Reserves the entitlement frame. Field shapes closed in schema 0.3.0 (state/reason enums, usage+limit split, opaque upgrade_target); server emit still pending WS-005."
       }
     ],
     "unemitted_model_classes": [
@@ -1292,6 +1292,90 @@
         }
       }
     },
+    "EntitlementUsage": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "unit"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "const": "seconds"
+        }
+      },
+      "description": "Consumed quantity for the entitlement decision. Always a real non-negative amount \u2014 never overloaded to encode 'unlimited'."
+    },
+    "EntitlementMeteredLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "amount",
+        "unit"
+      ],
+      "properties": {
+        "kind": {
+          "const": "metered"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "const": "seconds"
+        }
+      }
+    },
+    "EntitlementUnmeteredLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unmetered"
+        }
+      },
+      "description": "Paid / unlimited plans. Explicit kind \u2014 NEVER encode unlimited as amount=-1 or 0."
+    },
+    "EntitlementUnknownLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unknown"
+        }
+      },
+      "description": "Server could not determine a numeric ceiling (partial entitlement data). Distinct from unmetered."
+    },
+    "EntitlementLimit": {
+      "x-omi-role": "model",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EntitlementMeteredLimit"
+        },
+        {
+          "$ref": "#/$defs/EntitlementUnmeteredLimit"
+        },
+        {
+          "$ref": "#/$defs/EntitlementUnknownLimit"
+        }
+      ],
+      "description": "Closed tagged union for the ceiling opposite usage.amount. Sentinel numbers are forbidden."
+    },
     "EntitlementEvent": {
       "x-omi-role": "server-event",
       "x-omi-event-type": "entitlement",
@@ -1300,13 +1384,15 @@
       "x-omi-emitted": false,
       "x-omi-status": "reserved-pending-ws005",
       "x-omi-in-canonical-16": false,
-      "x-omi-provisional-fields": true,
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "type",
         "state",
         "reason",
-        "capture_continues"
+        "usage",
+        "limit",
+        "upgrade_target"
       ],
       "properties": {
         "type": {
@@ -1319,46 +1405,31 @@
             "limit_reached",
             "upgrade_required"
           ],
-          "x-omi-open-enum": true,
-          "description": "transcription_paused_capture_continuing keeps the socket open (capture continues into local WAL). upgrade_required may pair with reserved close 4020."
+          "description": "Closed union. transcription_paused_capture_continuing keeps the socket open (capture continues into local WAL) \u2014 folds the former capture_continues boolean into state so the two cannot contradict. upgrade_required may pair with reserved close 4020."
         },
         "reason": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "free_tier_transcription_limit",
+            "free_tier_chat_limit",
+            "trial_expired",
+            "paywalled"
+          ],
+          "description": "Closed machine-branchable reason. No free-text companion on the listen frame (presentational copy is a client concern keyed by this enum)."
         },
         "usage": {
-          "type": "object",
-          "required": [
-            "used",
-            "limit"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "used": {
-              "type": "number"
-            },
-            "limit": {
-              "type": "number"
-            },
-            "unit": {
-              "type": "string",
-              "default": "seconds"
-            }
-          },
-          "description": "Usage vs limit. Unit/field names provisional pending WS-005."
+          "$ref": "#/$defs/EntitlementUsage"
+        },
+        "limit": {
+          "$ref": "#/$defs/EntitlementLimit"
         },
         "upgrade_target": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Existing plan-upgrade flow identifier; no new checkout surface (FEAT-APPS-031)."
-        },
-        "capture_continues": {
-          "type": "boolean",
-          "description": "true => transcription paused, capture continuing \u2014 NOT a session close. false may accompany reserved close 4020."
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque plan-upgrade flow identifier the shell hands back to an existing upsell surface. NEVER a URL the client constructs (FEAT-APPS-031)."
         }
       },
-      "description": "Unified entitlement payload on the /listen wire (WS-003 gate / WS-005). Reserved, not emitted at baseline. Distinguishes deferred-transcription (capture_continues=true) from entitlement-forced session close (code 4020)."
+      "description": "Unified entitlement payload on the /listen wire (WS-003 gate / WS-005). Reserved, not emitted at baseline. Distinguishes deferred-transcription (state=transcription_paused_capture_continuing) from entitlement-forced session close (code 4020)."
     }
   }
 }

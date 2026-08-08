@@ -82,6 +82,9 @@ function tsType(s) {
     const name = refName(s.$ref);
     return defs[name]["x-omi-opaque"] ? "Record<string, unknown>" : name;
   }
+  if (Array.isArray(s.oneOf) && s.oneOf.length > 0) {
+    return s.oneOf.map((branch) => tsType(branch)).join(" | ");
+  }
   if (s.const !== undefined) return JSON.stringify(s.const);
   const kinds = typeList(s).filter((k) => k !== "null");
   const parts = [];
@@ -101,11 +104,15 @@ function tsType(s) {
 }
 
 function tsInterface(name, def) {
-  const req = new Set(def.required ?? []);
   const lines = [];
   if (def.description) lines.push(`/** ${def.description.replace(/\*\//g, "*\\/")} */`);
   const locator = def["x-omi-locator"];
   if (locator) lines.push(`/** Producer: ${locator} */`);
+  if (Array.isArray(def.oneOf) && def.oneOf.length > 0) {
+    lines.push(`export type ${name} = ${tsType(def)};`);
+    return lines.join("\n");
+  }
+  const req = new Set(def.required ?? []);
   lines.push(`export interface ${name} {`);
   for (const [prop, ps] of Object.entries(def.properties ?? {})) {
     const optional = req.has(prop) ? "" : "?";
