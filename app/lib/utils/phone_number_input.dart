@@ -1,4 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
+
+/// Characters the phone field accepts.
+///
+/// `+` has to be here: [parsePhoneNumberInput] treats a leading `+` as "the
+/// user supplied their own country code" and lets it override the picker, and
+/// a formatter that strips `+` makes that branch unreachable from the UI. Lives
+/// beside the parser so the two cannot drift apart.
+final phoneFieldInputFormatters = <TextInputFormatter>[
+  FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s\-\(\)]')),
+];
 
 /// What the user typed on the phone-setup screen, interpreted for one country.
 ///
@@ -28,7 +39,11 @@ class PhoneNumberInput {
 /// is trusted over the picker, so pasting a foreign number does the obvious
 /// thing rather than being silently re-homed to the selected country.
 PhoneNumberInput parsePhoneNumberInput({required String raw, required String isoCode}) {
-  final trimmed = raw.trim();
+  // Only a leading + carries meaning; any other one is a typo, and leaving it
+  // in makes the whole string unparseable rather than just ignoring it.
+  final cleaned = raw.trim();
+  final trimmed =
+      cleaned.startsWith('+') ? '+${cleaned.substring(1).replaceAll('+', '')}' : cleaned.replaceAll('+', '');
   if (trimmed.isEmpty) return PhoneNumberInput.empty;
 
   final iso = _isoOrNull(isoCode);

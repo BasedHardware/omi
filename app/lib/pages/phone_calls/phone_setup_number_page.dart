@@ -168,7 +168,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                           hintText: context.l10n.phoneNumberHint,
                           hintStyle: TextStyle(color: Colors.grey[600]),
                         ),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\s\-\(\)]'))],
+                        inputFormatters: phoneFieldInputFormatters,
                         onChanged: (_) => setState(() => _errorMessage = null),
                       ),
                     ),
