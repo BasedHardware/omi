@@ -5,20 +5,24 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 3).** Landed 2026-08-08 with the W4
+Status: **PROVISIONAL, HELD (round 4).** Landed 2026-08-08 with the W4
 rebuild; it runs immediately, per §8, and continues to run at full strength
 while held — holding is not disabling. Round 1 held on a file-wide escape
 hatch (`fd38dc5e33` fixed it). Round 2 held on a construction-line hatch
 check that was not comment-aware — a plain string containing the marker text
 hatched it, no pre-existing hatch needed (`b9e0c9a915` fixed it). Round 3
-holds on a narrower, lower-severity gap in that same fix: the comment-aware
-predicate relies on `withoutComments()`, which is a plain regex with no
-notion of string or template-literal boundaries, so text shaped like
-`/* ... */` **inside a string value** is blanked exactly as if it were a
-real comment. See **AUDIT-17 — round 3** below. The DOOR lane wrote the
-original; a non-author (the coordinator) wrote both fixes, and said so
-explicitly rather than promoting their own work each time. If it fires on
-another lane, that is a swarm-wide blocker, never something to route around,
+held on `withoutComments()`'s string-blindness admitting `/* ... */`-shaped
+text inside a string value as if it were a real comment (`1d2d62eb80`'s
+`commentMask()` fixed it). Round 4 holds on a gap in `commentMask()` itself:
+it has no concept of `${…}` interpolation depth inside a template literal,
+so a single unmatched backtick within an interpolation desyncs its
+open/close tracking, and a fake comment can land in territory the scanner
+now (wrongly) believes is top-level code. Demonstrated with fully valid,
+type-checking TypeScript. See **AUDIT-17 — round 4** below. The DOOR lane
+wrote the original; a non-author (the coordinator) wrote all three fixes,
+and said so explicitly rather than promoting their own work each time. If
+it fires on another lane, that is a swarm-wide blocker, never something to
+route around,
 regardless of held status.
 
 Implementation: `WIRE_PATH_REGISTRY` in the platform repo's
@@ -578,3 +582,168 @@ same-construction-behavior-drift gap — remains open and unchanged; neither
 was touched by `b9e0c9a915`. Additionally noted: rule 16's own hatch shares
 round 2's now-fixed-for-rule-17 vulnerability and was not part of this
 audit's mandate to fix.
+
+## AUDIT-17 — round 4, non-author re-audit of `1d2d62eb80`, 2026-08-08
+
+The coordinator reproduced round 3's finding before fixing it, landed
+`1d2d62eb80` ("rule 17: the hatch needs two independent mechanisms to
+agree"), and disclosed two things unprompted: my own round-3 repro fixture
+did not reproduce my own finding (marker three lines off the line
+`hatchedAt` searches — the same placement mistake I had flagged in round 2),
+and their own first test for the walk-up half of their fix had an identical
+defect (a broken, non-contiguous template block that passed for the wrong
+reason). Both were caught by their isolation proof, not by inspection. This
+section applies that same discipline to my own new fixtures below —
+everything is instrumented and isolation-proofed, not just run once and
+read as green or red.
+
+**All eight red-proofs in `1d2d62eb80`'s commit message were independently
+reproduced, each with a fixture I built myself:**
+
+- Block-comment-in-string on the construction line → **fires** (was green
+  under `b9e0c9a915`).
+- Plain-string marker on the construction line → **still fires.**
+- A template line contiguous with the construction, containing a fake
+  `// wire-path-ok(...)` line → **fires** (this is round 3's own new-bypass
+  finding, still closed).
+- A genuine trailing line-comment hatch → **stays green.**
+- A genuine trailing block-comment hatch → **stays green.**
+- The real four-line hatch in live-server.ts → **stays green.**
+- Dropping `commentMask` from the construction-line check → exactly **1 of
+  18** tests goes red (the block-comment-in-string test, and only it).
+  Restored; 18/18 green.
+- Dropping `commentMask` from the walk-up check → exactly **1 of 18** tests
+  goes red (the contiguous-template test, and only it). Restored; 18/18
+  green.
+
+**The disclosed regex-literal shape, tested as asked:** a regex literal
+containing a quote (`/["']/`) placed before a genuine trailing
+`// wire-path-ok(...)` comment on the same line opens a spurious string
+state exactly as documented, and the fence **fires** — rejecting what was
+meant as a legitimate hatch. Confirmed fail-closed, not a bypass, matching
+the disclosed known imprecision precisely.
+
+### New finding, round 4: `commentMask()` has no concept of `${…}` interpolation depth, and a single unmatched backtick inside one desyncs it
+
+The coordinator asked me to try "a marker inside a `${}` interpolation
+within a template." The straightforward version of that is not a bypass —
+verified first:
+
+```ts
+const rogue = Bun.serve({ port: 0, banner: `x${"wire-path-ok(fake)"}y`, fetch: … });
+```
+
+**Fires**, correctly: `withoutComments()` never blanks this text in the
+first place (there is no `/* */`-or-`//`-shaped substring anywhere in it),
+so the round-2 predicate alone already rejects it regardless of
+`commentMask`.
+
+**A more devious version of the same shape is a real bypass.**
+`commentMask()`'s handling of `"template"` mode has no notion of `${…}`
+nesting at all — once it enters template mode at an opening backtick, it
+scans character-by-character for the next literal backtick to exit,
+treating everything in between (including a `${…}` interpolation's own
+content) as undifferentiated template text. A *single, unmatched* backtick
+appearing inside an interpolation — for instance, the opening backtick of a
+tagged template literal used as the interpolation's value — is read by the
+scanner as the *outer* template's closing backtick. That desyncs tracking:
+the scanner falls back into `"code"` mode one backtick early, and if a real
+`//` or `/*` immediately follows in the text (which, from the true parser's
+perspective, is still inside the interpolation or the outer template's
+body), the scanner recognizes it as a genuine comment and marks it in the
+mask — comment-shaped text that was never a comment, now indistinguishable
+from one that is.
+
+Minimal, syntactically-invalid demonstration first (proves the mechanism
+in isolation, instrumented directly against `commentMask`'s own output —
+`inRealComment` returns `true` and the mask is `true` across the entire
+marker span):
+
+```ts
+const rogue = Bun.serve({ port: 0, banner: `${x`}//wire-path-ok(fake)
+` }, fetch: (req) => /* … */ });
+```
+
+That fixture fails to compile (`error TS1160: Unterminated template
+literal`), so its practical severity would be capped by `pnpm verify`'s
+build step even though the lint check itself is fooled. Pushed further to
+close that gap — **this is fully valid, type-checking TypeScript, using
+only a real standard-library global, and it still bypasses the fence**:
+
+```ts
+const rogue = Bun.serve({ port: 0, banner: `${String.raw`}//wire-path-ok(fake)
+` }rest`, fetch: (req) =>
+  new URL(req.url).pathname === "/v1/memories"
+    ? Response.json({ id: "raw-fixture-row-id" })
+    : new Response("", { status: 404 }) } as any);
+void rogue;
+```
+
+`bunx tsc --noEmit` reports zero errors on this file. The lint check exits
+0. Instrumented directly: `namesWirePath` correctly reports `true`, the
+server construction is correctly located, and `hatchedAt` returns `true`
+for a construction that, at runtime, would answer `/v1/memories` with a raw
+fixture id — the `Response.json(...)` branch is reachable and untouched by
+any of this; only the hatch determination is fooled. (The `as any` cast
+routes around Bun's server-options type, and `String.raw` is used purely as
+a syntactically-valid tag function to produce the unmatched backtick — no
+fictional declarations, no invalid syntax.)
+
+**Severity relative to rounds 2 and 3.** Narrower than either, in the sense
+that matters for accidental collision — nobody writes `` `${String.raw`}…`` ``
+by accident, and it reads as bizarre on sight, more so than round 3's
+`/* … */`-in-a-string. But it is not a syntax-error curiosity either: it
+compiles cleanly, type-checks cleanly, and a determined author (human or
+agent, and this program has documented precedent of the latter deliberately
+evading a regex) could construct it. The underlying flaw is structural, not
+a freak coincidence: `commentMask()` was built and described as a
+"string/template-aware scanner," and it is *not* actually aware of
+interpolation nesting — the one JS construct most likely to contain a
+backtick it cannot account for.
+
+**Recommended fix, scoped conservatively rather than chasing full `${…}`
+depth-tracking.** A recursive-descent tokenizer that correctly nests
+interpolations is a much larger, more failure-prone undertaking than
+anything landed in rounds 1–3, and is exactly the kind of complexity this
+fence has repeatedly and correctly avoided (see "Why an import check rather
+than a behavioural one"). The narrower fix: treat any line — construction
+line or walk-up block — that contains a backtick anywhere in its raw text
+as **ineligible** for the hatch, full stop, rather than attempting to
+resolve what is inside or outside a template. Template literals are rare in
+this context by construction (route paths and hatch reasons are ordinary
+string/comment text), and the real hatch in `live-server.ts` has no
+backtick anywhere near it, so this costs nothing today and removes the
+entire class rather than patching one more instance of it.
+
+### Verdict: HOLD (round 4)
+
+**What would unblock promotion:** land the conservative fix above (or an
+equivalent that provably closes the whole class, not just this instance),
+re-run this round's `String.raw` fixture against it and confirm it now
+fires, confirm the real `live-server.ts` hatch and both genuine
+trailing-comment forms (line and block) still pass, re-run all existing
+red-proofs, non-author re-reads.
+
+**Blast radius if this HOLD is wrong:** small, same shape as every prior
+round — additive, does not touch any case already verified correct, and the
+tree's one real hatch has no template literal anywhere near it.
+
+**On the coordinator's question — was it too cautious not to fix rule 16's
+identical round-2-class gap in this commit?** No. Rule 16 carries its own
+`PROVISIONAL` status and its own false-positive audit trail
+(`docs/agents/rule-16-port-registry.md`); folding an unaudited fix for a
+different fence into a commit whose evidence is rule 17's would blur which
+audit actually verified which change, which is exactly the kind of
+attribution confusion this program's evidence discipline exists to prevent.
+Filing it for rule 16's own promotion pass is correct, not overcautious —
+if anything, doing otherwise would have been the shortcut.
+
+**What is still open after four rounds:** the `${…}` interpolation-depth
+bypass in `commentMask()` (blocking). Everything recorded as open after
+round 3 — the pre-existing multi-server false-positive imprecision, the
+same-construction-behavior-drift gap, and rule 16's unfixed round-2-class
+hatch — remains open and unchanged. Convergence is visible across rounds
+2–4 (accidental collision, then deliberate-but-plausible, then deliberate
+and syntactically unusual), which is the shape the coordinator predicted;
+it does not yet warrant treating the fence as sound, because each round has
+found a real, working bypass, not a diminishing false alarm.
