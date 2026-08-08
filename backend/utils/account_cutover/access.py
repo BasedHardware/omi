@@ -11,7 +11,7 @@ from fastapi import WebSocketException
 
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
-from models.account_cutover import AccountCutoverClientAction, AccountCutoverState
+from models.account_cutover import AccountCutoverClientAction, AccountCutoverRecord, AccountCutoverState
 from utils.account_cutover.control import build_account_cutover_control, parse_client_build
 from utils.account_cutover.telemetry import record_cutover_access_decision
 from utils.executors import db_executor, run_blocking
