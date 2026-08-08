@@ -248,6 +248,43 @@ final class ShellWindowChromeTests: XCTestCase {
     XCTAssertTrue(window.styleMask.contains(.closable))
   }
 
+  /// The shell must be dressed by the view that is actually mounted in it, not by a one-shot timed
+  /// search of `NSApp.windows`. A cold SwiftUI scene can appear after that timer has already fired.
+  func testMountedAttachmentDressesItsExactContainingWindow() throws {
+    let window = makeWindow()
+    let attachment = ShellWindowAttachmentView(frame: .zero)
+    window.contentView = attachment
+    window.isOpaque = true
+    window.backgroundColor = .windowBackgroundColor
+    window.hasShadow = true
+    for button in ShellWindowChrome.hiddenStandardButtons {
+      window.standardWindowButton(button)?.isHidden = false
+    }
+
+    attachment.reassertIfNeeded(force: true)
+
+    let presentation = ShellSummon.presentation()
+    XCTAssertTrue(ShellWindowChrome.isDressed(window, as: presentation))
+    XCTAssertFalse(window.isOpaque)
+    XCTAssertEqual(window.backgroundColor, .clear)
+    XCTAssertFalse(window.hasShadow)
+    for button in ShellWindowChrome.hiddenStandardButtons {
+      XCTAssertEqual(window.standardWindowButton(button)?.isHidden, true)
+    }
+  }
+
+  func testDressedContractDetectsRecreatedSystemChrome() {
+    let window = makeWindow()
+    ShellWindowChrome.dress(window, as: .summoned)
+    XCTAssertTrue(ShellWindowChrome.isDressed(window, as: .summoned))
+
+    window.standardWindowButton(.closeButton)?.isHidden = false
+
+    XCTAssertFalse(
+      ShellWindowChrome.isDressed(window, as: .summoned),
+      "a SwiftUI title-bar rebuild must be visible to the attachment's repair guard")
+  }
+
   private func firstVisualEffectView(in view: NSView) -> NSVisualEffectView? {
     if let material = view as? NSVisualEffectView { return material }
     for subview in view.subviews {

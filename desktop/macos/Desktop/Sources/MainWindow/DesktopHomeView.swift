@@ -431,6 +431,7 @@ struct DesktopHomeView: View {
       }
     }
     .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
+    .background(ShellWindowAttachment().frame(width: 0, height: 0))
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)
@@ -440,7 +441,6 @@ struct DesktopHomeView: View {
       )
       // Drive the notch "moments" (live receipts + conversation-end) off real state.
       NotchMomentsCoordinator.shared.start(appState: appState)
-      // Force dark appearance and disable minSize computation on NSHostingView.
       // By default, every @Published change triggers
       // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
       // which traverses the ENTIRE view tree (~200 samples per window per trigger).

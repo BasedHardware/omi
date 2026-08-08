@@ -78,6 +78,7 @@
 
 import AppKit
 import OmiTheme
+import SwiftUI
 
 /// The main window's chrome: transparent, light-pinned, and without the system's window buttons.
 @MainActor
@@ -172,5 +173,103 @@ enum ShellWindowChrome {
     for button in hiddenStandardButtons {
       window.standardWindowButton(button)?.isHidden = true
     }
+  }
+
+  /// Whether the live window still satisfies the shell contract.
+  ///
+  /// SwiftUI is allowed to rebuild a scene's title-bar views after launch. Reading the contract before
+  /// re-applying it keeps that ordinary update path cheap while still repairing a window whose system
+  /// chrome has been recreated underneath us.
+  static func isDressed(_ window: NSWindow, as presentation: Presentation) -> Bool {
+    let hasExpectedSpaceBehavior: Bool
+    switch presentation {
+    case .summoned:
+      hasExpectedSpaceBehavior =
+        window.collectionBehavior.contains(.fullScreenAuxiliary)
+        && !window.collectionBehavior.contains(.fullScreenPrimary)
+    case .anchored:
+      hasExpectedSpaceBehavior =
+        window.collectionBehavior.contains(.fullScreenPrimary)
+        && !window.collectionBehavior.contains(.fullScreenAuxiliary)
+    }
+
+    let buttonsAreHidden = hiddenStandardButtons.allSatisfy { button in
+      window.standardWindowButton(button)?.isHidden != false
+    }
+
+    return !window.isOpaque
+      && window.backgroundColor == .clear
+      && !window.hasShadow
+      && window.styleMask.contains(.fullSizeContentView)
+      && window.styleMask.isSuperset(of: keyboardWindowCommands)
+      && window.titlebarAppearsTransparent
+      && window.titleVisibility == .hidden
+      && window.titlebarSeparatorStyle == .none
+      && buttonsAreHidden
+      && window.isMovableByWindowBackground
+      && window.level == (presentation == .summoned ? .floating : .normal)
+      && !window.hidesOnDeactivate
+      && window.collectionBehavior.contains(.moveToActiveSpace)
+      && hasExpectedSpaceBehavior
+  }
+}
+
+/// Binds the SwiftUI shell to the exact `NSWindow` that contains it.
+///
+/// The launch delegate used to search `NSApp.windows` once after a fixed 200 ms delay. On a cold or
+/// newly patched bundle the scene can mount later than that, leaving the shell in AppKit's default
+/// titled, opaque state for the whole session. This zero-sized view receives `viewDidMoveToWindow`
+/// from AppKit, so there is no title lookup and no timing assumption. The update observer only writes
+/// when SwiftUI has recreated enough title-bar state for the contract to drift.
+@MainActor
+final class ShellWindowAttachmentView: NSView {
+  private weak var attachedWindow: NSWindow?
+  private var updateObserver: NSObjectProtocol?
+
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    super.viewWillMove(toWindow: newWindow)
+    guard newWindow !== attachedWindow else { return }
+    stopObserving()
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    guard let window else { return }
+    attachedWindow = window
+    reassertIfNeeded(force: true)
+    updateObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didUpdateNotification,
+      object: window,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.reassertIfNeeded()
+      }
+    }
+  }
+
+  func reassertIfNeeded(force: Bool = false) {
+    guard let window = attachedWindow ?? self.window else { return }
+    let presentation = ShellSummon.presentation()
+    guard force || !ShellWindowChrome.isDressed(window, as: presentation) else { return }
+    ShellSummon.applyPresentation(to: window)
+  }
+
+  private func stopObserving() {
+    if let updateObserver {
+      NotificationCenter.default.removeObserver(updateObserver)
+      self.updateObserver = nil
+    }
+    attachedWindow = nil
+  }
+}
+
+struct ShellWindowAttachment: NSViewRepresentable {
+  func makeNSView(context: Context) -> ShellWindowAttachmentView {
+    ShellWindowAttachmentView(frame: .zero)
+  }
+
+  func updateNSView(_ nsView: ShellWindowAttachmentView, context: Context) {
+    nsView.reassertIfNeeded()
   }
 }
