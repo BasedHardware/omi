@@ -4,11 +4,24 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../contracts" },
-    { "path": "../kernel" },
-    { "path": "../sync" },
-    { "path": "../adapters-legacy" }
+    {
+      "path": "../../contracts"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../sync"
+    },
+    {
+      "path": "../adapters-legacy"
+    },
+    {
+      "path": "../adapters-platform"
+    }
   ]
 }
