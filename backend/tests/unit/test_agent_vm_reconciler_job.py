@@ -742,6 +742,55 @@ def test_reused_state_rollback_repairs_auto_delete_before_detach_completed():
     assert events == [("old", lifecycle.STATE_DISK_DEVICE_NAME, True)]
 
 
+def test_reused_state_rollback_treats_omitted_disk_users_as_detached():
+    migration_id = "d" * 24
+    attachments: list[tuple[Any, ...]] = []
+
+    class Api:
+        project = "project"
+        zone = "us-central1-a"
+
+        async def get_instance(self, name: str) -> dict[str, Any] | None:
+            if name == "candidate":
+                return None
+            return {"id": "old-id", "labels": {}, "disks": []}
+
+        async def get_disk(self, _name: str) -> dict[str, Any]:
+            return {
+                "id": "state-id",
+                "labels": {"omi-agent-role": "state", "omi-agent-owner": "owner"},
+            }
+
+        async def attach_disk(self, *args: Any, **kwargs: Any) -> None:
+            attachments.append((*args, kwargs))
+
+    restored = asyncio.run(
+        reconciler._rollback_failed_boot_image_candidate(
+            Api(),
+            "uid",
+            "old",
+            {
+                "migrationId": migration_id,
+                "vmName": "candidate",
+                "oldInstanceId": "old-id",
+                "stateDiskName": "state",
+                "stateDiskId": "state-id",
+                "stateDiskReused": "true",
+                "ownerLabel": "owner",
+            },
+        )
+    )
+
+    assert restored is True
+    assert attachments == [
+        (
+            "old",
+            "projects/project/zones/us-central1-a/disks/state",
+            {"auto_delete": True},
+        )
+    ]
+
+
 def test_reused_state_disk_requires_exact_predecessor_attachment_user_before_detach(monkeypatch):
     expected_user = "projects/project/zones/us-central1-a/instances/omi-agent-user"
     events: list[str] = []
@@ -1515,7 +1564,7 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
                 "zone": "us-central1-a",
                 "status": "stopped",
                 "authToken": "old-token",
-                "reconcile": {"durableMigration": True},
+                "reconcile": {"durableMigration": migration_id},
             },
             RELEASE,
             owner="worker",
@@ -1601,6 +1650,17 @@ def test_boot_image_migration_journal_fences_predecessor_and_resumes_candidate_r
         "dev-user", "omi-agent-user", "us-central1-a", "old-token", "worker", migration_id, migration, now=now
     )
     assert journal and journal["candidateAuthToken"] == "candidate-token"
+    assert client.transactions[-1].updates[-1][1]["agentVm.reconcile.durableMigration"] == migration_id
+    assert (
+        lifecycle.active_boot_image_migration(
+            "dev-user",
+            "omi-agent-user",
+            "old-id",
+            migration_id,
+            firestore_client=client,
+        )
+        == journal
+    )
     assert lifecycle.record_boot_image_state_disks(
         "dev-user",
         "omi-agent-user",
@@ -1848,6 +1908,7 @@ def test_boot_image_migration_completion_requires_candidate_pointer_and_lease(mo
     )
     updates = client.transactions[-1].updates
     assert updates[-2][1]["agentVm.reconcile.migration"] is lifecycle.DELETE_FIELD
+    assert updates[-2][1]["agentVm.reconcile.durableMigration"] is lifecycle.DELETE_FIELD
     assert updates[-2][1]["agentVm.reconcile.lease"] is lifecycle.DELETE_FIELD
     assert updates[-1][1]["state"] == "completed"
 
@@ -2586,45 +2647,26 @@ def test_owner_discovery_legacy_fallback_supports_existing_small_fleets(monkeypa
 
 
 def test_owner_discovery_selects_a_durable_migration_without_manifest_opt_in(monkeypatch):
-    class MigrationReference:
-        path = "users/journal-owner/agentVmMigrations/666666666666666666666666"
-
-    class MigrationSnapshot:
-        reference = MigrationReference()
-
-        def to_dict(self) -> dict[str, Any]:
-            return {"state": "candidate_creating"}
-
-    class MigrationQuery:
-        def where(self, **_kwargs: Any) -> "MigrationQuery":
-            return self
-
-        def stream(self) -> list[MigrationSnapshot]:
-            return [MigrationSnapshot()]
-
-    class UserDocument:
-        def get(self) -> OwnerSnapshot:
-            return OwnerSnapshot(
+    users = OwnerQuery(
+        [
+            OwnerSnapshot("cohort", {"agentVm": {"vmName": "cohort", "authToken": "token"}}),
+            OwnerSnapshot(
                 "journal-owner",
-                {"agentVm": {"vmName": "omi-agent-journal-owner", "authToken": "token"}},
-            )
-
-    class DurableUsers(OwnerQuery):
-        def document(self, uid: str) -> UserDocument:
-            assert uid == "journal-owner"
-            return UserDocument()
-
-    users = DurableUsers([OwnerSnapshot("cohort", {"agentVm": {"vmName": "cohort", "authToken": "token"}})])
+                {
+                    "agentVm": {
+                        "vmName": "omi-agent-journal-owner",
+                        "authToken": "token",
+                        "reconcile": {"durableMigration": "6" * 24},
+                    }
+                },
+            ),
+        ]
+    )
 
     class DurableClient:
-        def collection(self, name: str) -> DurableUsers:
+        def collection(self, name: str) -> OwnerQuery:
             assert name == "users"
             return users
-
-        @staticmethod
-        def collection_group(name: str) -> MigrationQuery:
-            assert name == "agentVmMigrations"
-            return MigrationQuery()
 
     monkeypatch.setattr(reconciler, "get_firestore_client", lambda: DurableClient())
 
@@ -2635,7 +2677,7 @@ def test_owner_discovery_selects_a_durable_migration_without_manifest_opt_in(mon
         {
             "vmName": "omi-agent-journal-owner",
             "authToken": "token",
-            "reconcile": {"durableMigration": True},
+            "reconcile": {"durableMigration": "6" * 24},
         },
     )
     assert reconciler._select_reconcile_owners(owners, RELEASE.release_id, 0)[-1] == owners[-1]

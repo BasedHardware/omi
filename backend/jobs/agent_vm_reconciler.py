@@ -40,7 +40,6 @@ from services.agent_vm_lifecycle import (
     STATE_SOURCE_DEVICE_NAME,
     active_session_count,
     active_boot_image_migration,
-    active_boot_image_migration_uids,
     begin_boot_image_migration,
     claim_boot_image_migration_retirement,
     claim_reconciler_run_lease,
@@ -176,6 +175,8 @@ def _disk_name(source: Any) -> str:
 
 def _normalized_disk_users(disk: Mapping[str, Any]) -> list[str] | None:
     users = disk.get("users")
+    if "users" not in disk:
+        return []
     if not isinstance(users, list):
         return None
     return [str(user).split("/compute/v1/")[-1] for user in users]
@@ -287,29 +288,7 @@ def _owners() -> list[tuple[str, dict[str, Any]]]:
             ) from exc
     if len(snapshots) > owner_limit:
         raise RuntimeError(f"Agent VM owner discovery exceeded configured limit {owner_limit}")
-    owners = [owner for snapshot in snapshots if (owner := _owner_from_snapshot(snapshot)) is not None]
-    owner_by_uid = {uid: vm for uid, vm in owners}
-    durable_uids = active_boot_image_migration_uids(firestore_client=client)
-    if not durable_uids:
-        return owners
-    users = client.collection("users")
-    for uid in sorted(durable_uids):
-        vm = owner_by_uid.get(uid)
-        if vm is None:
-            snapshot = users.document(uid).get()
-            owner = _owner_from_snapshot(snapshot)
-            if owner is None:
-                continue
-            uid, vm = owner
-            owners.append(owner)
-            owner_by_uid[uid] = vm
-        reconcile = vm.get("reconcile")
-        marked_reconcile = dict(reconcile) if isinstance(reconcile, Mapping) else {}
-        marked_reconcile["durableMigration"] = True
-        marked_vm = dict(vm)
-        marked_vm["reconcile"] = marked_reconcile
-        owner_by_uid[uid] = marked_vm
-    return [(uid, owner_by_uid.get(uid, vm)) for uid, vm in owners]
+    return [owner for snapshot in snapshots if (owner := _owner_from_snapshot(snapshot)) is not None]
 
 
 def _requested_rollout_phase(raw: Mapping[str, Any], environment: str) -> str:
@@ -439,7 +418,11 @@ def _missing_cleanup_candidate(vm: Mapping[str, Any]) -> bool:
 def _active_migration_candidate(vm: Mapping[str, Any]) -> bool:
     reconcile = vm.get("reconcile")
     return isinstance(reconcile, Mapping) and (
-        isinstance(reconcile.get("migration"), Mapping) or reconcile.get("durableMigration") is True
+        isinstance(reconcile.get("migration"), Mapping)
+        or (
+            isinstance(reconcile.get("durableMigration"), str)
+            and _MIGRATION_ID.fullmatch(str(reconcile["durableMigration"])) is not None
+        )
     )
 
 
@@ -993,6 +976,7 @@ async def _replace_stopped_boot_image_drift(
             # Block proxy admission until the journaled soak completes. No
             # owner work can land on the candidate during the rollback window.
             "state": "migration_soaking",
+            "durableMigration": migration_id,
             "releaseId": release.release_id,
             "observedRelease": release.release_id,
             "observedImageDigest": release.image_digest,
@@ -1301,7 +1285,12 @@ async def reconcile_one(
                 return ReconcileResult(uid, "missing", cleanup_blocked_detail)
             return ReconcileResult(uid, "cleanup_pending", "GCE instance not found; waiting for terminal cleanup grace")
         durable_migration = None
-        if not isinstance(active_migration, Mapping) and reconcile_state.get("durableMigration") is True:
+        durable_migration_id = reconcile_state.get("durableMigration")
+        if (
+            not isinstance(active_migration, Mapping)
+            and isinstance(durable_migration_id, str)
+            and _MIGRATION_ID.fullmatch(durable_migration_id)
+        ):
             observed_instance_id = str(instance.get("id") or "")
             if observed_instance_id:
                 durable_migration = await asyncio.to_thread(
@@ -1309,6 +1298,7 @@ async def reconcile_one(
                     uid,
                     vm_name,
                     observed_instance_id,
+                    durable_migration_id,
                 )
         if (
             isinstance(durable_migration, Mapping)
