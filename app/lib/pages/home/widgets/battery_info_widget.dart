@@ -85,8 +85,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
   @override
   Widget build(BuildContext context) {
     return Selector<HomeProvider, bool>(
+      // Conversations (0) — the only tab carrying app-bar chrome. Only there
+      // does this expand into the full Connect + Record control; everywhere
+      // else it collapses to the battery pill.
+      // The chat tab is index 1 since the Convos/Chat swap. Only there does
+      // this expand into the full Connect + Record control.
       selector: (context, state) => state.selectedIndex == 0,
-      builder: (context, isMemoriesPage, child) {
+      builder: (context, isCaptureTab, child) {
         // Use Selector to only rebuild when battery level, connected device, or connecting state changes
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
         return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
@@ -154,7 +159,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   ),
                 ),
               );
-              if (!isMemoriesPage) return batteryPill;
+              if (!isCaptureTab) return batteryPill;
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -237,15 +242,15 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
-                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                          isConnecting && isMemoriesPage
+                          isCaptureTab ? const SizedBox(width: 6) : const SizedBox.shrink(),
+                          isConnecting && isCaptureTab
                               ? Text(
                                   context.l10n.searching,
                                   style: Theme.of(
                                     context,
                                   ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                                 )
-                              : isMemoriesPage
+                              : isCaptureTab
                                   ? Text(context.l10n.connect,
                                       style: const TextStyle(color: Colors.white, fontSize: 12))
                                   : const SizedBox.shrink(),
@@ -253,7 +258,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       ),
                     ),
                   ),
-                  if (isMemoriesPage)
+                  if (isCaptureTab)
                     Consumer<CaptureProvider>(
                       builder: (context, captureProvider, _) {
                         final isRecording = captureProvider.recordingState == RecordingState.record;

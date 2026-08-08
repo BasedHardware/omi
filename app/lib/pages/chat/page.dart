@@ -44,10 +44,13 @@ enum _ChatScrollMode { followingBottom, freeScrolling }
 
 /// Gap the embedded composer leaves for the bottom nav, which floats over the
 /// body rather than taking layout space. Sized to the bar's opaque strip (80)
-/// plus a small breathing gap, so the composer sits just clear of it — the
-/// position the composer lands in when focused, which is the one that reads
-/// right.
-const double _kEmbeddedComposerClearance = 88;
+/// plus a breathing gap, so the composer sits clear of it — the position the
+/// composer lands in when focused, which is the one that reads right.
+// The nav bar's opaque strip is 80. The extra 32 is deliberate breathing room,
+// not just clearance: with the composer sitting tight above the bar the two
+// read as a double-decker toolbar rather than as a control floating over
+// navigation.
+const double _kEmbeddedComposerClearance = 112;
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -645,9 +648,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 bottom: 7,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25),
+                                // Lighter than the nav bar below it (#0F0F0F) so
+                                // the composer reads as the primary control at
+                                // the bottom rather than a second toolbar of the
+                                // same weight.
+                                color: const Color(0xFF26262E),
                                 borderRadius: BorderRadius.circular(32),
-                                border: Border.all(color: const Color(0xFF35343B), width: 1),
+                                border: Border.all(color: const Color(0xFF3A3945), width: 1),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.65),

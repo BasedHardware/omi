@@ -918,6 +918,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
+  /// Leading icon of the summary pill. The pill is filled [_barSelected]
+  /// (white), so every fallback here has to be [_barOnSelected] — a white glyph
+  /// left over from the purple ramp is invisible, and the 28pt box it still
+  /// occupies is what pushes the label off centre.
   Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading) {
     const double size = 28;
 
@@ -925,7 +929,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return const SizedBox(
         width: size,
         height: size,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(_barOnSelected)),
       );
     }
 
@@ -935,7 +939,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         height: size,
         child: SvgPicture.asset(
           Assets.images.aiMagic,
-          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          colorFilter: const ColorFilter.mode(_barOnSelected, BlendMode.srcIn),
         ),
       );
     }
@@ -969,14 +973,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           height: size,
           child: SvgPicture.asset(
             Assets.images.aiMagic,
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+            colorFilter: const ColorFilter.mode(_barOnSelected, BlendMode.srcIn),
           ),
         );
       },
       placeholder: (context, url) => const SizedBox(
         width: size,
         height: size,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(_barOnSelected)),
       ),
     );
   }

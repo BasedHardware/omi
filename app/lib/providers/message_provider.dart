@@ -36,6 +36,16 @@ class MessageProvider extends ChangeNotifier {
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
+
+  // LOCAL-ONLY DEMO SEED — DO NOT COMMIT. See lib/dev_demo_data.dart.
+  // Also clears the loading flag: the chat renders its empty-state hero while
+  // loading, and fetching never resolves without a backend.
+  void seedDemoData(List<ServerMessage> demo) {
+    messages = List.of(demo);
+    isLoadingMessages = false;
+    notifyListeners();
+  }
+
   bool _isNextMessageFromVoice = false;
 
   final AgentChatService _agentChatService = AgentChatService();

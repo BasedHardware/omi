@@ -149,16 +149,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _scrollToTop(int pageIndex) {
     switch (pageIndex) {
-      // 0 is the chat — it follows the live edge on its own, and yanking a
-      // reader back to the top of a conversation is not what "tap the tab
-      // again" should mean.
       case 0:
-        break;
-      case 1:
         final conversationsState = _conversationsPageKey.currentState;
         if (conversationsState != null) {
           (conversationsState as dynamic).scrollToTop();
         }
+        break;
+      // 1 is the chat — it follows the live edge on its own, and yanking a
+      // reader back to the top of a conversation is not what "tap the tab
+      // again" should mean.
+      case 1:
         break;
       // 2 is the Brain graph — pan/zoom, nothing to scroll.
       case 3:
@@ -253,6 +253,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     _pages = [
+      ConversationsPage(key: _conversationsPageKey),
       // Home *is* the chat. Tapping the composer used to push ChatPage as a
       // route — a leftover from when Chat was its own nav tab (the tap still
       // fired bottomNavigationTabClicked('Chat')). It now lives here, so asking
@@ -272,7 +273,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
         ),
       ),
-      ConversationsPage(key: _conversationsPageKey),
       // Brain tab. BrainPage paints no background, inheriting this Scaffold's;
       // it passes embedded/trackOpenEvent through to MemoryGraphPage (the host
       // Scaffold supplies the app bar, and IndexedStack builds this at launch so
@@ -772,7 +772,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       },
                     ),
                     // Merge action bar - floats above bottom nav when in selection mode
-                    if (homeProvider.selectedIndex == 1)
+                    if (homeProvider.selectedIndex == 0)
                       const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
                     // Task selection action bar - floats above bottom nav on the
                     // tasks tab when selection mode is active in ActionItemsProvider.
@@ -795,8 +795,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   /// Conversations keeps its calendar button — only the device status chip and
   /// the settings gear drop away. Tasks and Apps each carry their own controls
   /// next to their search field, so they need neither.
-  static bool _hidesAppBarChrome(int selectedIndex) =>
-      selectedIndex == 1 || selectedIndex == 2 || selectedIndex == 3 || selectedIndex == 4;
+  // Only Conversations (0) carries app-bar chrome — the device status chip
+  // (Connect/Record) and the settings gear. Chat (1), Brain (2), Tasks (3) and
+  // Conversations (0) is the only tab that carries app-bar chrome — the
+  // Connect/Record capture control and the settings gear. Chat (1) is a
+  // composer surface where those competed with the hero; Brain (2), Tasks (3)
+  // and Apps (4) render their own headers.
+  //
+  // BatteryInfoWidget gates on the same index independently — keep the two in
+  // step or the bar shows but the control inside it stays collapsed.
+  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex != 0;
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     // Tabs in [_hidesAppBarChrome] render no app bar content of their own, and
@@ -804,10 +812,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // a full-height bar leaves an empty band above the page's own headline —
     // so collapse it to zero rather than reserve space for nothing.
     final selectedIndex = context.watch<HomeProvider>().selectedIndex;
-    final showsSyncButton = selectedIndex == 1 &&
+    final showsSyncButton = selectedIndex == 0 &&
         (context.watch<DeviceProvider>().pairedDevice != null ||
             context.watch<SyncProvider>().missingWalsOnDevice.isNotEmpty);
-    final showsCalendarButton = selectedIndex == 1 && context.watch<ConversationProvider>().selectedDate != null;
+    final showsCalendarButton = selectedIndex == 0 && context.watch<ConversationProvider>().selectedDate != null;
     final isBarEmpty = _hidesAppBarChrome(selectedIndex) && !showsSyncButton && !showsCalendarButton;
 
     return AppBar(
@@ -837,7 +845,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   final isSyncing = syncProvider.isSyncing;
 
                   // Show sync icon only on Conversations tab and if there's a paired device OR if there are pending files on device
-                  if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice)) {
+                  if (homeProvider.selectedIndex == 0 && (device != null || hasPendingOnDevice)) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
@@ -875,7 +883,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               // lives inline with the folder chips (see FolderTabs).
               Consumer2<HomeProvider, ConversationProvider>(
                 builder: (context, homeProvider, convoProvider, _) {
-                  if (homeProvider.selectedIndex != 1) {
+                  if (homeProvider.selectedIndex != 0) {
                     return const SizedBox.shrink();
                   }
 

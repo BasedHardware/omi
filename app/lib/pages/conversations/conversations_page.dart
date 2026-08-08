@@ -320,7 +320,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 // filters.
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 28, 16, 16),
+                    // Bottom is 4, not 16: every conversation card adds its own
+                    // 12 of top padding (that is what spaces the cards apart),
+                    // so 4 + 12 lands the first card the same 16 below this
+                    // heading that the recaps cards sit below theirs.
+                    padding: const EdgeInsets.fromLTRB(16, 28, 16, 4),
                     child: Consumer2<FolderProvider, ConversationProvider>(
                       builder: (context, folderProvider, convoProvider, _) => Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
