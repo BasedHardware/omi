@@ -68,31 +68,54 @@ final class MemoryAtlasEvidenceNavigationTests: XCTestCase {
       "The evidence row needs an identifier for cursor-free verification")
   }
 
-  func testStaticCheckerTheHubOnlyLeavesTheGraphOnceTheMemoryIsOpen() throws {
-    // STATIC CHECKER. The canonical hub supplies its leave action to the map.
-    // Calling it before the cached memory opens would strand the user on the
-    // Memories page with an empty panel whenever a citation is not on this device.
-    let source = try homeSource()
-    guard let destination = source.range(of: "private struct CanonicalBrainMapDestination: View, Equatable {") else {
-      return XCTFail("The hub must route cited memories through its canonical destination")
-    }
-    let body = String(source[destination.lowerBound...].prefix(2_000))
+  /// The hub hands the map a leave action. Running it before the cached memory
+  /// opens strands the user on the Memories page with an empty detail panel —
+  /// the routine outcome for a citation that is not on this device.
+  func testAMemoryThatIsNotOnThisDeviceKeepsTheUserOnTheGraph() async throws {
+    let viewModel = MemoriesViewModel()
+    let leaves = LeaveRecorder()
 
-    guard
-      let guardProbe = body.range(of: "guard await memoriesViewModel.openMemory(id: memoryID)"),
-      let leaveProbe = body.range(of: "onLeave()")
-    else {
-      return XCTFail("The hub must open the memory and then leave the graph")
+    await MemoryAtlasCitationOpen.open(id: "never-synced", in: viewModel, leave: leaves.record)
+
+    XCTAssertEqual(leaves.count, 0, "A failed open must not leave the graph")
+    XCTAssertNil(viewModel.selectedMemory)
+  }
+
+  func testOpeningACitedMemorySucceedsBeforeTheGraphIsLeft() async throws {
+    let viewModel = MemoriesViewModel()
+    try await MemoryStorage.shared.syncServerMemories([
+      makeMemory(id: "cited-1", content: "the cited memory")
+    ])
+    viewModel.memories = []
+    let leaves = LeaveRecorder()
+    leaves.bind(viewModel)
+
+    await MemoryAtlasCitationOpen.open(id: "cited-1", in: viewModel, leave: leaves.record)
+
+    XCTAssertEqual(leaves.count, 1, "A successful open must leave the graph exactly once")
+    XCTAssertEqual(
+      leaves.selectedMemoryIDAtLeave, "cited-1",
+      "The memory must already be open when the graph is left")
+  }
+
+  /// Records the leave callback and, at that instant, what the Memories page
+  /// was showing — the ordering is the thing under test.
+  @MainActor
+  private final class LeaveRecorder {
+    private(set) var count = 0
+    private(set) var selectedMemoryIDAtLeave: String?
+    private weak var viewModel: MemoriesViewModel?
+
+    func bind(_ viewModel: MemoriesViewModel) { self.viewModel = viewModel }
+
+    func record() {
+      count += 1
+      selectedMemoryIDAtLeave = viewModel?.selectedMemory?.id
     }
-    XCTAssertLessThan(guardProbe.lowerBound, leaveProbe.lowerBound)
   }
 
   private func atlasSource() throws -> String {
     try read("Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift")
-  }
-
-  private func homeSource() throws -> String {
-    try read("Sources/MainWindow/DesktopHomeView.swift")
   }
 
   private func read(_ relativePath: String) throws -> String {

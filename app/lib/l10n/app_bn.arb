@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "আপনার প্ল্যান {date} এ নবায়ন হয়।",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "বিনামূল্যে পরিকল্পনা",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,22 @@
     "whisperModelSizeLarge": "বড়",
     "whisperModelSizeMedium": "মাঝারি",
     "whisperModelSizeSmall": "ছোট",
-    "whisperModelSizeTiny": "অতি ছোট"
+    "whisperModelSizeTiny": "অতি ছোট",
+    "planSheetChooseYourPlan": "সীমাহীন Omi আনলক করতে আপনার প্ল্যান বেছে নিন।",
+    "availableOnMacMobileWeb": "Mac, মোবাইল এবং ওয়েবে উপলব্ধ",
+    "popularBadge": "জনপ্রিয়",
+    "worksOnDesktop": "ডেস্কটপে কাজ করে",
+    "noDesktopAccess": "ডেস্কটপে কাজ করে না",
+    "annualBillingSummary": "{months} মাস / {price}",
+    "monthsFreeBadge": "{count, plural, =1{১ মাস ফ্রি} other{{count} মাস ফ্রি}}",
+    "freemiumLimitsIntro": "Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:",
+    "downgradeLimitDelayNotRealTime": "৫-৭ সেকেন্ড বিলম্ব (রিয়েল-টাইম নয়)",
+    "downgradeToFreemiumAction": "ফ্রি সংস্করণে নেমে যান",
+    "getFreeUnlimitedAccess": "ফ্রি আনলিমিটেড অ্যাক্সেস পান",
+    "shareDataForTraining": "প্রশিক্ষণের জন্য ডেটা শেয়ার করুন",
+    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন",
+    "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
+    "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
+    "baselineMemory": "বেসলাইন মেমরি",
+    "alwaysInContext": "সর্বদা প্রসঙ্গে"
 }

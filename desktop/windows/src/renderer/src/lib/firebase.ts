@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth'
 import { teardownUserData } from './authTeardown'
 import { encryptedAuthPersistence, scrubLegacyPlaintextAuth } from './encryptedAuthPersistence'
+import type { SignInProvider } from '../../../shared/types'
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -50,18 +51,18 @@ onAuthStateChanged(auth, () => {
 })
 
 /**
- * Google sign-in via the backend-mediated OAuth flow in the SYSTEM browser.
+ * Google or Apple sign-in via the backend-mediated OAuth flow in the SYSTEM browser.
  * The main process runs the whole PKCE + loopback dance (Google blocks OAuth
  * inside embedded webviews, so the old signInWithPopup path is gone for good)
  * and hands back a Firebase CUSTOM token; from signInWithCustomToken on,
  * persistence and onAuthStateChanged behave exactly as before.
  */
-export async function signInWithGoogle(): Promise<User> {
-  const result = await window.omi.signInWithGoogle()
+export async function signInWithProvider(provider: SignInProvider): Promise<User> {
+  const result = await window.omi.signInWithProvider(provider)
   if (!result.ok) throw new Error(result.error)
   const cred = await signInWithCustomToken(auth, result.customToken)
   // Custom-token sessions can start with an empty displayName (fresh Firebase
-  // user record); best-effort seed it from the Google profile claims so the
+  // user record); best-effort seed it from the provider profile claims so the
   // sidebar/home greeting show a name immediately.
   const name = [result.givenName, result.familyName].filter(Boolean).join(' ')
   if (name && !cred.user.displayName) {

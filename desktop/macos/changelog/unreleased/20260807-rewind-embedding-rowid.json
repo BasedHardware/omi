@@ -1,0 +1,3 @@
+{
+  "change": "Fixed screen-history semantic search missing everything captured after the initial backfill \u2014 newly captured frames were never queued for embedding"
+}

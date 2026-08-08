@@ -290,6 +290,39 @@ def test_v2_qualifiers_never_project_as_nodes_or_edges():
     ]
 
 
+def test_v2_assertion_remains_readable_when_item_retains_legacy_arguments():
+    subject = canonical_graph_entity_id("Alpha")
+    object_id = canonical_graph_entity_id("Beta")
+    assertion = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-v2-legacy-item-arguments",
+        item_revision=1,
+        content_hash="hash-v2-legacy-item-arguments",
+        evidence_ids=["ev-v2-legacy-item-arguments"],
+        graph_plan=PromotionGraphPlan(
+            schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+            subject_entity_id=subject,
+            predicate="depends_on",
+            subject=GraphRelationEndpoint(entity_id=subject, label="Alpha", node_type="organization"),
+            object=GraphRelationEndpoint(entity_id=object_id, label="Beta", node_type="organization"),
+            qualifiers={},
+        ),
+        commit_id="commit-v2-legacy-item-arguments",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Seattle"})))
+
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == [assertion]
+
+
+def test_v1_assertion_still_requires_matching_item_arguments():
+    assertion = _assertion()
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, arguments={"location": "Portland"})))
+
+    assert kg_db.get_active_memory_graph_assertions(UID, db_client=db) == []
+
+
 @pytest.mark.parametrize(
     "item_override",
     [

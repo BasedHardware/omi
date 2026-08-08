@@ -240,7 +240,6 @@
     "unlimitedPlan": "无限套餐",
     "managePlan": "管理套餐",
     "cancelAtPeriodEnd": "您的套餐将于 {date} 结束。",
-    "renewsOn": "您的套餐将于 {date} 续订。",
     "basicPlan": "免费套餐",
     "usageLimitMessage": "已使用 {used} / {limit} 分钟",
     "upgrade": "升级",
@@ -3218,5 +3217,18 @@
     "whisperModelSizeLarge": "大型",
     "whisperModelSizeMedium": "中型",
     "whisperModelSizeSmall": "小型",
-    "whisperModelSizeTiny": "微型"
+    "whisperModelSizeTiny": "微型",
+    "planSheetChooseYourPlan": "选择你的方案，解锁无限 Omi。",
+    "availableOnMacMobileWeb": "支持 Mac、手机和网页",
+    "popularBadge": "热门",
+    "worksOnDesktop": "支持桌面端",
+    "noDesktopAccess": "不支持桌面端",
+    "annualBillingSummary": "{months} 个月 / {price}",
+    "monthsFreeBadge": "{count, plural, =1{免费 1 个月} other{免费 {count} 个月}}",
+    "freemiumLimitsIntro": "Omi 是免费的，但免费版存在一些会影响体验的限制：",
+    "downgradeLimitDelayNotRealTime": "5-7 秒延迟（非实时）",
+    "downgradeToFreemiumAction": "降级到免费版",
+    "getFreeUnlimitedAccess": "免费获取无限访问权限",
+    "shareDataForTraining": "共享数据用于训练",
+    "yourRequestUnderReview": "你的申请正在审核中"
 }

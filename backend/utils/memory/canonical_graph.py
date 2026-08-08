@@ -309,24 +309,24 @@ def _build_canonical_graph_items_query(
 
 
 def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Represent a durable canonical memory without inventing a relationship.
+    """Represent every durable canonical memory without inventing a relationship.
 
-    Historical rows may predate the graph-assertion contract.  They remain
-    authoritative memory facts, so the atlas includes them as isolated memory
-    nodes while assertion-backed relationships stay exclusively in the fenced
-    graph records below.
+    The catalog is the one-to-one memory browser. Assertion-backed entities and
+    relationships remain exclusively in the fenced graph records below, so the
+    atlas never needs to infer a relationship merely to show a memory.
     """
     content = item.get('content')
     memory_id = item.get('memory_id')
     updated_at = item.get('updated_at')
-    if (
-        not isinstance(content, str)
-        or not content.strip()
-        or not isinstance(memory_id, str)
-        or not isinstance(updated_at, datetime)
-    ):
+    if not isinstance(content, str) or not isinstance(memory_id, str) or not isinstance(updated_at, datetime):
         return None
     label = ' '.join(content.split())
+    # Eligibility, authority, and access are decided before presentation. A
+    # historical item with blank source text is still a canonical memory; do
+    # not erase it from the user's one-to-one browser merely because it has no
+    # safe text to display. The fallback makes no semantic claim or edge.
+    if not label:
+        label = 'Untitled canonical memory'
     return {
         'id': f'memory:{memory_id}',
         'label': label[:240],
@@ -406,14 +406,11 @@ def _read_canonical_graph_page_once(
                     account_generation=revision.account_generation,
                     db_client=client,
                 )
-                assertion_memory_ids = {assertion.memory_id for assertion in loaded_assertions}
                 for assertion in loaded_assertions:
                     accepted_assertions.append(assertion)
                     visible_memory_ids.add(assertion.memory_id)
                 for item in eligible_batch:
                     memory_id = cast(str, item['memory_id'])
-                    if memory_id in assertion_memory_ids:
-                        continue
                     catalog_node = _canonical_memory_catalog_node(item)
                     if catalog_node is not None:
                         catalog_nodes.append(catalog_node)
