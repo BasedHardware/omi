@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { InvalidMcpCursorError } from "./cursor";
 import {
   createMcpProtocolHandler,
   MCP_PROTOCOL_VERSION,
@@ -16,13 +17,12 @@ type Counters = {
   authenticate: number;
   authorize: number;
   rateLimit: number;
-  cursorParse: number;
-  cursorIssue: number;
   readPage: number;
   validatePage: number;
   reauthorizeBeforeEmission: number;
   order: string[];
   rateInputs: Array<Record<string, unknown>>;
+  readInputs: Array<{ authorization: unknown; cursor: string | null; limit: number }>;
 };
 
 type FixtureOptions = {
@@ -33,7 +33,7 @@ type FixtureOptions = {
   transportRateAllowed?: boolean;
   readRateAllowed?: boolean;
   reauthorize?: boolean;
-  cursorFailure?: boolean;
+  readPageError?: unknown;
   validatedPage?: string | null;
   uid?: string;
   app_id?: string;
@@ -50,13 +50,12 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
     authenticate: 0,
     authorize: 0,
     rateLimit: 0,
-    cursorParse: 0,
-    cursorIssue: 0,
     readPage: 0,
     validatePage: 0,
     reauthorizeBeforeEmission: 0,
     order: [],
     rateInputs: [],
+    readInputs: [],
   };
   const credential: McpCredential = {
     kind: "mcp_api_key",
@@ -66,15 +65,6 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
       uid: options.uid ?? "owner-1",
       app_id: options.app_id ?? "app-1",
       key_id: options.key_id ?? "key-1",
-    },
-    cursorBindings: {
-      ownerAuthorizationDigest: "owner-digest",
-      appAuthorizationDigest: "app-digest",
-      keyAuthorizationDigest: "key-digest",
-      graphGenerationDigest: "graph-digest",
-      projectionGenerationDigest: "projection-digest",
-      filterDigest: "filter-digest",
-      readModeDigest: "mode-digest",
     },
     authentication: { internalOnly: true },
   };
@@ -116,11 +106,16 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
       },
       async readPage(input) {
         counters.readPage += 1;
-        counters.order.push(`readPage:${input.afterVisibleKey ?? "start"}`);
-        return {
-          ...page,
-          window: { nextCursor: input.issueCursor("opaque-visible-key-2") },
-        };
+        counters.order.push(`readPage:${input.cursor ?? "start"}`);
+        counters.readInputs.push({
+          authorization: input.authorization,
+          cursor: input.cursor,
+          limit: input.limit,
+        });
+        if (options.readPageError !== undefined) {
+          throw options.readPageError;
+        }
+        return page;
       },
       validatePage(value) {
         counters.validatePage += 1;
@@ -131,21 +126,6 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
         counters.reauthorizeBeforeEmission += 1;
         counters.order.push("reauthorizeBeforeEmission");
         return options.reauthorize !== false;
-      },
-      cursor: {
-        parse(input) {
-          counters.cursorParse += 1;
-          counters.order.push(`cursorParse:${input.cursor}`);
-          if (options.cursorFailure || input.cursor === "bad-cursor") {
-            throw new Error("invalid cursor");
-          }
-          return { lastVisibleKey: "opaque-visible-key-1" };
-        },
-        issue(input) {
-          counters.cursorIssue += 1;
-          counters.order.push(`cursorIssue:${input.lastVisibleKey}`);
-          return `signed:${input.lastVisibleKey}`;
-        },
       },
     },
   };
@@ -468,14 +448,15 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(malformedDecision.counters.readPage).toBe(0);
   });
 
-  test("T5 validates cursor dependency output before it reaches readPage", async () => {
-    for (const malformed of [null, {}, { lastVisibleKey: "" }, { lastVisibleKey: "opaque", smuggled: true }]) {
+  test("T5 rejects malformed cursor syntax before authorization or readPage", async () => {
+    for (const malformed of ["", "   ", "x".repeat(4097), 7]) {
       const dependency = fixture();
-      dependency.ports.cursor.parse = () => malformed as never;
-      const response = await createMcpProtocolHandler(dependency.ports).handleHttp(callRequest({ cursor: "opaque-cursor" }));
+      const response = await createMcpProtocolHandler(dependency.ports).handleHttp(
+        callRequest({ cursor: malformed }),
+      );
       expect(response.status).toBe(400);
       expect(errorCode(response)).toBe(-32602);
-      expect(dependency.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+      expect(dependency.counters).toMatchObject({ authorize: 0, readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
     }
   });
 
@@ -499,15 +480,6 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
       kind: "mcp_api_key" as const,
       scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
       rateLimitKey: { prefix: "mcp" as const, uid: "owner-1", app_id: "app-1", key_id: "key-1" },
-      cursorBindings: {
-        ownerAuthorizationDigest: "owner-digest",
-        appAuthorizationDigest: "app-digest",
-        keyAuthorizationDigest: "key-digest",
-        graphGenerationDigest: "graph-digest",
-        projectionGenerationDigest: "projection-digest",
-        filterDigest: "filter-digest",
-        readModeDigest: "mode-digest",
-      },
       authentication: { adapterOnly: true },
     } satisfies McpCredential;
     let authorizedCredential: McpCredential | undefined;
@@ -533,6 +505,7 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(authorizedCredential?.scopes).toEqual([SYNTHESIZED_MEMORY_READ_SCOPE]);
     expect(authorizedCredential?.rateLimitKey.key_id).toBe("key-1");
     expect((authorizedCredential?.authentication as { adapterOnly: boolean }).adapterOnly).toBe(true);
+    expect(Object.hasOwn(authorizedCredential as object, "cursorBindings")).toBe(false);
     expect(Object.isFrozen(authorizedCredential)).toBe(true);
     expect(Object.isFrozen(authorizedCredential?.rateLimitKey)).toBe(true);
   });
@@ -543,15 +516,6 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     const credentialWithAccessor = {
       kind: "mcp_api_key",
       scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
-      cursorBindings: {
-        ownerAuthorizationDigest: "owner-digest",
-        appAuthorizationDigest: "app-digest",
-        keyAuthorizationDigest: "key-digest",
-        graphGenerationDigest: "graph-digest",
-        projectionGenerationDigest: "projection-digest",
-        filterDigest: "filter-digest",
-        readModeDigest: "mode-digest",
-      },
       authentication: { adapterOnly: true },
     };
     Object.defineProperty(credentialWithAccessor, "rateLimitKey", {
@@ -588,6 +552,52 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(authorizationDependency.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
   });
 
+  test("T7c rejects credential and authorization proxies without invoking their traps", async () => {
+    const credentialDependency = fixture();
+    let credentialTrapCalls = 0;
+    const credentialProxy = new Proxy({
+      kind: "mcp_api_key",
+      scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
+      rateLimitKey: { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "key-1" },
+      authentication: { adapterOnly: true },
+    }, {
+      getPrototypeOf() {
+        credentialTrapCalls += 1;
+        return Object.prototype;
+      },
+      ownKeys() {
+        credentialTrapCalls += 1;
+        return [];
+      },
+    });
+    credentialDependency.ports.authenticate = async () => credentialProxy as never;
+    const credentialResponse = await createMcpProtocolHandler(credentialDependency.ports).handleHttp(callRequest());
+    expect(credentialResponse.status).toBe(401);
+    expect(credentialTrapCalls).toBe(0);
+    expect(credentialDependency.counters).toMatchObject({ rateLimit: 0, authorize: 0, readPage: 0 });
+
+    const authorizationDependency = fixture();
+    let authorizationTrapCalls = 0;
+    const authorizationProxy = new Proxy({
+      allowed: true,
+      readAuthorization: { readToken: "safe" },
+    }, {
+      getPrototypeOf() {
+        authorizationTrapCalls += 1;
+        return Object.prototype;
+      },
+      ownKeys() {
+        authorizationTrapCalls += 1;
+        return [];
+      },
+    });
+    authorizationDependency.ports.authorize = async () => authorizationProxy;
+    const authorizationResponse = await createMcpProtocolHandler(authorizationDependency.ports).handleHttp(callRequest());
+    expect(errorCode(authorizationResponse)).toBe(-32602);
+    expect(authorizationTrapCalls).toBe(0);
+    expect(authorizationDependency.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+  });
+
   test("T8 returns a fresh tool descriptor graph for each tools/list response", async () => {
     const handler = createMcpProtocolHandler(fixture().ports);
     const first = await handler.handleHttp(listRequest());
@@ -600,68 +610,84 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(secondTool.inputSchema.properties.cursor.minLength).toBe(1);
   });
 
-  test("U0 passes a valid parsed cursor to readPage", async () => {
+  test("U0 passes syntactically valid cursor bytes to readPage unchanged after auth and rate gates", async () => {
     const { ports, counters } = fixture();
+    const cursor = "mcp1.opaque-payload.opaque-signature";
 
     const response = await createMcpProtocolHandler(ports).handleHttp(
-      callRequest({ cursor: "opaque-cursor" }),
+      callRequest({ cursor, limit: 37 }),
     );
 
     expect(response.status).toBe(200);
-    expect(counters).toMatchObject({ cursorParse: 1, readPage: 1 });
-    expect(counters.order).toContain("readPage:opaque-visible-key-1");
+    expect(counters.readPage).toBe(1);
+    expect(counters.readInputs).toEqual([{
+      authorization: { internalOnly: true },
+      cursor,
+      limit: 37,
+    }]);
+    expect(Object.keys(counters.readInputs[0]).sort()).toEqual(["authorization", "cursor", "limit"]);
+    expect(counters.order).toEqual([
+      "authenticate:mcp_api_key",
+      "rateLimit:mcp:sse:key-1",
+      "authorize",
+      `rateLimit:${SYNTHESIZED_MEMORY_READ_RATE_POLICY}:key-1`,
+      `readPage:${cursor}`,
+      "validatePage",
+      "reauthorizeBeforeEmission",
+    ]);
   });
 
-  test("U1 rejects malformed cursors after the gate and before data access", async () => {
-    const { ports, counters } = fixture({ cursorFailure: true });
-    const response = await createMcpProtocolHandler(ports).handleHttp(callRequest({ cursor: "bad-cursor" }));
+  test("U1 maps only readPage InvalidMcpCursorError failures to the uniform invalid-cursor response", async () => {
+    const first = fixture({ readPageError: new InvalidMcpCursorError() });
+    const second = fixture({ readPageError: new InvalidMcpCursorError() });
+    const firstResponse = await createMcpProtocolHandler(first.ports).handleHttp(
+      callRequest({ cursor: "well-shaped-but-invalid-a" }, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }),
+    );
+    const secondResponse = await createMcpProtocolHandler(second.ports).handleHttp(
+      callRequest({ cursor: "well-shaped-but-invalid-b" }, SYNTHESIZED_MEMORY_READ_TOOL, { id: "same" }),
+    );
 
-    expect(response.status).toBe(400);
-    expect(errorCode(response)).toBe(-32602);
-    expect(counters).toMatchObject({ cursorParse: 1, readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    expect(firstResponse.status).toBe(400);
+    expect(errorCode(firstResponse)).toBe(-32602);
+    expect(rpcBody(firstResponse)).toEqual(rpcBody(secondResponse));
+    expect(first.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    expect(second.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
   });
 
-  test("U2 rejects unknown credential and cursor-binding fields before authorization", async () => {
+  test("U1b keeps non-cursor readPage failures internal", async () => {
+    const failure = fixture({ readPageError: new Error("storage unavailable") });
+    const response = await createMcpProtocolHandler(failure.ports).handleHttp(
+      callRequest({ cursor: "well-shaped-cursor" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(errorCode(response)).toBe(-32603);
+    expect(failure.counters).toMatchObject({ readPage: 1, validatePage: 0, reauthorizeBeforeEmission: 0 });
+  });
+
+  test("U2 rejects credential extras, including auth-time cursor state, before authorization", async () => {
     const unknownCredential = fixture();
     unknownCredential.ports.authenticate = async () => ({
       kind: "mcp_api_key",
       scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
       rateLimitKey: { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "key-1", extra: "reject" },
-      cursorBindings: {
-        ownerAuthorizationDigest: "owner-digest",
-        appAuthorizationDigest: "app-digest",
-        keyAuthorizationDigest: "key-digest",
-        graphGenerationDigest: "graph-digest",
-        projectionGenerationDigest: "projection-digest",
-        filterDigest: "filter-digest",
-        readModeDigest: "mode-digest",
-      },
       authentication: null,
     } as never);
     const credentialResponse = await createMcpProtocolHandler(unknownCredential.ports).handleHttp(callRequest());
     expect(credentialResponse.status).toBe(401);
     expect(unknownCredential.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
 
-    const unknownBindings = fixture();
-    unknownBindings.ports.authenticate = async () => ({
+    const authTimeCursorState = fixture();
+    authTimeCursorState.ports.authenticate = async () => ({
       kind: "mcp_api_key",
       scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
       rateLimitKey: { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "key-1" },
-      cursorBindings: {
-        ownerAuthorizationDigest: "owner-digest",
-        appAuthorizationDigest: "app-digest",
-        keyAuthorizationDigest: "key-digest",
-        graphGenerationDigest: "graph-digest",
-        projectionGenerationDigest: "projection-digest",
-        filterDigest: "filter-digest",
-        readModeDigest: "mode-digest",
-        extra: "reject",
-      },
+      cursorBindings: { dishonestAuthTimeStub: true },
       authentication: null,
     } as never);
-    const bindingResponse = await createMcpProtocolHandler(unknownBindings.ports).handleHttp(callRequest());
-    expect(bindingResponse.status).toBe(401);
-    expect(unknownBindings.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
+    const cursorStateResponse = await createMcpProtocolHandler(authTimeCursorState.ports).handleHttp(callRequest());
+    expect(cursorStateResponse.status).toBe(401);
+    expect(authTimeCursorState.counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
   });
 
   test("S3 leaves a hidden and unknown tool indistinguishable to an unscoped caller", async () => {

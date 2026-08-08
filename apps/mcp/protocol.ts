@@ -1,3 +1,7 @@
+import { isProxy } from "node:util/types";
+
+import { InvalidMcpCursorError } from "./cursor";
+
 /**
  * Stateless MCP 2026-07-28 HTTP/JSON-RPC seam.
  *
@@ -29,20 +33,6 @@ export const SYNTHESIZED_MEMORY_READ_DEPENDENCY: McpScopedDependency = Object.fr
   log_on_failure: true,
 });
 
-export interface CursorBindings {
-  readonly ownerAuthorizationDigest: string;
-  // domain-pending(DIV-DOMAPPS-001): "app" remains a legacy public label
-  // while its plugin-era persistence terminology is unresolved.
-  // domain-pending(DIV-DOMAPPS-006): this transport receives digests only.
-  readonly appAuthorizationDigest: string;
-  // domain-pending(DIV-DOMAPPS-006): see appAuthorizationDigest above.
-  readonly keyAuthorizationDigest: string;
-  readonly graphGenerationDigest: string;
-  readonly projectionGenerationDigest: string;
-  readonly filterDigest: string;
-  readonly readModeDigest: string;
-}
-
 export interface McpCredentialRateLimitKey {
   readonly prefix: "mcp";
   readonly uid: string;
@@ -60,7 +50,6 @@ export interface McpCredential {
   readonly kind: "mcp_api_key";
   readonly scopes: readonly string[];
   readonly rateLimitKey: McpCredentialRateLimitKey;
-  readonly cursorBindings: CursorBindings;
   readonly authentication: unknown;
 }
 
@@ -117,11 +106,18 @@ export interface McpProtocolPorts {
   }): Promise<AuthorizationDecision>;
   /** FEAT-AUTH-013's exact per-credential tuple; no opaque shared bucket. */
   rateLimit(input: McpRateLimitInput): Promise<RateLimitDecision>;
+  /**
+   * The coherent read composition owns cursor verification and
+   * issuance. Only that layer has the complete authorization, projection,
+   * commit, source, and frontier snapshot needed by the 15-field cursor
+   * binding. The transport forwards the syntactically bounded client bytes
+   * unchanged and translates only `InvalidMcpCursorError` to the public
+   * invalid-cursor response.
+   */
   readPage(input: {
     readonly authorization: unknown;
-    readonly afterVisibleKey: string | null;
+    readonly cursor: string | null;
     readonly limit: number;
-    readonly issueCursor: (lastVisibleKey: string) => string;
   }): Promise<unknown>;
   /**
    * The Track 1 contract parser validates once and returns the bounded,
@@ -133,10 +129,6 @@ export interface McpProtocolPorts {
     readonly credential: McpCredential;
     readonly tool: McpToolDefinition;
   }): Promise<boolean>;
-  cursor: {
-    parse(input: { readonly cursor: string; readonly bindings: CursorBindings }): { readonly lastVisibleKey: string };
-    issue(input: { readonly lastVisibleKey: string; readonly bindings: CursorBindings }): string;
-  };
 }
 
 export interface McpHttpRequest {
@@ -293,31 +285,17 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
     return rpcHttp(200, readRate);
   }
 
-  let afterVisibleKey: string | null = null;
-  if (call.cursor !== undefined) {
-    try {
-      const parsedCursor = snapshotCursorParseResult(ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings }));
-      if (parsedCursor === null) {
-        return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
-      }
-      afterVisibleKey = parsedCursor.lastVisibleKey;
-    } catch {
-      return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
-    }
-  }
-
   let page: unknown;
   try {
     page = await ports.readPage({
       authorization: gate.authorization.readAuthorization,
-      afterVisibleKey,
+      cursor: call.cursor ?? null,
       limit: call.limit,
-      issueCursor: (lastVisibleKey) => ports.cursor.issue({
-        lastVisibleKey,
-        bindings: credential.cursorBindings,
-      }),
     });
-  } catch {
+  } catch (caught) {
+    if (caught instanceof InvalidMcpCursorError) {
+      return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
+    }
     return rpcHttp(200, error(rpc.id, -32603, "Internal error"));
   }
 
@@ -558,25 +536,13 @@ function headerMismatch(message: string): { status: 400; code: -32020; message: 
 }
 
 function isCredential(value: unknown): value is McpCredential {
-  if (!isRecord(value) || !hasExactKeys(value, ["kind", "scopes", "rateLimitKey", "cursorBindings", "authentication"])) {
+  if (!isRecord(value) || !hasExactKeys(value, ["kind", "scopes", "rateLimitKey", "authentication"])) {
     return false;
   }
   if (value.kind !== "mcp_api_key" || !Array.isArray(value.scopes) || !value.scopes.every(isNonEmptyString)) {
     return false;
   }
-  if (!isCredentialRateLimitKey(value.rateLimitKey) || !isRecord(value.cursorBindings)) {
-    return false;
-  }
-  const bindings = value.cursorBindings;
-  return hasExactKeys(bindings, [
-    "ownerAuthorizationDigest",
-    "appAuthorizationDigest",
-    "keyAuthorizationDigest",
-    "graphGenerationDigest",
-    "projectionGenerationDigest",
-    "filterDigest",
-    "readModeDigest",
-  ]) && Object.values(bindings).every(isNonEmptyString);
+  return isCredentialRateLimitKey(value.rateLimitKey);
 }
 
 /** Snapshot once after authentication so downstream ports cannot race its tuple. */
@@ -628,17 +594,6 @@ function snapshotRateLimitDecision(value: unknown): RateLimitDecision | null {
     return null;
   }
   return retryAfterSeconds === undefined ? { allowed: false } : { allowed: false, retryAfterSeconds: retryAfterSeconds as number };
-}
-
-function snapshotCursorParseResult(value: unknown): { readonly lastVisibleKey: string } | null {
-  const snapshot = detachDependencyData(value);
-  return snapshot !== DETACH_FAILED
-    && isRecord(snapshot)
-    && hasExactKeys(snapshot, ["lastVisibleKey"])
-    && isNonEmptyString(snapshot.lastVisibleKey)
-    && snapshot.lastVisibleKey.length <= 4096
-    ? snapshot as { readonly lastVisibleKey: string }
-    : null;
 }
 
 function isBoundedJsonSnapshot(value: unknown): value is string {
@@ -839,6 +794,9 @@ function detachDependencyData(value: unknown): unknown | typeof DETACH_FAILED {
 function detachPlainData(value: unknown, depth: number): unknown {
   if (depth > 64) {
     throw new TypeError("Dependency result is too deeply nested");
+  }
+  if (typeof value === "object" && value !== null && isProxy(value)) {
+    throw new TypeError("Dependency result contains a proxy");
   }
   if (value === null || typeof value === "string" || typeof value === "boolean") {
     return value;
