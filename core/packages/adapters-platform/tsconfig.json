@@ -13,15 +13,6 @@
     },
     {
       "path": "../kernel"
-    },
-    {
-      "path": "../sync"
-    },
-    {
-      "path": "../adapters-legacy"
-    },
-    {
-      "path": "../adapters-platform"
     }
   ]
 }

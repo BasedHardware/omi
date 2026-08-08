@@ -2,7 +2,7 @@
 // Source: core/contracts/wire/listen/listen-protocol.schema.json
 // Generator: packages/wire-listen/scripts/generate.mjs
 // Protocol baseline: e0893286f94ecc75aacb4cbc441f653f347e382b
-// Schema version: 0.2.0
+// Schema version: 0.3.0
 // Ported from prototypes/listen-schema/codegen/generate.mjs
 
 import type { FallbackSink, MaybeDegraded } from "@omi-core/contracts";
@@ -27,6 +27,31 @@ export interface TranscriptSegment {
   "speech_profile_processed"?: boolean;
   "stt_provider"?: string | null;
 }
+
+/** Consumed quantity for the entitlement decision. Always a real non-negative amount — never overloaded to encode 'unlimited'. */
+export interface EntitlementUsage {
+  "amount": number;
+  "unit": "seconds";
+}
+
+export interface EntitlementMeteredLimit {
+  "kind": "metered";
+  "amount": number;
+  "unit": "seconds";
+}
+
+/** Paid / unlimited plans. Explicit kind — NEVER encode unlimited as amount=-1 or 0. */
+export interface EntitlementUnmeteredLimit {
+  "kind": "unmetered";
+}
+
+/** Server could not determine a numeric ceiling (partial entitlement data). Distinct from unmetered. */
+export interface EntitlementUnknownLimit {
+  "kind": "unknown";
+}
+
+/** Closed tagged union for the ceiling opposite usage.amount. Sentinel numbers are forbidden. */
+export type EntitlementLimit = EntitlementMeteredLimit | EntitlementUnmeteredLimit | EntitlementUnknownLimit;
 
 // ---------------------------------------------------------- server -> client
 
@@ -168,15 +193,15 @@ export interface OnboardingCompleteEvent {
   "answers_count": number;
 }
 
-/** Unified entitlement payload on the /listen wire (WS-003 gate / WS-005). Reserved, not emitted at baseline. Distinguishes deferred-transcription (capture_continues=true) from entitlement-forced session close (code 4020). */
+/** Unified entitlement payload on the /listen wire (WS-003 gate / WS-005). Reserved, not emitted at baseline. Distinguishes deferred-transcription (state=transcription_paused_capture_continuing) from entitlement-forced session close (code 4020). */
 /** Producer: docs/backend-handoff-requirements.md#entitlements */
 export interface EntitlementEvent {
   "type": "entitlement";
-  "state": "transcription_paused_capture_continuing" | "limit_reached" | "upgrade_required" | (string & {});
-  "reason": string;
-  "usage"?: Record<string, unknown>;
-  "upgrade_target"?: string | null;
-  "capture_continues": boolean;
+  "state": "transcription_paused_capture_continuing" | "limit_reached" | "upgrade_required";
+  "reason": "free_tier_transcription_limit" | "free_tier_chat_limit" | "trial_expired" | "paywalled";
+  "usage": EntitlementUsage;
+  "limit": EntitlementLimit;
+  "upgrade_target": string;
 }
 
 export type ListenServerEvent =
@@ -347,7 +372,7 @@ export const LISTEN_CLOSE_CODES: Readonly<Record<number, ListenCloseCodeInfo>> =
     "name": "entitlement_upgrade_required",
     "emittedByListen": false,
     "clientShouldRetry": false,
-    "meaning": "Reserved (WS-005 / entitlements contract): WebSocket closed because entitlement requires upgrade. DISTINCT from the mid-session entitlement frame with capture_continues=true (transcription paused, capture continuing — socket stays open). A preceding entitlement event carries upgrade advice. Close-code number 4020 is provisional pending WS-005 ratification (avoiding collision with dead 4001/4004)."
+    "meaning": "RESERVED (WS-005 / entitlements contract): WebSocket closed for entitlement exhaustion / upgrade-required. DISTINCT from the mid-session entitlement frame with state=transcription_paused_capture_continuing (transcription paused, capture continuing — socket stays open). A preceding entitlement event carries upgrade advice. Number 4020 avoids collision with reserved-but-dead 4001/4004. Server emit is not implemented at baseline."
   }
 };
 
@@ -507,7 +532,9 @@ const REQUIRED_KEYS: Readonly<Record<string, readonly string[]>> = {
   "entitlement": [
     "state",
     "reason",
-    "capture_continues"
+    "usage",
+    "limit",
+    "upgrade_target"
   ]
 };
 

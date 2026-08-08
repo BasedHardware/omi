@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@omi-core/adapters-legacy": "workspace:*",
+    "@omi-core/adapters-platform": "workspace:*",
     "@omi-core/bridge-web": "workspace:*",
     "@omi-core/contracts": "workspace:*",
+    "@omi-core/dev-recall-stub": "workspace:*",
     "@omi-core/domain": "workspace:*",
     "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*",
