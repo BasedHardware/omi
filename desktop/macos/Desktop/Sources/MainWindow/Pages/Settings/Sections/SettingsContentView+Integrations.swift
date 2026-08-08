@@ -14,16 +14,16 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "person.crop.circle.badge.plus")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Google accounts")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               Text(googleOAuthSummary)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.tertiary)
             }
 
             Spacer()
@@ -48,14 +48,14 @@ extension SettingsContentView {
                 promptGoogleOAuthClientId()
               }
               .buttonStyle(.plain)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             }
           }
 
           if let googleOAuthMessage {
             Text(googleOAuthMessage)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(Ink.errorRed)
           }
 
           if (GoogleOAuth.clientId ?? "").isEmpty {
@@ -65,7 +65,7 @@ extension SettingsContentView {
                 + "the Gmail API and Google Calendar API."
             )
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.tertiary)
           }
 
           // account is optional on pre-fix grants; index-based identity keeps
@@ -73,15 +73,15 @@ extension SettingsContentView {
           ForEach(Array(googleOAuthAccounts.enumerated()), id: \.offset) { _, account in
             HStack(spacing: OmiSpacing.md) {
               Image(systemName: "envelope")
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 16, height: 16)
               Text(account.account ?? "Connected account")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               if account.needsReconnect {
                 Text("Reconnect needed")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(Ink.errorRed)
               }
               Spacer()
               if !account.needsReconnect,
@@ -92,7 +92,7 @@ extension SettingsContentView {
                   loadGoogleOAuthAccounts()
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
               }
               Button(action: {
                 Task {
@@ -109,7 +109,7 @@ extension SettingsContentView {
                   .scaledFont(size: OmiType.caption, weight: .medium)
               }
               .buttonStyle(.plain)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             }
           }
         }
@@ -120,17 +120,17 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "person.crop.circle.badge.checkmark")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Email account")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(gmailAccountSummary)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.tertiary)
           }
 
           Spacer()

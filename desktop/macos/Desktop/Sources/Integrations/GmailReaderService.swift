@@ -162,7 +162,6 @@ if userInitiated {
       return try await readRecentEmailsViaOAuth(
         manager: oauth, maxResults: maxResults, query: query)
     }
-    }
     let selectedCookiePath = GmailSelectionStore.selectedCookiePath
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
@@ -896,8 +895,7 @@ let browserConfigs = GmailSelectionStore.filter(
 
   private func fetchGmailViaDateWindows(
     daysBack: Int,
-    maxResults: Int,
-    userInitiated: Bool = false
+    maxResults: Int
   ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
@@ -908,8 +906,7 @@ let browserConfigs = GmailSelectionStore.filter(
     else {
       return try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
-        query: "newer_than:\(daysBack)d",
-        userInitiated: userInitiated
+        query: "newer_than:\(daysBack)d"
       )
     }
 
@@ -929,8 +926,7 @@ let browserConfigs = GmailSelectionStore.filter(
       let query = Self.atomDateRangeQuery(start: windowStart, end: windowEnd)
       let slice = try fetchGmailViaAtomFeedSingle(
         maxResults: min(20, maxResults),
-        query: query,
-        userInitiated: userInitiated
+        query: query
       )
       for email in slice {
         collected[email.id] = email

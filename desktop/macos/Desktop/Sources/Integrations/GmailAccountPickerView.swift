@@ -12,12 +12,12 @@ struct GmailAccountPickerView: View {
       HStack {
         Text("Gmail account")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         Button("Cancel", action: onCancel)
           .buttonStyle(.plain)
           .font(.system(size: 12, weight: .medium))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
 
       Button {
@@ -27,15 +27,15 @@ struct GmailAccountPickerView: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text("Automatic")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             Text("First readable browser account")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.tertiary)
           }
           Spacer()
           if selectedCookiePath == nil {
             Image(systemName: "checkmark")
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.accent)
           }
         }
       }
@@ -51,15 +51,15 @@ struct GmailAccountPickerView: View {
             VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text(account.browserName)
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               Text(account.email ?? "Unknown account")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.tertiary)
             }
             Spacer()
             if selectedCookiePath == account.id {
               Image(systemName: "checkmark")
-                .foregroundColor(OmiColors.accent)
+                .foregroundColor(Ink.accent)
             }
           }
         }
@@ -68,7 +68,7 @@ struct GmailAccountPickerView: View {
     }
     .padding(OmiSpacing.lg)
     .frame(width: 400)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
   private func accountLabel(_ account: GmailAccountOption) -> String {

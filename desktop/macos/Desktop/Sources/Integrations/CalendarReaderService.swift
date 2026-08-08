@@ -244,9 +244,6 @@ if userInitiated {
     }
 
     await APIKeyService.shared.waitForKeys()
-    }
-
-    await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack,
       daysForward: daysForward,
@@ -336,7 +333,6 @@ let manager = GoogleOAuthConnectionManager.shared
           maxResults: 1,
           userInitiated: userInitiated
         )
-      }
       }
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
