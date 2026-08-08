@@ -53,7 +53,8 @@ void main() {
     });
     // NativeBleTransport.connect() gates on BluetoothReadiness.instance, which
     // queries the native adapter state through the pigeon BleHostApi channel.
-    setHostApiHandler('getBluetoothState', (message) async => 'on');
+    // The reply must be a List (pigeon wraps the scalar return value).
+    setHostApiHandler('getBluetoothState', (message) async => ['on']);
 
     final transport = NativeBleTransport(_deviceId);
     addTearDown(transport.dispose);
