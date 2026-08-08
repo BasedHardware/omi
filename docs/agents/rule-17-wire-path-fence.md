@@ -5,17 +5,19 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 2).** Landed 2026-08-08 with the W4
+Status: **PROVISIONAL, HELD (round 3).** Landed 2026-08-08 with the W4
 rebuild; it runs immediately, per §8, and continues to run at full strength
-while held — holding is not disabling. AUDIT-17 round 1 held on a file-wide
-escape hatch; `fd38dc5e33` fixed that (per-server-construction-site scoping),
-and AUDIT-17 round 2 re-verified it and found a **different, more severe**
-gap in the new implementation: the construction-line half of the hatch check
-is not comment-aware, so any string literal containing the marker text on the
-server's own construction line hatches it — no `//`, no real justification,
-no pre-existing hatch required. See **AUDIT-17 — round 2** below. The DOOR
-lane wrote the original; a non-author (the coordinator) wrote the fix, and
-said so explicitly rather than promoting their own work. If it fires on
+while held — holding is not disabling. Round 1 held on a file-wide escape
+hatch (`fd38dc5e33` fixed it). Round 2 held on a construction-line hatch
+check that was not comment-aware — a plain string containing the marker text
+hatched it, no pre-existing hatch needed (`b9e0c9a915` fixed it). Round 3
+holds on a narrower, lower-severity gap in that same fix: the comment-aware
+predicate relies on `withoutComments()`, which is a plain regex with no
+notion of string or template-literal boundaries, so text shaped like
+`/* ... */` **inside a string value** is blanked exactly as if it were a
+real comment. See **AUDIT-17 — round 3** below. The DOOR lane wrote the
+original; a non-author (the coordinator) wrote both fixes, and said so
+explicitly rather than promoting their own work each time. If it fires on
 another lane, that is a swarm-wide blocker, never something to route around,
 regardless of held status.
 
@@ -416,3 +418,163 @@ line string-literal bypass (blocking). The pre-existing multi-server
 false-positive imprecision (not blocking, recorded). The
 same-construction-behavior-drift gap (not this fence's job; recorded so
 nobody assumes it is covered).
+
+## AUDIT-17 — round 3, non-author re-audit of `b9e0c9a915`, 2026-08-08
+
+The coordinator reproduced round 2's finding before fixing anything, landed
+`b9e0c9a915` ("rule 17: the hatch marker must be in a comment, not a string
+literal"), and disclosed — unprompted — that their first test for it was
+itself wrong: the fixture placed the marker three lines below the
+construction line, so it was never on the line `hatchedAt` searches; the
+test passed for the wrong reason, and only the isolation proof (revert the
+fence, expect exactly one red — it came back 14/14 green) caught it. They
+rewrote the fixture and asked to have neither claim taken on trust. This
+section is that independent re-verification, done in a fresh `bin/omi-lane`
+worktree.
+
+**Every claim in `b9e0c9a915`'s commit message was independently
+reproduced, each against the real files or a standalone fixture, not the
+landing commit's own test:**
+
+- String-literal marker on the construction line (`banner: "wire-path-ok(fake)"`)
+  → **fires** (was green under `fd38dc5e33`).
+- A genuine trailing `// wire-path-ok(...)` comment on the construction line
+  → **stays green.**
+- The real four-line hatch in integration/adversarial/live-server.ts
+  → **stays green** (confirmed on the clean tree; nothing touches it).
+- Round 1's mutation 8 (second, unhatched server added to the already-hatched
+  file) → **still fires**, naming the correct construction line. Reverted;
+  diffed byte-identical.
+- Reverting the construction-line check to the old bare substring test → the
+  suite goes from 14 green to **exactly one red** — the new test written to
+  close this exact bypass, and nothing else. Restored; 14/14 green.
+
+**Whether `isCommentText` (derived from `withoutComments()`, replacing the
+old `trimStart().startsWith("//")` walk-up predicate) is faithful to my
+round-2 criterion or a widening: faithful, and an improvement.** My
+criterion was stated for the construction line specifically; generalizing it
+to the walk-up half means both halves now agree on the exact same
+definition of "comment" — the one `withoutComments()` already uses
+everywhere else in this checker — rather than two independently-maintained
+heuristics that can drift, which is how this bug existed in the first
+place. Verified this does not silently admit non-comment lines: a line
+containing real code plus a trailing `//` comment is correctly still
+rejected by the walk (its comment-stripped form is non-blank, so
+`isCommentText` is false), matching the old behavior exactly. The one
+behavioral difference found: a multi-line `/* ... */` block comment whose
+continuation lines are not `*`-aligned is now correctly recognized as
+comment text end-to-end, where the old line-prefix check would have stopped
+partway through it. That is a widening, but in the safe direction — it
+recognizes more *genuine* comments, not more non-comment text — verified by
+construction (see below).
+
+### New finding, round 3: `withoutComments()` has no notion of string or template boundaries, and the hatch check now inherits that
+
+The coordinator asked me to try two shapes they had not tested. Both matter,
+but for different reasons:
+
+1. **A genuine trailing block comment, `/* wire-path-ok(...) */`, on the
+   construction line.** Constructed as a standalone fixture. **Stays green**
+   — a legitimate hatch in block-comment form is honoured, exactly as the
+   trailing-`//` form is. Good: the fix does not accidentally favor one
+   comment syntax over the other.
+2. **A marker split across a template literal**
+   (`` `${"wire-path-"}ok(fake)` ``). **Fires** — correct, and not really an
+   attack on the hatch logic at all: the raw text never contains the
+   contiguous substring `wire-path-ok(`, so it is not recognized as a
+   marker by either the exploit path or the legitimate one. Nothing to fix
+   here.
+
+**A third shape, not on the coordinator's list, is a real bypass — narrower
+than round 2's, but real:**
+
+```ts
+const rogue = Bun.serve({
+  port: 0,
+  banner: "/* wire-path-ok(fake, this is a string not a comment) */",
+  fetch: (req) => new URL(req.url).pathname === "/v1/memories"
+    ? Response.json({ id: "raw-fixture-row-id" })
+    : new Response("", { status: 404 }),
+});
+```
+
+**Stays green.** `withoutComments()` is `text.replace(/\/\*[\s\S]*?\*\//g, ...)`
+— a plain regex over the raw source with no concept of string or
+template-literal boundaries. It matches `/* ... */`-shaped text *anywhere it
+appears literally*, including inside a quoted string, and blanks it exactly
+as it would a real comment. Verified directly, isolated from the rest of the
+checker:
+
+```
+RAW     : ...banner: "/* wire-path-ok(fake, this is a string not a comment) */"...
+STRIPPED: ...banner: "                                                        "...
+raw.includes(marker)      : true
+stripped.includes(marker) : false
+```
+
+Both halves of the round-2 predicate (`raw.includes(marker) &&
+!stripped.includes(marker)`) are satisfied — not because the marker is in a
+real comment, but because `withoutComments()` cannot tell a string
+containing comment-shaped text from an actual comment.
+
+**Severity, relative to round 2.** Lower, not absent. Round 2's bypass
+needed nothing but an ordinary string containing the marker text — the kind
+of collision that could occur without any intent to evade. This one needs
+the specific `/* */` delimiters wrapped around the marker *as literal string
+content*, which is unusual enough to draw a reviewer's eye ("why does this
+banner field contain comment syntax?") and implausible by accident. It is
+closer to a deliberate-evasion shape than a collision shape — but this
+program has documented precedent of deliberate evasion under pressure
+(string-splitting a route to dodge a regex), so "a reviewer would probably
+notice" is not the same guarantee a structural fence is supposed to provide,
+and it is exactly the shape of adversarial probe this round's mandate asked
+for.
+
+**Root cause is broader than this one hatch.** `withoutComments()` is used
+throughout this checker — the corpus-path check, the storage-provenance
+identifier check, rule 16's port-registry content matching, and now rule
+17's hatch — and every one of those uses inherits the same string-blindness.
+For content-matching uses (does this file *mention* a forbidden path or
+identifier), a string that looks like a comment can only cause a
+**false negative** on detection, which is the same class as the already-
+disclosed fragment-assembly gap and is treated as a known limit rather than
+a blocker. Using the identical primitive to **grant an exemption** is a
+different risk profile: a false negative there does not just fail to catch
+one occurrence, it turns off the fence entirely for that construction site.
+That distinction — detection missing something once versus a hatch
+suppressing everything — is why this is flagged as blocking for the hatch
+specifically, while the same underlying limitation is not reopened as a
+blocker for rule 16 or the other checks that were not part of this audit's
+mandate. (Worth noting, out of scope to fix here: rule 16's own hatch,
+`(rawLines[index] ?? "").includes(portCompositionAllowMarker)`, never
+adopted round 2's comment-awareness at all and remains fully open to round
+2's plain-string bypass. Flagging for whoever next touches rule 16; not
+re-auditing it under this mandate.)
+
+### Verdict: HOLD (round 3)
+
+**What would unblock promotion:** give the hatch check — construction line
+and walk-up block alike — a definition of "comment" that understands string
+and template-literal boundaries, so `/* */`-or-`//`-shaped text inside a
+quoted value is never treated as live comment syntax. This does not require
+rewriting `withoutComments()` for the whole checker; a small, self-contained
+scanner used only by `hatchedAt` (track whether each character position is
+inside a string/template literal before checking for comment-introducing
+tokens) is sufficient and testable in isolation. Re-run this round's fixture
+against the tightened check and confirm it now fires, confirm the real
+`live-server.ts` hatch and the genuine block-comment case both still pass,
+re-run all existing red-proofs, non-author re-reads.
+
+**Blast radius if this HOLD is wrong:** small. The fix is additive and
+narrowly scoped to the hatch predicate; it does not change any case already
+verified as firing or passing correctly in rounds 1–3, and the tree's one
+real hatch is an ordinary `//` block with no string literals near it, so
+tightening this does not touch it.
+
+**What is still open after this round:** the string/template-boundary
+bypass on the hatch check (blocking). Everything recorded as open after
+round 2 — the pre-existing multi-server false-positive imprecision, and the
+same-construction-behavior-drift gap — remains open and unchanged; neither
+was touched by `b9e0c9a915`. Additionally noted: rule 16's own hatch shares
+round 2's now-fixed-for-rule-17 vulnerability and was not part of this
+audit's mandate to fix.
