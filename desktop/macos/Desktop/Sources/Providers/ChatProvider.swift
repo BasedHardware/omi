@@ -1513,7 +1513,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Current Model
   var currentModel: String {
-    "Claude"
+    "Chat agent"
   }
 
   // MARK: - System Prompt
@@ -1522,7 +1522,7 @@ class ChatProvider: ObservableObject {
   init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
     self.bridgeHarnessOverride = bridgeHarnessOverride
     composerDraft.restore()
-    log("ChatProvider initialized, will start Claude bridge on first use")
+    log("ChatProvider initialized, will start Omi AI bridge on first use")
 
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
     // Pre-6594 installs may have the old agentSDK tag saved; the settings
