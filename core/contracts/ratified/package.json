@@ -31,6 +31,7 @@
     "fixtures/recall-completeness.json",
     "fixtures/recall-trace.json",
     "fixtures/page-conformance.json",
+    "fixtures/status-matrix.json",
     "PROVENANCE.json"
   ],
   "scripts": {

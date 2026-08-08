@@ -90,6 +90,29 @@ void invalidTerminalCursor;
 const invalidMissingCursor: Read.Window = { status: "incomplete", complete: false, hasMore: true, nextCursor: null };
 void invalidMissingCursor;
 
+// @ts-expect-error an incomplete terminal window cannot claim complete recall.
+const invalidCompleteRecallIncompleteTerminal: Read.Page = {
+  ...page,
+  window: { status: "incomplete", complete: false, hasMore: false, nextCursor: null },
+};
+void invalidCompleteRecallIncompleteTerminal;
+
+// @ts-expect-error an incomplete continuation window cannot claim complete recall.
+const invalidCompleteRecallIncompleteContinuation: Read.Page = {
+  ...page,
+  window: { status: "incomplete", complete: false, hasMore: true, nextCursor: cursor },
+};
+void invalidCompleteRecallIncompleteContinuation;
+
+const invalidIncompleteReason: Read.IncompleteRecall = {
+  version: "recall-completeness-v1",
+  status: "incomplete",
+  // @ts-expect-error incomplete recall accepts only the accepted-work-pending reason family.
+  reasons: ["projection_stale"],
+  frontiers: page.completeness.frontiers,
+};
+void invalidIncompleteReason;
+
 // @ts-expect-error unvalidated strings cannot bypass the non-empty item-id boundary.
 const invalidEmptyId: Read.Item = { ...page.items[0]!, id: "" };
 void invalidEmptyId;

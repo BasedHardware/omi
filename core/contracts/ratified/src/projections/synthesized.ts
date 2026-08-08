@@ -143,6 +143,7 @@ export declare namespace SynthesizedMemoryRead {
   }
 
   type Completeness = CompleteRecall | IncompleteRecall | DegradedRecall | PartialRecall;
+  type LimitedCompleteness = IncompleteRecall | DegradedRecall | PartialRecall;
 
   interface QueryGap {
     kind: "query_gap";
@@ -151,20 +152,37 @@ export declare namespace SynthesizedMemoryRead {
   interface PageBase {
     contractVersion: typeof SYNTHESIZED_READ_CONTRACT_VERSION;
     items: readonly Item[];
-    completeness: Completeness;
   }
 
-  interface ContinuationPage extends PageBase {
-    window: ContinuationWindow;
-    absence: null;
-  }
-
-  interface TerminalPage extends PageBase {
-    window: TerminalWindow;
+  interface CompleteRecallTerminalPage extends PageBase {
+    window: CompleteTerminalWindow;
+    completeness: CompleteRecall;
     absence: QueryGap | null;
   }
 
-  type Page = ContinuationPage | TerminalPage;
+  interface CompleteRecallContinuationPage extends PageBase {
+    window: MoreContinuationWindow;
+    completeness: CompleteRecall;
+    absence: null;
+  }
+
+  interface LimitedTerminalPage extends PageBase {
+    window: TerminalWindow;
+    completeness: LimitedCompleteness;
+    absence: QueryGap | null;
+  }
+
+  interface LimitedContinuationPage extends PageBase {
+    window: ContinuationWindow;
+    completeness: LimitedCompleteness;
+    absence: null;
+  }
+
+  type Page =
+    | CompleteRecallTerminalPage
+    | CompleteRecallContinuationPage
+    | LimitedTerminalPage
+    | LimitedContinuationPage;
 }
 
 /** Runtime law for JSON conformance fixtures and non-TypeScript service adapters. */
@@ -274,6 +292,8 @@ export function hasSafeSynthesizedPage(value: unknown): value is SynthesizedMemo
   if (window.nextCursor !== null && (typeof window.nextCursor !== "string" || parseKeysetCursorValue(window.nextCursor) === null)) return false;
   if (!hasHonestPageWindow(window as { status: string; complete: boolean; hasMore: boolean; nextCursor: string | null })) return false;
   if (!hasSafeCompletenessObject(page.completeness)) return false;
+  const completenessStatus = (page.completeness as { status: unknown }).status;
+  if (window.status === "incomplete" && completenessStatus === "complete") return false;
   if (page.absence !== null && (!hasExactKeys(page.absence, ["kind"]) || (page.absence as { kind: unknown }).kind !== "query_gap")) return false;
   if (page.absence !== null && (window.hasMore || window.nextCursor !== null)) return false;
   return hasHonestRecallCompleteness({

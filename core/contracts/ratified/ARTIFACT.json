@@ -4,9 +4,9 @@
     "name": "@omi-core/ratified-contracts",
     "version": "0.1.0"
   },
-  "provenanceSha256": "f4d1c1a6c21958168e4ddfcae0af795346d94ac1cc10290ca32cea111fd24580",
-  "sourceDigest": "6cf73dc7831b74d4c473d7f36c8a1a4d04189f46a7c438936a3019cefcfe5a8d",
-  "tarballSha256": "fcf9a54d75f09782903e1f45afc499d6446127959d5d298989beeef874101aac",
+  "provenanceSha256": "08d18b5f243d4bd668d942d7e5750957332ebd92bcecde92ac111b1c1ad042e6",
+  "sourceDigest": "110596711c4004be29c507bbb32be6b893466c17109fe153f5f1acf5fba47873",
+  "tarballSha256": "2985ef36657a4433f8aeb28c27cdea9ce02a2b6462584227713646969728d2ec",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",
@@ -21,6 +21,7 @@
     "package/fixtures/read-page-windows.json",
     "package/fixtures/recall-completeness.json",
     "package/fixtures/recall-trace.json",
+    "package/fixtures/status-matrix.json",
     "package/package.json"
   ]
 }

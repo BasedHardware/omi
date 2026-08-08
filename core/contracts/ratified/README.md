@@ -28,6 +28,8 @@ explicit query-gap absence union; the strict runtime validator rejects extra fie
 completeness. Terminal and continuation windows are distinct TypeScript variants, and query-gap
 absence is valid only on an honest terminal page. Item ids, per-item citation refs, and
 completeness reasons are unique. Empty, stale, or failed renders never serialize as items.
+An `incomplete` window can pair only with incomplete, degraded, or partial recall; complete recall
+uses either an ordinary terminal-complete window or an ordinary paginated-more continuation.
 
 The trace carries only opaque stage refs, typed outcome/freshness, bounded counts, and strategy
 version. Its type and runtime laws enforce the six-stage subset chain, reference uniqueness, and

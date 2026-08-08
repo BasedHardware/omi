@@ -19,6 +19,7 @@ const inputs = [
   "fixtures/recall-completeness.json",
   "fixtures/recall-trace.json",
   "fixtures/page-conformance.json",
+  "fixtures/status-matrix.json",
   "fixtures/manifest.json",
   "test/contracts.test.mjs",
   "scripts/check-domain-markers.mjs",

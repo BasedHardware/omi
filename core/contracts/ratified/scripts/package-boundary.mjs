@@ -23,6 +23,7 @@ const expectedManifestFiles = [
   "fixtures/recall-completeness.json",
   "fixtures/recall-trace.json",
   "fixtures/page-conformance.json",
+  "fixtures/status-matrix.json",
   "PROVENANCE.json",
 ];
 const expectedTarFiles = [
@@ -39,6 +40,7 @@ const expectedTarFiles = [
   "package/fixtures/recall-completeness.json",
   "package/fixtures/recall-trace.json",
   "package/fixtures/page-conformance.json",
+  "package/fixtures/status-matrix.json",
   "package/package.json",
 ].sort();
 
