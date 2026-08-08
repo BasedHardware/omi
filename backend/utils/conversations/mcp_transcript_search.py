@@ -160,16 +160,28 @@ def resolve_mcp_conversation_search_ids(
     ends_at: Optional[int] = None,
     query_vectors: Callable[..., List[str]],
     search_transcript_chunks: Callable[..., Any],
+    embed_query: Optional[Callable[[str], List[float]]] = None,
 ) -> List[str]:
-    """Combine summary-vector search with transcript-chunk search (fail-open on chunks)."""
+    """Combine summary-vector search with transcript-chunk search (fail-open on chunks).
+
+    When ``embed_query`` is provided, the query is embedded once and the vector is
+    shared across both Pinecone namespace lookups (summary + transcript chunks).
+    """
     limit = max(1, min(int(limit or 10), 100))
-    summary_ids = query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit) or []
+    shared_vector: Optional[List[float]] = None
+    if embed_query is not None:
+        shared_vector = embed_query(query)
+    vector_kw: Dict[str, Any] = {"query_vector": shared_vector} if shared_vector is not None else {}
+
+    summary_ids = query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit, **vector_kw) or []
 
     transcript_ids: List[str] = []
     try:
         # Over-fetch chunks so multiple hits in one conversation still leave room for others.
         chunk_limit = min(max(limit * 3, limit), 60)
-        rows_raw: Any = search_transcript_chunks(uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at)
+        rows_raw: Any = search_transcript_chunks(
+            uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at, **vector_kw
+        )
         rows: List[Any] = rows_raw if isinstance(rows_raw, list) else []
         for row in rows:
             if not isinstance(row, dict):

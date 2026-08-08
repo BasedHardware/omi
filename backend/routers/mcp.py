@@ -569,6 +569,7 @@ def search_conversations(
         ends_at=ends_at,
         query_vectors=vector_db.query_vectors,
         search_transcript_chunks=vector_db.search_transcript_chunks,
+        embed_query=vector_db.embeddings.embed_query,
     )
     if not conversation_ids:
         return []
