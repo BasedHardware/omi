@@ -3,20 +3,20 @@
   "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.4.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.4.0-a03fab9c.tgz"
+    "version": "0.5.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.5.0-99df48ef.tgz"
   },
   "artifact": {
     "compatibility": "breaking",
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.4.0-a03fab9c.tgz",
-    "sha256": "a03fab9c7a386af69246a0f77467cbc221fc08e2b7b62a1645f01973a5834306",
-    "sha512": "8f56a6d6606b35d2bde7a0f2fd9dd8c416ea2e634c04b3a909977964074a0866d3d06421ca27f92e3d433bb43646864b42f6fadb8c575c0e0f9bf808e2bb0929",
-    "integrity": "sha512-j1am1mBrNdK956Dy/Z3YxBbqLmNMBLOpCZd5ZAdKCGbT0GQhyif5Lj1DO7Q2RoZLQvb624xXXA4Pm/gI4rsJKQ==",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.5.0-99df48ef.tgz",
+    "sha256": "99df48efaca9443b5c401cd0b7baa986b09c78cf027aad54db12e3674508819c",
+    "sha512": "35395f19eb616b14463011c7a85c0d48eb2a73c0b31ad02c7aba65a7fbfa293e6baffdbd9165e75a91c81d0425e8fe9acc7da9f64ae011fedf24dc904205b5b5",
+    "integrity": "sha512-NTlfGethaxRGMBHHqFwNSOsqc8CzGtAserplp/v6KT5rr/29kWXnWpHIHQQl6P6azH2p9krgEf7fJNyQQgW1tQ==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "91d48a0140094cdf29485942983daf16ae3187dc8f5dd6a3e0aaa776dfdc463d",
+    "metadataSha256": "300b64646ddb84ae4f70ebde2cb94ceb450ef5eb2fb8e96da40f2645a31b83ed",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "bb1654a0aaf69073b6cce99038bc7d41e992eb860252ef024309c6b60e05b17e",
-    "sourceDigest": "a183348c02f3aab5730f50795b2dccd9b24cc6ceab689132fd8b166c5540ea5b",
+    "provenanceSha256": "e377ce50c15e81addde711e46efa1e450ae26e0632ee766e43017935489b9145",
+    "sourceDigest": "d332c562c4a091368da502e52d231c9b6a7a174fe0c5086be70291a2c0a3ecad",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
@@ -45,12 +45,12 @@
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
     "ref": "refs/heads/core/foundation",
-    "commit": "2d0b3cc1c82862f0892069ee9ef9033790db5bfa",
+    "commit": "446711e0aa7aa0d3f1ce1f7a6bfbbc40d84c9e77",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact 0.4.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites COORD-write-path-rulings and COORD-cross-generation-writes. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
+    "evidence": "The exact 0.5.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites COORD-fable-rulings-wave2 alongside COORD-write-path-rulings and COORD-cross-generation-writes. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {

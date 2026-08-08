@@ -15,7 +15,7 @@
     "qa:contracts": "bun run scripts/qa-contracts.ts"
   },
   "dependencies": {
-    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.4.0-a03fab9c.tgz",
+    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.5.0-99df48ef.tgz",
     "hono": "4.12.26"
   },
   "devDependencies": {

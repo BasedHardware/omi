@@ -11,8 +11,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  WRITE_ERRORS,
+  CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  WRITE_AVAILABILITY,
   WRITE_REFUSALS,
+  readWriteAvailabilitySignal,
   readWriteRefusalOutcome,
 } from "@omi-core/ratified-contracts/write/ops";
 
@@ -49,25 +51,33 @@ describe("ratified write contract and the account-control fence agree on one wir
     }
   });
 
-  test("the fifth outcome is exactly the one the contract declines to ratify", async () => {
-    // control_unavailable is a FIFTH value on a wire ADR-010 §3 gives four, and
-    // it is escalated to fable in
-    // data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md §1. The contract
-    // therefore fixes the STATUS and leaves the BODY null, and records the
-    // serving side's current spelling as observation rather than as ratification.
+  test("the fifth value is ratified as an AVAILABILITY signal, not a fifth refusal", async () => {
+    // COORD-fable-rulings-wave2 W1, and its binding condition. The contract now
+    // carries `control_unavailable` — the escalation is ruled — but it carries it
+    // in its own table with its own reader, because ADR-010 §3's four outcomes
+    // are statements about the CALLER'S AUTHORITY and this one is not. Keeping
+    // "refusals are four distinct outcomes" true of the authorization
+    // composition is what makes this an extension of the ADR David accepted
+    // rather than a delegate's signature amending it.
     //
-    // red-proof: give WRITE_ERRORS.maintenance a string body in the contract
-    // source and this goes red. APPLIED AND OBSERVED RED.
-    expect(WRITE_ERRORS.maintenance.body).toBeNull();
-    expect<number>(WRITE_FENCE_REFUSALS.control_unavailable.status).toBe(WRITE_ERRORS.maintenance.status);
-    expect(readWriteRefusalOutcome(
-      WRITE_FENCE_REFUSALS.control_unavailable.status,
-      WRITE_FENCE_REFUSALS.control_unavailable.body,
-    )).toBeNull();
+    // red-proof: make the refusal reader answer control_unavailable and this
+    // goes red. APPLIED AND OBSERVED RED.
+    const fence = WRITE_FENCE_REFUSALS.control_unavailable;
+    const contract = WRITE_AVAILABILITY.control_unavailable;
+    expect<number>(fence.status).toBe(contract.status);
+    expect<string>(fence.body).toBe(contract.body);
+    expect(readWriteAvailabilitySignal(fence.status, fence.body)).toBe("control_unavailable");
+    expect(readWriteRefusalOutcome(fence.status, fence.body)).toBeNull();
 
-    const schema = await Bun.file(SCHEMA_OF_RECORD).json() as { outcomes: { outcome: string; servingSideBody?: string }[] };
-    const row = schema.outcomes.find((entry) => entry.outcome === "maintenance");
-    expect(row?.servingSideBody).toBe(WRITE_FENCE_REFUSALS.control_unavailable.body);
+    // The conditions the ruling made load-bearing. Weakening any of these is a
+    // §8 guard-weakening diff, so they are asserted from both sides.
+    expect<number>(contract.retryAfterSeconds).toBe(CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS);
+    expect(fence.headers["retry-after"]).toBe(String(CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS));
+    expect(contract.body).not.toContain("epoch");
+
+    const schema = await Bun.file(SCHEMA_OF_RECORD).json() as { outcomes: { outcome: string; kind: string }[] };
+    const row = schema.outcomes.find((entry) => entry.outcome === "control_unavailable");
+    expect(row?.kind).toBe("availability");
   });
 
   test("no fence outcome collapses onto another", () => {
