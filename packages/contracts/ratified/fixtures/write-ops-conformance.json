@@ -153,17 +153,18 @@
     "name": "migration window: backpressure, recorded nowhere",
     "wireOutcome": "maintenance",
     "ruling": "B2",
-    "note": "Not evidence. Nothing is persisted. The client must NOT dead-letter this.",
+    "note": "Backpressure, recorded nowhere, and the client must NOT dead-letter it. The BODY here is the serving side's current spelling, not a ratified value \u2014 see the maintenance row in write-ops-outcomes.json. The client classification (retryable) is identical under either outcome of the pending escalation, which is why this row can exist while the body cannot be fixed.",
     "path": "/v1/tasks/ops",
     "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 503,
-      "body": "{\"error\":\"maintenance\"}"
+      "body": "{\"error\":\"maintenance\",\"refusal_outcome\":\"control_unavailable\"}"
     },
     "clientFailure": {
       "kind": "retryable"
-    }
+    },
+    "bodyRatified": false
   },
   {
     "name": "write_id is not 64 lowercase hex",
