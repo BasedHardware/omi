@@ -6,7 +6,6 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
-  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
   # `SettingsPage` mounts the shell-drawn confirmation on Advanced → Reset Onboarding, which S9b
   # opens and cancels. A system `.alert` dimmed the *window* here, and this window is a transparent
   # rectangle larger than the panels inside it.

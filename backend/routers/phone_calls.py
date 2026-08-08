@@ -8,17 +8,18 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
 from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
-from utils.phone_registration import PhoneVerificationError, register_phone_verification
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.multipart import MultipartMaxPartSizeRoute, PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.twilio_service import (
     generate_access_token,
+    start_caller_id_verification,
     check_caller_id_verified,
     delete_caller_id,
     get_caller_id,
@@ -112,11 +113,39 @@ def verify_phone_number(
     _: None = Depends(rate_limit_dependency(endpoint="phone_verify", requests_per_window=5, window_seconds=3600)),
 ):
     """Initiate phone number verification via Twilio caller ID validation."""
+    check_call_access(uid)
+    phone_number = request.phone_number.strip()
+    if not E164_PATTERN.match(phone_number):
+        raise HTTPException(status_code=400, detail="Phone number must be in E.164 format (e.g., +15551234567)")
+
+    # Check if already verified
+    existing = phone_calls_db.get_phone_number_by_number(uid, phone_number)
+    if existing:
+        raise HTTPException(status_code=409, detail="Phone number already verified")
+
     try:
-        result = register_phone_verification(uid, request.phone_number)
+        result = start_caller_id_verification(phone_number)
+        phone_calls_db.set_pending_verification(uid, phone_number)
         return VerifyPhoneNumberResponse(**result)
-    except PhoneVerificationError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except TwilioRestException as e:
+        # Error 21450: a validation request already exists for this number.
+        # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
+        if e.code == 21450:
+            caller_id_info = get_caller_id(phone_number)
+            if caller_id_info:
+                # Number is already verified in Twilio by someone else — block this attempt
+                raise HTTPException(
+                    status_code=409,
+                    detail="This phone number is already registered. If you own this number and previously verified it, check your settings.",
+                )
+            else:
+                # Number has a pending verification — not yet verified
+                raise HTTPException(
+                    status_code=409,
+                    detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
+                )
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")

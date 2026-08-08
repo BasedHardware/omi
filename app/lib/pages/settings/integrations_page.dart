@@ -1,12 +1,10 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
-import 'package:omi/backend/http/api/channels.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -107,10 +105,6 @@ class IntegrationsPage extends StatefulWidget {
 }
 
 class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBindingObserver {
-  ChannelStatus? _channelStatus;
-  ChannelLinkResponse? _channelLink;
-  String? _channelLoading;
-
   @override
   void initState() {
     super.initState();
@@ -119,7 +113,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // Schedule loading for after the first frame to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFromBackend();
-      _loadChannels();
     });
   }
 
@@ -141,123 +134,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
     await context.read<IntegrationProvider>().loadFromBackend();
-  }
-
-  Future<void> _loadChannels() async {
-    try {
-      final status = await getChannelStatus();
-      if (mounted) setState(() => _channelStatus = status);
-    } catch (_) {}
-  }
-
-  Future<void> _generateChannelCode(String channel) async {
-    setState(() {
-      _channelLoading = channel;
-      _channelLink = null;
-    });
-    try {
-      final link = await createChannelLink(channel);
-      if (!mounted) return;
-      if (link == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.error)));
-      } else {
-        setState(() => _channelLink = link);
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.error)));
-      }
-    } finally {
-      if (mounted) setState(() => _channelLoading = null);
-    }
-  }
-
-  Future<void> _copyChannelCode() async {
-    final code = _channelLink?.code;
-    if (code == null) return;
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.copied)));
-  }
-
-  Widget _buildMessagingChannels() {
-    const channels = ['telegram', 'imessage', 'sms'];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.integrations,
-          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Use the same Omi core chat from Telegram, iMessage, or SMS.',
-          style: TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
-        ),
-        const SizedBox(height: 12),
-        ...channels.map((channel) {
-          final isLinked = _channelStatus?.bindings.any((binding) => binding.channel == channel) ?? false;
-          final displayName = channel == 'imessage' ? 'iMessage' : channel[0].toUpperCase() + channel.substring(1);
-          final isLoading = _channelLoading == channel;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 15)),
-                        Text(
-                          isLinked ? context.l10n.connected : context.l10n.disconnected,
-                          style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _channelLoading == null ? () => _generateChannelCode(channel) : null,
-                    child: Text(isLoading ? '…' : context.l10n.connect),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-        if (_channelLink != null) ...[
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_channelLink!.instructions, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        _channelLink!.code,
-                        style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _copyChannelCode,
-                      icon: const Icon(Icons.copy, color: Color(0xFF8E8E93), size: 18),
-                      tooltip: context.l10n.copy,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 20),
-      ],
-    );
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
@@ -663,7 +539,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Expanded(
                 child: ListView(
                   children: [
-                    _buildMessagingChannels(),
                     ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),

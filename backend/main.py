@@ -70,7 +70,6 @@ from routers import (
     focus_sessions,
     advice,
     chat_sessions,
-    channels,
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
@@ -206,7 +205,6 @@ app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
-app.include_router(channels.router)
 app.include_router(scores.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
