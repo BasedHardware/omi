@@ -292,8 +292,15 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS
