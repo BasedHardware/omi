@@ -12,6 +12,7 @@ import {
   type DevPrincipal,
 } from "./auth/dev-token";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
+import { DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY } from "./composition/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import { registerMemoryRoutes } from "./routes/memories";
@@ -115,6 +116,11 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       codecRootSecret,
       cursorSigningKeyset,
       cursorTtlSeconds: CURSOR_TTL_SECONDS,
+      // Passed EXPLICITLY, never left to be implied by which handler is
+      // running. The value is the app-facing default, but the read is told
+      // which granularity it is serving rather than inferring it.
+      // domain-pending(DIV-DOMCORE-008)
+      granularity: DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY,
       readTimestampEpochSeconds: anchorEpochSeconds,
       // Opaque references only, and this server has no reason to retain even those.
       traceSink: () => {},

@@ -153,7 +153,15 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  // Fixed message. The caught value can carry lsof output, command lines,
+  // process and user names, or filesystem paths, and this script's whole job is
+  // to report a verdict without publishing any of that. An unexpected crash is
+  // a failure to prove loopback binding, which is all the caller needs to know.
+  void error;
+  console.error(JSON.stringify({
+    version: "loopback-assertion-v1",
+    verdict: "fail",
+    reason: "assertion_failed_to_run",
+  }));
   process.exit(1);
 });
