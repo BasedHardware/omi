@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import runpy
+import shutil
 import tempfile
 
 import pytest
@@ -608,3 +609,36 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "EXPECTED_RELEASE_ID" in workflow
     assert "EXPECTED_GENERATION" in workflow
     assert "gcloud run deploy" not in workflow
+
+
+def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
+    """Behavioral contract: the guard rejects a promotion that drops its trusted-repository gate."""
+    monkeypatch.syspath_prepend(str(SCRIPTS))
+    guard = _load("release_process_guards", "check-release-process-guards.py")
+    promotion_text = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
+    trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
+    obsolete_dispatch_gate = "github.event.workflow_run.event == 'workflow_dispatch'"
+
+    assert trusted_repository in promotion_text
+    assert obsolete_dispatch_gate not in promotion_text
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for relative_path in (
+            ".github/workflows/desktop_qualify_beta.yml",
+            ".github/workflows/desktop_promote_beta.yml",
+            ".github/workflows/desktop_recover_beta.yml",
+            ".github/scripts/check-desktop-auto-beta-candidate.py",
+        ):
+            target = root / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / relative_path, target)
+
+        promotion = root / ".github/workflows/desktop_promote_beta.yml"
+        promotion.write_text(promotion_text.replace(trusted_repository, "", 1), encoding="utf-8")
+        guard.ROOT = root
+        errors = guard.check_desktop_qualification_runner()
+        assert any(trusted_repository in error for error in errors), errors
+
+        promotion.write_text(promotion_text, encoding="utf-8")
+        assert guard.check_desktop_qualification_runner() == []

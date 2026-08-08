@@ -19,7 +19,7 @@ import SwiftUI
 /// pixel-exact hit testing during a drag, a scroll wheel that pans, and a hover tooltip that has to
 /// be able to escape the window's rounded bounds without being clipped.
 @MainActor
-final class RewindTrackNSView: NSView {
+final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
 
   /// Total height of the control: the bar, plus room for the badges that straddle it and the hour
   /// labels beneath.
