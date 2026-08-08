@@ -2344,6 +2344,12 @@ workflows:
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+            # SwiftPM emits Resources/node at the resource-bundle root. Keep
+            # Codemagic aligned with run.sh and the signed-artifact contract by
+            # moving it to the app-style nested resource path before signing.
+            source scripts/launcher-bootstrap.sh
+            omi_normalize_packaged_resource_bundle \
+              "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
           else
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi

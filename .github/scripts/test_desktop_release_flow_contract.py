@@ -121,6 +121,14 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             self.codemagic,
         )
 
+    def test_codemagic_normalizes_the_swiftpm_node_before_signing(self) -> None:
+        self.assertIn("source scripts/launcher-bootstrap.sh", self.codemagic)
+        self.assertIn("omi_normalize_packaged_resource_bundle", self.codemagic)
+        self.assertIn(
+            '"$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"',
+            self.codemagic,
+        )
+
     def test_m1_qualification_binds_the_immutable_tag(self) -> None:
         for fragment in (
             'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
