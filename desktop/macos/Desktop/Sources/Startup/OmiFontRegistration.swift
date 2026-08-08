@@ -1,11 +1,13 @@
 import CoreText
 import Foundation
+import OmiTheme
 
-/// Registers the bundled Geist / Geist Mono variable fonts with CoreText at launch so
-/// the Second Brain design system (`Font.geist` / `Font.geistMono`) resolves them by
-/// family name. The fonts ship in the executable target's resource bundle
-/// (`Resources/Fonts/*.ttf`), so registration must happen here — `OmiTheme`'s own
-/// `Bundle.module` cannot see them.
+/// Registers the bundled display and UI faces with CoreText at launch so the design
+/// systems resolve them by family name: Geist / Geist Mono (`Font.geist` /
+/// `Font.geistMono`) and Open Runde (`Font.openRunde` — the glass system's display face
+/// at and above `Font.inkDisplayThreshold`). The fonts ship in the executable target's
+/// resource bundle (`Resources/Fonts/*.ttf` and `*.otf`), so registration must happen
+/// here — `OmiTheme`'s own `Bundle.module` cannot see them.
 enum OmiFontRegistration {
   // Touched only on the main thread from `applicationWillFinishLaunching`.
   nonisolated(unsafe) private static var didRegister = false
@@ -21,16 +23,20 @@ enum OmiFontRegistration {
     // `.build` path from the build machine, so it fatalErrors on every real user
     // install (v0.12.110 launch crash) while passing on any machine that has the
     // repo checked out.
+    // Geist ships as `.ttf`, Open Runde as `.otf`; both extensions must be swept or the
+    // missing family silently falls back to the system font at every call site.
     var urls = Set<URL>()
-    if let root = Bundle.resourceBundle.urls(forResourcesWithExtension: "ttf", subdirectory: nil) {
-      urls.formUnion(root)
-    }
-    if let sub = Bundle.resourceBundle.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") {
-      urls.formUnion(sub)
+    for ext in ["ttf", "otf"] {
+      if let root = Bundle.resourceBundle.urls(forResourcesWithExtension: ext, subdirectory: nil) {
+        urls.formUnion(root)
+      }
+      if let sub = Bundle.resourceBundle.urls(forResourcesWithExtension: ext, subdirectory: "Fonts") {
+        urls.formUnion(sub)
+      }
     }
 
     guard !urls.isEmpty else {
-      NSLog("OmiFontRegistration: no bundled .ttf fonts found — Geist will fall back to system font")
+      NSLog("OmiFontRegistration: no bundled fonts found — Geist and Open Runde fall back to the system font")
       return
     }
 
@@ -42,5 +48,9 @@ enum OmiFontRegistration {
         NSLog("OmiFontRegistration: \(url.lastPathComponent) not registered (\(message))")
       }
     }
+
+    // A launch seam may have resolved a role before CoreText registration completed. Never retain
+    // that system-font fallback once the bundled display faces are available.
+    InkFonts.invalidate()
   }
 }

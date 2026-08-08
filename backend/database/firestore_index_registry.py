@@ -304,6 +304,26 @@ CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_canonical_atlas_read',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _desc('updated_at'),
+        _desc('__name__'),
+    ),
+)
+
 CONVERSATION_SOURCE_MEMORY_QUERY = FirestoreQuerySpec(
     identifier='memory_items_by_conversation_source',
     collection_group='memory_items',

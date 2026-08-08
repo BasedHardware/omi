@@ -18,9 +18,9 @@ struct SafeDismissButton: View {
   var body: some View {
     Image(systemName: icon)
       .scaledFont(size: OmiType.body, weight: .medium)
-      .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .frame(width: 28, height: 28)
-      .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+      .background(showBackground ? Ink.wash : Color.clear)
       .clipShape(Circle())
       .contentShape(Circle())
       .opacity(isPressed ? 0.7 : 1.0)
@@ -91,9 +91,9 @@ struct DismissButton: View {
     } label: {
       Image(systemName: icon)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 28, height: 28)
-        .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+        .background(showBackground ? Ink.wash : Color.clear)
         .clipShape(Circle())
         .contentShape(Circle())
     }
@@ -185,7 +185,7 @@ struct AppsPage: View {
       searchBar
         .padding()
 
-      Color.white.opacity(0.08)
+      Ink.separator
         .frame(height: 1)
 
       // Content
@@ -261,7 +261,7 @@ struct AppsPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .onChange(of: searchText) { _, newValue in
       appProvider.searchQuery = newValue
       // Clear filters when searching
@@ -461,19 +461,19 @@ struct AppsPage: View {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.body, weight: .medium)
         .frame(width: AppsHeaderMetrics.controlIconSize, height: AppsHeaderMetrics.controlIconSize)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       TextField("Search apps...", text: $searchText)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .accessibilityLabel("Search apps")
 
       if !searchText.isEmpty {
         Button(action: { searchText = "" }) {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
         .help("Clear search")
@@ -484,10 +484,10 @@ struct AppsPage: View {
     .frame(height: AppsHeaderMetrics.controlHeight)
     .background(
       Capsule(style: .continuous)
-        .fill(Color.white.opacity(0.06))
+        .fill(Ink.rowFill)
         .overlay(
           Capsule(style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
     )
   }
@@ -534,7 +534,7 @@ struct AppsPage: View {
     SmallHeaderButton(
       icon: "app.badge.fill",
       label: "Create App",
-      color: OmiColors.textSecondary
+      color: Ink.secondary
     ) {
       if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
         NSWorkspace.shared.open(url)
@@ -611,27 +611,27 @@ struct AppsPage: View {
           .scaleEffect(1.2)
         Text("Searching...")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(maxWidth: .infinity, minHeight: 200)
     case .empty:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "magnifyingglass")
           .scaledFont(size: 32)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         Text("No apps found")
           .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(maxWidth: .infinity, minHeight: 200)
     case .failure:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "exclamationmark.circle")
           .scaledFont(size: 32)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         Text("Couldn't load apps")
           .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         Button("Try Again") {
           Task { await appProvider.searchApps() }
         }
@@ -654,7 +654,7 @@ struct AppsPage: View {
           Text("Back")
             .scaledFont(size: OmiType.body, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
     }
@@ -675,7 +675,7 @@ struct AppsPage: View {
             .scaleEffect(0.8)
           Text("Loading more...")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         } else {
           Color.clear
             .frame(height: 1)
@@ -719,15 +719,15 @@ struct AppsPage: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "square.grid.2x2")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No apps found")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       if !searchText.isEmpty {
         Text("Try a different search term")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         Button("Clear Search") {
           searchText = ""
@@ -735,7 +735,7 @@ struct AppsPage: View {
         .buttonStyle(.bordered)
       } else {
         Text("Apps will appear here once available")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -844,6 +844,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     var lastSyncedAt: Date?
     var lastDeltaCount: Int?
     var availabilityText: String?
+    var requiresVerification = false
   }
 
   struct Snapshot {
@@ -919,6 +920,7 @@ final class ImportConnectorStatusStore: ObservableObject {
       defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
     }
     metrics.lastSyncedAt = syncedAt
+    metrics.requiresVerification = false
     defaults.set(
       syncedAt.timeIntervalSince1970,
       forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
@@ -991,6 +993,11 @@ final class ImportConnectorStatusStore: ObservableObject {
         let timestamp = defaults.double(forKey: lastSyncedAtKey)
         if timestamp > 0 {
           metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+          // Apple Notes access is revocable and its security-scoped folder
+          // grant can disappear between launches. A persisted import proves
+          // history, not current readability, so require an explicit refresh
+          // before displaying it as connected.
+          metrics.requiresVerification = connector.id == "apple-notes"
         }
       }
       if defaults.bool(forKey: hasLastDeltaKey) {
@@ -1138,36 +1145,18 @@ final class ImportConnectorStatusStore: ObservableObject {
   }
 
   private func refreshAppleNotesMetrics() async {
-    let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
-    switch status {
-    case .connected(let noteCount, _):
-      var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-      metrics.sourceCount = noteCount
-      defaults.set(
-        noteCount,
-        forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "apple-notes")
-      )
-      if metrics.lastSyncedAt == nil {
-        let syncedAt = Date()
-        metrics.lastSyncedAt = syncedAt
-        defaults.set(
-          syncedAt.timeIntervalSince1970,
-          forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "apple-notes")
-        )
-      }
-      metrics.availabilityText = "Private notes accessible"
-      defaults.set(
-        "Private notes accessible",
-        forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "apple-notes")
-      )
-      metricsByID["apple-notes"] = metrics
-    case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
-      log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
-      clearStoredMetrics(for: "apple-notes")
-    }
+    // Reading NoteStore.sqlite is reserved for the explicit Connect/Import
+    // action. Marking a persisted import as unverified keeps passive refreshes
+    // honest without opening the protected Notes store.
+    guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
+    metrics.requiresVerification = true
+    metricsByID["apple-notes"] = metrics
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
+    if metrics.requiresVerification {
+      return false
+    }
     if metrics.lastSyncedAt != nil {
       return true
     }
@@ -1180,6 +1169,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String {
+    if connector.id == "apple-notes", metrics.requiresVerification {
+      return "Reconnect to verify access"
+    }
+
     if let sourceCount = metrics.sourceCount {
       if let memoryCount = metrics.memoryCount, memoryCount > 0 {
         return
@@ -1206,6 +1199,12 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String? {
+    if connector.id == "apple-notes", metrics.requiresVerification,
+      let lastSyncedAt = metrics.lastSyncedAt
+    {
+      return "Last imported \(relativeTimestamp(lastSyncedAt))"
+    }
+
     if let lastSyncedAt = metrics.lastSyncedAt {
       var text = "Synced \(relativeTimestamp(lastSyncedAt))"
       if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
@@ -1258,7 +1257,7 @@ struct ImportsSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Imports")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       LazyVGrid(
         columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
@@ -1293,12 +1292,12 @@ struct ImportConnectorRow: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(connector.title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           Text(connector.description)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
         }
@@ -1309,7 +1308,7 @@ struct ImportConnectorRow: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+      .background(isHovering ? Ink.wash : Color.clear)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -1333,12 +1332,12 @@ struct ImportConnectorCard: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(connector.title)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
 
             Text(connector.subtitle)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
@@ -1347,7 +1346,7 @@ struct ImportConnectorCard: View {
 
         Text(connector.description)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(2)
           .multilineTextAlignment(.leading)
 
@@ -1355,12 +1354,12 @@ struct ImportConnectorCard: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(snapshot.primaryText)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
+              .foregroundColor(snapshot.isConnected ? Ink.primary : Ink.secondary)  // green: ≈1.6:1 here
 
             if let secondaryText = snapshot.secondaryText {
               Text(secondaryText)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -1371,11 +1370,11 @@ struct ImportConnectorCard: View {
         }
       }
       .padding(OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
       .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1392,13 +1391,13 @@ struct ImportConnectorActionButton: View {
   var body: some View {
     Text(title)
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
+      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
       .frame(width: isConnected ? 84 : 72, height: 28)
-      .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
+      .background(isConnected ? Ink.wash : Ink.primary)
       .cornerRadius(OmiChrome.chipRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(OmiColors.border, lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
   }
 }
@@ -1410,16 +1409,16 @@ struct ConnectionModalActionButton: View {
   var body: some View {
     Text(title)
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
+      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
       .lineLimit(1)
       .padding(.horizontal, OmiSpacing.md)
       .frame(minWidth: isConnected ? 84 : 72)
       .frame(height: 28)
-      .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
+      .background(isConnected ? Ink.wash : Ink.primary)
       .cornerRadius(OmiChrome.chipRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(OmiColors.border, lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
   }
 }
@@ -1457,15 +1456,15 @@ struct ImportConnectorSheet: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(connector.title)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(connector.subtitle)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(connector.description)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.top, OmiSpacing.xxs)
         }
 
@@ -1488,7 +1487,7 @@ struct ImportConnectorSheet: View {
       }
     }
     .padding(OmiSpacing.xxl)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
     .onChange(of: runState?.phase) { _, newPhase in
       // A successful import consumed the pasted draft, so clear it —
       // but only if it is still the submitted text. A reopened sheet
@@ -1515,7 +1514,7 @@ struct ImportConnectorSheet: View {
       if let metricText = connector.metricText {
         Text(metricText)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Button {
@@ -1532,7 +1531,7 @@ struct ImportConnectorSheet: View {
       if connector.id == "local-files" {
         Text("Local files are indexed on-device and used to build your memory graph.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
   }
@@ -1541,7 +1540,7 @@ struct ImportConnectorSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Open \(connector.title), paste the copied prompt, then drop the full response here.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Button {
         openAndCopyPrompt(for: memorySource)
@@ -1552,11 +1551,11 @@ struct ImportConnectorSheet: View {
 
       ZStack(alignment: .topLeading) {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.wash)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
               .stroke(
-                Color.white.opacity(draftFocused ? 0.18 : 0.08),
+                draftFocused ? Ink.accent : Ink.hairline,
                 lineWidth: 1
               )
           )
@@ -1564,7 +1563,7 @@ struct ImportConnectorSheet: View {
         if draftText.isEmpty {
           Text("Paste the full \(connector.title) response here…")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, draftFieldHorizontalInset)
             .padding(.vertical, draftFieldVerticalInset)
             .allowsHitTesting(false)
@@ -1573,7 +1572,7 @@ struct ImportConnectorSheet: View {
         TextEditor(text: $draftText)
           .scrollContentBackground(.hidden)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           // NSTextView adds a built-in 5pt line-fragment inset, so
           // subtract it here to align the caret with the placeholder.
           .padding(.horizontal, draftFieldHorizontalInset - 5)
@@ -1766,16 +1765,16 @@ struct ImportConnectorSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(run.progressTitle)
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(run.progressDetail)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
 
             Text("You can close this window now. Omi keeps importing in the background.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -1783,27 +1782,27 @@ struct ImportConnectorSheet: View {
     } else if let statusMessage = runState?.statusMessage {
       Text(statusMessage)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.success)
+        .foregroundColor(Ink.primary)  // green measures ≈1.6:1 here; see SettingsStatusChip
     } else if let errorMessage = runState?.errorMessage {
       Text(UserFacingErrorPresentation.message(from: errorMessage, while: .integration(connector.title)))
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(SettingsInk.notice)
     } else if snapshot.isConnected || snapshot.secondaryText != nil {
       statusCard {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           Text("Current import status")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(snapshot.primaryText)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .fixedSize(horizontal: false, vertical: true)
 
           if let secondaryText = snapshot.secondaryText {
             Text(secondaryText)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -1813,7 +1812,7 @@ struct ImportConnectorSheet: View {
         "Start the import here. Once it starts, you can close this window and Omi keeps importing in the background."
       )
       .scaledFont(size: OmiType.caption)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
     }
   }
 
@@ -1821,7 +1820,7 @@ struct ImportConnectorSheet: View {
     content()
       .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(OmiColors.backgroundSecondary)
+      .background(Ink.wash)
       .cornerRadius(OmiChrome.controlRadius)
   }
 }
@@ -1836,9 +1835,9 @@ struct ShimmerView: View {
       .fill(
         LinearGradient(
           colors: [
-            OmiColors.backgroundSecondary,
-            OmiColors.backgroundTertiary,
-            OmiColors.backgroundSecondary,
+            Ink.wash,
+            Ink.rowFill,
+            Ink.wash,
           ],
           startPoint: .leading,
           endPoint: .trailing
@@ -1885,7 +1884,7 @@ struct HorizontalAppSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: OmiSpacing.lg) {
@@ -1899,15 +1898,15 @@ struct HorizontalAppSection: View {
               VStack(spacing: OmiSpacing.xs) {
                 ZStack {
                   RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(Ink.wash)
                     .frame(width: 56, height: 56)
                   Image(systemName: "chevron.right")
                     .scaledFont(size: 18, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
                 Text("See more")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .frame(width: 70)
             }
@@ -1917,15 +1916,15 @@ struct HorizontalAppSection: View {
               VStack(spacing: OmiSpacing.xs) {
                 ZStack {
                   RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(Ink.wash)
                     .frame(width: 56, height: 56)
                   Image(systemName: "chevron.right")
                     .scaledFont(size: 18, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
                 Text("View all")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .frame(width: 70)
             }
@@ -1952,7 +1951,7 @@ struct AppGridSection: View {
       HStack {
         Text(title)
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -1964,7 +1963,7 @@ struct AppGridSection: View {
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.micro, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -2013,7 +2012,7 @@ struct CompactAppCard: View {
         VStack(spacing: OmiSpacing.hairline) {
           Text(app.name)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           // Rating and installs
@@ -2021,20 +2020,20 @@ struct CompactAppCard: View {
             if let rating = app.formattedRating {
               Image(systemName: "star.fill")
                 .scaledFont(size: 8)
-                .foregroundColor(.yellow)
+                .foregroundColor(SettingsInk.notice)
               Text(rating)
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
             if let installs = app.formattedInstalls {
               if app.formattedRating != nil {
                 Text("·")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               Text(installs)
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
         }
@@ -2044,7 +2043,7 @@ struct CompactAppCard: View {
       }
       .frame(width: 90)
       .padding(.vertical, OmiSpacing.sm)
-      .background(isHovering ? OmiColors.backgroundSecondary.opacity(0.5) : Color.clear)
+      .background(isHovering ? Ink.wash : Color.clear)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
     .buttonStyle(.plain)
@@ -2053,10 +2052,10 @@ struct CompactAppCard: View {
 
   private var appIconPlaceholder: some View {
     RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-      .fill(OmiColors.backgroundTertiary)
+      .fill(Ink.rowFill)
       .overlay(
         Image(systemName: "app.fill")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       )
   }
 }
@@ -2085,13 +2084,13 @@ struct SmallAppButton: View {
       } else {
         Text(app.enabled ? "Open" : "Install")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
+          .foregroundColor(Ink.surface)
           .frame(width: 50, height: 22)
-          .background(Color.white)
+          .background(Ink.primary)
           .cornerRadius(OmiChrome.smallControlRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.border, lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
       }
     }
@@ -2130,12 +2129,12 @@ struct AppCard: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(app.name)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
 
             Text(app.author)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
@@ -2144,7 +2143,7 @@ struct AppCard: View {
 
         Text(app.description)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(2)
           .multilineTextAlignment(.leading)
 
@@ -2155,20 +2154,20 @@ struct AppCard: View {
               HStack(spacing: OmiSpacing.hairline) {
                 Image(systemName: "star.fill")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(.yellow)
+                  .foregroundColor(SettingsInk.notice)
                 Text(rating)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
             }
             if let installs = app.formattedInstalls {
               HStack(spacing: OmiSpacing.hairline) {
                 Image(systemName: "arrow.down.circle")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                 Text(installs)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
             }
           }
@@ -2180,7 +2179,7 @@ struct AppCard: View {
         }
       }
       .padding(OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+      .background(isHovering ? Ink.rowFill : Ink.wash)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
     .buttonStyle(.plain)
@@ -2191,10 +2190,10 @@ struct AppCard: View {
 
   private var appIconPlaceholder: some View {
     RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-      .fill(OmiColors.backgroundTertiary)
+      .fill(Ink.rowFill)
       .overlay(
         Image(systemName: "app.fill")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       )
   }
 }
@@ -2223,13 +2222,13 @@ struct AppActionButton: View {
       } else {
         Text(app.enabled ? "Open" : "Install")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
+          .foregroundColor(Ink.surface)
           .frame(width: 60, height: 28)
-          .background(Color.white)
+          .background(Ink.primary)
           .cornerRadius(OmiChrome.chipRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-              .stroke(OmiColors.border, lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
       }
     }
@@ -2260,7 +2259,7 @@ struct AppFilterSheet: View {
       HStack {
         Text("Filters")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -2270,7 +2269,7 @@ struct AppFilterSheet: View {
             Task { await appProvider.searchApps() }
           }
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
 
         DismissButton(action: dismissSheet)
@@ -2278,7 +2277,7 @@ struct AppFilterSheet: View {
       .padding()
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
@@ -2286,7 +2285,7 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Category")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             FlowLayout(spacing: OmiSpacing.sm) {
               ForEach(appProvider.categories) { category in
@@ -2309,7 +2308,7 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Capability")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             FlowLayout(spacing: OmiSpacing.sm) {
               ForEach(appProvider.capabilities) { capability in
@@ -2332,11 +2331,11 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Other")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
               .toggleStyle(OmiToggleStyle())
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .onChange(of: appProvider.showInstalledOnly) { _, _ in
                 Task { await appProvider.searchApps() }
               }
@@ -2346,7 +2345,7 @@ struct AppFilterSheet: View {
       }
     }
     .frame(width: 400, height: 450)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
   private var hasActiveFilters: Bool {
@@ -2367,12 +2366,12 @@ struct FilterChip: View {
         .scaledFont(size: OmiType.body)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(isSelected ? Color.white : OmiColors.backgroundSecondary)
-        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+        .background(isSelected ? Ink.primary : Ink.wash)
+        .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
         .cornerRadius(OmiChrome.sectionRadius)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.sectionRadius)
-            .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
+            .stroke(isSelected ? Ink.separator : Color.clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -2411,18 +2410,18 @@ struct CategoryAppsSheet: View {
 
         Text(category.title)
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Text("\(categoryApps.count) apps")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .padding()
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
 
       ScrollView {
         LazyVGrid(
@@ -2438,7 +2437,7 @@ struct CategoryAppsSheet: View {
         .padding()
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
   }
 }
 
@@ -2510,7 +2509,7 @@ struct AppDetailSheet: View {
                   .aspectRatio(contentMode: .fill)
               default:
                 RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFill)
               }
             }
             .frame(width: 80, height: 80)
@@ -2519,11 +2518,11 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.xs) {
               Text(app.name)
                 .scaledFont(size: 24, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(app.author)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               HStack(spacing: OmiSpacing.md) {
                 let ratingAvg = appDetails?.ratingAvg ?? app.ratingAvg
@@ -2532,17 +2531,17 @@ struct AppDetailSheet: View {
                 if let ratingAvg, ratingCount > 0 {
                   HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "star.fill")
-                      .foregroundColor(.yellow)
+                      .foregroundColor(SettingsInk.notice)
                     Text(String(format: "%.1f", ratingAvg))
                     Text("(\(ratingCount))")
                   }
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                 }
                 if installs > 0 {
                   Text("\(installs) installs")
                     .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
               }
             }
@@ -2585,18 +2584,18 @@ struct AppDetailSheet: View {
                       Text("Setting up...")
                         .scaledFont(size: OmiType.caption, weight: .semibold)
                     }
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                     .frame(width: 120, height: 36)
                   } else {
                     Text(primaryAction == .open ? "Open" : "Install")
                       .scaledFont(size: OmiType.body, weight: .semibold)
-                      .foregroundColor(.black)
+                      .foregroundColor(Ink.surface)
                       .frame(width: 100, height: 36)
-                      .background(Color.white)
+                      .background(Ink.primary)
                       .cornerRadius(OmiChrome.controlRadius)
                       .overlay(
                         RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                          .stroke(OmiColors.border, lineWidth: 1)
+                          .stroke(Ink.separator, lineWidth: 1)
                       )
                   }
                 }
@@ -2610,9 +2609,9 @@ struct AppDetailSheet: View {
                 }) {
                   Image(systemName: "trash")
                     .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.error)
+                    .foregroundColor(Ink.errorRed)
                     .frame(width: 36, height: 36)
-                    .background(OmiColors.error.opacity(0.1))
+                    .background(Ink.errorRed.opacity(0.1))
                     .cornerRadius(OmiChrome.controlRadius)
                 }
                 .buttonStyle(.plain)
@@ -2621,17 +2620,17 @@ struct AppDetailSheet: View {
           }
 
           Divider()
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
 
           // Description
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("About")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(app.description)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
 
@@ -2650,36 +2649,36 @@ struct AppDetailSheet: View {
                     // Step number / checkmark
                     ZStack {
                       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                        .fill(isSetupCompleted ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
+                        .fill(isSetupCompleted ? Ink.listeningGreen.opacity(0.15) : Ink.rowFill)
                         .frame(width: 40, height: 40)
                       if isSetupCompleted {
                         Image(systemName: "checkmark")
                           .scaledFont(size: OmiType.body, weight: .semibold)
-                          .foregroundColor(.green)
+                          .foregroundColor(Ink.listeningGreen)
                       } else {
                         Text("\(index + 1)")
                           .scaledFont(size: OmiType.body, weight: .semibold)
-                          .foregroundColor(OmiColors.textSecondary)
+                          .foregroundColor(Ink.secondary)
                       }
                     }
 
                     VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                       Text(step.name)
                         .scaledFont(size: OmiType.body, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(Ink.primary)
                       Text(isSetupCompleted ? "Completed" : "Click to complete")
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(isSetupCompleted ? .green : OmiColors.textTertiary)
+                        .foregroundColor(isSetupCompleted ? Ink.listeningGreen : Ink.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "arrow.up.right.square")
                       .scaledFont(size: OmiType.body)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                   }
                   .padding(OmiSpacing.md)
-                  .background(OmiColors.backgroundSecondary)
+                  .background(Ink.wash)
                   .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
@@ -2692,7 +2691,7 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Text("Capabilities")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               FlowLayout(spacing: OmiSpacing.sm) {
                 ForEach(app.capabilities, id: \.self) { capability in
@@ -2706,22 +2705,22 @@ struct AppDetailSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Category")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(app.category.replacingOccurrences(of: "-", with: " ").capitalized)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
 
           Divider()
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
 
           // Add Review Section
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
               Text("Reviews")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
@@ -2733,7 +2732,7 @@ struct AppDetailSheet: View {
                     Text("Add Review")
                       .scaledFont(size: OmiType.body, weight: .medium)
                   }
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                 }
                 .buttonStyle(.plain)
               }
@@ -2745,14 +2744,14 @@ struct AppDetailSheet: View {
                 HStack {
                   Text("Your Review")
                     .scaledFont(size: OmiType.body, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(Ink.primary)
 
                   Spacer()
 
                   Button(action: { showAddReview = true }) {
                     Text("Edit")
                       .scaledFont(size: OmiType.caption, weight: .medium)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                   }
                   .buttonStyle(.plain)
                 }
@@ -2770,7 +2769,7 @@ struct AppDetailSheet: View {
             } else if userReview == nil && reviews.isEmpty {
               Text("No reviews yet. Be the first to review this app.")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .padding(.vertical, OmiSpacing.sm)
             }
           }
@@ -2779,7 +2778,7 @@ struct AppDetailSheet: View {
       }
     }
     .frame(width: 500, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
     .task {
       await loadReviews()
       await loadAppDetails()
@@ -2985,7 +2984,7 @@ struct AddReviewSheet: View {
 
         Text(existingReview != nil ? "Edit Review" : "Add Review")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -2994,7 +2993,7 @@ struct AddReviewSheet: View {
       .padding()
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
@@ -3008,7 +3007,7 @@ struct AddReviewSheet: View {
                   .aspectRatio(contentMode: .fill)
               default:
                 RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFill)
               }
             }
             .frame(width: 50, height: 50)
@@ -3017,11 +3016,11 @@ struct AddReviewSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(app.name)
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(app.author)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -3031,7 +3030,7 @@ struct AddReviewSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Your Rating")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             StarRatingPicker(rating: $selectedRating)
           }
@@ -3041,27 +3040,27 @@ struct AddReviewSheet: View {
             HStack {
               Text("Your Review")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
               Text("\(reviewText.count)/\(maxReviewLength)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(reviewText.count > maxReviewLength ? OmiColors.error : OmiColors.textTertiary)
+                .foregroundColor(reviewText.count > maxReviewLength ? Ink.errorRed : Ink.secondary)
             }
 
             ZStack(alignment: .topLeading) {
               TextEditor(text: $reviewText)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 120, maxHeight: 200)
                 .padding(OmiSpacing.md)
-                .background(OmiColors.backgroundSecondary)
+                .background(Ink.wash)
                 .cornerRadius(OmiChrome.smallControlRadius)
                 .overlay(
                   RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+                    .stroke(Ink.separator, lineWidth: 1)
                 )
                 .onChange(of: reviewText) { _, newValue in
                   if newValue.count > maxReviewLength {
@@ -3072,7 +3071,7 @@ struct AddReviewSheet: View {
               if reviewText.isEmpty {
                 Text("Share your experience with this app...")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.leading, OmiSpacing.lg)
                   .padding(.top, OmiSpacing.xl)
                   .allowsHitTesting(false)
@@ -3084,10 +3083,10 @@ struct AddReviewSheet: View {
           if let errorMessage = errorMessage {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.circle.fill")
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(Ink.errorRed)
               Text(errorMessage)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(Ink.errorRed)
             }
           }
 
@@ -3097,20 +3096,20 @@ struct AddReviewSheet: View {
               if isSubmitting {
                 ProgressView()
                   .scaleEffect(0.8)
-                  .tint(OmiColors.textPrimary)
+                  .tint(PageGlass.primaryActionLabel)
               } else {
                 Text(existingReview != nil ? "Update Review" : "Submit Review")
                   .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(PageGlass.primaryActionLabel)
             .frame(maxWidth: .infinity)
             .frame(height: 44)
-            .background(isFormValid ? Color.white : Color.white.opacity(0.5))
+            .background(isFormValid ? Ink.primary : Ink.primary.opacity(0.45))
             .cornerRadius(OmiChrome.smallControlRadius)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .stroke(OmiColors.border, lineWidth: 1)
+                .stroke(Ink.separator, lineWidth: 1)
             )
           }
           .buttonStyle(.plain)
@@ -3120,7 +3119,7 @@ struct AddReviewSheet: View {
       }
     }
     .frame(width: 400, height: 480)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
   private func submitReview() {
@@ -3180,7 +3179,7 @@ struct StarRatingPicker: View {
       if rating > 0 {
         Text(ratingLabel)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .padding(.leading, OmiSpacing.sm)
       }
     }
@@ -3193,7 +3192,7 @@ struct StarRatingPicker: View {
 
   private func starColor(for star: Int) -> Color {
     let effectiveRating = hoverRating > 0 ? hoverRating : rating
-    return star <= effectiveRating ? .yellow : OmiColors.textTertiary.opacity(0.5)
+    return star <= effectiveRating ? SettingsInk.notice : Ink.hairline
   }
 
   private func scaleEffect(for star: Int) -> CGFloat {
@@ -3240,8 +3239,8 @@ struct CapabilityBadge: View {
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
-    .background(OmiColors.backgroundSecondary)
-    .foregroundColor(OmiColors.textSecondary)
+    .background(Ink.wash)
+    .foregroundColor(Ink.secondary)
     .cornerRadius(OmiChrome.controlRadius)
   }
 }
@@ -3259,7 +3258,7 @@ struct ReviewCard: View {
           ForEach(1...5, id: \.self) { star in
             Image(systemName: star <= review.score ? "star.fill" : "star")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(star <= review.score ? .yellow : OmiColors.textTertiary)
+              .foregroundColor(star <= review.score ? SettingsInk.notice : Ink.secondary)
           }
         }
 
@@ -3267,32 +3266,32 @@ struct ReviewCard: View {
 
         Text(review.ratedAt, style: .date)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Text(review.review)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .lineLimit(3)
 
       if let response = review.response {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Developer Response")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(response)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(2)
         }
         .padding(OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
+        .background(Ink.wash)
         .cornerRadius(OmiChrome.elementRadius)
       }
     }
     .padding(OmiSpacing.md)
-    .background(OmiColors.backgroundSecondary.opacity(0.5))
+    .background(Ink.wash)
     .cornerRadius(OmiChrome.smallControlRadius)
   }
 }
@@ -3374,131 +3373,6 @@ struct FlowLayout: Layout {
   }
 }
 
-// MARK: - Dismissable Sheet
-/// A sheet that can be dismissed by clicking outside the content area.
-/// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
-
-struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
-  @Binding var isPresented: Bool
-  let sheetContent: () -> SheetContent
-
-  func body(content: Content) -> some View {
-    content
-      // The overlay is modal: while it is up, the content underneath must
-      // not be reachable by VoiceOver / Full Keyboard Access.
-      .accessibilityHidden(isPresented)
-      .overlay {
-        ZStack {
-          if isPresented {
-            // Dimmed background that dismisses on tap.
-            Color.black.opacity(0.3)
-              .ignoresSafeArea()
-              .contentShape(Rectangle())
-              .onTapGesture {
-                log("DISMISSABLE_SHEET: Background tapped, dismissing")
-                OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                  isPresented = false
-                }
-              }
-              .transition(.opacity)
-              .zIndex(0)
-
-            // Force the sheet into a centered full-size overlay so it
-            // does not end up clipped or visually hidden behind the scrim.
-            sheetContent()
-              .background(OmiColors.backgroundPrimary)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
-
-            OverlayModalEscapeCatcher {
-              log("DISMISSABLE_SHEET: Escape pressed, dismissing")
-              OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                isPresented = false
-              }
-            }
-            .zIndex(2)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
-      .omiAnimation(.easeOut(duration: 0.2), value: isPresented)
-  }
-}
-
-extension View {
-  /// Presents a sheet that can be dismissed by clicking outside the content area.
-  func dismissableSheet<Content: View>(
-    isPresented: Binding<Bool>,
-    @ViewBuilder content: @escaping () -> Content
-  ) -> some View {
-    self.modifier(DismissableSheetModifier(isPresented: isPresented, sheetContent: content))
-  }
-
-  /// Presents an item-based sheet that can be dismissed by clicking outside the content area.
-  func dismissableSheet<Item: Identifiable, Content: View>(
-    item: Binding<Item?>,
-    @ViewBuilder content: @escaping (Item) -> Content
-  ) -> some View {
-    self.modifier(DismissableSheetItemModifier(item: item, sheetContent: content))
-  }
-}
-
-/// Item-based version of DismissableSheetModifier for optional item bindings.
-struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: ViewModifier {
-  @Binding var item: Item?
-  let sheetContent: (Item) -> SheetContent
-
-  func body(content: Content) -> some View {
-    content
-      // The overlay is modal: while it is up, the content underneath must
-      // not be reachable by VoiceOver / Full Keyboard Access.
-      .accessibilityHidden(item != nil)
-      .overlay {
-        ZStack {
-          if let presentedItem = item {
-            // Dimmed background that dismisses on tap.
-            Color.black.opacity(0.3)
-              .ignoresSafeArea()
-              .contentShape(Rectangle())
-              .onTapGesture {
-                log("DISMISSABLE_SHEET: Background tapped, dismissing item")
-                OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                  item = nil
-                }
-              }
-              .transition(.opacity)
-              .zIndex(0)
-
-            // Force the sheet into a centered full-size overlay so it
-            // does not end up clipped or visually hidden behind the scrim.
-            sheetContent(presentedItem)
-              .background(OmiColors.backgroundPrimary)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
-
-            OverlayModalEscapeCatcher {
-              log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
-              OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                item = nil
-              }
-            }
-            .zIndex(2)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
-      .omiAnimation(.easeOut(duration: 0.2), value: item?.id != nil)
-  }
-}
-
 // MARK: - Create App Card
 /// Simple card button for creating apps or persona
 
@@ -3525,19 +3399,19 @@ struct CreateAppCard: View {
 
       Text(title)
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Spacer()
 
       Image(systemName: "chevron.right")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: .infinity)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+        .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
             .stroke(iconColor.opacity(0.3), lineWidth: 1)

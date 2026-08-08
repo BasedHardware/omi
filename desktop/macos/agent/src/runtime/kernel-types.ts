@@ -150,6 +150,8 @@ export type ExternalSurfaceAuthorityErrorCode =
   | "permission_route_rejected"
   | "permission_request_not_authorized"
   | "pill_management_intent_required"
+  | "memory_save_not_authorized"
+  | "memory_content_not_in_user_request"
   | "sql_write_rejected";
 
 export class ExternalSurfaceAuthorityError extends Error {

@@ -116,16 +116,22 @@ def test_load_backend_env_offline_ignores_provider_keys_in_personal_dotenv(
 def test_load_backend_env_skips_adc_when_auth_emulator_active(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env.local-dev").write_text(
-        "FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099\n" "GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json\n",
+        "FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099\n"
+        "GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json\n"
+        "FIREBASE_AUTH_CREDENTIALS_PATH=firebase-auth.json\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("OMI_ENV_STAGE", "local")
-    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/inherited-google-credentials.json")
+    monkeypatch.setenv("SERVICE_ACCOUNT_JSON", '{"type":"service_account"}')
+    monkeypatch.setenv("FIREBASE_AUTH_CREDENTIALS_PATH", "/tmp/inherited-firebase-auth.json")
 
     load_backend_env(tmp_path)
 
     assert os.environ["FIREBASE_AUTH_EMULATOR_HOST"] == "127.0.0.1:9099"
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ
+    assert "SERVICE_ACCOUNT_JSON" not in os.environ
+    assert "FIREBASE_AUTH_CREDENTIALS_PATH" not in os.environ
 
 
 def test_load_backend_env_invalid_stage_uses_legacy_dotenv_only(

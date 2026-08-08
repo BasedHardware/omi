@@ -79,7 +79,7 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
           ) { _ in }
         }
         AppsHeaderLayoutProbe(recorder: recorder, slot: .create) {
-          SmallHeaderButton(icon: "app.badge.fill", label: "Create App", color: OmiColors.textSecondary) {}
+          SmallHeaderButton(icon: "app.badge.fill", label: "Create App", color: Ink.secondary) {}
         }
       }
       .fixedSize()
