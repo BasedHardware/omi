@@ -51,15 +51,8 @@ struct OnboardingGoalStepView: View {
             .textFieldStyle(.plain)
             .padding(.horizontal, OmiSpacing.lg)
             .padding(.vertical, OmiSpacing.md)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                .fill(OmiColors.backgroundSecondary)
-                .overlay(
-                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-            )
-            .foregroundColor(OmiColors.textPrimary)
+            .glassField()
+            .foregroundColor(Ink.primary)
             .frame(maxWidth: 560)
             .onSubmit(saveGoalAndContinue)
         }
@@ -67,7 +60,8 @@ struct OnboardingGoalStepView: View {
         if let error = coordinator.lastActionError {
           Text(error)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(PageGlass.warning)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         HStack(spacing: OmiSpacing.md) {
@@ -77,7 +71,7 @@ struct OnboardingGoalStepView: View {
             Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
               saveGoalAndContinue()
             }
-            .buttonStyle(OmiButtonStyle(.primary))
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .keyboardShortcut(.defaultAction)
             .disabled(coordinator.isSavingGoal)
           }
@@ -147,22 +141,22 @@ private struct GoalChipGrid: View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: OmiSpacing.sm)], spacing: OmiSpacing.sm) {
       ForEach(items, id: \.self) { item in
         let isSelected = selectedItem == item
+        let shape = RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
 
         Button(action: { onSelect(item) }) {
           Text(item)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+            .inkStyle(InkType.rowCopy, color: isSelected ? Ink.surface : Ink.primary)
+            .multilineTextAlignment(.center)
+            // A goal is a sentence, and the grid is adaptive — the cell grows, it never clips.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.md)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                .fill(isSelected ? Color.white : Color.white.opacity(0.05))
-                .overlay(
-                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                    .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-                )
-            )
+            // The chosen goal inverts the label ladder, the way the primary button does: on this
+            // panel the old white fill *is* the panel, so selection had nothing left to say with.
+            .background(shape.fill(isSelected ? Ink.primary : Ink.rowFill))
+            .overlay(shape.strokeBorder(isSelected ? Color.clear : Ink.separator, lineWidth: 1))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
       }

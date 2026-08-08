@@ -42,7 +42,7 @@ steps:
     name: Navigate to the mounted Chat page after server materialization
     bridge.navigate:
       target: chat
-      activateApp: true
+      activateApp: false
       settleMs: 1000
 
   - id: S2

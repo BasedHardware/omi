@@ -32,6 +32,17 @@ assert_config "Omi Dev" "false" "com.omi.desktop-dev" "omi-computer-dev"
 assert_config "omi-subagent-test" "true" "com.omi.omi-subagent-test" "omi-omi-subagent-test"
 assert_config "Omi Subagent Test!!" "true" "com.omi.omi-subagent-test" "omi-omi-subagent-test"
 
+assert_eq "normal" "$(derive_omi_automation_ui_mode false "")" "Omi Dev automation UI default"
+assert_eq "quiet" "$(derive_omi_automation_ui_mode true "")" "named bundle automation UI default"
+assert_eq "interactive" "$(derive_omi_automation_ui_mode true interactive)" "explicit interactive automation UI"
+assert_eq "normal" "$(derive_omi_automation_ui_mode true normal)" "explicit normal automation UI"
+if derive_omi_automation_ui_mode true unexpected >/tmp/omi-app-config-ui.out 2>/tmp/omi-app-config-ui.err; then
+  fail "invalid automation UI mode unexpectedly succeeded"
+fi
+if ! grep -q "must be normal, quiet, or interactive" /tmp/omi-app-config-ui.err; then
+  fail "invalid automation UI mode did not explain accepted values"
+fi
+
 if derive_omi_app_config "!!!" >/tmp/omi-app-config-invalid.out 2>/tmp/omi-app-config-invalid.err; then
   fail "invalid app name unexpectedly succeeded"
 fi

@@ -258,7 +258,8 @@ launch_app() {
   [ -x "$binary" ] || return 1
   rm -f "$(token_file)"
   OMI_AUTOMATION_PORT="$PORT" OMI_ENABLE_LOCAL_AUTOMATION=1 \
-    nohup "$binary" >>"$(app_log)" 2>&1 &
+    nohup "$binary" --automation-bridge "--automation-port=$PORT" \
+      --automation-ui=quiet >>"$(app_log)" 2>&1 &
   APP_PID=$!
   # Detach from job control so bash doesn't print "Terminated" when probes
   # SIGTERM the app deliberately.

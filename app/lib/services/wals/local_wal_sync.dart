@@ -575,17 +575,13 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress, int? maxBatches}) =>
-      _syncAll(progress: progress, liveCaptureOnly: false, maxBatches: maxBatches);
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) =>
+      _syncAll(progress: progress, liveCaptureOnly: false);
 
-  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress, int? maxBatches}) =>
-      _syncAll(progress: progress, liveCaptureOnly: true, maxBatches: maxBatches);
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _syncAll(progress: progress, liveCaptureOnly: true);
 
-  Future<SyncLocalFilesResponse?> _syncAll({
-    IWalSyncProgressListener? progress,
-    required bool liveCaptureOnly,
-    int? maxBatches,
-  }) async {
+  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;
@@ -618,10 +614,6 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     int batchesCompleted = 0;
     int batchesFailed = 0;
-    // Every selected batch consumes the grace budget — including upload failures
-    // and recovery-window rejections — so a transient outage cannot walk the
-    // whole backlog during a screen-lock pass (#7221 / cubic P1).
-    int batchesAttempted = 0;
     int corruptedCount = 0;
     int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
@@ -643,13 +635,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      if (maxBatches != null && batchesAttempted >= maxBatches) {
-        Logger.debug('LocalWalSync: stopping after $maxBatches batch attempt(s) (screen-lock grace)');
-        break;
-      }
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
-      batchesAttempted++;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
       final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
@@ -793,6 +780,19 @@ class LocalWalSyncImpl implements LocalWalSync {
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
+      } on SyncOfflineQueueQuarantinedException {
+        // Cutover fence: leave WALs retryable and skip quietly until control allows drain.
+        DebugLogManager.logEvent('local_upload_cutover_quarantined', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
+        });
         for (final wal in batchWals) {
           wal.isSyncing = false;
           wal.syncStartedAt = null;
@@ -963,6 +963,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    } on SyncOfflineQueueQuarantinedException {
+      DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;

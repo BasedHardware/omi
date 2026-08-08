@@ -7,6 +7,8 @@ from uuid import UUID
 
 import typesense
 
+from utils.share_links import accepted_share_hosts, share_base_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +16,6 @@ class ConversationSearchUnavailableError(Exception):
     """Raised when Typesense is unreachable or times out (transient upstream failure)."""
 
 
-_EXACT_CONVERSATION_HOST = 'h.omi.me'
 _EXACT_CONVERSATION_PATH_PREFIX = '/conversations/'
 
 
@@ -35,8 +36,9 @@ def parse_exact_conversation_reference(query: str) -> Optional[str]:
     """Extract a canonical conversation UUID from an ID or Omi share URL.
 
     Exact references intentionally accept only the two values Omi presents to users: a UUID or an
-    HTTPS URL on ``h.omi.me`` with the exact ``/conversations/<uuid>`` path. Anything else remains a
-    natural-language query so partial IDs and lookalike URLs cannot turn search into document probing.
+    HTTPS URL on the configured share host (default ``h.omi.me``) with the exact
+    ``/conversations/<uuid>`` path. Anything else remains a natural-language query so partial IDs
+    and lookalike URLs cannot turn search into document probing.
     """
     value = query.strip() if query else ''
     if exact_id := _canonical_conversation_uuid(value):
@@ -47,16 +49,35 @@ def parse_exact_conversation_reference(query: str) -> Optional[str]:
     except ValueError:
         return None
 
+    host = (parsed.hostname or '').lower()
+    try:
+        configured = urlsplit(share_base_url())
+        port = parsed.port
+        configured_port = configured.port
+    except ValueError:
+        return None
+    configured_host = (configured.hostname or '').lower()
+    if host == configured_host:
+        expected_port = configured_port
+        expected_path_prefix = f'{configured.path.rstrip("/")}{_EXACT_CONVERSATION_PATH_PREFIX}'
+    elif host == 'h.omi.me':
+        expected_port = None
+        expected_path_prefix = _EXACT_CONVERSATION_PATH_PREFIX
+    else:
+        return None
     if (
         parsed.scheme.lower() != 'https'
-        or parsed.netloc.lower() != _EXACT_CONVERSATION_HOST
+        or host not in accepted_share_hosts()
+        or parsed.username is not None
+        or parsed.password is not None
+        or port != expected_port
         or parsed.query
         or parsed.fragment
-        or not parsed.path.startswith(_EXACT_CONVERSATION_PATH_PREFIX)
+        or not parsed.path.startswith(expected_path_prefix)
     ):
         return None
 
-    return _canonical_conversation_uuid(parsed.path[len(_EXACT_CONVERSATION_PATH_PREFIX) :])
+    return _canonical_conversation_uuid(parsed.path[len(expected_path_prefix) :])
 
 
 def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional[int]) -> tuple[int, int]:
