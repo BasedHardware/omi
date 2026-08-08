@@ -71,13 +71,7 @@ test('App', async () => {
             <text
               class="Hint"
             >
-              Edit
-              <text
-                style="font-style:italic;color:rgba(255, 255, 255, 0.85)"
-              >
-                 src/App.tsx
-              </text>
-              to see updates!
+              omi-relay-contract:v1|native-seam:pending|payload:bounded|gap:explicit
             </text>
           </view>
           <view

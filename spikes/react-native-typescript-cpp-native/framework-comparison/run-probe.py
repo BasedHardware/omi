@@ -19,8 +19,7 @@ def main() -> int:
     candidates = data["candidates"]
     names = [item["name"] for item in candidates]
     assert len(names) == len(set(names)), "candidate names must be unique"
-    assert {"lynx", "makepad"} <= set(names), "Lynx and Makepad must be included"
-    assert "swift-native" in names, "Swift comparison must remain explicit"
+    assert set(names) == {"react-native", "flutter", "valdi", "lynx"}, "focused spike must contain only RN, Flutter, Valdi, and Lynx"
 
     for candidate in candidates:
         missing = REQUIRED - candidate.keys()

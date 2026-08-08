@@ -1,29 +1,25 @@
-# Runnable framework shells
+# Focused runnable mobile shells
 
-This directory is the **implementation spike**, not a production migration. Each shell exposes or displays the same contract marker:
+This directory is limited to React Native, Flutter, Lynx, and Valdi. Each candidate is evaluated against:
 
 ```text
 omi-relay-contract:v1|native-seam:<framework boundary>|payload:bounded|gap:explicit
 ```
 
-## Verified locally
+## Current evidence
 
 | Shell | Command | Evidence |
 |---|---|---|
-| Tauri 2 | `bun install && bun run build && bun run tauri build -- --debug` | TypeScript + Rust command + macOS bundle/DMG built |
-| Dioxus | `cargo check --manifest-path src-tauri/Cargo.toml` | Official Dioxus/Tauri shell checks |
-| Flutter | `flutter analyze`; `MACOSX_DEPLOYMENT_TARGET=12.0 flutter build macos --debug` | Analyzer and macOS shell build |
-| Lynx | `bun install && bun run build` | ReactLynx shell bundle builds; native module remains next seam |
-| Makepad | `cargo test --manifest-path framework-comparison/runtimes/makepad_shell/Cargo.toml` | Published Makepad widgets dependency compiles; contract test passes |
-| SwiftUI | `swift build --package-path framework-comparison/runtimes/swift_native_shell -c debug` | SwiftUI macOS executable builds; Android intentionally skipped |
-| Compose Multiplatform | `./gradlew jvmJar --no-daemon` from `framework-comparison/runtimes/compose_template` | Desktop JVM target builds |
+| Flutter | `flutter analyze`; `MACOSX_DEPLOYMENT_TARGET=12.0 flutter build macos --debug` | Existing parity baseline; analyzer and macOS shell build |
+| Lynx | `bun install && bun run build` | ReactLynx bundle builds; native module remains unverified |
+| React Native | Existing project tests/builds | Android relay baseline; iOS compiler issue remains |
+| Valdi | `valdi agent-check --module hello_world --json` | Resolver passes; full check currently fails build, lint, and tests |
 
-## Evidence that remains blocked or scoped
+Generated dependencies and external Valdi source remain ignored. Use Bun for JavaScript/TypeScript installation and scripts; do not use npm.
 
-- **Valdi:** source checkout contains a native hello-world with C++/Objective-C/Kotlin examples. The isolated CLI resolved module targets successfully, but the full `agent-check --module hello_world --json` returned `success: false`: build failed, lint failed because files were not formatted, and tests failed because the requested test targets could not be built/found. Valdi is not marked built.
-- **Electrobun:** package/arm64 CLI installed, but `electrobun init` returned no scaffold or diagnostic output. It is not marked built.
-- **Crepuscularity:** remains source/research-only; no stable public scaffold command was found.
-- **React Native:** existing Android shell and relay tests remain the primary native runtime baseline.
-- **Swift:** this spike intentionally does not target Android.
+## Next gates
 
-The generated external repositories and dependency/build caches are ignored. Re-run the commands above after a fresh scaffold to reproduce the evidence; do not infer runtime support from the comparison manifest alone.
+- React Native: real Android/iOS native-function adapter.
+- Flutter: route the same contract through the existing Flutter host.
+- Lynx: implement one native module and run the Android host.
+- Valdi: complete a clean Android Bazel build, then run module tests.

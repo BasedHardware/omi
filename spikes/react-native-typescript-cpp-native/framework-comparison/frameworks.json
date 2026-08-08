@@ -1,17 +1,9 @@
 {
-  "question": "Can this framework host a TypeScript-first product shell while keeping native functions narrow and the shared relay contract portable?",
+  "question": "Can Valdi, Lynx, React Native, and Flutter host the same TypeScript-first/native-function contract with honest mobile evidence?",
   "candidates": [
     {"name":"react-native","language":"TypeScript","mobile":true,"desktop":true,"native_boundary":"TurboModule/JSI","status":"shell-built-android-verified"},
     {"name":"flutter","language":"Dart","mobile":true,"desktop":true,"native_boundary":"FFI/platform channels","status":"existing-parity-baseline"},
     {"name":"valdi","language":"TypeScript","mobile":true,"desktop":true,"native_boundary":"generated polyglot bindings","status":"agent-check-failed-resolve-pass-build-fail-lint-fail-tests-fail"},
-    {"name":"tauri","language":"Rust + web TypeScript","mobile":true,"desktop":true,"native_boundary":"Rust commands/plugins/FFI","status":"shell-built-macos-verified"},
-    {"name":"dioxus","language":"Rust","mobile":true,"desktop":true,"native_boundary":"Rust FFI/platform APIs","status":"shell-built-cargo-check-verified"},
-    {"name":"crepuscularity","language":"Rust/.crepus","mobile":true,"desktop":true,"native_boundary":"View IR/C ABI/Tauri","status":"local-source-inspected"},
-    {"name":"electrobun","language":"TypeScript/Bun","mobile":false,"desktop":true,"native_boundary":"Bun/native desktop APIs","status":"cli-probe-blocked-no-scaffold-output"},
-    {"name":"compose-multiplatform","language":"Kotlin","mobile":true,"desktop":true,"native_boundary":"JNI/Objective-C++/Kotlin","status":"official-template-desktop-jvm-verified"},
-    {"name":"lynx","language":"TypeScript/ReactLynx","mobile":true,"desktop":false,"native_boundary":"Lynx native runtime/modules","status":"shell-built-js-contract-verified"},
-    {"name":"makepad","language":"Rust","mobile":true,"desktop":true,"native_boundary":"Rust/platform backends","status":"crate-compiled-contract-test-verified"},
-    {"name":"swift-native","language":"Swift","mobile":false,"desktop":true,"native_boundary":"direct Apple APIs/C++ interop","status":"swiftui-macos-build-verified-android-skipped"},
-    {"name":"web-moonshine","language":"TypeScript","mobile":false,"desktop":false,"native_boundary":"browser API","status":"typed-boundary-only"}
+    {"name":"lynx","language":"TypeScript/ReactLynx","mobile":true,"desktop":false,"native_boundary":"Lynx native runtime/modules","status":"shell-built-js-contract-verified"}
   ]
 }
