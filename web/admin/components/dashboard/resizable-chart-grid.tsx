@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { GripVertical, Move, X, RotateCcw } from "lucide-react";
+import { PeriodChangeIndicator } from "@/components/dashboard/period-change-indicator";
+import type { PeriodChange } from "@/lib/period-change";
 
 // 12-column grid with fixed row height so both axes snap to tiles,
 // giving the layout PostHog/Mixpanel-style rectangle behavior.
@@ -41,6 +43,7 @@ export interface ChartItem {
   title: string;
   subtitle?: string;
   icon?: ReactNode;
+  periodChange?: PeriodChange | null;
   variant?: ChartVariant;
   initialLayout?: Partial<ChartLayout>;
   // Defaults to true. Set false on widgets that must always be visible
@@ -365,7 +368,10 @@ function ChartCard({
             )}
           </div>
         </div>
-        {removeButton}
+        <div className="flex shrink-0 items-center gap-2">
+          <PeriodChangeIndicator change={item.periodChange} />
+          {removeButton}
+        </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1">{item.render(layout)}</div>

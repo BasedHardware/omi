@@ -55,6 +55,7 @@ import {
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
 import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
+import { latestPeriodChange } from "@/lib/period-change";
 
 // --- Types ---
 
@@ -126,6 +127,8 @@ interface FloatingBarUsageData {
     voice_queries: number;
     unique_users: number;
     avg_per_user: number;
+    sessions: number;
+    avg_sessions_per_user: number;
   }[];
   days: number;
   summary: {
@@ -611,6 +614,7 @@ export default function AnalyticsPage() {
       {
         id: "profit-users",
         title: "New users / day",
+        periodChange: latestPeriodChange(usersData, (point) => point.total, "vs previous day"),
         subtitle: summary
           ? `Desktop ${summary.totalNewDesktop.toLocaleString()} · Mobile ${summary.totalNewMobile.toLocaleString()}`
           : "Per-platform signups",
@@ -633,6 +637,7 @@ export default function AnalyticsPage() {
       {
         id: "profit-revenue",
         title: "Revenue / day (est.)",
+        periodChange: latestPeriodChange(revenueData, (point) => point.total, "vs previous day"),
         subtitle: "Daily MRR share by platform active-user ratio",
         icon: <DollarSign className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -663,6 +668,7 @@ export default function AnalyticsPage() {
       {
         id: "profit-cost-per-user",
         title: `Cost / user / day${costSource === "real" ? "" : " (est.)"}`,
+        periodChange: latestPeriodChange(costPerUserData, (point: ProfitabilityPoint) => point.total, "vs previous day"),
         subtitle: avgCostDesktop != null && avgCostMobile != null
           ? `Avg: Desktop $${avgCostDesktop.toFixed(2)} · Mobile $${avgCostMobile.toFixed(2)}`
           : "Daily infra spend ÷ active users, per platform",
@@ -685,6 +691,7 @@ export default function AnalyticsPage() {
       {
         id: "profit-cost",
         title: `Total infra cost / day${costSource === "real" ? "" : " (est.)"}`,
+        periodChange: latestPeriodChange(costData, (point) => point.total, "vs previous day"),
         subtitle: summary?.totalCostUsd != null
           ? `Total last ${profitability?.days ?? 30}d: ${formatCurrency(summary.totalCostUsd)}`
           : "Desktop + mobile daily burn",
@@ -707,6 +714,7 @@ export default function AnalyticsPage() {
       {
         id: "profit-conversion",
         title: "Free → paid %",
+        periodChange: latestPeriodChange(conversionData, (point) => point.total, "vs previous day"),
         subtitle: "New paid subs / new users",
         icon: <Percent className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -788,6 +796,7 @@ export default function AnalyticsPage() {
       {
         id: "rev-cumulative",
         title: "Cumulative users",
+        periodChange: latestPeriodChange(cumulativeSeries, (point) => point.cumulative, "vs previous day"),
         subtitle: "Total users across all platforms",
         icon: <Users className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -816,6 +825,7 @@ export default function AnalyticsPage() {
       {
         id: "rev-mrr",
         title: "MRR over time",
+        periodChange: latestPeriodChange(mrrData, (point) => point.mrr, "vs previous month"),
         subtitle: "Monthly recurring revenue from Stripe",
         icon: <DollarSign className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -840,6 +850,7 @@ export default function AnalyticsPage() {
       {
         id: "rev-subs",
         title: "New subscriptions",
+        periodChange: latestPeriodChange(subData, (point) => point.monthly + point.annual, "vs previous month"),
         subtitle: "Monthly vs annual subscriptions created each month",
         icon: <TrendingUp className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -998,6 +1009,7 @@ export default function AnalyticsPage() {
       {
         id: "macos-fb-sessions-per-user",
         title: "Floating Bar Sessions per User",
+        periodChange: latestPeriodChange(fbUsageData, (point) => point.avg_sessions_per_user, "vs previous day"),
         subtitle: "Times floating bar was opened and a question asked, per user per day (follow-ups don't count)",
         icon: <Activity className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1053,6 +1065,7 @@ export default function AnalyticsPage() {
       {
         id: "notif-daily-sent",
         title: "Daily Notifications Sent",
+        periodChange: latestPeriodChange(notificationDailyCombined, (point) => point.totalSent, "vs previous day"),
         initialLayout: { cols: 12, rows: 4 },
         icon: <Send className="h-4 w-4" />,
         render: () => (
@@ -1078,6 +1091,7 @@ export default function AnalyticsPage() {
       {
         id: "notif-hourly-168h",
         title: "Notifications Sent, Last 168 Hours",
+        periodChange: latestPeriodChange(notificationHourlyData, (point) => point.total, "vs previous hour"),
         subtitle: "Hourly volume, with dates marked at midnight UTC.",
         icon: <Send className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -1104,6 +1118,7 @@ export default function AnalyticsPage() {
       {
         id: "notif-fb-ctr",
         title: "Floating Bar Notification CTR",
+        periodChange: latestPeriodChange(floatingBarCtr?.dailyData ?? [], (point) => point.ctr, "vs previous day"),
         subtitle: floatingBarCtrSummary?.mode === "surface_tagged"
           ? "Sent vs clicked proactive notifications in the desktop floating bar."
           : "Surface-tagged floating-bar events are not populated yet, so this is currently using all desktop notification clicks as a fallback.",
@@ -1138,6 +1153,7 @@ export default function AnalyticsPage() {
       {
         id: "notif-weekly-reach",
         title: "Weekly Notification Reach",
+        periodChange: latestPeriodChange(notificationWeeklyCombined, (point) => point.totalUniqueUsers, "vs previous week"),
         subtitle: "Volume and unique recipients in one view.",
         icon: <Users className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -1215,6 +1231,11 @@ export default function AnalyticsPage() {
       {
         id: "ratings-weekly",
         title: "Chat Response Ratings",
+        periodChange: latestPeriodChange(
+          weeklyRatingsData,
+          (point) => point.thumbs_up + point.thumbs_down,
+          "vs previous week",
+        ),
         subtitle: "Weekly thumbs up/down from macOS floating bar. The overall positive rate is shown above.",
         icon: <MessageSquare className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1261,6 +1282,7 @@ export default function AnalyticsPage() {
       {
         id: "fb-usage-text-voice",
         title: "Floating Bar Usage",
+        periodChange: latestPeriodChange(fbUsageData, (point) => point.total_queries, "vs previous day"),
         subtitle: "Daily queries by input type — text vs voice (last 30 days)",
         icon: <Activity className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1314,6 +1336,7 @@ export default function AnalyticsPage() {
       {
         id: "fb-avg-per-user",
         title: "Avg Queries per User per Day",
+        periodChange: latestPeriodChange(fbUsageData, (point) => point.avg_per_user, "vs previous day"),
         subtitle: "Average floating bar queries per active user, daily (last 30 days)",
         icon: <Activity className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1375,6 +1398,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-growth-accounting",
         title: "Growth Accounting",
+        periodChange: latestPeriodChange(ga, (point) => point.active, "vs previous week"),
         subtitle: "Weekly breakdown: where do active users come from? (Churned shown as negative)",
         icon: <TrendingUp className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1412,6 +1436,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-dau",
         title: "Daily Active Users",
+        periodChange: latestPeriodChange(dauData, (point) => point.dau, "vs previous day"),
         subtitle: "Unique macOS users per day",
         icon: <Activity className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -1438,6 +1463,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-crash-rate",
         title: "App Stability",
+        periodChange: latestPeriodChange(crashRate?.data ?? [], (point) => point.crashFreeRate, "vs previous day"),
         subtitle: "Daily crashes vs active users (last 30 days)",
         icon: <AlertTriangle className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -1495,6 +1521,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-daily-new-users",
         title: "Daily New Users",
+        periodChange: latestPeriodChange(dailyWithRollingAvg, (point) => point.rollingAvg, "vs previous day"),
         subtitle: "First-time sign-ins with 7-day rolling average",
         icon: <Users className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1536,6 +1563,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-stickiness",
         title: "Stickiness (DAU/WAU)",
+        periodChange: latestPeriodChange(stickinessData, (point) => point.dauWau, "vs previous week"),
         subtitle: "How often weekly users come back daily (good: 30%+)",
         icon: <Zap className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -1593,6 +1621,7 @@ export default function AnalyticsPage() {
       {
         id: "viral-activation",
         title: "Activation Rate",
+        periodChange: latestPeriodChange(activationData, (point) => point.rate, "vs previous day"),
         subtitle: "% of new users who create a Memory within 7 days of signing up",
         icon: <Target className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
@@ -1790,6 +1819,7 @@ export default function AnalyticsPage() {
       {
         id: "chart-total-users-cumulative",
         title: "Total Users — All-time growth",
+        periodChange: latestPeriodChange(allDailyData, (point) => point.cumulative, "vs previous day"),
         subtitle: "Cumulative signups (Firebase Auth)",
         variant: "card",
         initialLayout: { cols: 6, rows: 4 },
@@ -2353,6 +2383,13 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
     {
       id: "chat-ratings",
       title: "Chat Response Ratings",
+      periodChange: groupBy === "week"
+        ? latestPeriodChange<{ thumbs_up: number; thumbs_down: number }>(
+            chartData,
+            (point) => point.thumbs_up + point.thumbs_down,
+            "vs previous week",
+          )
+        : null,
       subtitle:
         stats.total > 0
           ? `${stats.up} 👍 · ${stats.down} 👎 · ${stats.pct}% positive`
