@@ -747,11 +747,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'आपल्या योजना $date वर नवीकरण होईल.';
-  }
-
-  @override
   String get basicPlan => 'मुक्त योजना';
 
   @override
@@ -2128,16 +2123,16 @@ class AppLocalizationsMr extends AppLocalizations {
   String get editMemory => '✏️ स्मृती संपादित करा';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'आधार म्हणून पिन करा';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'आधारातून अनपिन करा';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'आधार स्मृती';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'नेहमी संदर्भात';
 
   @override
   String get memoryContentHint => 'मला आयस्क्रीम खाण्यास आवडते...';
@@ -9783,4 +9778,54 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'सिंक करण्यासाठी खूप जुने — Omi ते स्वीकारू शकत नाही';
+
+  @override
+  String get planSheetChooseYourPlan => 'अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, मोबाइल आणि वेबवर उपलब्ध';
+
+  @override
+  String get popularBadge => 'लोकप्रिय';
+
+  @override
+  String get worksOnDesktop => 'डेस्कटॉपवर चालते';
+
+  @override
+  String get noDesktopAccess => 'डेस्कटॉपवर चालत नाही';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months महिने / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count महिने मोफत',
+      one: '1 महिना मोफत',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 सेकंद विलंब (रिअल-टाइम नाही)';
+
+  @override
+  String get downgradeToFreemiumAction => 'मोफत आवृत्तीवर जा';
+
+  @override
+  String get getFreeUnlimitedAccess => 'मोफत अमर्यादित प्रवेश मिळवा';
+
+  @override
+  String get shareDataForTraining => 'प्रशिक्षणासाठी डेटा सामायिक करा';
+
+  @override
+  String get yourRequestUnderReview => 'तुमची विनंती पुनरावलोकनाधीन आहे';
 }

@@ -137,6 +137,22 @@ void main() {
     });
   });
 
+  test('a transcript scroll-state store resets on a fresh page but reuses a live session', () {
+    final store = TranscriptScrollStateStore();
+    final first = store.forSession('live-session');
+    first.update(offset: 120, isAtBottom: false);
+
+    expect(store.forSession('live-session'), same(first));
+    expect(store.forSession('live-session').isAtBottom, isFalse);
+
+    final nextSession = store.forSession('next-session');
+    expect(nextSession, isNot(same(first)));
+    expect(nextSession.hasPosition, isFalse);
+
+    final freshPageStore = TranscriptScrollStateStore();
+    expect(freshPageStore.forSession('live-session').hasPosition, isFalse);
+  });
+
   group('Live transcript scrolling', () {
     late ScrollController controller;
     late TranscriptScrollState scrollState;
@@ -208,20 +224,21 @@ void main() {
       expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
     });
 
-    testWidgets('a user position away from the bottom survives reopening', (tester) async {
+    testWidgets('a fresh transcript load starts at the latest segment', (tester) async {
       await pumpTranscript(tester);
       await tester.drag(find.byType(ListView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
-      final preservedOffset = controller.offset;
       expect(scrollState.isAtBottom, isFalse);
       expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      scrollState = TranscriptScrollState();
       await pumpTranscript(tester);
 
-      expect(controller.offset, closeTo(preservedOffset, 0.1));
-      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
     });
 
     testWidgets('the jump control animates to the latest segment and hides', (tester) async {
@@ -235,6 +252,71 @@ void main() {
       expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
       expect(scrollState.isAtBottom, isTrue);
       expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+    });
+
+    testWidgets('manual scrolling up stays put while live transcript grows', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+
+      final preservedOffset = controller.offset;
+      expect(scrollState.isAtBottom, isFalse);
+
+      segments = [
+        ...segments,
+        TranscriptSegment(
+          id: 'live-new',
+          text: List.filled(80, 'new live words').join(' '),
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: segments.length.toDouble(),
+          end: segments.length + 1.0,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(preservedOffset, 0.1));
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
+    testWidgets('manual scrolling up stays put when live content arrives mid-gesture', (tester) async {
+      await pumpTranscript(tester);
+      final gestureStart = tester.getCenter(find.byType(ListView));
+      final gesture = await tester.startGesture(gestureStart);
+      for (var step = 0; step < 5; step++) {
+        await gesture.moveBy(const Offset(0, 52));
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      await tester.pump();
+
+      final preservedOffset = controller.offset;
+      segments = [
+        ...segments,
+        TranscriptSegment(
+          id: 'live-mid-gesture',
+          text: List.filled(80, 'new live words').join(' '),
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: segments.length.toDouble(),
+          end: segments.length + 1.0,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester, settle: false);
+      await tester.pump(const Duration(milliseconds: 16));
+
+      expect(controller.offset, closeTo(preservedOffset, 0.1));
+      expect(scrollState.isAtBottom, isFalse);
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('same-ID transcript growth keeps following the live edge', (tester) async {

@@ -32,8 +32,9 @@ def mock_db(monkeypatch):
 
 
 class _Snap:
-    def __init__(self, data):
+    def __init__(self, data, doc_id=None):
         self._d = data
+        self.id = doc_id
         self.exists = True
 
     def to_dict(self):
@@ -46,14 +47,44 @@ class _DocRef:
         self._data = data
 
     def get(self):
-        return _Snap(self._data)
+        return _Snap(self._data, self.id)
+
+
+class _LlmUsageCollection:
+    """Firestore collection fake that actually applies the `__name__` range
+    filters the month query issues, so the first/last day of the month and the
+    adjacent months are exercised rather than assumed. `list_documents` raises:
+    the quota reader must never fall back to scanning the account's whole
+    llm_usage history."""
+
+    def __init__(self, docs, filters=()):
+        self._docs = docs
+        self._filters = filters
+
+    def document(self, doc_id):
+        return _DocRef(doc_id, self._docs.get(doc_id, {}))
+
+    def list_documents(self):
+        raise AssertionError("chat-quota reads must stay bounded to the current month")
+
+    def where(self, filter):
+        return _LlmUsageCollection(self._docs, (*self._filters, filter))
+
+    def stream(self):
+        def _match(doc_id):
+            for f in self._filters:
+                assert f.field_path == "__name__"  # Firestore's document-id sentinel
+                if f.op_string == ">=" and doc_id < f.value.id:
+                    return False
+                if f.op_string == "<" and doc_id >= f.value.id:
+                    return False
+            return True
+
+        return iter([_Snap(data, doc_id) for doc_id, data in self._docs.items() if _match(doc_id)])
 
 
 def _setup_docs(mock_db, docs):
-    refs = [_DocRef(k, v) for k, v in docs.items()]
-    llm_usage_ref = MagicMock()
-    llm_usage_ref.list_documents.return_value = refs
-    mock_db.collection.return_value.document.return_value.collection.return_value = llm_usage_ref
+    mock_db.collection.return_value.document.return_value.collection.return_value = _LlmUsageCollection(docs)
 
 
 NOW = datetime(2026, 6, 23, tzinfo=timezone.utc)
@@ -107,6 +138,41 @@ def test_realtime_ptt_included_via_grand_total(mock_db):
 def test_only_proactive_counts_zero(mock_db):
     _setup_docs(mock_db, {"2026-06-23": {"conv_apps.gpt-5.call_count": 100, "memories.gpt-4.call_count": 50}})
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 0
+
+
+def test_month_read_is_bounded_to_the_current_month(mock_db, monkeypatch):
+    # `enforce_chat_quota` calls this on every chat request. Reading the whole
+    # llm_usage collection made the cost of asking a question grow with how long
+    # the account had existed.
+    _setup_docs(
+        mock_db,
+        {
+            "2025-06-23": {"desktop_chat": {"quota_questions": 500}},  # last year
+            "2026-05-31": {"desktop_chat": {"quota_questions": 400}},  # day before the month
+            "2026-06-01": {"desktop_chat": {"quota_questions": 1}},  # first day, inclusive
+            "2026-06-30": {"desktop_chat": {"quota_questions": 2}},  # last day, inclusive
+            "2026-07-01": {"desktop_chat": {"quota_questions": 300}},  # day after the month
+        },
+    )
+    observed = []
+    monkeypatch.setattr(user_usage, "record_firestore_read", lambda *args: observed.append(args))
+
+    assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 3
+    assert observed == [(FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 2)]
+
+
+def test_december_month_read_stops_at_the_january_boundary(mock_db):
+    _setup_docs(
+        mock_db,
+        {
+            "2026-12-01": {"desktop_chat": {"quota_questions": 4}},
+            "2026-12-31": {"desktop_chat": {"quota_questions": 6}},
+            "2027-01-01": {"desktop_chat": {"quota_questions": 900}},
+        },
+    )
+    usage = user_usage.get_monthly_chat_usage("uid", now=datetime(2026, 12, 15, tzinfo=timezone.utc))
+    assert usage["questions"] == 10
+    assert usage["reset_at"] == int(datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp())
 
 
 def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, monkeypatch):
@@ -231,3 +297,40 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     # 600 (7am local, filed under the previous UTC date) + 300 (6pm local, filed under today's
     # UTC date). Serving the UTC day alone finds only the 300.
     assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monkeypatch):
+    query = MagicMock()
+    query.stream.return_value = iter(
+        [
+            _Snap({'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8}),
+            _Snap({'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16}),
+        ]
+    )
+    mock_db.collection.return_value.document.return_value.collection.return_value = query
+    record_read = MagicMock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', record_read)
+
+    result = user_usage.get_current_user_usage('uid', 'all_time')
+
+    assert result['all_time']['transcription_seconds'] == 30
+    assert result['all_time']['words_transcribed'] == 4
+    assert result['all_time']['speech_seconds'] == 24
+    assert result['history'] == [
+        {
+            'date': '2025-01-01',
+            'transcription_seconds': 10,
+            'words_transcribed': 0,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+        {
+            'date': '2026-01-01',
+            'transcription_seconds': 20,
+            'words_transcribed': 4,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+    ]
+    query.stream.assert_called_once_with()
+    record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)

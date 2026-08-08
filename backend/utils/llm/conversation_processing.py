@@ -22,6 +22,7 @@ from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
+from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
@@ -1043,6 +1044,11 @@ def extract_action_items(
         return action_items
 
     except Exception as e:
+        # BYOK rate-limit failures are actionable and must reach the composition
+        # boundary (process_conversation._get_structured) so the user gets the
+        # typed 429/retry contract instead of a silently incomplete conversation.
+        if is_byok_rate_limit_gateway_error(e):
+            raise
         logger.error(f'Error extracting action items: {e}')
         return []
 

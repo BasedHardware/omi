@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "התוכנית שלך מתחדשת ב-{date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "תוכנית חינם",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,22 @@
     "whisperModelSizeLarge": "גדול",
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
-    "whisperModelSizeTiny": "זעיר"
+    "whisperModelSizeTiny": "זעיר",
+    "planSheetChooseYourPlan": "בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.",
+    "availableOnMacMobileWeb": "זמין ב-Mac, בנייד ובאינטרנט",
+    "popularBadge": "פופולרי",
+    "worksOnDesktop": "עובד במחשב",
+    "noDesktopAccess": "לא עובד במחשב",
+    "annualBillingSummary": "{months} חודשים / {price}",
+    "monthsFreeBadge": "{count, plural, =1{חודש אחד חינם} other{{count} חודשים חינם}}",
+    "freemiumLimitsIntro": "Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:",
+    "downgradeLimitDelayNotRealTime": "עיכוב של 5-7 שניות (לא בזמן אמת)",
+    "downgradeToFreemiumAction": "מעבר לגרסה החינמית",
+    "getFreeUnlimitedAccess": "קבלו גישה בלתי מוגבלת בחינם",
+    "shareDataForTraining": "שיתוף נתונים לאימון",
+    "yourRequestUnderReview": "הבקשה שלכם בבדיקה",
+    "pinAsBaseline": "הצמדה כבסיס",
+    "unpinAsBaseline": "ביטול הצמדה מהבסיס",
+    "baselineMemory": "זיכרון בסיס",
+    "alwaysInContext": "תמיד בהקשר"
 }

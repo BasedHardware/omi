@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3684
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3689
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Dated-versus-No Deadline task surfaces (apiDatedBucketCount includes retired dated rows for null-due API boundary), IncompleteTaskSurfaceState offset consolidation, raw API cursor accounting, owner-fenced page fetches, bounded local reloads, duplicate filtering, full-sync refresh, task-detail recovery, retry cleanup, and destructive server reconciliation remain with the TasksStore owner and its existing mutation/recovery gates; splitting these coupled cache/API/presentation transitions would create competing pagination authority and is disproportionate."

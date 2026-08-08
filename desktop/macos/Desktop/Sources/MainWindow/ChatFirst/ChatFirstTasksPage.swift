@@ -186,7 +186,6 @@ struct ChatFirstTasksPage: View {
         taskList
       }
     }
-    .background(OmiColors.backgroundPrimary)
     .onAppear {
       tasksStore.isActive = true
       Task { await tasksStore.loadTasksIfNeeded() }
@@ -205,10 +204,10 @@ struct ChatFirstTasksPage: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Tasks")
             .scaledFont(size: OmiType.title, weight: .bold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
           Text("A quiet checklist for what is next.")
             .scaledFont(size: OmiType.body)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
         Spacer()
         Button {
@@ -227,7 +226,7 @@ struct ChatFirstTasksPage: View {
         navigation.discuss(.tasks, using: chatProvider)
       }
       .buttonStyle(.plain)
-      .foregroundStyle(OmiColors.textSecondary)
+      .foregroundStyle(Ink.secondary)
       .accessibilityIdentifier("chat-first-tasks-discuss")
 
       if tasksStore.error != nil, !visibleTasks.isEmpty {
@@ -237,7 +236,7 @@ struct ChatFirstTasksPage: View {
           Text("Some task changes could not be confirmed. Refresh to reconcile.")
         }
         .scaledFont(size: OmiType.caption)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .padding(.top, OmiSpacing.xs)
       }
     }
@@ -266,7 +265,7 @@ struct ChatFirstTasksPage: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(group.title)
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
 
       ForEach(ChatFirstTaskPagePolicy.groupedByGoal(tasks)) { goalGroup in
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -454,7 +453,7 @@ private struct ChatFirstTaskRow: View {
       } label: {
         Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
           .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundStyle(task.completed ? OmiColors.success : OmiColors.textTertiary)
+          .foregroundStyle(task.completed ? Ink.listeningGreen : Ink.secondary)
           .frame(width: 24, height: 24)
       }
       .buttonStyle(.plain)
@@ -470,6 +469,10 @@ private struct ChatFirstTaskRow: View {
             .focused($titleIsFocused)
             .onSubmit { rename() }
             .onExitCommand { cancelRename() }
+            .onEscapeKey(priority: .editing) {
+              cancelRename()
+              return true
+            }
             .accessibilityLabel("Rename \(task.description)")
             .accessibilityIdentifier("chat-first-tasks-rename-\(task.id)")
             .onAppear {
@@ -483,8 +486,8 @@ private struct ChatFirstTaskRow: View {
           } label: {
             Text(task.description)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundStyle(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-              .strikethrough(task.completed, color: OmiColors.textTertiary)
+              .foregroundStyle(task.completed ? Ink.secondary : Ink.primary)
+              .strikethrough(task.completed, color: Ink.secondary)
               .multilineTextAlignment(.leading)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -514,7 +517,7 @@ private struct ChatFirstTaskRow: View {
             move()
           }
           .buttonStyle(.plain)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
           .disabled(isSaving)
           .accessibilityIdentifier("chat-first-tasks-move-\(task.id)-\(moveTarget.rawValue)")
         }
@@ -525,7 +528,7 @@ private struct ChatFirstTaskRow: View {
     .padding(.vertical, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(isHighlighted ? OmiColors.backgroundTertiary : Color.clear)
+        .fill(isHighlighted ? Ink.rowFillHover : Color.clear)
     )
     .onAppear { onVisible(task.id) }
     .accessibilityElement(children: .contain)
@@ -624,7 +627,7 @@ private struct ChatFirstTaskAddRow: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: "plus")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
         .frame(width: 24, height: 24)
         .accessibilityHidden(true)
       TextField("Add a task", text: $draft)
@@ -636,7 +639,7 @@ private struct ChatFirstTaskAddRow: View {
       if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         Button("Add", action: onSubmit)
           .buttonStyle(.plain)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
           .disabled(isAdding)
           .accessibilityIdentifier("chat-first-tasks-add-submit-\(group.rawValue)")
       }
@@ -645,7 +648,7 @@ private struct ChatFirstTaskAddRow: View {
     .padding(.vertical, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .stroke(OmiColors.border.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        .stroke(Ink.separator.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
     )
   }
 }

@@ -1,0 +1,3 @@
+{
+  "change": "The top bar's microphone and screen icons now draw a line through themselves when they are off, and hovering one says which capability it is — audio or screen — and what state it is in"
+}

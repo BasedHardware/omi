@@ -14,6 +14,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case searchConversations = "search_conversations"
   case getMemories = "get_memories"
   case searchMemories = "search_memories"
+  case createMemory = "create_memory"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case updateActionItem = "update_action_item"
@@ -45,8 +46,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:63a4895fd703c99bd01ea56ed74a06c003ffe23d5dd20a18c1499975a7b04e34"
-  static let chatFirstManifestDigest = "sha256:eb4878f3e2a98d3e51130e3b4a7c06b644b7c1c84eb87c72f3ba870b1a4e86ba"
+  static let manifestDigest = "sha256:d5c616c33eb64d4ce6c6bdce7402a1bb7a457eb2f42c05f99edb41219e17478a"
+  static let chatFirstManifestDigest = "sha256:d622ff2e8c6527fa5e32dcc106a6765174e40696ba5e86406bccd4d4026fbca0"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -67,6 +68,7 @@ enum GeneratedToolExecutors {
     .searchConversations: .chatToolExecutor,
     .getMemories: .chatToolExecutor,
     .searchMemories: .chatToolExecutor,
+    .createMemory: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
     .updateActionItem: .chatToolExecutor,
@@ -132,6 +134,7 @@ enum GeneratedToolExecutors {
     case searchConversations
     case getMemories
     case searchMemories
+    case createMemory
     case getActionItems
     case createActionItem
     case updateActionItem
@@ -169,6 +172,7 @@ enum GeneratedToolExecutors {
     case .searchConversations: return .searchConversations
     case .getMemories: return .getMemories
     case .searchMemories: return .searchMemories
+    case .createMemory: return .createMemory
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
     case .updateActionItem: return .updateActionItem
