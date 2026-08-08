@@ -19,17 +19,17 @@ struct SuggestedTasksLoadingIndicator: View {
       ProgressView().controlSize(.small)
       Text("Checking Suggested")
         .scaledFont(size: 12)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
     .background(
       Capsule()
-        .fill(OmiColors.backgroundSecondary.opacity(0.92))
+        .fill(Ink.rowFill.opacity(0.92))
     )
     .overlay(
       Capsule()
-        .stroke(OmiColors.border.opacity(0.8), lineWidth: 1)
+        .stroke(Ink.separator.opacity(0.8), lineWidth: 1)
     )
     .accessibilityIdentifier("suggested-loading")
   }
@@ -45,17 +45,17 @@ struct SuggestedTasksSection: View {
         HStack(spacing: 8) {
           Image(systemName: "tray")
             .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           Text("Suggested")
             .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Text("\(store.candidates.count)")
             .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Spacer()
           Text("Quietly captured for your review")
             .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         ForEach(store.candidates) { candidate in
@@ -78,18 +78,18 @@ struct SuggestedTasksSection: View {
         if let error = store.error {
           Text(error)
             .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .accessibilityIdentifier("suggested-error")
         }
       }
       .padding(12)
       .background(
         RoundedRectangle(cornerRadius: 12)
-          .fill(OmiColors.backgroundSecondary.opacity(0.72))
+          .fill(Ink.rowFill.opacity(0.72))
       )
       .overlay(
         RoundedRectangle(cornerRadius: 12)
-          .stroke(OmiColors.border.opacity(0.8), lineWidth: 1)
+          .stroke(Ink.separator.opacity(0.8), lineWidth: 1)
       )
       .accessibilityIdentifier("suggested-section")
     }
@@ -128,20 +128,20 @@ private struct SuggestedCandidateCard: View {
         TextField("Suggested task", text: $title, axis: .vertical)
           .textFieldStyle(.plain)
           .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1...3)
           .accessibilityIdentifier("suggested-title-\(candidate.id)")
       } else {
         Text(candidate.title)
           .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(3)
       }
 
       if let detail = candidate.detail, !detail.isEmpty {
         Text(detail)
           .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(2)
       }
 
@@ -152,15 +152,15 @@ private struct SuggestedCandidateCard: View {
         }
       }
       .scaledFont(size: 10)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
 
       HStack(spacing: 8) {
         Button("Do now") {
           Task { await onDoNow(candidate.isEditableTask ? title : nil) }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
-        .foregroundColor(.black)
+        .tint(Ink.primary)
+        .foregroundColor(Ink.surface)
         // Empty-title gate applies only to task creation — Later/Dismiss must stay
         // usable even when the editable title is cleared.
         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -190,11 +190,11 @@ private struct SuggestedCandidateCard: View {
     .padding(12)
     .background(
       RoundedRectangle(cornerRadius: 10)
-        .fill(OmiColors.backgroundTertiary.opacity(0.75))
+        .fill(Ink.rowFillHover.opacity(0.75))
     )
     .overlay(
       RoundedRectangle(cornerRadius: 10)
-        .stroke(OmiColors.border.opacity(0.6), lineWidth: 1)
+        .stroke(Ink.separator.opacity(0.6), lineWidth: 1)
     )
     .onChange(of: candidate.title) { _, updated in
       if !isBusy { title = updated }
@@ -209,10 +209,10 @@ private struct SuggestedCandidateCard: View {
     VStack(alignment: .leading, spacing: 10) {
       Text("Optional reason")
         .scaledFont(size: 12, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
       Text("Close this menu to dismiss without a reason.")
         .scaledFont(size: 10)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       ForEach(dismissReasonChoices, id: \.label) { choice in
         Button(choice.label) {
@@ -254,18 +254,18 @@ struct AutoAcceptedTaskWhyButton: View {
       Button("Why") { isPresented = true }
         .buttonStyle(.plain)
         .scaledFont(size: 10, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .popover(isPresented: $isPresented) {
           VStack(alignment: .leading, spacing: 6) {
             Text("Why Omi added this")
               .scaledFont(size: 12, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             Text(provenanceDescription)
               .scaledFont(size: 11)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             Text("\((task.provenance ?? []).count) linked source\((task.provenance ?? []).count == 1 ? "" : "s")")
               .scaledFont(size: 10)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .padding(12)
           .frame(width: 220)

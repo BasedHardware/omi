@@ -4,6 +4,34 @@ import Combine
 import SwiftUI
 @preconcurrency import UserNotifications
 
+/// How many permissions the last refresh found granted, so the next one can tell a grant from a
+/// re-read. `nil` until the first refresh establishes that baseline.
+///
+/// File scope rather than a stored property because `AppState` is a singleton and this extension
+/// cannot add storage to it; the value is meaningful only to `notePermissionGrants` below.
+@MainActor private var lastGrantedPermissionCount: Int?
+
+/// The AppKit lookups the accessibility probe depends on, read once on the main
+/// actor and handed to the probe as plain values so the expensive cross-process
+/// AX round trips can run off it.
+struct AccessibilityProbeTargets: Sendable, Equatable {
+  var frontmostProcessID: pid_t?
+  var frontmostName: String
+  var finderProcessID: pid_t?
+}
+
+/// What the accessibility probes observed. Kept separate from the decision so
+/// the decision is a pure function that can be exercised for every combination
+/// without a live TCC database.
+struct AccessibilityProbeSignals: Sendable, Equatable {
+  /// `AXIsProcessTrusted()` — authoritative when true, stale-able when false.
+  var tccTrusted: Bool
+  /// A `CGEvent.tapCreate` succeeded, which reads the live TCC database.
+  var eventTapWorks: Bool
+  /// A real `AXUIElementCopyAttributeValue` succeeded.
+  var axCallsWork: Bool
+}
+
 @MainActor
 extension AppState {
   func openScreenRecordingPreferences() {
@@ -11,6 +39,7 @@ extension AppState {
   }
 
   func openAutomationPreferences() {
+    ShellSummon.suspendForPermissionPrompt()
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
     {
@@ -25,11 +54,15 @@ extension AppState {
 
       if authorizationStatus == .notDetermined {
         // First time - show the system prompt
+        let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
         NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
           reason: "launch_disabled_error",
           previousStatus: "notDetermined"
         ) { [weak self] _ in
-          MainActor.assumeIsolated { self?.checkNotificationPermission() }
+          MainActor.assumeIsolated {
+            if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
+            self?.checkNotificationPermission()
+          }
         }
       } else if authorizationStatus == .denied {
         // Previously denied - open System Settings so user can enable manually
@@ -73,8 +106,33 @@ extension AppState {
 
   // MARK: - Permission Status Checks
 
+  /// The two permissions this refresh reads directly out of TCC, on every call, in every build.
+  ///
+  /// Everything else is excluded because it cannot tell a grant from a late read. Notification
+  /// authorisation resolves through a completion handler; system audio is only marked granted once
+  /// capture happens to be running; and automation, accessibility and full-disk access are skipped
+  /// entirely under `usesLazyDevPermissions`, so their flags settle on some later path. Each of
+  /// those would surface as a permission "arriving" one refresh after the fact.
+  private var grantedPermissionCount: Int {
+    [hasScreenRecordingPermission, hasMicrophonePermission].filter { $0 }.count
+  }
+
+  /// Sounds a permission actually landing — the user left for System Settings, granted something,
+  /// and came back, which is what drives this refresh.
+  ///
+  /// The first refresh only records a baseline. At launch every flag is still at its `false`
+  /// default, so the jump to the machine's real state is a read rather than a grant, and chiming at
+  /// it would mean chiming on every cold start.
+  private func notePermissionGrants() {
+    let granted = grantedPermissionCount
+    defer { lastGrantedPermissionCount = granted }
+    guard let previous = lastGrantedPermissionCount, granted > previous else { return }
+    OmiUISound.play(.complete)
+  }
+
   /// Check and update all permission states
   func checkAllPermissions() {
+    defer { notePermissionGrants() }
     checkNotificationPermission()
     checkScreenRecordingPermission()
     checkMicrophonePermission()
@@ -274,34 +332,75 @@ extension AppState {
 
   /// Check automation permission without triggering a prompt
   /// Uses AEDeterminePermissionToAutomateTarget to query TCC status for System Events
+  ///
+  /// Fire-and-forget: the result lands one turn later. Anything that reads
+  /// `hasAutomationPermission` on the next line must `await
+  /// refreshAutomationPermission()` instead — see its doc comment.
   func checkAutomationPermission() {
     guard !isCheckingAutomationPermission else { return }
     isCheckingAutomationPermission = true
-    Task.detached {
-      defer { Task { @MainActor in self.isCheckingAutomationPermission = false } }
-      let status = Self.queryAutomationPermissionStatus()
-
-      // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied,
-      // -1744 = not determined, -600 = target not running. A status refresh is
-      // observational only: do not launch System Events or send an Apple Event
-      // just to improve a badge on startup.
-      let previousValue = await MainActor.run { self.hasAutomationPermission }
-      let projection = Self.automationPermissionProjection(
-        status: status,
-        previousPermission: previousValue
-      )
-      if status == -600 {
-        log(
-          "AUTOMATION_CHECK: status=-600 (procNotFound); preserving last known grant and leaving System Events stopped")
-      } else if projection.hasPermission != previousValue {
-        log("AUTOMATION_CHECK: status=\(status), hasPermission=\(projection.hasPermission)")
-      }
-
-      await MainActor.run {
-        self.hasAutomationPermission = projection.hasPermission
-        self.automationPermissionError = projection.error
-      }
+    Task { [weak self] in
+      guard let self else { return }
+      await self.refreshAutomationPermission()
+      self.isCheckingAutomationPermission = false
     }
+  }
+
+  /// Await-able automation status refresh — the only correct probe for a caller
+  /// that acts on the answer.
+  ///
+  /// `checkAutomationPermission()` returns before its probe has run, and with
+  /// `-600` (System Events stopped) deliberately *preserving* the previous
+  /// value, a caller reading the flag immediately afterwards observed the state
+  /// from the probe before last. During onboarding that reads as "we asked
+  /// macOS and it said no": an Automation permission the user had already
+  /// granted was not detected, and they were asked for it again.
+  ///
+  /// The query itself is a cross-process Apple Event permission lookup, so it
+  /// runs off the main actor and only the state write comes back.
+  @discardableResult
+  func refreshAutomationPermission(
+    query: @escaping @Sendable () -> OSStatus = { AppState.queryAutomationPermissionStatus() }
+  ) async -> Bool {
+    let status = await Task.detached(priority: .userInitiated) { query() }.value
+    // Read the grant only after the detached probe returns. A user can grant
+    // Automation while the probe is in flight; preserving the value captured
+    // before the await would overwrite that newer main-actor state when the
+    // result is -600 (System Events was not running).
+    return applyAutomationPermissionStatus(status)
+  }
+
+  /// Project one observed `OSStatus` onto the shared automation permission
+  /// state. Separated from the probe so a request path that already *has* the
+  /// answer (the TCC prompt returns it) adopts it directly instead of racing a
+  /// second lookup against it.
+  ///
+  /// noErr (0) = granted, errAEEventNotPermitted (-1743) = denied,
+  /// -1744 = not determined, -600 = target not running.
+  @discardableResult
+  func applyAutomationPermissionStatus(
+    _ status: OSStatus,
+    previousPermission: Bool? = nil
+  ) -> Bool {
+    let previousValue = previousPermission ?? hasAutomationPermission
+    let projection = Self.automationPermissionProjection(
+      status: status,
+      previousPermission: previousValue
+    )
+    if status == -600 {
+      log(
+        "AUTOMATION_CHECK: status=-600 (procNotFound); preserving last known grant and leaving System Events stopped")
+    } else if projection.hasPermission != previousValue {
+      log("AUTOMATION_CHECK: status=\(status), hasPermission=\(projection.hasPermission)")
+    }
+    // Assign only on change — see `applyAccessibilitySignals`.
+    if hasAutomationPermission != projection.hasPermission {
+      hasAutomationPermission = projection.hasPermission
+    }
+    if automationPermissionError != projection.error {
+      automationPermissionError = projection.error
+    }
+    return projection.hasPermission
   }
 
   nonisolated static func automationPermissionProjection(
@@ -340,60 +439,112 @@ extension AppState {
   /// AXIsProcessTrusted() can return stale data after macOS updates or app re-signs,
   /// so we also do a functional AX test to detect the "broken" state.
   func checkAccessibilityPermission() {
-    let tccGranted = AXIsProcessTrusted()
+    // AXUIElement/CGEvent calls can synchronously cross the WindowServer. Keep
+    // the fire-and-forget API non-blocking for legacy callers; callers that
+    // need the answer must await `refreshAccessibilityPermission()`.
+    Task { [weak self] in
+      _ = await self?.refreshAccessibilityPermission()
+    }
+  }
+
+  /// Off-main accessibility refresh, for callers that probe repeatedly.
+  ///
+  /// The probe is three cross-process round trips —
+  /// `AXUIElementCopyAttributeValue` against the frontmost app, a second one
+  /// against Finder to disambiguate `cannotComplete`, and `CGEvent.tapCreate`.
+  /// Onboarding runs this every 500ms for 20s while a permission step is
+  /// visible, which on the main actor is a hitch budget the window cannot pay.
+  /// Only the cheap AppKit lookups stay on the main actor; the round trips move
+  /// off it and just the projection comes back.
+  @discardableResult
+  func refreshAccessibilityPermission(
+    probe: (@Sendable () -> AccessibilityProbeSignals)? = nil
+  ) async -> Bool {
+    let signals = await Task.detached(priority: .userInitiated) {
+      let resolved =
+        probe ?? {
+          Self.probeAccessibilitySignals(targets: Self.accessibilityProbeTargets())
+        }
+      return resolved()
+    }.value
+    applyAccessibilitySignals(signals)
+    return hasAccessibilityPermission
+  }
+
+  /// AppKit lookups the probe needs. Cheap, cached by AppKit, and main-actor
+  /// bound — so they are read here and handed to the probe as plain values.
+  nonisolated static func accessibilityProbeTargets() -> AccessibilityProbeTargets {
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    let finder = NSRunningApplication.runningApplications(
+      withBundleIdentifier: "com.apple.finder"
+    ).first
+    return AccessibilityProbeTargets(
+      frontmostProcessID: frontmost?.processIdentifier,
+      frontmostName: frontmost?.localizedName ?? "unknown",
+      finderProcessID: finder?.processIdentifier)
+  }
+
+  /// The whole accessibility decision as a pure function of what the probes
+  /// observed. `AXIsProcessTrusted()` can be stale after a macOS update or an
+  /// app re-sign, so an event tap that succeeds is treated as authoritative
+  /// evidence of the grant; a real AX call failing on top of either is what
+  /// "broken" means.
+  nonisolated static func accessibilityProjection(
+    _ signals: AccessibilityProbeSignals
+  ) -> (hasPermission: Bool, isBroken: Bool) {
+    if signals.tccTrusted { return (true, !signals.axCallsWork) }
+    if signals.eventTapWorks { return (true, !signals.axCallsWork) }
+    // Event tap also failed — permission genuinely not granted.
+    return (false, false)
+  }
+
+  /// Gather the accessibility signals. Safe off the main actor: every call here
+  /// is a C API on `ApplicationServices`, not AppKit.
+  nonisolated static func probeAccessibilitySignals(
+    targets: AccessibilityProbeTargets
+  ) -> AccessibilityProbeSignals {
+    let tccTrusted = AXIsProcessTrusted()
+    if tccTrusted {
+      return AccessibilityProbeSignals(
+        tccTrusted: true,
+        eventTapWorks: true,
+        axCallsWork: axCallsWork(targets: targets))
+    }
+    guard probeAccessibilityViaEventTap() else {
+      return AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: false, axCallsWork: false)
+    }
+    return AccessibilityProbeSignals(
+      tccTrusted: false,
+      eventTapWorks: true,
+      axCallsWork: axCallsWork(targets: targets))
+  }
+
+  private func applyAccessibilitySignals(_ signals: AccessibilityProbeSignals) {
     let previouslyGranted = hasAccessibilityPermission
+    let projection = Self.accessibilityProjection(signals)
 
-    if tccGranted {
-      hasAccessibilityPermission = true
+    if projection.hasPermission, !previouslyGranted {
+      let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+      let route = signals.tccTrusted ? "TCC" : "event tap probe (stale AXIsProcessTrusted)"
+      log("ACCESSIBILITY_CHECK: Permission granted via \(route) (bundleId=\(bundleId))")
+    } else if !projection.hasPermission, previouslyGranted {
+      let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+      log("ACCESSIBILITY_CHECK: Permission revoked (bundleId=\(bundleId))")
+    }
+    if projection.isBroken != isAccessibilityBroken {
+      log(
+        projection.isBroken
+          ? "ACCESSIBILITY_CHECK: TCC/event tap say granted but AX calls fail — stuck/broken state detected"
+          : "ACCESSIBILITY_CHECK: AX calls working normally")
+    }
 
-      // Log transitions
-      if !previouslyGranted {
-        let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
-        log("ACCESSIBILITY_CHECK: Permission granted (bundleId=\(bundleId))")
-      }
-
-      // TCC says yes — verify with an actual AX call
-      let broken = !testAccessibilityPermission()
-      if broken != isAccessibilityBroken {
-        isAccessibilityBroken = broken
-        if broken {
-          log(
-            "ACCESSIBILITY_CHECK: TCC says granted but AX calls fail — stuck/broken state detected")
-        } else {
-          log("ACCESSIBILITY_CHECK: AX calls working normally")
-        }
-      }
-    } else {
-      // AXIsProcessTrusted() says not granted — but on macOS 26 this may be stale.
-      // Probe via event tap which checks the live TCC database.
-      if probeAccessibilityViaEventTap() {
-        if !previouslyGranted {
-          log(
-            "ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected"
-          )
-        }
-        let axWorks = testAccessibilityPermission()
-        hasAccessibilityPermission = true
-        if !axWorks {
-          if !isAccessibilityBroken {
-            log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
-          }
-          isAccessibilityBroken = true
-        } else {
-          if isAccessibilityBroken {
-            log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
-          }
-          isAccessibilityBroken = false
-        }
-      } else {
-        // Event tap also failed — permission genuinely not granted
-        if previouslyGranted {
-          let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
-          log("ACCESSIBILITY_CHECK: Permission revoked (bundleId=\(bundleId))")
-        }
-        hasAccessibilityPermission = false
-        isAccessibilityBroken = false
-      }
+    // Assign only on change: a permission step re-probes twice a second, and an
+    // idempotent write to an @Published still redraws every observer.
+    if hasAccessibilityPermission != projection.hasPermission {
+      hasAccessibilityPermission = projection.hasPermission
+    }
+    if isAccessibilityBroken != projection.isBroken {
+      isAccessibilityBroken = projection.isBroken
     }
   }
 
@@ -401,23 +552,43 @@ extension AppState {
   /// The TCC database query is unreliable on macOS 15+ (schema changes, ad-hoc signing),
   /// so we probe actual protected directories instead.
   func checkFullDiskAccess() {
+    // The file-system probe can synchronously cross tccd. Keep this API
+    // compatible for passive callers without making their actor pay that
+    // round-trip; callers that need the answer must await the refresh below.
+    Task { [weak self] in
+      _ = await self?.refreshFullDiskAccess()
+    }
+  }
+
+  /// Off-main Full Disk Access refresh. `contentsOfDirectory` on a
+  /// TCC-protected directory is a synchronous tccd round trip; a poll that runs
+  /// it on the main actor twice a second stalls the window it is polling for.
+  @discardableResult
+  func refreshFullDiskAccess(
+    probe: @escaping @Sendable () -> Bool = { AppState.probeFullDiskAccessGranted() }
+  ) async -> Bool {
+    let granted = await Task.detached(priority: .userInitiated) { probe() }.value
+    applyFullDiskAccess(granted)
+    return granted
+  }
+
+  /// These paths are protected by Full Disk Access on all macOS versions.
+  /// Listing one successfully is the grant. Pure and thread-safe.
+  nonisolated static func probeFullDiskAccessGranted() -> Bool {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    // These paths are protected by Full Disk Access on all macOS versions.
-    // Try to list directory contents — if it succeeds, FDA is granted.
     let protectedPaths = [
       "\(home)/Library/Safari",
       "\(home)/Library/Mail",
       "\(home)/Library/Messages",
     ]
 
-    var granted = false
-    for path in protectedPaths {
-      if FileManager.default.fileExists(atPath: path) {
-        granted = (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
-        break
-      }
+    for path in protectedPaths where FileManager.default.fileExists(atPath: path) {
+      return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
     }
+    return false
+  }
 
+  private func applyFullDiskAccess(_ granted: Bool) {
     if granted != hasFullDiskAccess {
       hasFullDiskAccess = granted
       log("Full Disk Access: \(granted ? "granted" : "not granted") (file probe)")
@@ -426,13 +597,13 @@ extension AppState {
 
   /// Test if Accessibility API actually works by attempting a real AX call.
   /// Returns true if AX calls succeed, false if permission is stuck/broken.
-  func testAccessibilityPermission() -> Bool {
-    guard let frontApp = NSWorkspace.shared.frontmostApplication else {
+  nonisolated static func axCallsWork(targets: AccessibilityProbeTargets) -> Bool {
+    guard let frontPID = targets.frontmostProcessID else {
       // No frontmost app to test against — can't determine, assume OK
       return true
     }
 
-    let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+    let appElement = AXUIElementCreateApplication(frontPID)
     var focusedWindow: CFTypeRef?
     let result = AXUIElementCopyAttributeValue(
       appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
@@ -444,17 +615,17 @@ extension AppState {
     case .apiDisabled:
       // System-wide AX is disabled — unambiguous, no confirmation needed
       log(
-        "ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))"
+        "ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontPID), app: \(targets.frontmostName))"
       )
       return false
     case .cannotComplete:
       // cannotComplete is ambiguous: it can mean our permission is broken, OR that the
       // frontmost app doesn't implement AX (e.g. Qt, OpenGL, Python-based apps like PyMOL).
       // Confirm against Finder before concluding the permission is truly broken.
-      return confirmAccessibilityBrokenViaFinder(suspectApp: frontApp.localizedName ?? "unknown")
+      return confirmAccessibilityBrokenViaFinder(targets: targets)
     default:
       log(
-        "ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(frontApp.localizedName ?? "unknown") — not permission-related, treating as OK"
+        "ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(targets.frontmostName) — not permission-related, treating as OK"
       )
       return true
     }
@@ -463,11 +634,12 @@ extension AppState {
   /// Secondary AX check against Finder to disambiguate cannotComplete errors.
   /// If Finder (a known AX-compliant app) also fails, the permission is truly broken.
   /// If Finder succeeds, the original failure was app-specific, not a permission issue.
-  func confirmAccessibilityBrokenViaFinder(suspectApp: String) -> Bool {
-    if let finder = NSRunningApplication.runningApplications(
-      withBundleIdentifier: "com.apple.finder"
-    ).first {
-      let finderElement = AXUIElementCreateApplication(finder.processIdentifier)
+  nonisolated static func confirmAccessibilityBrokenViaFinder(
+    targets: AccessibilityProbeTargets
+  ) -> Bool {
+    let suspectApp = targets.frontmostName
+    if let finderPID = targets.finderProcessID {
+      let finderElement = AXUIElementCreateApplication(finderPID)
       var finderWindow: CFTypeRef?
       let finderResult = AXUIElementCopyAttributeValue(
         finderElement, kAXFocusedWindowAttribute as CFString, &finderWindow)
@@ -494,7 +666,7 @@ extension AppState {
   /// Probe accessibility permission by attempting to create a CGEvent tap.
   /// Unlike AXIsProcessTrusted(), event tap creation checks the live TCC database,
   /// bypassing the per-process cache that can go stale on macOS 26 (Tahoe).
-  func probeAccessibilityViaEventTap() -> Bool {
+  nonisolated static func probeAccessibilityViaEventTap() -> Bool {
     let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
       place: .tailAppendEventTap,

@@ -31,11 +31,11 @@ overlay:
           value: '1.0'
           category: rollout
         MEMORY_MODE:
-          value: read
+          value: 'off'
         MEMORY_ENABLED_USERS:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          value: ''
         MEMORY_V3_GET_ENABLED:
-          value: 'true'
+          value: 'false'
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
@@ -196,10 +196,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -234,11 +234,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
           # `/v3/memories` and the canonical graph use signed cursors even for
           # the initial page, so an enrolled user must fail closed until this
           # versioned binding is present.
@@ -260,10 +260,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -295,11 +295,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -314,10 +314,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -349,11 +349,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -368,10 +368,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -403,11 +403,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -435,15 +435,15 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'true'
+            value: 'false'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-            value: 'true'
+            value: 'false'
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
           PINECONE_INDEX_NAME:

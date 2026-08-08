@@ -4,10 +4,12 @@ import Foundation
 // MARK: - Screenshot Model
 
 /// Represents a captured screenshot stored in the Rewind database
-// `MutablePersistableRecord` — not `PersistableRecord` — because the rowid is
-// captured by a `mutating didInsert`. `PersistableRecord`'s requirement is
-// non-mutating, so a mutating declaration silently witnesses nothing and the
-// empty default runs instead, leaving `id` nil after every insert.
+///
+/// **`MutablePersistableRecord`, deliberately.** `didInsert` is how this row learns the rowid
+/// SQLite generated for it, and capture keys everything that follows the insert — embeddings,
+/// canonical-memory linkage — to that id. `PersistableRecord` declares `didInsert` non-mutating
+/// and ships an empty default, so a `mutating func didInsert` on a `PersistableRecord` struct is
+/// not a witness for it: it compiles, never runs, and every insert quietly returns `id == nil`.
 struct Screenshot: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Equatable {
   /// Database row ID (auto-generated)
   var id: Int64?
@@ -392,10 +394,43 @@ class RewindSettings: ObservableObject {
     "Keychain Access",  // macOS Keychain Access
   ]
 
+  /// The retention setting that means "never delete a captured frame".
+  ///
+  /// **This is what makes an all-time Rewind possible at all.** Every other value here is a
+  /// deletion window: the cleanup pass runs `DELETE FROM screenshots WHERE timestamp < cutoff` and
+  /// removes the backing video chunks from disk, so on the shipped 7-day default a Rewind timeline
+  /// physically cannot reach further back than a week no matter what the UI is willing to draw.
+  /// Zero is the sentinel rather than a large day count because "3,650 days" is still a promise the
+  /// cleanup would eventually break, and because it stores as a plain `Int` in the same key.
+  static let unlimitedRetentionDays = 0
+
   @Published var retentionDays: Int {
     didSet {
       defaults.set(retentionDays, forKey: "rewindRetentionDays")
     }
+  }
+
+  /// Whether capture is kept forever.
+  var keepsEverything: Bool { Self.isUnlimited(retentionDays: retentionDays) }
+
+  /// A retention day count that promises never to delete.
+  ///
+  /// Non-positive rather than `== 0` so a value that arrives from an older build, a corrupted
+  /// default, or a hand-edited plist can only ever fail *safe* — an unreadable retention setting
+  /// keeps the user's history instead of silently erasing it.
+  static func isUnlimited(retentionDays: Int) -> Bool { retentionDays <= unlimitedRetentionDays }
+
+  /// The instant before which capture may be deleted — or `nil` when nothing may be.
+  ///
+  /// Pure and static so the boundary between "keep everything" and "prune at N days" is testable
+  /// without a database, a clock, or the indexer that calls it.
+  static func retentionCutoff(
+    retentionDays: Int,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    guard !isUnlimited(retentionDays: retentionDays) else { return nil }
+    return calendar.date(byAdding: .day, value: -retentionDays, to: now)
   }
 
   @Published var captureInterval: Double {

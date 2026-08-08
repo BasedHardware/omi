@@ -29,7 +29,7 @@ struct RewindTimelineView: View {
         ZStack(alignment: .leading) {
           // Background
           RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .fill(OmiColors.backgroundTertiary.opacity(0.5))
+            .fill(Ink.rowFillHover.opacity(0.5))
 
           // Activity markers
           activityMarkers(width: width)
@@ -40,7 +40,7 @@ struct RewindTimelineView: View {
           {
             let position = positionForIndex(index, width: width)
             Rectangle()
-              .fill(OmiColors.accent)
+              .fill(Ink.accent)
               .frame(width: 2, height: timelineHeight - 16)
               .position(x: position, y: (timelineHeight - 8) / 2)
           }
@@ -57,7 +57,7 @@ struct RewindTimelineView: View {
               }
 
               Rectangle()
-                .fill(Color.white.opacity(0.6))
+                .fill(Ink.rowFillHover)
                 .frame(width: 1, height: timelineHeight - 20)
             }
             .position(x: position, y: (timelineHeight - 8) / 2)
@@ -98,10 +98,7 @@ struct RewindTimelineView: View {
       timeLabels
     }
     .frame(height: timelineHeight + 50)
-    .background(
-      OmiColors.backgroundSecondary.opacity(0.95)
-        .background(.ultraThinMaterial)
-    )
+    .background(Ink.rowFill)
     // Scroll wheel handler for timeline navigation
     .onScrollWheelGesture { delta in
       handleScrollWheel(delta: delta)
@@ -191,7 +188,7 @@ struct RewindTimelineView: View {
       if let oldest = screenshots.last {
         Text(oldest.formattedTime)
           .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Spacer()
@@ -200,11 +197,11 @@ struct RewindTimelineView: View {
         VStack(spacing: OmiSpacing.hairline) {
           Text(selected.formattedTime)
             .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(selected.appName)
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -213,7 +210,7 @@ struct RewindTimelineView: View {
       if let newest = screenshots.first {
         Text(newest.formattedTime)
           .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
@@ -317,14 +314,14 @@ struct AppIconButton: View {
 
         // Active indicator dot
         Circle()
-          .fill(isActive ? OmiColors.accent : Color.clear)
+          .fill(isActive ? Ink.accent : Color.clear)
           .frame(width: 4, height: 4)
       }
       .padding(.horizontal, OmiSpacing.xxs)
       .padding(.vertical, OmiSpacing.xxs)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-          .fill(isHovered ? OmiColors.backgroundTertiary : Color.clear)
+          .fill(isHovered ? Ink.rowFillHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -353,7 +350,7 @@ struct HoverPreviewTooltip: View {
             .clipped()
         } else {
           Rectangle()
-            .fill(OmiColors.backgroundTertiary)
+            .fill(Ink.rowFillHover)
             .frame(width: 160, height: 100)
         }
       }
@@ -363,18 +360,18 @@ struct HoverPreviewTooltip: View {
       VStack(spacing: OmiSpacing.hairline) {
         Text(screenshot.formattedTime)
           .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text(screenshot.appName)
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundSecondary)
-        .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+        .fill(Ink.rowFill)
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
     )
     .task {
       await loadThumbnail()
@@ -428,12 +425,12 @@ struct ScreenshotPreviewView: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(screenshot.appName)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             if let title = screenshot.windowTitle, !title.isEmpty {
               Text(title)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -451,10 +448,10 @@ struct ScreenshotPreviewView: View {
               Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
                 .scaledFont(size: OmiType.caption)
             }
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(OmiColors.accent.opacity(0.15))
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.stripRadius)
           }
         }
@@ -462,7 +459,7 @@ struct ScreenshotPreviewView: View {
         // Time
         Text(screenshot.formattedDate)
           .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         // Keyboard hints
         HStack(spacing: OmiSpacing.md) {
@@ -476,16 +473,16 @@ struct ScreenshotPreviewView: View {
         Button(action: onClose) {
           Image(systemName: "xmark")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 28, height: 28)
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFillHover)
             .clipShape(Circle())
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)
-      .background(OmiColors.backgroundSecondary.opacity(0.95))
+      .background(Ink.rowFill.opacity(0.95))
 
       // Image with highlight overlays
       GeometryReader { geometry in
@@ -519,7 +516,7 @@ struct ScreenshotPreviewView: View {
           } else {
             Image(systemName: "photo")
               .scaledFont(size: 48)
-              .foregroundColor(OmiColors.textQuaternary)
+              .foregroundColor(Ink.secondary)
           }
 
           // Navigation arrows
@@ -535,7 +532,7 @@ struct ScreenshotPreviewView: View {
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color.black.opacity(0.4))
+      .background(Ink.rowFillHover)
 
       // OCR text preview (if available)
       if let ocrText = screenshot.ocrText, !ocrText.isEmpty {
@@ -551,15 +548,15 @@ struct ScreenshotPreviewView: View {
     HStack(spacing: OmiSpacing.xxs) {
       Text(key)
         .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.xs)
         .padding(.vertical, OmiSpacing.hairline)
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
         .cornerRadius(OmiChrome.stripRadius)
 
       Text(label)
         .scaledFont(size: OmiType.micro)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -567,7 +564,7 @@ struct ScreenshotPreviewView: View {
     Button(action: action) {
       Image(systemName: systemName)
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.surface)
         .frame(width: 40, height: 40)
         .background(Color.black.opacity(0.5))
         .clipShape(Circle())
@@ -580,11 +577,11 @@ struct ScreenshotPreviewView: View {
       HStack {
         Image(systemName: "doc.text.viewfinder")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         Text("Extracted Text")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
 
@@ -597,7 +594,7 @@ struct ScreenshotPreviewView: View {
             Text("Copy")
           }
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -613,7 +610,7 @@ struct ScreenshotPreviewView: View {
         } else {
           Text(text)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .textSelection(.enabled)
             .if_available_writingToolsNone()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -622,12 +619,12 @@ struct ScreenshotPreviewView: View {
       .frame(maxHeight: 100)
     }
     .padding(OmiSpacing.md)
-    .background(OmiColors.backgroundTertiary.opacity(0.8))
+    .background(Ink.rowFillHover.opacity(0.8))
   }
 
   private func highlightedText(_ text: String, query: String) -> AttributedString {
     var result = AttributedString(text)
-    result.foregroundColor = OmiColors.textSecondary
+    result.foregroundColor = Ink.secondary
 
     let lowercasedText = text.lowercased()
     let lowercasedQuery = query.lowercased()
@@ -635,8 +632,8 @@ struct ScreenshotPreviewView: View {
     var searchStart = lowercasedText.startIndex
     while let range = lowercasedText.range(of: lowercasedQuery, range: searchStart..<lowercasedText.endIndex) {
       if let attrRange = Range(range, in: result) {
-        result[attrRange].foregroundColor = OmiColors.accent
-        result[attrRange].backgroundColor = OmiColors.accent.opacity(0.2)
+        result[attrRange].foregroundColor = Ink.primary
+        result[attrRange].backgroundColor = PageGlass.warning.opacity(0.32)
         result[attrRange].font = .system(size: 11, weight: .semibold)
       }
       searchStart = range.upperBound
@@ -706,8 +703,8 @@ struct SearchHighlightOverlay: View {
         let screenRect = block.screenRect(for: CGSize(width: 1, height: 1))  // Normalized
 
         Rectangle()
-          .stroke(OmiColors.accent, lineWidth: 2)
-          .background(OmiColors.accent.opacity(0.2))
+          .stroke(Ink.accent, lineWidth: 2)
+          .background(Ink.accent.opacity(0.2))
           .frame(
             width: screenRect.width * layout.size.width,
             height: screenRect.height * layout.size.height

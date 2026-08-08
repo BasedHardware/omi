@@ -22,7 +22,7 @@ struct RewindOnlyView: View {
           }
           ProgressView()
             .scaleEffect(0.8)
-            .tint(.white.opacity(0.6))
+            .tint(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if authState.sessionPhase == .recoveryRequired {
@@ -46,18 +46,20 @@ struct RewindOnlyView: View {
           }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    // No ground of its own: the glass window owns it. See `glassContent()` — it also pins the
+    // panel's light appearance, without which `Ink`'s ladder resolves *up* on a Dark Mac and the
+    // whole page renders white on white.
+    .glassContent()
     .frame(minWidth: 800, minHeight: 500)
-    .preferredColorScheme(.dark)
-    .tint(OmiColors.accent)
+    .tint(Ink.accent)
     .onAppear {
       log("RewindOnlyView: View appeared - isSignedIn=\(authState.isSignedIn)")
-      // Force dark appearance on the window
+      // The window has to be transparent and light-pinned or there is no glass — a window still
+      // painting its own `backgroundColor` slips an opaque sheet between the desktop and the blur.
       DispatchQueue.main.async {
-        for window in NSApp.windows {
-          if window.title.contains("Rewind") || window.title.lowercased().hasPrefix("omi") {
-            window.appearance = NSAppearance(named: .darkAqua)
-          }
+        for window in NSApp.windows
+        where window.title.contains("Rewind") || window.title.lowercased().hasPrefix("omi") {
+          WindowGlass.wear(window, as: .titled)
         }
       }
     }
@@ -104,10 +106,11 @@ struct RewindOnlyView: View {
     } label: {
       Image(systemName: "gearshape.fill")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.white.opacity(0.7))
+        .foregroundColor(Ink.primary)
         .padding(OmiSpacing.sm)
-        .background(Color.black.opacity(0.5))
-        .clipShape(Circle())
+        // It floats over the timeline, so it is real glass rather than a wash: a wash over moving
+        // screenshots is not a control, it is a smudge.
+        .glassFloatingBar(cornerRadius: 999)
     }
     .menuStyle(.borderlessButton)
     .menuIndicator(.hidden)
@@ -163,8 +166,7 @@ struct RewindOnlyView: View {
     let settingsView = RewindSettingsView()
       .withFontScaling()
       .frame(minWidth: 500, minHeight: 400)
-      .background(OmiColors.backgroundPrimary)
-      .preferredColorScheme(.dark)
+      .glassContent()
 
     let hostingController = NSHostingController(rootView: settingsView)
 
@@ -174,7 +176,8 @@ struct RewindOnlyView: View {
     newWindow.styleMask = [.titled, .closable, .resizable, .miniaturizable]
     newWindow.minSize = NSSize(width: 500, height: 400)
     newWindow.center()
-    newWindow.appearance = NSAppearance(named: .darkAqua)
+    // Transparent + light-pinned, or there is no glass.
+    WindowGlass.wear(newWindow, as: .titled)
     newWindow.isReleasedWhenClosed = false
     newWindow.makeKeyAndOrderFront(nil)
 
@@ -201,15 +204,14 @@ struct RewindSettingsView: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Rewind Settings")
             .scaledFont(size: 24, weight: .bold)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
 
           Text("Configure screen capture and storage")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.6))
+            .foregroundColor(Ink.secondary)
         }
 
-        Divider()
-          .background(Color.white.opacity(0.2))
+        GlassSeparator()
 
         // Screen Capture Toggle
         settingsRow(
@@ -223,7 +225,9 @@ struct RewindSettingsView: View {
         // Retention Period
         settingsRow(
           title: "Keep Screenshots For",
-          subtitle: "Older screenshots will be automatically deleted"
+          subtitle: RewindSettings.isUnlimited(retentionDays: retentionDays)
+            ? "Every screenshot is kept, so Rewind reaches back to your first capture"
+            : "Older screenshots will be automatically deleted"
         ) {
           SettingsMenuPicker(selection: $retentionDays) {
             Text("1 day").tag(1)
@@ -231,14 +235,14 @@ struct RewindSettingsView: View {
             Text("7 days").tag(7)
             Text("14 days").tag(14)
             Text("30 days").tag(30)
+            Text("Keep everything").tag(RewindSettings.unlimitedRetentionDays)
           }
         }
 
         // Storage Info
         storageInfoSection
 
-        Divider()
-          .background(Color.white.opacity(0.2))
+        GlassSeparator()
 
         // Permissions Section
         permissionsSection
@@ -247,7 +251,7 @@ struct RewindSettingsView: View {
       }
       .padding(OmiSpacing.xxl)
     }
-    .background(OmiColors.backgroundPrimary)
+    .glassContent()
   }
 
   private func settingsRow<Content: View>(
@@ -259,11 +263,12 @@ struct RewindSettingsView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(title)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
 
         Text(subtitle)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white.opacity(0.5))
+          // The bottom rung on glass is `secondary`; a fainter grey measures under WCAG AA there.
+          .foregroundColor(Ink.secondary)
       }
 
       Spacer()
@@ -277,17 +282,17 @@ struct RewindSettingsView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Storage")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(Ink.primary)
 
       HStack {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Screenshots stored locally")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.primary)
 
           Text("~/Library/Application Support/Omi/users/\(UserDefaults.standard.string(forKey: "auth_userId") ?? "")/")
             .scaledFont(size: OmiType.caption, design: .monospaced)
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -297,20 +302,20 @@ struct RewindSettingsView: View {
           NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.accent)
+        // The one accent, spent on the one thing here that is actionable and is not a button.
+        .foregroundColor(Ink.accent)
         .scaledFont(size: OmiType.caption, weight: .medium)
       }
     }
     .padding(OmiSpacing.lg)
-    .background(Color.white.opacity(0.05))
-    .cornerRadius(OmiChrome.smallControlRadius)
+    .glassCard(cornerRadius: PageGlass.rowRadius)
   }
 
   private var permissionsSection: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Permissions")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(Ink.primary)
 
       Button {
         ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
@@ -318,27 +323,26 @@ struct RewindSettingsView: View {
         HStack {
           Image(systemName: "rectangle.on.rectangle")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.primary)
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text("Screen Recording")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.white)
+              .foregroundColor(Ink.primary)
 
             Text("Required for Rewind to capture your screen")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.white.opacity(0.5))
+              .foregroundColor(Ink.secondary)
           }
 
           Spacer()
 
           Text("Open Settings")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
         .padding(OmiSpacing.md)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(OmiChrome.elementRadius)
+        .glassCard(cornerRadius: PageGlass.rowRadius)
       }
       .buttonStyle(.plain)
     }
