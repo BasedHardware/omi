@@ -71,6 +71,17 @@ export interface SeedQaSnapshotOptions {
   readonly memory_count: number;
   /** IANA timezone used for local-day grouping; validated like the QA recall loader. */
   readonly account_timezone: string;
+  /**
+   * Memories seeded as REAL durable rows that the authorization projection then
+   * hides, because their policy labels are not all generic.
+   *
+   * They exist so a test can prove that a record hidden by authorization is
+   * byte-identical on the wire to a record that was never there. Each hidden
+   * memory shares a local day with a visible one, so the served day-node exists
+   * in both fixture sets and only its membership differs - which is the case where a
+   * leak would actually show up in the synthesized text.
+   */
+  readonly hidden_memory_count?: number;
 }
 
 const fail = (message: string): never => {
@@ -128,9 +139,9 @@ const DAY_MS = 86_400_000;
 const fixtureInstant = (index: number): string =>
   new Date(ANCHOR_MS - index * DAY_MS).toISOString();
 
-const identity = (index: number): SourceIdentityRef => ({
-  namespace_instance_ref: `namespace:qa:${padIndex(index)}`,
-  local_key: `local:qa:${padIndex(index)}`,
+const identity = (token: string): SourceIdentityRef => ({
+  namespace_instance_ref: `namespace:qa:${token}`,
+  local_key: `local:qa:${token}`,
   producer: { producer_ref: "qa-seed-producer", contract_ref: "qa-seed-contract" },
   asserted_identity: { domain: null, scope_ref: null },
 });
@@ -140,7 +151,9 @@ const identity = (index: number): SourceIdentityRef => ({
 const buildMemory = (
   ownerAccountId: string,
   accountTimezone: string,
-  index: number,
+  dayIndex: number,
+  commitSequence: number,
+  hidden: boolean,
 ): {
   readonly event: L1Event;
   readonly evidence: Evidence;
@@ -149,8 +162,13 @@ const buildMemory = (
   readonly commit_id: string;
   readonly sequence: number;
 } => {
-  const token = padIndex(index);
-  const observedAt = fixtureInstant(index);
+  const token = `${hidden ? "h" : ""}${padIndex(dayIndex)}`;
+  const observedAt = fixtureInstant(dayIndex);
+  // A non-generic label is exactly what applicationVisibleClosure filters on.
+  // domain-pending(DIV-DOMCORE-008)
+  const policyLabels = hidden
+    ? ["subject:generic", "sensitivity:private", "capture:generic"]
+    : [...GENERIC_POLICY_LABELS];
   const eventRevisionId = `event-revision:qa:${token}`;
   const evidenceId = `evidence:qa:${token}`;
   const entityId = `entity:qa:${token}`;
@@ -168,13 +186,13 @@ const buildMemory = (
     event_kind: "text",
     payload_schema_ref: "qa-seed-text-v1",
     schema_version: "v1",
-    payload: { fixture_index: index },
+    payload: { fixture_index: dayIndex, fixture_hidden: hidden },
     event_time: observedAt,
     ingest_time: observedAt,
-    source_sequence: index,
+    source_sequence: commitSequence,
     evidence_addressable_refs: [evidenceId],
     source_trust: "qa-seed",
-    policy_labels: [...GENERIC_POLICY_LABELS],
+    policy_labels: [...policyLabels],
     canonical_redacted_hash: `hash:qa:event:${token}`,
   };
 
@@ -184,12 +202,12 @@ const buildMemory = (
     source_unit_ref: `unit:qa:${token}`,
     range: { start: 0, end: 16 },
     excerpt: `qa memory ${token}`,
-    source_identity_ref: identity(index),
+    source_identity_ref: identity(token),
     speaker_rendering: null,
     source_local_mention_ref: null,
     state: "active",
     source_trust: "qa-seed",
-    policy_labels: [...GENERIC_POLICY_LABELS],
+    policy_labels: [...policyLabels],
     source_independence_key: `source:qa:${token}`,
   };
 
@@ -237,7 +255,7 @@ const buildMemory = (
       },
     },
     evidence_refs: [evidenceId],
-    policy_labels: [...GENERIC_POLICY_LABELS],
+    policy_labels: [...policyLabels],
     source_language: "en",
     scope: { locality: "durable", scope_ref: entityId },
     lifecycle: "canonical",
@@ -245,7 +263,7 @@ const buildMemory = (
     source_provisional_revision_ids: [provisionalRevisionId],
   };
 
-  return { event, evidence, entity, claim, commit_id: commitId, sequence: index + 1 };
+  return { event, evidence, entity, claim, commit_id: commitId, sequence: commitSequence + 1 };
 };
 
 const sharedPredicate = (ownerAccountId: string): Predicate => ({
@@ -293,11 +311,25 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
   const ownerAccountId = requireOwner(options.owner_account_id);
   const memoryCount = requireMemoryCount(options.memory_count);
   const accountTimezone = requireTimezone(options.account_timezone);
+  const hiddenCount = options.hidden_memory_count === undefined
+    ? 0
+    : requireMemoryCount(options.hidden_memory_count);
+  if (hiddenCount > memoryCount) {
+    return fail("hidden_memory_count cannot exceed memory_count, since each hidden memory shares a day with a visible one");
+  }
 
   ensureSchema(db);
   resetQaSnapshot(db);
 
   if (memoryCount === 0) return;
+
+  // Visible memories occupy days 0..memoryCount-1. Each hidden memory reuses one
+  // of those same days so the served day-node exists in BOTH fixture sets and only
+  // its membership differs.
+  const plan: readonly { readonly dayIndex: number; readonly hidden: boolean }[] = [
+    ...Array.from({ length: memoryCount }, (_, index) => ({ dayIndex: index, hidden: false })),
+    ...Array.from({ length: hiddenCount }, (_, index) => ({ dayIndex: index, hidden: true })),
+  ];
 
   const predicate = sharedPredicate(ownerAccountId);
   let parentCommit: string | null = null;
@@ -305,9 +337,11 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
   let headSequence = 0;
 
   const write = db.transaction(() => {
-    for (let index = 0; index < memoryCount; index += 1) {
-      const memory = buildMemory(ownerAccountId, accountTimezone, index);
+    for (let index = 0; index < plan.length; index += 1) {
+      const step = plan[index]!;
+      const memory = buildMemory(ownerAccountId, accountTimezone, step.dayIndex, index, step.hidden);
       const { event, evidence, entity, claim, commit_id: commitId, sequence } = memory;
+      const rowToken = `${step.hidden ? "h" : ""}${padIndex(step.dayIndex)}`;
 
       db.query(
         "INSERT INTO derivation_commits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -316,12 +350,12 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         ownerAccountId,
         parentCommit,
         sequence,
-        `idempotency:qa:${padIndex(index)}`,
-        `input:qa:${padIndex(index)}`,
-        `input-version:qa:${padIndex(index)}`,
-        `output:qa:${padIndex(index)}`,
+        `idempotency:qa:${rowToken}`,
+        `input:qa:${rowToken}`,
+        `input-version:qa:${rowToken}`,
+        `output:qa:${rowToken}`,
         "success",
-        JSON.stringify({ commit_id: commitId, fixture_index: index }),
+        JSON.stringify({ commit_id: commitId, fixture_row: rowToken }),
       );
 
       if (index === 0) {
@@ -339,16 +373,16 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         event.event_revision_id,
         ownerAccountId,
         JSON.stringify(event),
-        `hash:qa:event:${padIndex(index)}`,
+        `hash:qa:event:${rowToken}`,
         commitId,
       );
 
       db.query("INSERT INTO evidence_revisions VALUES (?, ?, ?, ?, ?, ?)").run(
-        `evidence-revision:qa:${padIndex(index)}`,
+        `evidence-revision:qa:${rowToken}`,
         ownerAccountId,
         event.event_revision_id,
         JSON.stringify(evidence),
-        `hash:qa:evidence:${padIndex(index)}`,
+        `hash:qa:evidence:${rowToken}`,
         commitId,
       );
 
@@ -357,7 +391,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         entity.entity_revision_id,
         ownerAccountId,
         JSON.stringify(entity),
-        `hash:qa:entity:${padIndex(index)}`,
+        `hash:qa:entity:${rowToken}`,
         commitId,
       );
 
@@ -369,7 +403,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         "canonical",
         claim.temporal_scope.observed_at,
         JSON.stringify(claim),
-        `hash:qa:claim:${padIndex(index)}`,
+        `hash:qa:claim:${rowToken}`,
         commitId,
       );
 

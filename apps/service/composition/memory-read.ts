@@ -183,18 +183,21 @@ export interface MemoryReadCompositionConfig {
 // domain-pending(DIV-DOMCORE-008)
 const buildCoverage = (
   load: CoherentQaLoad,
+  authorizedGraphGeneration: string,
   encodeFrontier: (internalFrontier: string) => string,
 ): RecallCompletenessInput => {
   // The declared frontier reaches the wire UNFILTERED. Unlike item, citation and
   // trace references it does not pass through the read core's opaque-ref codecs
   // or its forbidden-ref leak check - `mapCompleteness` copies it straight into
-  // the page. Emitting the raw ledger-head digest here would therefore publish
-  // an unkeyed digest of internal coordinates that is identical for every
-  // reader and correlatable across them. Reader-scoping it costs nothing and
-  // keeps the frontier stable for the reader that actually uses it.
-  const declaredFrontier = encodeFrontier(
-    `durable:${load.internal_coverage.durable.ledger_head_digest}`,
-  );
+  // the page. So keeping it content-free AND authorization-scoped is this
+  // composition's job.
+  //
+  // It is derived from the AUTHORIZED projection generation, never from the
+  // ledger head. The ledger head counts every durable row including rows this
+  // reader may not see, so a frontier derived from it changes when a hidden
+  // record is added - an authorization oracle that survives even though the
+  // items themselves are correctly filtered. A test caught exactly that.
+  const declaredFrontier = encodeFrontier(`durable:${authorizedGraphGeneration}`);
 
   // Accepted synthesis is not performed here. Only a declared no-eligible state
   // survives as no_eligible; every other state becomes an explicit limitation.
@@ -215,8 +218,21 @@ const buildCoverage = (
   });
 };
 
+/**
+ * Generation receipts.
+ *
+ * EVERY value here is derived from the AUTHORIZED projection or from coverage
+ * STATE that is already visible on the wire. None of it is derived from raw
+ * ledger position, row counts, or row identities, because all of those count
+ * material this reader may not see - and these digests reach the wire inside
+ * the signed cursor. Binding unseeable state into a cursor is an authorization
+ * oracle even when the item list is filtered correctly.
+ */
 const buildGenerations = (
-  load: CoherentQaLoad,
+  authorizedGraphGeneration: string,
+  authorizedContentDigest: string,
+  acceptedState: AcceptedCoverageState,
+  stmState: StmCoverageState,
   authorizationDigest: string,
   synthesizedProjectionGenerationDigest: string,
 ): ApplicationRecallGenerationDigests => Object.freeze({
@@ -224,57 +240,57 @@ const buildGenerations = (
   synthesized_projection_generation_digest: synthesizedProjectionGenerationDigest,
   durable_generation_digest: sha256Hex(canonicalJson({
     kind: "durable-generation",
-    graph_generation: load.internal_coverage.durable.graph_generation,
-    ledger_head_digest: load.internal_coverage.durable.ledger_head_digest,
+    authorized_graph_generation: authorizedGraphGeneration,
   })),
-  // No overlay is projected into the served page; its generation still binds
-  // the cursor so a cursor cannot survive an overlay change unnoticed.
+  // Only the overlay's reported STATE, never its row count or row ids. The
+  // state is already published in the completeness envelope, so binding it
+  // reveals nothing the client cannot already read.
   overlay_generation_digest: sha256Hex(canonicalJson({
     kind: "overlay-generation",
-    eligible_items: load.internal_coverage.stm.eligible_items,
-    selected_items: load.internal_coverage.stm.selected_items,
-    has_more: load.internal_coverage.stm.has_more,
-    bounds_reached: [...load.internal_coverage.stm.bounds_reached].sort(compareStrings),
+    state: stmState,
   })),
   declared_generation_digest: sha256Hex(canonicalJson({
     kind: "declared-generation",
-    ledger_head_digest: load.internal_coverage.durable.ledger_head_digest,
+    authorized_graph_generation: authorizedGraphGeneration,
   })),
   accepted_generation_digest: sha256Hex(canonicalJson({
     kind: "accepted-generation",
-    state: load.internal_coverage.accepted.state,
-    declared_frontier: load.accepted_state.declared_frontier,
-    searched_frontier: load.accepted_state.searched_frontier,
+    state: acceptedState,
   })),
   stm_generation_digest: sha256Hex(canonicalJson({
     kind: "stm-generation",
-    eligible_items: load.internal_coverage.stm.eligible_items,
-    row_ids: load.stm_rows.map((row) => row.id).sort(compareStrings),
+    state: stmState,
   })),
+
 });
 
 const buildReadCoordinates = (
-  load: CoherentQaLoad,
+  authorizedGraphGeneration: string,
+  authorizedContentDigest: string,
   authorization: ApplicationMemoryReadAuthorizationRequest,
   authorizationDigest: string,
   persistedGrantStateDigest: string,
   readTimestampEpochSeconds: number,
 ): ApplicationReadCoherentCoordinates => Object.freeze({
-  owner_identity_digest: sha256Hex(`owner:${load.owner_account_id}`),
+  owner_identity_digest: sha256Hex(`owner:${authorization.owner_account_id}`),
   application_identity_digest: sha256Hex(`app:${authorization.credential.app_id ?? ""}`),
   credential_identity_digest: sha256Hex(`credential:${authorization.credential.key_id ?? ""}`),
   // The core cross-checks this against the authorization generation digest.
   authorization_state_digest: authorizationDigest,
   grant_state_digest: persistedGrantStateDigest,
+  // Authorization-scoped, NOT the ledger head. See buildGenerations.
   account_head_digest: sha256Hex(canonicalJson({
     kind: "account-head",
-    ledger_head_digest: load.internal_coverage.durable.ledger_head_digest,
+    authorized_graph_generation: authorizedGraphGeneration,
   })),
   authorized_graph_digest: sha256Hex(canonicalJson({
     kind: "authorized-graph",
-    graph_generation: load.internal_coverage.durable.graph_generation,
+    authorized_graph_generation: authorizedGraphGeneration,
   })),
-  coherent_projection_commit_digest: sha256Hex(`coherent:${load.coherent_snapshot_digest}`),
+  coherent_projection_commit_digest: sha256Hex(canonicalJson({
+    kind: "coherent-projection-commit",
+    authorized_content_digest: authorizedContentDigest,
+  })),
   // This read applies the application-default visibility, no filter, and no
   // query. They are still distinct bound coordinates so that introducing any of
   // them later invalidates outstanding cursors rather than silently reusing them.
@@ -422,19 +438,46 @@ export const prepareMemoryRead = async (
       authorization_request: authorization,
       load_coherent: () => {
         const load = config.loadCoherent();
+        const snapshot = toStandardPrototypeJson(load.durable_snapshot);
+
+        // Project HERE, before deriving any coordinate the wire will see.
+        //
+        // The coherent load describes the whole durable corpus, including rows
+        // this reader is not authorized to see. Deriving a frontier, generation
+        // receipt, or cursor binding from it publishes the existence of those
+        // rows: add one hidden record and the frontier and cursor change, while
+        // the item list stays correctly filtered. That is an authorization
+        // oracle, and `hidden-vs-absent.test.ts` failed on exactly it before
+        // this change. Everything below is therefore derived from the projected
+        // (authorization-scoped) generation and content digests instead.
+        //
+        // The core re-projects this same snapshot immediately afterwards; if the
+        // two ever disagreed, the produced-render binding fails closed.
+        const projected = readAfterApplicationAuthorization(authorization, () => ({
+          snapshot,
+          options: { account_timezone: load.account_timezone },
+        }));
+        const authorizedGraphGeneration = String(projected.graph_generation);
+        const authorizedContentDigest = String(projected.projected_content_digest);
+        const coverage = buildCoverage(load, authorizedGraphGeneration, encodeFrontier);
+
         return {
           projection_load: {
-            snapshot: toStandardPrototypeJson(load.durable_snapshot),
+            snapshot,
             options: { account_timezone: load.account_timezone },
           },
-          coverage: buildCoverage(load, encodeFrontier),
+          coverage,
           generations: buildGenerations(
-            load,
+            authorizedGraphGeneration,
+            authorizedContentDigest,
+            coverage.accepted.state,
+            coverage.stm.state,
             evidence.authorization_digest,
             synthesizedProjectionGenerationDigest,
           ),
           read_coordinates: buildReadCoordinates(
-            load,
+            authorizedGraphGeneration,
+            authorizedContentDigest,
             authorization,
             evidence.authorization_digest,
             evidence.persisted_grant_state_digest,

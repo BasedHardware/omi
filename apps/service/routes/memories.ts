@@ -81,9 +81,35 @@ const parsePageQuery = (
   return { limit, cursor };
 };
 
+/**
+ * The memory read path.
+ *
+ * CANONICAL: `GET /v1/memories`
+ * TRANSITIONAL ALIAS: `GET /v1/memories/recall`
+ *
+ * The endpoint path is not part of ratified 0.1.1 - the contract fixes the wire
+ * SHAPE, not the URL - so the spelling was an open choice. `/v1/memories` wins
+ * because this is a paginated collection read with no query input: it takes
+ * `limit` and `cursor` and nothing else. `/recall` reads as a verb, which would
+ * misdescribe a plain list, and it is worth keeping free for the day a genuinely
+ * query-bearing recall is ratified - that endpoint will want exactly this name.
+ *
+ * The alias exists only because FE-CORE had already integrated against
+ * `/v1/memories/recall` before the spelling was settled. It routes to the same
+ * handler and returns byte-identical responses. It is a dated migration shim,
+ * not a second supported name: delete it once FE-CORE and FE-SHELLS point at
+ * the canonical path.
+ */
+// domain-pending(DIV-DOMCORE-001)
+export const MEMORY_READ_PATH = "/v1/memories";
+// domain-pending(DIV-DOMCORE-001)
+export const MEMORY_READ_TRANSITIONAL_ALIAS_PATH = "/v1/memories/recall";
+
 export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): void => {
   // domain-pending(DIV-DOMCORE-001)
-  app.get("/v1/memories", async (context) => {
+  const handler = async (context: {
+    req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined };
+  }): Promise<Response> => {
     const token = bearerToken(context.req.header("authorization"));
     if (token === null) {
       deps.counter.recordDomainRead("denied");
@@ -128,7 +154,12 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
       deps.counter.recordDomainRead("failed");
       return fixedResponse(INTERNAL_BODY, 500);
     }
-  });
+  };
+
+  // Both paths share one handler, so the alias cannot drift from the canonical
+  // route's bytes, status codes, headers, or served-count accounting.
+  app.get(MEMORY_READ_PATH, handler);
+  app.get(MEMORY_READ_TRANSITIONAL_ALIAS_PATH, handler);
 };
 
 /**

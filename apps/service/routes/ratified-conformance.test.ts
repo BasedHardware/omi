@@ -252,3 +252,32 @@ describe("ratified synthesized page wire conformance", () => {
     }
   });
 });
+
+describe("memory read path spelling", () => {
+  const service = bootService();
+
+  test("the transitional alias returns byte-identical responses to the canonical path", async () => {
+    // red-proof: give the alias its own handler (or a different default limit)
+    // and the bodies diverge. The alias exists only so FE-CORE is not broken
+    // mid-flight; it must never become a second, subtly different endpoint.
+    const request = (path: string) => new Request(
+      `http://ratified-conformance.invalid${path}?limit=${PAGE_LIMIT}`,
+      { method: "GET", headers: { authorization: service.authorizationHeader } },
+    );
+
+    const canonical = await service.fetch(request("/v1/memories"));
+    const alias = await service.fetch(request("/v1/memories/recall"));
+
+    expect(alias.status).toBe(canonical.status);
+    expect(await alias.text()).toBe(await canonical.text());
+  });
+
+  test("an unknown sibling path is still a 404, so the alias is a route and not a prefix match", async () => {
+    // red-proof: register the alias as a wildcard/prefix and this returns 200.
+    const response = await service.fetch(new Request(
+      "http://ratified-conformance.invalid/v1/memories/nonsense",
+      { method: "GET", headers: { authorization: service.authorizationHeader } },
+    ));
+    expect(response.status).toBe(404);
+  });
+});
