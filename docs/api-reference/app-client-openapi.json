@@ -107,6 +107,173 @@
         "title": "AcceptSharedTasksRequest",
         "type": "object"
       },
+      "AccountCutoverCheckpointPhase": {
+        "description": "Forward-migration checkpoint phases (legacy-side seam only).",
+        "enum": [
+          "not_started",
+          "inventory",
+          "offline_queue_fenced",
+          "exporting",
+          "importing",
+          "verifying",
+          "cutover_ready",
+          "completed",
+          "failed",
+          "paused"
+        ],
+        "title": "AccountCutoverCheckpointPhase",
+        "type": "string"
+      },
+      "AccountCutoverClientAction": {
+        "description": "Fail-closed client surface before product traffic.",
+        "enum": [
+          "none",
+          "force_upgrade",
+          "migration_maintenance"
+        ],
+        "title": "AccountCutoverClientAction",
+        "type": "string"
+      },
+      "AccountCutoverControl": {
+        "additionalProperties": false,
+        "description": "Authenticated bootstrap/control projection for bridge clients.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "api_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Api Generation",
+            "type": "integer"
+          },
+          "auth_bootstrap_reachable": {
+            "default": true,
+            "title": "Auth Bootstrap Reachable",
+            "type": "boolean"
+          },
+          "client_action": {
+            "$ref": "#/components/schemas/AccountCutoverClientAction",
+            "default": "none"
+          },
+          "legacy_writes_allowed": {
+            "default": true,
+            "title": "Legacy Writes Allowed",
+            "type": "boolean"
+          },
+          "migration": {
+            "$ref": "#/components/schemas/AccountCutoverManifestSummary"
+          },
+          "minimum_supported_builds": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlatformMinimumBuild"
+            },
+            "title": "Minimum Supported Builds",
+            "type": "array"
+          },
+          "offline_queue_instruction": {
+            "$ref": "#/components/schemas/OfflineQueueInstruction",
+            "default": "none"
+          },
+          "product_traffic_allowed": {
+            "default": true,
+            "title": "Product Traffic Allowed",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AccountCutoverState",
+            "default": "legacy"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          },
+          "ui_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Ui Generation",
+            "type": "integer"
+          }
+        },
+        "title": "AccountCutoverControl",
+        "type": "object"
+      },
+      "AccountCutoverManifestSummary": {
+        "additionalProperties": false,
+        "description": "Opaque forward-migration manifest identity without user content.",
+        "properties": {
+          "checkpoint_phase": {
+            "$ref": "#/components/schemas/AccountCutoverCheckpointPhase",
+            "default": "not_started"
+          },
+          "checkpoint_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Token"
+          },
+          "destination_backend_bound": {
+            "default": false,
+            "title": "Destination Backend Bound",
+            "type": "boolean"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountCutoverManifestSummary",
+        "type": "object"
+      },
+      "AccountCutoverState": {
+        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverState",
+        "type": "string"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -14975,6 +15142,16 @@
         "title": "OAuthUrlResponse",
         "type": "object"
       },
+      "OfflineQueueInstruction": {
+        "description": "Server instruction for legacy offline/outbox queues on clients.\n\n``drain`` is only legal before the migration fence (legacy plane still\nwritable). ``quarantine`` applies once the account enters ``migrating``.",
+        "enum": [
+          "none",
+          "drain",
+          "quarantine"
+        ],
+        "title": "OfflineQueueInstruction",
+        "type": "string"
+      },
       "OnboardingStateResponse": {
         "properties": {
           "acquisition_source": {
@@ -16033,6 +16210,28 @@
         ],
         "title": "PlanType",
         "type": "string"
+      },
+      "PlatformMinimumBuild": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_supported_build": {
+            "minimum": 0.0,
+            "title": "Minimum Supported Build",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "minimum_supported_build"
+        ],
+        "title": "PlatformMinimumBuild",
+        "type": "object"
       },
       "PluginResult": {
         "properties": {
@@ -23630,6 +23829,100 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/account/cutover/control": {
+      "get": {
+        "description": "Stable authenticated bootstrap projection for bridge clients.\n\nAlways reachable for signed-in users, including while product traffic is\nfenced for migrating / force-upgrade / stranded states. Does not migrate\nany account; absent documents project as legacy. Malformed authoritative\ndocuments fail closed.",
+        "operationId": "get_account_cutover_control_v1_account_cutover_control_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCutoverControl"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Cutover Control",
+        "tags": [
+          "account-cutover"
+        ]
+      }
+    },
     "/v1/action-items": {
       "get": {
         "description": "Get action items for the current user.",

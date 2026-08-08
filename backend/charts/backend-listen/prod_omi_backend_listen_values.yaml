@@ -131,6 +131,8 @@ env:
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
+  - name: ACCOUNT_CUTOVER_ENFORCEMENT
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION

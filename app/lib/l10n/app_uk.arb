@@ -3208,5 +3208,11 @@
     "pinAsBaseline": "Закріпити як базове",
     "unpinAsBaseline": "Відкріпити від базового",
     "baselineMemory": "Базова пам'ять",
-    "alwaysInContext": "Завжди в контексті"
+    "alwaysInContext": "Завжди в контексті",
+    "accountCutoverUpdateRequiredTitle": "Потрібне оновлення",
+    "accountCutoverUpdateRequiredMessage": "Встановіть найновіший додаток Omi, щоб продовжити після міграції облікового запису.",
+    "accountCutoverMigrationInProgressTitle": "Триває міграція",
+    "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
+    "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
+    "accountCutoverOpenStore": "Відкрити магазин"
 }

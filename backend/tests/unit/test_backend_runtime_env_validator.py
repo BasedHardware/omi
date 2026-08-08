@@ -98,6 +98,15 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     )
 
 
+def with_account_cutover_enforcement(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the cutover fence default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "ACCOUNT_CUTOVER_ENFORCEMENT", "value": "off"},',
+    )
+
+
 def with_listen_finalization_orphan_env(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the reliability recovery setting."""
     return payload.replace(
@@ -130,7 +139,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_backend_pusher_env(
             with_parity_pack_env(
-                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+                with_listen_finalization_orphan_env(
+                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                )
             )
         )
     )

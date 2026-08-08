@@ -75,6 +75,9 @@ environment_shared:
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
           category: rollout
+        ACCOUNT_CUTOVER_ENFORCEMENT:
+          value: 'off'
+          category: rollout
         DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
           value: '0.01'
           category: rollout
@@ -200,6 +203,9 @@ environment_shared:
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
+            value: 'off'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -265,6 +271,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -341,6 +350,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -431,6 +443,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
