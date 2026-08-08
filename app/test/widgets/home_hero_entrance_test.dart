@@ -3,9 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/pages/home/widgets/home_hero.dart';
 
-/// The hero fades in, so its headline is only the colour it declares once the
-/// entrance has finished. A screenshot caught it at ~75% opacity, which is
-/// indistinguishable from "the text is grey" — these pin the end state.
+/// The hero fades in, so the headline is only the colour it declares once the
+/// entrance has finished — and only if nothing is left compositing over it.
+///
+/// Both mattered in practice: a screenshot caught it mid-fade at ~75%, and the
+/// settled frame still rendered a few percent short of white because the
+/// entrance's Opacity layer stayed in the tree at opacity 1.0.
 void main() {
   Future<void> pumpHero(WidgetTester tester, {required bool animate}) async {
     await tester.pumpWidget(
@@ -15,28 +18,31 @@ void main() {
     );
   }
 
-  double heroOpacity(WidgetTester tester) {
-    final opacities = tester.widgetList<Opacity>(find.byType(Opacity)).toList();
-    expect(opacities, isNotEmpty, reason: 'the hero wraps its content in an entrance Opacity');
-    return opacities.first.opacity;
-  }
-
-  testWidgets('the entrance settles fully opaque', (tester) async {
+  testWidgets('the entrance fades in, then leaves nothing compositing over the text', (tester) async {
     await pumpHero(tester, animate: true);
 
-    // Mid-flight it is deliberately partial.
     await tester.pump(const Duration(milliseconds: 300));
-    expect(heroOpacity(tester), lessThan(1.0));
+    final midFlight = tester.widgetList<Opacity>(find.byType(Opacity)).toList();
+    expect(midFlight, isNotEmpty, reason: 'mid-flight it fades');
+    expect(midFlight.first.opacity, lessThan(1.0));
 
     await tester.pumpAndSettle();
-    expect(heroOpacity(tester), 1.0, reason: 'a headline left below 1.0 renders grey, not white');
+
+    // Not "opacity == 1.0" — the layer must be gone. An Opacity at 1.0 still
+    // round-trips the text through an offscreen buffer, which is what rendered
+    // the headline grey on device.
+    expect(
+      find.byType(Opacity),
+      findsNothing,
+      reason: 'a settled hero must not composite its text through an opacity layer',
+    );
   });
 
-  testWidgets('with animate off it is opaque on the first frame', (tester) async {
+  testWidgets('with animate off there is no opacity layer at all', (tester) async {
     await pumpHero(tester, animate: false);
     await tester.pump();
 
-    expect(heroOpacity(tester), 1.0);
+    expect(find.byType(Opacity), findsNothing);
   });
 
   testWidgets('the headline declares pure white', (tester) async {

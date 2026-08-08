@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/utils/app_typography.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -29,8 +30,10 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
   /// through the full history.
   static const int _limit = 7;
 
-  static const double _cardWidth = 200;
-  static const double _stripHeight = 176;
+  /// Fraction of the viewport a card spans. Sized so the next card shows as
+  /// a deliberate sliver instead of looking clipped by the screen edge.
+  static const double _cardWidthFraction = 0.78;
+  static const double _stripHeight = 140;
 
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
@@ -82,17 +85,21 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
     // the top of a page that is about conversations.
     if (_summaries.isEmpty) return const SizedBox.shrink();
 
+    // Cards are sized off the viewport, minus the 16pt gutter, so the sliver of
+    // the next card is the same on every device.
+    final cardWidth = (MediaQuery.sizeOf(context).width - 32) * _cardWidthFraction;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 context.l10n.dailyRecaps,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                style: AppType.sectionTitle,
               ),
               TextButton(
                 onPressed: () {
@@ -116,21 +123,23 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
           height: _stripHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
+            // Right inset matches the left so the last card ends clear of the
+            // edge instead of running into it.
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: _summaries.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => _buildCard(_summaries[index], index),
+            itemBuilder: (context, index) => _buildCard(_summaries[index], index, cardWidth),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCard(DailySummary summary, int index) {
+  Widget _buildCard(DailySummary summary, int index, double cardWidth) {
     return GestureDetector(
       onTap: () => _openSummary(summary, index),
       child: Container(
-        width: _cardWidth,
+        width: cardWidth,
         decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(20)),
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -156,7 +165,7 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
                 summary.headline,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: AppType.cardTitle,
               ),
             ),
             const SizedBox(height: 8),
@@ -202,7 +211,7 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
             baseColor: AppStyles.backgroundSecondary,
             highlightColor: AppStyles.backgroundTertiary,
             child: Container(
-              width: _cardWidth,
+              width: MediaQuery.sizeOf(context).width * _cardWidthFraction,
               decoration: BoxDecoration(
                 color: AppStyles.backgroundSecondary,
                 borderRadius: BorderRadius.circular(20),

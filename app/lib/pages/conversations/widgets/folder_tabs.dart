@@ -89,11 +89,12 @@ class _FolderTabsState extends State<FolderTabs> {
   Widget build(BuildContext context) {
     final selectedFolder = _selectedFolder;
 
-    return Container(
+    // No padding or height of its own — this sits inline in the Conversations
+    // header row, which owns the gutter and the vertical rhythm.
+    return SizedBox(
       height: 36,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           PullDownButton(
             itemBuilder: (context) => [
@@ -169,7 +170,7 @@ class _FolderTabsState extends State<FolderTabs> {
               ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           _SearchButton(),
         ],
       ),

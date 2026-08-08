@@ -17,12 +17,17 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/utils/app_typography.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+
+/// Starred marker: an outline star at 65% amber. The solid, full-strength
+/// version pulled more attention than the conversation title it sat next to.
+const Color _starColor = Color(0xA6FFC107);
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -352,7 +357,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         widget.conversation.discarded
                             ? widget.conversation.getTranscript(maxCount: 100)
                             : widget.conversation.structured.title.decodeString,
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: AppType.cardTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -366,7 +371,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   const Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+                                    child: FaIcon(FontAwesomeIcons.star, size: 12, color: _starColor),
                                   ),
                               ],
                             )
@@ -393,7 +398,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   const Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+                                    child: FaIcon(FontAwesomeIcons.star, size: 12, color: _starColor),
                                   ),
                               ],
                             ),
@@ -554,7 +559,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       if (widget.conversation.starred)
                         const Padding(
                           padding: EdgeInsets.only(left: 8.0),
-                          child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+                          child: FaIcon(FontAwesomeIcons.star, size: 12, color: _starColor),
                         ),
                     ],
                   ),

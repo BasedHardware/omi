@@ -20,6 +20,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/app_typography.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -313,48 +314,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   convoProvider.isLoadingConversations ||
                   convoProvider.isFetchingConversations ||
                   _hasActiveFilter(convoProvider))
+                // Title and controls share one row. Split across two they read
+                // as unrelated bands with dead space between them, and the
+                // floating search button looked detached from the list it
+                // filters.
                 SliverToBoxAdapter(
-                  child: Builder(
-                    builder: (context) => Padding(
-                      // Generous top gap so the headline separates from the
-                      // recap strip above rather than crowding it.
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 24, bottom: 8),
-                      child: Row(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 28, 16, 16),
+                    child: Consumer2<FolderProvider, ConversationProvider>(
+                      builder: (context, folderProvider, convoProvider, _) => Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            context.l10n.conversations,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          Text(context.l10n.conversations, style: AppType.sectionTitle),
+                          FolderTabs(
+                            folders: folderProvider.folders,
+                            selectedFolderId: convoProvider.selectedFolderId,
+                            onFolderSelected: (folderId) {
+                              convoProvider.filterByFolder(folderId);
+                            },
+                            showStarredOnly: convoProvider.showStarredOnly,
+                            onStarredToggle: convoProvider.toggleStarredFilter,
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-
-              // Folder tabs - hidden when the user has no conversations yet
-              // (matches the title). Keep chips visible whenever a filter is
-              // active so the user can always clear it, even when the filtered
-              // result is empty.
-              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                  convoProvider.isLoadingConversations ||
-                  convoProvider.isFetchingConversations ||
-                  _hasActiveFilter(convoProvider))
-                Consumer2<FolderProvider, ConversationProvider>(
-                  builder: (context, folderProvider, convoProvider, _) {
-                    return SliverToBoxAdapter(
-                      child: FolderTabs(
-                        folders: folderProvider.folders,
-                        selectedFolderId: convoProvider.selectedFolderId,
-                        onFolderSelected: (folderId) {
-                          convoProvider.filterByFolder(folderId);
-                        },
-                        showStarredOnly: convoProvider.showStarredOnly,
-                        onStarredToggle: convoProvider.toggleStarredFilter,
-                      ),
-                    );
-                  },
                 ),
               if (_nonDiscardedConversationCount(convoProvider) == 0 &&
                   !hasRecordings &&
@@ -419,7 +404,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
                             key: ValueKey(date),
                             isFirst: index == 0,

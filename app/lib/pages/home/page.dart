@@ -290,7 +290,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // Navigate uri
     Uri? navigateToUri;
     var pageAlias = "home";
-    var homePageIdx = 0;
+    var homePageIdx = 1; // TEMP-VERIFY
     String? detailPageId;
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {

@@ -99,6 +99,27 @@ class AppType {
     color: Colors.white,
   );
 
+  /// Section label above a list — "Daily Recaps", "Conversations". Deliberately
+  /// bigger than [cardTitle]: the section has to outrank the cards under it, and
+  /// at the same size the page read as one flat stack of headings.
+  static const TextStyle sectionTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    letterSpacing: AppTracking.title,
+    height: 1.25,
+    color: Colors.white,
+  );
+
+  /// Title inside a card — a conversation row, a recap card. One token so the
+  /// two card types can't drift apart.
+  static const TextStyle cardTitle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    letterSpacing: AppTracking.title,
+    height: 1.3,
+    color: Colors.white,
+  );
+
   static const TextStyle bodyLarge = TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w400,

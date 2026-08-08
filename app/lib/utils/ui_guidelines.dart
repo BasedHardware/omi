@@ -27,10 +27,11 @@ class AppStyles {
 
   static const Color accent = Colors.blue;
 
-  /// Fill for a checked-off task — the one place the app reads "done" as a
-  /// colour; everything else stays neutral. Named for the role, not the hue, so
-  /// changing the colour doesn't mean renaming every call site.
-  static const Color completedAccent = Color(0xFF4C82F7);
+  /// Fill for a checked-off task. White rather than a hue: "done" is signalled
+  /// by the fill appearing at all, and a coloured one was the only chromatic
+  /// accent left on the page. Named for the role, not the hue, so changing it
+  /// doesn't mean renaming every call site.
+  static const Color completedAccent = Color(0xFFFFFFFF);
 
   /// Glyph drawn on [completedAccent]. Dark, not white — the fill is bright
   /// enough that a white tick washes out against it.

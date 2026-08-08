@@ -73,6 +73,30 @@ void main() {
     expect(provider.actionItems.where((i) => !i.completed), hasLength(1));
   });
 
+  testWidgets('a completed task appears in the inline Completed section', (tester) async {
+    final provider = await pumpPage(tester);
+
+    // Nothing done yet — no section at all.
+    expect(find.text('COMPLETED'), findsNothing);
+
+    final circle = find.byWidgetPredicate((w) => w is SizedBox && w.width == 44 && w.height == 48);
+    await tester.tap(circle.first, warnIfMissed: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+
+    expect(find.text('COMPLETED'), findsOneWidget, reason: 'the section appears once something is done');
+
+    final done = provider.actionItems.firstWhere((i) => i.completed);
+    // Collapsed by default, so the row is not rendered until expanded.
+    expect(find.text(done.description), findsNothing);
+
+    await tester.tap(find.text('COMPLETED'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(done.description), findsOneWidget, reason: 'expanding reveals the completed task');
+  });
+
   testWidgets('the completed view surfaces the checked task', (tester) async {
     final provider = await pumpPage(tester);
 

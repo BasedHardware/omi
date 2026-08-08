@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+// Still imported for the commented-out ramp-based headline below.
+// ignore: unused_import
 import 'package:omi/utils/app_typography.dart';
 
 /// The Home entry surface: the headline, then the "Ask Omi" bar beneath it.
@@ -62,10 +64,16 @@ class _HomeHeroState extends State<HomeHero> with SingleTickerProviderStateMixin
     final animation = CurvedAnimation(parent: _controller, curve: interval);
     return AnimatedBuilder(
       animation: animation,
-      builder: (context, child) => Opacity(
-        opacity: animation.value.clamp(0.0, 1.0),
-        child: Transform.translate(offset: Offset(0, rise * (1 - animation.value)), child: child),
-      ),
+      builder: (context, child) {
+        final t = animation.value.clamp(0.0, 1.0);
+        // Drop the wrapper once settled rather than leaving an Opacity(1.0) and
+        // an identity Transform in the tree for the rest of the session.
+        if (t >= 1.0) return child!;
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, rise * (1 - t)), child: child),
+        );
+      },
       child: child,
     );
   }
@@ -78,11 +86,31 @@ class _HomeHeroState extends State<HomeHero> with SingleTickerProviderStateMixin
         _entrance(
           interval: _headlineCurve,
           rise: 16,
-          child: Text(
+          // Headline, styled inline rather than through the type ramp. The
+          // ramp-based version below rendered measurably grey on device
+          // (peak 190/255 against 255 for the app bar's own white text) and
+          // none of colour, tracking, the entrance fade, or the layer tree
+          // accounted for it. Kept commented rather than deleted so the
+          // comparison is still there when the cause is found.
+          child: const Text(
             'Ask Omi anything about your life',
             textAlign: TextAlign.center,
-            style: AppType.headlineMedium.copyWith(height: 1.35),
+            style: TextStyle(
+              color: Color(0xFFFFFFFF),
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
           ),
+          // child: Text(
+          //   'Ask Omi anything about your life',
+          //   textAlign: TextAlign.center,
+          //   style: AppType.headlineMedium.copyWith(
+          //     height: 1.35,
+          //     letterSpacing: 0,
+          //     color: Colors.white,
+          //   ),
+          // ),
         ),
         if (widget.chatBar != null) ...[
           const SizedBox(height: 24),

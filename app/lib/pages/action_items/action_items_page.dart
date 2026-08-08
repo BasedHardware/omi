@@ -23,13 +23,18 @@ import 'widgets/action_item_form_sheet.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
-/// Two buckets, plus Completed rendered separately below them.
+/// One bucket for everything outstanding, with Completed rendered separately
+/// below it.
 ///
-/// Overdue folds into [today] — a task that is past due is the most actionable
-/// thing on the page, and filing it under its own heading pushed it below
-/// everything else. Tomorrow and no-deadline fold into [later]: five headings
-/// for eight tasks read as filing, not as a list of what to do.
-enum TaskCategory { today, later }
+/// This started as five headings (Today, Tomorrow, Later, No deadline,
+/// Overdue), which read as filing rather than as a list of what to do. Due
+/// dates still show on the items themselves, so the headings were splitting a
+/// short list without adding information the rows didn't already carry.
+///
+/// Kept as an enum rather than dropped: ordering, drag-and-drop and the drop
+/// zones are all keyed by category, and a single-value enum keeps that
+/// plumbing intact while the page shows one list.
+enum TaskCategory { todos }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -232,7 +237,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             heroTag: 'action_items_fab',
             onPressed: () {
               HapticFeedback.lightImpact();
-              _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
+              _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.todos));
             },
             // White on black, matching the chat bar's mic button. Purple is
             // off-brand (INV-UI-1) and this was the loudest instance of it.
@@ -370,32 +375,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     List<ActionItemWithMetadata> items,
     bool showCompleted,
   ) {
-    final now = DateTime.now();
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
-      TaskCategory.today: [],
-      TaskCategory.later: [],
+      TaskCategory.todos: [],
     };
 
     for (var item in items) {
       // Skip completed items unless showing completed
       if (item.completed && !showCompleted) continue;
       if (!item.completed && showCompleted) continue;
-
-      if (item.dueAt == null) {
-        // Undated work that has been sitting for over a week is treated as
-        // needing attention now rather than drifting in Later forever.
-        final isStale = !showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo);
-        categorized[isStale ? TaskCategory.today : TaskCategory.later]!.add(item);
-      } else {
-        final dueDate = item.dueAt!;
-        // Overdue counts as today: it is due, and burying it under its own
-        // heading put the most urgent work at the bottom of the page.
-        final isDueNow = dueDate.isBefore(startOfTomorrow);
-        categorized[isDueNow ? TaskCategory.today : TaskCategory.later]!.add(item);
-      }
+      categorized[TaskCategory.todos]!.add(item);
     }
 
     return categorized;
@@ -403,21 +391,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   String _getCategoryTitle(BuildContext context, TaskCategory category) {
     switch (category) {
-      case TaskCategory.today:
-        return context.l10n.today;
-      case TaskCategory.later:
-        return context.l10n.tasksLater;
+      case TaskCategory.todos:
+        return context.l10n.navTodos;
     }
   }
 
   DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
     final now = DateTime.now();
     switch (category) {
-      case TaskCategory.today:
+      case TaskCategory.todos:
+        // End of today: a task added from this page is presumed to be for now.
         return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.later:
-        // Day after tomorrow — the earliest date that still lands in Later.
-        return DateTime(now.year, now.month, now.day + 2, 23, 59);
     }
   }
 
@@ -911,7 +895,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           if (_completedExpanded)
             ...ordered.map(
-              (item) => _buildTaskItem(item, provider, category: TaskCategory.later, categoryItems: ordered),
+              (item) => _buildTaskItem(item, provider, category: TaskCategory.todos, categoryItems: ordered),
             ),
           const SizedBox(height: 12),
         ],
@@ -1265,19 +1249,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
-    final now = DateTime.now();
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-
-    // Mirrors the bucketing in _categorizeItems: overdue and stale undated work
-    // read as Today; everything else is Later.
-    if (item.dueAt == null) {
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      final isStale = item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo);
-      return isStale ? TaskCategory.today : TaskCategory.later;
-    }
-    return item.dueAt!.isBefore(startOfTomorrow) ? TaskCategory.today : TaskCategory.later;
-  }
+  /// Every outstanding item lives in the one bucket; due dates are shown on the
+  /// rows rather than used to sort them into sections.
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) => TaskCategory.todos;
 
   Widget _buildTaskItemContent(
     ActionItemWithMetadata item,

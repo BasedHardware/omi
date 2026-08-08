@@ -31,18 +31,18 @@ class ChatStarterPrompts extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final prompt in prompts)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _PromptChip(label: prompt, onTap: () => onSelected(prompt)),
-            ),
+            // No gap between rows: with the surfaces gone the spacing has to
+            // come from the rows' own padding, or they read as floating
+            // fragments rather than a short list.
+            _PromptRow(label: prompt, onTap: () => onSelected(prompt)),
         ],
       ),
     );
   }
 }
 
-class _PromptChip extends StatelessWidget {
-  const _PromptChip({required this.label, required this.onTap});
+class _PromptRow extends StatelessWidget {
+  const _PromptRow({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
@@ -57,26 +57,21 @@ class _PromptChip extends StatelessWidget {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        decoration: BoxDecoration(
-          // Filled, not outlined: a hairline border is harder to pick out than a
-          // soft surface, and gave these the look of controls rather than
-          // suggestions. The fill sits between the page (black) and the
-          // composer (#1F1F25) so they read as clearly subordinate to the input
-          // they sit beneath — present, but never competing with it.
-          color: const Color(0xFF131317),
-          borderRadius: BorderRadius.circular(22),
-        ),
+        // Padding is the tap target, not a visible box. The rounded pill is the
+        // composer's shape and stays unique to it — repeating it here made these
+        // read as three peers of the input rather than as examples beneath it.
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        color: Colors.transparent,
         child: Text(
           label,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            // A step quieter than the composer's placeholder, so the ranking
-            // holds on the text as well as the surface.
-            color: Colors.white.withValues(alpha: 0.62),
-            fontSize: 14,
+            // With no surface behind it the text carries the whole element, so
+            // it lifts slightly — still clearly quieter than the composer.
+            color: Colors.white.withValues(alpha: 0.68),
+            fontSize: 15,
             fontWeight: FontWeight.w400,
           ),
         ),

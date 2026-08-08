@@ -12,8 +12,8 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
 /// Checking a task off has to *show* the completion before the item is handed
-/// to the provider: fill the circle green, strike the text through, and only
-/// then report it.
+/// to the provider: fill the circle with the completion accent, strike the text
+/// through, and only then report it.
 ///
 /// These run against [ActionItemsPage] rather than a tile widget on purpose —
 /// the page owns the checkbox and the toggle handler, and an earlier version of
@@ -58,11 +58,12 @@ void main() {
     return provider;
   }
 
-  /// The completed circle is the only solid-green Container on the page.
-  bool hasGreenCheck(WidgetTester tester) {
+  /// The completed circle is the only Container filled with the completion
+  /// accent on the page.
+  bool hasCompletedCheck(WidgetTester tester) {
     return tester.widgetList<Container>(find.byType(Container)).any((c) {
       final decoration = c.decoration;
-      return decoration is BoxDecoration && decoration.color == AppStyles.completedGreen;
+      return decoration is BoxDecoration && decoration.color == AppStyles.completedAccent;
     });
   }
 
@@ -71,14 +72,14 @@ void main() {
     return text.style?.decoration == TextDecoration.lineThrough;
   }
 
-  testWidgets('an open task shows no green check and no strikethrough', (tester) async {
+  testWidgets('an open task shows no completed check and no strikethrough', (tester) async {
     await pumpPage(tester);
 
-    expect(hasGreenCheck(tester), isFalse);
+    expect(hasCompletedCheck(tester), isFalse);
     expect(isStruckThrough(tester), isFalse);
   });
 
-  testWidgets('tapping the circle shows a green check and strikes the text through', (tester) async {
+  testWidgets('tapping the circle fills the check and strikes the text through', (tester) async {
     await pumpPage(tester);
 
     // The tap target is the 44x48 box around the circle, left of the text.
@@ -90,7 +91,7 @@ void main() {
     await tester.tap(circle.first, warnIfMissed: false);
     await tester.pump();
 
-    expect(hasGreenCheck(tester), isTrue, reason: 'the circle fills green on tap');
+    expect(hasCompletedCheck(tester), isTrue, reason: 'the circle fills on tap');
     expect(isStruckThrough(tester), isTrue, reason: 'the text strikes through on tap');
 
     // Let the 500ms completion window and the provider call drain.
