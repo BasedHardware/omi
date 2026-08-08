@@ -10774,5 +10774,11 @@
     "pinAsBaseline": "הצמדה כבסיס",
     "unpinAsBaseline": "ביטול הצמדה מהבסיס",
     "baselineMemory": "זיכרון בסיס",
-    "alwaysInContext": "תמיד בהקשר"
+    "alwaysInContext": "תמיד בהקשר",
+    "accountCutoverUpdateRequiredTitle": "נדרש עדכון",
+    "accountCutoverUpdateRequiredMessage": "התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.",
+    "accountCutoverMigrationInProgressTitle": "העברה בתהליך",
+    "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
+    "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
+    "accountCutoverOpenStore": "פתחו חנות"
 }

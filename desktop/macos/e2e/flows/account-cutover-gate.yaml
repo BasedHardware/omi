@@ -1,0 +1,36 @@
+version: 2
+name: account-cutover-gate
+tier: manual
+description: Manual verification that signed-in desktop home awaits cutover control before product services and that offline outboxes respect the shared upload gate
+app: com.omi.desktop-dev
+covers:
+  - desktop/macos/Desktop/Sources/AccountCutover/APIClient+AccountCutover.swift
+  - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverBlockingOverlay.swift
+  - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverControl.swift
+  - desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+
+steps:
+  - id: S1
+    name: Launch signed-in home
+    do: "Launch a named non-prod bundle already signed in and onboarded. Confirm DesktopHomeView reaches the signed-in shell."
+
+  - id: S2
+    name: Confirm cutover control bootstrap
+    do: "Confirm AccountCutoverControlManager stays pending until GET /v1/account/cutover/control succeeds, then admits product services. With a legacy projection, confirm product traffic remains available and no blocking overlay is shown."
+
+  - id: S3
+    name: Confirm force-upgrade overlay reuses update prompt
+    do: "Inject or stub a cutover control with client_action=force_upgrade. Confirm the required-update prompt surface blocks the home shell and the CTA opens the existing desktop download URL path."
+
+  - id: S4
+    name: Confirm migration maintenance blocks durable uploads
+    do: "Inject or stub a migrating control with product traffic blocked. Confirm the migration-maintenance overlay blocks product traffic and durable outbox / WAL upload paths (SuggestedTasks, dashboard feedback, TasksStore unsynced retries, recording WAL, kernel journal sync/delete/reconcile, candidates) refuse upload until the gate reopens."
