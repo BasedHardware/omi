@@ -5,9 +5,12 @@ import json
 import os
 import sqlite3
 import sys
+import threading
+import time
 import types
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +27,23 @@ def load_app(tmp_path: Path):
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
     return module.app, module
+
+
+def create_database(path: Path, table: str, value: str) -> bytes:
+    connection = sqlite3.connect(path)
+    connection.execute(f"CREATE TABLE {table} (value TEXT)")
+    connection.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+    connection.commit()
+    connection.close()
+    return path.read_bytes()
+
+
+def read_database_value(path: Path, table: str) -> str:
+    connection = sqlite3.connect(path)
+    try:
+        return connection.execute(f"SELECT value FROM {table}").fetchone()[0]
+    finally:
+        connection.close()
 
 
 def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> None:
@@ -55,6 +75,7 @@ def test_health_reports_state_receipt_metadata_without_receipt_contents(tmp_path
     assert body["stateReady"] is True
     assert body["stateMigrationId"] == "migration-1"
     assert body["stateReceiptSha256"] == hashlib.sha256(receipt_bytes).hexdigest()
+    assert body["stateDatabaseExpected"] is True
     assert "tree" not in body
     assert "db" not in body
 
@@ -92,6 +113,79 @@ def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None
     assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
 
 
+def test_malformed_database_validation_closes_connection_and_temp_file(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+
+    class MalformedConnection:
+        closed = False
+
+        def execute(self, _statement):
+            raise sqlite3.DatabaseError("malformed")
+
+        def close(self):
+            self.closed = True
+
+    connection = MalformedConnection()
+    monkeypatch.setattr(module.sqlite3, "connect", lambda *_args, **_kwargs: connection)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=b"not sqlite",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 400
+    assert connection.closed
+    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
+    started = threading.Event()
+    release = threading.Event()
+    worker = None
+
+    def slow_validation(_path):
+        nonlocal worker
+        worker = threading.current_thread()
+        started.set()
+        assert release.wait(2)
+        return ["ok"]
+
+    monkeypatch.setattr(module, "validate_database_integrity", slow_validation)
+
+    class Request:
+        headers = {"content-length": str(len(payload))}
+
+        async def stream(self):
+            yield payload
+
+    async def run_upload():
+        upload_task = asyncio.create_task(module.upload_database(Request()))
+        assert await asyncio.to_thread(started.wait, 1)
+        await asyncio.sleep(0.01)
+        elapsed = time.monotonic() - started_at
+        release.set()
+        result = await upload_task
+        return elapsed, result
+
+    timer = threading.Timer(0.2, release.set)
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        elapsed, result = asyncio.run(run_upload())
+    finally:
+        release.set()
+        timer.cancel()
+        module.runtime.close_database()
+
+    assert elapsed < 0.15
+    assert worker is not threading.main_thread()
+    assert result == (len(payload), len(payload))
+
+
 def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     sqlite3.connect(module.runtime.db_path).close()
@@ -113,6 +207,207 @@ def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path)
     assert response.status_code == 200
     assert value == "ready"
     assert not module.runtime.db_path.with_suffix(".db.previous").exists()
+
+
+def test_database_upload_durability_order_keeps_rollback_until_new_db_is_synced(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+    previous = module.runtime.db_path.with_suffix(".db.previous")
+    temporary = module.runtime.db_path.with_suffix(".db.uploading")
+    events = []
+    original_fsync_file = module.fsync_file
+    original_fsync_directory = module.fsync_directory
+    original_replace = Path.replace
+    original_unlink = Path.unlink
+
+    def record_fsync_file(path):
+        events.append(("file_fsync", Path(path)))
+        original_fsync_file(path)
+
+    def record_fsync_directory(path):
+        events.append(("directory_fsync", Path(path)))
+        original_fsync_directory(path)
+
+    def record_replace(source, target):
+        source_path = Path(source)
+        target_path = Path(target)
+        if source_path in {module.runtime.db_path, temporary}:
+            events.append(("replace", source_path, target_path))
+        return original_replace(source, target)
+
+    def record_unlink(path, *args, **kwargs):
+        if Path(path) == previous:
+            events.append(("unlink", previous))
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(module, "fsync_file", record_fsync_file)
+    monkeypatch.setattr(module, "fsync_directory", record_fsync_directory)
+    monkeypatch.setattr(Path, "replace", record_replace)
+    monkeypatch.setattr(Path, "unlink", record_unlink)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=payload,
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    prior_replace = events.index(("replace", module.runtime.db_path, previous))
+    uploaded_replace = events.index(("replace", temporary, module.runtime.db_path))
+    rollback_unlink = max(index for index, event in enumerate(events) if event == ("unlink", previous))
+    uploaded_fsync = events.index(("file_fsync", temporary))
+    new_db_fsync = max(index for index, event in enumerate(events) if event == ("file_fsync", module.runtime.db_path))
+
+    assert response.status_code == 200
+    assert uploaded_fsync < prior_replace
+    assert events[prior_replace + 1] == ("directory_fsync", module.runtime.db_path.parent)
+    assert events[uploaded_replace + 1] == ("directory_fsync", module.runtime.db_path.parent)
+    assert uploaded_replace < new_db_fsync < rollback_unlink
+
+
+def test_database_upload_directory_sync_failure_restores_prior_database(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+    previous = module.runtime.db_path.with_suffix(".db.previous")
+    original_fsync_directory = module.fsync_directory
+    failed = False
+
+    def fail_after_uploaded_rename(path):
+        nonlocal failed
+        if not failed and module.runtime.db_path.is_file() and previous.is_file():
+            failed = True
+            raise OSError("power loss during database swap")
+        original_fsync_directory(path)
+
+    monkeypatch.setattr(module, "fsync_directory", fail_after_uploaded_rename)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=payload,
+            headers={"Authorization": "Bearer test-token"},
+        )
+        database_is_open = module.runtime.db is not None
+
+    assert response.status_code == 400
+    assert failed
+    assert database_is_open
+    assert read_database_value(module.runtime.db_path, "durable") == "preserved"
+    assert not previous.exists()
+    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_checkpoint_failure_cleans_upload_and_preserves_prior_database(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+
+    with TestClient(app) as client:
+        original = module.runtime.db
+
+        class FailingConnection:
+            def execute(self, _statement):
+                raise sqlite3.OperationalError("checkpoint failed")
+
+            def close(self):
+                original.close()
+
+        module.runtime.db = FailingConnection()
+        with pytest.raises(sqlite3.OperationalError, match="checkpoint failed"):
+            client.post(
+                "/upload?token=test-token",
+                content=payload,
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
+        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_close_failure_cleans_upload_and_preserves_prior_database(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+
+    with TestClient(app) as client:
+        original_close = module.runtime.close_database
+
+        def fail_close():
+            raise RuntimeError("close failed")
+
+        monkeypatch.setattr(module.runtime, "close_database", fail_close)
+        try:
+            with pytest.raises(RuntimeError, match="close failed"):
+                client.post(
+                    "/upload?token=test-token",
+                    content=payload,
+                    headers={"Authorization": "Bearer test-token"},
+                )
+        finally:
+            monkeypatch.setattr(module.runtime, "close_database", original_close)
+
+        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
+        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_swap_failure_restores_prior_database_and_cleans_upload(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+    original_replace = Path.replace
+
+    def fail_uploaded_replace(source, target):
+        if source == module.runtime.db_path.with_suffix(".db.uploading") and Path(target) == module.runtime.db_path:
+            raise OSError("swap failed")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_uploaded_replace)
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=payload,
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 400
+    assert read_database_value(module.runtime.db_path, "durable") == "preserved"
+    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_uploaded_database_open_failure_restores_prior_database(tmp_path: Path, monkeypatch) -> None:
+    app, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+    original_open = module.runtime.open_database
+    calls = 0
+
+    def fail_uploaded_open():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return False
+        return original_open()
+
+    with TestClient(app) as client:
+        monkeypatch.setattr(module.runtime, "open_database", fail_uploaded_open)
+        with pytest.raises(RuntimeError, match="Failed to open uploaded database"):
+            client.post(
+                "/upload?token=test-token",
+                content=payload,
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+        assert read_database_value(module.runtime.db_path, "durable") == "preserved"
+        assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+        assert not module.runtime.db_path.with_suffix(".db.previous").exists()
 
 
 def test_database_uploads_are_serialized(tmp_path: Path, monkeypatch) -> None:

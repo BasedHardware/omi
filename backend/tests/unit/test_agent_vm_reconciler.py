@@ -90,8 +90,29 @@ def test_runtime_verification_requires_all_release_identity_fields():
     }
     assert runtime_matches(payload, release)
     assert not runtime_matches({**payload, "imageDigest": "gcr.io/project/agent-vm@sha256:" + "e" * 64}, release)
-    assert state_runtime_matches({"stateReady": True, "stateMigrationId": "migration-id"}, "migration-id")
+    assert state_runtime_matches(
+        {
+            "stateReady": True,
+            "stateMigrationId": "migration-id",
+            "stateDatabaseExpected": True,
+            "databaseReady": True,
+        },
+        "migration-id",
+    )
     assert not state_runtime_matches({"stateReady": True, "stateMigrationId": "stale"}, "migration-id")
+
+
+def test_migration_readiness_requires_database_only_when_the_state_receipt_requires_it():
+    payload = {
+        "stateReady": True,
+        "stateMigrationId": "migration-id",
+        "stateDatabaseExpected": True,
+        "databaseReady": False,
+    }
+
+    assert not state_runtime_matches(payload, "migration-id")
+    assert state_runtime_matches({**payload, "databaseReady": True}, "migration-id")
+    assert state_runtime_matches({**payload, "stateDatabaseExpected": False}, "migration-id")
 
 
 def test_reconciler_readiness_selects_only_an_rfc1918_instance_address():
@@ -166,6 +187,53 @@ async def test_reconciler_readiness_uses_the_private_vpc_channel_when_explicitly
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("database_ready, expected", [(False, False), (True, True)])
+async def test_cutover_readiness_requires_database_ready_for_a_state_receipt(monkeypatch, database_ready, expected):
+    monkeypatch.setenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", "private-vpc")
+    release = AgentVmRelease.from_mapping(RELEASE)
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": "ok",
+                "release": release.release_id,
+                "imageDigest": release.image_digest,
+                "startupSha256": release.startup_sha256,
+                "stateReady": True,
+                "stateMigrationId": "migration-id",
+                "stateDatabaseExpected": True,
+                "databaseReady": database_ready,
+            }
+
+    class Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, _url, *, headers):
+            assert headers == {"Authorization": "Bearer owner-bearer"}
+            return Response()
+
+    monkeypatch.setattr(lifecycle.httpx, "AsyncClient", Client)
+
+    assert (
+        await GceAgentVmClient("project").runtime_is_current(
+            "10.128.0.9",
+            "owner-bearer",
+            release,
+            expected_state_migration_id="migration-id",
+        )
+    ) is expected
+
+
+@pytest.mark.asyncio
 async def test_metadata_repair_can_restore_the_owner_fenced_auth_token():
     captured = {}
 
@@ -210,6 +278,7 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
         "migration-id",
         "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-state-test",
         "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
+        "d" * 20,
     )
 
     body = captured["body"]
@@ -225,7 +294,11 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
         {"email": release.service_account, "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}
     ]
     assert body["tags"] == {"items": ["omi-agent-vm"]}
-    assert body["labels"] == {"omi-agent-migration": "migration-id", "omi-agent-predecessor": "predecessor-id"}
+    assert body["labels"] == {
+        "omi-agent-migration": "migration-id",
+        "omi-agent-predecessor": "predecessor-id",
+        "omi-agent-owner": "d" * 20,
+    }
     metadata = {item["key"]: item["value"] for item in body["metadata"]["items"]}
     assert metadata["auth-token"] == "candidate-owner-bearer"
     assert metadata["omi-agent-migration"] == "migration-id"
@@ -245,6 +318,7 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
         "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
     }
     assert metadata["omi-agent-state-required"] == "true"
+    assert metadata["omi-agent-state-source-required"] == "true"
 
 
 @pytest.mark.asyncio
@@ -291,6 +365,14 @@ async def test_state_disk_compute_mutations_use_named_devices_and_identity_fence
 
     client.disk = {**(client.disk or {}), "id": "foreign-id"}
     assert not await client.delete_disk("omi-agent-state-test", "disk-id", "a" * 24, "state", "b" * 20)
+
+    client.disk = {
+        "id": "disk-id",
+        "status": "READY",
+        "labels": {"omi-agent-role": "state", "omi-agent-owner": "b" * 20},
+        "users": [],
+    }
+    assert await client.delete_disk("omi-agent-state-test", "disk-id", "migration-id", "state", "b" * 20)
 
 
 @pytest.mark.asyncio

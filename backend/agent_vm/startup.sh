@@ -55,6 +55,57 @@ state_fail() {
   exit 1
 }
 
+startup_fail() {
+  echo "Agent VM startup failed: $1" >&2
+  exit 1
+}
+
+ensure_docker_daemon() {
+  if ! command -v docker >/dev/null 2>&1; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1 && systemctl enable --now docker; then
+      :
+    elif command -v service >/dev/null 2>&1; then
+      service docker start
+    else
+      startup_fail "Docker daemon could not be started"
+    fi
+  fi
+}
+
+stop_existing_agent_container() {
+  if docker container inspect omi-agent-vm >/dev/null 2>&1; then
+    # A restart-policy container can come back as soon as the daemon starts.
+    # Stop and remove it before any state mount or migration work begins.
+    docker stop omi-agent-vm >/dev/null 2>&1 || true
+    if ! docker rm omi-agent-vm >/dev/null 2>&1; then
+      docker rm -f omi-agent-vm >/dev/null 2>&1 || startup_fail "could not remove existing omi-agent-vm"
+    fi
+  fi
+}
+
+quiesce_docker_before_state_mount() {
+  command -v docker >/dev/null 2>&1 || return 0
+  if command -v systemctl >/dev/null 2>&1; then
+    # Docker may already be enabled from a prior boot. Stop both activation
+    # paths before mounting state so an unless-stopped container cannot bind
+    # the boot-disk directory during this startup run.
+    systemctl stop docker.service docker.socket >/dev/null 2>&1 || true
+    if systemctl is-active --quiet docker.service || systemctl is-active --quiet docker.socket; then
+      startup_fail "Docker could not be quiesced before the state mount"
+    fi
+  elif command -v service >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    service docker stop >/dev/null 2>&1 || startup_fail "Docker could not be stopped before the state mount"
+  elif docker info >/dev/null 2>&1; then
+    # Non-systemd fallback: at minimum remove the restart-policy container
+    # while the daemon is known to be live.
+    stop_existing_agent_container
+  fi
+}
+
 state_manifest() {
   local root="$1"
   local manifest="$2"
@@ -116,6 +167,68 @@ summary_path.write_text(
 PY
 }
 
+state_fsync_tree() {
+  local root="$1"
+  python3 - "$root" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+no_follow = getattr(os, "O_NOFOLLOW", 0)
+close_on_exec = getattr(os, "O_CLOEXEC", 0)
+directory_flag = getattr(os, "O_DIRECTORY", 0)
+
+
+def relative(path: Path) -> str:
+    return "." if path == root else path.relative_to(root).as_posix()
+
+
+def sync_file(path: Path) -> None:
+    try:
+        fd = os.open(path, os.O_RDONLY | no_follow | close_on_exec)
+    except OSError as exc:
+        raise SystemExit(f"could not open state entry for fsync: {relative(path)}: {exc}") from exc
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        raise SystemExit(f"could not fsync state entry: {relative(path)}: {exc}") from exc
+    finally:
+        os.close(fd)
+
+
+def sync_tree(path: Path) -> None:
+    mode = os.lstat(path).st_mode
+    if stat.S_ISLNK(mode):
+        raise SystemExit(f"symlink is not allowed in durable state: {relative(path)}")
+    if stat.S_ISREG(mode):
+        sync_file(path)
+        return
+    if not stat.S_ISDIR(mode):
+        raise SystemExit(f"unsupported state entry type: {relative(path)}")
+
+    children = sorted(path.iterdir(), key=lambda child: child.name)
+    for child in children:
+        if child == root / "state-receipt.json":
+            continue
+        sync_tree(child)
+    try:
+        fd = os.open(path, os.O_RDONLY | directory_flag | no_follow | close_on_exec)
+    except OSError as exc:
+        raise SystemExit(f"could not open state directory for fsync: {relative(path)}: {exc}") from exc
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        raise SystemExit(f"could not fsync state directory: {relative(path)}: {exc}") from exc
+    finally:
+        os.close(fd)
+
+
+sync_tree(root)
+PY
+}
+
 state_receipt_is_valid() {
   local receipt="$1"
   python3 - "$receipt" <<'PY'
@@ -172,10 +285,15 @@ fd, temporary_name = tempfile.mkstemp(prefix=".state-receipt.", dir=receipt_path
 try:
     with os.fdopen(fd, "wb") as stream:
         stream.write(encoded)
+        os.chmod(temporary_name, 0o644)
         stream.flush()
         os.fsync(stream.fileno())
-    os.chmod(temporary_name, 0o644)
     os.replace(temporary_name, receipt_path)
+    directory_fd = os.open(receipt_path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 finally:
     try:
         os.unlink(temporary_name)
@@ -275,6 +393,8 @@ ensure_state_tools() {
   done
 }
 
+quiesce_docker_before_state_mount
+
 state_required_raw=""
 if state_required_raw="$(metadata_get_optional 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/omi-agent-state-required')"; then
   :
@@ -304,6 +424,7 @@ state_source_mount="${AGENT_VM_STATE_SOURCE_MOUNT:-/run/omi-agent-state-source}"
 state_migration_id=""
 state_receipt_name="state-receipt.json"
 state_receipt="${state_mount}/${state_receipt_name}"
+state_receipt_for_container=""
 
 if [[ "$state_required" == true || -e "$state_device" ]]; then
   [[ -e "$state_device" ]] || state_fail "required state device is missing"
@@ -312,6 +433,31 @@ if [[ "$state_required" == true || -e "$state_device" ]]; then
     state_migration_id="$(metadata_get 'http://metadata.google.internal/computeMetadata/v1/instance/name' 2>/dev/null || true)"
   fi
   [[ -n "$state_migration_id" ]] || state_fail "state migration metadata is missing"
+  state_source_required_raw=""
+  state_source_required_metadata_present=false
+  if state_source_required_raw="$(metadata_get_optional 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/omi-agent-state-source-required')"; then
+    state_source_required_metadata_present=true
+  else
+    state_source_required_status=$?
+    [[ "$state_source_required_status" == 1 ]] || state_fail "state source requirement metadata is unavailable"
+  fi
+  state_source_required="${state_source_required_raw//$'\r'/}"
+  state_source_required="${state_source_required//$'\n'/}"
+  if [[ "$state_source_required_metadata_present" == true ]]; then
+    case "${state_source_required,,}" in
+      false)
+        state_source_required=false
+        ;;
+      true)
+        state_source_required=true
+        ;;
+      *)
+        state_fail "invalid omi-agent-state-source-required metadata"
+        ;;
+    esac
+  else
+    state_source_required=false
+  fi
   ensure_state_tools
   state_mount_destination "$state_device" "$state_mount"
   data_dir="$state_mount"
@@ -321,11 +467,18 @@ if [[ "$state_required" == true || -e "$state_device" ]]; then
 
   state_receipt_present=false
   state_previous_db_integrity=""
-  if [[ -e "$state_receipt" ]]; then
+  if [[ -e "$state_receipt" || -L "$state_receipt" ]]; then
     [[ -f "$state_receipt" && ! -L "$state_receipt" ]] || state_fail "state receipt is not a regular file"
     state_previous_db_integrity="$(state_receipt_is_valid "$state_receipt")" \
       || state_fail "state receipt schema mismatch"
     state_receipt_present=true
+  fi
+
+  if [[ "$state_receipt_present" == false && "$state_source_required_metadata_present" != true ]]; then
+    state_fail "state source requirement metadata is missing for legacy migration"
+  fi
+  if [[ "$state_receipt_present" == false && "$state_source_required" == true && ! -e "$state_source_device" ]]; then
+    state_fail "required legacy state source device is missing"
   fi
 
   if [[ "$state_receipt_present" == false && -e "$state_source_device" ]]; then
@@ -376,7 +529,6 @@ finally:
     os.close(directory_fd)
 PY
     umount "$state_source_mount" || state_fail "could not unmount source clone"
-    rm -f "$state_source_manifest" "$state_destination_manifest" "$state_source_summary" "$state_destination_summary"
   elif [[ "$state_receipt_present" == false ]]; then
     python3 - "$data_dir" <<'PY' || state_fail "state disk is not empty"
 import sys
@@ -402,16 +554,42 @@ print(summary["digest"])
 print(summary["count"])
 print(summary["bytes"])
 PY
-)"
+  )"
   mapfile -t state_tree <<<"$state_tree_values"
   [[ "${#state_tree[@]}" == 3 ]] || state_fail "invalid state tree summary"
   state_db_integrity_value="$(state_db_integrity "$data_dir/data/omi.db")" || state_fail "state database integrity check failed"
   if [[ "$state_previous_db_integrity" == ok && "$state_db_integrity_value" != ok ]]; then
     state_fail "previously durable state database is missing"
   fi
+  if [[ "$state_receipt_present" == true ]]; then
+    state_previous_tree_values="$(python3 - "$state_receipt" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    receipt = json.load(stream)
+tree = receipt["tree"]
+print(tree["digest"])
+print(tree["count"])
+print(tree["bytes"])
+PY
+    )" || state_fail "could not read state receipt tree"
+    mapfile -t state_previous_tree <<<"$state_previous_tree_values"
+    [[ "${#state_previous_tree[@]}" == 3 ]] || state_fail "invalid state receipt tree"
+    if [[ "${state_tree[0]}" != "${state_previous_tree[0]}" || "${state_tree[1]}" != "${state_previous_tree[1]}" || "${state_tree[2]}" != "${state_previous_tree[2]}" ]]; then
+      state_fail "durable state does not match state receipt"
+    fi
+  fi
+  state_fsync_tree "$data_dir" || state_fail "could not durably sync state"
   state_write_receipt "$state_receipt" "$state_migration_id" "${state_tree[0]}" "${state_tree[1]}" "${state_tree[2]}" "$state_db_integrity_value" \
     || state_fail "could not write state receipt"
-  rm -f "$state_manifest_file" "$state_summary_file"
+  state_receipt_for_container="$state_receipt"
+  for temporary_file in \
+    "${state_manifest_file:-}" "${state_summary_file:-}" \
+    "${state_source_manifest:-}" "${state_destination_manifest:-}" \
+    "${state_source_summary:-}" "${state_destination_summary:-}"; do
+    [[ -z "$temporary_file" ]] || rm -f "$temporary_file"
+  done
 else
   mkdir -p "$data_dir/data" "$data_dir/workspace"
 fi
@@ -422,20 +600,11 @@ gemini_secret_name="${AGENT_VM_GEMINI_SECRET_NAME}"
 gemini_api_key="$(secret_access "$gemini_secret_name")"
 mkdir -p "$data_dir"
 
-if ! command -v docker >/dev/null 2>&1; then
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
-fi
-if ! docker info >/dev/null 2>&1; then
-  if command -v systemctl >/dev/null 2>&1 && systemctl enable --now docker; then
-    :
-  elif command -v service >/dev/null 2>&1; then
-    service docker start
-  else
-    echo 'Docker daemon could not be started' >&2
-    exit 1
-  fi
-fi
+# State is now mounted and verified. Starting Docker can safely revive an old
+# restart-policy container because its host bind paths resolve into the durable
+# mount; remove it again before launching the release-pinned container.
+ensure_docker_daemon
+stop_existing_agent_container
 
 # Agent VM base images before the immutable-container rollout boot a legacy
 # host-level Node service on port 8080. Retire only that known service before
@@ -448,12 +617,16 @@ fi
 registry_token="$(metadata_access_token)"
 printf '%s' "$registry_token" | docker login --username oauth2accesstoken --password-stdin https://gcr.io >/dev/null
 docker pull "$image"
-if docker container inspect omi-agent-vm >/dev/null 2>&1; then
-  docker rm -f omi-agent-vm >/dev/null
-fi
 backend_env=()
 if [[ -n "$backend_url" ]]; then
   backend_env=(--env "BACKEND_URL=$backend_url")
+fi
+docker_state_mounts=(
+  --volume "$data_dir/data:/root/omi-agent/data"
+  --volume "$data_dir/workspace:/root/omi-agent/workspace"
+)
+if [[ -n "$state_receipt_for_container" ]]; then
+  docker_state_mounts+=(--volume "$state_receipt_for_container:/run/omi-agent/state-receipt.json:ro")
 fi
 docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:8080 \
   --env ANTHROPIC_API_KEY="$anthropic_api_key" --env AUTH_TOKEN="$auth_token" --env GEMINI_API_KEY="$gemini_api_key" \
@@ -461,8 +634,8 @@ docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:
   --env AGENT_VM_STARTUP_SHA256="$startup_sha256" "${backend_env[@]}" \
   --env AGENT_VM_STOP_AUDIENCE="$stop_audience" \
   --env DB_PATH=/root/omi-agent/data/omi.db --env AGENT_VM_WORKSPACE=/root/omi-agent/workspace \
-  --env STATE_RECEIPT_PATH=/root/omi-agent/state-receipt.json --env AGENT_VM_STATE_MIGRATION_ID="$state_migration_id" \
+  --env STATE_RECEIPT_PATH=/run/omi-agent/state-receipt.json --env AGENT_VM_STATE_MIGRATION_ID="$state_migration_id" \
   --env PLAYWRIGHT_MCP_COMMAND=playwright-mcp \
   --env PLAYWRIGHT_MCP_ARGS='["--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]' \
   --tmpfs /app/chrome-profile:rw,exec \
-  --volume "$data_dir:/root/omi-agent" "$image"
+  "${docker_state_mounts[@]}" "$image"

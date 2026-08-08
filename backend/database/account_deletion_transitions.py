@@ -1,10 +1,37 @@
-"""Transactional state transitions for durable account deletion markers."""
+"""Account-deletion state transitions and deletion-scoped resource reads."""
 
 from datetime import datetime, timezone
+from typing import Any
 
+from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+
+
+def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
+    """Read migration journals before deleting the user's Firestore subtree.
+
+    The journal is the durable source of truth for provider resources created
+    during an Agent VM migration.  Callers must validate each returned record
+    against the provider before issuing destructive requests.
+    """
+    if not uid.strip():
+        raise ValueError('uid is required')
+    client = get_firestore_client()
+    migration_ref = client.collection('users').document(uid).collection('agentVmMigrations')
+    journals: list[dict[str, Any]] = []
+    for snapshot in migration_ref.stream():
+        data = snapshot.to_dict()
+        if not isinstance(data, dict):
+            raise RuntimeError('Agent VM migration journal is malformed')
+        journal = dict(data)
+        if journal.get('migrationId') not in (None, snapshot.id):
+            raise RuntimeError('Agent VM migration journal identity is ambiguous')
+        journal['migrationId'] = snapshot.id
+        journals.append(journal)
+    journals.sort(key=lambda journal: str(journal.get('migrationId') or ''))
+    return journals
 
 
 @transactional

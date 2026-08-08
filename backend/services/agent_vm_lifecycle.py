@@ -36,6 +36,7 @@ SESSION_LEASE_TTL_SECONDS = 90
 MAX_RETRY_DELAY_SECONDS = 3600
 STATE_DISK_DEVICE_NAME = "omi-agent-state"
 STATE_SOURCE_DEVICE_NAME = "omi-agent-state-source"
+STATE_SOURCE_REQUIRED_METADATA = "omi-agent-state-source-required"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
@@ -225,8 +226,18 @@ def runtime_matches(payload: Mapping[str, Any], release: AgentVmRelease) -> bool
 
 
 def state_runtime_matches(payload: Mapping[str, Any], migration_id: str) -> bool:
-    """Require the guest-generated, authenticated state migration receipt."""
-    return payload.get("stateReady") is True and payload.get("stateMigrationId") == migration_id
+    """Require the receipt and the database it says was durable to be open."""
+    return state_runtime_ready(payload) and payload.get("stateMigrationId") == migration_id
+
+
+def state_runtime_ready(payload: Mapping[str, Any]) -> bool:
+    """Require mounted durable state and any receipt-declared database."""
+    database_expected = payload.get("stateDatabaseExpected")
+    return (
+        payload.get("stateReady") is True
+        and isinstance(database_expected, bool)
+        and (not database_expected or payload.get("databaseReady") is True)
+    )
 
 
 def retry_delay_seconds(attempt: int) -> int:
@@ -1661,7 +1672,7 @@ class GceAgentVmClient:
         self,
         disk_name: str,
         expected_disk_id: str,
-        migration_id: str,
+        migration_id: str | None,
         role: str,
         owner_hash: str,
     ) -> bool:
@@ -1669,12 +1680,17 @@ class GceAgentVmClient:
         if disk is None:
             return True
         labels = disk.get("labels")
+        migration_matches = isinstance(labels, Mapping) and labels.get("omi-agent-migration") == migration_id
+        # A reused owner state disk predates the migration journal and therefore
+        # has no migration label. Its numeric provider ID, role, and owner label
+        # are the complete rollback fence; migration-created source disks still
+        # require their journal label.
         if (
             str(disk.get("id") or "") != expected_disk_id
             or not isinstance(labels, Mapping)
-            or labels.get("omi-agent-migration") != migration_id
             or labels.get("omi-agent-role") != role
             or labels.get("omi-agent-owner") != owner_hash
+            or (role != "state" and not migration_matches)
         ):
             return False
         users = disk.get("users")
@@ -1692,6 +1708,7 @@ class GceAgentVmClient:
         migration_id: str,
         state_disk_source: str,
         source_clone_disk_source: str | None = None,
+        owner_hash: str = "",
     ) -> None:
         """Create a labelled replacement from the pinned immutable boot image.
 
@@ -1699,6 +1716,8 @@ class GceAgentVmClient:
         same deterministic VM name.  We deliberately do not copy a private IP,
         disk, token, or arbitrary metadata from the predecessor.
         """
+        if not owner_hash:
+            raise RuntimeError("replacement owner identity is unavailable")
         machine_type = predecessor.get("machineType")
         if not isinstance(machine_type, str) or not machine_type:
             raise RuntimeError("predecessor machine type is unavailable")
@@ -1750,13 +1769,21 @@ class GceAgentVmClient:
             ],
             "networkInterfaces": [interface],
             "tags": {"items": ["omi-agent-vm"]},
-            "labels": {"omi-agent-migration": migration_id, "omi-agent-predecessor": predecessor_id},
+            "labels": {
+                "omi-agent-migration": migration_id,
+                "omi-agent-predecessor": predecessor_id,
+                "omi-agent-owner": owner_hash,
+            },
             "metadata": {
                 "items": [
                     *[{"key": key, "value": value} for key, value in expected_release_metadata(release).items()],
                     {"key": "auth-token", "value": auth_token},
                     {"key": "omi-agent-migration", "value": migration_id},
                     {"key": "omi-agent-state-required", "value": "true"},
+                    {
+                        "key": STATE_SOURCE_REQUIRED_METADATA,
+                        "value": "true" if source_clone_disk_source else "false",
+                    },
                 ]
             },
         }
@@ -1841,6 +1868,7 @@ class GceAgentVmClient:
         timeout: int = 300,
         *,
         expected_state_migration_id: str | None = None,
+        require_state: bool = False,
     ) -> None:
         deadline = time.monotonic() + timeout
         runtime_url = self._trusted_runtime_url(ip)
@@ -1858,6 +1886,7 @@ class GceAgentVmClient:
                             expected_state_migration_id is None
                             or state_runtime_matches(payload, expected_state_migration_id)
                         )
+                        and (not require_state or state_runtime_ready(payload))
                     ):
                         return
                 except (httpx.HTTPError, ValueError):
@@ -1872,6 +1901,7 @@ class GceAgentVmClient:
         release: AgentVmRelease,
         *,
         expected_state_migration_id: str | None = None,
+        require_state: bool = False,
     ) -> bool:
         runtime_url = self._trusted_runtime_url(ip)
         try:
@@ -1886,6 +1916,7 @@ class GceAgentVmClient:
                 and isinstance(payload, Mapping)
                 and runtime_matches(payload, release)
                 and (expected_state_migration_id is None or state_runtime_matches(payload, expected_state_migration_id))
+                and (not require_state or state_runtime_ready(payload))
             )
         except (httpx.HTTPError, ValueError):
             return False
@@ -1900,6 +1931,7 @@ __all__ = [
     "GceAgentVmClient",
     "STATE_DISK_DEVICE_NAME",
     "STATE_SOURCE_DEVICE_NAME",
+    "STATE_SOURCE_REQUIRED_METADATA",
     "LEASE_HEARTBEAT_SECONDS",
     "RECONCILER_SCHEMA_VERSION",
     "TrustedAgentVmHealthChannelUnavailable",

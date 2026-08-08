@@ -254,7 +254,7 @@ async def test_late_created_vm_cleanup_is_persisted_when_provider_delete_fails(m
 
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: next(lifecycle_checks))
-    monkeypatch.setattr(desktop_agent_vm, "_create_vm", lambda *_args: _async_result("34.1.2.3"))
+    monkeypatch.setattr(desktop_agent_vm, "_create_vm", lambda *_args: _async_result(("34.1.2.3", "123456789")))
     monkeypatch.setattr(desktop_agent_vm, "_delete_vm", delete_vm)
     monkeypatch.setattr(
         desktop_agent_vm.users_db,
@@ -267,6 +267,29 @@ async def test_late_created_vm_cleanup_is_persisted_when_provider_delete_fails(m
     )
 
     assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
+
+
+@pytest.mark.asyncio
+async def test_successful_provision_persists_provider_instance_identity(monkeypatch):
+    updates: list[tuple[object, ...]] = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_create_vm",
+        lambda *_args: _async_result(("34.1.2.3", "123456789")),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: updates.append(args) or True)
+
+    await desktop_agent_vm._provision_background(
+        "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
+    )
+
+    assert updates[-1][3:] == ("ready", "34.1.2.3", "us-central1-a", "123456789")
 
 
 @pytest.mark.asyncio
@@ -298,6 +321,108 @@ async def test_create_error_after_deletion_admission_still_records_possible_late
     )
 
     assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
+
+
+@pytest.mark.asyncio
+async def test_readiness_failure_after_create_uses_identity_fenced_cleanup(monkeypatch):
+    deleted: list[tuple[object, ...]] = []
+    updates: list[tuple[object, ...]] = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def create_vm(*_args):
+        raise desktop_agent_vm.AgentVmReadinessError("health timeout", "123456789")
+
+    async def delete_vm(*args):
+        deleted.append(args)
+        return True
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+    monkeypatch.setattr(desktop_agent_vm, "_create_vm", create_vm)
+    monkeypatch.setattr(desktop_agent_vm, "_delete_vm", delete_vm)
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: updates.append(args) or True)
+
+    await desktop_agent_vm._provision_background(
+        "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
+    )
+
+    assert deleted == [
+        (
+            "project",
+            "omi-agent-uid",
+            "us-central1-a",
+            "123456789",
+            desktop_agent_vm._agent_vm_owner_hash("uid"),
+        )
+    ]
+    assert updates[-1][3] == "error"
+
+
+@pytest.mark.asyncio
+async def test_late_cleanup_refuses_a_reused_name_with_a_different_provider_identity(monkeypatch):
+    async def foreign_instance(*_args):
+        return "RUNNING", {
+            "id": "987654321",
+            "labels": {"omi-agent-owner": desktop_agent_vm._agent_vm_owner_hash("uid")},
+        }
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", foreign_instance)
+
+    with pytest.raises(desktop_agent_vm.AgentVmIdentityMismatch):
+        await desktop_agent_vm._delete_vm(
+            "project",
+            "omi-agent-uid",
+            "us-central1-a",
+            "123456789",
+            desktop_agent_vm._agent_vm_owner_hash("uid"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_vm_preserves_provider_identity_when_readiness_fails(monkeypatch):
+    async def fake_gce_request(method, url, token, body=None):
+        return httpx.Response(200, json={"name": "operation"}, request=httpx.Request(method, url))
+
+    async def readiness_failure(*_args):
+        raise RuntimeError("health timeout")
+
+    monkeypatch.setattr(desktop_agent_vm, "_get_access_token", lambda: "gce-token")
+    monkeypatch.setattr(desktop_agent_vm, "_gce_request", fake_gce_request)
+    monkeypatch.setattr(desktop_agent_vm, "_operation", lambda *_args: _async_result(None))
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_instance",
+        lambda *_args: _async_result(
+            (
+                "RUNNING",
+                {
+                    "id": "123456789",
+                    "networkInterfaces": [{"networkIP": "10.128.0.9", "accessConfigs": [{"natIP": "34.1.2.3"}]}],
+                },
+            )
+        ),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", readiness_failure)
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+
+    with pytest.raises(desktop_agent_vm.AgentVmReadinessError) as error:
+        await desktop_agent_vm._create_vm(
+            "project",
+            "source-image",
+            "bucket",
+            "omi-agent-uid",
+            "omi-token",
+            "agent-bootstrap@example.iam.gserviceaccount.com",
+            "a" * 20,
+        )
+
+    assert error.value.instance_id == "123456789"
 
 
 @pytest.mark.asyncio
@@ -628,6 +753,7 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 @pytest.mark.asyncio
 async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_scope(monkeypatch):
     requests = []
+    readiness_calls = []
     owner_hash = "a" * 20
     vm_name = f"omi-agent-{owner_hash}-12345678"
 
@@ -639,20 +765,26 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
         return None
 
     async def fake_instance(*args):
-        return "RUNNING", {"networkInterfaces": [{"accessConfigs": [{"natIP": "203.0.113.10"}]}]}
+        return "RUNNING", {
+            "id": "123456789",
+            "networkInterfaces": [{"networkIP": "10.128.0.9", "accessConfigs": [{"natIP": "203.0.113.10"}]}],
+        }
+
+    async def fake_wait_for_vm_ready(*args):
+        readiness_calls.append(args)
 
     monkeypatch.setattr(desktop_agent_vm, "_get_access_token", lambda: "gce-token")
     monkeypatch.setattr(desktop_agent_vm, "_gce_request", fake_gce_request)
     monkeypatch.setattr(desktop_agent_vm, "_operation", fake_operation)
     monkeypatch.setattr(desktop_agent_vm, "_instance", fake_instance)
-    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", lambda *_args: _async_result(None))
+    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", fake_wait_for_vm_ready)
     monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
     monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
     monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
     monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
     monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
 
-    ip = await desktop_agent_vm._create_vm(
+    ip, instance_id = await desktop_agent_vm._create_vm(
         "project",
         "source-image",
         "bucket",
@@ -663,6 +795,9 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     )
 
     assert ip == "203.0.113.10"
+    assert instance_id == "123456789"
+    assert readiness_calls[0][0:3] == ("project", "10.128.0.9", "omi-token")
+    assert readiness_calls[0][4] == vm_name
     assert requests[0][0] == "POST"
     assert requests[0][2]["serviceAccounts"] == [
         {
@@ -670,6 +805,7 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
             "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
         }
     ]
+    assert requests[0][2]["labels"] == {"omi-agent-owner": owner_hash}
     assert requests[0][2]["disks"] == [
         {
             "boot": True,
@@ -698,6 +834,7 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     ]
     metadata = {item["key"]: item["value"] for item in requests[0][2]["metadata"]["items"]}
     assert metadata["omi-agent-state-required"] == "true"
+    assert metadata["omi-agent-state-source-required"] == "false"
 
 
 def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(monkeypatch):
@@ -935,6 +1072,7 @@ def test_new_vm_startup_metadata_contains_release_checksum_and_boot_image(monkey
     assert metadata["omi-agent-startup-sha256"] == "c" * 64
     assert metadata["omi-agent-boot-image"].endswith("/omi-agent-20260805")
     assert metadata["omi-agent-state-required"] == "true"
+    assert metadata["omi-agent-state-source-required"] == "false"
 
 
 def test_new_vm_requires_an_immutable_boot_image_and_complete_release_contract(monkeypatch):
@@ -949,7 +1087,15 @@ def test_new_vm_requires_an_immutable_boot_image_and_complete_release_contract(m
 
 
 @pytest.mark.asyncio
-async def test_health_readiness_requires_unauthenticated_rejection(monkeypatch):
+async def test_health_readiness_uses_the_trusted_private_vpc_channel(monkeypatch):
+    monkeypatch.setenv("GCE_PROJECT_ID", "project")
+    monkeypatch.setenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", "private-vpc")
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+    release = desktop_agent_vm._agent_vm_release("service-account")
     calls = []
 
     class FakeClient:
@@ -959,22 +1105,76 @@ async def test_health_readiness_requires_unauthenticated_rejection(monkeypatch):
         async def __aexit__(self, *_args):
             return None
 
-        async def get(self, _url, headers=None):
-            calls.append(headers)
-            if headers is None:
-                return httpx.Response(401)
-            return httpx.Response(200, json={"status": "ok", "stateReady": True})
+        async def get(self, url, *, headers):
+            calls.append((url, headers))
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "release": release.release_id,
+                    "imageDigest": release.image_digest,
+                    "startupSha256": release.startup_sha256,
+                    "stateReady": True,
+                    "stateMigrationId": "omi-agent-new",
+                    "stateDatabaseExpected": True,
+                    "databaseReady": True,
+                },
+            )
 
     monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
-    await desktop_agent_vm._wait_for_vm_ready("203.0.113.10", "omi-token")
+    await desktop_agent_vm._wait_for_vm_ready("project", "10.128.0.9", "omi-token", release, "omi-agent-new")
 
-    assert calls == [None, {"Authorization": "Bearer omi-token"}]
+    assert calls == [("http://10.128.0.9:8080/health", {"Authorization": "Bearer omi-token"})]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("payload", [{"status": "ok"}, {"status": "ok", "stateReady": False}])
-async def test_health_readiness_fails_closed_without_state_ready(monkeypatch, payload):
-    calls = []
+async def test_health_readiness_refuses_public_ip_without_an_explicit_private_channel(monkeypatch):
+    monkeypatch.setenv("GCE_PROJECT_ID", "project")
+    monkeypatch.delenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", raising=False)
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+    release = desktop_agent_vm._agent_vm_release("service-account")
+
+    class UnexpectedClient:
+        def __init__(self, **_kwargs):
+            pytest.fail("readiness must fail before opening an untrusted health channel")
+
+    monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", UnexpectedClient)
+
+    with pytest.raises(RuntimeError, match="private VPC"):
+        await desktop_agent_vm._wait_for_vm_ready("project", "203.0.113.10", "omi-token", release, "omi-agent-new")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field, value",
+    [("release", "wrong"), ("stateReady", False), ("stateMigrationId", "other"), ("databaseReady", False)],
+)
+async def test_health_readiness_rejects_incomplete_runtime_identity_or_state(monkeypatch, field, value):
+    import services.agent_vm_lifecycle as lifecycle
+
+    monkeypatch.setenv("GCE_PROJECT_ID", "project")
+    monkeypatch.setenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", "private-vpc")
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+    release = desktop_agent_vm._agent_vm_release("service-account")
+    payload = {
+        "status": "ok",
+        "release": release.release_id,
+        "imageDigest": release.image_digest,
+        "startupSha256": release.startup_sha256,
+        "stateReady": True,
+        "stateMigrationId": "omi-agent-new",
+        "stateDatabaseExpected": True,
+        "databaseReady": True,
+    }
+    payload[field] = value
     clock = iter([0.0, 0.0, 2.0])
 
     class FakeClient:
@@ -984,21 +1184,20 @@ async def test_health_readiness_fails_closed_without_state_ready(monkeypatch, pa
         async def __aexit__(self, *_args):
             return None
 
-        async def get(self, _url, headers=None):
-            calls.append(headers)
-            if headers is None:
-                return httpx.Response(401)
+        async def get(self, _url, *, headers):
+            assert headers == {"Authorization": "Bearer omi-token"}
             return httpx.Response(200, json=payload)
 
-    monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
-    monkeypatch.setattr(desktop_agent_vm, "time", type("FakeTime", (), {"monotonic": lambda _self: next(clock)})())
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(lifecycle.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    monkeypatch.setattr(lifecycle, "time", type("FakeTime", (), {"monotonic": lambda _self: next(clock)})())
+    monkeypatch.setattr(lifecycle.asyncio, "sleep", no_sleep)
     monkeypatch.setattr(desktop_agent_vm, "_READY_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(desktop_agent_vm, "_READY_POLL_SECONDS", 0)
 
-    with pytest.raises(RuntimeError, match="did not become healthy"):
-        await desktop_agent_vm._wait_for_vm_ready("203.0.113.10", "omi-token")
-
-    assert calls == [None, {"Authorization": "Bearer omi-token"}]
+    with pytest.raises(RuntimeError, match="activated release"):
+        await desktop_agent_vm._wait_for_vm_ready("project", "10.128.0.9", "omi-token", release, "omi-agent-new")
 
 
 async def _stopped_instance():

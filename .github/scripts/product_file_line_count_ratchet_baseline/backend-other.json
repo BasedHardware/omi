@@ -1,7 +1,7 @@
 {
   "files": {
-    "backend/jobs/agent_vm_reconciler.py": 1524,
-    "backend/services/agent_vm_lifecycle.py": 1937,
+    "backend/jobs/agent_vm_reconciler.py": 1612,
+    "backend/services/agent_vm_lifecycle.py": 1969,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {

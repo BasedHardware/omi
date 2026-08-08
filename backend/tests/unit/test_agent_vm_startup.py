@@ -53,14 +53,25 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     assert "systemctl disable --now omi-agent.service" in commands
     assert "docker login --username oauth2accesstoken --password-stdin https://gcr.io" in commands
     assert "docker pull gcr.io/project/agent-vm:abcdef0" in commands
-    assert commands.index("docker container inspect omi-agent-vm") < commands.index("docker rm -f omi-agent-vm")
-    assert commands.index("docker rm -f omi-agent-vm") < commands.index("docker run --detach")
+    assert commands.index("docker container inspect omi-agent-vm") < commands.index("docker stop omi-agent-vm")
+    assert commands.index("docker stop omi-agent-vm") < commands.index("docker rm omi-agent-vm")
+    assert commands.index("docker rm omi-agent-vm") < commands.index("docker run --detach")
     assert "--env ANTHROPIC_API_KEY=secret-value" in commands
     assert "--env AUTH_TOKEN=omi-token" in commands
     assert "--env GEMINI_API_KEY=secret-value" in commands
     assert "--env PLAYWRIGHT_MCP_COMMAND=playwright-mcp" in commands
     assert "--env DB_PATH=/root/omi-agent/data/omi.db" in commands
     assert "--env AGENT_VM_WORKSPACE=/root/omi-agent/workspace" in commands
+    assert "--env STATE_RECEIPT_PATH=/run/omi-agent/state-receipt.json" in commands
+    assert "--volume " + bash_path(tmp_path / "data" / "data", cwd=ROOT) + ":/root/omi-agent/data" in commands
+    assert "--volume " + bash_path(tmp_path / "data" / "workspace", cwd=ROOT) + ":/root/omi-agent/workspace" in commands
+    assert "--volume " + bash_path(tmp_path / "data" / "state-receipt.json", cwd=ROOT) not in commands
+    assert (
+        "--volume "
+        + bash_path(tmp_path / "data" / "state-receipt.json", cwd=ROOT)
+        + ":/run/omi-agent/state-receipt.json:ro"
+        not in commands
+    )
     assert "--tmpfs /app/chrome-profile:rw,exec" in commands
     assert (
         "--env PLAYWRIGHT_MCP_ARGS=[\"--user-data-dir\", \"/app/chrome-profile\", \"--headless\", \"--no-sandbox\"]"
@@ -129,6 +140,11 @@ def test_startup_bootstraps_read_only_state_tooling_contract() -> None:
     assert "DEBIAN_FRONTEND=noninteractive apt-get install -y util-linux e2fsprogs" in source
     assert 'wipefs --noheadings "$device"' in source
     assert 'wipefs --noheadings --all' not in source
+    assert "os.replace(temporary_name, receipt_path)" in source
+    assert "directory_fd = os.open(receipt_path.parent, os.O_RDONLY)" in source
+    assert "os.fsync(directory_fd)" in source
+    assert "state_fsync_tree \"$data_dir\"" in source
+    assert source.index('state_fsync_tree "$data_dir"') < source.index('state_write_receipt "$state_receipt"')
 
 
 def _write_fake_command(bin_dir: Path, name: str, body: str) -> None:
@@ -164,6 +180,13 @@ def _state_startup_environment(
         bin_dir,
         "curl",
         "case \"$*\" in\n"
+        "  *'omi-agent-state-source-required'*)\n"
+        "    case \"$STATE_SOURCE_REQUIRED_MODE\" in\n"
+        "      missing) printf '\\n404\\n' ;;\n"
+        "      error) exit 1 ;;\n"
+        "      false) printf 'false\\n200\\n' ;;\n"
+        "      *) printf 'true\\n200\\n' ;;\n"
+        "    esac ;;\n"
         "  *'omi-agent-state-required'*)\n"
         "    case \"$STATE_REQUIRED_MODE\" in\n"
         "      missing) printf '\\n404\\n' ;;\n"
@@ -224,6 +247,7 @@ def _state_startup_environment(
         "AGENT_VM_STATE_SOURCE_MOUNT": bash_path(source_mount, cwd=ROOT),
         "MIGRATION_MODE": "metadata",
         "STATE_REQUIRED_MODE": "required",
+        "STATE_SOURCE_REQUIRED_MODE": "required",
         "COMMAND_LOG": bash_path(log, cwd=ROOT),
         "FS_MARKER": bash_path(fs_marker, cwd=ROOT),
         "STATE_DEVICE": bash_path(state_device, cwd=ROOT),
@@ -267,6 +291,14 @@ def test_startup_migrates_legacy_state_and_writes_receipt(tmp_path: Path) -> Non
     assert "umount" in commands
     assert "wipefs --noheadings" in commands
     assert "--all" not in commands
+    assert commands.index("systemctl stop docker.service docker.socket") < commands.index("mount ")
+    assert commands.index("mount ") < commands.index("docker stop omi-agent-vm")
+    assert commands.index("mount ") < commands.index("docker run --detach")
+    assert (
+        "--volume " + bash_path(state_mount / "state-receipt.json", cwd=ROOT) + ":/run/omi-agent/state-receipt.json:ro"
+        in commands
+    )
+    assert "--volume " + bash_path(state_mount, cwd=ROOT) + ":/root/omi-agent" not in commands
 
 
 def test_startup_falls_back_to_instance_name_for_migration_id(tmp_path: Path) -> None:
@@ -305,6 +337,16 @@ def test_startup_fails_closed_on_a_symlink_in_durable_state(tmp_path: Path) -> N
 
     assert result.returncode != 0
     assert "symlink is not allowed in durable state" in result.stderr
+
+
+def test_startup_fails_closed_on_a_dangling_state_receipt_symlink(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    (state_mount / "state-receipt.json").symlink_to("missing-receipt.json")
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode != 0
+    assert "state receipt is not a regular file" in result.stderr
 
 
 def test_startup_is_idempotent_for_the_same_migration(tmp_path: Path) -> None:
@@ -360,6 +402,54 @@ def test_startup_distinguishes_absent_legacy_metadata_from_metadata_outage(tmp_p
 
     assert result.returncode != 0
     assert "state requirement metadata is unavailable" in result.stderr
+
+
+def test_startup_requires_source_requirement_metadata_for_legacy_migration(tmp_path: Path) -> None:
+    environment, _, _, _ = _state_startup_environment(tmp_path)
+    environment["STATE_SOURCE_REQUIRED_MODE"] = "missing"
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode != 0
+    assert "state source requirement metadata is missing for legacy migration" in result.stderr
+
+
+def test_startup_fails_closed_when_required_legacy_source_device_is_missing(tmp_path: Path) -> None:
+    environment, _, _, _ = _state_startup_environment(tmp_path)
+    Path(environment["AGENT_VM_STATE_SOURCE_DEVICE"]).unlink()
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode != 0
+    assert "required legacy state source device is missing" in result.stderr
+
+
+def test_startup_allows_an_explicitly_optional_legacy_source_to_be_absent(tmp_path: Path) -> None:
+    environment, state_mount, _, log = _state_startup_environment(tmp_path)
+    environment["STATE_SOURCE_REQUIRED_MODE"] = "false"
+    Path(environment["AGENT_VM_STATE_SOURCE_DEVICE"]).unlink()
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        json.loads((state_mount / "state-receipt.json").read_text(encoding="utf-8"))["db"]["integrity"] == "not_present"
+    )
+    assert "mount -o ro" not in log.read_text(encoding="utf-8")
+
+
+def test_startup_revalidates_existing_receipt_against_actual_state(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    first = _run_state_startup(environment)
+    assert first.returncode == 0, first.stderr
+    receipt_path = state_mount / "state-receipt.json"
+    (state_mount / "legacy.txt").write_text("changed after receipt", encoding="utf-8")
+
+    second = _run_state_startup(environment)
+
+    assert second.returncode != 0
+    assert "durable state does not match state receipt" in second.stderr
+    assert json.loads(receipt_path.read_text(encoding="utf-8"))["migrationId"] == "migration-test-1"
 
 
 def test_startup_fails_closed_when_source_and_destination_manifests_differ(tmp_path: Path) -> None:
