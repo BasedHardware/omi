@@ -4,6 +4,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./task-fixtures.js";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionSearchField } from "./ProductionPrimitives.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
@@ -351,7 +352,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           <p>{translate("tasks.subtitle")}</p>
         </div>
         <div className="tasks-header-actions">
-          <label className="tasks-search"><span className="visually-hidden">{translate("tasks.filterSavedPlaceholder")}</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={translate("tasks.filterSavedPlaceholder")} /></label>
+          <ProductionSearchField className="tasks-search" label={translate("tasks.filterSavedPlaceholder")} placeholder={translate("tasks.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
           {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={translate("common.retry")}>{translate("common.retry")}</button>}
           <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}>{createOpen ? "×" : "+"}</button>
           <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}>•••</button>

@@ -4,6 +4,7 @@ import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionMemoryStore } from "./memory-fixtures.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
+import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
@@ -217,10 +218,18 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
         <button type="submit" disabled={!draft.trim()}>{t(locale, "common.save")}</button>
       </form>}
       <div className="memory-controls">
-        <label className="memory-search"><span className="visually-hidden">{t(locale, "memories.filterSavedPlaceholder")}</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(locale, "memories.filterSavedPlaceholder")} /></label>
-        <div className="memory-filter" aria-label={t(locale, "memories.visibility")}>
-          {(["all", "private", "public"] as const).map((value) => <button key={value} type="button" aria-pressed={visibilityFilter === value} onClick={() => setVisibilityFilter(value)}>{value === "all" ? t(locale, "memories.all") : value === "private" ? t(locale, "memories.private") : t(locale, "memories.public")}</button>)}
-        </div>
+        <ProductionSearchField className="memory-search" label={t(locale, "memories.filterSavedPlaceholder")} placeholder={t(locale, "memories.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
+        <ProductionFilterChips
+          className="memory-filter"
+          label={t(locale, "memories.visibility")}
+          value={visibilityFilter}
+          options={[
+            { value: "all", label: t(locale, "memories.all") },
+            { value: "private", label: t(locale, "memories.private") },
+            { value: "public", label: t(locale, "memories.public") },
+          ]}
+          onValueChange={setVisibilityFilter}
+        />
         <div className="memory-toolbar-actions">
           <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} aria-label={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} title={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} onClick={() => setComposerOpen((open) => !open)}>{composerOpen ? "×" : "+"}</button>
           <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}>•••</button>

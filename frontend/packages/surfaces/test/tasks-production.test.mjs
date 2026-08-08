@@ -38,7 +38,7 @@ test("tasks derive UTC calendar groups and preserve no-due tasks in Later", asyn
 
 test("task discovery filters the loaded snapshot without claiming backend search", async () => {
   const source = await read("src/production/TasksProduction.tsx");
-  assert.match(source, /type="search"/);
+  assert.match(source, /<ProductionSearchField/);
   assert.match(source, /tasks\.filterSavedPlaceholder/);
   assert.match(source, /task\.description\.toLocaleLowerCase\(locale\)\.includes\(needle\)/);
   assert.doesNotMatch(source, /store\.search|searchTasks|fetchSearch/);

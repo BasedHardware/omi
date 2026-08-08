@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { t } from "@omi-core/i18n";
-import { getTheme, type ThemeName } from "@omi-core/tokens";
+import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
 import { ConversationsStore, FoldersStore, MemoriesStore, TasksStore } from "@omi-core/domain";
@@ -28,8 +28,18 @@ const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
   : matchMedia("(min-width: 760px)").matches ? "desktop" : "mobile";
-const themeName: ThemeName = platform === "desktop" ? "desktopLightGlass" : "mobileDark";
-const theme = getTheme(themeName);
+type ThemeSelection = "default" | "system" | ColorMode;
+const requestedTheme = query.get("theme");
+const themeSelection: ThemeSelection = requestedTheme === "dark" || requestedTheme === "light" || requestedTheme === "system"
+  ? requestedTheme
+  : "default";
+const systemPrefersDark = matchMedia("(prefers-color-scheme: dark)");
+const colorModeFor = (selection: ThemeSelection): ColorMode => selection === "system"
+  ? systemPrefersDark.matches ? "dark" : "light"
+  : selection === "dark" || selection === "light"
+    ? selection
+    : platform === "mobile" ? "dark" : "light";
+let themeName: ThemeName = themeNameFor(platform, colorModeFor(themeSelection));
 const locale = query.get("locale")?.trim() || navigator.language || "en";
 const translateTasks = t.bind(null, locale) as unknown as TasksProductionProps["translate"];
 document.title = t(locale, "app.name");
@@ -37,32 +47,45 @@ const rootStyle = document.documentElement.style;
 const set = (name: string, value: string | number): void => rootStyle.setProperty(name, String(value));
 
 document.documentElement.dataset["platform"] = platform;
-document.documentElement.dataset["theme"] = themeName;
-document.documentElement.dataset["nativeGlass"] = query.get("nativeGlass") === "1" ? "true" : "false";
-set("--surface-canvas", theme.colors.surface.canvas);
-set("--surface-raised", theme.colors.surface.raised);
-set("--surface-elevated", theme.colors.surface.elevated);
-set("--surface-scrim", theme.colors.surface.scrim);
-set("--content-primary", theme.colors.content.primary);
-set("--content-secondary", theme.colors.content.secondary);
-set("--content-tertiary", theme.colors.content.tertiary);
-set("--content-inverse", theme.colors.content.inverse);
-set("--border", theme.colors.border);
-set("--focus", theme.colors.focus);
-set("--danger", theme.colors.danger);
-set("--success", theme.colors.success);
-set("--warning", theme.colors.warning);
-set("--accent", theme.colors.accent);
-set("--min-tap-target", `${theme.interaction.minTapTarget}px`);
-set("--focus-ring-width", `${theme.interaction.focusRingWidth}px`);
-for (const [name, value] of Object.entries(theme.radii)) set(`--radius-${name}`, `${value}px`);
-for (const [name, value] of Object.entries(theme.spacing)) set(`--space-${name}`, `${value}px`);
-for (const [name, role] of Object.entries(theme.typography)) {
-  set(`--type-${name}-size`, `${role.size}px`);
-  set(`--type-${name}-weight`, role.weight);
-  set(`--type-${name}-line`, role.lineHeight);
-  set(`--type-${name}-tracking`, `${role.tracking}px`);
-  set(`--type-${name}-family`, role.family === "openRunde" ? "Open Runde, system-ui" : "system-ui");
+document.documentElement.dataset["themeSelection"] = themeSelection;
+const applyTheme = (name: ThemeName): void => {
+  const theme = getTheme(name);
+  const colorMode: ColorMode = name === "mobileDark" || name === "desktopDarkGlass" ? "dark" : "light";
+  themeName = name;
+  document.documentElement.dataset["theme"] = name;
+  document.documentElement.dataset["colorMode"] = colorMode;
+  // The prototype AppKit host is Aqua-pinned. Explicit desktop dark mode must
+  // paint its own fallback instead of claiming that light native material is dark.
+  document.documentElement.dataset["nativeGlass"] = query.get("nativeGlass") === "1" && name === "desktopLightGlass" ? "true" : "false";
+  set("--surface-canvas", theme.colors.surface.canvas);
+  set("--surface-raised", theme.colors.surface.raised);
+  set("--surface-elevated", theme.colors.surface.elevated);
+  set("--surface-scrim", theme.colors.surface.scrim);
+  set("--content-primary", theme.colors.content.primary);
+  set("--content-secondary", theme.colors.content.secondary);
+  set("--content-tertiary", theme.colors.content.tertiary);
+  set("--content-inverse", theme.colors.content.inverse);
+  set("--border", theme.colors.border);
+  set("--focus", theme.colors.focus);
+  set("--danger", theme.colors.danger);
+  set("--success", theme.colors.success);
+  set("--warning", theme.colors.warning);
+  set("--accent", theme.colors.accent);
+  set("--min-tap-target", `${theme.interaction.minTapTarget}px`);
+  set("--focus-ring-width", `${theme.interaction.focusRingWidth}px`);
+  for (const [token, value] of Object.entries(theme.radii)) set(`--radius-${token}`, `${value}px`);
+  for (const [token, value] of Object.entries(theme.spacing)) set(`--space-${token}`, `${value}px`);
+  for (const [token, role] of Object.entries(theme.typography)) {
+    set(`--type-${token}-size`, `${role.size}px`);
+    set(`--type-${token}-weight`, role.weight);
+    set(`--type-${token}-line`, role.lineHeight);
+    set(`--type-${token}-tracking`, `${role.tracking}px`);
+    set(`--type-${token}-family`, role.family === "openRunde" ? "Open Runde, system-ui" : "system-ui");
+  }
+};
+applyTheme(themeName);
+if (themeSelection === "system") {
+  systemPrefersDark.addEventListener("change", () => applyTheme(themeNameFor(platform, colorModeFor("system"))));
 }
 
 let readyLogged = false;

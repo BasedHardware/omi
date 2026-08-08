@@ -3,6 +3,7 @@ import { t } from "@omi-core/i18n";
 type Locale = string;
 type ProductionRoute = "home" | "memories" | "conversations" | "tasks";
 type ChromeIconName = "home" | "library" | "tasks" | "rewind" | "apps" | "conversations" | "microphone" | "screen" | "settings";
+type ThemeSelection = "default" | "system" | "light" | "dark";
 
 function ChromeIcon({ name }: { name: ChromeIconName }): React.JSX.Element {
   const paths: Record<ChromeIconName, React.JSX.Element> = {
@@ -33,6 +34,32 @@ function href(route: ProductionRoute): string {
   return `?${params.toString()}`;
 }
 
+function activeThemeSelection(): ThemeSelection {
+  const value = new URLSearchParams(location.search).get("theme");
+  return value === "system" || value === "light" || value === "dark" ? value : "default";
+}
+
+function ProductionThemeControl({ locale, mobile = false }: { locale: Locale; mobile?: boolean }): React.JSX.Element {
+  const navigate = (selection: ThemeSelection): void => {
+    const params = new URLSearchParams(location.search);
+    if (selection === "default") params.delete("theme");
+    else params.set("theme", selection);
+    location.search = params.toString();
+  };
+  return (
+    <label className={`theme-mode-control${mobile ? " is-mobile" : ""}`} title={t(locale, "appearance.title")}>
+      <ChromeIcon name="settings" />
+      <span className="visually-hidden">{t(locale, "appearance.title")}</span>
+      <select aria-label={t(locale, "appearance.title")} value={activeThemeSelection()} onChange={(event) => navigate(event.target.value as ThemeSelection)}>
+        <option value="default">{t(locale, "appearance.default")}</option>
+        <option value="system">{t(locale, "appearance.system")}</option>
+        <option value="light">{t(locale, "appearance.light")}</option>
+        <option value="dark">{t(locale, "appearance.dark")}</option>
+      </select>
+    </label>
+  );
+}
+
 export function ProductionChrome({ locale, active, placement = "top" }: {
   locale: Locale;
   active: ProductionRoute;
@@ -54,10 +81,14 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
             <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
               <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /><span className="visually-hidden">{t(locale, "nav.microphone")}</span></span>
               <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /><span className="visually-hidden">{t(locale, "nav.screenCapture")}</span></span>
-              <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.settings")}><ChromeIcon name="settings" /><span className="visually-hidden">{t(locale, "nav.settings")}</span></span>
+              <ProductionThemeControl locale={locale} />
             </div>
           </div>
         ) : null}
+        {top ? <div className="mobile-topbar">
+          <span className="mobile-brand">{t(locale, "app.name")}</span>
+          <ProductionThemeControl locale={locale} mobile />
+        </div> : null}
         <div className="nav-mobile">
           <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
           <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" ? "page" : undefined}><ChromeIcon name="conversations" />{t(locale, "nav.conversations")}</a>
