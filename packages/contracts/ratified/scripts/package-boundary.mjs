@@ -10,6 +10,20 @@ const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"))
 const provenanceBytes = readFileSync(resolve(root, "PROVENANCE.json"));
 const provenance = JSON.parse(provenanceBytes);
 
+/**
+ * COORD-contract-evolution-policy.md §1: "The version number is an
+ * identifier. The compatibility class is the contract" - checked mechanically,
+ * declared explicitly in ARTIFACT.json rather than inferred from semver.
+ * Exactly two values exist; there is no third. This bump is `additive`: it
+ * adds one optional request header (APP_CONTRACT_VERSION_HEADER) and three
+ * new exports to an already-public subpath. Every client built against 0.1.1
+ * keeps working unchanged - nothing about the existing wire shape moved.
+ */
+const COMPATIBILITY_CLASS = "additive";
+if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
+  throw new Error("compatibility class must be exactly 'additive' or 'breaking'");
+}
+
 const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./recall/trace"];
 const expectedManifestFiles = [
   "dist/pagination/cursor.js",
@@ -50,7 +64,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.1.1" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.2.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");
@@ -91,6 +105,7 @@ try {
   const artifact = {
     schemaVersion: 1,
     package: { name: manifest.name, version: manifest.version },
+    compatibility: COMPATIBILITY_CLASS,
     provenanceSha256: sha256(provenanceBytes),
     sourceDigest: provenance.sourceDigest,
     tarballSha256: sha256(readFileSync(tarball)),
