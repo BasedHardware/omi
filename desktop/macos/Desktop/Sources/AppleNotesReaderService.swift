@@ -9,6 +9,7 @@ struct AppleNoteRecord: Identifiable, Sendable {
 }
 
 enum AppleNotesReaderError: LocalizedError {
+  case userInitiatedReadRequired
   case storeNotFound
   case authorizationDenied(path: String)
   case invalidSelectedFolder(path: String)
@@ -17,6 +18,8 @@ enum AppleNotesReaderError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
+    case .userInitiatedReadRequired:
+      return "Apple Notes stays disconnected until you choose Connect or Import."
     case .storeNotFound:
       return "Apple Notes data store not found."
     case .authorizationDenied:
@@ -33,6 +36,8 @@ enum AppleNotesReaderError: LocalizedError {
 
   var reasonCode: String {
     switch self {
+    case .userInitiatedReadRequired:
+      return "user_initiated_read_required"
     case .storeNotFound:
       return "store_not_found"
     case .authorizationDenied:
@@ -48,6 +53,8 @@ enum AppleNotesReaderError: LocalizedError {
 
   var shouldPromptForFolderSelection: Bool {
     switch self {
+    case .userInitiatedReadRequired:
+      return false
     case .storeNotFound, .authorizationDenied, .invalidSelectedFolder:
       return true
     case .schemaUnavailable, .storeReadFailed:
@@ -119,7 +126,14 @@ actor AppleNotesReaderService {
 
   private let selectedFolderDefaultsKey = "onboardingAppleNotesFolderPath"
 
-  func readRecentNotes(maxResults: Int = 40, selectedFolderPath: String? = nil) async throws -> [AppleNoteRecord] {
+  func readRecentNotes(
+    maxResults: Int = 40,
+    selectedFolderPath: String? = nil,
+    userInitiated: Bool = false
+  ) async throws -> [AppleNoteRecord] {
+    guard userInitiated else {
+      throw AppleNotesReaderError.userInitiatedReadRequired
+    }
     let boundedMaxResults = min(max(maxResults, 0), 1_000)
     let storeURL = try locateNotesStoreURL(selectedFolderPath: selectedFolderPath)
 
@@ -136,9 +150,23 @@ actor AppleNotesReaderService {
     }
   }
 
-  func connectionStatus(maxResults: Int = 1, selectedFolderPath: String? = nil) async -> AppleNotesConnectionStatus {
+  func connectionStatus(
+    maxResults: Int = 1,
+    selectedFolderPath: String? = nil,
+    userInitiated: Bool = false
+  ) async -> AppleNotesConnectionStatus {
+    guard userInitiated else {
+      return .needsAccess(
+        message: "Choose Connect or Import to check Apple Notes access.",
+        reasonCode: "user_initiated_read_required"
+      )
+    }
     do {
-      let notes = try await readRecentNotes(maxResults: maxResults, selectedFolderPath: selectedFolderPath)
+      let notes = try await readRecentNotes(
+        maxResults: maxResults,
+        selectedFolderPath: selectedFolderPath,
+        userInitiated: true
+      )
       return .connected(noteCount: notes.count, verifiedAt: Date())
     } catch let error as AppleNotesReaderError {
       let outcome = Self.classifyReadOutcome(noteCount: nil, error: error)

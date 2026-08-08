@@ -59,15 +59,6 @@ class SettingsSyncManager {
       }
     }
 
-    // Focus settings
-    if let focus = remote.focus {
-      if let v = focus.enabled { FocusAssistantSettings.shared.isEnabled = v }
-      if let v = focus.analysisPrompt { FocusAssistantSettings.shared.analysisPrompt = v }
-      if let v = focus.cooldownInterval { FocusAssistantSettings.shared.cooldownInterval = v }
-      if let v = focus.notificationsEnabled { FocusAssistantSettings.shared.notificationsEnabled = v }
-      if let v = focus.excludedApps { FocusAssistantSettings.shared.excludedApps = Set(v) }
-    }
-
     // Task settings
     if let task = remote.task {
       if let v = task.enabled { TaskAssistantSettings.shared.isEnabled = v }
@@ -128,14 +119,6 @@ class SettingsSyncManager {
       screenAnalysisEnabled: shouldKeepLocalScreenAnalysisDefault ? nil : AssistantSettings.shared.screenAnalysisEnabled
     )
 
-    let focus = FocusSettingsResponse(
-      enabled: FocusAssistantSettings.shared.isEnabled,
-      analysisPrompt: FocusAssistantSettings.shared.analysisPrompt,
-      cooldownInterval: FocusAssistantSettings.shared.cooldownInterval,
-      notificationsEnabled: FocusAssistantSettings.shared.notificationsEnabled,
-      excludedApps: Array(FocusAssistantSettings.shared.excludedApps)
-    )
-
     let task = TaskSettingsResponse(
       enabled: TaskAssistantSettings.shared.isEnabled,
       analysisPrompt: TaskAssistantSettings.shared.analysisPrompt,
@@ -170,7 +153,6 @@ class SettingsSyncManager {
 
     return AssistantSettingsResponse(
       shared: shared,
-      focus: focus,
       task: task,
       insight: insight,
       memory: memory,

@@ -61,7 +61,7 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
     // A merge reintroducing a hand-rolled removeObject list regresses silently.
     // omi-test-quality: source-inspection -- static contract: signOut() must use the shared clearing helpers
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let signOutStart = try XCTUnwrap(source.range(of: "func signOut() async throws {"))
+    let signOutStart = try XCTUnwrap(source.range(of: "func signOut("))
     let tail = source[signOutStart.lowerBound...]
     XCTAssertNotNil(
       tail.range(of: "OnboardingFlow.clearPersistedState()"),

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the post-setup \"try asking\" suggestions never appearing on Home, and made the Conversations menu item (⌘2) open Conversations instead of whichever Library view you looked at last"
+}

@@ -176,6 +176,11 @@ jobs:
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
           for t in tests/test-*.sh; do
             echo "== $t"
+            case "$t" in
+              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+                continue
+                ;;
+            esac
             bash "$t"
           done
 

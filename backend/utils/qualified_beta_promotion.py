@@ -502,12 +502,10 @@ async def build_qualified_beta_manifest(
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or merged_source is not True:
         _fail("candidate source is not a trusted merged source")
     evidence_asset, evidence_name = _qualification_evidence_asset(assets, source_sha=source_sha)
-    zip_url, dmg_url, evidence_url = (
-        _asset_url(zip_asset, tag, "Omi.zip"),
-        _asset_url(dmg_asset, tag, "omi.dmg"),
-        _asset_url(evidence_asset, tag, evidence_name),
-    )
-    expected_digests = {
+    zip_url = _asset_url(zip_asset, tag, "Omi.zip")
+    dmg_url = _asset_url(dmg_asset, tag, "omi.dmg")
+    _asset_url(evidence_asset, tag, evidence_name)
+    release_digests = {
         "Omi.zip": _asset_digest(zip_asset),
         "omi.dmg": _asset_digest(dmg_asset),
         evidence_name: _asset_digest(evidence_asset),
@@ -516,8 +514,12 @@ async def build_qualified_beta_manifest(
     if has_beta_identity:
         for beta_name in SANCTIONED_BETA_ASSET_NAMES:
             beta_asset = _asset(assets, beta_name)
+            # Validate the canonical release URL for each beta asset. Unlike the
+            # blob downloads removed by this change, this is a pure identity
+            # check (no bytes fetched) and must not be skipped for beta assets.
+            _asset_url(beta_asset, tag, beta_name)
             beta_assets[beta_name] = beta_asset
-            expected_digests[beta_name] = _asset_digest(beta_asset)
+            release_digests[beta_name] = _asset_digest(beta_asset)
     _, run_id, run_attempt = _select_qualification_run(
         await _read_github(source, "runs"), tag, source_sha, current_time
     )
@@ -533,31 +535,25 @@ async def build_qualified_beta_manifest(
         _fail("candidate trusted qualification evidence does not bind its run")
     if not _is_exact_integer(evidence.get("schema_version")) or evidence.get("schema_version") != 1:
         _fail("candidate trusted qualification evidence is invalid")
-    download_targets = [("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)]
-    for beta_name in SANCTIONED_BETA_ASSET_NAMES:
-        if beta_name in beta_assets:
-            download_targets.append((beta_name, _asset_url(beta_assets[beta_name], tag, beta_name)))
-    downloaded: dict[str, bytes] = {}
-    for name, url in download_targets:
-        content = await _read_github(source, "download", url)
-        if not isinstance(content, bytes):
-            _fail("candidate GitHub asset is unavailable")
-        downloaded[name] = content
-    actual_digests = {name: "sha256:" + hashlib.sha256(content).hexdigest() for name, content in downloaded.items()}
-    if actual_digests != expected_digests:
-        _fail("candidate asset digest does not match GitHub release metadata")
-    if downloaded[evidence_name] != trusted_evidence_bytes:
+    # GitHub exposes an immutable SHA-256 digest for each release asset. The
+    # qualification evidence is content-addressed by that digest and is also
+    # retained in the trusted Actions artifact. Rehash that small artifact to
+    # bind it to the release, rather than downloading every large release
+    # binary through GitHub's temporary blob redirects during promotion.
+    trusted_evidence_digest = "sha256:" + hashlib.sha256(trusted_evidence_bytes).hexdigest()
+    if trusted_evidence_digest != release_digests[evidence_name]:
         _fail("candidate release qualification evidence differs from its trusted run artifact")
     contract_release = _release_for_contract(release, assets)
-    # verify_evidence requires the digest set to equal the evidence's artifact set;
-    # when the beta identity ships, its two assets are in the evidence too.
+    # verify_evidence requires the digest set to equal the evidence's artifact
+    # set; GitHub's immutable release digests are the authoritative values.
+    # When the beta identity ships, its two assets are in the evidence too.
     verify_digests = {
-        "Omi.zip": actual_digests["Omi.zip"].removeprefix("sha256:"),
-        "omi.dmg": actual_digests["omi.dmg"].removeprefix("sha256:"),
+        "Omi.zip": release_digests["Omi.zip"].removeprefix("sha256:"),
+        "omi.dmg": release_digests["omi.dmg"].removeprefix("sha256:"),
     }
     for beta_name in SANCTIONED_BETA_ASSET_NAMES:
         if beta_name in beta_assets:
-            verify_digests[beta_name] = actual_digests[beta_name].removeprefix("sha256:")
+            verify_digests[beta_name] = release_digests[beta_name].removeprefix("sha256:")
     try:
         verify_evidence(
             evidence,
@@ -580,12 +576,12 @@ async def build_qualified_beta_manifest(
         "build_number": int(match.group("build")),
         "app_source_sha": source_sha,
         "zip_url": zip_url,
-        "zip_sha256": actual_digests["Omi.zip"],
+        "zip_sha256": release_digests["Omi.zip"],
         "dmg_url": dmg_url,
-        "dmg_sha256": actual_digests["omi.dmg"],
+        "dmg_sha256": release_digests["omi.dmg"],
         "ed_signature": signature,
         "qualification_evidence_asset": evidence_name,
-        "qualification_evidence_sha256": actual_digests[evidence_name],
+        "qualification_evidence_sha256": release_digests[evidence_name],
         "qualification_tier": "T2",
         "qualification_passed": True,
         "backend_mode": "app_only",
