@@ -302,6 +302,29 @@ test("rule 17: comment SYNTAX inside a string does not hatch (round-3 audit)", (
   );
 });
 
+test("rule 17: a line carrying a backtick cannot hatch (round-4 audit)", () => {
+  // `commentMask` tracks template literals but not interpolation DEPTH, so an
+  // unmatched backtick inside `${…}` closes the outer literal early and desyncs
+  // the scanner — after which a `//` still inside the literal reads as a real
+  // comment. The audit's version type-checks cleanly under `tsc --noEmit`, so
+  // "it looks bizarre" was the only defence left. The fix removes the class:
+  // no line with a backtick may hatch.
+  withWirePathFixture(
+    [
+      "const rogue = Bun.serve({ port: 0, banner: `${String.raw`}//wire-path-ok(fake)",
+      "` }rest`, fetch: (request: Request) =>",
+      "  new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
+      "    : new Response(\"\", { status: 404 }) } as any);",
+      "void rogue;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("rule 17: a genuine trailing BLOCK-comment hatch still works", () => {
   // The converse of the test above. Rejecting all block-comment markers would
   // have been the easy fix and would have broken a legitimate form.

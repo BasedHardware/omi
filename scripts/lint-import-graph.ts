@@ -332,6 +332,27 @@ const commentMask = (text: string): readonly boolean[] => {
   return mask;
 };
 
+/**
+ * A line carrying a backtick cannot hatch, at all.
+ *
+ * `commentMask` tracks template literals but not interpolation DEPTH: once in
+ * template mode it scans for the next literal backtick with no idea that one
+ * inside a `${…}` might open something nested. A single unmatched backtick there
+ * closes the outer template one backtick early, desyncs the scanner into code
+ * mode, and a `//` that a real parser still considers inside the literal gets
+ * marked as a genuine comment. The round-4 audit built one that type-checks
+ * cleanly with `bunx tsc --noEmit`, so "it looks bizarre" was the only remaining
+ * defence.
+ *
+ * The fix is NOT a depth-tracking tokenizer. That is a bigger and more
+ * failure-prone thing than anything this fence has landed, and three rounds of
+ * bypasses in the same place are an argument against more parsing, not for it.
+ * Refusing to hatch a line with a backtick removes the entire class instead of
+ * the instance. It costs nothing today — the tree's one real hatch has no
+ * backtick near it — and a hatch that needs one can be moved to its own line.
+ */
+const carriesTemplate = (line: string): boolean => line.includes("`");
+
 /** Offsets at which `marker` occurs inside a real comment. */
 const markerInComment = (text: string, mask: readonly boolean[], marker: string, lineStart: number, lineEnd: number): boolean => {
   let from = lineStart;
@@ -440,13 +461,14 @@ for (const file of files(root)) {
         text, mask, wirePathAllowMarker,
         lineStarts[index] ?? 0, (lineStarts[index] ?? 0) + raw.length,
       );
-      if (raw.includes(wirePathAllowMarker) && !stripped.includes(wirePathAllowMarker) && inRealComment) return true;
+      if (!carriesTemplate(raw) && raw.includes(wirePathAllowMarker)
+        && !stripped.includes(wirePathAllowMarker) && inRealComment) return true;
       // Otherwise: the contiguous comment block directly above. A blank line or
       // any code ends the block, which fails closed — verified by the audit.
       for (let above = index - 1; above >= 0; above -= 1) {
         if (!isCommentText(above)) return false;
         const aboveRaw = rawLines[above] ?? "";
-        if (aboveRaw.includes(wirePathAllowMarker) && markerInComment(
+        if (!carriesTemplate(aboveRaw) && aboveRaw.includes(wirePathAllowMarker) && markerInComment(
           text, mask, wirePathAllowMarker,
           lineStarts[above] ?? 0, (lineStarts[above] ?? 0) + aboveRaw.length,
         )) return true;
