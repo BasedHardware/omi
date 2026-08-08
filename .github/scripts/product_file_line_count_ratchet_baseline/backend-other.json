@@ -1,12 +1,12 @@
 {
   "files": {
-    "backend/jobs/agent_vm_reconciler.py": 1620,
-    "backend/services/agent_vm_lifecycle.py": 1969,
+    "backend/jobs/agent_vm_reconciler.py": 1720,
+    "backend/services/agent_vm_lifecycle.py": 2036,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {
-    "backend/jobs/agent_vm_reconciler.py": "The state-preserving replacement keeps provider compensation, disk identity checks, candidate health, cutover, soak, and retirement in one crash-recoverable owner loop; splitting the loop would obscure mutation ordering and failure compensation.",
-    "backend/services/agent_vm_lifecycle.py": "The lifecycle owner keeps state-disk and migration journal transactions beside the existing account-deletion, lease, pointer, and GCE identity fences so every transition shares one transactional safety boundary.",
+    "backend/jobs/agent_vm_reconciler.py": "The state-preserving replacement keeps provider compensation, disk identity checks, candidate health, cutover, soak, and retirement in one crash-recoverable owner loop; splitting the loop would obscure mutation ordering and failure compensation. +100 keeps durable pre-cutover journal recovery and post-retirement auto-delete ordering in that same provider-mutation loop.",
+    "backend/services/agent_vm_lifecycle.py": "The lifecycle owner keeps state-disk and migration journal transactions beside the existing account-deletion, lease, pointer, and GCE identity fences so every transition shares one transactional safety boundary. +67 adds durable active-journal discovery and provider-identity lookup beside those transaction states so crash recovery cannot depend on a mutable release manifest.",
     "backend/testing/listen_pusher_stack/run.py": "#10577 keeps the operation-scoped persistence-fault controls beside the real listener/Pusher/Firestore assertions they qualify. +79 for #9809: the cloud-orphan-recovery scenario stays in the existing end-to-end listener/Pusher gauntlet rather than forking a second harness."
   },
   "threshold": 1500
