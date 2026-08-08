@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -226,7 +226,7 @@ function SummaryTab({
               >
                 {category && (
                   <div className="mb-3">
-                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                       {category}
                     </span>
                   </div>
@@ -251,7 +251,7 @@ function SummaryTab({
                 >
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                    className="flex items-center gap-1 text-sm text-text-primary hover:text-text-secondary transition-colors"
                   >
                     {isExpanded ? (
                       <>
@@ -284,7 +284,7 @@ function SummaryTab({
         <div>
           {category && (
             <div className="mb-3">
-              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                 {category}
               </span>
             </div>
@@ -298,7 +298,7 @@ function SummaryTab({
         {/* Section Header with Generate Button */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <Sparkles className="w-4 h-4 text-text-primary" />
             <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
           <GenerateSummaryButton
@@ -854,7 +854,7 @@ export function ConversationDetailPanel({
                   'flex items-center gap-2 px-3 py-2 rounded-lg',
                   'text-sm font-medium transition-all duration-150',
                   activeTab === tab.id
-                    ? 'bg-purple-primary text-white'
+                    ? 'bg-text-primary text-bg-primary'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
@@ -917,7 +917,7 @@ export function ConversationDetailPanel({
                 {/* Loading state while fetching signed URLs */}
                 {audioAvailable && fetchedAudioFiles.length === 0 && (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-text-tertiary text-sm">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-primary/50">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-text-primary/90">
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </div>
                     <span>Loading audio...</span>

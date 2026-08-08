@@ -315,6 +315,11 @@ checks:
     triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "web/personas-open-source/src/app/api/social-profile/route.ts"]
     lanes: ["local", "ci"]
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
+  - id: web-app-checks
+    command: ["bash", "web/app/test.sh"]
+    triggers: ["web/app/src/**", "web/app/scripts/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/moonshine.config.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "web/app shipped with no typecheck or test lane at all, so desktop-parity work there had no runnable Definition-of-Done gate"
   - id: web-llm-gateway-only
     command: ["python3", ".github/scripts/check_web_llm_gateway_only.py"]
     triggers: ["web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.ts", "web/**/*.tsx", "web/**/package.json", ".github/scripts/check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]

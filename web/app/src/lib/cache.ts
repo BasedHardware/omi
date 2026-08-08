@@ -10,9 +10,9 @@
 
 // Cache TTL constants
 export const CACHE_TTL = {
-  SHORT: 60 * 1000,        // 1 minute - user-specific frequently changing data
-  MEDIUM: 5 * 60 * 1000,   // 5 minutes - lists that update occasionally
-  LONG: 60 * 60 * 1000,    // 1 hour - static/reference data
+  SHORT: 60 * 1000, // 1 minute - user-specific frequently changing data
+  MEDIUM: 5 * 60 * 1000, // 5 minutes - lists that update occasionally
+  LONG: 60 * 60 * 1000, // 1 hour - static/reference data
 } as const;
 
 // Cache entry with metadata
@@ -36,7 +36,8 @@ if (typeof window !== 'undefined') {
   try {
     // Check if this is a page reload - if so, clear cache for fresh data
     // This ensures refreshing the page always fetches fresh data from server
-    const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const navEntry = performance.getEntriesByType('navigation')[0] as
+      PerformanceNavigationTiming | undefined;
     const isReload = navEntry?.type === 'reload';
 
     if (isReload) {
@@ -69,7 +70,7 @@ function persistCache(): void {
       const toStore: Record<string, CacheEntry<unknown>> = {};
       for (const [key, entry] of cache.entries()) {
         // Only persist certain keys to avoid bloating storage
-        if (PERSISTENT_KEYS.some(pattern => key.includes(pattern))) {
+        if (PERSISTENT_KEYS.some((pattern) => key.includes(pattern))) {
           toStore[key] = entry;
         }
       }
@@ -137,11 +138,11 @@ export function invalidateCache(pattern: string): void {
     }
   }
 
-  keysToDelete.forEach(key => cache.delete(key));
+  keysToDelete.forEach((key) => cache.delete(key));
   persistCache();
 
   // Notify listeners
-  invalidationListeners.forEach(listener => listener(pattern));
+  invalidationListeners.forEach((listener) => listener(pattern));
 }
 
 /**
@@ -188,7 +189,7 @@ export function onCacheInvalidation(listener: InvalidationListener): () => void 
  */
 export async function deduplicatedFetch<T>(
   key: string,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
 ): Promise<T> {
   // Check if request is already in flight
   const pending = pendingRequests.get(key);
@@ -216,7 +217,7 @@ export async function fetchWithCache<T>(
     ttl?: number;
     forceRefresh?: boolean;
     onStaleData?: (data: T) => void;
-  } = {}
+  } = {},
 ): Promise<T> {
   const { ttl = CACHE_TTL.MEDIUM, forceRefresh = false, onStaleData } = options;
 
@@ -231,9 +232,11 @@ export async function fetchWithCache<T>(
         // Stale data - return immediately and revalidate in background
         onStaleData(cached.data);
         // Background revalidation
-        deduplicatedFetch(key, fetcher).then(freshData => {
-          setCache(key, freshData, ttl);
-        }).catch(console.error);
+        deduplicatedFetch(key, fetcher)
+          .then((freshData) => {
+            setCache(key, freshData, ttl);
+          })
+          .catch(console.error);
         return cached.data;
       }
     }
@@ -283,6 +286,10 @@ export const cacheKeys = {
   search: (type: string, query: string) => `search:${type}:${query}`,
 
   apps: (tab: string, filters?: string) => `apps:${tab}:${filters || ''}`,
+
+  goals: (includeEnded: boolean) => `goals:${includeEnded ? 'all' : 'active'}`,
+
+  scores: (date?: string) => `scores:${date || 'today'}`,
 };
 
 // Invalidation patterns for mutations
@@ -292,4 +299,5 @@ export const invalidationPatterns = {
   actionItems: 'actionItems',
   folders: 'folders',
   apps: 'apps',
+  goals: 'goals',
 };

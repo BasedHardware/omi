@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
-import Image from 'next/image';
+import { usePathname } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
 import { X } from 'lucide-react';
 
 type Platform = 'ios' | 'android' | 'other';
@@ -48,7 +48,9 @@ export function MobileBlockOverlay() {
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if current path should bypass mobile detection entirely
-  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some(path => pathname?.startsWith(path));
+  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some((path) =>
+    pathname?.startsWith(path),
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -122,7 +124,7 @@ export function MobileBlockOverlay() {
 
       {/* Background gradient effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-primary/5 rounded-full blur-[120px]" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/[0.08] rounded-full blur-[120px]" />
       </div>
 
       {/* Main content container */}
@@ -130,7 +132,7 @@ export function MobileBlockOverlay() {
         {/* Round logo with breathing glow */}
         <div className="relative mb-8">
           <div
-            className="absolute inset-0 rounded-full bg-purple-primary/20 blur-xl animate-pulse"
+            className="absolute inset-0 rounded-full bg-white/[0.14] blur-xl animate-pulse"
             style={{ animationDuration: '3s' }}
           />
           <div className="w-28 h-28 relative">
@@ -174,13 +176,7 @@ export function MobileBlockOverlay() {
 
       {/* Bottom section with logo and links */}
       <div className="relative z-10 pb-8 flex flex-col items-center gap-4">
-        <Image
-          src="/omi-white.webp"
-          alt="Omi"
-          width={60}
-          height={24}
-          priority
-        />
+        <Image src="/omi-white.webp" alt="Omi" width={60} height={24} priority />
         <div className="flex items-center gap-4 text-sm text-text-quaternary">
           <a
             href="https://www.omi.me/"

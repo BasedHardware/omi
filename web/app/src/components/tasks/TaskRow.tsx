@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Trash2, Clock, Calendar, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDueBadge } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
 
 interface TaskRowProps {
@@ -18,28 +19,6 @@ interface TaskRowProps {
   isFocused?: boolean;
   // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
-}
-
-function formatDueBadge(dueAt: string): { text: string; isOverdue: boolean } {
-  const due = new Date(dueAt);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
-
-  const diffTime = due.getTime() - today.getTime();
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) {
-    return { text: `${Math.abs(diffDays)}d late`, isOverdue: true };
-  } else if (diffDays === 0) {
-    return { text: 'Today', isOverdue: false };
-  } else if (diffDays === 1) {
-    return { text: 'Tomorrow', isOverdue: false };
-  } else if (diffDays <= 7) {
-    return { text: due.toLocaleDateString('en-US', { weekday: 'short' }), isOverdue: false };
-  } else {
-    return { text: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), isOverdue: false };
-  }
 }
 
 function formatDateForInput(date: Date): string {
@@ -85,7 +64,10 @@ export function TaskRow({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+      if (
+        datePickerRef.current &&
+        !datePickerRef.current.contains(event.target as Node)
+      ) {
         setShowDatePicker(false);
       }
     }
@@ -172,8 +154,8 @@ export function TaskRow({
         'border-b border-bg-tertiary/50',
         'transition-colors duration-100',
         isHovered && 'bg-white/[0.02]',
-        isFocused && 'bg-purple-primary/10',
-        isSelected && 'bg-purple-primary/5'
+        isFocused && 'bg-white/10',
+        isSelected && 'bg-white/5',
       )}
     >
       {/* Selection checkbox */}
@@ -185,11 +167,13 @@ export function TaskRow({
             'border transition-all duration-150',
             'flex items-center justify-center',
             isSelected
-              ? 'bg-purple-primary border-purple-primary'
-              : 'border-text-quaternary/50 hover:border-purple-primary'
+              ? 'bg-white border-white'
+              : 'border-text-quaternary/50 hover:border-white',
           )}
         >
-          {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+          {isSelected && (
+            <Check className="w-2.5 h-2.5 text-bg-primary" strokeWidth={3} />
+          )}
         </button>
       )}
 
@@ -204,8 +188,8 @@ export function TaskRow({
             task.completed
               ? 'bg-success border-success'
               : isOverdue
-              ? 'border-error hover:bg-error/20'
-              : 'border-text-quaternary/50 hover:border-text-tertiary'
+                ? 'border-error hover:bg-error/20'
+                : 'border-text-quaternary/50 hover:border-text-tertiary',
           )}
         >
           {(task.completed || isCompleting) && (
@@ -225,10 +209,10 @@ export function TaskRow({
             onBlur={handleEditSubmit}
             onKeyDown={handleEditKeyDown}
             className={cn(
-              'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+              'w-full text-sm bg-bg-secondary border border-white/50',
               'rounded px-2 py-0.5',
               'text-text-primary outline-none',
-              'focus:ring-1 focus:ring-purple-primary/30'
+              'focus:ring-1 focus:ring-white/30',
             )}
           />
         ) : (
@@ -236,10 +220,8 @@ export function TaskRow({
             onDoubleClick={handleTextDoubleClick}
             className={cn(
               'text-sm transition-colors',
-              task.completed
-                ? 'text-text-quaternary line-through'
-                : 'text-text-primary',
-              !task.completed && onUpdateDescription && 'cursor-text'
+              task.completed ? 'text-text-quaternary line-through' : 'text-text-primary',
+              !task.completed && onUpdateDescription && 'cursor-text',
             )}
           >
             {task.description}
@@ -258,7 +240,7 @@ export function TaskRow({
                 'transition-colors',
                 isOverdue
                   ? 'bg-error/10 text-error'
-                  : 'bg-bg-tertiary text-text-tertiary hover:bg-purple-primary/10 hover:text-purple-primary'
+                  : 'bg-bg-tertiary text-text-tertiary hover:bg-white/10 hover:text-white',
               )}
             >
               <Clock className="w-3 h-3" />
@@ -269,8 +251,8 @@ export function TaskRow({
               onClick={handleDateClick}
               className={cn(
                 'flex items-center gap-1 px-2 py-0.5 rounded text-xs',
-                'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10',
-                'opacity-0 group-hover:opacity-100 transition-opacity'
+                'text-text-quaternary hover:text-white hover:bg-white/10',
+                'opacity-0 group-hover:opacity-100 transition-opacity',
               )}
             >
               <Calendar className="w-3 h-3" />
@@ -290,7 +272,7 @@ export function TaskRow({
                 className={cn(
                   'absolute top-full right-0 mt-1 z-50',
                   'bg-bg-secondary border border-bg-tertiary rounded-lg',
-                  'shadow-lg shadow-black/30 p-2'
+                  'shadow-lg shadow-black/30 p-2',
                 )}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -302,7 +284,7 @@ export function TaskRow({
                     className={cn(
                       'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
                       'text-xs text-text-primary outline-none',
-                      'focus:border-purple-primary'
+                      'focus:border-white',
                     )}
                   />
                   <div className="flex gap-1">
@@ -314,7 +296,7 @@ export function TaskRow({
                           setShowDatePicker(false);
                         }
                       }}
-                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                     >
                       Today
                     </button>
@@ -328,7 +310,7 @@ export function TaskRow({
                           setShowDatePicker(false);
                         }
                       }}
-                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-purple-primary/20 rounded text-text-secondary"
+                      className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                     >
                       Tmrw
                     </button>
@@ -358,7 +340,10 @@ export function TaskRow({
       {/* Completed date */}
       {task.completed && task.completed_at && (
         <span className="flex-shrink-0 text-xs text-text-quaternary">
-          {new Date(task.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          {new Date(task.completed_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          })}
         </span>
       )}
 
@@ -377,7 +362,7 @@ export function TaskRow({
                 e.stopPropagation();
                 onSnooze(task.id, 1);
               }}
-              className="px-1.5 py-0.5 text-xs rounded text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10"
+              className="px-1.5 py-0.5 text-xs rounded text-text-quaternary hover:text-white hover:bg-white/10"
               title="Snooze 1 day"
             >
               +1d

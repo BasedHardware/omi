@@ -44,14 +44,14 @@ export function TaskListView({
 }: TaskListViewProps) {
   // Filter tasks based on search query
   const filteredPending = searchQuery
-    ? pendingTasks.filter(t =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    ? pendingTasks.filter((t) =>
+        t.description.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : pendingTasks;
 
   const filteredCompleted = searchQuery
-    ? completedTasks.filter(t =>
-        t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    ? completedTasks.filter((t) =>
+        t.description.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : completedTasks;
 
@@ -64,7 +64,9 @@ export function TaskListView({
           <span className="text-2xl">✓</span>
         </div>
         <h3 className="text-lg font-medium text-text-primary mb-2">All caught up!</h3>
-        <p className="text-sm text-text-tertiary">No tasks to show. Add a new task to get started.</p>
+        <p className="text-sm text-text-tertiary">
+          No tasks to show. Add a new task to get started.
+        </p>
       </div>
     );
   }
@@ -72,7 +74,9 @@ export function TaskListView({
   if (isEmpty && searchQuery) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm text-text-tertiary">No tasks match "{searchQuery}"</p>
+        <p className="text-sm text-text-tertiary">
+          No tasks match &quot;{searchQuery}&quot;
+        </p>
       </div>
     );
   }
@@ -114,7 +118,7 @@ export function TaskListView({
             className={cn(
               'flex items-center gap-2 px-3 py-2 w-full',
               'text-sm text-text-tertiary hover:text-text-secondary',
-              'transition-colors rounded-lg hover:bg-bg-tertiary/50'
+              'transition-colors rounded-lg hover:bg-bg-tertiary/50',
             )}
           >
             {showCompleted ? (

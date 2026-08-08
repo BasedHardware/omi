@@ -55410,6 +55410,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -55514,6 +55530,22 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
             }
           },
           {
@@ -55625,6 +55657,22 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
             }
           },
           {

@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, LucideIcon } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 
 interface PageHeaderProps {
   title: string;
@@ -10,7 +10,12 @@ interface PageHeaderProps {
   onBack?: () => void;
 }
 
-export function PageHeader({ title, icon: Icon, showBackButton, onBack }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  icon: Icon,
+  showBackButton,
+  onBack,
+}: PageHeaderProps) {
   const router = useRouter();
 
   const handleBack = () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import { motion } from 'framer-motion';
 import {
   Calendar,
@@ -14,7 +14,7 @@ import {
   Loader2,
   Maximize2,
 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 
 // Dynamically import LocationMap to avoid SSR issues with Leaflet
 const LocationMap = dynamic(() => import('./sections/LocationMap'), {
@@ -192,7 +192,7 @@ function JourneyTimeline({
       {/* Header */}
       <div className="p-4 border-b border-white/[0.04]">
         <h4 className="text-sm font-medium text-text-primary flex items-center gap-2">
-          <Clock className="w-4 h-4 text-purple-primary" />
+          <Clock className="w-4 h-4 text-white" />
           Your Journey
         </h4>
       </div>
@@ -214,7 +214,7 @@ function JourneyTimeline({
         ) : (
           <div className="relative">
             {/* Vertical line connecting all items */}
-            <div className="absolute left-4 top-4 bottom-4 w-px bg-purple-primary/20" />
+            <div className="absolute left-4 top-4 bottom-4 w-px bg-white/20" />
 
             <div className="space-y-4">
               {sortedLocations.map((loc, idx) => {
@@ -243,10 +243,10 @@ function JourneyTimeline({
                     {/* Numbered marker */}
                     <div
                       className={cn(
-                        'relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold transition-all',
+                        'relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-bg-primary text-xs font-semibold transition-all',
                         isCurrent
-                          ? 'bg-purple-primary shadow-lg ring-2 ring-purple-primary/50 scale-110'
-                          : 'bg-purple-primary shadow-md',
+                          ? 'bg-white shadow-lg ring-2 ring-white/50 scale-110'
+                          : 'bg-white shadow-md',
                         isPast && !isCurrent && 'opacity-60',
                       )}
                     >
@@ -271,7 +271,7 @@ function JourneyTimeline({
                       <p
                         className={cn(
                           'text-xs font-medium',
-                          isCurrent ? 'text-purple-primary' : 'text-purple-primary/70',
+                          isCurrent ? 'text-white' : 'text-white/70',
                         )}
                       >
                         {formatJourneyTime(loc.time)}
@@ -287,7 +287,7 @@ function JourneyTimeline({
                               : 'text-text-secondary',
                             loc.conversation_id &&
                               onConversationClick &&
-                              'group-hover:text-purple-primary transition-colors',
+                              'group-hover:text-white transition-colors',
                           )}
                         >
                           {display.title}
@@ -411,7 +411,7 @@ export function RecapDetailPanel({
     return (
       <div className="h-full flex flex-col bg-bg-secondary">
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
         </div>
       </div>
     );
@@ -446,7 +446,7 @@ export function RecapDetailPanel({
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
                 {/* Day emoji */}
-                <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-primary/20 to-purple-primary/5 flex items-center justify-center text-3xl">
+                <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center text-3xl">
                   {recap.day_emoji || '📅'}
                 </div>
                 <div>
@@ -687,7 +687,7 @@ function Section({ title, icon: Icon, children }: SectionProps) {
     >
       {/* Section header */}
       <div className="flex items-center gap-2 mb-3">
-        <Icon className="w-5 h-5 text-purple-primary" />
+        <Icon className="w-5 h-5 text-white" />
         <h3 className="text-base font-semibold text-text-primary">{title}</h3>
       </div>
       {/* Section content */}

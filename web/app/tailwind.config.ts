@@ -21,14 +21,18 @@ const config: Config = {
         'bg-primary': '#0F0F0F',
         'bg-secondary': '#1A1A1A',
         'bg-tertiary': '#252525',
-        'bg-quaternary': '#2A2A2A',
+        // Matches desktop OmiColors.backgroundQuaternary / backgroundRaised.
+        'bg-quaternary': '#35343B',
+        'bg-raised': '#1F1F25',
         'bg-color': '#181818',
 
-        // Purple accent system
-        'purple-primary': '#8B5CF6',
-        'purple-secondary': '#A855F7',
-        'purple-accent': '#7C3AED',
-        'purple-light': '#D946EF',
+        // Desktop `mainContentContainer` fill — the inset content pane sits a
+        // shade darker than the window behind it so the inset reads as depth.
+        'bg-pane': '#0D0D0F',
+
+        // Desktop OmiColors.border — visible against bg-secondary, unlike
+        // borrowing bg-tertiary as a border colour.
+        stroke: '#3A3940',
 
         // Text
         'text-primary': '#FFFFFF',
@@ -55,18 +59,28 @@ const config: Config = {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+        'gradient-conic':
+          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
       borderRadius: {
         lg: '12px',
         md: '8px',
         sm: '6px',
+        // Desktop OmiChrome radius registers, so web surfaces read at the same
+        // softness as the macOS app.
+        window: '26px',
+        card: '24px',
+        section: '20px',
+        control: '16px',
+        chip: '14px',
+        element: '8px',
+        badge: '6px',
       },
       boxShadow: {
-        'soft': '0 4px 12px rgba(0, 0, 0, 0.1)',
-        'medium': '0 8px 20px rgba(0, 0, 0, 0.15)',
-        'strong': '0 12px 30px rgba(0, 0, 0, 0.25)',
-        'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
+        soft: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        medium: '0 8px 20px rgba(0, 0, 0, 0.15)',
+        strong: '0 12px 30px rgba(0, 0, 0, 0.25)',
+        glow: '0 0 20px rgba(255, 255, 255, 0.18)',
       },
       keyframes: {
         shimmer: {

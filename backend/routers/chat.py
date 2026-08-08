@@ -27,6 +27,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+from utils.chat_session_target import resolve_chat_session, resolve_chat_target
 import database.conversations as conversations_db
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
@@ -203,9 +204,19 @@ def filter_messages(messages, app_id):
 
 
 def _build_quota_exceeded_reply(
-    uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: dict
+    uid: str,
+    data: SendMessageRequest,
+    compat_app_id: Optional[str],
+    detail: dict,
+    chat_session: Optional[ChatSession] = None,
 ) -> ResponseMessage:
     """Persist the user's question + a canned AI reply and return it.
+
+    Both messages join `chat_session` when the request named one. Without it the
+    turn is stored unthreaded: the client shows it optimistically against the
+    session the user is looking at, and then it disappears on the next history
+    load, because that read is scoped to the session and these rows belong to no
+    session at all.
 
     Mobile clients render the reply as a normal AI message, so users on
     older builds without structured 402 handling at least see *why* nothing
@@ -223,6 +234,8 @@ def _build_quota_exceeded_reply(
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, user_msg.model_dump())
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, user_msg.id)
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -256,6 +269,8 @@ def _build_quota_exceeded_reply(
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, ai_msg.model_dump())
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_msg.id)
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
@@ -286,6 +301,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
@@ -306,7 +322,17 @@ def send_message(
         _compat_id = app_id or plugin_id
         if _compat_id in ['null', '']:
             _compat_id = None
-        response_msg = _build_quota_exceeded_reply(uid, data, _compat_id, exc.detail)
+        # Resolved here rather than at the happy path's `_resolve_chat_session`
+        # below: quota enforcement returns before that line is ever reached, and
+        # the canned reply still belongs in the session the request named.
+        _quota_target = resolve_chat_target(uid, _compat_id, chat_session_id)
+        response_msg = _build_quota_exceeded_reply(
+            uid,
+            data,
+            _quota_target.app_id,
+            exc.detail,
+            ChatSession(**_quota_target.session) if _quota_target.session else None,
+        )
 
         def _quota_exceeded_stream():
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -320,9 +346,10 @@ def send_message(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
+    # get chat session — a named session also decides which app this turn runs as
+    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session = ChatSession(**target.session) if target.session else None
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -580,15 +607,22 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # get the targeted chat session. Its own app id scopes the delete: the
+    # message rows carry the session's `plugin_id`, so filtering by the query
+    # string's app instead deletes the session record and orphans its messages.
+    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session = target.session
+    chat_session_id = target.session_id
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
@@ -622,14 +656,18 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    target = resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session_id = target.session_id
 
     messages = chat_db.get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
@@ -644,7 +682,9 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        return [initial_message_util(uid, compat_app_id)]
+        # The greeting belongs to the session that was read, not to whatever
+        # session `acquire_chat_session` would pick for the app.
+        return [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
     return messages
 
 

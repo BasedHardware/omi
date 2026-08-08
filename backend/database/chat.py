@@ -10,6 +10,13 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.firestore_index_registry import CURRENT_CHAT_SESSION_QUERY
+
+# Sessions are per-user and per-app, so this is a ceiling on a small collection
+# rather than a page size; it exists so a pathological account cannot turn one
+# lookup into an unbounded read.
+CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
+
 from models.chat import Message
 from utils import encryption
 from ._client import db
@@ -653,19 +660,44 @@ def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, A
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    session_ref = (
-        db.collection('users')
-        .document(uid)
-        .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
-        .limit(1)
+    """The user's current chat session for an app.
+
+    Newest-first: an unordered `.limit(1)` lets Firestore return any matching
+    document, so once a user has more than one session for an app the "current"
+    one is whichever the index happens to yield. Callers treat this as the
+    session to read and append to, so an arbitrary pick silently splits a
+    conversation across sessions.
+
+    The ordering is applied after the read, not by `order_by`, because Firestore
+    drops documents that lack the ordered field entirely. `add_chat_session`
+    writes whatever dict it is handed, so a session with no `created_at` is
+    representable — and ordering in the query would make those sessions
+    invisible here, stranding a user's existing history behind a brand new
+    session. A session with no timestamp sorts oldest, and its id breaks ties so
+    the answer is stable across calls.
+    """
+    sessions = (
+        CURRENT_CHAT_SESSION_QUERY.build(
+            db.collection('users').document(uid).collection('chat_sessions'),
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
+        .stream()
     )
 
-    sessions = session_ref.stream()
+    newest: Optional[Dict[str, Any]] = None
+    newest_key: Optional[tuple] = None
     for session in sessions:
-        return _typed_doc(session)
+        data = _typed_doc(session)
+        # `_typed_doc` returns {} for a document with no fields, which sorts as
+        # untimestamped and loses to anything real rather than being skipped.
+        created = data.get('created_at')
+        key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
+        if newest_key is None or key > newest_key:
+            newest, newest_key = data, key
 
-    return None
+    return newest
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:

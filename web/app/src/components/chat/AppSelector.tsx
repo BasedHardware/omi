@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Sparkles, Loader2 } from 'lucide-react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { getChatApps, type App } from '@/lib/api';
@@ -46,7 +46,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedApp = apps.find(app => app.id === selectedAppId);
+  const selectedApp = apps.find((app) => app.id === selectedAppId);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -60,7 +60,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
           'border border-bg-quaternary',
           'transition-colors',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          isOpen && 'bg-bg-quaternary'
+          isOpen && 'bg-bg-quaternary',
         )}
       >
         {/* Selected app avatar */}
@@ -81,8 +81,8 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
             )}
           </div>
         ) : (
-          <div className="w-6 h-6 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-purple-primary" />
+          <div className="w-6 h-6 rounded-full bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-text-primary" />
           </div>
         )}
 
@@ -90,10 +90,12 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
           {selectedApp ? selectedApp.name : 'Omi'}
         </span>
 
-        <ChevronDown className={cn(
-          'w-4 h-4 text-text-tertiary transition-transform',
-          isOpen && 'rotate-180'
-        )} />
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 text-text-tertiary transition-transform',
+            isOpen && 'rotate-180',
+          )}
+        />
       </button>
 
       {/* Dropdown menu */}
@@ -108,7 +110,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
               'absolute top-full left-0 mt-2 z-50',
               'min-w-[200px] max-w-[280px]',
               'bg-bg-secondary border border-bg-tertiary rounded-xl',
-              'shadow-lg overflow-hidden'
+              'shadow-lg overflow-hidden',
             )}
           >
             {isLoading ? (
@@ -126,28 +128,26 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2.5',
                     'hover:bg-bg-tertiary transition-colors',
-                    !selectedAppId && 'bg-bg-tertiary/50'
+                    !selectedAppId && 'bg-bg-tertiary/50',
                   )}
                 >
-                  <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-4 h-4 text-purple-primary" />
+                  <div className="w-8 h-8 rounded-full bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-text-primary" />
                   </div>
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-text-primary">Omi</p>
                     <p className="text-xs text-text-tertiary">Default assistant</p>
                   </div>
                   {!selectedAppId && (
-                    <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                    <Check className="w-4 h-4 text-text-primary flex-shrink-0" />
                   )}
                 </button>
 
                 {/* Separator if there are apps */}
-                {apps.length > 0 && (
-                  <div className="border-t border-bg-tertiary my-1" />
-                )}
+                {apps.length > 0 && <div className="border-t border-bg-tertiary my-1" />}
 
                 {/* Chat apps list */}
-                {apps.map(app => (
+                {apps.map((app) => (
                   <button
                     key={app.id}
                     onClick={() => {
@@ -157,7 +157,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                     className={cn(
                       'w-full flex items-center gap-3 px-4 py-2.5',
                       'hover:bg-bg-tertiary transition-colors',
-                      selectedAppId === app.id && 'bg-bg-tertiary/50'
+                      selectedAppId === app.id && 'bg-bg-tertiary/50',
                     )}
                   >
                     <div className="w-8 h-8 rounded-full overflow-hidden bg-bg-quaternary flex-shrink-0">
@@ -186,7 +186,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                       )}
                     </div>
                     {selectedAppId === app.id && (
-                      <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                      <Check className="w-4 h-4 text-text-primary flex-shrink-0" />
                     )}
                   </button>
                 ))}
@@ -194,9 +194,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                 {/* Empty state */}
                 {apps.length === 0 && (
                   <div className="px-4 py-3 text-center">
-                    <p className="text-sm text-text-tertiary">
-                      No chat apps enabled
-                    </p>
+                    <p className="text-sm text-text-tertiary">No chat apps enabled</p>
                     <p className="text-xs text-text-quaternary mt-1">
                       Enable apps in the Apps section
                     </p>

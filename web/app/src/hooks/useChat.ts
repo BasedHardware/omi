@@ -8,9 +8,15 @@ import {
 } from '@/lib/api';
 import type { ClientMessage, MessageChunk } from '@/types/conversation';
 import type { ChatContextInfo } from '@/components/chat/ChatContext';
+import { useRequestOwner } from '@/hooks/useRequestOwner';
 
 interface UseChatOptions {
   appId?: string;
+  /**
+   * Which chat session to read. `null` is the default shared thread every
+   * client sees through `/v2/messages`; an id targets that one thread.
+   */
+  chatSessionId?: string | null;
 }
 
 interface UseChatReturn {
@@ -30,7 +36,7 @@ interface UseChatReturn {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { appId } = options;
+  const { appId, chatSessionId = null } = options;
 
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,20 +45,37 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [currentThinking, setCurrentThinking] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Track current app ID to detect changes
+  // Track current app + session to detect changes
   const currentAppIdRef = useRef(appId);
-  // Track if we've loaded history for current app
+  const currentSessionIdRef = useRef(chatSessionId);
+  // Track if we've loaded history for the current app + session
   const historyLoadedRef = useRef(false);
 
-  // Reset state when app changes
+  // A load or a stream belongs to the thread it was started for. Switching
+  // threads mid-flight must not let the previous thread's response land in the
+  // newly-selected one.
+  const claimRequest = useRequestOwner(`${appId ?? ''}||${chatSessionId ?? ''}`);
+
+  // Reset state when the app or the selected session changes. Switching threads
+  // must clear the transcript: leaving the previous session's messages on
+  // screen reads as though they belong to the newly-selected chat. The
+  // transient stream state goes with it, for the same reason.
   useEffect(() => {
-    if (currentAppIdRef.current !== appId) {
+    if (
+      currentAppIdRef.current !== appId ||
+      currentSessionIdRef.current !== chatSessionId
+    ) {
       currentAppIdRef.current = appId;
+      currentSessionIdRef.current = chatSessionId;
       historyLoadedRef.current = false;
       setMessages([]);
       setError(null);
+      setStreamingText('');
+      setCurrentThinking('');
+      setIsStreaming(false);
+      setIsLoading(false);
     }
-  }, [appId]);
+  }, [appId, chatSessionId]);
 
   /**
    * Load message history from server
@@ -60,20 +83,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const loadHistory = useCallback(async () => {
     if (historyLoadedRef.current) return;
 
+    const isCurrent = claimRequest();
     setIsLoading(true);
     setError(null);
 
     try {
-      const history = await getMessages(appId);
+      const history = await getMessages(appId, chatSessionId);
+      if (!isCurrent()) return;
       setMessages([...history].reverse());
       historyLoadedRef.current = true;
     } catch (err) {
+      if (!isCurrent()) return;
       console.error('Failed to load message history:', err);
       setError('Failed to load message history');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [appId]);
+  }, [appId, chatSessionId, claimRequest]);
 
   /**
    * Send a message and handle streaming response
@@ -82,6 +108,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     async (text: string, fileIds?: string[], context?: ChatContextInfo | null) => {
       if (!text.trim() || isStreaming) return;
 
+      const isCurrent = claimRequest();
       setError(null);
       setIsStreaming(true);
       setStreamingText('');
@@ -110,6 +137,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         await sendMessageStream(
           text.trim(),
           (chunk: MessageChunk) => {
+            // Chunks that arrive after the reader moved to another thread
+            // belong to the thread they were requested for, not this one.
+            if (!isCurrent()) return;
             switch (chunk.type) {
               case 'think':
                 setCurrentThinking((prev) => prev + chunk.text);
@@ -139,9 +169,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 break;
             }
           },
-          { appId, fileIds, context: context || null },
+          { appId, chatSessionId, fileIds, context: context || null },
         );
       } catch (err) {
+        if (!isCurrent()) return;
         console.error('Failed to send message:', err);
         setError(err instanceof Error ? err.message : 'Failed to send message');
 
@@ -161,31 +192,36 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           setMessages((prev) => [...prev, partialMessage]);
         }
       } finally {
-        setIsStreaming(false);
-        setStreamingText('');
+        if (isCurrent()) {
+          setIsStreaming(false);
+          setStreamingText('');
+        }
       }
     },
-    [appId, isStreaming],
+    [appId, chatSessionId, isStreaming, claimRequest],
   );
 
   /**
    * Clear all message history
    */
   const clearHistory = useCallback(async () => {
+    const isCurrent = claimRequest();
     setIsLoading(true);
     setError(null);
 
     try {
-      await clearMessagesApi(appId);
+      await clearMessagesApi(appId, chatSessionId);
+      if (!isCurrent()) return;
       setMessages([]);
       historyLoadedRef.current = false;
     } catch (err) {
+      if (!isCurrent()) return;
       console.error('Failed to clear messages:', err);
       setError('Failed to clear message history');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [appId]);
+  }, [appId, chatSessionId, claimRequest]);
 
   return {
     messages,

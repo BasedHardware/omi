@@ -526,6 +526,19 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    # No `created_at` ordering: Firestore omits documents that lack the ordered
+    # field, and a chat session with no timestamp is representable, so ordering
+    # in the query would hide a user's existing sessions. The caller reads this
+    # filter and picks the newest itself.
+    index_fields=(_asc('plugin_id'), _asc('__name__')),
+)
+
+
 QUERY_SPECS = (
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -546,6 +559,7 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
