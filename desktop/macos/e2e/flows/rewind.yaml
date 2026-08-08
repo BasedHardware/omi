@@ -27,8 +27,8 @@ covers:
   # `OCREmbeddingService.searchSimilar` -> `readEmbeddingBatch`, which is the only caller; it runs
   # unbounded and newest-first, so an all-time query is what proves the range and the ordering.
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+Embeddings.swift
-  # Rewind is the page that holds keyboard focus itself so arrow keys and the scroll wheel work
-  # wherever the pointer is (S3b). The focus effect that came with it is what S3d looks for.
+  # Rewind is the page that holds keyboard focus itself so arrow keys work wherever the pointer is.
+  # The track owns wheel/swipe input (S3b). The focus effect that came with it is what S3d looks for.
   - desktop/macos/Desktop/Sources/MainWindow/ShellPageKeyboardTarget.swift
 preconditions:
   - auth_ready
@@ -43,7 +43,7 @@ steps:
 
   - id: S2
     name: Verify Rewind overlay controls
-    do: "Verify the Rewind overlay shows: search bar ('Search your screen history...'), date picker (showing today's date), settings gear icon, and a toggle. The keyboard shortcut badge (⌘⌥R) should be visible near the Rewind title."
+    do: "Verify the Rewind overlay shows: search bar ('Search your screen history...'), timestamp pill for the current frame, settings gear icon, and a toggle. The keyboard shortcut badge (⌘⌥R) should be visible near the Rewind title."
     expect:
       interactive_count: { min: 3 }
 
@@ -53,7 +53,7 @@ steps:
     # absences must not collapse into one: before the survey finishes the line reads "Checking how
     # far back your capture goes…", and only a finished survey that found nothing may say "No screen
     # capture yet". A confident "no screen capture" over an account with months of it is the defect.
-    do: "Click the timestamp pill at the bottom-left of the frame stage (calendar glyph, date, chevron) to open the day popover. Verify it shows a graphical date picker, one line stating the real span ('N days of capture · <oldest> – <newest>'), and a second line naming the retention setting ('Capture older than N days is deleted', or 'Keeping everything — nothing is deleted' when retention is unlimited). Verify the span line never reads 'No screen capture yet' on an account that has capture. Press 'Oldest capture' and verify the timeline jumps to a day that actually holds frames and the button then disables; press 'Newer' and verify it steps to the next day holding capture rather than to the next calendar day."
+    do: "With capture on at least two non-adjacent days, verify Rewind opens on a recent, readable timeline window. Repeatedly zoom out and verify the axis expands smoothly past midnight until it reaches the oldest and newest retained captures; the footer count may change as each visible window is sampled, but the timeline must not reload as separate days. Swipe left/back through the track and verify the viewport moves continuously toward older timestamps, then swipe right and verify it moves toward newer timestamps. Click the timestamp pill at the bottom-left of the frame stage (calendar glyph, date, chevron) to open the day popover. Verify it shows a graphical date picker, one line stating the real span ('N days of capture · <oldest> – <newest>'), and a second line naming the retention setting ('Capture older than N days is deleted', or 'Keeping everything — nothing is deleted' when retention is unlimited). Verify the span line never reads 'No screen capture yet' on an account that has capture. Press 'Oldest capture' and verify the timeline centers a window containing that day; press 'Newer' and verify it centers the next day holding capture without changing to a day-scoped timeline."
     expect:
       interactive_count: { min: 3 }
 
@@ -65,7 +65,7 @@ steps:
 
   - id: S3b
     name: Verify per-app colour identity and scrub smoothness
-    do: "With the timeline showing, find an app badge whose real icon could not be resolved — it draws as a letter monogram on a filled circle. Verify the circle is a solid, saturated colour (not grey) and that the letter is white and legible on it. Verify two different apps get two different colours, and that the same app keeps its colour after quitting and relaunching the app (RewindPalette hashes the name, so the colour must not change across launches). Then hold the left/right arrow keys to scrub several seconds of frames and verify the stage image keeps up with the keypresses rather than lagging behind them."
+    do: "With the timeline showing, find an app badge whose real icon could not be resolved — it draws as a letter monogram on a filled circle. Verify the circle is a solid, saturated colour (not grey) and that the letter is white and legible on it. Verify two different apps get two different colours, and that the same app keeps its colour after quitting and relaunching the app (RewindPalette hashes the name, so the colour must not change across launches). Hold the left/right arrow keys to scrub several frames and verify the stage image keeps up. Then place the pointer on the timeline track: swipe right and verify the playhead moves right/newer, swipe left and verify it moves left/older; swiping over the frame or day popover must not move the track."
     expect:
       interactive_count: { min: 1 }
 
@@ -83,8 +83,8 @@ steps:
 
   - id: S3d
     name: The page takes keyboard focus without tracing the window
-    # The page is `focusable()` so its arrow-key and scroll-wheel handlers fire wherever the pointer
-    # is. AppKit draws a focus effect around whatever holds focus, and at content-area scale on a
+    # The page is `focusable()` so its arrow-key handlers fire wherever the pointer is. AppKit draws
+    # a focus effect around whatever holds focus, and at content-area scale on a
     # window with no visible extent that effect is a 1 pt accent rectangle on the user's wallpaper —
     # in the one hue this product never uses (INV-UI-1). Focus is kept; the paint is not.
     do: "Click once on the Rewind page background so the page itself holds keyboard focus, then look at the window's left, right and bottom edges and at the line under the top bar. Verify no accent-coloured rectangle or hairline is traced there and none appears on the wallpaper. Then press the arrow keys and verify frames still step, confirming focus was kept rather than removed."

@@ -14,7 +14,30 @@ struct RewindActivityBlock: Equatable {
   var duration: Double { max(0, endedAt - startedAt) }
 }
 
-/// The time window the track is showing, and how it is derived from a day of capture.
+/// Pure navigation policy shared by the AppKit track and the SwiftUI page.
+enum RewindTimelineNavigation {
+  /// The capture nearest an absolute moment in an ascending viewport sample.
+  static func nearestIndex(to instant: Double, screenshots: [Screenshot]) -> Int? {
+    guard !screenshots.isEmpty else { return nil }
+    var lower = 0
+    var upper = screenshots.count
+    while lower < upper {
+      let middle = lower + (upper - lower) / 2
+      if screenshots[middle].timestamp.timeIntervalSince1970 <= instant {
+        lower = middle + 1
+      } else {
+        upper = middle
+      }
+    }
+    if lower == 0 { return 0 }
+    if lower == screenshots.count { return screenshots.count - 1 }
+    let earlier = screenshots[lower - 1].timestamp.timeIntervalSince1970
+    let later = screenshots[lower].timestamp.timeIntervalSince1970
+    return instant - earlier <= later - instant ? lower - 1 : lower
+  }
+}
+
+/// The time window the track is showing, and how it is derived from the loaded capture history.
 ///
 /// Split out of the view because it is the whole of the track's arithmetic and none of its drawing:
 /// a pure function of timestamps that a hermetic test can drive without a window server.
@@ -23,6 +46,15 @@ enum RewindTrackWindow {
   /// The narrowest window a zoom may reach — a minute across the bar is already finer than the
   /// capture interval, so anything below it zooms into empty space.
   static let minimumSpan: Double = 60
+
+  /// Exact retained-history bounds, padded enough that the end captures are not flush against the
+  /// track. This range stays global while viewport samples come and go beneath it.
+  static func historyRange(oldest: Date?, newest: Date?) -> ClosedRange<Double>? {
+    guard let oldest, let newest else { return nil }
+    let lower = oldest.timeIntervalSince1970 - 30
+    let upper = max(newest.timeIntervalSince1970 + 30, lower + minimumSpan)
+    return lower...upper
+  }
 
   /// Contiguous same-app stretches, in capture order.
   ///
@@ -47,7 +79,7 @@ enum RewindTrackWindow {
     return result
   }
 
-  /// The full extent of a day's capture, padded by one sampling interval at each end so the first and
+  /// The full extent of the loaded capture history, padded by one sampling interval at each end so the first and
   /// last segments are not flush against the bar's rounded corners.
   static func fullRange(of instants: [Double]) -> ClosedRange<Double> {
     guard let first = instants.first, let last = instants.last else {
@@ -60,7 +92,7 @@ enum RewindTrackWindow {
     return lower...upper
   }
 
-  /// Clamps a proposed window so it can neither be narrower than a minute nor wander off the day.
+  /// Clamps a proposed window so it can neither be narrower than a minute nor leave retained history.
   ///
   /// One clamp for the buttons and the pinch both, so a gesture cannot leave the track in a state a
   /// button could not reach.

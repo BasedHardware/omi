@@ -13,7 +13,7 @@ import SwiftUI
 /// how far back a pixel travels depends on how densely that stretch happened to be captured; a lunch
 /// break is invisible; and two frames either side of an overnight gap sit adjacent. Here x maps to
 /// the capture's `timestamp` over the visible window and the frame is found by binary search, which
-/// makes the track an honest picture of a day.
+/// makes the track an honest picture of the retained history.
 ///
 /// It is drawn in AppKit rather than SwiftUI for three reasons that are all about the pointer:
 /// pixel-exact hit testing during a drag, a scroll wheel that pans, and a hover tooltip that has to
@@ -54,6 +54,9 @@ final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
   var onScrubEnd: ((Int) -> Void)?
   /// Called while the user pinches, with the span to show.
   var onZoom: ((Double, Double) -> Void)?
+  /// Called for wheel/trackpad input that begins on the track. The page owns the current index; the
+  /// AppKit control owns whether the gesture belongs to the timeline.
+  var onScroll: ((CGFloat, CGFloat) -> Void)?
 
   private var tooltipWindow: NSWindow?
   private var tooltipContent: RewindTrackTooltipView?
@@ -372,7 +375,8 @@ final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
   /// sample of a scrub; constructing a `DateFormatter` there would put a locale lookup on the frame
   /// budget this rebuild exists to protect.
   static func tickFormatter(forInterval interval: Double) -> DateFormatter {
-    interval >= 3600 ? hourTickFormatter : minuteTickFormatter
+    if interval >= 24 * 3600 { return dayTickFormatter }
+    return interval >= 3600 ? hourTickFormatter : minuteTickFormatter
   }
 
   private static let hourTickFormatter: DateFormatter = {
@@ -384,6 +388,12 @@ final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
   private static let minuteTickFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "h:mm"
+    return formatter
+  }()
+
+  private static let dayTickFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.setLocalizedDateFormatFromTemplate("MMM d")
     return formatter
   }()
 
@@ -461,6 +471,13 @@ final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
       lastReportedIndex = index
       onScrubEnd?(index)
     }
+  }
+
+  /// Wheel and two-finger scroll gestures belong to the track under the pointer, not to a page-wide
+  /// event tap. Keeping the raw axes separate lets the navigation policy choose the gesture's
+  /// dominant direction instead of cancelling a slightly diagonal swipe by adding its axes.
+  override func scrollWheel(with event: NSEvent) {
+    onScroll?(event.scrollingDeltaX, event.scrollingDeltaY)
   }
 
   /// Moves the playhead and reports the frame under it.

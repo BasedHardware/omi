@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Rewind so zooming out or swiping back moves smoothly through all retained screen history instead of stopping at one day"
+}
