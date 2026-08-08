@@ -1,12 +1,8 @@
 import { sha256CanonicalRedacted } from "../ledger";
-import { projectTreeInputSnapshot, type GraphSnapshot, type PolicyClass, type TreeInputOptions, type TreeInputSnapshot } from "./index";
+import { genericPolicyClassifier, projectTreeInputSnapshot, type GraphSnapshot, type PolicyClass, type TreeInputSnapshot } from "./index";
+import { sha256CanonicalContent } from "./content-digest";
 
-// domain-pending(DIV-DOMAPPS-001)
-// domain-pending(DIV-DOMAPPS-006)
-const authorizationBrand: unique symbol = Symbol("application-read-authorization");
-// domain-pending(DIV-DOMAPPS-001)
-// domain-pending(DIV-DOMAPPS-006)
-const projectedInputBrand: unique symbol = Symbol("application-grant-projected-tree-input");
+const projectedInputs = new WeakSet<object>();
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 export const APPLICATION_DEFAULT_SYNTHESIZED_POLICY: Readonly<PolicyClass> = Object.freeze({
@@ -57,7 +53,7 @@ export interface ApplicationMemoryReadAuthorizationRequest {
 
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
-export interface ApplicationReadAuthorization {
+interface ApplicationReadAuthorization {
   readonly owner_account_id: string;
   // domain-pending(DIV-DOMAPPS-001)
   readonly app_id: string;
@@ -67,7 +63,6 @@ export interface ApplicationReadAuthorization {
   readonly principal_digest: string;
   readonly projection_policy_classes: readonly Readonly<PolicyClass>[];
   readonly authorization_digest: string;
-  readonly [authorizationBrand]: true;
 }
 
 // domain-pending(DIV-DOMCORE-001)
@@ -76,8 +71,14 @@ export interface ApplicationReadAuthorization {
 export interface ApplicationGrantProjectedTreeInputSnapshot extends TreeInputSnapshot {
   readonly reader_projection_digest: string;
   readonly projection_authorization_digest: string;
-  readonly [projectedInputBrand]: true;
 }
+
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMAPPS-001)
+export type ApplicationProjectionCapability = (
+  snapshot: GraphSnapshot,
+  options: { account_timezone: string },
+) => ApplicationGrantProjectedTreeInputSnapshot;
 
 // domain-pending(DIV-DOMAPPS-001)
 export type ApplicationReadDenial =
@@ -104,12 +105,42 @@ const REQUIRED_MEMORY_READ_SCOPE = "memories.read";
 const deny = (reason: ApplicationReadDenial): never => { throw new ApplicationReadDenied(reason); };
 const isResolved = (value: string | null): value is string => typeof value === "string" && value.length > 0;
 const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+const genericPolicyLabels = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
+const hasOnlyGenericPolicyLabels = (labels: readonly string[]): boolean => labels.every((label) => genericPolicyLabels.has(label));
 const deepFreeze = <Value>(value: Value): Value => {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     for (const nested of Object.values(value)) deepFreeze(nested);
     Object.freeze(value);
   }
   return value;
+};
+
+const rejectNestedOwnerMismatch = (snapshot: GraphSnapshot, ownerAccountId: string): void => {
+  const visited = new WeakSet<object>();
+  const inspect = (value: unknown): void => {
+    if (value === null || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (Object.prototype.hasOwnProperty.call(value, "owner_account_id")
+      && (value as { owner_account_id?: unknown }).owner_account_id !== ownerAccountId) deny("projection_binding_mismatch");
+    for (const nested of Object.values(value)) inspect(nested);
+  };
+  inspect(snapshot);
+
+  const events = new Map<string, NonNullable<GraphSnapshot["events"]>[number]>();
+  for (const event of snapshot.events ?? []) {
+    for (const ref of [event.revision_id, event.event.event_revision_id]) {
+      if (!ref || (events.has(ref) && events.get(ref) !== event)) deny("projection_binding_mismatch");
+      events.set(ref, event);
+    }
+  }
+  const evidenceIds = new Set<string>();
+  for (const evidence of snapshot.evidence ?? []) {
+    if (!evidence.evidence.evidence_id || evidenceIds.has(evidence.evidence.evidence_id) || !events.has(evidence.evidence.event_revision_id)) deny("projection_binding_mismatch");
+    evidenceIds.add(evidence.evidence.evidence_id);
+  }
+  for (const item of snapshot.claims) for (const evidenceRef of item.claim.evidence_refs) {
+    if (!evidenceIds.has(evidenceRef)) deny("projection_binding_mismatch");
+  }
 };
 
 /**
@@ -122,7 +153,7 @@ const deepFreeze = <Value>(value: Value): Value => {
 // domain-pending(DIV-DOMAPPS-006)
 export const readAfterApplicationAuthorization = <Result>(
   request: ApplicationMemoryReadAuthorizationRequest,
-  readStore: (authorization: ApplicationReadAuthorization) => Result,
+  readStore: (project: ApplicationProjectionCapability) => Result,
 ): Result => {
   const credential = request.credential;
   if (credential.credential_kind !== "mcp_api_key") deny("unsupported_credential_kind");
@@ -172,9 +203,10 @@ export const readAfterApplicationAuthorization = <Result>(
     principal_digest: principalDigest,
     projection_policy_classes: Object.freeze([APPLICATION_DEFAULT_SYNTHESIZED_POLICY]),
     authorization_digest: authorizationDigest,
-    [authorizationBrand]: true,
   });
-  return readStore(authorization);
+  const project: ApplicationProjectionCapability = (snapshot, options) =>
+    projectApplicationDefaultReadTreeInput(snapshot, options, authorization);
+  return readStore(project);
 };
 
 /**
@@ -184,14 +216,16 @@ export const readAfterApplicationAuthorization = <Result>(
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
-export const projectApplicationDefaultReadTreeInput = (
+const projectApplicationDefaultReadTreeInput = (
   snapshot: GraphSnapshot,
-  options: Omit<TreeInputOptions, "request_context">,
+  options: { account_timezone: string },
   authorization: ApplicationReadAuthorization,
 ): ApplicationGrantProjectedTreeInputSnapshot => {
-  if (authorization[authorizationBrand] !== true
-    || snapshot.owner_account_id !== authorization.owner_account_id
-    || "request_context" in options) deny("projection_binding_mismatch");
+  if (snapshot.owner_account_id !== authorization.owner_account_id
+    || typeof options.account_timezone !== "string"
+    || options.account_timezone.length === 0
+    || Object.keys(options).some((key) => key !== "account_timezone")) deny("projection_binding_mismatch");
+  rejectNestedOwnerMismatch(snapshot, authorization.owner_account_id);
   // domain-pending(DIV-DOMCORE-008)
   const canonicalDefaultSnapshot: GraphSnapshot = {
     ...snapshot,
@@ -199,32 +233,54 @@ export const projectApplicationDefaultReadTreeInput = (
       && item.claim.lifecycle === "canonical"
       && item.claim.scope.locality === "durable"),
   };
-  const input = projectTreeInputSnapshot(canonicalDefaultSnapshot, options);
+  const input = projectTreeInputSnapshot(canonicalDefaultSnapshot, { account_timezone: options.account_timezone, classifier: genericPolicyClassifier });
+  const evidenceById = new Map(input.evidence_index.map((span) => [span.evidence_id, span]));
   // domain-pending(DIV-DOMCORE-008)
   const claims = input.claims.filter((claim) => claim.policy_class.subject_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.subject_class
     && claim.policy_class.sensitivity === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.sensitivity
-    && claim.policy_class.capture_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.capture_class);
+    && claim.policy_class.capture_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.capture_class
+    && hasOnlyGenericPolicyLabels(claim.policy_labels)
+    && claim.evidence_refs.every((evidenceId) => {
+      const evidence = evidenceById.get(evidenceId);
+      return evidence !== undefined && hasOnlyGenericPolicyLabels(evidence.policy_labels);
+    }));
   const visibleClaimIds = new Set(claims.map((claim) => claim.claim_revision_id));
   const visibleEvidenceIds = new Set(claims.flatMap((claim) => claim.evidence_refs));
+  const evidence_index = input.evidence_index.filter((span) => visibleEvidenceIds.has(span.evidence_id));
+  const policy_classes = Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, { ...claim.policy_class }]));
+  const diagnostics = input.diagnostics.filter((diagnostic) => "claim_revision_id" in diagnostic
+    ? visibleClaimIds.has(diagnostic.claim_revision_id)
+    : diagnostic.claim_revision_ids.some((revision) => visibleClaimIds.has(revision)));
+  const projected_content_digest = sha256CanonicalContent({
+    owner_account_id: input.owner_account_id,
+    claims,
+    identity_constraints: input.identity_constraints,
+    evidence_index,
+    policy_classes,
+    diagnostics,
+  });
   const projected = {
     ...input,
     graph_generation: sha256CanonicalRedacted({
-      graph_generation: input.graph_generation,
+      projection_version: "application-default-generic-v1",
       projection_authorization_digest: authorization.authorization_digest,
+      projected_content_digest,
+      account_timezone: input.account_timezone,
+      classifier_version: input.classifier_version,
+      liveness_hook_version: input.liveness_hook_version,
       live_claim_revision_ids: [...visibleClaimIds].sort(),
       evidence_ids: [...visibleEvidenceIds].sort(),
     }),
     reader_projection_digest: authorization.principal_digest,
     projection_authorization_digest: authorization.authorization_digest,
+    projected_content_digest,
     claims,
-    evidence_index: input.evidence_index.filter((span) => visibleEvidenceIds.has(span.evidence_id)),
-    policy_classes: Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, { ...claim.policy_class }])),
-    diagnostics: input.diagnostics.filter((diagnostic) => "claim_revision_id" in diagnostic
-      ? visibleClaimIds.has(diagnostic.claim_revision_id)
-      : diagnostic.claim_revision_ids.some((revision) => visibleClaimIds.has(revision))),
+    evidence_index,
+    policy_classes,
+    diagnostics,
   };
   const detached = structuredClone(projected) as ApplicationGrantProjectedTreeInputSnapshot;
-  Object.defineProperty(detached, projectedInputBrand, { value: true, enumerable: false, configurable: false, writable: false });
+  projectedInputs.add(detached);
   return deepFreeze(detached);
 };
 
@@ -233,7 +289,7 @@ export const projectApplicationDefaultReadTreeInput = (
 export const isApplicationGrantProjectedTreeInput = (
   input: TreeInputSnapshot,
 ): input is ApplicationGrantProjectedTreeInputSnapshot =>
-  (input as Partial<ApplicationGrantProjectedTreeInputSnapshot>)[projectedInputBrand] === true
+  projectedInputs.has(input)
   && typeof input.projection_authorization_digest === "string"
   && input.projection_authorization_digest.length > 0
   && typeof input.reader_projection_digest === "string"

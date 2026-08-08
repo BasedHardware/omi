@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { sha256CanonicalRedacted } from "../ledger";
 import type { TreeInputSnapshot } from "./index";
 import {
-  projectApplicationDefaultReadTreeInput,
   readAfterApplicationAuthorization,
   type ApplicationGrantProjectedTreeInputSnapshot,
   type ApplicationMemoryReadAuthorizationRequest,
@@ -19,8 +18,8 @@ const authorizationRequest = (appId = "app:a"): ApplicationMemoryReadAuthorizati
 });
 
 const projectedInput = (appId = "app:a"): ApplicationGrantProjectedTreeInputSnapshot =>
-  readAfterApplicationAuthorization(authorizationRequest(appId), (authorization) =>
-    projectApplicationDefaultReadTreeInput(snapshot(), { account_timezone: "UTC" }, authorization));
+  readAfterApplicationAuthorization(authorizationRequest(appId), (project) =>
+    project(snapshot(), { account_timezone: "UTC" }));
 
 const renderedFixture = async (appId = "app:a"): Promise<{ input: ApplicationGrantProjectedTreeInputSnapshot; render: RenderNode }> => {
   const input = projectedInput(appId);
@@ -38,6 +37,7 @@ const resign = (render: RenderNode, patch: Partial<RenderNode>): RenderNode => {
     graph_generation: changed.graph_generation,
     reader_projection_digest: changed.reader_projection_digest,
     projection_authorization_digest: changed.projection_authorization_digest,
+    projected_content_digest: changed.projected_content_digest,
     node_id: changed.node_id,
     rendered_from_digest: changed.rendered_from_digest,
     rendered_from_manifest: changed.rendered_from_manifest,
@@ -65,6 +65,7 @@ test("projection binds owner, generations, exact claims, citations, policy, and 
   expect(envelope.graph_generation).toBe(input.graph_generation);
   expect(envelope.projection_authorization_digest).toBe(input.projection_authorization_digest);
   expect(envelope.reader_projection_digest).toBe(input.reader_projection_digest);
+  expect(envelope.projected_content_digest).toBe(input.projected_content_digest);
   expect(envelope.live_claim_revision_ids).toEqual([...render.rendered_from_manifest.live_member_revisions].sort());
   expect(envelope.citations).toEqual([{ evidence_id: "e1", event_revision_id: "event", capture_session_id: "capture", claim_revision_ids: envelope.live_claim_revision_ids }]);
   expect(envelope.synthesized_summary).toBe("A synthesized summary.");
@@ -94,6 +95,15 @@ test("projection rejects an owner view or a render from a differently authorized
   denial(input, other.render, "authorization_binding_mismatch");
 });
 
+test("copying every discoverable runtime brand cannot forge a projected input", async () => {
+  const { input, render } = await renderedFixture();
+  const forged = structuredClone(input) as ApplicationGrantProjectedTreeInputSnapshot;
+  for (const key of Reflect.ownKeys(input)) if (typeof key === "symbol") {
+    Object.defineProperty(forged, key, Object.getOwnPropertyDescriptor(input, key)!);
+  }
+  denial(forged, render, "authorization_binding_mismatch");
+});
+
 test("projection rejects claim, policy, and complete-citation mismatches", async () => {
   const { input, render } = await renderedFixture();
   denial(input, resign(render, { rendered_from_manifest: { ...render.rendered_from_manifest, live_member_revisions: ["missing"] } }), "claim_revision_mismatch");
@@ -119,4 +129,81 @@ test("rendering itself refuses mixed graph generations", async () => {
   await expect(renderStructuralTree({ ...tree, input_generation: "graph:other" }, input, {
     render: async () => ({ summary_text: "must not render", citations: ["e1"] }),
   }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" })).rejects.toThrow("render tree/input generation mismatch");
+});
+
+test("model request mutation cannot rewrite the retained render manifest", async () => {
+  const input = projectedInput();
+  const tree = buildDeterministicAnchors(input);
+  const original = tree.nodes[0]!.dependency_manifest.live_member_revisions;
+  const renders = await renderStructuralTree(tree, input, {
+    render: async (request) => {
+      const node = (request.input as { node: { dependency_manifest: { live_member_revisions: string[] } } }).node;
+      node.dependency_manifest.live_member_revisions.push("forged");
+      return { summary_text: "safe", citations: ["e1"] };
+    },
+  }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" });
+  expect(renders[0]!.rendered_from_manifest.live_member_revisions).toEqual(original);
+  expect(renders[0]!.rendered_from_manifest.live_member_revisions).not.toContain("forged");
+});
+
+test("render snapshots input, tree, options, and cache before the awaited model edge", async () => {
+  const mutableInput = structuredClone(projectedInput()) as TreeInputSnapshot;
+  const tree = buildDeterministicAnchors(mutableInput);
+  const options = { strategy: "summary", model_version: "model:before", prompt_version: "p", policy_version: "p", schema_version: "s" };
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const seenPredicates: string[] = [];
+  const pending = renderStructuralTree(tree, mutableInput, {
+    render: async (request) => {
+      await gate;
+      seenPredicates.push((request.input as { claims: { predicate: string }[] }).claims[0]!.predicate);
+      return { summary_text: "stable", citations: ["e1"] };
+    },
+  }, options);
+  await Promise.resolve();
+  (mutableInput.claims[0] as { predicate: string }).predicate = "mutated-after-call";
+  options.model_version = "model:after";
+  (tree.nodes[0]!.dependency_manifest.live_member_revisions as string[]).push("forged-after-call");
+  release();
+  const renders = await pending;
+  expect(seenPredicates.every((predicate) => predicate === "met")).toBe(true);
+  expect(renders.every((render) => render.model_version === "model:before")).toBe(true);
+  expect(renders.every((render) => !render.rendered_from_manifest.live_member_revisions.includes("forged-after-call"))).toBe(true);
+});
+
+test("cache identity changes when projected content changes without a graph frontier", async () => {
+  const firstGraph = snapshot();
+  const secondGraph = snapshot();
+  secondGraph.claims = secondGraph.claims.map((item) => item.revision_id === "a"
+    ? { ...item, claim: { ...item.claim, predicate: "changed-predicate" } }
+    : item);
+  const project = (graph: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), (projectInput) =>
+    projectInput(graph, { account_timezone: "UTC" }));
+  const firstInput = project(firstGraph);
+  const secondInput = project(secondGraph);
+  const firstRenders = await renderStructuralTree(buildDeterministicAnchors(firstInput), firstInput, {
+    render: async () => ({ summary_text: "first", citations: ["e1"] }),
+  }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" });
+  const cache = new Map(firstRenders.map((render) => [render.rendered_from_digest, render]));
+  let calls = 0;
+  const secondRenders = await renderStructuralTree(buildDeterministicAnchors(secondInput), secondInput, {
+    render: async () => { calls++; return { summary_text: "second", citations: ["e1"] }; },
+  }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" }, cache);
+  expect(secondInput.graph_generation).not.toBe(firstInput.graph_generation);
+  expect(calls).toBeGreaterThan(0);
+  expect(secondRenders.some((render) => render.summary_text === "second")).toBe(true);
+
+  const evidenceGraph = snapshot();
+  evidenceGraph.evidence = evidenceGraph.evidence!.map((item) => ({ ...item, evidence: { ...item.evidence, excerpt: "changed evidence with the same ids" } }));
+  const evidenceInput = project(evidenceGraph);
+  expect(evidenceInput.graph_generation).not.toBe(firstInput.graph_generation);
+  expect(evidenceInput.projected_content_digest).not.toBe(firstInput.projected_content_digest);
+
+  const hiddenPrivateChange = snapshot();
+  hiddenPrivateChange.claims = hiddenPrivateChange.claims.map((item) => item.revision_id === "private"
+    ? { ...item, claim: { ...item.claim, predicate: "changed-hidden-private" } }
+    : item);
+  const hiddenPrivateInput = project(hiddenPrivateChange);
+  expect(hiddenPrivateInput.graph_generation).toBe(firstInput.graph_generation);
+  expect(hiddenPrivateInput.projected_content_digest).toBe(firstInput.projected_content_digest);
 });

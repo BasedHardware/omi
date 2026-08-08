@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import {
   ApplicationReadDenied,
-  projectApplicationDefaultReadTreeInput,
   readAfterApplicationAuthorization,
   type ApplicationMemoryReadAuthorizationRequest,
 } from "./authorization-boundary";
 import { snapshot } from "./tree.fixture";
+import { genericPolicyClassifier } from "./index";
 
 const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
   owner_account_id: "owner",
@@ -30,10 +30,9 @@ const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
 
 test("application read requires scope and exact active persisted grant before store access", () => {
   let storeCalls = 0;
-  const result = readAfterApplicationAuthorization(allowed(), (authorization) => {
+  const result = readAfterApplicationAuthorization(allowed(), (project) => {
     storeCalls++;
-    expect(authorization.principal_digest).not.toContain("owner");
-    expect(authorization.authorization_digest).not.toBe(authorization.principal_digest);
+    expect(project(snapshot(), { account_timezone: "UTC" }).reader_projection_digest).not.toContain("owner");
     return "read-result";
   });
   expect(result).toBe("read-result");
@@ -75,8 +74,8 @@ test("application read denials all occur before the supplied store callback", ()
 
 test("application projection factory is branded, owner-bound, and canonical/default only", () => {
   const graph = snapshot();
-  const projected = readAfterApplicationAuthorization(allowed(), (authorization) =>
-    projectApplicationDefaultReadTreeInput(graph, { account_timezone: "UTC" }, authorization));
+  const projected = readAfterApplicationAuthorization(allowed(), (project) =>
+    project(graph, { account_timezone: "UTC" }));
   expect(projected.owner_account_id).toBe("owner");
   expect(projected.reader_projection_digest).not.toBeNull();
   expect(projected.projection_authorization_digest).not.toBeNull();
@@ -85,10 +84,10 @@ test("application projection factory is branded, owner-bound, and canonical/defa
   expect(projected.claims[0]!.policy_class).toEqual({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" });
 
   const otherOwner = { ...graph, owner_account_id: "owner:b" };
-  expect(() => readAfterApplicationAuthorization(allowed(), (authorization) =>
-    projectApplicationDefaultReadTreeInput(otherOwner, { account_timezone: "UTC" }, authorization))).toThrow("projection_binding_mismatch");
-  expect(() => readAfterApplicationAuthorization(allowed(), (authorization) =>
-    projectApplicationDefaultReadTreeInput(graph, { account_timezone: "UTC", request_context: { reader_account_id: "owner", grant: { grant_id: "owner", policy_classes: [] } } } as never, authorization))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
+    project(otherOwner, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
+    project(graph, { account_timezone: "UTC", request_context: { reader_account_id: "owner", grant: { grant_id: "owner", policy_classes: [] } } } as never))).toThrow("projection_binding_mismatch");
 });
 
 test("owner status never substitutes for the application grant", () => {
@@ -96,4 +95,42 @@ test("owner status never substitutes for the application grant", () => {
   let storeCalls = 0;
   expect(() => readAfterApplicationAuthorization({ ...request, persisted_grant: null }, () => { storeCalls++; })).toThrow(ApplicationReadDenied);
   expect(storeCalls).toBe(0);
+});
+
+test("authorization callback exposes only a closure capability, never a recoverable decision token", () => {
+  readAfterApplicationAuthorization(allowed(), (capability) => {
+    expect(typeof capability).toBe("function");
+    expect(Reflect.ownKeys(Object(capability))).not.toContain("authorization_digest");
+    return null;
+  });
+});
+
+test("application projection refuses caller classifier overrides and keeps private policy out", () => {
+  const malicious = { version: "attacker", classify: () => ({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }) };
+  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
+    project(snapshot(), { account_timezone: "UTC", classifier: malicious } as never))).toThrow("projection_binding_mismatch");
+  const projected = readAfterApplicationAuthorization(allowed(), (project) => project(snapshot(), { account_timezone: "UTC" }));
+  expect(projected.claims.map((claim) => claim.claim_revision_id)).toEqual(["a"]);
+  expect(projected.classifier_version).toBe(genericPolicyClassifier.version);
+
+  const unknown = snapshot();
+  unknown.claims = unknown.claims.map((item) => item.revision_id === "a"
+    ? { ...item, claim: { ...item.claim, policy_labels: ["unrecognized-policy-label"] } }
+    : item);
+  const unknownProjected = readAfterApplicationAuthorization(allowed(), (project) => project(unknown, { account_timezone: "UTC" }));
+  expect(unknownProjected.claims).toEqual([]);
+});
+
+test("application projection rejects nested cross-owner claims and events before projection", () => {
+  const claimMismatch = snapshot();
+  claimMismatch.claims = claimMismatch.claims.map((item, index) => index === 0
+    ? { ...item, claim: { ...item.claim, owner_account_id: "owner:b" } }
+    : item);
+  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
+    project(claimMismatch, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
+
+  const eventMismatch = snapshot();
+  eventMismatch.events = eventMismatch.events!.map((item) => ({ ...item, event: { ...item.event, owner_account_id: "owner:b" } }));
+  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
+    project(eventMismatch, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
 });

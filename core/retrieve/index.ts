@@ -5,6 +5,7 @@ import type { ImmutableIdentitySupport } from "../resolve/identity-authority";
 import { sha256CanonicalRedacted } from "../ledger";
 import { grantAllows, type RequestContext } from "./grant";
 import { restrictivePolicyJoin } from "./policy";
+import { sha256CanonicalContent } from "./content-digest";
 
 export * from "./temporal";
 export * from "./grant";
@@ -125,6 +126,8 @@ export interface TreeInputSnapshot {
   reader_projection_digest: string | null;
   /** Set only by the application authorization boundary after its grant gate succeeds. */
   projection_authorization_digest: string | null;
+  /** Hash of the exact projected claim/evidence content consumed by structure/render. */
+  projected_content_digest: string;
   account_timezone: string;
   claims: readonly LiveClaimView[];
   identity_constraints: readonly IdentityConstraint[];
@@ -413,10 +416,12 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
       .sort((left, right) => compareStrings(`${left.subject_class}\u0000${left.sensitivity}\u0000${left.capture_class}`, `${right.subject_class}\u0000${right.sensitivity}\u0000${right.capture_class}`)),
   } : null;
   const reader_projection_digest = readerProjectionSeed === null ? null : sha256CanonicalRedacted(readerProjectionSeed);
-  const generationSeed = { graph: options.graph_generation ?? snapshot.graph_generation ?? "snapshot", classifier: classifier.version, liveness_hook: "d35-liveness-v1", timezone: options.account_timezone, reader_projection_digest };
-  return { owner_account_id: snapshot.owner_account_id, graph_generation: sha256CanonicalRedacted(generationSeed), reader_projection_digest, projection_authorization_digest: null, account_timezone: options.account_timezone,
-    claims, identity_constraints: snapshot.identity_constraints?.map((item) => item.constraint) ?? [], evidence_index: spans,
-    policy_classes: Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, claim.policy_class])),
+  const identity_constraints = snapshot.identity_constraints?.map((item) => item.constraint) ?? [];
+  const policy_classes = Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, claim.policy_class]));
+  const projected_content_digest = sha256CanonicalContent({ owner_account_id: snapshot.owner_account_id, claims, identity_constraints, evidence_index: spans, policy_classes, diagnostics });
+  const generationSeed = { graph: options.graph_generation ?? snapshot.graph_generation ?? "snapshot", projected_content_digest, classifier: classifier.version, liveness_hook: "d35-liveness-v1", timezone: options.account_timezone, reader_projection_digest };
+  return { owner_account_id: snapshot.owner_account_id, graph_generation: sha256CanonicalRedacted(generationSeed), reader_projection_digest, projection_authorization_digest: null, projected_content_digest, account_timezone: options.account_timezone,
+    claims, identity_constraints, evidence_index: spans, policy_classes,
     liveness_hook_version: generationSeed.liveness_hook, classifier_version: classifier.version, diagnostics };
 };
 
