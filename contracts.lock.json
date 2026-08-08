@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "publicationStatus": "local-unpushed-qa-evidence",
+  "schemaVersion": 2,
+  "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
     "version": "0.1.0",
@@ -39,10 +39,13 @@
   "source": {
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
+    "ref": "refs/heads/codex/contract-seam-memory-read",
     "commit": "d8a1daf53a3f1cc56df07bac7c0b9ca9bdbca789",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
-    "published": false,
-    "evidence": "The source commit is local and unpushed; this vendored tarball is QA evidence, not a published production artifact."
+    "upstreamBranchPushed": true,
+    "mergedToMain": false,
+    "registryPublished": false,
+    "evidence": "The exact source commit is pushed to the upstream coordination branch; it is not merged to main, registry-published, or adopted in production. This vendored tarball remains QA evidence."
   },
   "toolchain": {
     "artifactBuild": {

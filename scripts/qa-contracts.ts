@@ -26,9 +26,12 @@ export interface ContractLock {
   source: {
     repository: string;
     path: string;
+    ref: string;
     commit: string;
     baselineCommit: string;
-    published: boolean;
+    upstreamBranchPushed: boolean;
+    mergedToMain: boolean;
+    registryPublished: boolean;
     evidence: string;
   };
   toolchain: {
@@ -125,10 +128,16 @@ export function verifyArtifactRecords(
   artifact: ArtifactRecord,
   provenance: ProvenanceRecord,
 ): void {
-  requireEqual("lock schema", lock.schemaVersion, 1);
-  requireEqual("publication status", lock.publicationStatus, "local-unpushed-qa-evidence");
-  requireEqual("published source flag", lock.source.published, false);
-  if (!lock.source.evidence.includes("local and unpushed")) fail("source evidence must say local and unpushed");
+  requireEqual("lock schema", lock.schemaVersion, 2);
+  requireEqual("publication status", lock.publicationStatus, "upstream-branch-qa-evidence");
+  requireEqual("source repository", lock.source.repository, "BasedHardware/omi");
+  requireEqual("source branch", lock.source.ref, "refs/heads/codex/contract-seam-memory-read");
+  requireEqual("upstream branch pushed flag", lock.source.upstreamBranchPushed, true);
+  requireEqual("merged-to-main flag", lock.source.mergedToMain, false);
+  requireEqual("registry-published flag", lock.source.registryPublished, false);
+  if (!lock.source.evidence.includes("not merged to main, registry-published, or adopted in production")) {
+    fail("source evidence must state the non-production publication boundary");
+  }
   if (!/^[0-9a-f]{40}$/.test(lock.source.commit)) fail("source commit must be a full Git object id");
   if (!/^[0-9a-f]{40}$/.test(lock.source.baselineCommit)) fail("baseline commit must be a full Git object id");
 
