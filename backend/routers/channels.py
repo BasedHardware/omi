@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -30,6 +31,8 @@ from services.channel_chat import (
 from utils.executors import db_executor, run_blocking
 from utils.multipart import PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -236,20 +239,31 @@ async def _channel_reply(channel: str, payload: Dict[str, Any]) -> str:
         return 'I could not complete that request. Please try again.'
 
 
+async def _release_failed_claim(channel: str, event_id: str) -> None:
+    try:
+        await run_blocking(db_executor, channels_db.release_webhook_claim, channel, event_id)
+    except Exception:
+        logger.warning('channel=%s could not release a failed webhook claim event_id=%s', channel, event_id)
+
+
 async def _handle_payload(channel: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     event_id = payload['event_id']
     created, existing = await run_blocking(db_executor, channels_db.claim_webhook_event, channel, event_id)
     if not created:
         return await _duplicate_event_response(channel, event_id, existing)
-    reply = await _channel_reply(channel, payload)
-    await _send_and_record(
-        channel,
-        event_id,
-        payload['channel_chat_id'],
-        reply,
-        is_group=payload['channel_chat_id'] != payload['channel_user_id'],
-        provider_mode=payload.get('provider_mode'),
-    )
+    try:
+        reply = await _channel_reply(channel, payload)
+        await _send_and_record(
+            channel,
+            event_id,
+            payload['channel_chat_id'],
+            reply,
+            is_group=payload['channel_chat_id'] != payload['channel_user_id'],
+            provider_mode=payload.get('provider_mode'),
+        )
+    except BaseException:
+        await _release_failed_claim(channel, event_id)
+        raise
     return {'status': 'delivered'}
 
 

@@ -14,6 +14,9 @@ from database.firestore_index_registry import CHANNEL_BINDINGS_BY_UID_CHANNEL_QU
 CHANNELS = frozenset({'telegram', 'imessage', 'sms'})
 LINK_TOKEN_TTL = timedelta(minutes=15)
 LINK_TOKEN_PATTERN = re.compile(r'^[0-9a-f]{48}$')
+FIRESTORE_MAX_BATCH_WRITES = 500
+WEBHOOK_PROCESSING_LEASE = timedelta(minutes=5)
+WEBHOOK_RECLAIMABLE_STATUSES = frozenset({'processing', 'failed'})
 
 
 class ChannelLinkError(ValueError):
@@ -234,22 +237,20 @@ def get_binding(
 ) -> Optional[Dict[str, Any]]:
     if channel not in CHANNELS:
         return None
-    identities = (
-        [channel_chat_id, channel_user_id]
-        if channel_chat_id and channel_chat_id != channel_user_id
-        else [channel_user_id]
-    )
+    identity = channel_chat_id or channel_user_id
+    if not identity:
+        return None
     collection = _client(firestore_client).collection('channel_bindings')
-    for identity in identities:
-        if not identity:
-            continue
-        snapshot = collection.document(_binding_id(channel, channel_user_id, identity)).get()
-        if not snapshot.exists:
-            continue
-        binding = _typed_doc(snapshot)
-        if binding.get('revoked_at') is None:
-            return binding
-    return None
+    snapshot = collection.document(_binding_id(channel, channel_user_id, identity)).get()
+    if not snapshot.exists:
+        return None
+    binding = _typed_doc(snapshot)
+    if binding.get('revoked_at') is not None:
+        return None
+    bound_identity = binding.get('channel_chat_id')
+    if isinstance(bound_identity, str) and bound_identity and bound_identity != identity:
+        return None
+    return binding
 
 
 def list_bindings(uid: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
@@ -270,10 +271,11 @@ def revoke_channel(uid: str, channel: str, *, now: Optional[datetime] = None, fi
     refs = [row.reference for row in rows if _typed_doc(row).get('revoked_at') is None]
     if not refs:
         return 0
-    batch = client.batch()
-    for ref in refs:
-        batch.update(ref, {'revoked_at': revoked_at})
-    batch.commit()
+    for start in range(0, len(refs), FIRESTORE_MAX_BATCH_WRITES):
+        batch = client.batch()
+        for ref in refs[start : start + FIRESTORE_MAX_BATCH_WRITES]:
+            batch.update(ref, {'revoked_at': revoked_at})
+        batch.commit()
     return len(refs)
 
 
@@ -294,6 +296,32 @@ def revoke_binding(
     return True
 
 
+def _webhook_claim_is_stale(event: Dict[str, Any], now: datetime) -> bool:
+    """Whether a claim can be taken from whoever holds it.
+
+    A claim written before leases existed has no `lease_expires_at`. Reading
+    that as "expired" would make every such event reclaimable the instant this
+    deploys, including one a handler picked up seconds earlier — two handlers
+    on the same event means the user gets the reply twice. Its `received_at`
+    dates it just as well, so the lease is derived from that instead, and only
+    a genuinely old claim is reclaimed.
+    """
+    status = event.get('status')
+    if status not in WEBHOOK_RECLAIMABLE_STATUSES:
+        return False
+    if status == 'failed':
+        return True
+    lease_expires_at = event.get('lease_expires_at')
+    if not isinstance(lease_expires_at, datetime):
+        received_at = event.get('received_at')
+        if not isinstance(received_at, datetime):
+            # Neither field is usable, so nothing can date this claim. Leaving
+            # it held forever is the failure this lease exists to end.
+            return True
+        lease_expires_at = received_at + WEBHOOK_PROCESSING_LEASE
+    return lease_expires_at <= now
+
+
 def claim_webhook_event(
     channel: str,
     provider_event_id: str,
@@ -302,21 +330,72 @@ def claim_webhook_event(
     firestore_client: Any = None,
 ) -> Tuple[bool, Optional[Dict[str, Any]]]:
     received_at = now or datetime.now(timezone.utc)
-    ref = _client(firestore_client).collection('channel_webhook_events').document(_event_id(channel, provider_event_id))
+    client = _client(firestore_client)
+    ref = client.collection('channel_webhook_events').document(_event_id(channel, provider_event_id))
     try:
         ref.create(
             {
                 'channel': channel,
                 'provider_event_id': provider_event_id,
                 'status': 'processing',
+                'attempts': 1,
+                'lease_expires_at': received_at + WEBHOOK_PROCESSING_LEASE,
                 'received_at': received_at,
                 'updated_at': received_at,
             }
         )
         return True, None
     except AlreadyExists:
-        snapshot = ref.get()
-        return False, _typed_doc(snapshot) if snapshot.exists else None
+        pass
+
+    @firestore.transactional
+    def apply(transaction: Any) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        snapshot = ref.get(transaction=transaction)
+        existing = _typed_doc(snapshot) if snapshot.exists else None
+        if existing is not None and not _webhook_claim_is_stale(existing, received_at):
+            return False, existing
+        transaction.set(
+            ref,
+            {
+                'channel': channel,
+                'provider_event_id': provider_event_id,
+                'status': 'processing',
+                'attempts': int(existing.get('attempts') or 0) + 1 if existing else 1,
+                'lease_expires_at': received_at + WEBHOOK_PROCESSING_LEASE,
+                'received_at': (existing or {}).get('received_at') or received_at,
+                'updated_at': received_at,
+            },
+        )
+        return True, existing
+
+    return cast(Tuple[bool, Optional[Dict[str, Any]]], run_transactional(client, apply))
+
+
+def release_webhook_claim(
+    channel: str,
+    provider_event_id: str,
+    *,
+    now: Optional[datetime] = None,
+    firestore_client: Any = None,
+) -> bool:
+    """Mark an in-flight claim retryable so the provider's next delivery can reclaim it.
+
+    Only a claim still in ``processing`` is released: once the reply exists the event owns a
+    ``ready`` payload that must stay redeliverable instead of being regenerated.
+    """
+    released_at = now or datetime.now(timezone.utc)
+    client = _client(firestore_client)
+    ref = client.collection('channel_webhook_events').document(_event_id(channel, provider_event_id))
+
+    @firestore.transactional
+    def apply(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists or _typed_doc(snapshot).get('status') != 'processing':
+            return False
+        transaction.update(ref, {'status': 'failed', 'lease_expires_at': released_at, 'updated_at': released_at})
+        return True
+
+    return cast(bool, run_transactional(client, apply))
 
 
 def update_webhook_event(

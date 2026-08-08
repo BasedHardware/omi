@@ -459,3 +459,234 @@ def test_describe_image_preserves_mime_type_in_data_url(monkeypatch):
 
     assert result == 'A test image.'
     assert captured['messages'][0]['content'][1]['image_url']['url'] == 'data:image/png;base64,encoded'
+
+
+def test_group_binding_never_falls_back_to_the_sender_personal_binding():
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    token, _ = channels_db.issue_link_token('uid-personal', 'telegram', now=now, firestore_client=client)
+    channels_db.consume_link_token('telegram', token, '42', '42', now=now, firestore_client=client)
+
+    assert channels_db.get_binding('telegram', '42', '42', firestore_client=client)['uid'] == 'uid-personal'
+    assert channels_db.get_binding('telegram', '42', '-999', firestore_client=client) is None
+    assert channels_db.revoke_binding('telegram', '42', '-999', now=now, firestore_client=client) is False
+    assert channels_db.get_binding('telegram', '42', '42', firestore_client=client)['uid'] == 'uid-personal'
+
+
+def test_revoking_a_channel_chunks_writes_under_the_firestore_batch_cap():
+    commits = []
+
+    class CappedBatch:
+        def __init__(self, inner):
+            self._inner = inner
+            self._writes = 0
+
+        def update(self, ref, payload):
+            self._writes += 1
+            if self._writes > channels_db.FIRESTORE_MAX_BATCH_WRITES:
+                raise ValueError('maximum 500 writes allowed per request')
+            self._inner.update(ref, payload)
+
+        def commit(self):
+            commits.append(self._writes)
+            return self._inner.commit()
+
+    class CappedClient:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def batch(self):
+            return CappedBatch(self._inner.batch())
+
+    inner = MockFirestore()
+    client = CappedClient(inner)
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    total = channels_db.FIRESTORE_MAX_BATCH_WRITES + 3
+    for index in range(total):
+        inner.collection('channel_bindings').document(f'binding-{index}').set(
+            {
+                'channel': 'telegram',
+                'uid': 'uid-1',
+                'channel_user_id': str(index),
+                'channel_chat_id': str(index),
+                'linked_at': now,
+                'revoked_at': None,
+            }
+        )
+
+    assert channels_db.revoke_channel('uid-1', 'telegram', now=now, firestore_client=client) == total
+    assert commits == [channels_db.FIRESTORE_MAX_BATCH_WRITES, 3]
+    assert channels_db.list_bindings('uid-1', firestore_client=inner) == []
+
+
+def test_a_stale_processing_claim_is_reclaimed_instead_of_dropped():
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+
+    assert channels_db.claim_webhook_event('telegram', 'update-9', now=now, firestore_client=client) == (True, None)
+
+    created, existing = channels_db.claim_webhook_event('telegram', 'update-9', now=now, firestore_client=client)
+    assert not created
+    assert existing['status'] == 'processing'
+
+    expired = now + channels_db.WEBHOOK_PROCESSING_LEASE
+    created, existing = channels_db.claim_webhook_event('telegram', 'update-9', now=expired, firestore_client=client)
+    assert created
+    assert existing['status'] == 'processing'
+
+    stored = (
+        client.collection('channel_webhook_events')
+        .document(channels_db._event_id('telegram', 'update-9'))
+        .get()
+        .to_dict()
+    )
+    assert stored['attempts'] == 2
+    assert stored['lease_expires_at'] == expired + channels_db.WEBHOOK_PROCESSING_LEASE
+    assert stored['received_at'] == now
+
+
+def test_a_legacy_claim_is_dated_by_received_at_not_treated_as_expired():
+    """Events written before leases existed must not all become reclaimable at once.
+
+    A pre-lease document has no `lease_expires_at`. Reading that as "expired"
+    would let a second handler take an event the first picked up seconds before
+    this deployed, and the user gets the reply twice. `received_at` dates it.
+    """
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    ref = client.collection('channel_webhook_events').document(channels_db._event_id('telegram', 'legacy-1'))
+    ref.create(
+        {
+            'channel': 'telegram',
+            'provider_event_id': 'legacy-1',
+            'status': 'processing',
+            'received_at': now,
+            'updated_at': now,
+        }
+    )
+
+    # Still inside the window the lease would have covered: leave it alone.
+    fresh = now + channels_db.WEBHOOK_PROCESSING_LEASE / 2
+    created, existing = channels_db.claim_webhook_event(
+        'telegram', 'legacy-1', now=fresh, firestore_client=client
+    )
+    assert not created
+    assert existing['status'] == 'processing'
+
+    # Past it, the claim is genuinely abandoned and can be reclaimed.
+    stale = now + channels_db.WEBHOOK_PROCESSING_LEASE
+    created, _ = channels_db.claim_webhook_event('telegram', 'legacy-1', now=stale, firestore_client=client)
+    assert created
+
+
+def test_an_undatable_claim_is_reclaimable_rather_than_held_forever():
+    """No lease and no received_at: nothing can date it, so it must not stick."""
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+    ref = client.collection('channel_webhook_events').document(channels_db._event_id('sms', 'orphan-1'))
+    ref.create({'channel': 'sms', 'provider_event_id': 'orphan-1', 'status': 'processing'})
+
+    created, _ = channels_db.claim_webhook_event('sms', 'orphan-1', now=now, firestore_client=client)
+    assert created
+
+
+def test_a_failed_claim_is_released_for_immediate_retry_but_a_ready_reply_is_kept():
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+
+    channels_db.claim_webhook_event('sms', 'SM1', now=now, firestore_client=client)
+    assert channels_db.release_webhook_claim('sms', 'SM1', now=now, firestore_client=client) is True
+    created, existing = channels_db.claim_webhook_event('sms', 'SM1', now=now, firestore_client=client)
+    assert created
+    assert existing['status'] == 'failed'
+
+    channels_db.update_webhook_event('sms', 'SM1', {'status': 'ready', 'reply': 'hi'}, firestore_client=client)
+    assert channels_db.release_webhook_claim('sms', 'SM1', now=now, firestore_client=client) is False
+    created, existing = channels_db.claim_webhook_event('sms', 'SM1', now=now, firestore_client=client)
+    assert not created
+    assert existing['status'] == 'ready'
+
+
+def test_a_failing_handler_releases_its_claim_so_the_provider_retry_is_processed(monkeypatch):
+    import routers.channels as channels_router
+
+    client = MockFirestore()
+    now = datetime(2026, 8, 2, 12, 0, tzinfo=timezone.utc)
+
+    async def fake_run_blocking(_executor, fn, *args, **kwargs):
+        if fn is channels_db.claim_webhook_event:
+            return channels_db.claim_webhook_event(*args, now=now, firestore_client=client)
+        if fn is channels_db.release_webhook_claim:
+            return channels_db.release_webhook_claim(*args, now=now, firestore_client=client)
+        raise AssertionError(fn)
+
+    async def exploding_reply(_channel, _payload):
+        raise RuntimeError('core chat exploded')
+
+    monkeypatch.setattr(channels_router, 'run_blocking', fake_run_blocking)
+    monkeypatch.setattr(channels_router, '_channel_reply', exploding_reply)
+
+    payload = {'event_id': 'update-77', 'channel_user_id': '42', 'channel_chat_id': '42', 'text': 'hello'}
+    with pytest.raises(RuntimeError):
+        asyncio.run(channels_router._handle_payload('telegram', payload))
+
+    delivered = {}
+
+    async def working_reply(_channel, _payload):
+        return 'answer'
+
+    async def fake_send_and_record(channel, event_id, chat_id, reply, **kwargs):
+        delivered.update({'channel': channel, 'event_id': event_id, 'chat_id': chat_id, 'reply': reply})
+
+    monkeypatch.setattr(channels_router, '_channel_reply', working_reply)
+    monkeypatch.setattr(channels_router, '_send_and_record', fake_send_and_record)
+    assert asyncio.run(channels_router._handle_payload('telegram', payload)) == {'status': 'delivered'}
+    assert delivered['reply'] == 'answer'
+
+
+def test_over_quota_channel_messages_never_reach_the_media_pipeline(monkeypatch):
+    calls = []
+
+    class QuotaExceeded(Exception):
+        pass
+
+    def fake_enforce_chat_quota(_uid, *, platform):
+        calls.append(('quota', platform))
+        raise QuotaExceeded()
+
+    async def fake_build_media_context(_uid, _attachments):
+        calls.append(('media', None))
+        return 'described'
+
+    async def fake_run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(channel_chat, 'run_blocking', fake_run_blocking)
+    monkeypatch.setattr(channel_chat, 'enforce_chat_quota', fake_enforce_chat_quota)
+    monkeypatch.setattr(channel_chat, 'build_media_context', fake_build_media_context)
+
+    with pytest.raises(QuotaExceeded):
+        asyncio.run(
+            channel_chat.generate_channel_reply(
+                'uid-1', 'telegram', 'hello', attachments=[{'source': 'telegram', 'file_id': 'file-1'}]
+            )
+        )
+    assert calls == [('quota', 'telegram')]
+
+
+def test_sms_delivery_stays_off_the_reserved_auth_executor(monkeypatch):
+    from utils.executors import critical_executor, postprocess_executor
+
+    used = []
+
+    async def fake_run_blocking(executor, fn, *args, **kwargs):
+        used.append(executor)
+        return 'SM1'
+
+    monkeypatch.setattr(channel_chat, 'run_blocking', fake_run_blocking)
+    asyncio.run(channel_chat.send_channel_message('sms', '+15551234567', 'hello'))
+    assert used == [postprocess_executor]
+    assert critical_executor not in used
