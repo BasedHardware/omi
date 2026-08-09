@@ -8,6 +8,8 @@ import {
   LANE_REGISTRY,
   writeReceipt,
   readReceipt,
+  readReceiptHistory,
+  hasNonPassReceipt,
   listReceipts,
   verifyReceipt,
   receiptPath,
@@ -129,6 +131,51 @@ describe("writeReceipt / readReceipt round trip", () => {
     assert.ok(read.stamps["core-foundation"].treeHash, "stamp must carry a real tree hash");
     // L2 declares platform too; L1 must NOT, per LANE_REGISTRY.L1.repos.
     assert.equal(read.stamps.platform, undefined);
+  });
+
+  describe("append-only history", () => {
+    // red-proof: replace schema 3's exclusive per-run publish in
+    // writeReceipt() with the old schema-2 `writeFileSync(schema2ReceiptPath(...))`
+    // slot. The PASS then replaces the FAIL and every history assertion below
+    // fails. APPLIED, OBSERVED RED, REVERTED during M1 acceptance.
+    it("keeps a FAIL observable after a PASS on the identical lane+tree", () => {
+      const failed = writeReceipt({
+        lane: "L1",
+        result: "fail",
+        durationMs: 40,
+        notes: "forced red",
+        workspaceRoot,
+      });
+      const passed = writeReceipt({
+        lane: "L1",
+        result: "pass",
+        durationMs: 20,
+        notes: "rerun green",
+        workspaceRoot,
+      });
+
+      assert.equal(
+        failed.key,
+        passed.key,
+        "the two runs must measure the identical lane+tree",
+      );
+      assert.notEqual(failed.path, passed.path, "every run must get an immutable entry");
+      assert.equal(
+        readReceipt("L1", { workspaceRoot }).result,
+        "pass",
+        "current lookup stays compatible",
+      );
+
+      const history = readReceiptHistory("L1", { workspaceRoot });
+      assert.deepEqual(history.map((receipt) => receipt.result), ["fail", "pass"]);
+      assert.equal(history[0].notes, "forced red", "the original failure remains retrievable");
+      assert.equal(hasNonPassReceipt("L1", { workspaceRoot }), true);
+      assert.equal(
+        checkLaneClaims("fix: x\n\nLanes: L1\n", { workspaceRoot }).ok,
+        true,
+        "check-lane-claims keeps using the current PASS without erasing the FAIL",
+      );
+    });
   });
 
   it("readReceipt returns null, not throw, when nothing was written", () => {
