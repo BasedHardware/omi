@@ -301,13 +301,28 @@ function pivotPlatformSeries(
   // across quiet periods or present a stale bucket as the latest point.
   // Only fill when the query actually succeeded — otherwise a failed trend
   // query produces a misleading synthetic all-zero series.
+  //
+  // Anchor the zero-fill boundary to the latest row timestamp, not wall-clock
+  // now(): posthogResults caches constant now()-based queries for 30 min, so
+  // the returned rows stop at the cached query boundary. Filling to Date.now()
+  // would inject up to ~30 min of fictitious inactivity at the chart's right
+  // edge on every cache hit.
   if (queryOk) {
-    const nowSec = Date.now() / 1000;
     const bucketSec = bm * 60;
-    const lastCompleted =
-      Math.floor(nowSec / bucketSec) * bucketSec - bucketSec;
-    const firstBucket = lastCompleted - wh * 3600;
-    for (let t = firstBucket; t <= lastCompleted; t += bucketSec) {
+    let endBoundary: number;
+    if (byT.size > 0) {
+      let maxT = 0;
+      for (const t of Array.from(byT.keys())) if (t > maxT) maxT = t;
+      // Snap the last real bucket to a clean boundary.
+      endBoundary = Math.floor(maxT / bucketSec) * bucketSec;
+    } else {
+      // No rows at all (legitimate zero activity): use wall-clock so the
+      // chart shows a full zero line for the current window.
+      const nowSec = Date.now() / 1000;
+      endBoundary = Math.floor(nowSec / bucketSec) * bucketSec - bucketSec;
+    }
+    const firstBucket = endBoundary - wh * 3600;
+    for (let t = firstBucket; t <= endBoundary; t += bucketSec) {
       if (!byT.has(t)) {
         byT.set(t, { t, total: 0, macos: 0, windows: 0, ios: 0, android: 0 });
       }
