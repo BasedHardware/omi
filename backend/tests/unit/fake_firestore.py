@@ -112,8 +112,23 @@ class MockQuery:
         self._collection_path = collection_path
         self._predicates: list[tuple[str, str, Any]] = []
 
-    def where(self, field: str, op: str, value: Any) -> "MockQuery":
-        self._predicates.append((field, op, value))
+    def where(self, *args, **kwargs) -> "MockQuery":
+        # Support both the positional (field, op, value) form and the modern
+        # keyword form ``where(filter=FieldFilter(...))`` that the channels
+        # query spec uses. FieldFilter exposes ``field_path``, ``op_string`` and
+        # ``value``.
+        if kwargs.get('filter') is not None:
+            filt = kwargs['filter']
+            field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
+            op = getattr(filt, 'op_string', '==')
+            value = getattr(filt, 'value', None)
+            if field is not None:
+                self._predicates.append((field, op, value))
+            return self
+        if len(args) == 3 and not kwargs:
+            field, op, value = args
+            self._predicates.append((field, op, value))
+            return self
         return self
 
     def order_by(self, *args, **kwargs) -> "MockQuery":
@@ -127,11 +142,7 @@ class MockQuery:
 
     def stream(self):
         prefix = f"{self._collection_path}/"
-        rows = [
-            MockSnapshot(data)
-            for path, data in self._db.docs.items()
-            if path.startswith(prefix)
-        ]
+        rows = [MockSnapshot(data) for path, data in self._db.docs.items() if path.startswith(prefix)]
         for field, op, value in self._predicates:
             if op != "==":
                 continue
@@ -147,8 +158,8 @@ class MockCollectionReference:
     def document(self, document_id: str) -> MockDocumentReference:
         return MockDocumentReference(f"{self._collection_path}/{document_id}", self._db)
 
-    def where(self, field: str, op: str, value: Any) -> MockQuery:
-        return MockQuery(self._db, self._collection_path).where(field, op, value)
+    def where(self, *args, **kwargs) -> MockQuery:
+        return MockQuery(self._db, self._collection_path).where(*args, **kwargs)
 
     def stream(self) -> list[MockSnapshot]:
         return MockQuery(self._db, self._collection_path).stream()
@@ -178,6 +189,10 @@ class MockTransaction(MockBatch):
 
     def __init__(self, db: "MockFirestore"):
         super().__init__(db)
+        # Newer google-cloud-firestore ``transactional`` wrappers read this flag
+        # on the transaction to decide whether reads are allowed. The fake is
+        # the read-write transaction the SDK creates for ``client.transaction()``.
+        self._read_only = False
 
     def _begin(self, retry_id=None) -> None:
         pass
