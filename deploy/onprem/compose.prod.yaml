@@ -1,0 +1,17 @@
+name: omi-onprem
+# Omi self-host — PROD (hermetic). Base services + `omi` internal:true = the no-egress proof of
+# ADR-0001. Inference/LLM/embeddings endpoints are operator services reachable on the `omi` net (NO
+# host access). Expose the API only via the TLS proxies (`--profile auth`). No implicit default:
+# always pass -f (there is no docker-compose.yml).
+#   docker compose -f compose.prod.yaml [--profile auth|chat|…] up -d
+include:
+  - compose.base.yaml
+
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.prod
+networks:
+  omi:
+    internal: true

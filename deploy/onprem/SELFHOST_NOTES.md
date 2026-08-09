@@ -8,9 +8,28 @@ self-host deployment (later WPs add services to the same compose).
 > (outside the `src/omi` source tree). This file instead lives in the source because it is the
 > operational runbook for the compose stack.
 
+## Environments (compose + env per-environment — ADR-0043)
+
+The stack is split per environment on a common base — **no `docker-compose.yml`, no override** (studio
+`compose-environments-onprem`):
+
+| Entrypoint | Posture | When | Env file (layered) |
+|---|---|---|---|
+| `compose.prod.yaml` | **hermetic** (`omi internal:true`, no egress = ADR-0001 proof); inference is an operator service on the `omi` net; API behind the TLS proxies | production; the offline/hermetic verification below | `backend.env.base` + `backend.env.prod` |
+| `compose.dev.yaml`  | **non-hermetic dev** (`omi` non-internal; backend maps `host.docker.internal` to reach host inference for RAG; API published on :8000) | local dev, chat/RAG, seeding, E2E | `backend.env.base` + `backend.env.dev` |
+
+Always pass `-f compose.<env>.yaml` (there is no implicit default). Profiles
+(`mongo/objstore/push/chat/inference/auth`) are feature toggles, added per-run in any env. Unit tests
+do **not** use compose (file-isolated, ADR-0026). Copy the env templates once:
+```bash
+cd deploy/onprem
+for e in base dev prod; do cp backend.env.$e.example backend.env.$e; done
+sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
+```
+
 ## What the baseline contains (WP0)
 
-Three services (`deploy/onprem/docker-compose.yml`), network **`internal: true`** (no egress):
+Three services (`deploy/onprem/compose.prod.yaml`), network **`internal: true`** (no egress):
 
 | Service | Image / build | Role |
 |---|---|---|
@@ -32,17 +51,17 @@ everything is in the containers. The **build** needs internet access (see Deviat
 ```bash
 cd deploy/onprem
 
-# 1. create the env file with a real secret (backend.env is gitignored by *.env)
-cp backend.env.example backend.env
-sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env
+# 1. create the env files (gitignored) + a real secret — see the Environments section above:
+for e in base prod; do cp backend.env.$e.example backend.env.$e; done
+sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
 
-# 2. build + up (hermetic posture by default: no egress)
-docker compose up -d --build
-docker compose ps            # the 3 services must become 'healthy'
+# 2. build + up the PROD (hermetic) stack: no egress
+docker compose -f compose.prod.yaml up -d --build
+docker compose -f compose.prod.yaml ps   # the 3 services must become 'healthy'
 
 # logs / stop
-docker compose logs -f backend
-docker compose down          # add -v to wipe emulator/valkey data
+docker compose -f compose.prod.yaml logs -f backend
+docker compose -f compose.prod.yaml down # add -v to wipe emulator/valkey data
 ```
 
 ## Verification (WP0 acceptance)
@@ -51,19 +70,19 @@ The network is `internal` -> no published port: test from **inside** the contain
 
 ```bash
 # 1) the backend responds (no auth)
-docker compose exec -T backend curl -fsS http://localhost:8080/v1/health
+docker compose -f compose.prod.yaml exec -T backend curl -fsS http://localhost:8080/v1/health
 #    expected: {"status":"ok"}
 
 # 2) end-to-end auth + Firestore emulator round-trip (verified)
-docker compose exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
+docker compose -f compose.prod.yaml exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
   http://localhost:8080/v3/memories -H 'Authorization: Bearer dev-token'
 #    expected: 200 (LOCAL_DEVELOPMENT=true -> Bearer dev-token = uid 123; reads from the emulator)
-docker compose exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
+docker compose -f compose.prod.yaml exec -T backend curl -sS -o /dev/null -w '%{http_code}\n' \
   http://localhost:8080/v3/memories
 #    expected: 401 (auth enforced)
 
 # 3) HERMETICITY PROOF: no egress to the internet
-docker compose exec -T backend sh -c 'curl -m3 https://api.openai.com/v1/models; echo "exit=$?"'
+docker compose -f compose.prod.yaml exec -T backend sh -c 'curl -m3 https://api.openai.com/v1/models; echo "exit=$?"'
 #    expected: FAILURE ("Could not resolve host", exit 6) -> zero external calls by construction
 ```
 
@@ -72,7 +91,7 @@ docker compose exec -T backend sh -c 'curl -m3 https://api.openai.com/v1/models;
 The hermetic posture publishes no ports. To poke the endpoints from the host:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.expose.override.yml up -d
+docker compose -f compose.dev.yaml up -d
 curl -fsS http://localhost:8000/v1/health
 ```
 
@@ -157,12 +176,12 @@ cd deploy/onprem
 cp llm_gateway.env.example llm_gateway.env      # set OPENAI_BASE_URL (your Ollama/vLLM /v1) + a token
 TOK=$(openssl rand -hex 24)
 sed -i "s|^OMI_LLM_GATEWAY_SERVICE_TOKEN=.*|OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK|" llm_gateway.env
-# backend.env: same token + the gateway wiring (see backend.env.example "chat LLM gateway"):
+# backend.env: same token + the gateway wiring (see backend.env.dev.example "chat LLM gateway"):
 #   OMI_LLM_GATEWAY_FEATURE_MODE=gateway · OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 ·
 #   OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK · OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
 # Pin the chat model to one your endpoint serves (all features -> one local model):
 #   deploy/onprem/llm_gateway/generated_route_overrides.yaml   (default: qwen2.5:14b)
-docker compose --profile chat up -d
+docker compose -f compose.dev.yaml --profile chat up -d
 ```
 
 Three on-prem requirements the gateway wiring encodes (each was a real failure the E2E caught):
@@ -299,7 +318,7 @@ at `pretrained_models/snakers4_silero-vad_master/tests/data/test.wav`, then run 
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 
 ```
-docker compose --profile inference up -d --build
+docker compose -f compose.prod.yaml --profile inference up -d --build
 ```
 
 Once the profile is up (and model weights are provisioned into the volume), run all three
@@ -352,7 +371,7 @@ Requirements and gotchas:
   (multilingual, 99 languages, commodity GPU incl. sm_120) — `PARAKEET_INFERENCE_MODE=nim` loads no
   NeMo model and needs no GPU. The high-performance datacenter path (Parakeet on NeMo) is the
   documented alternative on the `parakeet` service (see the header of that service in the compose and
-  `backend.env.example`). Verified 2026-08-03 on the RTX 5060 Ti: an Italian FLEURS clip →
+  `backend.env.dev.example`). Verified 2026-08-03 on the RTX 5060 Ti: an Italian FLEURS clip →
   `parakeet` gateway → `whisper` → correct Italian transcription with auto-detected language, via
   `deploy/onprem/run-inference-live-tests.sh` (diarizer PASS · nllb PASS · whisper PASS).
 - Point the backend at them in `backend.env`: `HOSTED_PARAKEET_API_URL=http://parakeet:8080`,
@@ -367,7 +386,7 @@ committed [`Dockerfile.test`](Dockerfile.test):
 
 ```bash
 cd deploy/onprem
-docker compose build                                            # WP0 images (once)
+docker compose -f compose.prod.yaml build                                            # WP0 images (once)
 docker build -t omi-onprem-backend-test -f Dockerfile.test .    # test image
 ```
 
@@ -530,10 +549,10 @@ docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app 
 docker rm -f kc-contract    # cleanup
 ```
 
-### Two known residual failures (not our code, not fixable via the harness)
+### Three known residual failures (not our code, not fixable via the harness)
 
-With the harness above the offline unit sweep is green except two files, both pre-existing at the
-branch-point and unrelated to the self-host work:
+With the harness above the offline unit sweep is green except three files, all pre-existing/upstream
+and unrelated to the self-host work:
 
 - `tests/unit/test_auto_dev_backend_scope.py` — one subtest extracts and executes the real
   `.github/workflows/gcp_backend_auto_dev.yml` scope step's bash against a temp git repo; the
@@ -542,6 +561,14 @@ branch-point and unrelated to the self-host work:
   bearer -> close 1008), which requires `LOCAL_DEVELOPMENT` unset. The unit sweep sets it because ~46
   other files rely on the dev-auth bypass; a single global env cannot satisfy both. The file passes
   in isolation with `LOCAL_DEVELOPMENT` unset.
+- `tests/unit/test_sys_modules_hermeticity.py` — the single-process-safe-subset guard fails because
+  several upstream STT test files (`test_parakeet_diarization/nim/prerecorded/stream_session.py`,
+  `test_sync_transcription_prefs.py`) write `DEEPGRAM_API_KEY` at module/fixture scope without
+  cleanup, and two upstream STT tests (`test_modulate_stt.py::TestLanguageRouting`,
+  `test_streaming_deepgram_backoff.py::TestGetSttServiceForLanguage`) assert the "retired deepgram
+  config -> non-deepgram default" path, which only holds when `DEEPGRAM_API_KEY` is unset. The victim
+  tests are latently order-dependent upstream (they never establish that precondition); left as-is by
+  decision — not introduced by the self-host work. Each file passes in isolation.
 
 ## Testing the Flutter app offline
 
@@ -642,7 +669,7 @@ cp .env.dev.example .env                 # edit HOST_IP = the address the DEVICE
 HOST_IP=<your-ip> ./gen-dev-certs.sh     # self-signed CA + server cert (SAN=HOST_IP); gitignored
 # backend.env: AUTH_BACKEND=oidc + OIDC_ISSUER=${KC_HOSTNAME}/realms/omi
 #              + OIDC_JWKS_URL=http://keycloak:8090/realms/omi/protocol/openid-connect/certs + LOCAL_DEVELOPMENT=false
-docker compose --profile auth up -d --build     # keycloak(+kc-proxy https) + api-proxy(https) + backend + deps
+docker compose -f compose.prod.yaml --profile auth up -d --build     # keycloak(+kc-proxy https) + api-proxy(https) + backend + deps
 ```
 `keycloak` runs http-only behind `kc-proxy` (TLS on `${KC_HTTPS_PORT}`, `--proxy-headers`); the API runs
 behind `api-proxy` (TLS on `${API_HTTPS_PORT}`). The realm (`keycloak/omi-realm.example.json`) imports
@@ -687,7 +714,7 @@ Remote push is the one allowed cloud dependency, behind `PUSH_NOTIFICATION_BACKE
 ```bash
 cd deploy/onprem
 # backend.env: PUSH_NOTIFICATION_BACKEND=unifiedpush + UNIFIEDPUSH_INTERNAL_BASE_URL=http://ntfy:80
-docker compose --profile push up -d           # ntfy (internal) + ntfy-proxy (TLS on NTFY_HTTPS_PORT)
+docker compose -f compose.prod.yaml --profile push up -d           # ntfy (internal) + ntfy-proxy (TLS on NTFY_HTTPS_PORT)
 ```
 
 `ntfy` stays **internal** (on `omi` only); only the TLS reverse proxy `ntfy-proxy` is on `edge` with a
@@ -749,5 +776,5 @@ Proven flow (logs verbatim):
 ## Git notes
 
 Work happens on the `fullonprem` branch (ADR-0013). `backend.env` is ignored (`*.env`); the
-committed files are `backend.env.example`, the compose files, the Dockerfiles and this file. Until
+committed files are the `backend.env.*.example`, the `compose.{base,prod,dev}.yaml`, the Dockerfiles and this file. Until
 the remotes are reconciled to a fork, `git push` is unavailable: commits stay local.

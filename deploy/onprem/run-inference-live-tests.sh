@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Reproducible live tests for the on-prem inference services, run against the services
-# exactly as declared in docker-compose.yml (profile `inference`) — no ad-hoc `docker run`
+# exactly as declared in compose.dev.yaml (profile `inference`) — no ad-hoc `docker run`
 # servers. This is the codified version of the manual live-test recipes in SELFHOST_NOTES:
 # it brings the compose profile up, waits for health, then runs each backend live test
 # against its compose service.
@@ -41,7 +41,7 @@ LIBRISPEECH_URL="https://www.openslr.org/resources/12/test-clean.tar.gz"
 
 SERVICES=("$@"); [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(diarizer nllb whisper)
 
-compose() { docker compose -p "$PROJECT" -f "$COMPOSE_DIR/docker-compose.yml" "$@"; }
+compose() { docker compose -p "$PROJECT" -f "$COMPOSE_DIR/compose.dev.yaml" "$@"; }
 cid() { echo "${PROJECT}-$1-1"; }
 # whisper listens on 8000 (OpenAI-compatible), the rest on 8080.
 svc_port() { case "$1" in whisper) echo 8000 ;; *) echo 8080 ;; esac; }

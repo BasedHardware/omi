@@ -1,17 +1,11 @@
-# Omi self-host — WP0 baseline (offline, hermetic by construction).
-#
-# The `omi` network is `internal: true`: containers have NO route to the internet.
-# This IS the proof of "zero external calls" (ADR-0001): the core boots and serves
-# with no cloud, by construction. The build (which downloads liblc3, deps, the
-# emulator jar) runs on the daemon network, not on this service network, so it works.
-#
-# Verify (no host port on an internal network -> test from inside):
-#   docker compose up -d --build
-#   docker compose exec backend curl -fsS http://localhost:8080/v1/health   # {"status":"ok"}
-#   docker compose exec backend sh -c 'curl -m3 https://api.openai.com; echo exit=$?'  # must FAIL
-#
-# To curl from the host (accepts egress), add the override:
-#   docker compose -f docker-compose.yml -f docker-compose.expose.override.yml up -d
+# Omi self-host — COMPOSE BASE (common services). NOT run directly (ADR-0043). Use an environment
+# entrypoint that `include`s this base:
+#   compose.prod.yaml  — hermetic (`omi internal:true` = the no-egress proof of ADR-0001)
+#   compose.dev.yaml   — non-hermetic dev (host access + published API)
+# This base intentionally leaves the `omi` network WITHOUT `internal` — the posture is set by the
+# environment file, not here. The `edge` network + the profiles (mongo/objstore/push/chat/inference/
+# auth, feature toggles selected per-run) live here. See docs studio compose-environments-onprem.
+# The build (liblc3, deps, emulator jar) runs on the daemon network, so it works offline at runtime.
 
 name: omi-onprem
 
@@ -139,7 +133,7 @@ services:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
         PYTHON_BASE_IMAGE: python:3.11-slim
     env_file:
-      - ./backend.env
+      - ./backend.env.base
     # create the temp dirs used at runtime (main.py does not create them), then start uvicorn
     command:
       - sh
@@ -196,6 +190,26 @@ services:
       retries: 12
       start_period: 20s
     networks: [omi, edge]
+    restart: unless-stopped
+
+  # Self-hosted vector store (ADR-0033/0004) — the on-prem alternative to Pinecone, same opt-in shape
+  # as `mongo` (ADR-0002) and `rustfs` (ADR-0032). Stays on the internal `omi` net: the backend reaches
+  # it by name, no egress. The Qdrant adapter auto-creates each collection at QDRANT_VECTOR_DIM (cosine)
+  # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
+  #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["chat"]
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    healthcheck:
+      # Qdrant serves /readyz once the storage is up; no curl in the image, use the bundled shell probe.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [omi]
     restart: unless-stopped
 
   # ---- Optional local inference (ADR-0035) — GPU services, opt-in via the `inference` profile.
@@ -389,7 +403,6 @@ services:
 networks:
   omi:
     driver: bridge
-    internal: true
   # Non-internal network for the TLS reverse proxies so their published ports have host ingress
   # (the `omi` net is internal:true → no external routing). Proxies join both: `edge` for the
   # device/host, `omi` to reach keycloak/backend by service name.
@@ -400,3 +413,5 @@ volumes:
   # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
   # out-of-band before first `--profile inference` run — the internal network has no egress.
   inference-models:
+  # Qdrant vector-store persistence (self-hosted vector backend, ADR-0033; `chat` profile).
+  qdrant-storage:

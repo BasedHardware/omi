@@ -1,3 +1,11 @@
 # Operator-generated TLS material (never commit private keys) and local compose env.
 certs/
 .env
+
+# Real per-environment env files carry secrets — never commit them. The `*.example` templates ARE
+# committed (they are the source of truth for the structure). `*.env` (root) covers the old single
+# files; these patterns cover the split base/dev/prod files (which don't end in `.env`).
+backend.env.*
+llm_gateway.env.*
+!backend.env.*.example
+!llm_gateway.env.*.example

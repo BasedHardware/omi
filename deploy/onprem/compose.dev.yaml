@@ -1,0 +1,20 @@
+name: omi-onprem
+# Omi self-host — DEV (NOT hermetic; do not use for the ADR-0001 proof). Base services, but:
+#  - `omi` stays non-internal (egress), so the backend can reach an embeddings/LLM endpoint on the
+#    HOST (e.g. host Ollama /v1/embeddings) for RAG — mapped via host.docker.internal;
+#  - the backend API is published on the host (8000) for manual curls / the seed.
+# In PROD none of this applies (compose.prod.yaml): the backend stays internal and inference is an
+# operator service on the `omi` net. See docs studio compose-environments-onprem + D33.
+#   docker compose -f compose.dev.yaml --profile chat up -d
+#   # backend.env (dev): OMI_EMBEDDINGS_BASE_URL=http://host.docker.internal:11434/v1
+include:
+  - compose.base.yaml
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8080"
