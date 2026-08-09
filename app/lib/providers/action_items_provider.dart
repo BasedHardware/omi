@@ -25,21 +25,43 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 
+/// The subset of [api.updateActionItem] the completion toggle needs. The real
+/// function takes more optional named arguments and remains assignable here.
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
+  String actionItemId, {
+  String? description,
+  bool? completed,
+  DateTime? dueAt,
+});
+
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    UpdateActionItemRequest? updateActionItemRequest,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
-        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final UpdateActionItemRequest _updateActionItemRequest;
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
 
   List<ActionItemWithMetadata> _actionItems = [];
+
+  /// Puts items in the list without a fetch, so a widget test can render the
+  /// page against known content. Pair it with a fake [UpdateActionItemRequest]
+  /// if the test toggles completion — the real one would reach the network and
+  /// the optimistic update would roll back when it failed.
+  @visibleForTesting
+  void seedItems(List<ActionItemWithMetadata> items) {
+    _actionItems = List.of(items);
+    notifyListeners();
+  }
 
   bool _isLoading = false;
   bool _isFetching = false;
@@ -300,7 +322,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final success = await api.updateActionItem(
+      final success = await _updateActionItemRequest(
         item.id,
         description: item.description,
         completed: newState,

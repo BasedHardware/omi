@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/shared.dart';
-// LOCAL-ONLY DEMO DATA — DO NOT COMMIT.
-import 'package:omi/dev_demo_data.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
@@ -531,17 +529,6 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
 // Daily Summaries API
 
 Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
-  // LOCAL-ONLY DEMO DATA — DO NOT COMMIT. See lib/dev_demo_data.dart.
-  //
-  // Recaps have no provider to seed: home_content, the conversations carousel
-  // and ConversationProvider each call this function directly. Short-circuiting
-  // here is the single seam that reaches all of them.
-  if (kDemoDataEnabled) {
-    final all = demoDailySummaries();
-    if (offset >= all.length) return [];
-    return all.skip(offset).take(limit).toList();
-  }
-
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
     headers: {},

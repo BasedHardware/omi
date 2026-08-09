@@ -31,7 +31,7 @@ void main() {
 
   testWidgets('the task list scrolls when its content overflows', (tester) async {
     final actionItems = ActionItemsProvider();
-    actionItems.seedDemoData(List.generate(40, item));
+    actionItems.seedItems(List.generate(40, item));
 
     await tester.pumpWidget(
       MultiProvider(

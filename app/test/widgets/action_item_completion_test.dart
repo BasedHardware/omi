@@ -11,6 +11,8 @@ import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
+import 'support/fake_action_item_api.dart';
+
 /// Checking a task off has to *show* the completion before the item is handed
 /// to the provider: fill the circle with the completion accent, strike the text
 /// through, and only then report it.
@@ -36,8 +38,8 @@ void main() {
   }
 
   Future<ActionItemsProvider> pumpPage(WidgetTester tester, {bool completed = false}) async {
-    final provider = ActionItemsProvider();
-    provider.seedDemoData([buildItem(completed: completed)]);
+    final provider = ActionItemsProvider(updateActionItemRequest: fakeUpdate);
+    provider.seedItems([buildItem(completed: completed)]);
 
     await tester.pumpWidget(
       MultiProvider(

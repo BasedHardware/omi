@@ -10,6 +10,8 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 
+import 'support/fake_action_item_api.dart';
+
 /// A checked-off task has to leave the active list and turn up under the
 /// Completed toggle. The page filters purely on `item.completed`, so this is
 /// really a guard on the completed state surviving the toggle round-trip.
@@ -29,8 +31,8 @@ void main() {
   }
 
   Future<ActionItemsProvider> pumpPage(WidgetTester tester) async {
-    final provider = ActionItemsProvider();
-    provider.seedDemoData([item('a', 'Reply to Priya'), item('b', 'Book the dinner reservation')]);
+    final provider = ActionItemsProvider(updateActionItemRequest: fakeUpdate);
+    provider.seedItems([item('a', 'Reply to Priya'), item('b', 'Book the dinner reservation')]);
 
     await tester.pumpWidget(
       MultiProvider(

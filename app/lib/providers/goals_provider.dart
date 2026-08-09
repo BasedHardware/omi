@@ -21,19 +21,6 @@ class GoalsProvider extends ChangeNotifier {
   List<Goal> get goals => _goals;
   bool get isLoading => _isLoading;
 
-  // LOCAL-ONLY DEMO SEED — DO NOT COMMIT. See lib/dev_demo_data.dart.
-  //
-  // Also clears isLoading: the goals row renders nothing while loading, and
-  // loadGoals() never resolves without a backend.
-  bool _demoMode = false;
-
-  void seedDemoData(List<Goal> demo) {
-    _demoMode = true;
-    _goals = List.of(demo);
-    _isLoading = false;
-    notifyListeners();
-  }
-
   /// Initialize the provider by loading goals
   Future<void> init() async {
     await loadGoals();
@@ -41,10 +28,6 @@ class GoalsProvider extends ChangeNotifier {
 
   /// Load goals from local storage first, then sync with API
   Future<void> loadGoals() async {
-    // LOCAL-ONLY DEMO SEED — DO NOT COMMIT. Storage is empty and the API 401s,
-    // so letting this run would wipe the seeded goals straight back out.
-    if (_demoMode) return;
-
     final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
