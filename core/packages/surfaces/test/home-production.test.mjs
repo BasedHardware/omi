@@ -7,14 +7,19 @@ import test from "node:test";
 import { EN_MESSAGES } from "@omi-core/i18n";
 import {
   combineHomeRefreshStatuses,
-  homePhaseNoticeKey,
   homeSurfacePresentation,
 } from "../src/production/home-presentation.ts";
+import { refreshPhaseNoticeKey } from "../src/production/lifecycle-presentation.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 const refresh = (phase, hasSavedData) => ({ phase, hasSavedData });
+
+function present(phase, hasSavedData, rowCount) {
+  const status = refresh(phase, hasSavedData);
+  return homeSurfacePresentation(status, rowCount, refreshPhaseNoticeKey(phase));
+}
 
 test("home search reads loaded projections without claiming backend completeness", async () => {
   const source = await read("src/production/HomeProduction.tsx");
@@ -69,7 +74,6 @@ test("home does not fabricate ask, chat, send, or mutation affordances", async (
 
 test("home renders each of the five refresh states distinguishably", async () => {
   const source = await read("src/production/HomeProduction.tsx");
-  const presentation = await read("src/production/home-presentation.ts");
 
   const phases = [
     "initial-loading",
@@ -82,7 +86,7 @@ test("home renders each of the five refresh states distinguishably", async () =>
   for (const phase of phases) {
     const hasSavedData = phase === "saved-but-refresh-failed" || phase === "refreshing";
     const rowCount = phase === "saved-but-refresh-failed" ? 2 : phase === "unavailable" || phase === "initial-loading" ? 0 : phase === "ready" ? 0 : 1;
-    const view = homeSurfacePresentation(refresh(phase, hasSavedData), rowCount);
+    const view = present(phase, hasSavedData, rowCount);
     const fingerprint = `${view.phase}|${view.noticeKey}|rows:${view.showsSavedRows}|fail:${view.showsFailureIndication}`;
     assert.equal(view.phase, phase);
     assert.ok(!seen.has(fingerprint), `phase ${phase} collides with ${seen.get(fingerprint)}`);
@@ -91,19 +95,21 @@ test("home renders each of the five refresh states distinguishably", async () =>
   assert.equal(seen.size, 5);
 
   // saved-but-refresh-failed must keep saved rows and the failure indication together.
-  const savedFailed = homeSurfacePresentation(refresh("saved-but-refresh-failed", true), 3);
+  const savedFailed = present("saved-but-refresh-failed", true, 3);
   assert.equal(savedFailed.noticeKey, "lifecycle.savedFailed");
   assert.equal(savedFailed.showsSavedRows, true);
   assert.equal(savedFailed.showsFailureIndication, true);
   assert.equal(EN_MESSAGES["lifecycle.savedFailed"], "Showing saved data. Couldn't refresh.");
 
   // Catalog keys already exist — inventing a new string fails i18n parity and this check.
+  // Keys live in lifecycle-presentation.ts (shared).
+  const lifecyclePresentation = await read("src/production/lifecycle-presentation.ts");
   for (const key of ["lifecycle.loading", "lifecycle.refreshing", "lifecycle.savedFailed", "lifecycle.unavailable"]) {
     assert.equal(typeof EN_MESSAGES[key], "string");
     assert.ok(EN_MESSAGES[key].length > 0);
-    assert.match(presentation, new RegExp(`"${key}"`));
+    assert.match(lifecyclePresentation, new RegExp(`"${key}"`));
   }
-  assert.equal(homePhaseNoticeKey("ready"), null);
+  assert.equal(refreshPhaseNoticeKey("ready"), null);
 
   // STATIC TRIPWIRE — HomeProduction must consume homeSurfacePresentation for notice
   // text, notice visibility, and row visibility. No jsdom here; same discipline as
@@ -112,7 +118,7 @@ test("home renders each of the five refresh states distinguishably", async () =>
   // Labelled a tripwire on purpose (AGENTS.md): reading source is not behavioural
   // coverage; the behavioural half is homeSurfacePresentation above.
   const mustContain = [
-    "homeSurfacePresentation(refresh, results.length)",
+    "homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase))",
     "{presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role=\"status\">{t(locale, presentation.noticeKey)}</div>}",
     "{presentation.showsSavedRows ? (",
     "data-surface-state={presentation.phase}",
@@ -129,8 +135,8 @@ test("home renders each of the five refresh states distinguishably", async () =>
   assert.doesNotMatch(source, /saved-but-refresh-failed/);
   // red-proof: (1) suppress the failure notice in HomeProduction for
   // saved-but-refresh-failed — the mustContain notice line fails.
-  // (2) map saved-but-refresh-failed to the ready notice in home-presentation —
-  // savedFailed.noticeKey === "lifecycle.savedFailed" fails.
+  // (2) map saved-but-refresh-failed to the ready notice in
+  // lifecycle-presentation.ts — savedFailed.noticeKey === "lifecycle.savedFailed" fails.
 });
 
 test("home combines two source phases with a conservative worst-of reading", () => {
