@@ -47,6 +47,17 @@ export async function POST(request: NextRequest) {
     includeRevenue?: boolean;
   };
 
+  if (
+    body.label !== undefined &&
+    body.label !== null &&
+    typeof body.label !== "string"
+  ) {
+    return NextResponse.json(
+      { error: "label must be a string" },
+      { status: 400 },
+    );
+  }
+
   let ttlDays: number | null | undefined = body.ttlDays;
   try {
     if (ttlDays !== undefined && ttlDays !== null) {

@@ -35,7 +35,7 @@ function parseTtlDays(
   raw: string,
 ): { ok: true; value: number | null } | { ok: false; error: string } {
   const trimmed = raw.trim();
-  if (trimmed === "" || trimmed === "0") return { ok: true, value: null };
+  if (trimmed === "") return { ok: true, value: null };
   const n = Number(trimmed);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
     return {

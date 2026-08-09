@@ -87,7 +87,14 @@ export type TvSnapshot = {
 export function daysUntilMillion(
   totalUsers: number | null,
   dailyNew: Array<{ day: string; newUsers: number }>,
-  opts: { target?: number; rateDays?: number; asOf?: Date | string } = {},
+  opts: {
+    target?: number;
+    rateDays?: number;
+    asOf?: Date | string;
+    dailyNewOk?: boolean;
+    /** Total measured at the same completed-day boundary as dailyNew. */
+    seriesTotal?: number | null;
+  } = {},
 ): TvSnapshot["million"] {
   const target = opts.target ?? MILLION_USERS;
   const rateDays = opts.rateDays ?? MILLION_RATE_DAYS;
@@ -111,7 +118,9 @@ export function daysUntilMillion(
   );
   end.setUTCDate(end.getUTCDate() - 1);
   const endMs = end.getTime();
-  if (daysSorted.length) {
+  // A fulfilled query with zero rows means zero signups — not "unknown".
+  // Only leave perDay null when the query itself rejected (dailyNewOk === false).
+  if (daysSorted.length || opts.dailyNewOk) {
     let sum = 0;
     for (let i = 0; i < rateDays; i++) {
       const d = new Date(endMs - i * 86400000);
@@ -129,7 +138,9 @@ export function daysUntilMillion(
 
   const series: SeriesPoint[] = [];
   if (total != null && daysSorted.length) {
-    let running = total;
+    // Use the completed-day total for the series when available, so today's
+    // partial signups don't inflate every historical point.
+    let running = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : total;
     const rev: SeriesPoint[] = [];
     for (let i = daysSorted.length - 1; i >= 0; i--) {
       const day = daysSorted[i];
@@ -497,6 +508,7 @@ ORDER BY bucket ASC
 LIMIT ${lim * 5}`.trim();
 
     const qPersonsTotal = `SELECT count() AS total_users FROM persons LIMIT 1`;
+    const qPersonsTotalCompleted = `SELECT count() AS total_users FROM persons WHERE created_at < toStartOfDay(now()) LIMIT 1`;
     const qPersonsDaily = `
 SELECT toDate(created_at) AS day, count() AS new_users
 FROM persons
@@ -512,6 +524,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       ph(creds, qPersonsDaily),
       ph(creds, qActivityTotals),
       ph(creds, qFeaturesTotals),
+      ph(creds, qPersonsTotalCompleted),
     ]);
 
     const labels = [
@@ -523,6 +536,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "persons_daily",
       "activity_totals",
       "features_totals",
+      "persons_total_completed",
     ];
     results.forEach((r, i) => {
       if (r.status === "rejected") warnings.push(`${labels[i]}: ${r.reason}`);
@@ -634,7 +648,12 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       day: String(r.day ?? ""),
       newUsers: num(r.new_users) ?? 0,
     }));
-    million = daysUntilMillion(totalUsers, dailyNew);
+    const completedTotalRow = asRows(get(8), ["total_users"])[0] || {};
+    const seriesTotal = num(completedTotalRow.total_users);
+    million = daysUntilMillion(totalUsers, dailyNew, {
+      dailyNewOk: results[5].status === "fulfilled",
+      seriesTotal,
+    });
 
     activity = {
       byHours,
@@ -655,8 +674,10 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       results[2].status === "fulfilled" ||
       results[3].status === "fulfilled" ||
       results[4].status === "fulfilled" ||
+      results[5].status === "fulfilled" ||
       results[6].status === "fulfilled" ||
-      results[7].status === "fulfilled";
+      results[7].status === "fulfilled" ||
+      results[8].status === "fulfilled";
   }
 
   // Ensure Stripe has settled before evaluating sources / building the
