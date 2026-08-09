@@ -375,6 +375,9 @@ describe("the door is joinable: producer counters and a consumer observation", (
     expect(stats["writeOps"]).toMatchObject({
       outcomes: { accepted: 1, accepted_idempotent: 1, stale_epoch: 2, validation: 0, conflict: 0 },
       preservedEnvelopes: 2,
+      // Asserted, not merely counted: the route's top-level guard must not have
+      // caught anything during a run whose four outcomes were all intended.
+      internalErrors: 0,
     });
     // The fence's independent count of the same events: it saw two admissions
     // (the replay is admitted by the fence and then answered by the registry)
@@ -623,19 +626,48 @@ describe("the vendored write-ops corpus, executed", () => {
     };
     const ratifiedBody = new Map(outcomes.outcomes.map((row) => [row.outcome, row.bodyRatified]));
 
-    // Cases whose outcome this route cannot reach from a request alone: the
-    // authorization/entitlement classes need a grant composition that does not
-    // exist in this service yet, and `control_unavailable` is covered above by
-    // the fail-closed path. Named rather than silently skipped — a suite that
-    // quietly drops rows is how a corpus stops being a corpus.
-    const notReachableHere = new Set(["authorization", "entitlement", "control_unavailable"]);
+    /**
+     * THE ONE ROW THIS ROUTE CANNOT REACH FROM A REQUEST, and it is down from
+     * three.
+     *
+     * `entitlement` needs a grant/entitlement composition that does not exist
+     * in `apps/service` yet — the fence can produce the outcome, but nothing in
+     * this service can put an account into the state that produces it. Named
+     * rather than silently skipped, because a suite that quietly drops rows is
+     * how a corpus stops being a corpus.
+     *
+     * The other two are now EXECUTED against the real route rather than
+     * excluded with a note, which is what a conformance runner is for:
+     *
+     * - `authorization` — reached by seeding `lifecycle_state:
+     *   "deletion_pending"`. ADR-014 §1 makes lifecycle dominant and ADR-012 §4
+     *   forbids a probeable "deleted" outcome, so the fence answers the same
+     *   403 a missing grant would. That IS the corpus's authorization row.
+     * - `control_unavailable` — reached by NOT cutting over: an account the
+     *   destination has never been told about is the ratified fail-closed
+     *   posture, and it is the availability signal's own corpus row.
+     */
+    const notReachableHere = new Set(["entitlement"]);
 
     const executed: string[] = [];
     let rebasedCases = 0;
     for (const entry of corpus) {
       if (notReachableHere.has(entry.wireOutcome)) continue;
       const booted = boot();
-      await cutOver(booted);
+      // `control_unavailable` is the ABSENCE of control state, so this row is
+      // the one case that must not be cut over.
+      if (entry.wireOutcome !== "control_unavailable") await cutOver(booted);
+      if (entry.wireOutcome === "authorization") {
+        // Lifecycle dominates generation: the account is fully cut over and
+        // active, and only `lifecycle_state` moves.
+        await control(booted, "/v1/qa/control/observe", {
+          control_revision: 4,
+          account_generation: "new",
+          account_epoch: ACTIVE_EPOCH,
+          lifecycle_state: "deletion_pending",
+          deletion_epoch: 41,
+        });
+      }
 
       // The idempotent-replay row is a SECOND send of the row above it.
       if (entry.wireOutcome === "accepted_idempotent") await post(booted, entry.requestBody, { path: entry.path });
@@ -695,6 +727,13 @@ describe("the vendored write-ops corpus, executed", () => {
       if (ratifiedBody.get(entry.wireOutcome) === true) {
         expect({ case: entry.name, body: response.text })
           .toEqual({ case: entry.name, body: entry.response.body });
+        // The availability row is the only one carrying a header the corpus
+        // ratifies, and W1 makes it load-bearing: fixed, never varying with
+        // account state.
+        if (entry.wireOutcome === "control_unavailable") {
+          expect({ case: entry.name, retryAfter: response.retryAfter })
+            .toEqual({ case: entry.name, retryAfter: "60" });
+        }
       } else {
         // Not byte-ratified: assert the SHAPE the contract does ratify.
         const body: unknown = JSON.parse(response.text);

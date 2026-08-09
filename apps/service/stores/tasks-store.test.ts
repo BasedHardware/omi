@@ -144,6 +144,54 @@ describe("deletes", () => {
     expect(store.listRecords(ACCOUNT)).toEqual([]);
   });
 
+  /**
+   * FOUND BY A DELEGATED PROBE, VERIFIED INDEPENDENTLY, AND IT WAS A REAL
+   * DEFECT — the sharpest kind, because the module header claimed the opposite.
+   *
+   * The first version of `apply` dropped the record on delete, so a recreate
+   * began a SECOND GENESIS and minted the original revision again. Two writes,
+   * one revision. The chain's whole promise — that a revision names a point in
+   * one record's history — was false across a delete.
+   *
+   * red-proof: remove the `buried.set(...)` block from the delete branch.
+   * APPLIED AND OBSERVED RED.
+   */
+  test("recreating a deleted record with identical content does NOT reuse its old revision", () => {
+    const store = createInMemoryTasksStore();
+    const first = store.apply(ACCOUNT, { op: "create", record_id: "bounce", content: { title: "same" } });
+    store.apply(ACCOUNT, { op: "delete", record_id: "bounce" });
+    const again = store.apply(ACCOUNT, { op: "create", record_id: "bounce", content: { title: "same" } });
+
+    expect(first.applied && again.applied).toBe(true);
+    if (!first.applied || !again.applied) return;
+    expect(again.revision).not.toBe(first.revision);
+  });
+
+  /**
+   * THE CONSEQUENCE, and the reason the collision mattered rather than being a
+   * curiosity: a `base_revision` captured before the delete satisfied a
+   * precondition on the record that REPLACED it. A lost-update token from a
+   * dead history authorised a write on a new one — exactly what `base_revision`
+   * exists to prevent.
+   *
+   * red-proof: same mutation. APPLIED AND OBSERVED RED — the patch applied.
+   */
+  test("a base_revision from before a delete cannot authorise a write after the recreate", () => {
+    const store = createInMemoryTasksStore();
+    const created = store.apply(ACCOUNT, { op: "create", record_id: "ghost", content: { n: 1 } });
+    expect(created.applied).toBe(true);
+    if (!created.applied || created.revision === null) return;
+
+    store.apply(ACCOUNT, { op: "delete", record_id: "ghost" });
+    store.apply(ACCOUNT, { op: "create", record_id: "ghost", content: { n: 1 } });
+
+    const stale = store.apply(ACCOUNT, {
+      op: "patch", record_id: "ghost", patch: { n: 99 }, base_revision: created.revision,
+    });
+    expect(stale).toEqual({ applied: false, reason: "conflict" });
+    expect(store.readRecord(ACCOUNT, "ghost")?.content).toEqual({ n: 1 });
+  });
+
   test("deleting an absent record is accepted", () => {
     const store = createInMemoryTasksStore();
     expect(store.apply(ACCOUNT, { op: "delete", record_id: "task-0000" }))

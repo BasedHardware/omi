@@ -355,3 +355,67 @@ describe("base_revision cannot be borrowed from another record", () => {
     expect(new Set(revisions).size).toBe(2);
   });
 });
+
+describe("the arbiter names the bucket it is answering", () => {
+  /**
+   * FOUND BY A DELEGATED PROBE, VERIFIED INDEPENDENTLY. `/v1/qa/control/stats`
+   * echoed the caller's `run` string beside the NORMALISED bucket's numbers, so
+   * `run=`, `run=%20%20%20` and `run=__unattributed__` all came back with
+   * identical tallies under three different labels — each looking like a
+   * successful join.
+   *
+   * This program's every claim of working behaviour is "producer count and
+   * consumer observation, joined by run id". A response whose stated join key is
+   * not the key its numbers are under makes the join fictional while looking
+   * exactly like a join, which is the failure class the discipline exists to
+   * eliminate — sitting inside the arbiter itself.
+   *
+   * red-proof: echo `asked` instead of `resolveRunKey(asked)` in
+   * `qa-control.ts`. APPLIED AND OBSERVED RED.
+   */
+  test("an empty, blank or reserved run id all report the same resolved key", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    // Sent with NO run header, so it lands in the reserved bucket.
+    expect((await post(booted, envelope({ writeId: hex("f1"), op: create("unattrib") }))).status).toBe(200);
+
+    const seen: Array<{ asked: string; run: unknown; normalised: unknown; accepted: unknown }> = [];
+    for (const asked of ["", "%20%20%20", "__unattributed__"]) {
+      const stats = await (await booted.service.app.request(`/v1/qa/control/stats?run=${asked}`)).json() as {
+        run: string; requestedRun: string; normalised: boolean;
+        writeOps: { outcomes: Record<string, number> } | null;
+      };
+      seen.push({ asked, run: stats.run, normalised: stats.normalised, accepted: stats.writeOps?.outcomes["accepted"] });
+    }
+
+    // Same numbers, and now the SAME stated key — the three spellings are one
+    // bucket and the response says so.
+    expect(new Set(seen.map((entry) => entry.run)).size).toBe(1);
+    expect(seen.every((entry) => entry.run === "__unattributed__")).toBe(true);
+    expect(seen.every((entry) => entry.accepted === 1)).toBe(true);
+    // And the caller can tell whether its own spelling was the one used.
+    expect(seen.map((entry) => entry.normalised)).toEqual([true, true, false]);
+  });
+
+  /**
+   * The control probe: a real run id is NOT normalised and does not collapse
+   * into the reserved bucket. Without this, "always answer `__unattributed__`"
+   * would pass the test above.
+   */
+  test("a genuine run id is reported unchanged and keeps its own tally", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const run = `named-${crypto.randomUUID()}`;
+    await booted.service.app.request("/v1/tasks/ops", {
+      method: "POST",
+      headers: { authorization: booted.auth, "content-type": "application/json", "x-omi-run-id": run },
+      body: envelope({ writeId: hex("f2"), op: create("named") }),
+    });
+    const stats = await (await booted.service.app.request(`/v1/qa/control/stats?run=${encodeURIComponent(run)}`)).json() as {
+      run: string; normalised: boolean; writeOps: { outcomes: Record<string, number> } | null;
+    };
+    expect(stats.run).toBe(run);
+    expect(stats.normalised).toBe(false);
+    expect(stats.writeOps?.outcomes["accepted"]).toBe(1);
+  });
+});

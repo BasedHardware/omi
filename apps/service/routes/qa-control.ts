@@ -31,6 +31,41 @@
  * "possession of an identifier as evidence" shape `backend:ADR-012` §4 forbids,
  * kept out of the product only by the fact that nobody deployed it. Keeping the
  * discipline here costs one line.
+ *
+ * ── ⚠ THIS MODULE IS SAFE ONLY BECAUSE OF WHO COMPOSES IT ────────────────────
+ *
+ * Read this before you register these routes anywhere new.
+ *
+ * Scoping every operation to the authenticated principal is what makes this
+ * surface safe in a dev fixture. It is also **exactly what would make it
+ * catastrophic in production**, and the two facts are the same fact seen from
+ * opposite ends.
+ *
+ * `backend:ADR-010` §1 puts control state under LEGACY's authority: the
+ * platform observes it, never mints it, and the account epoch fence exists
+ * precisely so that a client cannot decide its own generation, epoch or
+ * activation. These routes let an authenticated caller `observe` and
+ * `activate` — that is, mint and advance **its own account's** control state.
+ * Composed behind a real credential seam, that is self-service epoch
+ * activation: any user could walk their own account through
+ * `legacy -> migrating -> new`, activate an epoch, and have the fence admit
+ * writes it was built to deny. The fence would not be bypassed; it would be
+ * answering honestly about state the attacker wrote.
+ *
+ * So the containment is not tidiness and it is not "dev-only by convention":
+ *
+ * - **One composition site**, `apps/service/app-facing.ts`, which is a QA
+ *   fixture service by construction — in-memory SQLite, dev tokens, seeded
+ *   corpus, loopback only.
+ * - `qa-control-containment.test.ts` enumerates the callers from the source
+ *   tree and fails when the set changes. Adding a caller is then a visible diff
+ *   in a file whose only job is to say who may compose this, which is the same
+ *   shape `WIRE_PATH_REGISTRY` uses for wire paths.
+ *
+ * There is **no production server composition in this repository today**, so
+ * nothing can reach these routes. That is a fact about the current tree, not a
+ * property of this module, and it will stop being true. The check is what
+ * carries the intent across that change.
  */
 
 import type { Hono } from "hono";
@@ -39,7 +74,7 @@ import type { AccountControlObservation } from "../../../core/control/account-co
 import type { WriteFenceCounter } from "../control/fence-counter";
 import type { AccountControlProjectionStore } from "../control/projection-store";
 import type { DevPrincipal } from "../auth/dev-token";
-import type { WriteOpsCounter } from "../observability/write-ops-counter";
+import { resolveRunKey, type WriteOpsCounter } from "../observability/write-ops-counter";
 import type { StragglerTable } from "../stores/straggler-table";
 import type { TasksReadStore } from "../stores/tasks-store";
 
@@ -162,10 +197,20 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
    * `/v1/qa/status` is.
    */
   app.get("/v1/qa/control/stats", (context) => {
-    const run = context.req.query("run") ?? "";
+    const asked = context.req.query("run") ?? "";
+    // THE KEY THE NUMBERS ARE ACTUALLY UNDER, not the string the caller typed.
+    // Both counters normalise an absent, empty or whitespace-only run id into
+    // one reserved bucket, and this endpoint used to echo the caller's spelling
+    // beside the bucket's numbers — so three different `run` values came back
+    // with identical tallies under three different labels, each looking like a
+    // successful join. Reporting the resolved key, and whether it was resolved,
+    // is what makes the join checkable by the party doing the joining.
+    const run = resolveRunKey(asked);
     return json({
       version: "qa-control-stats-v1",
       run,
+      requestedRun: asked,
+      normalised: run !== asked,
       fence: deps.fence.counter.tally(run),
       writeOps: deps.writeOpsCounter.tally(run),
     });

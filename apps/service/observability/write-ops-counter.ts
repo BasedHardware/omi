@@ -98,6 +98,20 @@ const zeroOutcomes = (): Record<WriteOpsWireOutcome, number> => {
   return outcomes;
 };
 
+/**
+ * The join key a run id actually resolves to.
+ *
+ * EXPORTED because a reader of the tally must be able to say WHICH BUCKET it is
+ * reporting. A probe found the reason: `/v1/qa/control/stats` echoed the
+ * caller's `run` string while serving the normalised bucket, so `run=`,
+ * `run=%20%20%20` and `run=__unattributed__` all returned the same numbers under
+ * three different labels. Every joined claim in this program is "producer count
+ * and consumer observation, joined by run id" — a response whose stated join key
+ * is not the key its numbers are under makes the join fictional while looking
+ * exactly like a join.
+ */
+export const resolveRunKey = (runId: string | null | undefined): string => normaliseRunId(runId);
+
 const normaliseRunId = (runId: string | null | undefined): string => {
   if (typeof runId !== "string") return UNATTRIBUTED_RUN;
   const trimmed = runId.trim();

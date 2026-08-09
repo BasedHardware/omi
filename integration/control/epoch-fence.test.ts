@@ -451,6 +451,15 @@ describe("the door is joinable: producer-side counters and a consumer-side obser
     expect(stats["writeOps"]).toMatchObject({
       outcomes: { accepted: 1, accepted_idempotent: 1, stale_epoch: 2, validation: 0, conflict: 0 },
       preservedEnvelopes: 2,
+      // ZERO IS THE ONLY ACCEPTABLE VALUE, and it is asserted in the joined
+      // test rather than left to a counter nobody reads. `internalErrors`
+      // counts requests that reached the route's top-level guard — an
+      // unhandled failure answered 500. A run where the client saw four
+      // well-formed outcomes and the server also caught an exception is a run
+      // where something was swallowed, and nothing else in this file would
+      // notice: the guard returns a fixed body, so a swallowed crash on a
+      // request the client never looked at is invisible from the wire.
+      internalErrors: 0,
     });
     // The FENCE's independent count of the same four events: it admitted twice
     // (the replay is admitted by the fence, then answered by the registry) and

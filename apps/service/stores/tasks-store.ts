@@ -38,6 +38,17 @@
  * envelopes produces the same revisions on every machine, which is what lets a
  * conformance corpus pin them at all.
  *
+ * **A DELETE DOES NOT RESET THE CHAIN, and the first version of this module got
+ * that wrong.** A probe deleted a record and recreated it with identical
+ * content, and the recreate minted the ORIGINAL revision — because `delete`
+ * dropped the record, so the recreate began a second genesis. The consequence
+ * is the exact failure `base_revision` exists to prevent: a token captured
+ * before the delete then satisfied a precondition on the record that replaced
+ * it, and a patch written against a dead history was applied to a new one. So
+ * a delete leaves a TOMBSTONE carrying the last revision, and the next write to
+ * that id links to it. The record's identity is its `record_id`, and its
+ * history does not restart just because it was empty for a while.
+ *
  * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────────
  *
  * Durable. It is in-memory, said plainly, for the same reason
@@ -151,9 +162,24 @@ const preconditionHolds = (current: TasksRecord | undefined, baseRevision: strin
   return current !== undefined && current.revision === baseRevision;
 };
 
+/** What a deleted record leaves behind, so its history can be continued. */
+interface TasksTombstone {
+  readonly revision: string;
+  readonly first_seen_seq: number;
+}
+
 export const createInMemoryTasksStore = (): TasksStore => {
   /** account id -> record id -> record. */
   const accounts = new Map<string, Map<string, TasksRecord>>();
+  /**
+   * account id -> record id -> the chain link a delete left behind.
+   *
+   * Bounded by the number of distinct record ids an account has ever deleted,
+   * which is the price of the property: a record id's history is continuous
+   * across deletion, so no revision is ever minted twice for one id and no
+   * precondition token outlives the history it was taken from.
+   */
+  const graves = new Map<string, Map<string, TasksTombstone>>();
   let sequence = 0;
 
   const recordsOf = (accountId: string): Map<string, TasksRecord> => {
@@ -161,6 +187,14 @@ export const createInMemoryTasksStore = (): TasksStore => {
     if (existing !== undefined) return existing;
     const created = new Map<string, TasksRecord>();
     accounts.set(accountId, created);
+    return created;
+  };
+
+  const gravesOf = (accountId: string): Map<string, TasksTombstone> => {
+    const existing = graves.get(accountId);
+    if (existing !== undefined) return existing;
+    const created = new Map<string, TasksTombstone>();
+    graves.set(accountId, created);
     return created;
   };
 
@@ -182,10 +216,21 @@ export const createInMemoryTasksStore = (): TasksStore => {
 
     apply(accountId: string, op: TasksWriteOp): TasksApplyOutcome {
       const records = recordsOf(accountId);
+      const buried = gravesOf(accountId);
       const current = records.get(op.record_id);
+      // The chain link for the next write to this id: the live record's
+      // revision, or — if it was deleted — the one its tombstone kept.
+      const priorRevision = current?.revision ?? buried.get(op.record_id)?.revision ?? NO_PRIOR_REVISION;
+      const priorSeq = current?.first_seen_seq ?? buried.get(op.record_id)?.first_seen_seq;
 
       if (op.op === "delete") {
         if (!preconditionHolds(current, op.base_revision)) return { applied: false, reason: "conflict" };
+        if (current !== undefined) {
+          buried.set(op.record_id, {
+            revision: current.revision,
+            first_seen_seq: current.first_seen_seq,
+          });
+        }
         records.delete(op.record_id);
         // A deleted record has no current revision, and inventing one would
         // hand a client a precondition token for something that is not there.
@@ -199,12 +244,12 @@ export const createInMemoryTasksStore = (): TasksStore => {
         // OF, and the contract's own validator refuses `base_revision` here.
         // A create over a live record therefore REPLACES its content and
         // continues its chain rather than forking a second history for one id.
-        const revision = nextRevision(current?.revision ?? NO_PRIOR_REVISION, op.record_id, op.content);
+        const revision = nextRevision(priorRevision, op.record_id, op.content);
         records.set(op.record_id, {
           record_id: op.record_id,
           revision,
           content: op.content,
-          first_seen_seq: current?.first_seen_seq ?? sequence,
+          first_seen_seq: priorSeq ?? sequence,
           last_applied_seq: sequence,
         });
         return { applied: true, record_id: op.record_id, revision };
@@ -229,12 +274,12 @@ export const createInMemoryTasksStore = (): TasksStore => {
       // and that is field semantics, which R6 says are unratified. A client
       // that needs to replace a nested value sends the whole value.
       const merged: Record<string, unknown> = { ...(current?.content ?? {}), ...op.patch };
-      const revision = nextRevision(current?.revision ?? NO_PRIOR_REVISION, op.record_id, merged);
+      const revision = nextRevision(priorRevision, op.record_id, merged);
       records.set(op.record_id, {
         record_id: op.record_id,
         revision,
         content: merged,
-        first_seen_seq: current?.first_seen_seq ?? sequence,
+        first_seen_seq: priorSeq ?? sequence,
         last_applied_seq: sequence,
       });
       return { applied: true, record_id: op.record_id, revision };
@@ -242,6 +287,7 @@ export const createInMemoryTasksStore = (): TasksStore => {
 
     reset(): void {
       accounts.clear();
+      graves.clear();
       sequence = 0;
     },
   });
