@@ -374,9 +374,36 @@ for (const file of files(root)) {
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
     const rawLines = text.split("\n");
     const codeLines = withoutComments(text).split("\n");
-    const hatched = (index: number): boolean =>
-      (rawLines[index] ?? "").includes(portCompositionAllowMarker)
-      || (rawLines[index - 1] ?? "").includes(portCompositionAllowMarker);
+    /**
+     * A line whose comment-stripped form is blank while its raw form is not is
+     * comment TEXT — the SAME predicate rule 17 derived for the identical
+     * problem (`b9e0c9a915`, "the hatch marker must be in a comment, not a
+     * string literal"). Reused rather than re-invented so the two fences'
+     * notion of "is this line a comment" cannot drift apart.
+     */
+    const isCommentText = (index: number): boolean =>
+      (codeLines[index] ?? "").trim() === "" && (rawLines[index] ?? "").trim() !== "";
+    /**
+     * AUDIT-16 round 1 (`data/run-2026-08-09/AUDIT-rule16-promotion-round1.md`):
+     * this was a bare substring search over RAW, unstripped text, so the marker
+     * could be smuggled in as an ordinary string VALUE on the construction line
+     * itself — no pre-existing hatch needed, any file self-exempts on first
+     * write. Ported fix, same shape as rule 17's:
+     *   - construction line: marker present in raw, ABSENT after stripping —
+     *     i.e. it lives in a trailing `//`/`/* *​/` comment, not inside a string
+     *     literal value the construction happens to carry.
+     *   - line above: must be comment TEXT in its own right (the whole line
+     *     blanks under `withoutComments`), and carry the marker in its raw
+     *     form. A marker sitting inside a string on an otherwise-blank-looking
+     *     line still can't happen here, because a bare string statement is not
+     *     comment text either.
+     */
+    const hatched = (index: number): boolean => {
+      const raw = rawLines[index] ?? "";
+      const stripped = codeLines[index] ?? "";
+      if (raw.includes(portCompositionAllowMarker) && !stripped.includes(portCompositionAllowMarker)) return true;
+      return isCommentText(index - 1) && (rawLines[index - 1] ?? "").includes(portCompositionAllowMarker);
+    };
     for (const row of PORT_REGISTRY) {
       const patterns = portConstructionPatterns(row.portType);
       codeLines.forEach((line, index) => {

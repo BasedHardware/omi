@@ -111,6 +111,49 @@ test("rule 16's escape hatch is honoured, and only with a reason", () => {
   );
 });
 
+test("rule 16's hatch marker must be in a COMMENT, not a string literal on the same line", () => {
+  // AUDIT-16 round 1 (data/run-2026-08-09/AUDIT-rule16-promotion-round1.md),
+  // the exact rule-17 round-2 shape (`fd38dc5e33` -> fixed in `b9e0c9a915`)
+  // ported to rule 16: `hatched`'s construction-line check was a bare
+  // substring search over RAW, unstripped text, so any rogue file self-exempts
+  // on first write by putting the marker in an ordinary property VALUE on the
+  // very line it exempts — no pre-existing hatch needed, unlike the round-1
+  // finding this one is worse than.
+  //
+  // The marker MUST sit on the same physical line as the construction, which
+  // is the only line this check searches. A fixture that put it one line
+  // below would pass for the wrong reason — the exact mistake rule 17's own
+  // fix commit records making and catching with its own isolation proof.
+  withPortFixture(
+    [
+      'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',
+      'export const rogue: ApplicationReadPorts = { bannerNotAComment: "port-composition-ok(fake, not a real comment)",',
+      "  x: 1 } as unknown as ApplicationReadPorts;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("second composition of registered port `ApplicationReadPorts`");
+    },
+  );
+});
+
+test("rule 16's marker-in-string check is not vacuous: the same shape with no marker still fires", () => {
+  // Isolates the hatch fix from the detector itself (mirrors AUDIT-16's own
+  // control) — without this, "the fixture above fires" could mean the fence
+  // rejects the construction outright regardless of the marker.
+  withPortFixture(
+    [
+      'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',
+      'export const noMarker: ApplicationReadPorts = { bannerNotAComment: "just an ordinary string, no marker here",',
+      "  x: 1 } as unknown as ApplicationReadPorts;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("second composition of registered port `ApplicationReadPorts`");
+    },
+  );
+});
+
 /**
  * RULE 17 — the wire-path fence. PROVISIONAL; see the fence's own header and
  * `core-foundation/docs/agents/rule-17-wire-path-fence.md`.
