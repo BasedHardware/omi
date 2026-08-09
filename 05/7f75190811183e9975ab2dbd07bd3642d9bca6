@@ -1,0 +1,42 @@
+.github/checks-manifest.yaml
+  s_8f253ccd2df075::t_3df141ae9c7fe7 685-689
+backend/scripts/probe_beta_uid_continuity.py
+  s_8f253ccd2df075::t_4504f5b1247b9f 15-17,221-238,243,262
+.github/scripts/desktop_qualification_evidence.py
+  s_8f253ccd2df075::t_85d0c8d36099bb 226
+  s_8f253ccd2df075::t_4504f5b1247b9f 99
+backend/tests/unit/test_qualified_beta_promotion.py
+  s_8f253ccd2df075::t_4504f5b1247b9f 291
+.github/scripts/test_desktop_qualification_evidence.py
+  s_8f253ccd2df075::t_3c9c539401c98d 71
+  s_8f253ccd2df075::t_4504f5b1247b9f 47
+backend/tests/unit/test_desktop_release_scripts.py
+  s_8f253ccd2df075::t_4504f5b1247b9f 83
+backend/scripts/test_probe_beta_uid_continuity.py
+  s_8f253ccd2df075::t_fd491c1faaa987 130
+  s_8f253ccd2df075::t_4832ef7eb6dc45 124-126
+  s_8f253ccd2df075::t_85d0c8d36099bb 119-123,127-128
+  s_8f253ccd2df075::t_4504f5b1247b9f 85-95,108,113-118,129
+.github/failure-classes/FC-ship-before-required-route.json
+  s_8f253ccd2df075::t_7af22d94caae5d 9-12
+.github/workflows/desktop_qualify_beta.yml
+  s_8f253ccd2df075::t_01538336f759bf 192
+.github/scripts/test_desktop_release_flow_contract.py
+  s_8f253ccd2df075::t_4504f5b1247b9f 158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "057f75190811183e9975ab2dbd07bd3642d9bca6",
+  "prompts": {},
+  "sessions": {
+    "s_8f253ccd2df075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe842-5fca-7273-a38d-bfddc241019a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
