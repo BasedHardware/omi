@@ -67,6 +67,12 @@ const provenance = {
   // is those documents' own filename prefix, not a required namespace, and
   // stamping COORD- onto a David-signed record would misattribute who signed it.
   //
+  // 0.8.0 adds "FABLE-R26-task-field-vocabulary-signed" — amendment A1 orders
+  // the ratified write corpus onto the signed task-domain vocabulary before
+  // write-door enforcement may land. The exact document slug is the ruling id;
+  // its FABLE- prefix records the delegated signer rather than inventing a
+  // COORD- namespace the file itself does not carry.
+  //
   // 0.5.0 adds "COORD-fable-rulings-wave2" — W1, which SIGNS the fifth wire
   // value `control_unavailable` AND binds how this contract must record it: as
   // an availability signal, never as a fifth authorization outcome.
@@ -80,7 +86,7 @@ const provenance = {
   // POST /v1/{domain}/ops, B6 tasks-first but domain-generic). Per the
   // evolution policy §3 a bump is valid only if this array gains a ratified
   // ruling id the previous version did not carry; that is what this line is.
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2", "DAVID-tasks-read-epoch-and-ci"],
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2", "DAVID-tasks-read-epoch-and-ci", "FABLE-R26-task-field-vocabulary-signed"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,

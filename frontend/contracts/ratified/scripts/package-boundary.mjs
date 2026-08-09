@@ -70,6 +70,17 @@ const provenance = JSON.parse(provenanceBytes);
  * §8 rollback: re-vendor 0.6.0. Nothing is persisted in a shape this contract
  * defines, and a client that never reads the field is unaffected by its
  * absence.
+ *
+ * 0.8.0 is additive. FABLE-R26-task-field-vocabulary-signed A1 changes only
+ * the serialized task op bags in the write conformance corpus: title becomes
+ * description and done becomes completed. No export, type, validator, wire
+ * outcome, or client obligation changes, so clients built against every prior
+ * version at the floor keep working unchanged. The unrelated memories bag key
+ * text remains exactly as ratified.
+ *
+ * §8 rollback: re-vendor 0.7.0. The corpus records request examples and does
+ * not define a persisted data shape, so this bump writes nothing an older
+ * client cannot read.
  */
 const COMPATIBILITY_CLASS = "additive";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
@@ -132,7 +143,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.7.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.8.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");
