@@ -214,7 +214,15 @@ export function receiptKey(lane, stamps) {
     .sort()
     .map((repo) => {
       const stamp = stamps[repo] ?? {};
-      return `${repo} ${stamp.repoRoot ?? ""} ${stamp.treeHash ?? ""}`;
+      // NUL as the field separator, written as an ESCAPE rather than as a
+      // literal byte. The separator must be a character that cannot occur in a
+      // repo name, an absolute path or a hex hash, or two different tuples
+      // could join to one string and collide. The first draft of this line
+      // carried real NUL bytes in the source, which made `grep` treat this
+      // whole file as binary and silently skip it — a control character you
+      // cannot see is a tooling hazard even when the runtime behaviour is
+      // identical.
+      return [repo, stamp.repoRoot ?? "", stamp.treeHash ?? ""].join("\u0000");
     });
   return createHash("sha256").update([lane, ...parts].join("")).digest("hex").slice(0, 16);
 }
