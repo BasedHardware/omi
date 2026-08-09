@@ -46,6 +46,28 @@ export interface AccountControlProjectionStore {
   activate(accountId: string, request: { readonly epoch: number; readonly at_control_revision: number }): ActivationResult;
   /** ADR-010 §1 rollback step 1. No-op for an unknown account. */
   deactivate(accountId: string): AccountControlProjection | null;
+  /**
+   * Returns an account to "never told about". **QA reset only — not a lifecycle
+   * operation**, and deliberately not reachable from any product path.
+   *
+   * It exists because the fence's own fail-closed posture — "missing control
+   * state denies writes" — is a state a test must be able to re-enter, and
+   * nothing else could produce it: `deactivate` clears the activation but keeps
+   * the projection and its revision, so a fresh `observe` at revision 1 is
+   * rejected as `stale_observation` and the account can never be rebuilt from
+   * the beginning. The retired fence harness papered over this by discarding
+   * the whole store between cases, which it could do because the store was its
+   * own; the registered app's store belongs to the app.
+   *
+   * The direction of this operation is the reason it is safe: forgetting an
+   * account makes every subsequent write DENY. It cannot be used to admit
+   * anything, so it is not a hatch in the fence — it is the fence's strictest
+   * state, restored.
+   *
+   * Returns whether an account was actually forgotten, so a caller can tell
+   * "reset something" from "reset nothing".
+   */
+  forget(accountId: string): boolean;
   /** The only exit from a poisoned projection; requires a stated operator reason. */
   reconcile(observation: AccountControlObservation, operator: { readonly reason: string }): AdmitObservationResult;
 }
@@ -90,6 +112,10 @@ export const createInMemoryAccountControlProjectionStore = (): AccountControlPro
       const next = deactivateEpoch(current);
       rows.set(accountId, next);
       return next;
+    },
+
+    forget(accountId: string): boolean {
+      return rows.delete(accountId);
     },
 
     reconcile(

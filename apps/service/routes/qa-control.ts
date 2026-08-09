@@ -41,6 +41,7 @@ import type { AccountControlProjectionStore } from "../control/projection-store"
 import type { DevPrincipal } from "../auth/dev-token";
 import type { WriteOpsCounter } from "../observability/write-ops-counter";
 import type { StragglerTable } from "../stores/straggler-table";
+import type { TasksReadStore } from "../stores/tasks-store";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -58,6 +59,9 @@ export interface QaControlRouteDependencies {
   };
   readonly writeOpsCounter: WriteOpsCounter;
   readonly stragglers: StragglerTable;
+  readonly tasksRead: TasksReadStore;
+  /** Ruling B5's collection, run when an epoch advance makes rows unreachable. */
+  readonly collectWriteIdsBelowEpoch: (accountId: string, activeEpoch: number) => number;
   /** Drops every write-path fixture: tasks, the registry and the straggler table. */
   readonly resetWriteState: () => void;
 }
@@ -103,9 +107,14 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
   };
 
   mutating("/v1/qa/control/reset", (principal) => {
-    deps.fence.store.deactivate(principal.uid);
+    // `forget`, not `deactivate`. Deactivating keeps the projection and its
+    // control revision, so the next `observe` at revision 1 is refused as
+    // `stale_observation` and the account can never be seeded from the
+    // beginning again. Forgetting restores the fence's strictest state — no
+    // projection, every write denies — which is where a test must start.
+    const forgotten = deps.fence.store.forget(principal.uid);
     deps.resetWriteState();
-    return json({ version: "qa-control-v1", status: "reset" });
+    return json({ version: "qa-control-v1", status: "reset", forgotten });
   });
 
   mutating("/v1/qa/control/observe", (principal, body) => {
@@ -124,7 +133,18 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
   mutating("/v1/qa/control/activate", (principal, body) => {
     const request = body as { epoch: number; at_control_revision: number };
     const result = deps.fence.store.activate(principal.uid, request);
-    return json({ activated: result.activated, reason: result.activated ? null : result.reason });
+    // RULING B5, as a behaviour rather than a callable. An epoch advance is the
+    // event that makes prior-epoch registry rows unreachable: the fence runs
+    // before the registry, so every replay stamped with an older epoch is now
+    // refused `stale_epoch` and its row can never be consulted again. Collecting
+    // here — at the advance, not on a timer — is what grounds GC in a mechanism
+    // instead of a guess about when replays stop arriving.
+    const collected = result.activated ? deps.collectWriteIdsBelowEpoch(principal.uid, request.epoch) : 0;
+    return json({
+      activated: result.activated,
+      reason: result.activated ? null : result.reason,
+      write_id_rows_collected: collected,
+    });
   });
 
   mutating("/v1/qa/control/deactivate", (principal) => {
@@ -148,6 +168,33 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
       run,
       fence: deps.fence.counter.tally(run),
       writeOps: deps.writeOpsCounter.tally(run),
+    });
+  });
+
+  /**
+   * THE CONSUMER-SIDE OBSERVATION OF AN APPLY — and it is deliberately NOT a
+   * read door.
+   *
+   * An L2 test that only reads the write door's own response is reading one
+   * side of one measurement. This lets it observe, from the store, that the
+   * record the door said it applied is actually there — the property the fence
+   * harness could never have, because it applied nothing.
+   *
+   * It returns `record_id` and `revision` and **no user content**, which is the
+   * line that keeps it from becoming the third door this program has already
+   * paid twice for. It cannot render a task, it mints no public ids, and it
+   * does not name the tasks read wire. When READ's registered route lands, this
+   * endpoint's continued existence is worth re-examining — but it is not a
+   * competing implementation of it, because it serves none of what that route
+   * serves.
+   */
+  app.get("/v1/qa/control/tasks", (context) => {
+    const principal = principalOf(context);
+    if (principal === null) return fixedResponse(UNAUTHORIZED_BODY, 401);
+    return json({
+      version: "qa-control-tasks-v1",
+      records: deps.tasksRead.listRecords(principal.uid)
+        .map((record) => ({ record_id: record.record_id, revision: record.revision })),
     });
   });
 

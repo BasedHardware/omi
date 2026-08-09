@@ -223,6 +223,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     fence: { store: controlStore, counter: fenceCounter },
     writeOpsCounter: opsCounter,
     stragglers,
+    tasksRead: tasks,
+    collectWriteIdsBelowEpoch: (accountId, activeEpoch) =>
+      writeIdRegistry.collectBelowEpoch(accountId, activeEpoch),
     resetWriteState: () => {
       tasks.reset();
       writeIdRegistry.reset();
