@@ -19,3 +19,12 @@ Subscription metrics use `lib/stripe-subscriptions.ts`; never list subscriptions
 - Marketplace apps are excluded by `metadata.app_id`, stamped by the backend on app checkout.
 - MRR includes `active` and `past_due`; report `trialing` separately.
 - Normalize amounts with each price's `interval` and `interval_count`; never assume monthly or annual pricing.
+
+## TV mode
+
+- Logged-in wall: `/dashboard/tv` (full-bleed; no sidebar).
+- Share links: `/dashboard/tv-links` manages Firestore `admin_tv_links` (hashed tokens).
+- Public kiosk: `/tv/view/<token>` — capability URL; no Firebase login.
+- Snapshot API: `GET /api/tv/snapshot` accepts admin bearer **or** TV token via `verifyAdminOrTvSnapshot`.
+- TV tokens must never unlock mutating admin routes — keep the allowlist to the snapshot endpoint only.
+- Store `token_hash` only; show the raw token once on create.

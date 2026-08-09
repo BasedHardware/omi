@@ -22,6 +22,8 @@ import {
   FlaskConical,
   Rocket,
   Handshake,
+  Tv,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,6 +54,16 @@ export function DashboardSidebar() {
       title: "Dashboard",
       href: "/dashboard",
       icon: LayoutGrid,
+    },
+    {
+      title: "TV view",
+      href: "/dashboard/tv",
+      icon: Tv,
+    },
+    {
+      title: "TV links",
+      href: "/dashboard/tv-links",
+      icon: Link2,
     },
     {
       title: "Apps",
