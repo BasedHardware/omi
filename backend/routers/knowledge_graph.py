@@ -209,7 +209,8 @@ async def extract_knowledge_graph(
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     kg_mod = _knowledge_graph_llm_module()
-    user_name = (body.user_name or get_user_name(uid) or "User").strip() or "User"
+    resolved_name = body.user_name or await run_blocking(db_executor, get_user_name, uid)
+    user_name = (resolved_name or "User").strip() or "User"
     extraction = await run_blocking(
         llm_executor,
         lambda: getattr(kg_mod, "extract_kg_from_text")(
