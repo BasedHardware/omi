@@ -152,7 +152,10 @@ function shortTime(t: number, hours: number): string {
 type BuiltChart = {
   data: Array<Record<string, number | string | null>>;
   activeKeys: string[];
-  stats: Record<string, { latest: number | null; peak: number | null; trough: number | null }>;
+  stats: Record<
+    string,
+    { latest: number | null; peak: number | null; trough: number | null; endPct: number | null }
+  >;
 };
 
 function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
@@ -166,7 +169,9 @@ function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
     });
   }
   const stats: BuiltChart["stats"] = {};
-  for (const k of PLATS) stats[k] = seriesStats(fullByKey[k]);
+  for (const k of PLATS) {
+    stats[k] = { ...seriesStats(fullByKey[k]), endPct: null };
+  }
 
   const sliced = downsample(full);
   const rawByKey: Record<string, Array<number | null>> = {};
@@ -184,6 +189,14 @@ function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
     if (!has) continue;
     activeKeys.push(k);
     indexed[k] = indexToStart(rawByKey[k]);
+    // Tip of the line = % of window start (same scale as the chart).
+    const idx = indexed[k];
+    for (let i = idx.length - 1; i >= 0; i--) {
+      if (idx[i] != null && Number.isFinite(idx[i]!)) {
+        stats[k].endPct = idx[i];
+        break;
+      }
+    }
   }
 
   const data = sliced.map((p, i) => {
@@ -238,7 +251,7 @@ function MultiLineChart({
     <div className="tv-chart-wrap">
       <div className="tv-chart-main">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 8, right: 4, left: 2, bottom: 0 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
             <XAxis
               dataKey="label"
@@ -248,14 +261,8 @@ function MultiLineChart({
               minTickGap={28}
               interval="preserveStartEnd"
             />
-            <YAxis
-              domain={[yMin, yMax]}
-              width={36}
-              tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-            />
+            {/* Indexed-to-start charts: hide % ticks — every series starts at 100%. */}
+            <YAxis domain={[yMin, yMax]} width={0} tick={false} tickLine={false} axisLine={false} />
             <Tooltip
               contentStyle={{
                 background: "#14161c",
@@ -288,12 +295,17 @@ function MultiLineChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="tv-end-labels">
-        {activeKeys.map((k) => (
-          <span key={k} style={{ color: PLAT_COLORS[k] }}>
-            {PLAT_LABEL[k]} {fmt(stats[k]?.latest)}
-          </span>
-        ))}
+      <div className="tv-end-labels" title="Relative to each line's start in this window">
+        {activeKeys.map((k) => {
+          const pct = stats[k]?.endPct;
+          const label =
+            pct == null ? "—" : `${Math.round(pct * 100)}%`;
+          return (
+            <span key={k} style={{ color: PLAT_COLORS[k] }}>
+              {PLAT_LABEL[k]} {label}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -500,8 +512,6 @@ export function TvBoard({
     if (restArr > 0) top.push({ name: "Other", arr: restArr, subs: restSubs });
     return top;
   }, [r?.byProduct]);
-  const maxArr = products[0]?.arr || 1;
-  const sumArr = products.reduce((s, p) => s + p.arr, 0) || 1;
   const pieData = products.map((p) => ({ name: p.name, value: p.arr }));
 
   const live = !snap ? "down" : snap.partial || error ? "stale" : "";
@@ -581,17 +591,9 @@ export function TvBoard({
           font-family:${plexMono.style.fontFamily}, monospace;font-size:var(--fs-fine);font-weight:600;
           white-space:nowrap;padding-right:.1vw}
         .tv-empty{height:100%;display:grid;place-items:center;color:var(--dim);font-size:var(--fs-chip)}
-        .tv-rev{flex:1;min-height:0;display:grid;grid-template-rows:auto 1fr auto;gap:.2vw}
+        .tv-rev{flex:1;min-height:0;display:grid;grid-template-rows:auto 1fr;gap:.2vw}
         .tv-rev-head .tv-value{font-size:1.95vw}
-        .tv-rev-mid{min-height:0;display:grid;grid-template-columns:1.05fr .95fr;gap:.35vw}
-        .tv-rev-list{min-height:0;display:flex;flex-direction:column;justify-content:center;gap:.22vw;overflow:hidden}
-        .tv-rev-row{display:grid;grid-template-columns:4.8vw 1fr 2.9vw;align-items:center;gap:.28vw;font-size:var(--fs-chip)}
-        .tv-rev-row .name{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .tv-rev-row .bar{height:.34vw;min-height:4px;background:rgba(255,255,255,.06);overflow:hidden}
-        .tv-rev-row .bar>i{display:block;height:100%}
-        .tv-rev-row .amt{font-family:${plexMono.style.fontFamily}, monospace;font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
-        .tv-rev-row .pct{color:var(--dim);margin-left:.12em;font-size:.9em}
-        .tv-pie{min-height:0;position:relative}
+        .tv-pie{min-height:0;position:relative;flex:1}
         .tv-pie-center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
           font-family:${plexMono.style.fontFamily}, monospace;font-size:.85vw;color:var(--muted);text-align:center;line-height:1.15}
         .tv-pie-center b{display:block;color:var(--ink);font-size:1.05vw;font-weight:500}
@@ -613,7 +615,6 @@ export function TvBoard({
           .tv-board{grid-template-columns:1fr 1fr;grid-template-rows:auto}
           .tv-panel{grid-column:auto!important;grid-row:auto!important;min-height:14rem}
           #p-dau,#p-mil,#p-rev{grid-column:1/-1!important}
-          .tv-rev-mid{grid-template-columns:1fr}
         }
       `}</style>
 
@@ -720,69 +721,84 @@ export function TvBoard({
                     {fmt(r.subscriptionCount)} subscriptions · MRR {fmtMoney(r.mrr)}
                   </div>
                 </div>
-                <div className="tv-rev-mid">
-                  <div className="tv-rev-list">
-                    {products.map((p, i) => {
-                      const w = Math.max(2, Math.round((p.arr / maxArr) * 100));
-                      const pct = Math.round((p.arr / sumArr) * 100);
-                      return (
-                        <div className="tv-rev-row" key={p.name}>
-                          <span className="name">{p.name}</span>
-                          <span className="bar">
-                            <i
+                <div className="tv-pie">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius="42%"
+                        outerRadius="68%"
+                        paddingAngle={1.5}
+                        stroke="rgba(12,13,16,0.6)"
+                        strokeWidth={1}
+                        isAnimationActive={false}
+                        labelLine={{ stroke: "#6b7382", strokeWidth: 1 }}
+                        label={(props: {
+                          cx?: number;
+                          cy?: number;
+                          midAngle?: number;
+                          outerRadius?: number;
+                          name?: string;
+                          percent?: number;
+                          value?: number;
+                        }) => {
+                          const {
+                            cx = 0,
+                            cy = 0,
+                            midAngle = 0,
+                            outerRadius = 0,
+                            name = "",
+                            percent = 0,
+                            value = 0,
+                          } = props;
+                          if (percent < 0.035) return null;
+                          const RAD = Math.PI / 180;
+                          const r = outerRadius + 16;
+                          const x = cx + r * Math.cos(-midAngle * RAD);
+                          const y = cy + r * Math.sin(-midAngle * RAD);
+                          return (
+                            <text
+                              x={x}
+                              y={y}
+                              fill="#c5cdd8"
+                              textAnchor={x > cx ? "start" : "end"}
+                              dominantBaseline="central"
                               style={{
-                                width: `${w}%`,
-                                background: PIE_COLORS[i % PIE_COLORS.length],
+                                fontSize: "0.72vw",
+                                fontFamily: plexMono.style.fontFamily,
                               }}
-                            />
-                          </span>
-                          <span className="amt">
-                            {fmtMoney(p.arr)}
-                            <span className="pct">{pct}%</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="tv-pie">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius="58%"
-                          outerRadius="88%"
-                          paddingAngle={1.5}
-                          stroke="rgba(12,13,16,0.6)"
-                          strokeWidth={1}
-                          isAnimationActive={false}
-                        >
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            background: "#14161c",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: 6,
-                            fontSize: 11,
-                            fontFamily: plexMono.style.fontFamily,
-                          }}
-                          formatter={(value: number, name: string) => [
-                            fmtMoney(value),
-                            name,
-                          ]}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="tv-pie-center">
-                      <span>
-                        <b>{fmtMoney(r.arr)}</b>
-                        ARR mix
-                      </span>
-                    </div>
+                            >
+                              {`${name} ${fmtMoney(value)}`}
+                            </text>
+                          );
+                        }}
+                      >
+                        {pieData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          background: "#14161c",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontFamily: plexMono.style.fontFamily,
+                        }}
+                        formatter={(value: number, name: string) => [
+                          fmtMoney(value),
+                          name,
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="tv-pie-center">
+                    <span>
+                      <b>{fmtMoney(r.arr)}</b>
+                      ARR
+                    </span>
                   </div>
                 </div>
               </div>
