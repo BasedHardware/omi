@@ -598,6 +598,11 @@ extension APIClient {
     )
   }
 
+  /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two
+  /// sequential model calls), so these endpoints override the shared 30s transport timeout.
+  /// Windows budgets the same 60s.
+  static var managedSynthesisTimeout: TimeInterval { 60 }
+
   /// Return-only SSOT memory-log extraction through managed memories (OpenRouter Luna).
   func extractMemoryLogImpl(
     text: String,
@@ -630,7 +635,8 @@ extension APIClient {
         textSource: textSource,
         existingMemories: Array(existingMemories.prefix(200))),
       expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: pinnedAuthorization)
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 
   /// Return-only connector synthesis (calendar / gmail / notes) through managed memories.
@@ -665,7 +671,8 @@ extension APIClient {
         items: Array(items.prefix(200)).map { String($0.prefix(1000)) },
         existingMemories: Array(existingMemories.prefix(200))),
       expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: pinnedAuthorization)
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 
   /// Creates a new memory (manual or extracted)

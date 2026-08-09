@@ -203,8 +203,20 @@ extension APIClient {
     goals: [String],
     conversations: [String],
     messages: [String],
-    pastProfilesOldestFirst: [String]
+    pastProfilesOldestFirst: [String],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AIUserProfileSynthesisResponse {
+    // The request carries one account's memories, messages and past profiles. Without a
+    // pinned owner an auth retry after a mid-flight account switch would replay them under
+    // the new account's token.
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
     struct SynthesizeRequest: Encodable {
       let memories: [String]
       let tasks: [String]
@@ -223,7 +235,10 @@ extension APIClient {
         conversations: conversations,
         messages: messages,
         past_profiles: Array(pastProfilesOldestFirst.prefix(5))
-      ))
+      ),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 
   // MARK: - Agent VM

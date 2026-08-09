@@ -469,7 +469,8 @@ extension APIClient {
       "v1/knowledge-graph/extract",
       body: Body(text: text, includeExisting: includeExisting),
       expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: pinnedAuthorization)
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 }
 
