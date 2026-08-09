@@ -10679,6 +10679,116 @@
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
       },
+      "ExtractKnowledgeGraphRequest": {
+        "properties": {
+          "include_existing": {
+            "default": false,
+            "title": "Include Existing",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractKnowledgeGraphRequest",
+        "type": "object"
+      },
+      "ExtractKnowledgeGraphResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "ExtractKnowledgeGraphResponse",
+        "type": "object"
+      },
+      "ExtractMemoryLogRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "existing_memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Existing Memories",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "default": "memory_log",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Text Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractMemoryLogRequest",
+        "type": "object"
+      },
+      "ExtractMemoryLogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "profile": {
+            "default": "",
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "ExtractMemoryLogResponse",
+        "type": "object"
+      },
       "FairUseDailyGenerationsBudgetResponse": {
         "properties": {
           "daily_limit_ms": {
@@ -41498,6 +41608,94 @@
         ]
       }
     },
+    "/v1/knowledge-graph/extract": {
+      "post": {
+        "description": "Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/file-index should call this instead of\ninventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.",
+        "operationId": "extract_knowledge_graph_v1_knowledge_graph_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractKnowledgeGraphRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractKnowledgeGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Knowledge Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
     "/v1/knowledge-graph/rebuild": {
       "post": {
         "operationId": "rebuild_graph_v1_knowledge_graph_rebuild_post",
@@ -43507,6 +43705,94 @@
         "summary": "Mcp Sse Info",
         "tags": [
           "mcp"
+        ]
+      }
+    },
+    "/v1/memories/extract": {
+      "post": {
+        "description": "Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/import should call this instead of inventing\nmemories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.",
+        "operationId": "extract_memory_log_v1_memories_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractMemoryLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractMemoryLogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Memory Log",
+        "tags": [
+          "memories"
         ]
       }
     },
