@@ -241,7 +241,7 @@ struct SBOnboardingView: View {
     }
   }
 
-@ViewBuilder private func streamingOmiRow(_ text: String) -> some View {
+  @ViewBuilder private func streamingOmiRow(_ text: String) -> some View {
     if OmiMarkdown.isPlainText(text) {
       HStack(alignment: .top, spacing: 10) {
         SBLogo(size: 16, opacity: 0.9)

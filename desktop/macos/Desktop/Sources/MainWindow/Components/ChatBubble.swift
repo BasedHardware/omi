@@ -254,7 +254,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-if message.sender == .ai, shouldTruncate {
+          if message.sender == .ai, shouldTruncate {
             // Keep the expansion affordance on the same baseline as the
             // visible truncation ellipsis. The text gets the remaining width,
             // so the control cannot fall onto a detached row.
@@ -274,9 +274,6 @@ if message.sender == .ai, shouldTruncate {
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 message.sender == .user
-                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
-              )
-          } else {
                   ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
               )
           } else {
@@ -371,7 +368,7 @@ if message.sender == .ai, shouldTruncate {
       if text.isEmpty {
         return AnyView(EmptyView())
       }
-return AnyView(StreamingAssistantText(text, isStreaming: message.isStreaming))
+      return AnyView(StreamingAssistantText(text, isStreaming: message.isStreaming))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
