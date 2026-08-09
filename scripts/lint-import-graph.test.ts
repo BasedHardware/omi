@@ -225,6 +225,44 @@ test("rule 17 does not fire on a file that only CALLS the path (a client, not a 
   );
 });
 
+test("rule 17 does not call a router plus its binder two servers", () => {
+  // Round-7 audit. The round-6 "two constructions on one line" check summed all
+  // four detection patterns, but `new Hono(` builds a router VALUE and binds no
+  // socket. `Bun.serve({ fetch: new Hono().fetch })` is the ordinary way to wire
+  // them and is ONE server; the check called it two and fired — unconditionally,
+  // on any file in the tree, not only ones naming a wire path. This fixture does
+  // not contain the word "memories" at all.
+  withWirePathFixture(
+    [
+      'import { Hono } from "hono";',
+      "const server = Bun.serve({ fetch: new Hono().fetch });",
+      "void server;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17 still catches a Hono-only door that never calls Bun.serve", () => {
+  // The converse, and the reason `new Hono(` stays in DETECTION: a router
+  // carrying the registered path is the door regardless of who binds it later.
+  // Narrowing the count must not narrow what counts as a site.
+  withWirePathFixture(
+    [
+      'import { Hono } from "hono";',
+      "const app = new Hono();",
+      'app.get("/v1/memories", () => new Response("{}"));',
+      "export default app;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("rule 17 does not fire on a DIFFERENT route that merely starts with a registered path", () => {
   // `/v1/memories-legacy-export` contains `/v1/memories` as a substring and is
   // not it. No such path exists in the tree today; the guard is here so the

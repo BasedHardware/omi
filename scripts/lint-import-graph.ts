@@ -284,10 +284,39 @@ const namesWirePath = (code: string, wirePath: string): boolean => {
     from = at + 1;
   }
 };
+/**
+ * Anything that means "a server lives here" for DETECTION purposes. `new Hono(`
+ * belongs: a router carrying the path is the door, whoever binds it.
+ */
 const serverConstructionPatterns: readonly RegExp[] = [
   /\bBun\.serve\s*\(/,
   /\bDeno\.serve\s*\(/,
   /\bnew\s+Hono\s*\(/,
+  /\bcreateServer\s*\(/,
+];
+
+/**
+ * The subset that actually BINDS A SOCKET — and the distinction is load-bearing
+ * for counting, not for detection.
+ *
+ * `new Hono(` constructs a router VALUE. It opens nothing; something else binds
+ * it, and `Bun.serve({ fetch: new Hono().fetch })` is the ordinary way to write
+ * that. On one line it matches two patterns, so a naive count says "two servers"
+ * about a file containing exactly one. The round-6 fix did precisely that, and
+ * the round-7 audit caught it: an unconditional check, firing on working code,
+ * anywhere in `platform/` — not even scoped to files that name a wire path.
+ *
+ * That is the failure this repo has already shipped once, in a fence that banned
+ * an ordinary English word and fired on prose while catching no real reference.
+ * A guard that fires on ordinary code gets routed around, and a routed-around
+ * guardrail is worse than none.
+ *
+ * Two independent SOCKET BINDS on one line still has no ordinary explanation and
+ * still fails.
+ */
+const socketBindPatterns: readonly RegExp[] = [
+  /\bBun\.serve\s*\(/,
+  /\bDeno\.serve\s*\(/,
   /\bcreateServer\s*\(/,
 ];
 
@@ -369,12 +398,12 @@ for (const file of files(root)) {
      * demonstrated against the real hatched file, lint green.
      */
     const constructionsOn = (line: string): number =>
-      serverConstructionPatterns.reduce(
+      socketBindPatterns.reduce(
         (total, pattern) => total + (line.match(new RegExp(pattern.source, "g")) ?? []).length,
         0,
       );
     const serverSites = codeLines
-      .map((line, index) => (constructionsOn(line) > 0 ? index : -1))
+      .map((line, index) => (serverConstructionPatterns.some((p) => p.test(line)) ? index : -1))
       .filter((index) => index >= 0);
 
     // Two constructions on one line is ALWAYS a failure, hatch or no hatch. The
