@@ -84,7 +84,7 @@ const BRIDGE_MODE = isBridgeHttpAvailable();
 
 function DevApp(): React.JSX.Element {
   const [stores, setStores] = useState<DevStores | null>(null);
-  const [baseUrl, setBaseUrl] = useState(localStorage.getItem(LS_URL) ?? "https://api.omi.me");
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem(LS_URL) ?? "http://127.0.0.1:4851");
   const [token, setToken] = useState(localStorage.getItem(LS_TOKEN) ?? "");
   const [uid, setUid] = useState(localStorage.getItem(LS_UID) ?? "dev-user");
 
