@@ -22,6 +22,7 @@ export type TvSnapshot = {
   revenue: {
     mrr: number | null;
     arr: number | null;
+    subscriptionCount?: number | null;
     byProduct: Array<{ productId: string; name: string; mrr: number; subscriptions: number }>;
     unavailable?: boolean;
   } | null;
@@ -295,10 +296,7 @@ export async function buildTvSnapshot(opts: {
     try {
       const rev = await computeRevenue();
       stripeOk = !rev.unavailable;
-      revenue = {
-        mrr: rev.unavailable ? null : rev.mrr,
-        arr: rev.unavailable ? null : rev.arr,
-        byProduct: (rev.byProduct || []).map(
+      const byProduct = (rev.byProduct || []).map(
           (p: {
             productId: string;
             productName: string;
@@ -310,7 +308,12 @@ export async function buildTvSnapshot(opts: {
             mrr: p.mrr,
             subscriptions: p.subscriptionCount,
           }),
-        ),
+        );
+      revenue = {
+        mrr: rev.unavailable ? null : rev.mrr,
+        arr: rev.unavailable ? null : rev.arr,
+        subscriptionCount: byProduct.reduce((a, p) => a + (p.subscriptions || 0), 0),
+        byProduct,
         unavailable: !!rev.unavailable,
       };
       if (rev.partial) warnings.push("stripe: partial subscription page");

@@ -1,43 +1,136 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip,
+  YAxis,
+} from "recharts";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import type { TvSnapshot } from "@/lib/tv-snapshot";
 
-function formatCompact(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return Math.round(value).toLocaleString();
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+
+const S = {
+  line: "#c5cdd8",
+  blue: "#8eb4e0",
+  amber: "#d4a574",
+  aqua: "#7eb8b0",
+  violet: "#a89fd4",
+  rose: "#d48890",
+  muted: "#9aa3b2",
+  dim: "#6b7382",
+  ink: "#f2f3f5",
+  ok: "#5bb98c",
+  warn: "#d4b45a",
+};
+
+type Props = {
+  getToken: () => Promise<string | null>;
+  kioskLabel?: string;
+  pollMs?: number;
+  showAdminChrome?: boolean;
+};
+
+function fmt(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const n = Number(v);
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 10_000) return `${Math.round(n / 1000)}k`;
+  if (Number.isInteger(n) || Math.abs(n) >= 100) return Math.round(n).toLocaleString();
+  return (Math.round(n * 10) / 10).toLocaleString();
 }
 
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+function fmtMoney(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const n = Number(v);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1000)}k`;
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
 }
 
-function ageLabel(iso: string | undefined): string {
-  if (!iso) return "";
+function ageLabel(iso?: string): string {
+  if (!iso) return "no snapshot";
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso;
   const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
-  if (sec < 60) return `updated ${sec}s ago`;
-  if (sec < 3600) return `updated ${Math.round(sec / 60)}m ago`;
-  return `updated ${Math.round(sec / 3600)}h ago`;
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  return `${Math.round(sec / 3600)}h ago`;
 }
 
-type Props = {
-  /** Bearer token for /api/tv/snapshot (Firebase ID token or TV share token). */
-  getToken: () => Promise<string | null>;
-  /** When set, show kiosk chrome (no admin nav). */
-  kioskLabel?: string;
-  pollMs?: number;
-};
+function shortProduct(name: string): string {
+  return name.replace(/^Omi\s+/i, "").replace(/\s+Monthly (Plan|Subscription)$/i, "") || "—";
+}
 
-export function TvBoard({ getToken, kioskLabel, pollMs = 60_000 }: Props) {
+function MiniArea({
+  data,
+  color = S.line,
+  money = false,
+}: {
+  data: Array<{ v: number }>;
+  color?: string;
+  money?: boolean;
+}) {
+  if (!data || data.length < 2) {
+    return <div className="tv-empty-chart">No trend yet</div>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={`g-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <YAxis hide domain={["dataMin", "dataMax"]} />
+        <Tooltip
+          contentStyle={{
+            background: "#14161c",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 6,
+            fontSize: 12,
+            fontFamily: plexMono.style.fontFamily,
+          }}
+          labelStyle={{ display: "none" }}
+          formatter={(value: number) => [money ? fmtMoney(value) : fmt(value), ""]}
+        />
+        <Area
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={1.6}
+          fill={`url(#g-${color.replace("#", "")})`}
+          isAnimationActive={false}
+          dot={false}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function TvBoard({
+  getToken,
+  kioskLabel,
+  pollMs = 60_000,
+  showAdminChrome = false,
+}: Props) {
   const [snap, setSnap] = useState<TvSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState("");
@@ -57,8 +150,7 @@ export function TvBoard({ getToken, kioskLabel, pollMs = 60_000 }: Props) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
-      const data = (await res.json()) as TvSnapshot;
-      setSnap(data);
+      setSnap((await res.json()) as TvSnapshot);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -74,7 +166,13 @@ export function TvBoard({ getToken, kioskLabel, pollMs = 60_000 }: Props) {
   useEffect(() => {
     const tick = () =>
       setClock(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        new Date().toLocaleString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
       );
     tick();
     const id = setInterval(tick, 1000);
@@ -84,221 +182,528 @@ export function TvBoard({ getToken, kioskLabel, pollMs = 60_000 }: Props) {
   const a = snap?.activity;
   const m = snap?.million;
   const r = snap?.revenue;
+  const f = snap?.features;
+
+  const dauSeries = useMemo(
+    () => (a?.daily || []).map((d) => ({ v: d.dau, day: d.day })),
+    [a?.daily],
+  );
+  const millionSeries = useMemo(
+    () => (m?.series || []).map((d) => ({ v: d.total, day: d.day })),
+    [m?.series],
+  );
+  const newUserSeries = useMemo(
+    () => (m?.series || []).map((d) => ({ v: d.newUsers, day: d.day })),
+    [m?.series],
+  );
+
+  const stickiness =
+    a?.dau1d != null && a?.wau7d != null && a.wau7d > 0
+      ? Math.round((a.dau1d / a.wau7d) * 1000) / 10
+      : null;
+
+  const products = useMemo(() => {
+    const all = (r?.byProduct || [])
+      .map((p) => ({
+        name: shortProduct(p.name),
+        arr: (p.mrr || 0) * 12,
+        subs: p.subscriptions || 0,
+      }))
+      .filter((p) => p.arr > 0)
+      .sort((x, y) => y.arr - x.arr);
+    const rest = all.slice(5).reduce((s, p) => s + p.arr, 0);
+    const top = all.slice(0, 5);
+    if (rest > 0) top.push({ name: "Other", arr: rest, subs: 0 });
+    return top;
+  }, [r?.byProduct]);
+  const maxArr = products[0]?.arr || 1;
+  const sumArr = products.reduce((s, p) => s + p.arr, 0) || 1;
+
+  const liveState = !snap
+    ? "down"
+    : snap.partial
+      ? "stale"
+      : error
+        ? "down"
+        : "";
 
   return (
-    <div className="tv-root min-h-screen text-slate-100">
+    <div className={`tv-shell ${plexSans.className} ${plexMono.className}`}>
       <style>{`
-        .tv-root {
-          background:
-            radial-gradient(1200px 600px at 10% -10%, #1a2a55 0%, transparent 55%),
-            radial-gradient(900px 500px at 90% 0%, #14263f 0%, transparent 50%),
-            #070a12;
-          font-family: "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+        .tv-shell {
+          --bg: #0c0d10;
+          --panel: #14161c;
+          --line: rgba(255,255,255,0.08);
+          --ink: #f2f3f5;
+          --muted: #9aa3b2;
+          --dim: #6b7382;
+          --ok: #5bb98c;
+          --warn: #d4b45a;
+          --bad: #d48890;
+          --s1: #8eb4e0;
+          --s2: #d4a574;
+          --s3: #7eb8b0;
+          --s4: #a89fd4;
+          --gap: 0.45vw;
+          --radius: 0.35vw;
+          --fs-lead: 3.4vw;
+          --fs-hero: 2.7vw;
+          --fs-stat: 1.75vw;
+          --fs-label: 0.78vw;
+          --fs-chip: 0.86vw;
+          --fs-fine: 0.72vw;
+          color: var(--ink);
+          background: var(--bg);
+          height: 100vh;
+          width: 100vw;
+          overflow: hidden;
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+          -webkit-font-smoothing: antialiased;
         }
-        .tv-tile {
-          background: linear-gradient(180deg, #152038, #10182a);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 1rem;
-          padding: 1rem 1.1rem;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-          min-height: 7rem;
+        .tv-shell * { box-sizing: border-box; }
+        .tv-rail {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1vw;
+          padding: 0.55vw 1vw 0.35vw;
+          border-bottom: 1px solid var(--line);
         }
-        .tv-label {
-          color: #8b9bb8;
-          font-size: 0.9rem;
-          font-weight: 500;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
+        .tv-brand { display: flex; align-items: baseline; gap: 0.5vw; }
+        .tv-dot {
+          width: 0.4vw; height: 0.4vw; min-width: 7px; min-height: 7px;
+          border-radius: 50%; background: var(--ok); align-self: center;
         }
-        .tv-value {
-          margin-top: 0.4rem;
-          font-size: clamp(2rem, 4vw, 3.2rem);
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-          letter-spacing: -0.03em;
-          line-height: 1.05;
+        .tv-dot.stale { background: var(--warn); }
+        .tv-dot.down { background: var(--bad); }
+        .tv-brand-name {
+          font-size: 1.15vw; font-weight: 600; letter-spacing: -0.02em;
         }
-        .tv-detail {
-          margin-top: 0.45rem;
-          color: #8b9bb8;
-          font-size: 0.8rem;
+        .tv-brand-sub {
+          font-size: var(--fs-label); text-transform: uppercase;
+          letter-spacing: 0.18em; color: var(--dim);
         }
-        .tv-section-title {
-          color: #8b9bb8;
-          font-size: 0.75rem;
+        .tv-rail-right {
+          display: flex; align-items: center; gap: 0.9vw;
+        }
+        .tv-fresh, .tv-status {
+          font-family: ${plexMono.style.fontFamily};
+          font-size: var(--fs-fine); color: var(--muted);
+        }
+        .tv-status { color: var(--warn); max-width: 18vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-clock {
+          font-family: ${plexMono.style.fontFamily};
+          font-size: 1vw; font-weight: 500; font-variant-numeric: tabular-nums;
+        }
+        .tv-chrome a {
+          font-size: var(--fs-fine);
+          color: var(--dim);
+          text-decoration: none;
+          border: 1px solid var(--line);
+          padding: 0.2vw 0.5vw;
+          border-radius: 999px;
+        }
+        .tv-chrome a:hover { color: var(--ink); border-color: var(--muted); }
+        .tv-board {
+          display: grid;
+          grid-template-columns: repeat(12, 1fr);
+          grid-template-rows: 1.28fr 1fr 1fr;
+          gap: var(--gap);
+          padding: 0.4vw 1vw 0.3vw;
+          min-height: 0;
+        }
+        .tv-panel {
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 0.5vw 0.65vw 0.4vw;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .tv-panel h2 {
+          margin: 0 0 0.25vw;
+          display: flex; align-items: baseline; gap: 0.45vw;
+          font-weight: 500; font-size: inherit;
+        }
+        .tv-eyebrow {
+          font-size: var(--fs-label);
           text-transform: uppercase;
           letter-spacing: 0.14em;
-          margin: 0 0 0.55rem;
-          font-weight: 600;
+          color: var(--muted);
+        }
+        .tv-h2-sub {
+          font-family: ${plexMono.style.fontFamily};
+          font-size: var(--fs-fine);
+          color: var(--dim);
+          margin-left: auto;
+        }
+        .tv-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .tv-stat-row {
+          display: flex; align-items: flex-end; justify-content: space-between;
+          gap: 0.5vw; flex: 0 0 auto;
+        }
+        .tv-stat { display: flex; flex-direction: column; gap: 0.1vw; min-width: 0; }
+        .tv-value {
+          font-family: ${plexMono.style.fontFamily};
+          font-size: var(--fs-stat);
+          font-weight: 500;
+          letter-spacing: -0.03em;
+          line-height: 0.95;
+          font-variant-numeric: tabular-nums;
+        }
+        .tv-lead .tv-value { font-size: var(--fs-lead); }
+        .tv-hero .tv-value { font-size: var(--fs-hero); }
+        .tv-caption {
+          font-size: var(--fs-fine);
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--muted);
+        }
+        .tv-side {
+          display: flex; align-items: flex-end; gap: 0.9vw;
+        }
+        .tv-side .tv-value { font-size: var(--fs-stat); color: var(--muted); }
+        .tv-plat {
+          display: flex; flex-wrap: wrap; gap: 0.25vw 0.75vw;
+          margin-top: 0.25vw; font-size: var(--fs-chip); color: var(--muted);
+        }
+        .tv-plat span { display: inline-flex; align-items: baseline; gap: 0.25vw; }
+        .tv-plat i {
+          width: 0.45vw; height: 0.18vw; min-width: 6px; min-height: 2px;
+          align-self: center; display: inline-block;
+        }
+        .tv-plat b {
+          font-family: ${plexMono.style.fontFamily};
+          font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums;
+        }
+        .tv-chart { position: relative; flex: 1 1 0; min-height: 0; margin-top: 0.15vw; }
+        .tv-empty-chart {
+          height: 100%; display: grid; place-items: center;
+          color: var(--dim); font-size: var(--fs-chip);
+        }
+        .tv-rev { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.3vw; }
+        .tv-rev-head .tv-value { font-size: 2.1vw; }
+        .tv-rev-list {
+          flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+          justify-content: center; gap: 0.3vw; overflow: hidden;
+        }
+        .tv-rev-row {
+          display: grid; grid-template-columns: 5.2vw 1fr 3.4vw;
+          align-items: center; gap: 0.35vw; font-size: var(--fs-chip);
+        }
+        .tv-rev-row .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-rev-row .bar {
+          height: 0.38vw; min-height: 4px; background: rgba(255,255,255,0.06); overflow: hidden;
+        }
+        .tv-rev-row .bar > i { display: block; height: 100%; background: var(--s2); }
+        .tv-rev-row:nth-child(2) .bar > i { background: var(--s3); }
+        .tv-rev-row:nth-child(3) .bar > i { background: var(--s1); }
+        .tv-rev-row:nth-child(4) .bar > i { background: var(--warn); }
+        .tv-rev-row:nth-child(5) .bar > i { background: #d48890; }
+        .tv-rev-row:nth-child(6) .bar > i { background: #8b93a3; }
+        .tv-rev-row .amt {
+          font-family: ${plexMono.style.fontFamily};
+          font-weight: 500; text-align: right; font-variant-numeric: tabular-nums;
+        }
+        .tv-rev-row .pct { color: var(--dim); margin-left: 0.2em; }
+        .tv-rev-trend {
+          flex: 0 0 auto; height: auto; border-top: 1px solid var(--line);
+          padding-top: 0.45vw; min-height: 0;
+        }
+        .tv-mixbar {
+          display: flex; width: 100%; height: 0.55vw; min-height: 6px;
+          overflow: hidden; background: rgba(255,255,255,0.04);
+        }
+        .tv-mixbar > i { display: block; height: 100%; }
+        .tv-mixbar-cap {
+          margin-top: 0.25vw;
+          font-size: var(--fs-fine);
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--dim);
+        }
+        .tv-foot {
+          display: flex; justify-content: space-between; align-items: center;
+          gap: 1vw; padding: 0.35vw 1vw 0.5vw; border-top: 1px solid var(--line);
+        }
+        .tv-warn {
+          font-family: ${plexMono.style.fontFamily};
+          font-size: var(--fs-fine); color: var(--warn);
+          max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .tv-hint { font-size: var(--fs-fine); color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; }
+        #p-dau { grid-column: 1 / 7; grid-row: 1; }
+        #p-mem { grid-column: 7 / 10; grid-row: 1; }
+        #p-rev { grid-column: 10 / 13; grid-row: 1 / 3; }
+        #p-chat { grid-column: 1 / 4; grid-row: 2; }
+        #p-habit { grid-column: 4 / 7; grid-row: 2; }
+        #p-stick { grid-column: 7 / 10; grid-row: 2; }
+        #p-mil { grid-column: 1 / 9; grid-row: 3; }
+        #p-new { grid-column: 9 / 13; grid-row: 3; }
+        @media (max-width: 1100px) {
+          .tv-shell { height: auto; min-height: 100vh; overflow: auto; --fs-lead: 2.2rem; --fs-hero: 1.8rem; --fs-stat: 1.25rem; --fs-label: 0.65rem; --fs-chip: 0.75rem; --fs-fine: 0.65rem; --gap: 0.5rem; --radius: 0.4rem; }
+          .tv-board { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
+          .tv-panel { grid-column: auto !important; grid-row: auto !important; min-height: 14rem; }
+          #p-dau, #p-mil, #p-rev { grid-column: 1 / -1 !important; }
+          .tv-rev-trend { height: 5rem; }
         }
       `}</style>
 
-      <header className="flex items-start justify-between gap-4 px-6 pt-5 pb-2">
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-sky-300/80">omi</div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight m-0">
-            {snap?.title || "Key metrics"}
-          </h1>
-          <p className="text-slate-400 text-sm m-0 mt-1">
-            {kioskLabel ? `${kioskLabel} · ` : ""}
-            {ageLabel(snap?.generatedAt)}
-            {snap?.partial ? " · partial sources" : ""}
-          </p>
+      <header className="tv-rail">
+        <div className="tv-brand">
+          <span className={`tv-dot ${liveState}`} />
+          <span className="tv-brand-name">omi</span>
+          <span className="tv-brand-sub">
+            {kioskLabel ? `${kioskLabel} · ` : ""}product pulse
+          </span>
         </div>
-        <div className="text-right">
-          <div className="text-3xl font-semibold tabular-nums">{clock}</div>
-          <div className="mt-2 flex flex-wrap gap-1.5 justify-end">
-            {snap &&
-              Object.entries(snap.sources).map(([k, ok]) => (
-                <span
-                  key={k}
-                  className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                    ok
-                      ? "border-emerald-500/40 text-emerald-400"
-                      : "border-rose-500/40 text-rose-400"
-                  }`}
-                >
-                  {k}
-                </span>
-              ))}
-          </div>
+        <div className="tv-rail-right">
+          {error ? <span className="tv-status">{error}</span> : null}
+          <span className="tv-fresh">{ageLabel(snap?.generatedAt)}</span>
+          <time className="tv-clock">{clock}</time>
+          {showAdminChrome ? (
+            <span className="tv-chrome">
+              <Link href="/dashboard/tv-links">links</Link>{" "}
+              <Link href="/dashboard">exit</Link>
+            </span>
+          ) : null}
         </div>
       </header>
 
-      {error && (
-        <div className="mx-6 mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-amber-100 text-sm">
-          {error}
-        </div>
-      )}
-
-      <main className="px-6 pb-8 space-y-5">
-        {r && (
-          <section>
-            <h2 className="tv-section-title">Revenue</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="tv-tile">
-                <div className="tv-label">ARR</div>
-                <div className="tv-value">{formatCurrency(r.arr)}</div>
-                <div className="tv-detail">Stripe active + past_due plans</div>
+      <main className="tv-board">
+        {/* Active users — lead */}
+        <section className="tv-panel tv-lead" id="p-dau">
+          <h2>
+            <span className="tv-eyebrow">Active users</span>
+            <span className="tv-h2-sub">24h / 7d</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">{fmt(a?.dau1d)}</div>
+                <div className="tv-caption">DAU · last 24h</div>
               </div>
-              <div className="tv-tile">
-                <div className="tv-label">MRR</div>
-                <div className="tv-value">{formatCurrency(r.mrr)}</div>
-              </div>
-              {(r.byProduct || []).slice(0, 2).map((p) => (
-                <div key={p.productId || p.name} className="tv-tile">
-                  <div className="tv-label">{p.name}</div>
-                  <div className="tv-value">{formatCurrency(p.mrr * 12)}</div>
-                  <div className="tv-detail">
-                    {p.subscriptions} subs · ARR from MRR×12
-                  </div>
+              <div className="tv-side">
+                <div className="tv-stat">
+                  <div className="tv-value">{fmt(a?.wau7d)}</div>
+                  <div className="tv-caption">WAU</div>
                 </div>
-              ))}
+              </div>
             </div>
-          </section>
-        )}
-
-        <section>
-          <h2 className="tv-section-title">Active users</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="tv-tile">
-              <div className="tv-label">DAU 24h</div>
-              <div className="tv-value">{formatCompact(a?.dau1d)}</div>
+            <div className="tv-plat">
+              <span>
+                <i style={{ background: S.blue }} /> Mac <b>{fmt(a?.desktopDau)}</b>
+              </span>
+              <span>
+                <i style={{ background: S.aqua }} /> Mobile <b>{fmt(a?.mobileDau)}</b>
+              </span>
+              <span>
+                <i style={{ background: S.amber }} /> Chat <b>{fmt(a?.chatUsers1d)}</b>
+              </span>
             </div>
-            <div className="tv-tile">
-              <div className="tv-label">WAU 7d</div>
-              <div className="tv-value">{formatCompact(a?.wau7d)}</div>
-            </div>
-            <div className="tv-tile">
-              <div className="tv-label">Desktop DAU</div>
-              <div className="tv-value">{formatCompact(a?.desktopDau)}</div>
-            </div>
-            <div className="tv-tile">
-              <div className="tv-label">Mobile DAU</div>
-              <div className="tv-value">{formatCompact(a?.mobileDau)}</div>
-            </div>
-            <div className="tv-tile">
-              <div className="tv-label">Chat users</div>
-              <div className="tv-value">{formatCompact(a?.chatUsers1d)}</div>
-              <div className="tv-detail">24h</div>
-            </div>
-            <div className="tv-tile">
-              <div className="tv-label">Memory users</div>
-              <div className="tv-value">{formatCompact(a?.memoryUsers1d)}</div>
-              <div className="tv-detail">24h created/extracted</div>
+            <div className="tv-chart">
+              <MiniArea data={dauSeries} color={S.blue} />
             </div>
           </div>
-          {a?.daily && a.daily.length > 1 && (
-            <div className="tv-tile mt-3">
-              <div className="tv-label mb-2">DAU · 14d</div>
-              <Spark values={a.daily.map((d) => d.dau)} />
-            </div>
-          )}
         </section>
 
-        <section>
-          <h2 className="tv-section-title">Growth &amp; product</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="tv-tile col-span-2">
-              <div className="tv-label">Days to 1M users</div>
-              <div className="tv-value">
-                {m?.days == null ? "—" : m.days === 0 ? "✓" : formatCompact(m.days)}
-              </div>
-              <div className="tv-detail">
-                {formatCompact(m?.totalUsers)} persons ·{" "}
-                {m?.perDay != null ? `${m.perDay}/day` : "—"} avg new ({m?.rateDays ?? 7}d)
-              </div>
-            </div>
-            <div className="tv-tile">
-              <div className="tv-label">Floating bar</div>
-              <div className="tv-value">{formatCompact(snap?.features.floatingBarUsers30d)}</div>
-              <div className="tv-detail">
-                users 30d · {formatCompact(snap?.features.floatingBarQueries30d)} queries
+        {/* Memories */}
+        <section className="tv-panel tv-hero" id="p-mem">
+          <h2>
+            <span className="tv-eyebrow">Memory users</span>
+            <span className="tv-h2-sub">24h</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">{fmt(a?.memoryUsers1d)}</div>
+                <div className="tv-caption">created / extracted</div>
               </div>
             </div>
-            <div className="tv-tile">
-              <div className="tv-label">Target</div>
-              <div className="tv-value">{formatCompact(m?.target ?? 1_000_000)}</div>
-              <div className="tv-detail">PostHog persons</div>
+            <div className="tv-chart">
+              <MiniArea data={dauSeries} color={S.aqua} />
+            </div>
+          </div>
+        </section>
+
+        {/* Revenue tall */}
+        <section className="tv-panel" id="p-rev">
+          <h2>
+            <span className="tv-eyebrow">Annual recurring revenue</span>
+            <span className="tv-h2-sub">Stripe</span>
+          </h2>
+          <div className="tv-body">
+            {r == null ? (
+              <div className="tv-empty-chart">Revenue hidden on this link</div>
+            ) : r.unavailable ? (
+              <div className="tv-empty-chart">Stripe not configured</div>
+            ) : (
+              <div className="tv-rev">
+                <div className="tv-rev-head">
+                  <div className="tv-value">{fmtMoney(r.arr)}</div>
+                  <div className="tv-caption">
+                    {fmt(r.subscriptionCount)} subscriptions · MRR {fmtMoney(r.mrr)}
+                  </div>
+                </div>
+                <div className="tv-rev-list">
+                  {products.map((p) => {
+                    const w = Math.max(2, Math.round((p.arr / maxArr) * 100));
+                    const pct = Math.round((p.arr / sumArr) * 100);
+                    return (
+                      <div className="tv-rev-row" key={p.name}>
+                        <span className="name">{p.name}</span>
+                        <span className="bar">
+                          <i style={{ width: `${w}%` }} />
+                        </span>
+                        <span className="amt">
+                          {fmtMoney(p.arr)}
+                          <span className="pct">{pct}%</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="tv-rev-trend">
+                  <div className="tv-mixbar" aria-hidden>
+                    {products.map((p, i) => {
+                      const colors = [S.amber, S.aqua, S.blue, S.warn, S.rose, "#8b93a3"];
+                      const pct = Math.max(1.5, (p.arr / sumArr) * 100);
+                      return (
+                        <i
+                          key={p.name}
+                          style={{
+                            width: `${pct}%`,
+                            background: colors[i % colors.length],
+                          }}
+                          title={`${p.name} ${fmtMoney(p.arr)}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="tv-mixbar-cap">product mix · list-price ARR</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Chat */}
+        <section className="tv-panel tv-hero" id="p-chat">
+          <h2>
+            <span className="tv-eyebrow">Chat</span>
+            <span className="tv-h2-sub">24h</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">{fmt(a?.chatUsers1d)}</div>
+                <div className="tv-caption">users sending messages</div>
+              </div>
+            </div>
+            <div className="tv-chart">
+              <MiniArea data={dauSeries} color={S.violet} />
+            </div>
+          </div>
+        </section>
+
+        {/* Habit / floating bar */}
+        <section className="tv-panel tv-hero" id="p-habit">
+          <h2>
+            <span className="tv-eyebrow">Habit forming</span>
+            <span className="tv-h2-sub">30d</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">{fmt(f?.floatingBarUsers30d)}</div>
+                <div className="tv-caption">
+                  floating bar users · {fmt(f?.floatingBarQueries30d)} queries
+                </div>
+              </div>
+            </div>
+            <div className="tv-chart">
+              <MiniArea data={newUserSeries} color={S.amber} />
+            </div>
+          </div>
+        </section>
+
+        {/* Stickiness instead of M1 retention */}
+        <section className="tv-panel tv-hero" id="p-stick">
+          <h2>
+            <span className="tv-eyebrow">Stickiness</span>
+            <span className="tv-h2-sub">DAU / WAU</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">
+                  {stickiness == null ? "—" : `${stickiness}%`}
+                </div>
+                <div className="tv-caption">
+                  {fmt(a?.dau1d)} of {fmt(a?.wau7d)} weekly actives today
+                </div>
+              </div>
+            </div>
+            <div className="tv-chart">
+              <MiniArea data={dauSeries} color={S.line} />
+            </div>
+          </div>
+        </section>
+
+        {/* Days to 1M */}
+        <section className="tv-panel tv-hero" id="p-mil">
+          <h2>
+            <span className="tv-eyebrow">Days until million users</span>
+            <span className="tv-h2-sub">{m?.rateDays ?? 7}d avg</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">
+                  {m?.days == null ? "—" : m.days === 0 ? "0" : fmt(m.days)}
+                </div>
+                <div className="tv-caption">
+                  {fmt(m?.totalUsers)} persons · +{fmt(m?.perDay)}/day
+                </div>
+              </div>
+            </div>
+            <div className="tv-chart">
+              <MiniArea data={millionSeries} color={S.line} />
+            </div>
+          </div>
+        </section>
+
+        {/* New users pace */}
+        <section className="tv-panel tv-hero" id="p-new">
+          <h2>
+            <span className="tv-eyebrow">New persons / day</span>
+            <span className="tv-h2-sub">PostHog</span>
+          </h2>
+          <div className="tv-body">
+            <div className="tv-stat-row">
+              <div className="tv-stat">
+                <div className="tv-value">{fmt(m?.perDay)}</div>
+                <div className="tv-caption">avg over {m?.rateDays ?? 7}d</div>
+              </div>
+            </div>
+            <div className="tv-chart">
+              <MiniArea data={newUserSeries} color={S.aqua} />
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="px-6 pb-4 text-xs text-slate-500 flex justify-between gap-4">
-        <span className="truncate">
+      <footer className="tv-foot">
+        <span className="tv-warn">
           {snap?.warnings?.length
             ? `${snap.warnings.length} warning(s): ${snap.warnings[0]}`
-            : "Aggregate metrics only · no PII"}
+            : "Aggregate metrics · no PII"}
         </span>
-        <span>Auto-refresh</span>
+        <span className="tv-hint">auto-refresh</span>
       </footer>
     </div>
-  );
-}
-
-function Spark({ values }: { values: number[] }) {
-  if (values.length < 2) return null;
-  const w = 640;
-  const h = 56;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const pts = values
-    .map((v, i) => {
-      const x = (i * (w - 8)) / (values.length - 1) + 4;
-      const y = h - 4 - ((v - min) / span) * (h - 8);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-14" aria-hidden>
-      <polyline
-        fill="none"
-        stroke="rgba(110,168,255,0.95)"
-        strokeWidth="2.5"
-        points={pts}
-      />
-    </svg>
   );
 }
