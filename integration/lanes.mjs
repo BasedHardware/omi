@@ -49,6 +49,7 @@ import {
   REPO_PATHS,
   assertCrossTreePairingIsDeclared,
   assertRepoPathsExist,
+  WORKSPACE_ROOT,
   readStampFile,
   verifyArtifact,
 } from "./lib/provenance.mjs";
@@ -140,7 +141,7 @@ export const LANES = {
     steps: [
       { cwd: PLATFORM_REPO, command: "bun run qa:contracts" },
       { cwd: PLATFORM_REPO, command: "bun test integration/" },
-      { cwd: CORE_REPO, command: "node --test integration/cross-side/wire-agreement.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/cross-side/wire-agreement.test.mjs integration/cross-side/write-id-agreement.test.mjs integration/cross-side/tasks-wire-agreement.test.mjs" },
       { cwd: CORE_REPO, command: "node --test integration/lib/receipts.test.mjs integration/lib/run-report.test.mjs integration/lib/write-journey.test.mjs" },
     ],
   },
@@ -156,6 +157,98 @@ export const LANES = {
     ],
   },
 };
+
+/**
+ * ── A ROOT THAT IS BEHIND ITS OWN REMOTE IS NOT A ROOT ANYONE CHOSE ─────────
+ *
+ * `assertCrossTreePairingIsDeclared` made a lane state WHICH trees it measures.
+ * It cannot see WHEN. The shared `platform` checkout spent this run many commits
+ * behind its trunk while lanes declared it and measured it, and the failure is
+ * the one this repo keeps paying for: every individual number accurate, the
+ * conclusion wrong, because the tree measured was not the tree anyone means.
+ * A coordinator counted a lane's tests against it and got a wrong answer; a lane
+ * (this one) drove the retired fence harness out of it for an hour after the
+ * real write door had landed.
+ *
+ * A shared checkout has no owner and nothing updates it. So this refuses, and
+ * the refusal names the one command that fixes it. It is deliberately narrow:
+ *
+ *  - Only when the remote-tracking ref EXISTS and is strictly ahead. No network
+ *    call, no fetch — a lane at 4am on a flaky link must not be blocked by a
+ *    check about freshness, and a stale remote ref simply makes this quiet.
+ *  - `git rev-list --count HEAD..<upstream>`, so a root that is ahead (a lane
+ *    with unpushed commits — the normal case) is untouched.
+ *  - A DIRTY tree still refuses, but says the fix is not a pull, because
+ *    somebody is working in it and `--ff-only` will not run.
+ *
+ * ── SHARED CHECKOUTS ONLY, AND THAT SCOPE WAS FOUND BY THE GUARD ITSELF ────
+ *
+ * The first version checked every declared root and immediately refused this
+ * lane's OWN worktree: trunk had moved while the lane worked, which is the
+ * ordinary state of a lane between rebases and is exactly what §4's
+ * rebase-and-re-verify step exists to resolve. Refusing it would have made the
+ * mandated loop unrunnable — §10's defect, committed by a guard written to
+ * prevent a different one.
+ *
+ * A LANE worktree behind its trunk is normal and has an owner who will rebase.
+ * A SHARED checkout behind its trunk has no owner, nothing updates it, and
+ * every lane that declares it measures a tree nobody is on. Only the second is
+ * refused, and that is the case the coordinator actually hit.
+ *
+ * §8: this is a new guard and lands PROVISIONAL. If it fires on another lane
+ * that is a swarm-wide blocker, not something to route around — the answer is
+ * to update the checkout, which is what the message says.
+ *
+ * red-proof: `git -C <a root> reset --hard HEAD~1` and run any lane. It must
+ * refuse and print that root, the count, and the pull command; `git merge
+ * --ff-only` then makes it pass. Applied and observed red before this landed.
+ */
+export function assertDeclaredRootsAreCurrent() {
+  const behind = [];
+  for (const [repo, path] of Object.entries(REPO_PATHS)) {
+    // Shared checkouts only. See the scope note above.
+    if (path !== join(WORKSPACE_ROOT, repo)) continue;
+    let upstream = "";
+    try {
+      upstream = execSync("git rev-parse --abbrev-ref --symbolic-full-name @{upstream}", {
+        cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      continue; // no upstream configured — nothing to be behind of
+    }
+    if (upstream === "") continue;
+    let count = 0;
+    try {
+      count = Number(execSync(`git rev-list --count HEAD..${upstream}`, {
+        cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      }).trim());
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(count) || count <= 0) continue;
+    let dirty = false;
+    try {
+      dirty = execSync("git status --porcelain", { cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() !== "";
+    } catch {
+      dirty = false;
+    }
+    behind.push({ repo, path, upstream, count, dirty });
+  }
+  if (behind.length === 0) return;
+  const lines = behind.map((b) =>
+    `  ${b.repo.padEnd(16)} ${b.path}\n`
+    + `    ${b.count} commit(s) behind ${b.upstream}${b.dirty ? " — and the tree is DIRTY" : ""}\n`
+    + `    ${b.dirty
+        ? "somebody is working in this checkout. Do NOT pull it. Point your root elsewhere, or ask them."
+        : `git -C ${b.path} pull --ff-only`}`);
+  throw new Error(
+    "refusing to measure a root that is behind its own remote.\n\n"
+    + lines.join("\n")
+    + "\n\nEvery number from a stale root is accurate about a tree nobody is on."
+    + " That is not a slower failure than a red lane; it is a silent wrong answer,"
+    + " and this run has already paid for it twice.",
+  );
+}
 
 function runLane(laneId, { json = false } = {}) {
   const lane = LANES[laneId];
@@ -294,6 +387,8 @@ try {
   assertRepoPathsExist();
   // ...and refuse a lane/shared pairing nobody chose. See provenance.mjs.
   assertCrossTreePairingIsDeclared();
+  // ...and refuse a root that is BEHIND its own remote. See below.
+  assertDeclaredRootsAreCurrent();
 } catch (err) {
   process.stderr.write(`${err.message}\n`);
   process.exit(2);

@@ -26,6 +26,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { judgeOutbox } from "./write-journey-outbox.mjs";
 import {
   JOURNEY_ASSERTIONS,
   classifyDoor,
@@ -464,4 +465,116 @@ test("mintWriteId produces the ratified 64-lowercase-hex shape", () => {
   const id = mintWriteId();
   assert.match(id, new RegExp(corpus.writeIdPattern));
   assert.notEqual(id, mintWriteId());
+});
+
+// ── STAGE (c): the outbox drain's verdict path ──────────────────────────────
+// Same standard: one mutation per assertion, each required to go red, from a
+// baseline that is green first.
+//
+// The EXPENSIVE half of these three was not staged — it was observed. Two real
+// defects in this stage's own driver produced all three reds live against the
+// registered door before the stage ever passed:
+//   * the journaled payload built as a WIRE op instead of the client's own
+//     TaskOp — `taskOpToWriteOp` returned null, nothing was sent, and
+//     `outbox_drained_to_the_door` went red naming a null server tally;
+//   * `env.advance()` called once, on the assumption a send settles inside it.
+//     Over real HTTP the next timer is only scheduled after the previous send
+//     resolves, so the retry ladder never ran: `journaled_write_id…` and
+//     `straggler_dead_letters…` both went red, correctly, on an outbox that had
+//     simply not been given time.
+// Both were found by the assertions, not by reading the driver.
+
+const outboxFacts = (over = {}) => ({
+  drainRunId: "run-x-outbox",
+  staleRunId: "run-x-outbox-stale",
+  recordId: "flying-dragon-vibrant",
+  journaled: { count: 1, writeId: "a".repeat(64), accountEpoch: 7, opId: "outbox-op-1" },
+  deadAfterDrain: [],
+  deadLetters: [{ opId: "outbox-op-stale", failure: { kind: "permanent", reason: "stale_epoch" } }],
+  controlRefreshes: [],
+  replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: true }) },
+  ...over,
+});
+
+const outboxProducer = (over = {}) => ({
+  drain: { fence: fenceTally(), writeOps: writeOpsTally() },
+  stale: { fence: fenceTally({ admitted: 0 }), writeOps: writeOpsTally({ outcomes: { accepted: 0, accepted_idempotent: 0 } }) },
+  ...over,
+});
+
+const outboxOutcome = (facts, producer, name) =>
+  judgeOutbox(facts, { producer }).assertions.find((a) => a.name === name);
+
+test("stage (c) baseline: a clean outbox drain passes every assertion", () => {
+  const v = judgeOutbox(outboxFacts(), { producer: outboxProducer() });
+  assert.deepEqual(v.assertions.filter((a) => a.result !== "pass").map((a) => `${a.name}: ${a.detail}`), []);
+  assert.equal(v.result, "pass");
+});
+
+test("RED-PROOF outbox_drained_to_the_door: the outbox journaled an op and sent nothing", () => {
+  const p = outboxProducer({ drain: { fence: null, writeOps: null } });
+  const r = outboxOutcome(outboxFacts(), p, "outbox_drained_to_the_door");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /null, not zero/);
+});
+
+test("RED-PROOF outbox_drained_to_the_door: the server accepted and the client dead-lettered the same op", () => {
+  const r = outboxOutcome(outboxFacts({ deadAfterDrain: [{ opId: "outbox-op-1" }] }), outboxProducer(), "outbox_drained_to_the_door");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /disagree about the same op/);
+});
+
+test("RED-PROOF journaled_write_id: the id was minted at send time, not at enqueue", () => {
+  // B1's demonstrated failure. The server does not recognise an id the client
+  // had already used, so the crash-replayed op applies a second time and the
+  // user's edit is duplicated.
+  const facts = outboxFacts({
+    replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: false }) },
+  });
+  const r = outboxOutcome(facts, outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /send-time mint/);
+});
+
+test("RED-PROOF journaled_write_id: nothing was journaled at all", () => {
+  const r = outboxOutcome(outboxFacts({ journaled: { count: 1, writeId: null, accountEpoch: 7 } }), outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /minted at enqueue/);
+});
+
+test("RED-PROOF journaled_write_id: no account epoch was journaled with the op", () => {
+  const r = outboxOutcome(outboxFacts({ journaled: { count: 1, writeId: "a".repeat(64), accountEpoch: null } }), outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /straggler stamp/);
+});
+
+test("RED-PROOF straggler_dead_letters_as_stale_epoch: the server refused and the client dropped it", () => {
+  // An op refused server-side and dropped client-side is a user's edit that
+  // vanished with no surface to recover it from.
+  const r = outboxOutcome(outboxFacts({ deadLetters: [] }), outboxProducer(), "straggler_dead_letters_as_stale_epoch");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /vanished with no surface/);
+});
+
+test("RED-PROOF straggler_dead_letters_as_stale_epoch: the client called it a conflict", () => {
+  const facts = outboxFacts({ deadLetters: [{ opId: "outbox-op-stale", failure: { kind: "permanent", reason: "conflict" } }] });
+  const r = outboxOutcome(facts, outboxProducer(), "straggler_dead_letters_as_stale_epoch");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /B2 rules out/);
+});
+
+test("RED-PROOF straggler_dead_letters_as_stale_epoch: the straggler was treated as backpressure", () => {
+  // W1's `control_unavailable` is retryable and is never a dead letter;
+  // `stale_epoch` is permanent and always is. Handling one as the other either
+  // loses the edit or retries forever against a server that cannot accept it.
+  const r = outboxOutcome(outboxFacts({ controlRefreshes: ["outbox-op-stale"] }), outboxProducer(), "straggler_dead_letters_as_stale_epoch");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /not backpressure/);
+});
+
+test("RED-PROOF straggler_dead_letters_as_stale_epoch: refused but not preserved", () => {
+  const p = outboxProducer({ stale: { fence: fenceTally({ admitted: 0, preservedEnvelopes: 0 }), writeOps: null } });
+  const r = outboxOutcome(outboxFacts(), p, "straggler_dead_letters_as_stale_epoch");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /silently lost edit/);
 });

@@ -60,22 +60,12 @@ import { REPO_PATHS } from "./provenance.mjs";
 
 export const WRITE_JOURNEY_SCHEMA_VERSION = 1;
 
-/** Ratified: ruling B4's route shape on ruling B6's first writable domain. */
-export const OPS_PATH = "/v1/tasks/ops";
-
-/** Joins a fence and write-ops decision to the run that caused it. */
-export const RUN_ID_HEADER = "x-omi-run-id";
-
-/**
- * The dev control plane, registered on the SAME app that serves the door
- * (`apps/service/routes/qa-control.ts`). Not a harness server: the retired
- * `integration/control/fence-server.ts` stood up its own `Bun.serve` and
- * answered `/v1/tasks/ops` with `202 {"fence":"admitted"}` where the registered
- * route answers `200 {applied, idempotent}` — two doors that had diverged at
- * the byte level (R5, and fable's R14 quarantine of everything measured
- * against the harness while both stood).
- */
-export const CONTROL_BASE = "/v1/qa/control";
+// The wire constants live in their own module because THIS one runs its CLI at
+// import time, and a module that does something at import time must not be
+// anybody's source of constants. Re-exported so existing importers do not have
+// to learn a second path.
+export { OPS_PATH, RUN_ID_HEADER, CONTROL_BASE } from "./write-journey-protocol.mjs";
+import { OPS_PATH, RUN_ID_HEADER, CONTROL_BASE } from "./write-journey-protocol.mjs";
 
 /**
  * The corpus this journey is judged against is the one the DOOR was built
@@ -834,6 +824,61 @@ if (process.argv[1] && process.argv[1].endsWith("write-journey.mjs")) {
     ...gatingOf(journey),
     facts: journey,
   };
+
+  /**
+   * ── STAGE (c): the client OUTBOX draining through the same door ───────────
+   *
+   * Runs whenever the door applies — i.e. whenever there is something to drain
+   * into. It is NOT conditional on anything a caller passes, and it is not
+   * skipped when it fails to load: a stage that quietly opts out is the
+   * "converts we-do-not-know into we-checked" shape, so a failure to import the
+   * client modules is reported as a failing assertion with the reason.
+   */
+  if (journey.door.capability === "applies") {
+    const outboxModule = await import(new URL("./write-journey-outbox.mjs", import.meta.url).href);
+    let outbox = null;
+    try {
+      const sync = await import(new URL("../../core/packages/sync/dist/index.js", import.meta.url).href);
+      const fakes = await import(new URL("../../core/packages/testkit/dist/fakes.js", import.meta.url).href);
+      const facts = await outboxModule.runOutboxDrain({
+        doorUrl: flag("--door"),
+        token: flag("--token"),
+        accountId: flag("--account"),
+        runId: verdict.runId,
+        activeEpoch,
+        deps: {
+          MemoryStore: fakes.MemoryStore,
+          ManualEnv: fakes.ManualEnv,
+          Outbox: sync.Outbox,
+          platformTasksTransport: adapters.platformTasksTransport,
+          createPlatformWriteStamps: adapters.createPlatformWriteStamps,
+          createDevAccountEpochProvider: adapters.createDevAccountEpochProvider,
+        },
+      });
+      // Producer-side, read back AFTER the drain, for the drain's OWN run ids.
+      const statsFor = async (id) => {
+        const r = await fetch(`${flag("--control", flag("--door"))}${CONTROL_BASE}/stats?run=${encodeURIComponent(id)}`);
+        const body = await r.json();
+        return { fence: body.fence ?? null, writeOps: body.writeOps ?? null };
+      };
+      const producer = { drain: await statsFor(facts.drainRunId), stale: await statsFor(facts.staleRunId) };
+      outbox = { ...outboxModule.judgeOutbox(facts, { producer }), producer, facts };
+    } catch (error) {
+      outbox = {
+        result: "fail",
+        assertions: [{
+          name: "outbox_stage_ran", claim: "stage (c) executed at all",
+          measuredBy: "the driver", corroboratedBy: null, singleMeasurement: true,
+          result: "fail",
+          detail: `stage (c) could not run: ${error.message}. A stage that cannot run is not a stage that passed.`,
+        }],
+      };
+    }
+    verdict.outbox = outbox;
+    verdict.assertions = [...verdict.assertions, ...outbox.assertions];
+    verdict.stage = outbox.result === "pass" ? "c" : verdict.stage;
+    if (outbox.result === "fail") verdict.result = "fail";
+  }
   const json = `${JSON.stringify(verdict, null, 2)}\n`;
   const out = flag("--out");
   if (out) (await import("node:fs")).writeFileSync(out, json);
