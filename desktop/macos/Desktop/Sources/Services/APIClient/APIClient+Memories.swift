@@ -633,6 +633,41 @@ extension APIClient {
       authorizationSnapshot: pinnedAuthorization)
   }
 
+  /// Return-only connector synthesis (calendar / gmail / notes) through managed memories.
+  func synthesizeConnectorItemsImpl(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let source: String
+      let items: [String]
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case source
+        case items
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/connectors/synthesize",
+      body: Body(
+        source: source,
+        items: Array(items.prefix(200)).map { String($0.prefix(1000)) },
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization)
+  }
+
   /// Creates a new memory (manual or extracted)
   func createMemory(
     content: String,
@@ -830,6 +865,27 @@ extension APIClient {
 
 struct MemoryLogExtractResponse: Codable, Equatable, Sendable {
   let memories: [String]
+  let profile: String
+}
+
+/// One task returned by the backend connector-synthesis SSOT.
+struct ConnectorSynthesisTask: Codable, Equatable, Sendable {
+  let description: String
+  let priority: String
+  let dueAt: String
+
+  enum CodingKeys: String, CodingKey {
+    case description
+    case priority
+    case dueAt = "due_at"
+  }
+}
+
+/// Response of POST /v1/connectors/synthesize — the backend owns the calendar /
+/// gmail / notes prompts, so readers only send their rows and read this back.
+struct ConnectorSynthesisResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let tasks: [ConnectorSynthesisTask]
   let profile: String
 }
 

@@ -269,6 +269,21 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
   }
+
+  func synthesizeConnectorItems(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    try await synthesizeConnectorItemsImpl(
+      source: source,
+      items: items,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 }
 
 // MARK: - User Settings Models
