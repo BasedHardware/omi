@@ -24,6 +24,50 @@ export interface Transport {
   >;
 }
 
+/**
+ * The values a write-path op must carry from the moment it is JOURNALED —
+ * COORD-write-path-rulings B1 and the account-epoch fence's straggler stamp.
+ *
+ * WHY THIS IS A PORT AND WHY THE OUTBOX CONSULTS IT.
+ *
+ * B1 says the write id is *minted and journaled at enqueue*. Left as a
+ * convention, that is one `{ ...op, writeId: mint() }` a future domain store
+ * forgets, and the failure is silent: the op sends, the server registry sees a
+ * new key on every replay, and a crash-replayed op applies twice. Making the
+ * stamp the outbox's job at the one place that appends to the journal is what
+ * makes forgetting unrepresentable rather than merely discouraged.
+ *
+ * It is OPTIONAL because the legacy wire has no registry and no epoch: a store
+ * that passes no source journals exactly what it journaled before, byte for
+ * byte. Nothing about legacy behaviour changes.
+ *
+ * Both members may return `null`, which means "I cannot stamp this op". That
+ * is not a value the outbox may paper over — see `enqueue`.
+ */
+export interface WriteStampSource {
+  /** B1: 64 lowercase hex from independent entropy. `null` = entropy unusable. */
+  mintWriteId(): string | null;
+  /** The account epoch the op is being created under. `null` = not known yet. */
+  currentAccountEpoch(): number | null;
+}
+
+/**
+ * Thrown by `enqueue` when a configured `WriteStampSource` cannot stamp the op.
+ *
+ * The op is NOT journaled: a write we could never send must not be
+ * acknowledged to the caller, because the caller renders optimistically the
+ * moment `enqueue` resolves and the user would see an edit that can only ever
+ * become a dead letter. Failing the call surfaces through the same operation-
+ * error path a failed journal append already takes, so no new thing is said to
+ * a user.
+ */
+export class WriteStampUnavailableError extends Error {
+  constructor(readonly missing: "write-id" | "account-epoch") {
+    super(`outbox: cannot journal a write op without a ${missing}`);
+    this.name = "WriteStampUnavailableError";
+  }
+}
+
 type JournalEntry =
   | { t: "op"; op: PendingOp }
   | { t: "tombstone"; opId: string; outcome: import("@omi-core/contracts").OperationOutcome };
@@ -55,6 +99,7 @@ export class Outbox {
   private constructor(
     private readonly env: Env,
     private readonly transport: Transport,
+    private readonly stamps: WriteStampSource | null,
   ) {}
 
   /**
@@ -65,9 +110,18 @@ export class Outbox {
    * at the tasks adapter, and vice versa. One durable log per domain is what
    * makes that unrepresentable; the required parameter is what stops the next
    * domain from forgetting.
+   *
+   * `stamps` is the write-path stamp source (B1). Omit it for the legacy wire,
+   * which has neither a write registry nor an account epoch.
    */
-  static async open(bridge: StorageBridge, env: Env, transport: Transport, domain: string): Promise<Outbox> {
-    const box = new Outbox(env, transport);
+  static async open(
+    bridge: StorageBridge,
+    env: Env,
+    transport: Transport,
+    domain: string,
+    stamps: WriteStampSource | null = null,
+  ): Promise<Outbox> {
+    const box = new Outbox(env, transport, stamps);
     box.log = await bridge.openLog(`outbox-${domain}`);
     box.kv = await bridge.openKv(`outbox-meta-${domain}`);
     const entries = await box.log.scan(0);
@@ -88,10 +142,28 @@ export class Outbox {
   }
 
   /** Journal first, then acknowledge. The caller's optimistic UI may render
-   * immediately after this resolves — the write is durable. */
+   * immediately after this resolves — the write is durable.
+   *
+   * B1: when a `WriteStampSource` is configured, the write id and the account
+   * epoch are stamped HERE — in the same statement that appends to the journal
+   * — so a stamped op and a journaled op are the same object by construction.
+   * An op that arrives already stamped (there is no such caller today; a
+   * replay never comes back through `enqueue`) keeps its own stamps: minting a
+   * second id for one op is the exact defect B1 rejects.
+   */
   async enqueue(op: PendingOp): Promise<void> {
-    await this.log.append(JSON.stringify({ t: "op", op } satisfies JournalEntry));
-    this.dispatch({ t: "enqueued", op });
+    const stamped = this.stamp(op);
+    await this.log.append(JSON.stringify({ t: "op", op: stamped } satisfies JournalEntry));
+    this.dispatch({ t: "enqueued", op: stamped });
+  }
+
+  private stamp(op: PendingOp): PendingOp {
+    if (this.stamps === null) return op;
+    const writeId = op.writeId ?? this.stamps.mintWriteId();
+    if (writeId === null) throw new WriteStampUnavailableError("write-id");
+    const accountEpoch = op.accountEpoch ?? this.stamps.currentAccountEpoch();
+    if (accountEpoch === null) throw new WriteStampUnavailableError("account-epoch");
+    return { ...op, writeId, accountEpoch };
   }
 
   async deadLetters(): Promise<DeadLetter[]> {

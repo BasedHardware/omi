@@ -3,6 +3,7 @@ import type { Task, TaskPatch } from "@omi-core/contracts";
 import type { StoreStatus } from "@omi-core/domain";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./ProductionStores.js";
+import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionSearchField } from "./ProductionPrimitives.js";
 import "./tasks.css";
@@ -407,10 +408,15 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       )}
       {dead.length > 0 && <section className="tasks-dead-panel" aria-labelledby="tasks-dead-heading">
           <h2 id="tasks-dead-heading">{translate("dead.title")}</h2>
-        <p>{translate("dead.body")}</p>
-          {dead.map((letter) => <div className="tasks-dead-row" key={letter.opId}>
-          <span>{translate("queue.pending")}</span>
-          <button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{translate("dead.remove")}</button>
+          {dead.map(deadLetterView).map((view) => <div className="tasks-dead-row" key={view.opId}>
+          <span>{translate(view.messageKey)}</span>
+          {/* "Your edit is saved below" is only true if it is. The view hands
+              back a saved edit exactly when the message promises one. */}
+          {view.savedEdit !== null && <pre className="tasks-dead-payload">{view.savedEdit}</pre>}
+          {/* DISCARD ONLY. Not an oversight and not a gap to fill: a retry
+              here resubmits an envelope stamped with a superseded epoch, which
+              the fence refuses forever. See dead-letter-presentation.ts. */}
+          <button type="button" onClick={() => void run(() => store.discardDeadLetter(view.opId))}>{translate("dead.remove")}</button>
         </div>)}
       </section>}
       <button type="button" className="tasks-mobile-fab" aria-expanded={createOpen} onClick={() => {
