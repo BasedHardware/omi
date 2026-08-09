@@ -1,7 +1,4 @@
 import type { RefreshPhase, RefreshStatus } from "@omi-core/domain";
-import { t } from "@omi-core/i18n";
-
-type Locale = string;
 
 /**
  * Conservative worst-of across Home's two search projections.
@@ -48,11 +45,6 @@ export function homePhaseNoticeKey(phase: RefreshPhase):
     case "unavailable": return "lifecycle.unavailable";
     default: return null;
   }
-}
-
-export function homePhaseLabel(status: RefreshStatus, locale: Locale): string | null {
-  const key = homePhaseNoticeKey(status.phase);
-  return key === null ? null : t(locale, key);
 }
 
 /** Distinguishes what Home must render for a combined refresh status + loaded rows. */

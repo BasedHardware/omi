@@ -105,15 +105,32 @@ test("home renders each of the five refresh states distinguishably", async () =>
   }
   assert.equal(homePhaseNoticeKey("ready"), null);
 
-  // The surface must bind the shared notice + data-surface-state, not a binary loadFailed.
-  assert.match(source, /data-surface-state=\{refresh\.phase\}/);
-  assert.match(source, /status-notice \$\{refresh\.phase\}/);
-  assert.match(source, /homePhaseLabel\(refresh, locale\)/);
-  assert.match(source, /combineHomeRefreshStatuses/);
+  // STATIC TRIPWIRE — HomeProduction must consume homeSurfacePresentation for notice
+  // text, notice visibility, and row visibility. No jsdom here; same discipline as
+  // integration/cross-side/tasks-rendering-parity.test.mjs: pin the shipped wiring
+  // against the production file's own source text so an unmirrored edit fails loudly.
+  // Labelled a tripwire on purpose (AGENTS.md): reading source is not behavioural
+  // coverage; the behavioural half is homeSurfacePresentation above.
+  const mustContain = [
+    "homeSurfacePresentation(refresh, results.length)",
+    "{presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role=\"status\">{t(locale, presentation.noticeKey)}</div>}",
+    "{presentation.showsSavedRows ? (",
+    "data-surface-state={presentation.phase}",
+  ];
+  const missing = mustContain.filter((fragment) => !source.includes(fragment));
+  assert.deepEqual(
+    missing,
+    [],
+    `HomeProduction.tsx no longer wires homeSurfacePresentation: ${JSON.stringify(missing)}`,
+  );
+  assert.doesNotMatch(source, /homePhaseLabel/);
   assert.doesNotMatch(source, /loadFailed|setLoadFailed|home-load-error|lifecycle\.error/);
-  // red-proof: collapsing back to a boolean loadFailed, or dropping the
-  // saved-but-refresh-failed notice while rows remain, makes fingerprints collide
-  // and fails the saved-rows + failure-indication assertion above.
+  // A phase special-case in the JSX would let notice/rows diverge from the helper.
+  assert.doesNotMatch(source, /saved-but-refresh-failed/);
+  // red-proof: (1) suppress the failure notice in HomeProduction for
+  // saved-but-refresh-failed — the mustContain notice line fails.
+  // (2) map saved-but-refresh-failed to the ready notice in home-presentation —
+  // savedFailed.noticeKey === "lifecycle.savedFailed" fails.
 });
 
 test("home combines two source phases with a conservative worst-of reading", () => {
