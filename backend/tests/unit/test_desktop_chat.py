@@ -1301,6 +1301,15 @@ def test_structured_aliases_route_to_the_structured_lane_not_chat():
     assert desktop_chat._managed_lane_id({}) == 'omi:auto:chat-agent'
 
 
+def test_structured_lane_traffic_is_attributed_to_its_own_feature():
+    """Structured-lane calls must not land in the ledger as chat-agent traffic."""
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-structured') == 'chat_structured'
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-agent') == 'chat_agent'
+    assert desktop_chat._gateway_request_headers(
+        'req-1', 'omi:auto:chat-structured'
+    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
+
+
 def test_gateway_body_stamps_the_selected_lane():
     request = {'model': 'omi-structured', 'messages': [{'role': 'user', 'content': 'plan this'}]}
     lane = desktop_chat._managed_lane_id(request)

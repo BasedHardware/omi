@@ -1060,18 +1060,30 @@ def _sse_json_payloads(frame_buffer: bytearray, chunk: bytes) -> list[dict[str, 
     return payloads
 
 
-def _gateway_request_headers(request_id: str) -> dict[str, str]:
-    headers = llm_gateway_headers(feature='chat_agent')
+def _gateway_feature_for_lane(lane_id: str) -> str:
+    """Accounting feature for a managed lane.
+
+    Structured-lane traffic must not be written to the ledger and reliability metrics as
+    chat-agent traffic, or per-feature cost and failure signals for the new lane vanish
+    into chat.
+    """
+    return 'chat_structured' if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID else 'chat_agent'
+
+
+def _gateway_request_headers(request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, str]:
+    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id))
     headers['X-Omi-Request-ID'] = request_id
     return headers
 
 
-def _record_gateway_result(*, outcome: str, reason: str, request_id: str) -> None:
+def _record_gateway_result(
+    *, outcome: str, reason: str, request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID
+) -> None:
     record_gateway_request_result(
-        feature='chat_agent',
+        feature=_gateway_feature_for_lane(lane_id),
         outcome=outcome,
         reason=reason,
-        route=CHAT_AGENT_AUTO_LANE_ID,
+        route=lane_id,
         mode='gateway',
         request_id=request_id,
         credential_source='omi_managed',
@@ -1090,16 +1102,20 @@ async def _record_chat_quota_question(uid: str, request_id: str, platform: str |
 
 
 async def _stream_gateway(
-    gateway_payload: dict[str, object], uid: str, request_id: str = 'unknown', platform: str | None = None
+    gateway_payload: dict[str, object],
+    uid: str,
+    request_id: str = 'unknown',
+    platform: str | None = None,
+    lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
 ) -> AsyncIterator[bytes]:
-    usage_token = set_usage_context(uid, 'chat_agent')
+    usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
     usage_recorded = False
     started_at = time.monotonic()
     result_recorded = False
     try:
         if not gateway_circuit.allow_request():
-            _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+            _record_gateway_result(lane_id=lane_id, outcome='error', reason='circuit_open', request_id=request_id)
             yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
             yield b'data: [DONE]\n\n'
             return
@@ -1107,7 +1123,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id),
+                headers=_gateway_request_headers(request_id, lane_id),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1116,11 +1132,12 @@ async def _stream_gateway(
                     if transport_failure:
                         gateway_circuit.record_transport_failure()
                     observe_gateway_first_byte(
-                        feature='chat_agent',
+                        feature=_gateway_feature_for_lane(lane_id),
                         started_at=started_at,
                         outcome='transport_failure' if transport_failure else 'error',
                     )
                     _record_gateway_result(
+                        lane_id=lane_id,
                         outcome='fallback' if transport_failure else 'error',
                         reason=f'http_{response.status_code}',
                         request_id=request_id,
@@ -1132,7 +1149,9 @@ async def _stream_gateway(
                     yield b'data: [DONE]\n\n'
                     return
                 await _record_chat_quota_question(uid, request_id, platform)
-                observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
+                observe_gateway_first_byte(
+                    feature=_gateway_feature_for_lane(lane_id), started_at=started_at, outcome='success'
+                )
                 async for chunk in response.aiter_bytes():
                     if not chunk:
                         continue
@@ -1143,11 +1162,11 @@ async def _stream_gateway(
                             usage_recorded = True
                     yield chunk
         gateway_circuit.record_transport_success()
-        _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+        _record_gateway_result(lane_id=lane_id, outcome='success', reason='ok', request_id=request_id)
         result_recorded = True
     except asyncio.CancelledError:
         if not result_recorded:
-            _record_gateway_result(outcome='cancelled', reason='cancelled', request_id=request_id)
+            _record_gateway_result(lane_id=lane_id, outcome='cancelled', reason='cancelled', request_id=request_id)
         raise
     except Exception as exc:
         if not result_recorded:
@@ -1155,12 +1174,15 @@ async def _stream_gateway(
             if transport_failure:
                 gateway_circuit.record_transport_failure()
             observe_gateway_first_byte(
-                feature='chat_agent',
+                feature=_gateway_feature_for_lane(lane_id),
                 started_at=started_at,
                 outcome='transport_failure' if transport_failure else 'error',
             )
             _record_gateway_result(
-                outcome='fallback' if transport_failure else 'error', reason='request_error', request_id=request_id
+                lane_id=lane_id,
+                outcome='fallback' if transport_failure else 'error',
+                reason='request_error',
+                request_id=request_id,
             )
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
         yield b'data: [DONE]\n\n'
@@ -1249,7 +1271,7 @@ async def chat_completions(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1273,26 +1295,30 @@ async def chat_completions(
             },
         )
     if gateway_mode:
-        usage_token = set_usage_context(uid, 'chat_agent')
+        usage_token = set_usage_context(uid, _gateway_feature_for_lane(public_model))
         started_at = time.monotonic()
         result_recorded = False
         try:
             if not gateway_circuit.allow_request():
-                _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+                _record_gateway_result(
+                    lane_id=public_model, outcome='error', reason='circuit_open', request_id=request_id
+                )
                 result_recorded = True
                 raise HTTPException(status_code=503, detail='Upstream provider unavailable')
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id),
+                    headers=_gateway_request_headers(request_id, public_model),
                     json=gateway_payload,
                 )
             response.raise_for_status()
             response_body = response.json()
             await _record_chat_quota_question(uid, request_id, x_app_platform)
             gateway_circuit.record_transport_success()
-            observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
-            _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+            observe_gateway_first_byte(
+                feature=_gateway_feature_for_lane(public_model), started_at=started_at, outcome='success'
+            )
+            _record_gateway_result(lane_id=public_model, outcome='success', reason='ok', request_id=request_id)
             result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
             return JSONResponse(
@@ -1310,11 +1336,12 @@ async def chat_completions(
                 if transport_failure:
                     gateway_circuit.record_transport_failure()
                 observe_gateway_first_byte(
-                    feature='chat_agent',
+                    feature=_gateway_feature_for_lane(public_model),
                     started_at=started_at,
                     outcome='transport_failure' if transport_failure else 'error',
                 )
                 _record_gateway_result(
+                    lane_id=public_model,
                     outcome='fallback' if transport_failure else 'error',
                     reason='request_error',
                     request_id=request_id,
