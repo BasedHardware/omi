@@ -146,6 +146,19 @@ struct InitialMessageResponse: Codable {
 
 // MARK: - AI User Profile API
 
+/// Response of POST /v1/users/ai-profile/synthesize.
+struct AIUserProfileSynthesisResponse: Codable, Equatable, Sendable {
+  let profileText: String
+  let dataSourcesUsed: [String]
+  let itemCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case profileText = "profile_text"
+    case dataSourcesUsed = "data_sources_used"
+    case itemCount = "item_count"
+  }
+}
+
 struct AIUserProfileResponse: Codable {
   let profileText: String
   let generatedAt: Date
@@ -178,6 +191,39 @@ extension APIClient {
     )
 
     let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body)
+  }
+
+  /// Return-only two-stage AI user profile synthesis through managed memories.
+  /// The prompts, the model and the consolidation live in the backend; callers send
+  /// their formatted source lines plus past profiles (oldest first) and persist the
+  /// returned text through `syncAIUserProfile`.
+  func synthesizeAIUserProfile(
+    memories: [String],
+    tasks: [String],
+    goals: [String],
+    conversations: [String],
+    messages: [String],
+    pastProfilesOldestFirst: [String]
+  ) async throws -> AIUserProfileSynthesisResponse {
+    struct SynthesizeRequest: Encodable {
+      let memories: [String]
+      let tasks: [String]
+      let goals: [String]
+      let conversations: [String]
+      let messages: [String]
+      let past_profiles: [String]
+    }
+
+    return try await post(
+      "v1/users/ai-profile/synthesize",
+      body: SynthesizeRequest(
+        memories: memories,
+        tasks: tasks,
+        goals: goals,
+        conversations: conversations,
+        messages: messages,
+        past_profiles: Array(pastProfilesOldestFirst.prefix(5))
+      ))
   }
 
   // MARK: - Agent VM

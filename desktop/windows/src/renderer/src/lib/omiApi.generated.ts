@@ -3323,6 +3323,21 @@ export interface SyncRequestValidationErrorResponse {
   detail: Array<Record<string, unknown>>;
 }
 
+export interface SynthesizeAIUserProfileRequest {
+  conversations?: Array<string>;
+  goals?: Array<string>;
+  memories?: Array<string>;
+  messages?: Array<string>;
+  past_profiles?: Array<string>;
+  tasks?: Array<string>;
+}
+
+export interface SynthesizeAIUserProfileResponse {
+  data_sources_used: Array<string>;
+  item_count: number;
+  profile_text: string;
+}
+
 export interface Targeting {
   app_version_max?: string | null;
   app_version_min?: string | null;
@@ -4429,6 +4444,8 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "SyncRequestValidationErrorResponse": SyncRequestValidationErrorResponse;
+  "SynthesizeAIUserProfileRequest": SynthesizeAIUserProfileRequest;
+  "SynthesizeAIUserProfileResponse": SynthesizeAIUserProfileResponse;
   "Targeting": Targeting;
   "TaskAssistantSettings": TaskAssistantSettings;
   "TaskCancelCandidate": TaskCancelCandidate;
@@ -7352,6 +7369,16 @@ export interface OmiApiPaths {
       operationId: "update_ai_profile_v1_users_ai_profile_patch";
       responses: {
         "200": AIUserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/ai-profile/synthesize": {
+    post: {
+      operationId: "synthesize_ai_profile_v1_users_ai_profile_synthesize_post";
+      responses: {
+        "200": SynthesizeAIUserProfileResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -13950,6 +13977,27 @@ export async function update_ai_profile_v1_users_ai_profile_patch(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function synthesize_ai_profile_v1_users_ai_profile_synthesize_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SynthesizeAIUserProfileRequest, init?: OmiApiClientInit): Promise<SynthesizeAIUserProfileResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile/synthesize`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function set_chat_message_analytics_v1_users_analytics_chat_message_post(query: { message_id: string, value: number, reason?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/analytics/chat_message`;
@@ -16357,4 +16405,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 397 client methods generated.
+// Total: 398 client methods generated.

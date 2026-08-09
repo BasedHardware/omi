@@ -19935,6 +19935,88 @@
         "title": "SyncRequestValidationErrorResponse",
         "type": "object"
       },
+      "SynthesizeAIUserProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Conversations",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Goals",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Memories",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Messages",
+            "type": "array"
+          },
+          "past_profiles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Past Profiles",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "title": "SynthesizeAIUserProfileRequest",
+        "type": "object"
+      },
+      "SynthesizeAIUserProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data_sources_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Sources Used",
+            "type": "array"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "profile_text": {
+            "title": "Profile Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_text",
+          "data_sources_used",
+          "item_count"
+        ],
+        "title": "SynthesizeAIUserProfileResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -48071,6 +48153,94 @@
           }
         ],
         "summary": "Update Ai Profile",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/v1/users/ai-profile/synthesize": {
+      "post": {
+        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
+        "operationId": "synthesize_ai_profile_v1_users_ai_profile_synthesize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SynthesizeAIUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SynthesizeAIUserProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Synthesize Ai Profile",
         "tags": [
           "users"
         ]

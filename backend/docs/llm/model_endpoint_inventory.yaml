@@ -173,3 +173,10 @@ surfaces:
     gateway_lane_capability_needed: generated omi:auto:conv-structure lane
     migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
+  - surface: ai_user_profile_synthesis
+    code_path: backend/routers/users.py:synthesize_ai_profile
+    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    request_shape: return-only two-stage user profile document from desktop source lines
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py

@@ -101,6 +101,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "connectors:synthesize": (30, 3600),
     # Return-only SSOT provisional conversation topic (emoji + short title)
     "conversations:topic": (60, 3600),
+    # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
+    "users:ai_profile_synthesize": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),
