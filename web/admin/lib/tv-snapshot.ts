@@ -248,10 +248,17 @@ function buildFeatHours(
 function pivotPlatformSeries(
   rows: Record<string, unknown>[],
   valueKey: string,
-  opts: { bucketMinutes?: number; windowHours?: number } = {},
+  opts: {
+    bucketMinutes?: number;
+    windowHours?: number;
+    /** When false (query rejected), skip zero-fill so a failed query
+     *  doesn't produce a synthetic all-zero trend. */
+    queryOk?: boolean;
+  } = {},
 ): SeriesPoint[] {
   const bm = opts.bucketMinutes ?? 10;
   const wh = opts.windowHours ?? 72;
+  const queryOk = opts.queryOk ?? true;
   const byT = new Map<number, SeriesPoint>();
   for (const r of rows) {
     const t = bucketTs(r.bucket ?? r.t);
@@ -282,13 +289,18 @@ function pivotPlatformSeries(
 
   // Zero-fill missing completed 10-minute buckets so charts don't connect
   // across quiet periods or present a stale bucket as the latest point.
-  const nowSec = Date.now() / 1000;
-  const bucketSec = bm * 60;
-  const lastCompleted = Math.floor(nowSec / bucketSec) * bucketSec - bucketSec;
-  const firstBucket = lastCompleted - wh * 3600;
-  for (let t = firstBucket; t <= lastCompleted; t += bucketSec) {
-    if (!byT.has(t)) {
-      byT.set(t, { t, total: 0, macos: 0, windows: 0, ios: 0, android: 0 });
+  // Only fill when the query actually succeeded — otherwise a failed trend
+  // query produces a misleading synthetic all-zero series.
+  if (queryOk) {
+    const nowSec = Date.now() / 1000;
+    const bucketSec = bm * 60;
+    const lastCompleted =
+      Math.floor(nowSec / bucketSec) * bucketSec - bucketSec;
+    const firstBucket = lastCompleted - wh * 3600;
+    for (let t = firstBucket; t <= lastCompleted; t += bucketSec) {
+      if (!byT.has(t)) {
+        byT.set(t, { t, total: 0, macos: 0, windows: 0, ios: 0, android: 0 });
+      }
     }
   }
 
@@ -327,10 +339,9 @@ export async function buildTvSnapshot(opts: {
           revenue = {
             mrr: rev.unavailable ? null : rev.mrr,
             arr: rev.unavailable ? null : rev.arr,
-            subscriptionCount: byProduct.reduce(
-              (a, p) => a + p.subscriptions,
-              0,
-            ),
+            subscriptionCount: rev.unavailable
+              ? null
+              : byProduct.reduce((a, p) => a + p.subscriptions, 0),
             byProduct,
             unavailable: !!rev.unavailable,
           };
@@ -551,6 +562,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     const actSeries = pivotPlatformSeries(
       asRows(get(1), ["bucket", "platform", "active"]),
       "active",
+      { queryOk: results[1].status === "fulfilled" },
     );
 
     const featPlat = asRows(get(2), [
@@ -605,9 +617,16 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "chat_users",
       "memory_events",
     ]);
-    const convSeries = pivotPlatformSeries(feat10m, "conversation_users");
-    const chatSeries = pivotPlatformSeries(feat10m, "chat_users");
-    const memSeries = pivotPlatformSeries(feat10m, "memory_events");
+    const feat10mOk = results[3].status === "fulfilled";
+    const convSeries = pivotPlatformSeries(feat10m, "conversation_users", {
+      queryOk: feat10mOk,
+    });
+    const chatSeries = pivotPlatformSeries(feat10m, "chat_users", {
+      queryOk: feat10mOk,
+    });
+    const memSeries = pivotPlatformSeries(feat10m, "memory_events", {
+      queryOk: feat10mOk,
+    });
 
     const totRow = asRows(get(4), ["total_users"])[0] || {};
     const totalUsers = num(totRow.total_users);

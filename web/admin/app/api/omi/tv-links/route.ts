@@ -68,6 +68,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate includeRevenue type so a string like "false" cannot silently
+    // create a revenue-enabled link (createTvLink treats !== false as true).
+    if (
+      body.includeRevenue !== undefined &&
+      typeof body.includeRevenue !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "includeRevenue must be a boolean" },
+        { status: 400 },
+      );
+    }
+
     const created = await createTvLink({
       label: body.label || "Office TV",
       createdBy: auth.uid,
