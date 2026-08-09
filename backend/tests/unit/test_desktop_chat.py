@@ -1283,6 +1283,9 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi:auto:chat-agent'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-luna'})
+    assert desktop_chat._uses_managed_chat_agent({'model': ''})
     assert desktop_chat._uses_managed_chat_agent({})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'client-model'})
 

@@ -205,26 +205,33 @@ _MANAGED_CHAT_ALIASES = {
     'omi-sonnet',
     'claude-sonnet-4-6',
     'claude-sonnet-4-20250514',
+    'omi-luna',
+    'omi-auto',
+    CHAT_AGENT_AUTO_LANE_ID,
 }
 _MAX_TOKENS = 16_384
 
 
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route conversational Sonnet traffic to Luna, but preserve specialist calls.
+    """Route managed conversational traffic to Luna, but preserve specialist calls.
 
-    Desktop conversational traffic uses the managed Luna chat agent only for
-    the supported Sonnet aliases. Extraction jobs use Haiku and some callers
-    explicitly request Opus; those legacy Anthropic calls must not inherit the
-    chat-agent personality/system prompt or have their requested model rewritten
-    to Luna. An omitted model uses the managed chat-agent default; an explicit
-    unknown model fails closed in the normal request validation path.
+    Desktop conversational traffic uses the managed Luna chat agent for Sonnet
+    legacy aliases and explicit auto/Luna lane ids. Extraction jobs use Haiku and
+    some callers explicitly request Opus; those legacy Anthropic calls must not
+    inherit the chat-agent personality/system prompt or have their requested model
+    rewritten to Luna. An omitted model uses the managed chat-agent default; an
+    explicit unknown model fails closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
     model = body['model']
     if not isinstance(model, str):
         return False
-    normalized = model.lower()
+    normalized = model.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _MANAGED_CHAT_ALIASES:
+        return True
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
     return False
@@ -1209,7 +1216,7 @@ async def chat_completions(
             )
             gateway_mode = False
         if gateway_mode:
-            public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)
+            public_model = CHAT_AGENT_AUTO_LANE_ID
             gateway_payload = _gateway_body(body)
         else:
             public_model, payload = _request(body)

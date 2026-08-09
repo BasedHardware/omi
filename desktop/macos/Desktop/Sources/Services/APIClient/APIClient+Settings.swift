@@ -241,6 +241,19 @@ extension APIClient {
   func deleteKnowledgeGraph() async throws {
     try await deleteKnowledgeGraphImpl()
   }
+
+  func extractKnowledgeGraph(
+    text: String,
+    includeExisting: Bool = false,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphExtractResponse {
+    try await extractKnowledgeGraphImpl(
+      text: text,
+      includeExisting: includeExisting,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 }
 
 // MARK: - User Settings Models

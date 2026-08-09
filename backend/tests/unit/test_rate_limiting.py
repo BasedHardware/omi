@@ -503,6 +503,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "mcp:memories_read",
             "mcp:memories_write",
             "knowledge_graph:rebuild",
+            "knowledge_graph:extract",
+            "knowledge_graph:canonical",
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",

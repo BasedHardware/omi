@@ -2,7 +2,7 @@ import importlib
 import sys
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
@@ -101,6 +101,17 @@ class DeleteKnowledgeGraphResponse(BaseModel):
     status: str
 
 
+class ExtractKnowledgeGraphRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100_000)
+    user_name: Optional[str] = None
+    include_existing: bool = False
+
+
+class ExtractKnowledgeGraphResponse(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+
+
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     graph = get_knowledge_graph_payload(uid)
@@ -173,6 +184,35 @@ def rebuild_graph(
     background_tasks.add_task(_rebuild_graph_task, uid, user_name)
 
     return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
+
+
+@router.post(
+    '/v1/knowledge-graph/extract',
+    tags=['knowledge_graph'],
+    response_model=ExtractKnowledgeGraphResponse,
+)
+def extract_knowledge_graph(
+    body: ExtractKnowledgeGraphRequest,
+    uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:extract")),
+):
+    """Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).
+
+    Does not write Firestore. Desktop onboarding/file-index should call this instead of
+    inventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.
+    """
+    kg_mod = _knowledge_graph_llm_module()
+    user_name = (body.user_name or get_user_name(uid) or "User").strip() or "User"
+    extraction = getattr(kg_mod, "extract_kg_from_text")(
+        uid,
+        body.text,
+        user_name=user_name,
+        load_existing_from_db=body.include_existing,
+        usage_memory_id="http-extract",
+    )
+    if extraction is None:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge_graph_extract_failed")
+    graph = getattr(kg_mod, "extraction_to_client_graph")(extraction)
+    return ExtractKnowledgeGraphResponse(nodes=graph['nodes'], edges=graph['edges'])
 
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)

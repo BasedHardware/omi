@@ -93,6 +93,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:search": (60, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
+    # Return-only SSOT extract for desktop onboarding / local graph writers
+    "knowledge_graph:extract": (30, 3600),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),
