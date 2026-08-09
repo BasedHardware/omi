@@ -1,0 +1,1715 @@
+[
+  {
+    "wireCase": "window:complete_terminal",
+    "label": "terminal page, complete recall, one item",
+    "safe": true,
+    "note": "The ordinary answer: the projection has applied every write and this is the last page.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "window:more_continuation",
+    "label": "continuation page carrying a cursor",
+    "safe": true,
+    "note": "Complete coverage paginated across windows; the cursor is opaque to the client.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "more",
+        "complete": false,
+        "hasMore": true,
+        "nextCursor": "tc1.v1.0000000000000000.signature"
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "window:incomplete_terminal",
+    "label": "terminal page whose coverage is limited",
+    "safe": true,
+    "note": "Last page of a read the server declares it did not fully cover.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "incomplete",
+        "complete": false,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "incomplete",
+        "reasons": [
+          "pending_writes"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "window:incomplete_continuation",
+    "label": "continuation page whose coverage is limited",
+    "safe": true,
+    "note": "More pages AND limited coverage. Two independent claims, both carried.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "incomplete",
+        "complete": false,
+        "hasMore": true,
+        "nextCursor": "tc1.v1.0000000000000000.signature"
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "incomplete",
+        "reasons": [
+          "pending_writes"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "completeness:complete",
+    "label": "complete coverage with no applied writes yet",
+    "safe": true,
+    "note": "A fresh account: nothing has ever been applied, which is honest completeness.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "no_applied_writes"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "completeness:incomplete",
+    "label": "applied writes the projection has not caught up with",
+    "safe": true,
+    "note": "The window is terminal and the recall is not. Collapsing the two is the defect this pair exists to prevent.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "incomplete",
+        "reasons": [
+          "pending_writes"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "completeness:degraded",
+    "label": "degraded projection",
+    "safe": true,
+    "note": "Precedence: degraded outranks everything, so status is degraded.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_stale"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_stale"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "completeness:partial",
+    "label": "policy-bounded read",
+    "safe": true,
+    "note": "Partial is the weakest limitation and only wins when nothing outranks it.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "partial",
+        "reasons": [
+          "policy_bound"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "policy_bound"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:pending_writes",
+    "label": "pending_writes carried alone",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "incomplete",
+        "reasons": [
+          "pending_writes"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:projection_stale",
+    "label": "projection_stale",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_stale"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_stale"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:projection_unavailable",
+    "label": "projection_unavailable",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_unavailable"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_unavailable"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:projection_bypassed",
+    "label": "projection_bypassed",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_bypassed"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_bypassed"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:source_bound",
+    "label": "source_bound",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "partial",
+        "reasons": [
+          "source_bound"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "source_bound"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:time_bound",
+    "label": "time_bound",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "partial",
+        "reasons": [
+          "time_bound"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "time_bound"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:policy_bound",
+    "label": "policy_bound",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "partial",
+        "reasons": [
+          "policy_bound"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "policy_bound"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "reason:no_applied_writes",
+    "label": "no write has ever been applied",
+    "safe": true,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "no_applied_writes"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "absence:query_gap",
+    "label": "empty page declares the gap explicitly",
+    "safe": true,
+    "note": "An empty item list is a claim and must say so; silence would read as 'no tasks exist'.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": {
+        "kind": "query_gap"
+      }
+    }
+  },
+  {
+    "wireCase": "item:full_field_parity",
+    "label": "one item carrying all thirteen fields populated",
+    "safe": true,
+    "note": "D2's parity: every field the domain declares is on the wire.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "item:nullable_fields_null",
+    "label": "every nullable field at null",
+    "safe": true,
+    "note": "Absent-as-null, never absent-as-missing: the keys stay present so both generations render the same shape.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "description": "",
+          "completed": true,
+          "completedAt": null,
+          "dueAt": null,
+          "owner": null,
+          "source": "assistant",
+          "provenance": [],
+          "sortOrder": -3,
+          "indentLevel": 4,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": null
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:extra_item_field",
+    "label": "an item carrying a fourteenth key",
+    "safe": false,
+    "note": "Extra fields are refused, not ignored: a field the client cannot see is a field the two generations disagree about.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9",
+          "category": "work"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:missing_item_field",
+    "label": "an item missing `revision`",
+    "safe": false,
+    "note": "All thirteen are required. An optional field would make the flip visible to users.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:duplicate_item_id",
+    "label": "two items sharing one opaque id",
+    "safe": false,
+    "note": "A repeated id across a keyset walk is the cursor-reset bug; the page refuses it at the source.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        },
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "other",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:dishonest_window",
+    "label": "hasMore true with a null cursor",
+    "safe": false,
+    "note": "A continuation with nothing to continue from.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "more",
+        "complete": false,
+        "hasMore": true,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:complete_window_with_more",
+    "label": "complete window claiming more pages",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": true,
+        "nextCursor": "tc1.v1.0000000000000000.signature"
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:status_contradicts_reasons",
+    "label": "complete status beside a limitation reason",
+    "safe": false,
+    "note": "Status is DERIVED from reasons. Asserting it beside them is how a stale projection gets reported as complete.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [
+          "projection_stale"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_stale"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:lagging_frontier_claims_complete",
+    "label": "applied frontier behind declared, status complete",
+    "safe": false,
+    "note": "The checkable half of the completeness claim. Without it `complete` is an adjective.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:pending_writes_omitted",
+    "label": "applied frontier behind declared, reason omitted",
+    "safe": false,
+    "note": "The frontiers and the reason list must tell the same story in both directions.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_stale"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-behind",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:pending_writes_unfounded",
+    "label": "pending_writes listed while caught up",
+    "safe": false,
+    "note": "The other direction: a limitation claimed but not evidenced.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "incomplete",
+        "reasons": [
+          "pending_writes"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:duplicate_reasons",
+    "label": "one reason listed twice",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "projection_stale",
+          "projection_stale"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_stale"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:unknown_reason",
+    "label": "a reason outside the ratified vocabulary",
+    "safe": false,
+    "note": "Tolerate-and-count applies to unknown FIELDS, never to an unknown value in a closed enumeration.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "degraded",
+        "reasons": [
+          "quota_exceeded"
+        ],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": null,
+          "missingAppliedFrontierReason": "projection_stale"
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:memories_completeness_version",
+    "label": "the memories envelope version on a tasks page",
+    "safe": false,
+    "note": "The two envelopes are different fields that share a shape; the version is what keeps them apart.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:absence_on_nonempty_page",
+    "label": "query_gap declared beside items",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": {
+        "kind": "query_gap"
+      }
+    }
+  },
+  {
+    "wireCase": "refusal:empty_page_without_absence",
+    "label": "empty item list and no absence",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:whitespace_in_item_id",
+    "label": "an item id carrying whitespace",
+    "safe": false,
+    "note": "Stated plainly because it is easy to over-read: this wire grammar is printable-ASCII and CANNOT tell a word slug from an opaque ref. D2's 'the slug/server-id alias does not cross this wire' is enforced by the SERVER minting reader-scoped handles, and is pinned there — not here. This row proves only that the grammar is bounded.",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task one two",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:non_integer_timestamp",
+    "label": "createdAt carrying a fraction",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000.5,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:negative_indent",
+    "label": "indentLevel below zero",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": -1,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:provenance_not_strings",
+    "label": "provenance carrying a non-string",
+    "safe": false,
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "ok",
+            7
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  },
+  {
+    "wireCase": "refusal:wrong_contract_version",
+    "label": "a page declaring a version this module does not serve",
+    "safe": false,
+    "page": {
+      "contractVersion": "2.0.0",
+      "items": [
+        {
+          "id": "task1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "description": "Ship the tasks read wire",
+          "completed": false,
+          "completedAt": null,
+          "dueAt": 1786000000,
+          "owner": "self",
+          "source": "assistant",
+          "provenance": [
+            "assistant:summarizer-v3"
+          ],
+          "sortOrder": 1.5,
+          "indentLevel": 0,
+          "createdAt": 1785900000,
+          "updatedAt": 1785950000,
+          "revision": "rev-9"
+        }
+      ],
+      "window": {
+        "status": "complete",
+        "complete": true,
+        "hasMore": false,
+        "nextCursor": null
+      },
+      "completeness": {
+        "version": "tasks-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:tasks-declared",
+          "newestAppliedFrontier": "frontier-v1:tasks-declared",
+          "missingAppliedFrontierReason": null
+        }
+      },
+      "absence": null
+    }
+  }
+]
