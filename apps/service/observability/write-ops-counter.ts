@@ -48,8 +48,11 @@ export type WriteOpsWireOutcome = (typeof WRITE_OPS_WIRE_OUTCOMES)[number];
 /**
  * Joins a route outcome to the run that caused it.
  *
- * Spelled the same as the fence harness's header. When the harness is retired
- * into this route's own tests (R5), this becomes the single definition.
+ * THE single definition. It used to be spelled twice — here and in the fence
+ * harness's own constants module — and that duplication is not a tidiness
+ * footnote: the harness's copy of the ROUTE constant is what let a second door
+ * name `/v1/tasks/ops` without rule 17 ever seeing the literal. The harness was
+ * retired under R5 and its constants went with it.
  */
 export const WRITE_RUN_ID_HEADER = "x-omi-run-id";
 
@@ -60,6 +63,22 @@ export interface WriteOpsRunTally {
   readonly outcomes: Readonly<Record<WriteOpsWireOutcome, number>>;
   /** Envelopes retained under ruling B3 during this run. */
   readonly preservedEnvelopes: number;
+  /**
+   * Requests that reached the route's top-level guard — an unhandled failure,
+   * answered 500.
+   *
+   * Deliberately NOT a `wireOutcome`. The outcome vocabulary is the ratified
+   * corpus's, so a conformance test can join a corpus case to a counted outcome
+   * with no translation table in between; adding a value the corpus does not
+   * have would quietly end that property. An internal failure is also not a
+   * decision about the caller or the request — it is this side failing — which
+   * is the same distinction the contract draws when it keeps
+   * `control_unavailable` out of `WriteRefusalOutcome`.
+   *
+   * It is counted at all because zero is the only acceptable value and an
+   * uncounted 500 is indistinguishable from no traffic.
+   */
+  readonly internalErrors: number;
 }
 
 export interface WriteOpsCounter {
@@ -67,6 +86,8 @@ export interface WriteOpsCounter {
   record(runId: string | null | undefined, outcome: WriteOpsWireOutcome): void;
   /** Called only when a row was actually written to the straggler table. */
   recordPreservedEnvelope(runId: string | null | undefined): void;
+  /** Called from the route's top-level guard, where nothing else can be known. */
+  recordInternalError(runId: string | null | undefined): void;
   /** `null` when this run produced no outcome at all — distinct from all-zero. */
   tally(runId: string): WriteOpsRunTally | null;
 }
@@ -84,13 +105,17 @@ const normaliseRunId = (runId: string | null | undefined): string => {
 };
 
 export const createWriteOpsCounter = (): WriteOpsCounter => {
-  const runs = new Map<string, { outcomes: Record<WriteOpsWireOutcome, number>; preservedEnvelopes: number }>();
+  const runs = new Map<string, {
+    outcomes: Record<WriteOpsWireOutcome, number>;
+    preservedEnvelopes: number;
+    internalErrors: number;
+  }>();
 
   const bucket = (runId: string | null | undefined) => {
     const key = normaliseRunId(runId);
     const existing = runs.get(key);
     if (existing !== undefined) return existing;
-    const created = { outcomes: zeroOutcomes(), preservedEnvelopes: 0 };
+    const created = { outcomes: zeroOutcomes(), preservedEnvelopes: 0, internalErrors: 0 };
     runs.set(key, created);
     return created;
   };
@@ -104,12 +129,17 @@ export const createWriteOpsCounter = (): WriteOpsCounter => {
       bucket(runId).preservedEnvelopes += 1;
     },
 
+    recordInternalError(runId: string | null | undefined): void {
+      bucket(runId).internalErrors += 1;
+    },
+
     tally(runId: string): WriteOpsRunTally | null {
       const tally = runs.get(normaliseRunId(runId));
       if (tally === undefined) return null;
       return Object.freeze({
         outcomes: Object.freeze({ ...tally.outcomes }),
         preservedEnvelopes: tally.preservedEnvelopes,
+        internalErrors: tally.internalErrors,
       });
     },
   });

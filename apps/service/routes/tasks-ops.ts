@@ -70,7 +70,7 @@ import {
 } from "../observability/write-ops-counter";
 import type { StragglerTable } from "../stores/straggler-table";
 import type { TasksStore } from "../stores/tasks-store";
-import type { WriteIdRegistry } from "../stores/write-id-registry";
+import { exceedsFingerprintDepth, type WriteIdRegistry } from "../stores/write-id-registry";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -135,6 +135,13 @@ const opFingerprint = (envelope: WriteOpEnvelope): unknown => ({
   op: envelope.op,
 });
 
+/**
+ * The one non-contract failure body. Fixed, like every other body here: an
+ * exception message or a stack on this wire would describe the shape of the
+ * input that produced it.
+ */
+const INTERNAL_BODY = JSON.stringify({ error: "internal_server_error" });
+
 export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencies): void => {
   const handler = async (context: {
     req: {
@@ -175,6 +182,15 @@ export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencie
     // wrong for where it sent it, and the contract's error vocabulary for "this
     // request is malformed" is exactly one value.
     if (envelope === null || !isWritableDomain(pathDomain) || envelope.domain !== pathDomain) {
+      return answer("validation", fixedResponse(WRITE_ERRORS.validation.body, WRITE_ERRORS.validation.status));
+    }
+    // DEPTH, checked here rather than left to whichever recursion overflows
+    // first. `parseWriteOpEnvelopeJson` recurses too, but at a different point
+    // in the call stack, so an envelope can pass its verifier and then blow the
+    // stack in the registry's fingerprint — a probe built exactly that input
+    // and the route answered 500. An envelope this server will not process is
+    // `validation`, the same class as any other it will not accept.
+    if (exceedsFingerprintDepth(envelope.op)) {
       return answer("validation", fixedResponse(WRITE_ERRORS.validation.body, WRITE_ERRORS.validation.status));
     }
 
@@ -237,8 +253,30 @@ export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencie
     ));
   };
 
+  /**
+   * NO CLIENT INPUT MAY PRODUCE AN UNHANDLED FAILURE. Without this, an
+   * exception unwinds to the framework, which answers with whatever it likes —
+   * and a probe demonstrated one: a deep-enough field bag overflowed the stack
+   * inside the registry fingerprint and the route answered 500 with a trace
+   * behind it. The depth bound above closes that specific input; this closes
+   * the CLASS, which is the difference between fixing a bug and fixing the
+   * reason it was reachable.
+   *
+   * Counted separately from the corpus outcomes on purpose: `internalErrors` is
+   * not a `wireOutcome`, and folding it into one would make the outcome
+   * vocabulary stop matching the corpus it is joined to.
+   */
+  const guarded = async (context: Parameters<typeof handler>[0]): Promise<Response> => {
+    try {
+      return await handler(context);
+    } catch {
+      deps.counter.recordInternalError(context.req.header(WRITE_RUN_ID_HEADER));
+      return fixedResponse(INTERNAL_BODY, 500);
+    }
+  };
+
   // POST only. Every other method on this path falls through to the app's
   // `notFound`, which is the read door's discipline: an unsupported method is
   // indistinguishable from an unknown path.
-  app.post(WRITE_OPS_ROUTE_PATTERN, handler);
+  app.post(WRITE_OPS_ROUTE_PATTERN, guarded);
 };

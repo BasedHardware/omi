@@ -91,12 +91,61 @@ interface RegistryRow {
 }
 
 /**
+ * THE DEPTH BOUND, and the defect that produced it.
+ *
+ * `stableSerialize` recurses, and so does the ratified contract's canonical-JSON
+ * verifier. They run at different points in the call stack, so they do not
+ * overflow at the same input depth — and a constructed probe found the gap:
+ * a 20,000-deep array nested inside the field bag PASSED
+ * `parseWriteOpEnvelopeJson` (whose own recursion is inside a `try`, so an
+ * overflow there is just a rejection) and then blew the stack in here, where
+ * nothing was catching it. The route answered **500** on a client-controlled
+ * input.
+ *
+ * "Deep enough to crash" is not a property any caller can be expected to know,
+ * and relying on another module's recursion limit to protect this one's is
+ * relying on a stack budget — a value that changes with the call path, the
+ * engine and the day. So the bound is explicit, checked before anything
+ * recurses, and answered as `validation`: the envelope is beyond what this
+ * server will process, which is the same class as any other envelope it will
+ * not accept.
+ *
+ * 64 is far above anything a task field bag has a reason to contain and far
+ * below any engine's limit. *Reverses as one constant* if a real payload ever
+ * needs more.
+ */
+export const MAX_FINGERPRINT_DEPTH = 64;
+
+/**
+ * True when a value nests deeper than the bound. ITERATIVE on purpose — a
+ * recursive depth-checker would overflow on exactly the input it exists to
+ * reject, which is the shape of the defect it was written for.
+ */
+export const exceedsFingerprintDepth = (value: unknown): boolean => {
+  const stack: Array<{ node: unknown; depth: number }> = [{ node: value, depth: 0 }];
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+    if (node === null || typeof node !== "object") continue;
+    if (depth >= MAX_FINGERPRINT_DEPTH) return true;
+    const children = Array.isArray(node)
+      ? node
+      : Object.values(node as Record<string, unknown>);
+    for (const child of children) stack.push({ node: child, depth: depth + 1 });
+  }
+  return false;
+};
+
+/**
  * A deterministic, key-ORDER-INDEPENDENT serialization. Distinct from the
  * contract's canonical JSON on purpose, and the difference is the whole point of
  * this function — see the module header.
  *
  * Arrays keep their order (order is meaning in an array); object keys are sorted
  * (order is not meaning in an object).
+ *
+ * Callers must have refused over-depth input already; `fingerprint` asserts it
+ * rather than trusting them, because the failure mode of not asserting is a
+ * stack overflow rather than a wrong answer.
  */
 export const stableSerialize = (value: unknown): string => {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -106,8 +155,15 @@ export const stableSerialize = (value: unknown): string => {
   return `{${entries.join(",")}}`;
 };
 
-const fingerprint = (value: unknown): string =>
-  createHash("sha256").update(stableSerialize(value), "utf8").digest("hex");
+const fingerprint = (value: unknown): string => {
+  if (exceedsFingerprintDepth(value)) {
+    // Reached only if a caller skipped the check. Failing here as a value error
+    // beats failing as a stack overflow: one is catchable and named, the other
+    // unwinds through the write path and answers 500.
+    throw new TypeError("write-id registry: value nests deeper than MAX_FINGERPRINT_DEPTH");
+  }
+  return createHash("sha256").update(stableSerialize(value), "utf8").digest("hex");
+};
 
 const keyOf = (accountId: string, writeId: string): string =>
   `${accountId.length}:${accountId}:${writeId}`;
