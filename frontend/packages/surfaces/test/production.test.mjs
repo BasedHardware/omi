@@ -157,7 +157,7 @@ test("memory cards keep locked and provenance behavior honest", async () => {
   const source = await read("src/production/MemoriesProduction.tsx");
   assert.match(source, /presentMemoryContent\(memory\.content\)/);
   assert.match(source, /locked\.body/);
-  assert.match(source, /await store\.discardDeadLetter\(letter\.opId\)/);
+  assert.match(source, /await store\.discardDeadLetter\(view\.opId\)/);
   assert.match(source, /memory\.locked \? \(/);
   assert.match(source, /store\.patch\(memory\.id, \{ visibility: targetVisibility \}\)/);
   assert.match(source, /store\.delete\(memory\.id\)/);
@@ -165,7 +165,7 @@ test("memory cards keep locked and provenance behavior honest", async () => {
   assert.doesNotMatch(lockedBranch, /store\.patch\(memory\.id, \{ content/);
   assert.doesNotMatch(source, /provenance-prefix/);
   assert.match(source, /<p className="memory-content">\{visibleText\}<\/p>/);
-  assert.doesNotMatch(source, /failure\.detail/);
+  assert.doesNotMatch(source, /failure\.detail|letter\.summary|view\.summary/);
   assert.doesNotMatch(source, /setReview/);
   assert.doesNotMatch(source, /memories\.(accept|reject)/);
   assert.doesNotMatch(source, /t\("en"/);
