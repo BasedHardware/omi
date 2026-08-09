@@ -4,7 +4,7 @@
     "wireOutcome": "accepted",
     "ruling": "B4",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Pick up prescription\",\"done\":false}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"description\":\"Pick up prescription\",\"completed\":false}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 200,
@@ -18,7 +18,7 @@
     "ruling": "B1",
     "note": "The demonstrated failure of the revision-derived design: applied, crashed before tombstone, interleaved write, replay. The registry answers from the recorded outcome. Reporting this as conflict would tell the user a saved edit failed.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Pick up prescription\",\"done\":false}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"description\":\"Pick up prescription\",\"completed\":false}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 200,
@@ -31,7 +31,7 @@
     "wireOutcome": "accepted",
     "ruling": "B4",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
     "envelopeAccepted": true,
     "response": {
       "status": 200,
@@ -57,7 +57,7 @@
     "wireOutcome": "authentication",
     "ruling": "B2",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 401,
@@ -73,7 +73,7 @@
     "ruling": "B2",
     "note": "Inner denial reason never reaches the wire. The read route's discipline, kept: class is distinguished, reason is not.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 403,
@@ -88,7 +88,7 @@
     "wireOutcome": "entitlement",
     "ruling": "B2",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 403,
@@ -105,7 +105,7 @@
     "ruling": "B2",
     "note": "409, the same status as conflict, and it must NOT classify as conflict or gone. Preserved for manual resolution; not user-retryable.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":6,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"title\":\"Pick up prescription for Mum\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":6,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"description\":\"Pick up prescription for Mum\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
     "envelopeAccepted": true,
     "response": {
       "status": 409,
@@ -122,7 +122,7 @@
     "ruling": "B1",
     "note": "A buggy adapter laundering two ops through one key. 409, and it is NOT stale_epoch.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"title\":\"Something else entirely\"}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-9f21\",\"content\":{\"description\":\"Something else entirely\"}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 409,
@@ -138,7 +138,7 @@
     "wireOutcome": "conflict",
     "ruling": "B4",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fb21be93792052d84d3728ea0805ffb0e0fae71c01072cd88172e2574e539b8e\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":false},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "requestBody": "{\"write_id\":\"fb21be93792052d84d3728ea0805ffb0e0fae71c01072cd88172e2574e539b8e\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":false},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
     "envelopeAccepted": true,
     "response": {
       "status": 409,
@@ -155,7 +155,7 @@
     "ruling": "W1",
     "note": "Not evidence. Nothing is persisted and the client must NOT dead-letter it. Ratified as an availability signal by COORD-fable-rulings-wave2 W1: a bare 503 would make a client retry in place against a platform that, after a rollback, can never accept \u2014 while the edit's real home is legacy.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}}}",
     "envelopeAccepted": true,
     "response": {
       "status": 503,
@@ -173,7 +173,7 @@
     "wireOutcome": "validation",
     "ruling": "B1",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"edit-task-9f21-set-done\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
+    "requestBody": "{\"write_id\":\"edit-task-9f21-set-done\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}}}",
     "envelopeAccepted": false,
     "response": {
       "status": 422,
@@ -207,7 +207,7 @@
     "ruling": "B4",
     "note": "The envelope is a REQUEST shape. Tolerate-and-count applies to fields a client RECEIVES; a server silently ignoring a field a client thought it sent is how a precondition goes missing.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}},\"op_id\":\"edit-task-9f21\"}",
+    "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"completed\":true}},\"op_id\":\"edit-task-9f21\"}",
     "envelopeAccepted": false,
     "response": {
       "status": 422,
@@ -224,7 +224,7 @@
     "ruling": "B4",
     "note": "There is nothing for a create to be a revision OF. Accepting it would let a client believe it had a precondition it does not have.",
     "path": "/v1/tasks/ops",
-    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-0001\",\"content\":{\"title\":\"x\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
+    "requestBody": "{\"write_id\":\"e11889ad5e74748964b84c271bd3b7bc6170d4a5816eb7e33f701a2cabe77a4c\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"create\",\"record_id\":\"task-0001\",\"content\":{\"description\":\"x\"},\"base_revision\":\"219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022\"}}",
     "envelopeAccepted": false,
     "response": {
       "status": 422,
