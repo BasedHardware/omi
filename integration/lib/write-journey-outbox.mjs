@@ -42,6 +42,7 @@
 // importing a constant from it created a top-level-await cycle that exited 13
 // with no verdict. See `write-journey-protocol.mjs`.
 import { RUN_ID_HEADER } from "./write-journey-protocol.mjs";
+import { createReadableTaskBag } from "./write-journey-task.mjs";
 
 /**
  * A real `HttpClient` over `fetch`, scoped to one door and one run id.
@@ -86,6 +87,7 @@ export function liveHttpClient({ baseUrl, token, runId, fetchImpl = fetch }) {
 export async function runOutboxDrain(options) {
   const {
     doorUrl, token, runId, activeEpoch, accountId,
+    buildEnvelope,
     deps: { MemoryStore, ManualEnv, Outbox, platformTasksTransport, createPlatformWriteStamps, createDevAccountEpochProvider },
     fetchImpl = fetch,
   } = options;
@@ -149,15 +151,42 @@ export async function runOutboxDrain(options) {
   };
 
   const recordId = options.recordId ?? "flying-dragon-vibrant";
+  const seedWriteId = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
+    byte.toString(16).padStart(2, "0")).join("");
+  const seedBuilt = buildEnvelope({
+    domain: "tasks",
+    writeId: seedWriteId,
+    op: {
+      op: "create",
+      record_id: recordId,
+      content: createReadableTaskBag({ description: "seeded for the outbox", completed: false }),
+    },
+  }, activeEpoch);
+  if (!seedBuilt.ok) {
+    throw new Error(`the shipped adapter refused the outbox seed: ${JSON.stringify(seedBuilt)}`);
+  }
+  const seedResponse = await fetchImpl(`${doorUrl}${seedBuilt.path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      [RUN_ID_HEADER]: `${runId}-outbox-seed`,
+    },
+    body: JSON.stringify(seedBuilt.envelope),
+  });
+  const seed = { status: seedResponse.status, text: await seedResponse.text() };
+  if (seed.status !== 200) {
+    throw new Error(`the conformant outbox seed was not applied: ${seed.status} ${seed.text}`);
+  }
   const op = (opId) => ({
     opId,
     domain: "tasks",
     recordId,
     payload: JSON.stringify({
-      op: "create", opId, id: recordId, at: 1_000,
-      description: "drained by the outbox", source: "user",
+      op: "patch", opId, id: recordId, at: 1_000,
+      patch: { description: "drained by the outbox" },
     }),
-    summary: `Create task ${recordId}`,
+    summary: `Edit task ${recordId}: description`,
     attempts: 0,
   });
 
@@ -218,6 +247,7 @@ export async function runOutboxDrain(options) {
     drainRunId,
     staleRunId,
     recordId,
+    seed,
     journaled,
     staleJournaled,
     epoch: { active: activeEpoch, straggler: activeEpoch - 1 },

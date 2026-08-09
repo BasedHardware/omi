@@ -66,6 +66,7 @@ export const WRITE_JOURNEY_SCHEMA_VERSION = 1;
 // to learn a second path.
 export { OPS_PATH, RUN_ID_HEADER, CONTROL_BASE } from "./write-journey-protocol.mjs";
 import { OPS_PATH, RUN_ID_HEADER, CONTROL_BASE } from "./write-journey-protocol.mjs";
+import { createReadableTaskBag } from "./write-journey-task.mjs";
 
 /**
  * The corpus this journey is judged against is the one the DOOR was built
@@ -293,7 +294,11 @@ export async function runWriteJourney(options) {
 
   const recordId = `task-journey-${runId}`;
   const createWriteId = mintWriteId();
-  const createOp = { op: "create", record_id: recordId, content: { title: "pick up oat milk", done: false } };
+  const createOp = {
+    op: "create",
+    record_id: recordId,
+    content: createReadableTaskBag({ description: "pick up oat milk", completed: false }),
+  };
 
   // ── S1. create ───────────────────────────────────────────────────────────
   const create = await sendOp({ writeId: createWriteId, op: createOp, epoch: activeEpoch });
@@ -303,14 +308,14 @@ export async function runWriteJourney(options) {
   const staleWriteId = mintWriteId();
   const stale = await sendOp({
     writeId: staleWriteId,
-    op: { op: "patch", record_id: recordId, patch: { done: true } },
+    op: { op: "patch", record_id: recordId, patch: { completed: true } },
     epoch: staleEpoch,
   });
   // Interleaved traffic under a DIFFERENT run id. A counter that only kept
   // totals would agree with the wrong answer without this.
   const interleaved = await sendOp({
     writeId: mintWriteId(),
-    op: { op: "patch", record_id: recordId, patch: { done: true } },
+    op: { op: "patch", record_id: recordId, patch: { completed: true } },
     epoch: staleEpoch,
     runIdOverride: otherRunId,
   });
@@ -846,6 +851,7 @@ if (process.argv[1] && process.argv[1].endsWith("write-journey.mjs")) {
         accountId: flag("--account"),
         runId: verdict.runId,
         activeEpoch,
+        buildEnvelope: adapters.buildWriteOpEnvelope,
         deps: {
           MemoryStore: fakes.MemoryStore,
           ManualEnv: fakes.ManualEnv,

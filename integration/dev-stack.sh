@@ -110,8 +110,8 @@
 #    up already, and fails loudly with that exact message if it is not.)
 #
 # IS TRAFFIC ACTUALLY FLOWING?
-#   curl -s http://127.0.0.1:4851/qa/stats
-#   -> {"servedRequests":N,"servedReads":N,...}
+#   curl -s http://127.0.0.1:4851/v1/qa/status
+#   -> {"version":"qa-status-v1","served":{...},"seed":{...}}
 #   This script prints those counters before and after it drives the apps, and
 #   FAILS if the count is still zero after an app was launched in bridge mode.
 #   Zero served requests with a happy-looking UI is the exact failure this
@@ -138,12 +138,12 @@
 #   id. See integration/lib/write-journey.mjs for what each step's two arbiters
 #   are and why a dispatch-side number never appears in the verdict.
 #
-#   THE DOOR IS THE REGISTERED APP — `integration/control/live-service.ts`,
-#   which is `createLocalService` bound to an ephemeral socket and constructs no
-#   route, handler, composition or store of its own. It is a SEPARATE PROCESS
-#   from the memories backend on 4851, which composes its own app and serves no
-#   write route. The retired `fence-server.ts` harness answered the same path
-#   with different bytes and is gone (R5).
+#   THE DOOR IS THE REGISTERED APP — `createLocalService`, bound directly to
+#   4851 by `integration/lib/write-journey-door.mjs`. Memories, task writes,
+#   task reads, QA control and their counters are one composition, one process,
+#   one token and one store. The old memories-only 4851 plus ephemeral task door
+#   was a split-brain stack: both processes were real, but neither measurement
+#   described the advertised stack as a whole.
 #
 #   WHETHER THE JOURNEY GATES L3 IS NOT A FLAG. `write-journey.mjs
 #   --print-door-plan` answers it from platform's WIRE_PATH_REGISTRY: with no
@@ -155,13 +155,9 @@
 #   observe/activate for its dev account only. The production publisher is
 #   legacy's and is untouched.
 #
-# PORTS IT USES     4851 new backend | 4852 surfaces | 4747 legacy fake
-#                   write door: EPHEMERAL, printed by the service and recorded
-#                   in $RUNDIR/write-door.json. Deliberately not a constant:
-#                   integration/cross-side/wire-agreement.test.mjs hard-codes
-#                   4853 for its own child, L2 must stay safe beside a live
-#                   stack, and two lanes on one fixed port report a socket
-#                   fight as a test failure in whichever lost.
+# PORTS IT USES     4851 registered backend + write door | 4852 surfaces |
+#                   4747 legacy fake. Cross-side tests continue to use
+#                   ephemeral sockets and remain safe beside this live stack.
 #                   5290 macOS shell's own loopback (it serves its bundled dist)
 # ============================================================================
 set -uo pipefail
@@ -207,6 +203,7 @@ MACOS_SHELL="${OMI_MACOS_SHELL:-$CORE_REPO/core/shells/macos}"
 IOS_SHELL="$TRACKER/prototypes/flutter-webview"
 LEGACY_FAKE="$TRACKER/prototypes/qa-api-server/server.mjs"
 SURFACES="$CORE_REPO/core/packages/surfaces"
+REGISTERED_DOOR_LAUNCHER="$HERE/lib/write-journey-door.mjs"
 
 RUNDIR="${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}"
 LOGDIR="$RUNDIR/logs"
@@ -219,8 +216,8 @@ BACKEND_URL="${OMI_BACKEND_URL:-http://127.0.0.1:$BACKEND_PORT}"
 # The write door announces its own token and owner account; nothing here
 # guesses either. A launcher that assumed the credential it remembered is how a
 # run measures a principal it does not have.
-WRITE_TOKEN=""
-WRITE_ACCOUNT=""
+WRITE_TOKEN="${OMI_BACKEND_TOKEN:-}"
+WRITE_ACCOUNT="${OMI_BACKEND_ACCOUNT:-}"
 WRITE_JOURNEY_EPOCH="${OMI_WRITE_JOURNEY_EPOCH:-7}"
 
 SEED="${OMI_SEED:-7}"
@@ -369,7 +366,7 @@ if [[ $STATUS_ONLY -eq 1 ]]; then
     h="$(port_holder "$p")"
     if [[ -n "$h" ]] && [[ "$(ps -o comm= -p "$h" 2>/dev/null)" == *omi-* ]]; then m_port="$p"; m_pid="$h"; break; fi
   done
-  b_stats="$(curl -fsS --max-time 2 "$BACKEND_URL/qa/stats" 2>/dev/null || echo '')"
+  b_stats="$(curl -fsS --max-time 2 "$BACKEND_URL/v1/qa/status" 2>/dev/null || echo '')"
   if [[ $EMIT_JSON -eq 1 ]]; then
     RUN_ID="$RUN_ID" BACKEND_URL="$BACKEND_URL" B_PID="$b_pid" S_PID="$s_pid" L_PID="$l_pid" \
     M_PID="$m_pid" M_PORT="$m_port" B_STATS="$b_stats" REPORTFILE="$REPORTFILE" \
@@ -450,14 +447,10 @@ free_port() {
   done
 }
 
-# The write door binds an EPHEMERAL port, so there is no constant to sweep. The
-# port the kernel actually gave it is recorded at boot; this reads it back.
-# Recording beats guessing for the same reason --status probes instead of
-# recalling: a port nobody wrote down is a port nobody can free.
+# The write-door record now describes the SAME 4851 process as the backend.
+# The pidfile/backend sweep owns stopping it; this helper only removes the
+# discovery record so a later --attach cannot inherit stale credentials.
 stop_write_door() {
-  [[ -f "$WRITE_DOOR_FILE" ]] || return 0
-  local port; port="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).port||"")}catch{console.log("")}' "$WRITE_DOOR_FILE" 2>/dev/null)"
-  [[ -n "$port" ]] && free_port "$port" "integration/control/live-service.ts"
   rm -f "$WRITE_DOOR_FILE"
 }
 
@@ -481,7 +474,7 @@ trap cleanup EXIT INT TERM
 
 if [[ $STOP_ONLY -eq 1 ]]; then
   stop_tracked
-  free_port "$BACKEND_PORT" "integration/server/serve.ts"
+  free_port "$BACKEND_PORT" "integration/lib/write-journey-door.mjs"
   free_port "$SURFACES_PORT" "dev-stack-static"
   free_port "$LEGACY_PORT" "qa-api-server"
   stop_write_door
@@ -501,10 +494,13 @@ need lsof "lsof ships with macOS; your PATH may be broken."
 [[ -d "$PLATFORM_REPO" ]] || fixit "backend repo not found at $PLATFORM_REPO" \
   "Expected the 'platform' checkout next to this one." \
   "  ls $WORKSPACE"
-[[ -f "$PLATFORM_REPO/integration/server/serve.ts" ]] || fixit \
-  "backend entrypoint missing: $PLATFORM_REPO/integration/server/serve.ts" \
+[[ -f "$PLATFORM_REPO/apps/service/app-facing.ts" ]] || fixit \
+  "registered composition missing: $PLATFORM_REPO/apps/service/app-facing.ts" \
   "Your platform checkout is on the wrong branch." \
   "  cd $PLATFORM_REPO && git checkout codex/track3-backend-integration"
+[[ -f "$REGISTERED_DOOR_LAUNCHER" ]] || fixit \
+  "registered-door launcher missing: $REGISTERED_DOOR_LAUNCHER" \
+  "Restore the integration files from this core-foundation lane."
 
 if [[ $WANT_MACOS -eq 1 ]]; then
   need swiftc "Install Xcode command line tools:  xcode-select --install"
@@ -553,7 +549,7 @@ fi
 # report on the wreckage.
 if [[ $MODE_ATTACH -eq 0 ]]; then
   stop_tracked
-  free_port "$BACKEND_PORT" "integration/server/serve.ts"
+  free_port "$BACKEND_PORT" "integration/lib/write-journey-door.mjs"
   free_port "$SURFACES_PORT" "dev-stack-static"
   stop_write_door
 fi
@@ -562,8 +558,8 @@ fi
 BACKEND_OWNED=0
 if [[ $MODE_ATTACH -eq 1 ]]; then
   say "${B}backend${Z} — attach mode: measuring the stack that is already up at $BACKEND_URL"
-  curl -fsS --max-time 3 "$BACKEND_URL/qa/stats" >/dev/null 2>&1 || fixit \
-    "attach mode, but nothing is answering at $BACKEND_URL/qa/stats" \
+  curl -fsS --max-time 3 "$BACKEND_URL/v1/qa/status" >/dev/null 2>&1 || fixit \
+    "attach mode, but nothing is answering at $BACKEND_URL/v1/qa/status" \
     "Attach asserts against a RUNNING stack; it boots nothing on purpose." \
     "Bring one up first:  integration/dev-stack.sh --no-ios --generation platform --up" \
     "Or see what is running:  integration/dev-stack.sh --status"
@@ -576,10 +572,15 @@ elif [[ "$BACKEND_URL" != "http://127.0.0.1:$BACKEND_PORT" ]]; then
     "Start that backend first, or unset OMI_BACKEND_URL to use the built-in one on $BACKEND_PORT."
   ok "external backend reachable at $BACKEND_URL"
 elif [[ $WANT_BACKEND -eq 1 ]]; then
-  say "${B}backend${Z} — booting new stack on $BACKEND_PORT (TZ=UTC, seed=$SEED)"
-  ( cd "$PLATFORM_REPO" && TZ=UTC OMI_INTEGRATION_PORT="$BACKEND_PORT" \
-      bun run integration/server/serve.ts ) > "$LOGDIR/backend.log" 2>&1 &
-  track backend $!
+  say "${B}backend${Z} — booting the registered composition on $BACKEND_PORT (TZ=UTC, seed=$SEED)"
+  # Direct `exec bun <file>`, not `bun run`: `bun run` leaves the listener in a
+  # child process, so the pidfile owns the runner rather than the socket and
+  # --stop kills the wrong PID.
+  ( cd "$PLATFORM_REPO" && TZ=UTC exec bun "$REGISTERED_DOOR_LAUNCHER" \
+      --platform-repo "$PLATFORM_REPO" --port "$BACKEND_PORT" --seed "$SEED" ) \
+      > "$LOGDIR/backend.log" 2>&1 &
+  BACKEND_RUNNER_PID=$!
+  track backend-runner "$BACKEND_RUNNER_PID"
   BACKEND_OWNED=1
   for i in $(seq 1 40); do
     curl -fsS --max-time 1 "$BACKEND_URL/health" >/dev/null 2>&1 && break
@@ -587,13 +588,27 @@ elif [[ $WANT_BACKEND -eq 1 ]]; then
     [[ $i -eq 40 ]] && fixit "backend never became ready on $BACKEND_PORT" \
       "Log: $LOGDIR/backend.log" "$(tail -5 "$LOGDIR/backend.log" 2>/dev/null || echo '(no log)')"
   done
-  curl -fsS "$BACKEND_URL/qa/reset?seed=$SEED" >/dev/null || die "seed failed"
-  ok "backend live at $BACKEND_URL  (seeded $SEED rows)"
+  read -r announced_url WRITE_TOKEN WRITE_ACCOUNT BACKEND_LISTENER_PID <<<"$(node -e '
+    const fs=require("fs");
+    let line=null;
+    try { line=fs.readFileSync(process.argv[1],"utf8").split("\n").find((l)=>l.includes("registered_door_listening")); } catch {}
+    if(!line){console.log("");process.exit(0)}
+    try{const j=JSON.parse(line);console.log(`${j.url} ${j.devToken} ${j.ownerAccountId} ${j.pid}`)}catch{console.log("")}
+  ' "$LOGDIR/backend.log" 2>/dev/null || echo "")"
+  [[ "$announced_url" == "$BACKEND_URL" && -n "$WRITE_TOKEN" && -n "$WRITE_ACCOUNT" \
+      && "$BACKEND_LISTENER_PID" =~ ^[0-9]+$ ]] || fixit \
+    "registered backend became healthy but did not announce its own URL, token and account" \
+    "Log: $LOGDIR/backend.log" \
+    "This is a loud boot failure replacing the old silent two-door split."
+  if [[ "$BACKEND_LISTENER_PID" != "$BACKEND_RUNNER_PID" ]]; then
+    track backend-listener "$BACKEND_LISTENER_PID"
+  fi
+  ok "registered backend live at $BACKEND_URL  (seeded $SEED memories; tasks read + ops on the same door)"
 fi
 
 if [[ $WANT_BACKEND -eq 1 || "$BACKEND_URL" != "http://127.0.0.1:$BACKEND_PORT" ]]; then
-  echo "    dev token:  ${B}omi-integration-qa-key-v1${Z}   (QA only, loopback only)"
-  echo "    try it:     curl -s '$BACKEND_URL/qa/stats'"
+  [[ -n "$WRITE_TOKEN" ]] && echo "    dev token:  ${B}$WRITE_TOKEN${Z}   (QA only, loopback only)"
+  echo "    try it:     curl -s '$BACKEND_URL/v1/qa/status'"
 fi
 
 # Loopback-only proof: lsof says 127.0.0.1, AND a LAN curl must FAIL.
@@ -624,21 +639,16 @@ fi
 # pre-ruled that it could not survive the registered route and OPS retired it;
 # fable's R14 quarantines every measurement taken against it while both stood.
 #
-# `integration/control/live-service.ts` is NOT its replacement in kind: it
-# constructs no route, handler, composition or store. It is `createLocalService`
-# — the same app the dev server, the route tests and the shipped binding use —
-# bound to a socket, because the properties under test are properties of the
-# BYTES and an in-process assertion compares JavaScript objects that can agree
-# while the status line, headers or framing differ.
+# `integration/lib/write-journey-door.mjs` is process glue, not a replacement
+# composition: it constructs no route, handler or store of its own. It imports
+# `createLocalService` — the same app the dev server, route tests and shipped
+# binding use — and binds it directly to 4851. The URL, dev token and owner are
+# read from its one-line JSON announcement; nothing here guesses them.
 #
-# It binds an EPHEMERAL port and prints its url, dev token and owner account on
-# one line of JSON. Nothing here guesses any of the three: a launcher that
-# assumed the token would be the one it remembered is how a run measures a
-# principal it does not have.
-#
-# NOTE the write door is a SEPARATE PROCESS from the memories backend on 4851.
-# `integration/server/serve.ts` composes its own app and registers only the
-# memory routes, so `/v1/tasks/ops` 404s there. Verified by probe, not assumed.
+# R34 removes the separate-process exception: the journey must read the
+# counters and store owned by the exact 4851 process that serves memories and
+# the final /v1/tasks probe. A missing token/account is therefore a loud
+# preflight failure; booting an ephemeral substitute would recreate the defect.
 JOURNEY_FILE=""
 JOURNEY_STATUS=""
 WRITE_DOOR_URL=""
@@ -651,32 +661,17 @@ if [[ $MODE_ATTACH -eq 1 ]]; then
     read -r WRITE_DOOR_URL WRITE_TOKEN WRITE_ACCOUNT <<<"$(node -e '
       const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
       console.log(`${j.url} ${j.devToken} ${j.ownerAccountId}`);' "$WRITE_DOOR_FILE" 2>/dev/null || echo "")"
-    [[ -n "$WRITE_DOOR_URL" ]] && say "${B}write door${Z} — attach mode: reusing $WRITE_DOOR_URL from the run that booted it"
+    if [[ "$WRITE_DOOR_URL" == "$BACKEND_URL" ]]; then
+      say "${B}write door${Z} — attach mode: reusing the registered backend door at $WRITE_DOOR_URL"
+    else
+      WRITE_DOOR_URL="" WRITE_TOKEN="" WRITE_ACCOUNT=""
+    fi
   fi
   [[ -z "$WRITE_DOOR_URL" ]] && warn "attach mode: no write door recorded by the run that booted this stack — the journey will not run"
 else
-  say "${B}write door${Z} — booting the registered service (createLocalService) on an ephemeral port"
-  # `exec` so $! is BUN's pid and not the subshell's. Killing a subshell leaves
-  # the listener holding its port, and the leak is invisible until some other
-  # harness fails to bind and reads a stranger's 404 as its own server's answer.
-  ( cd "$PLATFORM_REPO" && exec bun run integration/control/live-service.ts ) > "$LOGDIR/write-door.log" 2>&1 &
-  track writedoor $!
-  for i in $(seq 1 60); do
-    grep -q live_service_listening "$LOGDIR/write-door.log" 2>/dev/null && break
-    sleep 0.25
-  done
-  read -r WRITE_DOOR_URL WRITE_TOKEN WRITE_ACCOUNT <<<"$(node -e '
-    const fs=require("fs");
-    let line=null;
-    try {
-      line=fs.readFileSync(process.argv[1],"utf8").split("\n").find((l)=>l.includes("live_service_listening"));
-    } catch {}
-    if(!line){console.log("");process.exit(0)}
-    try{const j=JSON.parse(line);console.log(`${j.url} ${j.devToken} ${j.ownerAccountId}`)}catch{console.log("")}
-  ' "$LOGDIR/write-door.log" 2>/dev/null || echo "")"
-  if [[ -n "$WRITE_DOOR_URL" ]]; then
-    # Remember it: --attach and --stop both need a door this process discovered
-    # rather than one they can guess, because the port is the kernel's answer.
+  WRITE_DOOR_URL="$BACKEND_URL"
+  if [[ -n "$WRITE_TOKEN" && -n "$WRITE_ACCOUNT" ]]; then
+    # Remember the announced identity so --attach can reuse this exact door.
     WRITE_DOOR_URL="$WRITE_DOOR_URL" WRITE_TOKEN="$WRITE_TOKEN" WRITE_ACCOUNT="$WRITE_ACCOUNT" \
       WRITE_DOOR_FILE="$WRITE_DOOR_FILE" node -e '
         const e=process.env;
@@ -684,9 +679,11 @@ else
           url:e.WRITE_DOOR_URL, devToken:e.WRITE_TOKEN, ownerAccountId:e.WRITE_ACCOUNT,
           port:Number(new URL(e.WRITE_DOOR_URL).port), wroteAt:new Date().toISOString(),
         }, null, 2));'
-    ok "write door at $WRITE_DOOR_URL  (registered app, owner $WRITE_ACCOUNT)"
+    ok "write door is the registered backend at $WRITE_DOOR_URL  (owner $WRITE_ACCOUNT)"
   else
-    warn "the write door never announced itself — see $LOGDIR/write-door.log"
+    fixit "the registered backend supplied no door token/account; refusing to boot a substitute" \
+      "For an external backend, set OMI_BACKEND_TOKEN and OMI_BACKEND_ACCOUNT." \
+      "For the built-in backend, inspect $LOGDIR/backend.log."
   fi
 fi
 
@@ -807,7 +804,10 @@ STATS_BEFORE="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
 if [[ "$GENERATION" == "platform" ]]; then
   # The app's memories surface reads the NEW backend over GET /v1/memories.
   export OMI_API_BASE_URL="$BACKEND_URL"
-  export OMI_API_TOKEN="omi-integration-qa-key-v1"
+  # The registered composition announces one token for memories, task ops and
+  # task reads. Keeping the retired memories-harness token here would recreate
+  # the two-door split as two credentials even after the processes were joined.
+  export OMI_API_TOKEN="$WRITE_TOKEN"
   # BOTH are required. `generation=platform` alone leaves route=home, which takes
   # the legacy branch and dispatches legacy calls at the platform backend - they
   # fail, and a dispatch-counting shell calls that a PASS.
@@ -1042,7 +1042,7 @@ echo
 
 if [[ "$RED_PROOF" == "dead-backend" ]]; then
   warn "RED-PROOF dead-backend: killing the backend now that the apps have been driven."
-  free_port "$BACKEND_PORT" "integration/server/serve.ts"
+  free_port "$BACKEND_PORT" "integration/lib/write-journey-door.mjs"
   STATS_AFTER="$(curl -s --max-time 2 "$BACKEND_URL/qa/stats" 2>/dev/null || echo '')"
 fi
 

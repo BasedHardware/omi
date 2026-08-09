@@ -24,6 +24,7 @@
 // Run: node --test integration/lib/write-journey.test.mjs
 
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { test } from "node:test";
 
 import { judgeOutbox } from "./write-journey-outbox.mjs";
@@ -35,6 +36,8 @@ import {
   mintWriteId,
   readVendoredWriteOutcomes,
 } from "./write-journey.mjs";
+import { createReadableTaskBag } from "./write-journey-task.mjs";
+import { REPO_PATHS } from "./provenance.mjs";
 
 const corpus = readVendoredWriteOutcomes();
 const { classifyWriteOpsResponse: classify } = await import(
@@ -47,6 +50,124 @@ const STALE_BODY = corpus.byOutcome.get("stale_epoch").body;
 const RUN = "journey-unit";
 const WRITE_ID = "a".repeat(64);
 const REVISION = "219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022";
+
+test("the journey writes every bag-backed field in the signed task vocabulary", () => {
+  // red-proof: rename `description` back to `title`, `completed` back to
+  // `done`, or omit any projection field and this exact-key assertion fails.
+  const bag = createReadableTaskBag({
+    description: "pick up oat milk",
+    completed: false,
+  });
+  assert.deepEqual(Object.keys(bag), [
+    "description",
+    "completed",
+    "completedAt",
+    "dueAt",
+    "owner",
+    "source",
+    "provenance",
+    "sortOrder",
+    "indentLevel",
+    "createdAt",
+    "updatedAt",
+  ]);
+  assert.equal(bag.description, "pick up oat milk");
+  assert.equal(bag.completed, false);
+  assert.equal("title" in bag, false);
+  assert.equal("done" in bag, false);
+  assert.equal("id" in bag, false, "id is derived from the envelope record_id");
+  assert.equal("revision" in bag, false, "revision is owned by the store hash chain");
+});
+
+test("the launcher binds one registered composition for memories, task ops, and task reads", async (t) => {
+  // red-proof: replace the launcher import of `createLocalService` with the old
+  // memories-only integration server and /v1/tasks/ops returns the unknown-route
+  // 404 before this test can create or read the task.
+  const launcher = new URL("./write-journey-door.mjs", import.meta.url);
+  const child = spawn("bun", [
+    launcher.pathname,
+    "--platform-repo", REPO_PATHS.platform,
+    "--port", "0",
+    "--seed", "1",
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+  t.after(() => {
+    if (child.exitCode === null) child.kill("SIGTERM");
+  });
+
+  const listening = await new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => reject(new Error(`registered door did not announce itself: ${stderr}`)), 10_000);
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      const line = stdout.split("\n").find((candidate) => candidate.includes("registered_door_listening"));
+      if (line === undefined) return;
+      clearTimeout(timeout);
+      resolve(JSON.parse(line));
+    });
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("exit", (code) => {
+      if (code === 0) return;
+      clearTimeout(timeout);
+      reject(new Error(`registered door exited ${code}: ${stderr}`));
+    });
+  });
+
+  const auth = { authorization: `Bearer ${listening.devToken}` };
+  assert.equal(Number.isSafeInteger(listening.pid), true, "the listener must announce the PID shutdown owns");
+  const control = async (path, body) => {
+    const response = await fetch(`${listening.url}${path}`, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 200, `${path}: ${await response.text()}`);
+  };
+  const observation = (overrides) => ({
+    account_id: listening.ownerAccountId,
+    control_revision: 1,
+    account_generation: "legacy",
+    account_epoch: null,
+    lifecycle_state: "active",
+    deletion_epoch: null,
+    ...overrides,
+  });
+  await control("/v1/qa/control/reset", {});
+  await control("/v1/qa/control/observe", observation({}));
+  await control("/v1/qa/control/observe", observation({ control_revision: 2, account_generation: "migrating" }));
+  await control("/v1/qa/control/observe", observation({ control_revision: 3, account_generation: "new", account_epoch: 7 }));
+  await control("/v1/qa/control/activate", { epoch: 7, at_control_revision: 3 });
+
+  const created = await fetch(`${listening.url}/v1/tasks/ops`, {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({
+      write_id: "d".repeat(64),
+      account_epoch: 7,
+      domain: "tasks",
+      op: {
+        op: "create",
+        record_id: "registered-door-test",
+        content: createReadableTaskBag({ description: "registered door task", completed: false }),
+      },
+    }),
+  });
+  assert.equal(created.status, 200, await created.text());
+
+  const [memories, tasks] = await Promise.all([
+    fetch(`${listening.url}/v1/memories`, { headers: auth }),
+    fetch(`${listening.url}/v1/tasks`, { headers: auth }),
+  ]);
+  assert.equal(memories.status, 200);
+  assert.equal(tasks.status, 200);
+  const page = await tasks.json();
+  assert.equal(page.items[0].description, "registered door task");
+  assert.equal(page.items[0].completed, false);
+});
 
 const fenceTally = (over = {}) => ({
   admitted: 2,
@@ -78,7 +199,11 @@ const tally = (fenceOver = {}, writeOpsOver = {}) => ({
 function appliedJourney(over = {}) {
   const createBody = JSON.stringify({
     write_id: WRITE_ID, account_epoch: 7, domain: "tasks",
-    op: { op: "create", record_id: `task-journey-${RUN}`, content: { title: "t", done: false } },
+    op: {
+      op: "create",
+      record_id: `task-journey-${RUN}`,
+      content: createReadableTaskBag({ description: "t", completed: false }),
+    },
   });
   const journey = {
     schema: 1,
