@@ -44,9 +44,13 @@ const WINDOW_LABEL: Record<number, string> = { 12: "12h", 24: "1d", 72: "3d" };
 const PIE_COLORS = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3", "#c5cdd8"];
 
 type Props = {
-  getToken: () => Promise<string | null>;
+  /** Capability token for /api/tv/snapshot polls. */
+  token: string;
   kioskLabel?: string;
   pollMs?: number;
+  /** Server-fetched first paint so the wall isn't blank while client hydrates. */
+  initialSnap?: TvSnapshot | null;
+  initialError?: string | null;
 };
 
 function fmt(v: number | null | undefined): string {
@@ -214,32 +218,14 @@ function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
   return { data, activeKeys, stats };
 }
 
-function windowPlatTotals(
-  platforms: Record<string, number | null | Record<string, number | null>> | undefined,
-  hoursKey: string,
-): Record<string, number | null> {
-  const out: Record<string, number | null> = {};
-  if (!platforms) return out;
-  for (const k of PLATS) {
-    const raw = platforms[k];
-    if (raw == null) out[k] = null;
-    else if (typeof raw === "number") out[k] = raw;
-    else out[k] = (raw as Record<string, number | null>)[hoursKey] ?? null;
-  }
-  return out;
-}
-
 function MultiLineChart({
   series,
   hours,
-  totals,
 }: {
   series: SeriesPoint[];
   hours: number;
-  /** Window totals (same numbers as the top chips) — shown on the right. */
-  totals?: Record<string, number | null>;
 }) {
-  const { data, activeKeys } = useMemo(
+  const { data, activeKeys, stats } = useMemo(
     () => buildIndexedChart(series, hours),
     [series, hours],
   );
@@ -293,7 +279,7 @@ function MultiLineChart({
               formatter={(value: number, name: string, item) => {
                 const raw = item?.payload?.[`${name}_raw`];
                 const pct = value == null ? "—" : `${Math.round(value * 100)}% of start`;
-                const abs = raw == null ? "" : ` · bucket ${fmt(Number(raw))}`;
+                const abs = raw == null ? "" : ` · now ${fmt(Number(raw))}`;
                 return [`${pct}${abs}`, PLAT_LABEL[name] || name];
               }}
             />
@@ -313,15 +299,15 @@ function MultiLineChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="tv-end-labels" title="Same window totals as the chips above">
-        {activeKeys.map((k) => {
-          const total = totals?.[k];
-          return (
-            <span key={k} style={{ color: PLAT_COLORS[k] }}>
-              {PLAT_LABEL[k]} {fmt(total ?? null)}
-            </span>
-          );
-        })}
+      <div
+        className="tv-end-labels"
+        title="Latest 10-minute bucket (same grain as the line tip)"
+      >
+        {activeKeys.map((k) => (
+          <span key={k} style={{ color: PLAT_COLORS[k] }}>
+            {PLAT_LABEL[k]} {fmt(stats[k]?.latest ?? null)}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -461,24 +447,24 @@ function TvClock() {
 }
 
 export function TvBoard({
-  getToken,
+  token,
   kioskLabel,
   pollMs = 60_000,
+  initialSnap = null,
+  initialError = null,
 }: Props) {
-  const [snap, setSnap] = useState<TvSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [snap, setSnap] = useState<TvSnapshot | null>(initialSnap);
+  const [error, setError] = useState<string | null>(initialError);
   const [hours, setHours] = useState<WindowHours>(72);
   const hk = String(hours);
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
       if (!token) {
         setSnap(null);
         setError("Missing auth token");
         return;
       }
-      // Header is primary; ?token= is a fallback for proxies that strip Authorization.
       const res = await fetch(`/api/tv/snapshot?token=${encodeURIComponent(token)}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -486,7 +472,6 @@ export function TvBoard({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         const msg = body.error || `HTTP ${res.status}`;
-        // Revoked / unauthorized: clear the wall. Transient 5xx: keep last-good data.
         if (res.status === 401 || res.status === 403) {
           setSnap(null);
         }
@@ -497,9 +482,10 @@ export function TvBoard({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [getToken]);
+  }, [token]);
 
   useEffect(() => {
+    // Always refresh soon after mount (even if SSR gave initialSnap).
     void load();
     const id = setInterval(() => void load(), pollMs);
     return () => clearInterval(id);
@@ -690,11 +676,7 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart
-                series={a?.series || []}
-                hours={hours}
-                totals={actSlot?.platforms || {}}
-              />
+              <MultiLineChart series={a?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -718,11 +700,7 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart
-                series={mem?.series || []}
-                hours={hours}
-                totals={windowPlatTotals(mem?.platforms, hk)}
-              />
+              <MultiLineChart series={mem?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -849,11 +827,7 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart
-                series={conv?.series || []}
-                hours={hours}
-                totals={windowPlatTotals(conv?.platforms, hk)}
-              />
+              <MultiLineChart series={conv?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -877,11 +851,7 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart
-                series={chat?.series || []}
-                hours={hours}
-                totals={windowPlatTotals(chat?.platforms, hk)}
-              />
+              <MultiLineChart series={chat?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -925,11 +895,7 @@ export function TvBoard({
               </div>
             </div>
             <div className="tv-chart">
-              <MultiLineChart
-                series={a?.series || []}
-                hours={hours}
-                totals={actSlot?.platforms || {}}
-              />
+              <MultiLineChart series={a?.series || []} hours={hours} />
             </div>
           </div>
         </section>
