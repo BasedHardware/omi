@@ -4,6 +4,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionSearchField } from "./ProductionPrimitives.js";
 import "./tasks.css";
@@ -77,13 +78,8 @@ function groupFor(task: Task, now: number, calendarDay: (timestamp: number) => s
 }
 
 function phaseLabel(status: StoreStatus, translate: Translate): string | null {
-  switch (status.refresh.phase) {
-    case "initial-loading": return translate("lifecycle.loading");
-    case "refreshing": return translate("lifecycle.refreshing");
-    case "saved-but-refresh-failed": return translate("lifecycle.savedFailed");
-    case "unavailable": return translate("lifecycle.unavailable");
-    default: return null;
-  }
+  const key = refreshPhaseNoticeKey(status.refresh.phase);
+  return key === null ? null : translate(key);
 }
 
 function groupLabel(group: GroupKey, translate: Translate): string {

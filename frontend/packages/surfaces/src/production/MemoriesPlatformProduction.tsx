@@ -13,6 +13,7 @@ import {
   lineageRows,
   paginationAffordance,
 } from "./proposition-presentation.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import "./memories-platform.css";
 
 /**
@@ -31,13 +32,8 @@ import "./memories-platform.css";
 type Locale = string;
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  switch (status.refresh.phase) {
-    case "initial-loading": return t(locale, "lifecycle.loading");
-    case "refreshing": return t(locale, "lifecycle.refreshing");
-    case "saved-but-refresh-failed": return t(locale, "lifecycle.savedFailed");
-    case "unavailable": return t(locale, "lifecycle.unavailable");
-    default: return null;
-  }
+  const key = refreshPhaseNoticeKey(status.refresh.phase);
+  return key === null ? null : t(locale, key);
 }
 
 function PropositionCard({ item, locale }: {

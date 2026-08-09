@@ -5,6 +5,7 @@ import type { AppearanceSelection, SettingsSnapshot } from "./settings-merge.js"
 import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge } from "./ProductionPrimitives.js";
 import "./settings.css";
@@ -14,13 +15,8 @@ type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type SavePhase = "idle" | "saving" | "saved" | "failed";
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  switch (status.refresh.phase) {
-    case "initial-loading": return t(locale, "lifecycle.loading");
-    case "refreshing": return t(locale, "lifecycle.refreshing");
-    case "saved-but-refresh-failed": return t(locale, "lifecycle.savedFailed");
-    case "unavailable": return t(locale, "lifecycle.unavailable");
-    default: return null;
-  }
+  const key = refreshPhaseNoticeKey(status.refresh.phase);
+  return key === null ? null : t(locale, key);
 }
 
 const APPEARANCE_OPTIONS: AppearanceSelection[] = ["default", "system", "light", "dark"];
