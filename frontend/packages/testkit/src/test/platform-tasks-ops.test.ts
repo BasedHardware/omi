@@ -26,9 +26,9 @@ import {
 } from "@omi-core/adapters-platform";
 import { parseRecordId, type HttpResponse, type RecordId, type TaskOp } from "@omi-core/contracts";
 import { WRITE_ID_PATTERN, WRITE_AVAILABILITY, WRITE_ERRORS, WRITE_REFUSALS } from "@omi-core/ratified-contracts/write/ops";
-import { Outbox, WriteStampUnavailableError, type PendingOp } from "@omi-core/sync";
+import { CallerSuppliedWriteStampError, Outbox, WriteStampUnavailableError, type PendingOp } from "@omi-core/sync";
 
-import { ManualEnv, MemoryStore, ScriptedHttp } from "../fakes.js";
+import { ManualEnv, MemoryStore, ScriptedHttp, ScriptedTransport } from "../fakes.js";
 
 const RECORD: RecordId = parseRecordId("flying-dragon-vibrant")!.id;
 
@@ -169,6 +169,52 @@ test("an op that cannot be stamped is never journaled and never acknowledged", a
   // red-proof: move the `stamp()` call in enqueue to AFTER `log.append` — the
   // reopened outbox then replays an unstamped op and this fails.
   // APPLIED, OBSERVED RED, REVERTED.
+});
+
+test("a caller may not supply its own stamps — on the platform path or the legacy one", async () => {
+  // B1's "minted from independent entropy" was, until this test existed,
+  // enforced by there being no caller rather than by the code: `stamp()` read
+  // `op.writeId ?? mint()`, so a supplied id was journaled verbatim and mint
+  // was never reached. OPS found it by constructing the caller.
+  //
+  // The reachable harm is not the malformed id — `buildWriteOpEnvelope` refuses
+  // to build an envelope on one, so it never reaches the wire. It is the
+  // WELL-FORMED DUPLICATE, which passes every check and comes back
+  // `write_id_reuse`: a permanent dead letter, a lost edit the user is told
+  // about, caused by a value the outbox never minted.
+  const h = harness();
+  const box = await h.open(7);
+  const planted = { ...patchOp("op-planted"), writeId: "a".repeat(64) };
+  await assert.rejects(() => box.enqueue(planted), CallerSuppliedWriteStampError);
+  await assert.rejects(
+    () => box.enqueue({ ...patchOp("op-epoch"), accountEpoch: 99 }),
+    CallerSuppliedWriteStampError,
+  );
+  assert.equal(box.pendingOps().length, 0, "a refused op is not queued");
+  assert.equal(posts(h).length, 0, "and nothing was sent");
+  // Nothing was journaled either — a reopened outbox has no ghost to replay.
+  const reopened = await h.open(7);
+  assert.equal(reopened.pendingOps().length, 0);
+
+  // The LEGACY path refuses it too, and that is not symmetry for its own sake.
+  // A journal is not private to the transport that wrote it: the same durable
+  // log is what a platform transport drains after a generation flip, and a
+  // stamp planted through a legacy outbox would become a real write_id on a
+  // real wire at that moment.
+  const legacyStore = new MemoryStore();
+  const legacyEnv = new ManualEnv();
+  const legacyBox = await Outbox.open(legacyStore.openBridge("legacy"), legacyEnv, new ScriptedTransport(), "tasks");
+  await assert.rejects(() => legacyBox.enqueue(planted), CallerSuppliedWriteStampError);
+  assert.equal(legacyBox.pendingOps().length, 0);
+
+  // And an UNSTAMPED op is unaffected on both paths — the refusal is about the
+  // stamps, not a new obligation on every caller.
+  await legacyBox.enqueue(patchOp("op-plain"));
+  assert.equal(legacyBox.pendingOps().length, 1, "legacy still journals ordinary ops unchanged");
+  // red-proof: restore `op.writeId ?? this.stamps.mintWriteId()` in outbox.ts's
+  // stamp() and delete the two CallerSupplied guards — the planted id is
+  // journaled and sent, and the first three assertions fail.
+  // APPLIED, OBSERVED RED, REVERTED (this test only).
 });
 
 /* ── W1: control_unavailable is retryable, never a dead letter ───────────── */
