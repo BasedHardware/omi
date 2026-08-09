@@ -137,9 +137,34 @@ set -uo pipefail
 
 # ── Locations ───────────────────────────────────────────────────────────────
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CORE_REPO="$(cd "$HERE/.." && pwd)"
-WORKSPACE="$(cd "$CORE_REPO/.." && pwd)"
-PLATFORM_REPO="$WORKSPACE/platform"
+# ── WHERE THE REPOS ARE — ASKED, NOT COMPUTED ───────────────────────────────
+# This was `WORKSPACE="$CORE_REPO/.."`, which is true of the checkout at
+# <workspace>/core-foundation and false of every lane worktree — where
+# `bin/omi-lane` puts lanes and where swarm-protocol §3a REQUIRES them to work.
+# From a worktree it resolved the workspace to the worktree ROOT, so
+# `$WORKSPACE/platform` did not exist and this script died in preflight: L3 was
+# unrunnable from the only place a lane is allowed to run it.
+#
+# That is the SAME defect §10 was written about after wave 2, in the same shape,
+# in the one lane the launch-gate shakedown does not exercise (it runs L0/L1/L2).
+# `lib/provenance.mjs` had already been fixed and this file had not, which is
+# exactly why §10 also says: when you find a path-resolution defect in one file,
+# grep the tree for the shape before declaring it fixed.
+#
+# So there is now ONE resolver. `--paths` honours OMI_CORE_ROOT /
+# OMI_PLATFORM_ROOT, resolves core from `git --show-toplevel` and the workspace
+# from `git --git-common-dir`, and this script asks it.
+REPO_PATHS_JSON="$(node "$HERE/lib/provenance.mjs" --paths 2>/dev/null || true)"
+read -r CORE_REPO PLATFORM_REPO WORKSPACE <<<"$(printf '%s' "$REPO_PATHS_JSON" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+    try{const j=JSON.parse(s);console.log(`${j["core-foundation"]} ${j.platform} ${j.workspace}`)}catch{console.log("")}
+  })')"
+if [[ -z "${CORE_REPO:-}" || -z "${PLATFORM_REPO:-}" ]]; then
+  printf '%s\n' "✗ could not resolve the repo paths from integration/lib/provenance.mjs" >&2
+  printf '    %s\n' "Run it yourself to see why:  node $HERE/lib/provenance.mjs --paths" >&2
+  printf '    %s\n' "Or declare them:  export OMI_CORE_ROOT=… OMI_PLATFORM_ROOT=…" >&2
+  exit 1
+fi
 TRACKER="$WORKSPACE/omi-frontend-unification-and-microapps-project-tracker"
 # The PROMOTED shell (FE-SHELLS, core/shells/). The tracker prototype is NOT
 # equivalent: its bridge counts requests at DISPATCH, so it reports a healthy
