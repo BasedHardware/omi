@@ -81,6 +81,14 @@ test('App', async () => {
                 NATIVE_ADAPTER_UNAVAILABLE
               </wrapper>
             </text>
+            <text
+              class="Hint"
+            >
+              packet:
+              <wrapper>
+                NATIVE_ADAPTER_UNAVAILABLE
+              </wrapper>
+            </text>
           </view>
           <view
             style="flex:1"

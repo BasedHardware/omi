@@ -1,6 +1,7 @@
 package com.lynxshell.modules
 
 import android.content.Context
+import android.util.Base64
 import com.lynx.jsbridge.LynxMethod
 import com.lynx.jsbridge.LynxModule
 import org.json.JSONObject
@@ -17,7 +18,7 @@ class OmiNativeModule(context: Context) : LynxModule(context) {
     }
 
     private external fun nativeCapabilities(): String
-    private external fun nativeNormalizePacket(raw: String): String
+    private external fun nativeNormalizePacket(raw: ByteArray): String
 
     @LynxMethod
     fun getNativeCapabilities(): String = JSONObject(nativeCapabilities())
@@ -29,5 +30,8 @@ class OmiNativeModule(context: Context) : LynxModule(context) {
         .toString()
 
     @LynxMethod
-    fun normalizePacket(raw: String): String = nativeNormalizePacket(raw)
+    fun normalizePacket(rawBase64: String): String {
+        val raw = Base64.decode(rawBase64, Base64.DEFAULT)
+        return nativeNormalizePacket(raw)
+    }
 }

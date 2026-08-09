@@ -9,21 +9,31 @@ const relayContract = 'omi-relay-contract:v1|native-seam:lynx-module|payload:bou
 
 type OmiNativeModule = {
   getNativeCapabilities?: () => string;
+  normalizePacket?: (rawBase64: string) => string;
 };
 
+function readNativeModule(): OmiNativeModule | undefined {
+  if (typeof NativeModules === 'undefined') return undefined;
+  return (NativeModules as { OmiNativeModule?: OmiNativeModule }).OmiNativeModule;
+}
+
 function readNativeCapabilities(): string {
-  if (typeof NativeModules === 'undefined') return 'NATIVE_ADAPTER_UNAVAILABLE';
-  const module = (NativeModules as { OmiNativeModule?: OmiNativeModule }).OmiNativeModule;
-  return module?.getNativeCapabilities?.() ?? 'NATIVE_ADAPTER_UNAVAILABLE';
+  return readNativeModule()?.getNativeCapabilities?.() ?? 'NATIVE_ADAPTER_UNAVAILABLE';
+}
+
+function readNativePacketStatus(): string {
+  return readNativeModule()?.normalizePacket?.('') ?? 'NATIVE_ADAPTER_UNAVAILABLE';
 }
 
 export function App(props: { onRender?: () => void }) {
   const [alterLogo, setAlterLogo] = useState(false);
   const [nativeCapabilities, setNativeCapabilities] = useState('NATIVE_ADAPTER_UNAVAILABLE');
+  const [nativePacketStatus, setNativePacketStatus] = useState('NATIVE_ADAPTER_UNAVAILABLE');
 
   useEffect(() => {
     console.info('Hello, ReactLynx');
     setNativeCapabilities(readNativeCapabilities());
+    setNativePacketStatus(readNativePacketStatus());
   }, []);
   props.onRender?.();
 
@@ -52,6 +62,7 @@ export function App(props: { onRender?: () => void }) {
           <text className="Description">Tap the logo and have fun!</text>
           <text className="Hint">{relayContract}</text>
           <text className="Hint">native:{nativeCapabilities}</text>
+          <text className="Hint">packet:{nativePacketStatus}</text>
         </view>
         <view style={{ flex: 1 }} />
       </view>
