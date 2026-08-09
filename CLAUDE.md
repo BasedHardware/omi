@@ -1,3 +1,5 @@
+# BSA_SCOPE = false - Bu repo acik kaynak katki reposudur. BSA global kurallari (otonom squash merge, Next.js/Supabase zorunlulugu, versiyon bump) BURADA GECERSIZDIR. Upstream'in kendi kurallari uygulanir. Squash merge YASAK - regular merge kullan.
+
 # Omi Development Guide
 <!-- Official guidance for writing these files:
      CLAUDE.md: https://docs.anthropic.com/en/docs/claude-code/memory
