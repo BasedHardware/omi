@@ -3,20 +3,20 @@
   "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.6.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.6.0-2f2d0603.tgz"
+    "version": "0.7.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz"
   },
   "artifact": {
     "compatibility": "additive",
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.6.0-2f2d0603.tgz",
-    "sha256": "2f2d060369094b5004d6d4d6da2f1007f2584974a4599d8a41b5460a7e360dfc",
-    "sha512": "13e02bebb021b3345bdebcc33b8fd8579dcae3db1bd124929cce4267ae43ee06202a0ffa9699e3f5d8b95cb7e161f08531dab3fd53f92fbb4da25a721c09710e",
-    "integrity": "sha512-E+Ar67AhszRb3rzDO4/YV53K49sb0SSSnM5CZ65D7gYgKg/6lpnj9di5XLfhYfCFMdqz/VP5L7tNolpyHAlxDg==",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz",
+    "sha256": "a2b4adacf597e1b311f287e68c1f557e0f6368510165d8a81e0bb648ce0e82f4",
+    "sha512": "b2aa3a2346221f0c833764067e5b97e5baf314d3d4617a5ae114144300ec7dc1c9d03ceef28dd0c5a2e7c05d11a326fc1fc4cdc269a56024a7f06ae508d83114",
+    "integrity": "sha512-sqo6I0YiHwyDN2QGfluX5brzFNPUYXpa4RQUQwDsfcHJ0Dzu8o3QxaLnwF0Royb8H8TNwmmlYCSn8GrlCNgxFA==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "0113d359d78e556db15731735559511b0ed13ba2e1b5c8800d21f32b0d85aa03",
+    "metadataSha256": "9be2021ed3ce308bf140922b27bdd1e1c3c009c83d77dc7d73d67962b8679b01",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "f6352e6213155391e7eb699f69c7d6fcf53faac20985c0f94f08214f50affd66",
-    "sourceDigest": "073cd0e637b2ec0775b81dc30430ae22c7d51b54af3deab707cd77ba6783f8f2",
+    "provenanceSha256": "bc18e895ce367e958e9784b4a48aad157a9fa02a716ed7b195a2d3db05baaafb",
+    "sourceDigest": "11c976a591d34e506c947314c858678960e2b26caa024a2a9d89cb5bf7a4d12c",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
@@ -49,12 +49,12 @@
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
     "ref": "refs/heads/core/foundation",
-    "commit": "64745bd45f290dd02fc699d961086ce1dd00e908",
+    "commit": "ebb0a3e4406dcf70b5a214efca53717d4db89332",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact 0.6.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites DAVID-tasks-read-epoch-and-ci (D1/D2, signed by David in person) alongside the rulings 0.5.0 already carried. The hash was recorded only AFTER the push and read back with a real git ls-remote, per COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
+    "evidence": "The exact 0.7.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch, and confirmed there by git ls-remote before this hash was written — COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. PROVENANCE.json cites DAVID-tasks-read-epoch-and-ci, whose D3 is this bump's authority, signed by David in person. D3's own condition that a NON-AUTHOR check the ADR-012 §4 migration-oracle question in writing before the bump lands was satisfied first (data/run-2026-08-09/AUDIT-adr012-epoch-check.md): does not leak. The bump is additive — the field is optional, both page key sets validate, and TASKS_READ_CONTRACT_VERSION does not move — so rollback is a re-vendor of 0.6.0. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {

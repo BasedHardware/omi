@@ -21,6 +21,7 @@ import {
   TASK_ITEM_FIELDS,
   isTrustedTaskPageData,
   parseTaskPageJson,
+  readTaskPageAccountEpoch,
 } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   MAX_RECALL_TRACE_JSON_CODE_UNITS,
@@ -30,6 +31,7 @@ import {
 } from "@omi-core/ratified-contracts/recall/trace";
 import {
   WRITABLE_DOMAINS,
+  WRITE_AVAILABILITY,
   WRITE_ERRORS,
   WRITE_ID_ENTROPY_BYTES,
   WRITE_ID_PATTERN,
@@ -747,5 +749,92 @@ describe("tasks read wire seam (DAVID-tasks-read-epoch-and-ci D1/D2)", () => {
         expect(slug.test(item.id)).toBe(false);
       }
     }
+  });
+});
+
+// ── SERVER-side consumer of D3's account epoch (rule 15, second half) ───────
+//
+// The CLIENT-side consumer of the same field is
+// core-foundation/core/contracts/ratified/test/contracts.test.mjs. Two sides,
+// one vendored file, joined by contracts.lock.json's sourceDigest — neither
+// side can move this field without the other's test changing colour.
+//
+// This server does not serve the tasks read route yet, so what is asserted
+// here is the SERVING SIDE'S OBLIGATION rather than a live response: what a
+// server may put in this field, and what it must never do with it.
+describe("the account epoch on the tasks read (DAVID-tasks-read-epoch-and-ci D3)", () => {
+  // Declared locally rather than hoisted out of the D1/D2 block above: that
+  // block owns the read wire and this one owns a field on it, and widening
+  // someone else's scope to reach a type is how two blocks become one.
+  interface TasksReadCase {
+    wireCase: string;
+    label: string;
+    safe: boolean;
+    page: unknown;
+  }
+
+  const validPage = async (): Promise<Record<string, unknown>> => {
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    return structuredClone(
+      corpus.find((row) => row.wireCase === "window:complete_terminal")!.page,
+    ) as unknown as Record<string, unknown>;
+  };
+
+  test("a server that omits the epoch is still serving a valid page", async () => {
+    // This is the whole content of the word "additive". Every row in the
+    // vendored corpus predates the field; if any of them stopped validating,
+    // 0.7.0 would be a lockstep deploy wearing an additive label.
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    let checked = 0;
+    for (const row of corpus.filter((entry) => entry.safe)) {
+      expect(isTrustedTaskPageData(structuredClone(row.page))).toBe(true);
+      expect(readTaskPageAccountEpoch(row.page as never)).toBeNull();
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThanOrEqual(5);
+  });
+
+  test("a server that sends the epoch must send a generation, not a decoration", async () => {
+    const base = await validPage();
+    for (const epoch of [0, 1, 42, Number.MAX_SAFE_INTEGER]) {
+      const page = { ...base, accountEpoch: epoch };
+      expect(isTrustedTaskPageData(page)).toBe(true);
+      expect(parseTaskPageJson(JSON.stringify(page))).not.toBeNull();
+      expect(readTaskPageAccountEpoch(page as never)).toBe(epoch);
+    }
+    for (const junk of ["7", 1.5, -1, null, true]) {
+      const page = { ...base, accountEpoch: junk };
+      expect(isTrustedTaskPageData(page)).toBe(false);
+      expect(parseTaskPageJson(JSON.stringify(page))).toBeNull();
+    }
+  });
+
+  test("the epoch's arrival does not open the page to any other new key", async () => {
+    // The failure this forecloses: "optional" read as "extra keys are fine",
+    // and a server then ships `migrationProgress` beside the epoch — the very
+    // oracle backend:ADR-012 §4 forbids, arriving through the door D3 opened.
+    const base = await validPage();
+    expect(isTrustedTaskPageData({ ...base, migrationProgress: 0.4 })).toBe(false);
+    expect(isTrustedTaskPageData({ ...base, accountEpoch: 3, migrationProgress: 0.4 })).toBe(false);
+    expect(isTrustedTaskPageData({ ...base, accountEpoch: 3, generation: "platform" })).toBe(false);
+  });
+
+  test("W1's pins are untouched: no refusal body mentions an epoch", async () => {
+    // R10 scopes W1's "the active epoch is never returned" to fence refusal and
+    // availability responses, which is exactly where D3's field must not reach.
+    // Asserted over the fixed constants' BYTES, because byte-identical is the
+    // property and a serializer sits between an object and its bytes.
+    for (const refusal of Object.values(WRITE_REFUSALS)) {
+      expect(refusal.body).not.toContain("epoch_value");
+      expect(refusal.body).not.toContain("accountEpoch");
+      expect(refusal.body).not.toContain("account_epoch");
+    }
+    for (const availability of Object.values(WRITE_AVAILABILITY)) {
+      expect(availability.body).not.toContain("accountEpoch");
+      expect(availability.body).not.toContain("account_epoch");
+    }
+    // `stale_epoch` names the OUTCOME CLASS, never a value — that is the
+    // distinction the pin protects, so it is asserted rather than assumed.
+    expect(WRITE_REFUSALS.stale_epoch.body).toBe('{"error":"stale_epoch","refusal_outcome":"stale_epoch"}');
   });
 });
