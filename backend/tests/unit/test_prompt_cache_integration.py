@@ -316,6 +316,15 @@ def _get_agentic_module():
     if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
         sys.modules.pop("utils.retrieval.agentic", None)
 
+    # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
+    if not hasattr(chat_scope_mod, "build_chat_scope"):
+        chat_scope_mod.build_chat_scope = MagicMock(return_value=None)
+    if not hasattr(chat_scope_mod, "chat_scope_from_config"):
+        chat_scope_mod.chat_scope_from_config = MagicMock(return_value=None)
+    if not hasattr(chat_scope_mod, "apply_chat_scope_dates"):
+        chat_scope_mod.apply_chat_scope_dates = MagicMock(side_effect=lambda _s, a, b: (a, b, None))
+
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")
     if not hasattr(tools_pkg, "__path__"):
