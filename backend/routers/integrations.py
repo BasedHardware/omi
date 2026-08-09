@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, cast
 from pydantic import BaseModel, Field
 from urllib.parse import urlencode
 import os
@@ -30,6 +30,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_auth_module = cast(Any, auth)
 
 # OAuth state management
 OAUTH_STATE_EXPIRY = 600  # 10 minutes
@@ -212,6 +213,63 @@ class AppleHealthSyncResponse(BaseModel):
 DERIVED_INTEGRATIONS = {
     'gmail': (GOOGLE_INTEGRATION_KEY, GMAIL_READONLY_SCOPE),
 }
+
+
+class ConnectorSynthesisRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    source: Literal['calendar', 'gmail', 'notes']
+    items: List[str] = Field(..., min_length=1, max_length=200)
+    existing_memories: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ConnectorSynthesisTask(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    description: str
+    priority: str = "medium"
+    due_at: str = ""
+
+
+class ConnectorSynthesisResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str]
+    tasks: List[ConnectorSynthesisTask]
+    profile: str = ""
+
+
+@router.post("/v1/connectors/synthesize", tags=['integrations'], response_model=ConnectorSynthesisResponse)
+def synthesize_connector_data(
+    body: ConnectorSynthesisRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "connectors:synthesize"))
+    ),
+):
+    """Return-only calendar/gmail/notes synthesis through the managed memories feature.
+
+    Does not write Firestore. Desktop connector importers call this instead of building
+    their own prompts and inventing memories via Anthropic Haiku chat completions, then
+    persist through the normal memory/task write APIs.
+    """
+    from utils.llm import connector_synthesis
+
+    synthesis = connector_synthesis.synthesize_connector_items(
+        uid,
+        body.source,
+        body.items,
+        existing_memories=body.existing_memories,
+    )
+    if synthesis is None:
+        raise HTTPException(status_code=502, detail="connector_synthesis_failed")
+    return ConnectorSynthesisResponse(
+        memories=list(synthesis.memories),
+        tasks=[
+            ConnectorSynthesisTask(description=t.description, priority=t.priority, due_at=t.due_at)
+            for t in synthesis.tasks
+        ],
+        profile=synthesis.profile or "",
+    )
 
 
 @router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])

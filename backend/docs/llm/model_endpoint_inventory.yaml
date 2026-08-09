@@ -159,3 +159,10 @@ surfaces:
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
+  - surface: connector_synthesis
+    code_path: backend/routers/integrations.py:synthesize_connector_data
+    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
+    request_shape: return-only calendar/gmail/notes memories + tasks + profile
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
