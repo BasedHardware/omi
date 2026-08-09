@@ -87,11 +87,9 @@ struct AppleRemindersSyncUpdate: Encodable, Sendable {
     try container.encodeIfPresent(appleReminderId, forKey: .appleReminderId)
   }
 }
-  }
-}
 
 extension APIClient {
-/// The backend's action-item list orders every non-null `due_at` before the
+  /// The backend's action-item list orders every non-null `due_at` before the
   /// null bucket. Firestore inequality filters also exclude documents where
   /// `due_at` is missing/null, so this lower bound is the smallest supported
   /// query that returns only dated action items without materializing the
