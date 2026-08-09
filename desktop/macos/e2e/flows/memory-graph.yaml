@@ -9,6 +9,8 @@ covers:
   # compatibility fallback owned by APIClient+KnowledgeGraph.
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+KnowledgeGraph.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
+  # Tool-path discovery_text extract helper for local graph writers.
+  - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
 preconditions:
   - automation_bridge_ready
 
