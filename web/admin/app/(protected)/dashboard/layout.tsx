@@ -84,11 +84,9 @@ export default function DashboardLayout({
 }) {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
   const mainRef = useRef<HTMLElement>(null);
   const authenticated = !!(user && isAdmin && !loading);
-  const isTvMode = pathname === '/dashboard/tv';
-  useScrollRestoration(mainRef, authenticated && !isTvMode);
+  useScrollRestoration(mainRef, authenticated);
 
   useEffect(() => {
     if (loading) {
@@ -107,9 +105,6 @@ export default function DashboardLayout({
 
   // If user is authenticated and is an admin, render the dashboard layout
   if (user && isAdmin) {
-    if (isTvMode) {
-      return <div className="min-h-screen bg-background">{children}</div>;
-    }
     return (
       <div className="min-h-screen flex bg-background">
         <DashboardSidebar />

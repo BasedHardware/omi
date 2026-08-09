@@ -94,19 +94,29 @@ export async function verifyAdminOrTvSnapshot(
   request: NextRequest,
 ): Promise<SnapshotAuth | NextResponse> {
   const authorization = request.headers.get('Authorization');
-  const hasBearer = !!authorization?.startsWith('Bearer ');
+  const bearer = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length).trim()
+    : '';
+  // JWT-shaped tokens → admin path first. Opaque TV tokens skip Firebase verify
+  // so kiosk polls don't spam auth error logs.
+  const looksLikeJwt = bearer.split('.').length === 3;
 
-  if (hasBearer) {
+  if (looksLikeJwt) {
     const admin = await verifyAdmin(request);
     if (!(admin instanceof NextResponse)) {
       return { kind: 'admin', uid: admin.uid, includeRevenue: true };
     }
+    // Preserve backend outages; only fall through to TV on auth rejections.
+    if (admin.status >= 500) return admin;
   }
 
   const tv = await verifyTvLink(request);
   if (tv instanceof NextResponse) {
-    if (!hasBearer) return tv;
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!bearer && !request.headers.get('X-TV-Token') && !request.nextUrl.searchParams.get('token')) {
+      return tv;
+    }
+    // TV path failed; if we already tried admin JWT and got 401/403, keep that.
+    return tv;
   }
   return {
     kind: 'tv',

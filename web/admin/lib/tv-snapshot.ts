@@ -21,10 +21,10 @@ const CORE_EVENTS = `(
 )`;
 
 const PLATFORM_EXPR = `multiIf(
-  properties['$os'] = 'macOS', 'macos',
-  properties['$os'] = 'Windows', 'windows',
-  properties['$os'] IN ('iOS','iPadOS'), 'ios',
-  properties['$os'] = 'Android', 'android',
+  coalesce(properties['$os_name'], properties['$os']) = 'macOS', 'macos',
+  coalesce(properties['$os_name'], properties['$os']) = 'Windows', 'windows',
+  coalesce(properties['$os_name'], properties['$os']) IN ('iOS','iPadOS'), 'ios',
+  coalesce(properties['$os_name'], properties['$os']) = 'Android', 'android',
   'other'
 )`;
 
@@ -90,10 +90,26 @@ export function daysUntilMillion(
   const rateDays = opts.rateDays ?? MILLION_RATE_DAYS;
   const total =
     totalUsers == null || !Number.isFinite(totalUsers) ? null : Math.round(totalUsers);
-  const rows = dailyNew.filter((r) => r.day);
-  const news = rows.map((r) => (Number.isFinite(r.newUsers) ? r.newUsers : 0));
-  const recent = news.slice(-rateDays);
-  const perDay = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+
+  const byDay = new Map<string, number>();
+  for (const r of dailyNew) {
+    if (!r.day) continue;
+    byDay.set(r.day, Number.isFinite(r.newUsers) ? r.newUsers : 0);
+  }
+  const daysSorted = Array.from(byDay.keys()).sort();
+
+  let perDay: number | null = null;
+  if (daysSorted.length) {
+    const end = daysSorted[daysSorted.length - 1];
+    const endMs = Date.parse(`${end}T00:00:00Z`);
+    let sum = 0;
+    for (let i = 0; i < rateDays; i++) {
+      const d = new Date(endMs - i * 86400000);
+      const key = d.toISOString().slice(0, 10);
+      sum += byDay.get(key) ?? 0;
+    }
+    perDay = sum / rateDays;
+  }
 
   let days: number | null = null;
   if (total != null && total >= target) days = 0;
@@ -102,14 +118,14 @@ export function daysUntilMillion(
   }
 
   const series: SeriesPoint[] = [];
-  if (total != null && rows.length) {
+  if (total != null && daysSorted.length) {
     let running = total;
     const rev: SeriesPoint[] = [];
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const day = rows[i].day;
+    for (let i = daysSorted.length - 1; i >= 0; i--) {
+      const day = daysSorted[i];
       const ts = Date.parse(`${day}T00:00:00Z`) / 1000;
       rev.push({ t: ts, v: Math.round(running), total: Math.round(running) });
-      running -= news[i];
+      running -= byDay.get(day) ?? 0;
     }
     rev.reverse();
     series.push(...rev);
@@ -124,6 +140,7 @@ export function daysUntilMillion(
     series,
   };
 }
+
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -238,7 +255,7 @@ function pivotPlatformSeries(
 export async function buildTvSnapshot(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
-  const cacheKey = `tv-snapshot:v4:rev=${opts.includeRevenue ? 1 : 0}`;
+  const cacheKey = `tv-snapshot:v5:rev=${opts.includeRevenue ? 1 : 0}`;
   const cached = await getPayload<TvSnapshot>(cacheKey);
   if (cached?.data && Date.now() - cached.freshAt < 2 * 60 * 1000) {
     return cached.data;
@@ -271,6 +288,7 @@ export async function buildTvSnapshot(opts: {
         unavailable: !!rev.unavailable,
       };
       if (rev.partial) warnings.push("stripe: partial");
+      if (rev.unavailable) warnings.push("stripe: unavailable");
     } catch (e) {
       warnings.push(`stripe: ${e instanceof Error ? e.message : String(e)}`);
       revenue = {
@@ -501,6 +519,13 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       actSeries.length > 0 ||
       byHours["72"].total != null ||
       million.totalUsers != null;
+  }
+
+  if (!posthogOk && !(opts.includeRevenue && stripeOk)) {
+    // Nothing useful to show — fail rather than caching an empty board.
+    throw new Error(
+      warnings[0] || "No TV metric sources available (PostHog/Stripe)",
+    );
   }
 
   const snap: TvSnapshot = {

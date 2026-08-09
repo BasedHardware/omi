@@ -4,8 +4,8 @@
 
 | Path | Auth | Purpose |
 | --- | --- | --- |
-| `/dashboard/tv` | Firebase admin (full-bleed layout) | Logged-in wall view |
-| `/dashboard/tv-links` | Firebase admin | Create / list / revoke share links |
+| `/tv/view/<token>` | Firebase admin (full-bleed layout) | Logged-in wall view |
+| `/tv/view/<token>-links` | Firebase admin | Create / list / revoke share links |
 | `/tv/view/<token>` | Capability token in path | Kiosk; no Google login |
 | `GET /api/tv/snapshot` | Admin bearer **or** TV token | Aggregate metrics only |
 

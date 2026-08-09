@@ -28,10 +28,23 @@ export async function POST(request: NextRequest) {
       includeRevenue?: boolean;
     };
 
+    let ttlDays: number | null | undefined = body.ttlDays;
+    if (ttlDays !== undefined && ttlDays !== null) {
+      if (typeof ttlDays !== "number" || !Number.isFinite(ttlDays) || !Number.isInteger(ttlDays) || ttlDays < 1) {
+        return NextResponse.json(
+          { error: "ttlDays must be a positive integer, null for never, or omitted for default" },
+          { status: 400 },
+        );
+      }
+      if (ttlDays > 3650) {
+        return NextResponse.json({ error: "ttlDays cannot exceed 3650" }, { status: 400 });
+      }
+    }
+
     const created = await createTvLink({
       label: body.label || "Office TV",
       createdBy: auth.uid,
-      ttlDays: body.ttlDays === undefined ? undefined : body.ttlDays,
+      ttlDays,
       includeRevenue: body.includeRevenue,
     });
 

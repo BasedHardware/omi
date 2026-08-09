@@ -86,7 +86,7 @@ export async function listTvLinks(): Promise<TvLinkPublic[]> {
   const snap = await getDb()
     .collection(TV_LINKS_COLLECTION)
     .orderBy("createdAt", "desc")
-    .limit(100)
+    .limit(500)
     .get();
   return snap.docs.map((d) => toPublic(d.id, d.data() as TvLinkRecord));
 }
@@ -100,14 +100,19 @@ export async function createTvLink(input: {
   const label = input.label.trim() || "Office TV";
   const { token, tokenHash, prefix } = generateTvToken();
   const now = Date.now();
-  const ttlDays =
-    input.ttlDays === null
-      ? null
-      : typeof input.ttlDays === "number"
-        ? input.ttlDays
-        : DEFAULT_TV_LINK_TTL_DAYS;
+  let ttlDays: number | null;
+  if (input.ttlDays === null) {
+    ttlDays = null;
+  } else if (typeof input.ttlDays === "number") {
+    if (!Number.isFinite(input.ttlDays) || !Number.isInteger(input.ttlDays) || input.ttlDays < 1) {
+      throw new Error("ttlDays must be a positive integer or null");
+    }
+    ttlDays = input.ttlDays;
+  } else {
+    ttlDays = DEFAULT_TV_LINK_TTL_DAYS;
+  }
   const expiresAt =
-    ttlDays == null || ttlDays <= 0 ? null : now + ttlDays * 24 * 60 * 60 * 1000;
+    ttlDays == null ? null : now + ttlDays * 24 * 60 * 60 * 1000;
 
   const record: TvLinkRecord = {
     tokenHash,

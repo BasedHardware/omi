@@ -54,6 +54,7 @@ import {
   type ChartItem,
 } from "@/components/dashboard/resizable-chart-grid";
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
+import { TvLinksPanel } from "@/components/dashboard/tv-links-panel";
 import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
 import { calculatePeriodChange, latestPeriodChange } from "@/lib/period-change";
@@ -2577,6 +2578,9 @@ export default function AnalyticsPage() {
           <span>Some data sources failed to load. Numbers may be incomplete.</span>
         </div>
       )}
+
+      <TvLinksPanel />
+
       <ResizableChartGrid
         storageKey="admin:unified:v1"
         items={unifiedItems}

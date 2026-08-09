@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   CartesianGrid,
   Cell,
@@ -48,7 +47,6 @@ type Props = {
   getToken: () => Promise<string | null>;
   kioskLabel?: string;
   pollMs?: number;
-  showAdminChrome?: boolean;
 };
 
 function fmt(v: number | null | undefined): string {
@@ -402,15 +400,17 @@ function PlatStats({
   );
 }
 
+function TvClock() {
+  return <TvClock />;
+}
+
 export function TvBoard({
   getToken,
   kioskLabel,
   pollMs = 60_000,
-  showAdminChrome = false,
 }: Props) {
   const [snap, setSnap] = useState<TvSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clock, setClock] = useState("");
   const [hours, setHours] = useState<WindowHours>(72);
   const hk = String(hours);
 
@@ -432,6 +432,7 @@ export function TvBoard({
       setSnap((await res.json()) as TvSnapshot);
       setError(null);
     } catch (e) {
+      setSnap(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [getToken]);
@@ -441,22 +442,6 @@ export function TvBoard({
     const id = setInterval(() => void load(), pollMs);
     return () => clearInterval(id);
   }, [load, pollMs]);
-
-  useEffect(() => {
-    const tick = () =>
-      setClock(
-        new Date().toLocaleString([], {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-      );
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const a = snap?.activity;
   const actSlot = a?.byHours?.[hk];
@@ -624,13 +609,7 @@ export function TvBoard({
               </button>
             ))}
           </div>
-          <time className="tv-clock tv-mono">{clock}</time>
-          {showAdminChrome ? (
-            <span className="tv-chrome">
-              <Link href="/dashboard/tv-links">links</Link>{" "}
-              <Link href="/dashboard">exit</Link>
-            </span>
-          ) : null}
+          <TvClock />
         </div>
       </header>
 
