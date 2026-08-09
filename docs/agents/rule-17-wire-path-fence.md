@@ -5,7 +5,7 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 8).** Landed 2026-08-08 with the W4
+Status: **PROVISIONAL, HELD (round 9).** Landed 2026-08-08 with the W4
 rebuild; it runs immediately, per §8, and continues to run at full strength
 while held — holding is not disabling. Rounds 1–4 each found a working
 bypass in a comment-marker escape hatch (file-wide scope; a bare substring
@@ -27,7 +27,15 @@ socket-binding patterns while keeping *detection* at all four — see
 class for the patterns it excluded: two independent, unbound `new Hono(`
 routers sharing a line with an existing hatch are invisible to the
 ambiguity check, because it now only counts socket binds — see
-**AUDIT-17 — round 8**. The DOOR lane wrote the original; a non-author (the
+**AUDIT-17 — round 8**. Round 9 found that the round-8 fix restored round
+6's protection but reintroduced round 7's shape at the root: the
+"two constructions on one line" check still runs unconditionally, for
+every file in the tree, independent of whether that file is relevant to
+any registered wire path at all — so two unrelated, unbound routers
+sharing a line, in a file with zero connection to `/v1/memories`, still
+fail — see **AUDIT-17 — round 9**, including why this points at a fix
+scoped to the root cause rather than the next per-pattern instance. The
+DOOR lane wrote the original; a non-author (the
 coordinator) wrote every fix and the round-5 replacement, and said so
 explicitly rather than promoting their own work each time. If it fires on
 another lane, that is a swarm-wide blocker, never something to route around,
@@ -1233,3 +1241,174 @@ clearest demonstration of that claim this program has produced: eight
 rounds, eight times a stated boundary turned out to have an edge nobody
 had constructed yet, zero of them caught by re-reading code that had
 already been read carefully the round before.
+
+*(This paragraph moves to the top of the document on promotion — see
+**AUDIT-17 — round 9**'s closing note. Round 9 did not promote, so it
+stays here for now.)*
+
+## Correction to the historical record
+
+`63578dbac1`'s commit message states "Suite 716 pass / 0 fail." The
+coordinator caught this themselves, before the audit did, and asked that
+it be corrected here since a pushed commit message cannot be amended
+without a force-push: **the real number is 715.** The figure was written
+from a pre-rebase run and not re-read after. Verified again independently
+during round 9: 715 pass, 0 fail, on the merged trunk. Nothing about any
+verdict changes — this is a correction to a number in a commit message,
+not to a claim about behavior — but a record asserting a count it did not
+observe is the small end of the exact class this whole program exists to
+catch, and it does not stay uncorrected here.
+
+## AUDIT-17 — round 9, non-author re-audit of `63578dbac1`
+
+The coordinator reproduced round 8's finding before fixing it (confirmed
+against a simulated hatch, since the tree has no real Hono-only hatch to
+demonstrate it against), then made the ambiguity count context-sensitive:
+count socket binds when any are present on the line, otherwise count
+routers. This is exactly the fix the round-8 audit specified.
+
+**All three red-proofs in `63578dbac1`'s commit message reproduced, each
+against a standalone fixture:**
+
+- Two unbound routers, one naming the path → **fires**, both the
+  "two HTTP servers" ambiguity failure and the underlying unhatched-site
+  failure, on the same line.
+- `Bun.serve({ fetch: new Hono().fetch })` → **stays green** (round 7
+  preserved).
+- Reverting `ambiguousSiteCount` to counting binds only → exactly **1 of
+  13** tests goes red — the round-8 test, and only it. Restored; 13/13
+  green.
+
+**The previously-disclosed residual (a real socket bind sharing a line
+with a genuinely unrelated, independent router) was re-confirmed present,
+not re-tested as new.** Simulated the same way round 8's finding was
+simulated (a temporary `WIRE_PATH_HATCHES` row, since no real instance
+exists in the tree): with a hatch on `Bun.serve({ fetch: new
+Hono().fetch })`'s line, an independent second router sharing that line
+and naming the path is still silently covered. This matches exactly what
+round 8 named, and what `63578dbac1`'s own commit message restates as an
+accepted limit rather than a fix target. Confirmed accurate, not
+reopened.
+
+### New finding, round 9: the ambiguity check's unconditional scope is the actual root cause, and it produced a second instance
+
+Round 7's finding and this round's finding are different specific
+triggers of the **same structural property**: the "two constructions on
+one line" check runs before, and independent of, whether the file has any
+relevance to a registered wire path at all. Round 7 fixed the *specific
+pattern combination* that tripped it (`Bun.serve` + `new Hono`); it did
+not change *where the check runs*. So the same shape recurs for the
+pattern combination round 8 added:
+
+```ts
+const publicApp = new Hono(); const adminApp = new Hono();
+export { publicApp, adminApp };
+```
+
+Confirmed zero occurrences of "memories" anywhere in this fixture before
+running it. **Fires** — "two HTTP servers are constructed on one line" —
+against a file that could never need a `WIRE_PATH_HATCHES` row in the
+first place, because it never names a registered wire path.
+
+**Severity, assessed honestly rather than by pattern-matching against
+round 7.** The *triggering shape* here — two separate `const x = new
+Hono();` declarations crammed onto one physical line via a semicolon —
+is far less ordinary than round 7's natural single-expression idiom;
+most formatters would never produce it, and nobody writes two unrelated
+declarations on one line without a specific reason to. Judged purely on
+"how likely is this exact fixture," it is closer to round 6's
+unusual-but-deliberate territory than round 7's every-day one. But the
+*mechanism* is identical to round 7's: unconditional, tree-wide,
+zero-benefit noise on a file that could never trigger rule 17's actual
+concern. The next pattern that gets added to `serverConstructionPatterns`
+for some other framework will reopen the identical shape a third time,
+because the fix each round has narrowed the *symptom* (which pattern
+combination) rather than the *scope* (which files the check should even
+run against).
+
+**Recommended fix, aimed at the root rather than the next instance:**
+gate the entire "two constructions on one line" loop on the file being
+relevant to rule 17 at all — i.e., only run it for a file where
+`namesWirePath(code, row.wirePath)` is true for some `WIRE_PATH_REGISTRY`
+row. A file that never names a registered wire path can never legitimately
+need a `WIRE_PATH_HATCHES` entry, so the ambiguity the check exists to
+prevent cannot arise there; checking it anyway is pure false-positive risk
+with no corresponding protection. Verified this does not lose round 6's
+original protection: integration/adversarial/live-server.ts names
+`/v1/memories` (as a client call), so it would still be in scope under
+this gating, and the two-real-`Bun.serve(`-calls mutation would still
+fire.
+
+### Verdict: HOLD (round 9)
+
+Rounds 1–8 all stay closed; nothing here reopens any of them, and the
+round-8 residual was re-confirmed accurate rather than newly discovered.
+This is round 7's structural cause, not yet addressed, producing a second
+symptom through the code round 8 added to fix a different problem.
+
+**What would unblock promotion:** gate the ambiguity check on file-level
+wire-path relevance as described above (or an equivalent that provably
+closes the same root, not just this instance), re-run this round's
+two-independent-Hono-apps fixture and confirm it stays green, confirm
+`live-server.ts`'s protection is unaffected, re-run all existing
+red-proofs including round 8's and round 6's, non-author re-reads.
+
+**Blast radius if this HOLD is wrong:** small — a single additional guard
+condition on an existing loop, does not touch detection, hatch
+resolution, or staleness, and does not change any case already verified
+correct across nine rounds.
+
+**What is still open after nine rounds:** the ambiguity check's unscoped
+reach (blocking — this is round 7's root cause, not a new mechanism).
+Everything recorded open after round 4 that rounds 5–8 did not touch — the
+pre-existing multi-server false-positive imprecision, the same-
+construction-behavior-drift gap, and rule 16's unfixed round-2-class
+hatch — remains open and unchanged.
+
+### On the coordinator's proposed promotion bar
+
+> Promote when a round finds nothing reachable in the tree AND nothing
+> new in kind — with every residual written down as an accepted limit,
+> named and dated, rather than left implicit.
+
+**The bar is right, with one addition this round argues for directly.**
+The two-part test (not reachable today; not a new kind) is the correct
+shape: it does not ask for proof of completeness, which nothing here can
+give, and it matches how the rest of this document already treats
+detection-side gaps (the "Known limits" section has carried undecided,
+accepted items since before this audit existed). Round 8 would indeed
+have cleared it — its finding needed a hatch that does not exist.
+
+But round 9 is itself the argument for a third clause. Round 9's finding
+is "the same kind" as round 7 by mechanism (unconditional scope) and "a
+new kind" by trigger (a different pattern combination) — the bar as
+stated does not say which one governs, and answering that honestly
+required tracing round 7's fix back to what it actually changed (the
+counted patterns) versus what it left alone (where the check runs) rather
+than just diffing the two fixtures. A bar that can be satisfied by
+patching the last reported trigger without asking whether a **structural
+source** is still standing behind it would have promoted after round 7,
+then round 8, then this round — three times, on a fence that kept
+producing the same shape of finding from the same unaddressed root.
+
+**Proposed addition:** *and no open finding traces to a structural cause
+still capable of producing another instance in a different specific
+form.* Concretely, before promoting: for each finding closed so far, ask
+whether the fix addressed the mechanism that produced it or only the
+trigger that revealed it. Round 5 addressed a mechanism (deleted the
+marker apparatus entirely). Round 6 addressed a mechanism (line-keying).
+Round 7 and round 8 each addressed a trigger (which patterns count,
+twice) while leaving a mechanism — the check's unconditional scope —
+untouched; that is precisely why round 9 exists. Under the three-part
+bar, round 9's fix (gating on file relevance) closes a mechanism, not
+another trigger, and a round that finds nothing reachable, nothing new in
+kind, *and* no untouched structural source behind what was fixed is the
+point at which the audit's own reasoning, not just its search, is
+satisfied.
+
+This is not a retroactive re-litigation of the fix already landed — the
+registry replacement in round 5 and the line-count fix in round 6 were
+both mechanism-level from the start, and neither has reopened. It is a
+sharper version of the same bar, aimed at the one place in this fence's
+history where the same failure shape was allowed to recur because a
+symptom was patched twice before its cause was named once.
