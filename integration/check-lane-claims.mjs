@@ -84,6 +84,15 @@ const NEXT_ACTION = {
     `Run ${lane} (${LANE_REGISTRY[lane]?.description ?? "see LANE_REGISTRY"}) so it writes a receipt, then retry.`,
   stale: (lane) =>
     `Rerun ${lane} against the current tree — its receipt was written before this edit.`,
+  // Distinguished from `stale` because the fix is different. Stale means your
+  // tree moved; misattributed means the receipt was never about your tree — a
+  // sibling lane's worktree, the shared checkout, or a schema-1 receipt that
+  // cannot say which tree it measured. Rerunning is still the action, but the
+  // reason it was wrong is not "you edited something".
+  misattributed: (lane) =>
+    `That receipt measured a different tree (a sibling lane's worktree, the shared checkout, ` +
+    `or a schema-1 receipt with no recorded root). Run ${lane} in THIS tree with both roots ` +
+    `declared, then retry.`,
   failed: (lane) => `${lane}'s last run failed. Fix it and rerun until it passes, then retry.`,
 };
 
