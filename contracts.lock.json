@@ -3,20 +3,20 @@
   "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.7.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz"
+    "version": "0.8.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz"
   },
   "artifact": {
     "compatibility": "additive",
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz",
-    "sha256": "a2b4adacf597e1b311f287e68c1f557e0f6368510165d8a81e0bb648ce0e82f4",
-    "sha512": "b2aa3a2346221f0c833764067e5b97e5baf314d3d4617a5ae114144300ec7dc1c9d03ceef28dd0c5a2e7c05d11a326fc1fc4cdc269a56024a7f06ae508d83114",
-    "integrity": "sha512-sqo6I0YiHwyDN2QGfluX5brzFNPUYXpa4RQUQwDsfcHJ0Dzu8o3QxaLnwF0Royb8H8TNwmmlYCSn8GrlCNgxFA==",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
+    "sha256": "45b128b10949f83352073a3e047ad956a8b059cc633dde6f57d3a54e715de603",
+    "sha512": "ba98310ac2dcabdda9a046aeac12e1bdfe942d81b2ce97c88423b853e349a71e099601e6378dbdf8d116e2ae808b7eef02c6b28dd64d4769b2246f69d48f50a8",
+    "integrity": "sha512-upgxCsLcq92poEaurBLhvf6ULYGyzpfIhCO4U+NJpx4JlgHmN429+NEW4q6Ai37vAsayjdZNR2myJG9p1I9QqA==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "9be2021ed3ce308bf140922b27bdd1e1c3c009c83d77dc7d73d67962b8679b01",
+    "metadataSha256": "d2d8613d6420b4a15ac90f507cf8356cc9f4b9a421f229ad4cc23bedb59d20a6",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "bc18e895ce367e958e9784b4a48aad157a9fa02a716ed7b195a2d3db05baaafb",
-    "sourceDigest": "11c976a591d34e506c947314c858678960e2b26caa024a2a9d89cb5bf7a4d12c",
+    "provenanceSha256": "29d32be3cd43343b6649f395a2bdcf79493666f142b55b717fe7c36bba964e54",
+    "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
@@ -49,12 +49,12 @@
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
     "ref": "refs/heads/core/foundation",
-    "commit": "ebb0a3e4406dcf70b5a214efca53717d4db89332",
+    "commit": "b4bde0852ae442982a17ac68e0c5a808c2c63cb7",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact 0.7.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch, and confirmed there by git ls-remote before this hash was written — COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. PROVENANCE.json cites DAVID-tasks-read-epoch-and-ci, whose D3 is this bump's authority, signed by David in person. D3's own condition that a NON-AUTHOR check the ADR-012 §4 migration-oracle question in writing before the bump lands was satisfied first (data/run-2026-08-09/AUDIT-adr012-epoch-check.md): does not leak. The bump is additive — the field is optional, both page key sets validate, and TASKS_READ_CONTRACT_VERSION does not move — so rollback is a re-vendor of 0.6.0. It is not merged to main, registry-published, or adopted in production."
+    "evidence": "The exact 0.8.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch, and confirmed there by git ls-remote before this hash was written — COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. PROVENANCE.json cites FABLE-R26-task-field-vocabulary-signed, whose amendment A1 is this bump's authority, signed by David in person. The bump is additive — only the write-ops conformance corpus moves title to description and done to completed; no export, type, validator, wire outcome, or prior-client obligation changes — so rollback is a re-vendor of 0.7.0. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {

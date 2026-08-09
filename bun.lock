@@ -5,7 +5,7 @@
     "": {
       "name": "omi-placement-platform",
       "dependencies": {
-        "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz",
+        "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
         "hono": "4.12.26",
       },
       "devDependencies": {
@@ -48,7 +48,7 @@
     },
   },
   "packages": {
-    "@omi-core/ratified-contracts": ["@omi-core/ratified-contracts@./vendor/contracts/omi-core-ratified-contracts-0.7.0-a2b4adac.tgz", {}, "sha512-sqo6I0YiHwyDN2QGfluX5brzFNPUYXpa4RQUQwDsfcHJ0Dzu8o3QxaLnwF0Royb8H8TNwmmlYCSn8GrlCNgxFA=="],
+    "@omi-core/ratified-contracts": ["@omi-core/ratified-contracts@./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz", {}, "sha512-upgxCsLcq92poEaurBLhvf6ULYGyzpfIhCO4U+NJpx4JlgHmN429+NEW4q6Ai37vAsayjdZNR2myJG9p1I9QqA=="],
 
     "@platform/consolidate": ["@platform/consolidate@workspace:core/consolidate"],
 
