@@ -4,9 +4,11 @@ generated_route_overrides:
   - feature: app_generator
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
+  # Function tools on /v1/chat/completions require reasoning_effort=none for gpt-5.6-luna
+  # (OpenAI rejects tools + medium/high effort on that surface).
   - feature: chat_agent
     primary: {provider: openai, model: gpt-5.6-luna}
-    provider_options: {reasoning_effort: medium}
+    provider_options: {reasoning_effort: none}
   - feature: chat_extraction
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
