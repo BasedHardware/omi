@@ -332,7 +332,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
           <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>
         <ProductionFilterChips className="conversation-filter" label={t(locale, "conversations.title")} value={filter} options={filterOptions} onValueChange={setFilter} />
-        {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "conversations.emptyBody")}</p> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
+        {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state"><strong>{t(locale, "conversations.emptyTitle")}</strong><p>{t(locale, "conversations.emptyBody")}</p></div> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
             <h2>{group.label}</h2>
             {group.rows.map((conversation) => <ConversationRow key={conversation.id} conversation={conversation} locale={locale} run={run} store={store} fixture={fixture} />)}

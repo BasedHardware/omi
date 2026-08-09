@@ -48,6 +48,8 @@ a { color: var(--accent); }
 .memory-actions .danger-action { color: var(--content-tertiary); }
 .locked-label { min-height: var(--min-tap-target); display: inline-flex; align-items: center; color: var(--content-tertiary); }
 .empty-state { padding: var(--space-xxxl) var(--space-md); text-align: center; color: var(--content-tertiary); }
+.empty-state strong { display: block; margin-bottom: var(--space-sm); color: var(--content-primary); }
+.empty-state p { margin: 0; }
 .dead-letter-panel { margin-top: var(--space-xl); padding: var(--space-lg); border: 1px solid var(--danger); border-radius: var(--radius-section); background: var(--surface-raised); }
 .dead-letter-panel h2 { margin-top: 0; font-size: var(--type-heading-size); font-weight: var(--type-heading-weight); }
 .dead-letter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-sm) 0; border-top: 1px solid var(--border); }
