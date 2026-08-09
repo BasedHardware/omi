@@ -412,6 +412,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const i = argv.indexOf(name);
     return i === -1 ? undefined : argv[i + 1];
   };
+  /**
+   * `--paths` — where the repos are, for callers that are not JavaScript.
+   *
+   * `dev-stack.sh` used to answer this itself with `$HERE/../..`, which is the
+   * arithmetic the comment on `resolveWorkspaceRoot` above says was removed. It
+   * was removed from the JS and left in the shell, so L3 could not run from a
+   * lane worktree at all — the same §10 defect as wave 2's, in the one lane the
+   * launch-gate shakedown does not exercise. One resolver, one answer, and
+   * every caller asks it.
+   */
+  if (argv.includes("--paths")) {
+    process.stdout.write(`${JSON.stringify({ ...REPO_PATHS, workspace: WORKSPACE_ROOT })}\n`);
+    process.exit(0);
+  }
   const stamp = argv.includes("--workspace")
     ? workspaceStamps({ artifact: flag("--artifact") ?? "worktree" })
     : worktreeStamp({ repo: flag("--repo") ?? "core-foundation", artifact: flag("--artifact") ?? "worktree" });
