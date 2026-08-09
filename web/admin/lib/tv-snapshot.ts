@@ -141,7 +141,6 @@ export function daysUntilMillion(
   };
 }
 
-
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
   const n = typeof v === "number" ? v : Number(v);

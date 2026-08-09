@@ -82,13 +82,31 @@ function toPublic(id: string, data: TvLinkRecord): TvLinkPublic {
   };
 }
 
+/**
+ * List TV links newest-first. Pages through Firestore so older active links
+ * remain revocable (a hard limit would hide leaked long-lived URLs).
+ */
 export async function listTvLinks(): Promise<TvLinkPublic[]> {
-  const snap = await getDb()
-    .collection(TV_LINKS_COLLECTION)
-    .orderBy("createdAt", "desc")
-    .limit(500)
-    .get();
-  return snap.docs.map((d) => toPublic(d.id, d.data() as TvLinkRecord));
+  const pageSize = 200;
+  const maxPages = 25; // hard cap 5_000 rows
+  const out: TvLinkPublic[] = [];
+  let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+
+  for (let page = 0; page < maxPages; page++) {
+    let q = getDb()
+      .collection(TV_LINKS_COLLECTION)
+      .orderBy("createdAt", "desc")
+      .limit(pageSize);
+    if (last) q = q.startAfter(last);
+    const snap = await q.get();
+    if (snap.empty) break;
+    for (const d of snap.docs) {
+      out.push(toPublic(d.id, d.data() as TvLinkRecord));
+    }
+    last = snap.docs[snap.docs.length - 1];
+    if (snap.size < pageSize) break;
+  }
+  return out;
 }
 
 export async function createTvLink(input: {

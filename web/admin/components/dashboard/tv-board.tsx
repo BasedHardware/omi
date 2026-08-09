@@ -399,9 +399,25 @@ function PlatStats({
     </div>
   );
 }
-
+/** Isolated clock so 1s ticks don't re-render the whole TV board. */
 function TvClock() {
-  return <TvClock />;
+  const [clock, setClock] = useState("");
+  useEffect(() => {
+    const tick = () =>
+      setClock(
+        new Date().toLocaleString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      );
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="tv-clock tv-mono">{clock}</span>;
 }
 
 export function TvBoard({
@@ -418,6 +434,8 @@ export function TvBoard({
     try {
       const token = await getToken();
       if (!token) {
+        // Clear metrics on missing/revoked capability so walls don't keep last-good data.
+        setSnap(null);
         setError("Missing auth token");
         return;
       }

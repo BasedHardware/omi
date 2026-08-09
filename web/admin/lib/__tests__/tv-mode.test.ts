@@ -71,6 +71,18 @@ describe("daysUntilMillion", () => {
     expect(m.days).toBe(100); // ceil(100000/1000)
   });
 
+  it("averages over calendar days, zero-filling gaps", () => {
+    // Only two non-zero days in a 7-day window ending 2026-01-10.
+    const daily = [
+      { day: "2026-01-04", newUsers: 7000 },
+      { day: "2026-01-10", newUsers: 7000 },
+    ];
+    const m = daysUntilMillion(900_000, daily, { rateDays: 7 });
+    // (7000 + 0*5 + 7000) / 7 = 2000
+    expect(m.perDay).toBe(2000);
+    expect(m.days).toBe(50); // ceil(100000/2000)
+  });
+
   it("returns null days when rate is zero", () => {
     const m = daysUntilMillion(100, [{ day: "2026-01-01", newUsers: 0 }]);
     expect(m.days).toBeNull();

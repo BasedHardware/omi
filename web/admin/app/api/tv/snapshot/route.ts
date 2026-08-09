@@ -35,9 +35,13 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("TV snapshot error:", error);
+    const message = error instanceof Error ? error.message : "Failed to build TV snapshot";
+    const allSourcesFailed =
+      /no tv metric sources/i.test(message) ||
+      /POSTHOG_PERSONAL_API_KEY/i.test(message);
     return NextResponse.json(
-      { error: "Failed to build TV snapshot" },
-      { status: 500 },
+      { error: message },
+      { status: allSourcesFailed ? 502 : 500 },
     );
   }
 }

@@ -53,6 +53,11 @@ export function extractTvToken(request: NextRequest): string | null {
   return q?.trim() || null;
 }
 
+/** Firebase ID tokens are three '.'-separated segments; TV tokens are opaque base64url. */
+function bearerLooksLikeJwt(bearer: string): boolean {
+  return bearer.split('.').length === 3;
+}
+
 /**
  * TV share-link auth. Intentionally separate from verifyAdmin so a TV token
  * can never be mistaken for a full admin session.
@@ -89,6 +94,10 @@ export type SnapshotAuth =
 /**
  * Admin Firebase session OR active TV share link.
  * Used only by the read-only TV snapshot endpoint.
+ *
+ * Credential shapes are disjoint so kiosk polls never call Firebase verify
+ * (and never log false auth errors), and JWT failures keep their status
+ * instead of being flattened to a generic 401.
  */
 export async function verifyAdminOrTvSnapshot(
   request: NextRequest,
@@ -97,30 +106,31 @@ export async function verifyAdminOrTvSnapshot(
   const bearer = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length).trim()
     : '';
-  // JWT-shaped tokens → admin path first. Opaque TV tokens skip Firebase verify
-  // so kiosk polls don't spam auth error logs.
-  const looksLikeJwt = bearer.split('.').length === 3;
+  const queryToken = request.nextUrl.searchParams.get('token')?.trim() || '';
 
-  if (looksLikeJwt) {
+  if (DEV_BYPASS_ENABLED && bearer === DEV_BYPASS_TOKEN) {
+    return { kind: 'admin', uid: DEV_BYPASS_UID, includeRevenue: true };
+  }
+
+  if (bearer && bearerLooksLikeJwt(bearer)) {
     const admin = await verifyAdmin(request);
-    if (!(admin instanceof NextResponse)) {
-      return { kind: 'admin', uid: admin.uid, includeRevenue: true };
-    }
-    // Preserve backend outages; only fall through to TV on auth rejections.
-    if (admin.status >= 500) return admin;
+    if (admin instanceof NextResponse) return admin;
+    return { kind: 'admin', uid: admin.uid, includeRevenue: true };
   }
 
-  const tv = await verifyTvLink(request);
-  if (tv instanceof NextResponse) {
-    if (!bearer && !request.headers.get('X-TV-Token') && !request.nextUrl.searchParams.get('token')) {
-      return tv;
-    }
-    // TV path failed; if we already tried admin JWT and got 401/403, keep that.
-    return tv;
+  // Opaque bearer (TV capability) or ?token= kiosk query.
+  if ((bearer && !bearerLooksLikeJwt(bearer)) || queryToken) {
+    const tv = await verifyTvLink(request);
+    if (tv instanceof NextResponse) return tv;
+    return {
+      kind: 'tv',
+      link: tv,
+      includeRevenue: tv.includeRevenue,
+    };
   }
-  return {
-    kind: 'tv',
-    link: tv,
-    includeRevenue: tv.includeRevenue,
-  };
+
+  return NextResponse.json(
+    { error: 'Unauthorized: Missing or invalid token' },
+    { status: 401 },
+  );
 }
