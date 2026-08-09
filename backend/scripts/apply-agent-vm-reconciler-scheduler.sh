@@ -18,8 +18,13 @@ region="${AGENT_VM_RECONCILER_REGION:-us-central1}"
 job="${AGENT_VM_RECONCILER_JOB:-agent-vm-reconciler}"
 scheduler_job="${AGENT_VM_RECONCILER_SCHEDULER_JOB:-agent-vm-reconciler-5m}"
 scheduler_sa="${AGENT_VM_RECONCILER_SCHEDULER_SA:-}"
+install_paused="${AGENT_VM_RECONCILER_SCHEDULER_PAUSED:-0}"
 if [[ -z "$project" || -z "$scheduler_sa" ]]; then
   echo "AGENT_VM_RECONCILER_PROJECT and AGENT_VM_RECONCILER_SCHEDULER_SA are required." >&2
+  exit 2
+fi
+if [[ "$install_paused" != "0" && "$install_paused" != "1" ]]; then
+  echo "AGENT_VM_RECONCILER_SCHEDULER_PAUSED must be 0 or 1." >&2
   exit 2
 fi
 
@@ -37,9 +42,11 @@ gcloud run jobs add-iam-policy-binding "$job" \
   --member="serviceAccount:${scheduler_sa}" --role=roles/run.invoker
 
 uri="https://run.googleapis.com/v2/projects/${project}/locations/${region}/jobs/${job}:run"
-common=(
+scope=(
   "--location=$region"
   "--project=$project"
+)
+target=(
   "--schedule=*/5 * * * *"
   "--time-zone=Etc/UTC"
   "--uri=$uri"
@@ -47,15 +54,44 @@ common=(
   "--oauth-service-account-email=$scheduler_sa"
 )
 
-if gcloud scheduler jobs describe "$scheduler_job" "${common[@]:0:2}" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http "$scheduler_job" "${common[@]}"
-  # Updating retains a paused state.  Resuming here makes re-apply converge on
-  # the required enabled contract instead of silently leaving reconciliation off.
-  gcloud scheduler jobs resume "$scheduler_job" "${common[@]:0:2}"
+if gcloud scheduler jobs describe "$scheduler_job" "${scope[@]}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$scheduler_job" "${scope[@]}" "${target[@]}"
 else
-  gcloud scheduler jobs create http "$scheduler_job" "${common[@]}"
+  if [[ "$install_paused" == "1" ]]; then
+    # Cloud Scheduler does not offer an atomic create-paused operation. Create
+    # with a valid cron expression that can never match, pause it, verify the
+    # state, then install the live schedule while it remains paused.
+    paused_target=(
+      "--schedule=0 0 31 2 *"
+      "${target[@]:1}"
+    )
+    gcloud scheduler jobs create http "$scheduler_job" "${scope[@]}" "${paused_target[@]}"
+    gcloud scheduler jobs pause "$scheduler_job" "${scope[@]}"
+    [[ "$(gcloud scheduler jobs describe "$scheduler_job" "${scope[@]}" --format='value(state)')" == "PAUSED" ]]
+    gcloud scheduler jobs update http "$scheduler_job" "${scope[@]}" "${target[@]}"
+  else
+    gcloud scheduler jobs create http "$scheduler_job" "${scope[@]}" "${target[@]}"
+  fi
+fi
+current_state="$(gcloud scheduler jobs describe "$scheduler_job" "${scope[@]}" --format='value(state)')"
+if [[ "$install_paused" == "1" ]]; then
+  if [[ "$current_state" == "ENABLED" ]]; then
+    gcloud scheduler jobs pause "$scheduler_job" "${scope[@]}"
+  elif [[ "$current_state" != "PAUSED" ]]; then
+    echo "ERROR: scheduler is in unsupported state ${current_state}." >&2
+    exit 1
+  fi
+  expected_state="PAUSED"
+else
+  if [[ "$current_state" == "PAUSED" ]]; then
+    gcloud scheduler jobs resume "$scheduler_job" "${scope[@]}"
+  elif [[ "$current_state" != "ENABLED" ]]; then
+    echo "ERROR: scheduler is in unsupported state ${current_state}." >&2
+    exit 1
+  fi
+  expected_state="ENABLED"
 fi
 python3 backend/scripts/validate_agent_vm_reconciler_scheduler.py \
-  --state-file <(gcloud scheduler jobs describe "$scheduler_job" "${common[@]:0:2}" --format=json) \
+  --state-file <(gcloud scheduler jobs describe "$scheduler_job" "${scope[@]}" --format=json) \
   --project "$project" --region "$region" --scheduler-job "$scheduler_job" --cloud-run-job "$job" \
-  --scheduler-service-account "$scheduler_sa"
+  --scheduler-service-account "$scheduler_sa" --expected-state "$expected_state"

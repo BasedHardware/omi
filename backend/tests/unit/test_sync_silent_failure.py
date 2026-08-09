@@ -481,33 +481,39 @@ class TestDataLossPreventionFlow:
 
 
 class TestSegmentDeduplication:
-    """Verifies that retried segments are deduplicated in the merge path."""
+    """Verifies that retried / cross-timebase segments are deduplicated on merge."""
 
     @staticmethod
     def _read_pipeline_source():
         pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
         return _read_text(pipeline_path)
 
-    def test_merge_path_has_dedup_logic(self):
-        """process_segment merge path must deduplicate before appending."""
+    def test_merge_path_calls_shared_dedupe_helper(self):
+        """process_segment merge path must route through dedupe_segments_for_merge."""
         source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
-        assert 'existing_timestamps' in func_body, "Must build set of existing segment timestamps"
-        assert 'deduped_segments' in func_body, "Must filter out duplicate segments"
+        assert 'dedupe_segments_for_merge(' in func_body, "Must call shared merge dedupe helper"
         assert (
             'not deduped_segments' in func_body or 'if not deduped_segments' in func_body
         ), "Must handle case where all segments are duplicates"
+        assert (
+            'store_partial_merge_survivor_audio(' in func_body
+        ), "Partial dedupe must store sliced private-cloud audio for survivors"
 
-    def test_dedup_uses_timestamp_rounding(self):
-        """Dedup must round timestamps to avoid float precision issues."""
-        source = self._read_pipeline_source()
+    def test_dedupe_helper_uses_rounding(self):
+        """Shared helper must round timestamps for reliable comparison."""
+        merge_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'merge_dedupe.py')
+        source = _read_text(merge_path)
+        assert 'def dedupe_segments_for_merge(' in source
         assert 'round(' in source, "Must round timestamps for reliable comparison"
 
-    def test_dedup_logic_correctness(self):
-        """Verify the dedup algorithm works correctly with sample data."""
+    def test_dedup_logic_correctness_exact_absolute(self):
+        """Exact absolute-range duplicates (207 retry) are dropped; new ranges kept."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
         existing_segments = [
             {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
             {'start': 5.0, 'end': 10.0, 'timestamp': 1700000005.0, 'text': 'world'},
@@ -517,41 +523,165 @@ class TestSegmentDeduplication:
             {'start': 10.0, 'end': 15.0, 'timestamp': 1700000010.0, 'text': 'new stuff'},  # new
         ]
 
-        # Build existing set (same logic as in sync.py)
-        existing_timestamps = {
-            (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2)) for s in existing_segments
-        }
-
-        deduped = []
-        for seg in new_segments:
-            seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-            if seg_key not in existing_timestamps:
-                deduped.append(seg)
+        deduped = dedupe_segments_for_merge(1700000000.0, existing_segments, new_segments)
 
         assert len(deduped) == 1, "Should filter out 1 duplicate"
         assert deduped[0]['text'] == 'new stuff', "Should keep only the new segment"
 
     def test_all_duplicates_skips_merge(self):
-        """When all new segments are duplicates, merge is skipped entirely."""
+        """When all new segments are exact absolute duplicates, nothing remains."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
         existing_segments = [
-            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0},
+            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
         ]
         new_segments = [
-            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0},  # exact duplicate
+            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
         ]
 
-        existing_timestamps = {
-            (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2)) for s in existing_segments
-        }
-
-        deduped = [
-            seg
-            for seg in new_segments
-            if (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-            not in existing_timestamps
-        ]
-
+        deduped = dedupe_segments_for_merge(1700000000.0, existing_segments, new_segments)
         assert len(deduped) == 0, "All duplicates should be filtered"
+
+    def test_dedup_skips_same_text_when_chunk_timestamp_offset(self):
+        """Regression #4769: live/offline merge with clock offset must not duplicate lines."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start,
+                'text': 'Hello there, how is the project going',
+                'speaker': 'SPEAKER_00',
+            },
+            {
+                'start': 5.0,
+                'end': 12.0,
+                'timestamp': conv_start + 5.0,
+                'text': 'How are you doing with the offline sync',
+                'speaker': 'SPEAKER_00',
+            },
+        ]
+        # Same spoken content, WAL filename ~5 min ahead of conversation started_at
+        offset = 300.0
+        incoming = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start + offset,
+                'text': 'Hello there, how is the project going',
+                'speaker': 'SPEAKER_00',
+            },
+            {
+                'start': 5.0,
+                'end': 12.0,
+                'timestamp': conv_start + offset + 5.0,
+                'text': 'How are you doing with the offline sync',
+                'speaker': 'SPEAKER_00',
+            },
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert deduped == [], "Offset duplicate transcript lines must be dropped (#4769)"
+
+    def test_dedup_keeps_same_text_outside_slop_window(self):
+        """Repeated phrase far later in the conversation is not a clock-offset duplicate."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start,
+                'text': 'We should schedule the offline sync review',
+            },
+        ]
+        # Same long phrase 20 minutes later — keep it
+        later = 20 * 60
+        incoming = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start + later,
+                'text': 'We should schedule the offline sync review',
+            },
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert len(deduped) == 1
+        assert deduped[0]['text'] == 'We should schedule the offline sync review'
+
+    def test_dedup_keeps_short_repeated_backchannel_inside_slop(self):
+        """Short backchannels inside the slop window must not be silently dropped."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start, 'text': 'yeah'},
+        ]
+        incoming = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start + 30.0, 'text': 'yeah'},
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert len(deduped) == 1
+        assert deduped[0]['text'] == 'yeah'
+
+
+class TestMergeSurvivorAudio:
+    """Private-cloud slices for partial merge survivors (#4769 David CR)."""
+
+    def test_pcm16_16k_slice_is_sample_aligned(self):
+        from utils.sync.merge_audio import pcm16_16k_slice
+
+        pcm = b'\x00\x01' * 16000  # 1 second
+        sliced = pcm16_16k_slice(pcm, 0.25, 0.75)
+        assert len(sliced) == 16000  # 0.5s * 32000 B/s
+        assert len(sliced) % 2 == 0
+
+    def test_store_partial_uploads_one_chunk_per_survivor(self):
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
+
+        from utils.sync import merge_audio
+
+        survivors = [
+            {'start': 1.0, 'end': 2.0, 'timestamp': 1700000001.0, 'text': 'kept line'},
+        ]
+        pcm = b'\x00\x01' * 16000 * 3  # 3 seconds
+        expected_slice = pcm[32000:64000]
+
+        # Avoid importing the real utils.other.storage (slow) in a timing-guarded
+        # unit test; stub it via sys.modules so store_partial_merge_survivor_audio's
+        # local import resolves instantly.
+        import sys
+
+        mock_upload = MagicMock()
+        mock_storage = ModuleType('utils.other.storage')
+        mock_storage.upload_audio_chunk = mock_upload
+
+        with (
+            patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
+            patch.dict(sys.modules, {'utils.other.storage': mock_storage}),
+        ):
+            merge_audio.store_partial_merge_survivor_audio(
+                uid='uid',
+                conversation_id='conv',
+                file_timestamp=1700000000.0,
+                audio_bytes=b'wav',
+                data_protection_level='standard',
+                survivors=survivors,
+            )
+
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args.args
+        assert args[0] == expected_slice
+        assert args[1] == 'uid'
+        assert args[2] == 'conv'
+        assert args[3] == 1700000001.0
+        assert args[4] == 'standard'
 
 
 # ---------------------------------------------------------------------------
@@ -982,6 +1112,148 @@ class TestProcessSegmentReal:
         mock_update.assert_not_called()
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
+
+    def test_dedup_skips_offset_duplicate_transcript_lines(self):
+        """Regression #4769: same text with clock-offset WAL timestamp must skip merge."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        mock_segment = MagicMock()
+        mock_segment.end = 5.0
+        mock_segment.model_dump.return_value = {
+            'start': 0.0,
+            'end': 5.0,
+            'text': 'hello there from the offline wal chunk',
+            'speaker': 'SPEAKER_00',
+        }
+
+        from datetime import datetime, timezone
+
+        conv_start = 1700000000.0
+        existing_conv = {
+            'id': 'conv-live',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
+            'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
+            'transcript_segments': [
+                {'start': 0.0, 'end': 5.0, 'text': 'hello there from the offline wal chunk', 'speaker': 'SPEAKER_00'},
+            ],
+            'discarded': False,
+        }
+
+        # Offline WAL filename ~5 minutes ahead of live conversation start
+        wal_ts = conv_start + 300.0
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as mock_update, patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.pipeline.time.sleep'
+        ):
+            from models.conversation_enums import ConversationSource
+
+            process_segment(f'/tmp/{int(wal_ts)}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        mock_update.assert_not_called()
+        assert len(errors) == 0
+        assert 'conv-live' in response['updated_memories']
+
+    def test_partial_dedupe_private_cloud_stores_survivor_slices(self):
+        """#4769 David CR: mixed chunk keeps audio for new lines without full WAV."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # Same absolute timebase as the conversation: first line is an exact
+        # absolute duplicate (207-style), second line is genuinely new.
+        dup_seg = MagicMock()
+        dup_seg.end = 5.0
+        dup_seg.model_dump.return_value = {
+            'start': 0.0,
+            'end': 5.0,
+            'text': 'already on the conversation from earlier upload',
+            'speaker': 'SPEAKER_00',
+        }
+        new_seg = MagicMock()
+        new_seg.end = 10.0
+        new_seg.model_dump.return_value = {
+            'start': 5.0,
+            'end': 10.0,
+            'text': 'and then this brand new sentence arrives here',
+            'speaker': 'SPEAKER_00',
+        }
+
+        from datetime import datetime, timezone
+
+        conv_start = 1700000000.0
+        existing_conv = {
+            'id': 'conv-live',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
+            'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
+            'transcript_segments': [
+                {
+                    'start': 0.0,
+                    'end': 5.0,
+                    'text': 'already on the conversation from earlier upload',
+                    'speaker': 'SPEAKER_00',
+                },
+            ],
+            'discarded': False,
+        }
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as mock_update, patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'
+        ), patch(
+            'utils.sync.pipeline._store_sync_audio_chunk'
+        ) as mock_full_store, patch(
+            'utils.sync.pipeline.store_partial_merge_survivor_audio'
+        ) as mock_partial_store, patch(
+            'utils.sync.pipeline.time.sleep'
+        ):
+            from models.conversation_enums import ConversationSource
+
+            process_segment(
+                f'/tmp/{int(conv_start)}.wav',
+                'uid',
+                response,
+                lock,
+                errors,
+                ConversationSource.omi,
+                False,
+                private_cloud_sync_enabled=True,
+            )
+
+        mock_update.assert_called_once()
+        mock_full_store.assert_not_called()
+        mock_partial_store.assert_called_once()
+        survivors = mock_partial_store.call_args.kwargs['survivors']
+        assert len(survivors) == 1
+        assert survivors[0]['text'] == 'and then this brand new sentence arrives here'
+        assert survivors[0]['start'] == 5.0
+        assert survivors[0]['end'] == 10.0
+        assert len(errors) == 0
+        assert 'conv-live' in response['updated_memories']
 
     def test_speech_eligible_empty_segments_complete_as_silence(self):
         """VAD-positive segments that all transcribe empty complete, not fail.

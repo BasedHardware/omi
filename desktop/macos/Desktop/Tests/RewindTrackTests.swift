@@ -44,37 +44,14 @@ final class RewindTrackTests: XCTestCase {
 
   // MARK: - The drag belongs to the scrubber, not to the window
 
-  /// The shell's window monitor offers hosted content drags to the window unless an AppKit control
-  /// explicitly owns them. This one is a scrubber: its whole gesture *is* a drag, and giving it
+  /// The scrubber's whole gesture *is* a drag. Giving it to AppKit's native window-background mode
   /// away leaves a control where a click seeks and a drag walks the window sideways — a failure that
   /// reads as a rendering quirk rather than a dead gesture, which is why it needs a test rather than
   /// a screenshot.
   func testTheTrackKeepsItsDragsRatherThanHandingThemToTheWindow() {
     let day = gappedDay()
     let track = track(day.instants, day.apps)
-    track.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
-    let window = NSWindow(
-      contentRect: track.frame,
-      styleMask: [.titled, .fullSizeContentView],
-      backing: .buffered,
-      defer: true)
-    window.contentView = track
-    ShellWindowChrome.dress(window)
-
     XCTAssertFalse(track.mouseDownCanMoveWindow)
-    XCTAssertFalse(ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 200, y: 150), in: window))
-  }
-
-  /// …and the reason it has to say so: the shell installs its own drag monitor.
-  func testTheShellWindowIsTheOneThatMakesThatOptOutNecessary() {
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
-      backing: .buffered,
-      defer: true)
-    ShellWindowChrome.dress(window)
-    XCTAssertFalse(window.isMovableByWindowBackground)
-    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
   }
 
   // MARK: - The time-linearity contract
@@ -176,26 +153,105 @@ final class RewindTrackTests: XCTestCase {
       "two ticks a minute apart must not carry the same label")
   }
 
+  func testAllTimeDayTicksNameDatesRatherThanRepeatingMidnight() {
+    let first = Date(timeIntervalSince1970: 1_700_000_000)
+    let formatter = RewindTrackNSView.tickFormatter(forInterval: 24 * 3600)
+
+    XCTAssertNotEqual(
+      formatter.string(from: first),
+      formatter.string(from: first.addingTimeInterval(24 * 3600)),
+      "an all-time track must distinguish consecutive day ticks")
+  }
+
+  // MARK: - Continuous pan direction
+
+  func testRightwardSwipeMovesTheAscendingTimelineTowardsNewerFrames() {
+    let model = RewindTrackWindowModel()
+    model.adopt(range: 0...10_000, initialWindow: 4_000...5_000)
+    model.pan(deltaX: -60, deltaY: 0, pointsPerSpan: 600)
+    XCTAssertEqual(
+      model.start, 4_100, accuracy: 0.001,
+      "AppKit reports a rightward swipe with a negative delta; the viewport must still move right/newer")
+  }
+
+  func testLeftwardSwipeMovesTheAscendingTimelineTowardsOlderFrames() {
+    let model = RewindTrackWindowModel()
+    model.adopt(range: 0...10_000, initialWindow: 4_000...5_000)
+    model.pan(deltaX: 60, deltaY: 0, pointsPerSpan: 600)
+    XCTAssertEqual(model.start, 3_900, accuracy: 0.001)
+  }
+
+  func testDiagonalSwipeUsesItsDominantAxisInsteadOfCancellingDirections() {
+    let model = RewindTrackWindowModel()
+    model.adopt(range: 0...10_000, initialWindow: 4_000...5_000)
+    model.pan(deltaX: -60, deltaY: 50, pointsPerSpan: 600)
+    XCTAssertEqual(model.start, 4_100, accuracy: 0.001, "a slight vertical component must not cancel the pan")
+  }
+
+  func testScrollDownMovesTheAscendingTimelineTowardsNewerFrames() {
+    let model = RewindTrackWindowModel()
+    model.adopt(range: 0...10_000, initialWindow: 4_000...5_000)
+    model.pan(deltaX: 0, deltaY: 60, pointsPerSpan: 600)
+    XCTAssertEqual(model.start, 4_100, accuracy: 0.001)
+  }
+
+  func testViewportReloadTargetsTheCaptureNearestItsCentre() {
+    let screenshots = [
+      Screenshot(timestamp: Date(timeIntervalSince1970: 100), appName: "A", imagePath: "1.jpg"),
+      Screenshot(timestamp: Date(timeIntervalSince1970: 200), appName: "A", imagePath: "2.jpg"),
+      Screenshot(timestamp: Date(timeIntervalSince1970: 300), appName: "B", imagePath: "3.jpg"),
+    ]
+
+    XCTAssertEqual(RewindTimelineNavigation.nearestIndex(to: 249, screenshots: screenshots), 1)
+    XCTAssertEqual(RewindTimelineNavigation.nearestIndex(to: 251, screenshots: screenshots), 2)
+    XCTAssertNil(RewindTimelineNavigation.clampedIndex(0, screenshots: []))
+    XCTAssertEqual(RewindTimelineNavigation.clampedIndex(99, screenshots: screenshots), 2)
+  }
+
+  func testAnEmptyViewportKeepsTheTimelineWhenRetainedHistoryExists() {
+    XCTAssertTrue(RewindTimelinePresentation.showsTimeline(screenshotCount: 0, historyRange: 100...200))
+    XCTAssertFalse(RewindTimelinePresentation.showsTimeline(screenshotCount: 0, historyRange: nil))
+  }
+
+  func testLiveRefreshRequiresAViewportContainingNow() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 900...1_100, now: now))
+    XCTAssertFalse(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 100...200, now: now))
+  }
+
+  func testNewCaptureExtendsTheRetainedHistoryUpperBound() {
+    XCTAssertEqual(
+      RewindTrackWindow.extending(nil, toInclude: Date(timeIntervalSince1970: 250)),
+      250...280
+    )
+    let extended = RewindTrackWindow.extending(
+      100...200,
+      toInclude: Date(timeIntervalSince1970: 250)
+    )
+    XCTAssertEqual(extended, 100...280)
+  }
+
   // MARK: - Zoom bounds
 
-  func testClampKeepsTheWindowInsideTheDay() {
+  func testClampKeepsTheWindowInsideRetainedHistory() {
     let range: ClosedRange<Double> = 0...3600
     let past = RewindTrackWindow.clamp(start: 3500, span: 600, within: range)
-    XCTAssertEqual(past.start, 3000, accuracy: 0.001, "a window may not hang off the end of the day")
+    XCTAssertEqual(past.start, 3000, accuracy: 0.001, "a window may not hang off the end of history")
     XCTAssertEqual(past.span, 600, accuracy: 0.001)
 
     let tooWide = RewindTrackWindow.clamp(start: -500, span: 999_999, within: range)
     XCTAssertEqual(tooWide.start, 0, accuracy: 0.001)
-    XCTAssertEqual(tooWide.span, 3600, accuracy: 0.001, "a window may not be wider than the day")
+    XCTAssertEqual(tooWide.span, 3600, accuracy: 0.001, "a window may not be wider than history")
 
     let tooNarrow = RewindTrackWindow.clamp(start: 0, span: 1, within: range)
     XCTAssertEqual(tooNarrow.span, RewindTrackWindow.minimumSpan, accuracy: 0.001)
   }
 
-  func testZoomOutStopsAtTheWholeDayAndZoomInAtAMinute() {
+  func testZoomOutProgressivelyReachesAllHistoryAndZoomInStopsAtAMinute() {
     let model = RewindTrackWindowModel()
-    model.adopt(range: 0...3600)
-    XCTAssertFalse(model.canZoomOut, "a freshly loaded day is already showing all of itself")
+    model.adopt(range: 0...14_400, initialWindow: 10_800...14_400)
+    XCTAssertEqual(model.span, 3600, accuracy: 0.001, "first paint stays on the recent window")
+    XCTAssertTrue(model.canZoomOut, "older retained history remains reachable without a day reload")
     XCTAssertTrue(model.canZoomIn)
 
     for _ in 0..<20 { model.zoom(in: true) }
@@ -203,7 +259,8 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertFalse(model.canZoomIn)
 
     for _ in 0..<20 { model.zoom(in: false) }
-    XCTAssertEqual(model.span, 3600, accuracy: 0.001)
+    XCTAssertEqual(model.start, 0, accuracy: 0.001)
+    XCTAssertEqual(model.span, 14_400, accuracy: 0.001)
     XCTAssertFalse(model.canZoomOut)
   }
 

@@ -40,6 +40,10 @@ sequenceDiagram
 
 Your AI assistant connects to the Omi MCP server, discovers available tools, and calls them as needed during your conversations. All data stays within your Omi account — the MCP server authenticates via your personal API key.
 
+The same hosted MCP connection works across Claude, Claude Code, ChatGPT, Codex, and any compatible client. It exposes the user's Omi context as scoped tools: durable memories, conversations, people, action items, goals, chat history, daily summaries, and synced screen activity. The server's initialization instructions tell clients to retrieve task-specific evidence, confirm important claims against source records, and avoid writes unless the user clearly requested them.
+
+When the Omi macOS app connects Claude Code or Codex, it also installs a small `omi` skill in that client's personal skills directory. The skill contains routing guidance only—never credentials or user data—and Omi preserves an existing user-authored skill with the same name.
+
 ---
 
 ## Available Tools
