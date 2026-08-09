@@ -1,11 +1,8 @@
-import type { Metadata } from 'next';
-import PlatformPage from '@/src/components/memory-platform/platform-page';
-
-export const metadata: Metadata = {
-  title: 'Memory Platform',
-  description: 'Omi memory for APIs, MCP, local replicas, and embedded products.',
-};
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return <PlatformPage />;
+  // Keep the historical web root routing. The memory-platform landing page
+  // lives at /memory-platform so the homepage routing decision can be reviewed
+  // separately from adding the new surface.
+  redirect('/apps');
 }
