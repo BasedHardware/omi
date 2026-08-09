@@ -55,7 +55,7 @@ test("task actions stay within the task contract", async () => {
   assert.match(source, /store\.patch\(task\.id, patch\)/);
   assert.match(source, /store\.patch\(task\.id, \{ completed: !task\.completed \}/);
   assert.match(source, /store\.delete\(task\.id\)/);
-  assert.match(source, /store\.discardDeadLetter\(letter\.opId\)/);
+  assert.match(source, /store\.discardDeadLetter\(view\.opId\)/);
   assert.doesNotMatch(source, /goal|priority|appName|backendGroup/i);
   // red-proof: adding a goal/priority/backend grouping branch would claim a
   // capability absent from the current task contract.
@@ -87,8 +87,13 @@ test("mutation failures stay localized and dead letters remain discardable", asy
   const source = await read("src/production/TasksProduction.tsx");
   const fixtures = await read("src/production/task-fixtures.ts");
   assert.match(source, /setOperationError\(translate\("lifecycle\.error"\)\)/);
-  assert.match(source, /store\.discardDeadLetter\(letter\.opId\)/);
-  assert.doesNotMatch(source, /letter\.failure|failure\.detail|letter\.summary/);
+  assert.match(source, /store\.discardDeadLetter\(view\.opId\)/);
+  // The dead-letter row binding was renamed `letter` -> `view` when the panel
+  // started routing through `deadLetterView`. Both spellings are banned here
+  // now: a rename must not be able to defang this check a second time, which
+  // is exactly what it did the first time — the patterns went vacuously green
+  // against a panel that had simply stopped using the old identifier.
+  assert.doesNotMatch(source, /letter\.failure|view\.failure|failure\.detail|letter\.summary|view\.summary/);
   assert.match(fixtures, /state === "operation-failed"/);
   assert.match(fixtures, /refreshFailuresRemaining/);
   assert.match(source, /return true/);

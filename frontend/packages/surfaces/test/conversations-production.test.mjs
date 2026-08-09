@@ -61,8 +61,11 @@ test("detail metadata precedes summary and title editing is keyboard-complete", 
 
 test("conversation failures use product copy rather than backend summaries", async () => {
   const source = await read("src/production/ConversationsProduction.tsx");
-  assert.match(source, /t\(locale, "dead\.body"\)/);
-  assert.doesNotMatch(source, /letter\.summary|failure\.detail/);
+  // `dead.body` is now chosen by `deadLetterView`, which returns it for every
+  // permanent reason except the stale-epoch one David signed copy for. The
+  // check that matters is unchanged: product copy, never server text.
+  assert.match(source, /t\(locale, view\.messageKey\)/);
+  assert.doesNotMatch(source, /letter\.summary|view\.summary|failure\.detail/);
   // red-proof: rendering the adapter summary would leak backend wording into
   // localized product chrome and make screenshots dependent on server text.
 });
