@@ -109,7 +109,10 @@ export async function listTvLinks(): Promise<TvLinkPublic[]> {
     const snap = await q.get();
     if (snap.empty) break;
     for (const d of snap.docs) {
-      out.push(toPublic(d.id, d.data() as TvLinkRecord));
+      const pub = toPublic(d.id, d.data() as TvLinkRecord);
+      // Revoked links drop out of the admin list (doc retained for audit/auth).
+      if (pub.status === "revoked") continue;
+      out.push(pub);
     }
     last = snap.docs[snap.docs.length - 1];
     if (snap.size < pageSize) break;
