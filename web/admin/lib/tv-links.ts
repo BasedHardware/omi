@@ -38,7 +38,11 @@ export function hashTvToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-export function generateTvToken(): { token: string; tokenHash: string; prefix: string } {
+export function generateTvToken(): {
+  token: string;
+  tokenHash: string;
+  prefix: string;
+} {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashTvToken(token);
   return { token, tokenHash, prefix: token.slice(0, 8) };
@@ -73,7 +77,10 @@ export function safeEqualHex(a: string, b: string): boolean {
 }
 
 function toPublic(id: string, data: TvLinkRecord): TvLinkPublic {
-  const token = typeof data.token === "string" && data.token.length >= 16 ? data.token : null;
+  const token =
+    typeof data.token === "string" && data.token.length >= 16
+      ? data.token
+      : null;
   return {
     id,
     prefix: data.prefix,
@@ -133,14 +140,19 @@ export async function createTvLink(input: {
   if (input.ttlDays === null) {
     ttlDays = null;
   } else if (typeof input.ttlDays === "number") {
-    if (!Number.isFinite(input.ttlDays) || !Number.isInteger(input.ttlDays) || input.ttlDays < 1) {
+    if (
+      !Number.isFinite(input.ttlDays) ||
+      !Number.isInteger(input.ttlDays) ||
+      input.ttlDays < 1
+    ) {
       throw new Error("ttlDays must be a positive integer or null");
     }
     ttlDays = input.ttlDays;
   } else {
     ttlDays = DEFAULT_TV_LINK_TTL_DAYS;
   }
-  const expiresAt = ttlDays == null ? null : now + ttlDays * 24 * 60 * 60 * 1000;
+  const expiresAt =
+    ttlDays == null ? null : now + ttlDays * 24 * 60 * 60 * 1000;
 
   const record: TvLinkRecord = {
     tokenHash,
@@ -200,7 +212,10 @@ export async function resolveActiveTvToken(
 
   const now = Date.now();
   if (!data.lastUsedAt || now - data.lastUsedAt > 60_000) {
-    void ref.update({ lastUsedAt: now }).catch(() => undefined);
+    // Await the write so it completes before the response returns.  Cloud Run
+    // does not guarantee background work after a response is sent, and a cached
+    // snapshot can resolve almost immediately.
+    await ref.update({ lastUsedAt: now }).catch(() => undefined);
   }
 
   return {

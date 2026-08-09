@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ links });
   } catch (error) {
     console.error("list TV links:", error);
-    return NextResponse.json({ error: "Failed to list TV links" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to list TV links" },
+      { status: 500 },
+    );
   }
 }
 
@@ -21,23 +24,47 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAdmin(request);
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = (await request.json().catch(() => ({}))) as {
-      label?: string;
-      ttlDays?: number | null;
-      includeRevenue?: boolean;
-    };
+  let body: {
+    label?: string;
+    ttlDays?: number | null;
+    includeRevenue?: boolean;
+  };
 
-    let ttlDays: number | null | undefined = body.ttlDays;
+  // Parse JSON explicitly — a malformed body must return 400, not silently
+  // create a default 90-day, revenue-enabled link.
+  const raw = await request.text();
+  if (raw.trim()) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+  } else {
+    body = {};
+  }
+
+  let ttlDays: number | null | undefined = body.ttlDays;
+  try {
     if (ttlDays !== undefined && ttlDays !== null) {
-      if (typeof ttlDays !== "number" || !Number.isFinite(ttlDays) || !Number.isInteger(ttlDays) || ttlDays < 1) {
+      if (
+        typeof ttlDays !== "number" ||
+        !Number.isFinite(ttlDays) ||
+        !Number.isInteger(ttlDays) ||
+        ttlDays < 1
+      ) {
         return NextResponse.json(
-          { error: "ttlDays must be a positive integer, null for never, or omitted for default" },
+          {
+            error:
+              "ttlDays must be a positive integer, null for never, or omitted for default",
+          },
           { status: 400 },
         );
       }
       if (ttlDays > 3650) {
-        return NextResponse.json({ error: "ttlDays cannot exceed 3650" }, { status: 400 });
+        return NextResponse.json(
+          { error: "ttlDays cannot exceed 3650" },
+          { status: 400 },
+        );
       }
     }
 
@@ -50,7 +77,8 @@ export async function POST(request: NextRequest) {
 
     // Absolute URL when host is known (for copy-paste on TV).
     const proto = request.headers.get("x-forwarded-proto") || "https";
-    const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+    const host =
+      request.headers.get("x-forwarded-host") || request.headers.get("host");
     const origin = host ? `${proto}://${host}` : "";
     const url = origin ? `${origin}${created.path}` : created.path;
 
@@ -64,6 +92,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("create TV link:", error);
-    return NextResponse.json({ error: "Failed to create TV link" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create TV link" },
+      { status: 500 },
+    );
   }
 }

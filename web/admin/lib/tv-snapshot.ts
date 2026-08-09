@@ -62,7 +62,10 @@ export type TvSnapshot = {
     unavailable?: boolean;
   } | null;
   activity: {
-    byHours: Record<string, { total: number | null; platforms: Record<string, number | null> }>;
+    byHours: Record<
+      string,
+      { total: number | null; platforms: Record<string, number | null> }
+    >;
     wau: number | null;
     series: SeriesPoint[];
   };
@@ -89,7 +92,9 @@ export function daysUntilMillion(
   const target = opts.target ?? MILLION_USERS;
   const rateDays = opts.rateDays ?? MILLION_RATE_DAYS;
   const total =
-    totalUsers == null || !Number.isFinite(totalUsers) ? null : Math.round(totalUsers);
+    totalUsers == null || !Number.isFinite(totalUsers)
+      ? null
+      : Math.round(totalUsers);
 
   const byDay = new Map<string, number>();
   for (const r of dailyNew) {
@@ -101,7 +106,9 @@ export function daysUntilMillion(
   let perDay: number | null = null;
   // Anchor to latest *completed* UTC day (yesterday), not the last day that happened to have rows.
   const asOf = opts.asOf ? new Date(opts.asOf) : new Date();
-  const end = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+  const end = new Date(
+    Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()),
+  );
   end.setUTCDate(end.getUTCDate() - 1);
   const endMs = end.getTime();
   if (daysSorted.length) {
@@ -150,7 +157,10 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function asRows(results: unknown[], columns: string[]): Record<string, unknown>[] {
+function asRows(
+  results: unknown[],
+  columns: string[],
+): Record<string, unknown>[] {
   if (!results?.length) return [];
   if (Array.isArray(results[0])) {
     return (results as unknown[][]).map((r) => {
@@ -162,7 +172,9 @@ function asRows(results: unknown[], columns: string[]): Record<string, unknown>[
       return o;
     });
   }
-  return results.map((r) => (r && typeof r === "object" ? (r as Record<string, unknown>) : {}));
+  return results.map((r) =>
+    r && typeof r === "object" ? (r as Record<string, unknown>) : {},
+  );
 }
 
 function bucketTs(raw: unknown): number | null {
@@ -172,7 +184,11 @@ function bucketTs(raw: unknown): number | null {
   return Number.isNaN(n) ? null : n / 1000;
 }
 
-function posthogCreds(): { host: string; projectId: string; apiKey: string } | null {
+function posthogCreds(): {
+  host: string;
+  projectId: string;
+  apiKey: string;
+} | null {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
@@ -201,7 +217,11 @@ function buildFeatHours(
   const bh = emptyHours();
   const platforms: Record<string, Record<string, number | null>> = {};
   const sums: Record<string, number> = { "12": 0, "24": 0, "72": 0 };
-  const any: Record<string, boolean> = { "12": false, "24": false, "72": false };
+  const any: Record<string, boolean> = {
+    "12": false,
+    "24": false,
+    "72": false,
+  };
   for (const r of rows) {
     const plat = String(r.platform ?? "other");
     if (plat === "other") continue;
@@ -228,7 +248,10 @@ function buildFeatHours(
 function pivotPlatformSeries(
   rows: Record<string, unknown>[],
   valueKey: string,
+  opts: { bucketMinutes?: number; windowHours?: number } = {},
 ): SeriesPoint[] {
+  const bm = opts.bucketMinutes ?? 10;
+  const wh = opts.windowHours ?? 72;
   const byT = new Map<number, SeriesPoint>();
   for (const r of rows) {
     const t = bucketTs(r.bucket ?? r.t);
@@ -243,7 +266,12 @@ function pivotPlatformSeries(
       ios: 0,
       android: 0,
     };
-    if (plat === "macos" || plat === "windows" || plat === "ios" || plat === "android") {
+    if (
+      plat === "macos" ||
+      plat === "windows" ||
+      plat === "ios" ||
+      plat === "android"
+    ) {
       cur[plat] = (Number(cur[plat]) || 0) + v;
     }
     if (plat !== "other") {
@@ -251,6 +279,19 @@ function pivotPlatformSeries(
     }
     byT.set(t, cur);
   }
+
+  // Zero-fill missing completed 10-minute buckets so charts don't connect
+  // across quiet periods or present a stale bucket as the latest point.
+  const nowSec = Date.now() / 1000;
+  const bucketSec = bm * 60;
+  const lastCompleted = Math.floor(nowSec / bucketSec) * bucketSec - bucketSec;
+  const firstBucket = lastCompleted - wh * 3600;
+  for (let t = firstBucket; t <= lastCompleted; t += bucketSec) {
+    if (!byT.has(t)) {
+      byT.set(t, { t, total: 0, macos: 0, windows: 0, ios: 0, android: 0 });
+    }
+  }
+
   return Array.from(byT.values()).sort((a, b) => a.t - b.t);
 }
 
@@ -267,41 +308,48 @@ export async function buildTvSnapshot(opts: {
   let revenue: TvSnapshot["revenue"] = null;
   let stripeOk = false;
 
-  if (opts.includeRevenue) {
-    try {
-      const rev = await computeRevenue();
-      stripeOk = !rev.unavailable;
-      const byProduct = (rev.byProduct || []).map(
-        (p: {
-          productName: string;
-          mrr: number;
-          subscriptionCount: number;
-        }) => ({
-          name: p.productName,
-          arr: (p.mrr || 0) * 12,
-          subscriptions: p.subscriptionCount || 0,
-        }),
-      );
-      revenue = {
-        mrr: rev.unavailable ? null : rev.mrr,
-        arr: rev.unavailable ? null : rev.arr,
-        subscriptionCount: byProduct.reduce((a, p) => a + p.subscriptions, 0),
-        byProduct,
-        unavailable: !!rev.unavailable,
-      };
-      if (rev.partial) warnings.push("stripe: partial");
-      if (rev.unavailable) warnings.push("stripe: unavailable");
-    } catch (e) {
-      warnings.push(`stripe: ${e instanceof Error ? e.message : String(e)}`);
-      revenue = {
-        mrr: null,
-        arr: null,
-        subscriptionCount: null,
-        byProduct: [],
-        unavailable: true,
-      };
-    }
-  }
+  // Kick off Stripe early so a slow enumeration doesn't block PostHog.
+  const stripeP = opts.includeRevenue
+    ? computeRevenue()
+        .then((rev) => {
+          stripeOk = !rev.unavailable;
+          const byProduct = (rev.byProduct || []).map(
+            (p: {
+              productName: string;
+              mrr: number;
+              subscriptionCount: number;
+            }) => ({
+              name: p.productName,
+              arr: (p.mrr || 0) * 12,
+              subscriptions: p.subscriptionCount || 0,
+            }),
+          );
+          revenue = {
+            mrr: rev.unavailable ? null : rev.mrr,
+            arr: rev.unavailable ? null : rev.arr,
+            subscriptionCount: byProduct.reduce(
+              (a, p) => a + p.subscriptions,
+              0,
+            ),
+            byProduct,
+            unavailable: !!rev.unavailable,
+          };
+          if (rev.partial) warnings.push("stripe: partial");
+          if (rev.unavailable) warnings.push("stripe: unavailable");
+        })
+        .catch((e) => {
+          warnings.push(
+            `stripe: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          revenue = {
+            mrr: null,
+            arr: null,
+            subscriptionCount: null,
+            byProduct: [],
+            unavailable: true,
+          };
+        })
+    : Promise.resolve();
 
   const emptyFeat = (): FeatBoard => ({
     byHours: emptyHours(),
@@ -474,8 +522,15 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
         ? (results[i] as PromiseFulfilledResult<unknown[]>).value
         : [];
 
-    const actPlat = asRows(get(0), ["platform", "dau_12h", "dau_24h", "dau_72h", "wau"]);
-    const actTotals = asRows(get(6), ["dau_12h", "dau_24h", "dau_72h", "wau"])[0] || {};
+    const actPlat = asRows(get(0), [
+      "platform",
+      "dau_12h",
+      "dau_24h",
+      "dau_72h",
+      "wau",
+    ]);
+    const actTotals =
+      asRows(get(6), ["dau_12h", "dau_24h", "dau_72h", "wau"])[0] || {};
     const byHours: TvSnapshot["activity"]["byHours"] = {
       "12": { total: num(actTotals.dau_12h), platforms: {} },
       "24": { total: num(actTotals.dau_24h), platforms: {} },
@@ -510,21 +565,24 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "memory_events_24h",
       "memory_events_72h",
     ]);
-    const featTotals = asRows(get(7), [
-      "conversation_users_12h",
-      "conversation_users_24h",
-      "conversation_users_72h",
-      "chat_users_12h",
-      "chat_users_24h",
-      "chat_users_72h",
-      "memory_events_12h",
-      "memory_events_24h",
-      "memory_events_72h",
-    ])[0] || {};
+    const featTotals =
+      asRows(get(7), [
+        "conversation_users_12h",
+        "conversation_users_24h",
+        "conversation_users_72h",
+        "chat_users_12h",
+        "chat_users_24h",
+        "chat_users_72h",
+        "memory_events_12h",
+        "memory_events_24h",
+        "memory_events_72h",
+      ])[0] || {};
     const convH = buildFeatHours(featPlat, "conversation_users");
     const chatH = buildFeatHours(featPlat, "chat_users");
     const memH = buildFeatHours(featPlat, "memory_events");
-    // Prefer global uniques/counts over summed platforms.
+    // If the global totals query failed, platform-summed values could
+    // double-count multi-platform users, so null the headline totals.
+    const featTotalsOk = results[7].status === "fulfilled";
     for (const [board, prefix] of [
       [convH, "conversation_users"],
       [chatH, "chat_users"],
@@ -532,7 +590,11 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     ] as const) {
       for (const h of ["12", "24", "72"] as const) {
         const v = num(featTotals[`${prefix}_${h}h`]);
-        if (v != null) board.byHours[h] = v;
+        if (v != null) {
+          board.byHours[h] = v;
+        } else if (!featTotalsOk) {
+          board.byHours[h] = null;
+        }
       }
     }
 
@@ -576,9 +638,9 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
 
   if (!posthogOk && !(opts.includeRevenue && stripeOk)) {
     // Nothing useful to show — fail rather than caching an empty board.
-    throw new Error(
-      warnings[0] || "No TV metric sources available (PostHog/Stripe)",
-    );
+    // Use a sentinel message so the route handler can classify it as 502.
+    const detail = warnings[0] || "unknown";
+    throw new Error(`No TV metric sources available (${detail})`);
   }
 
   const snap: TvSnapshot = {

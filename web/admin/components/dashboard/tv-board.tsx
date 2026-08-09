@@ -41,7 +41,15 @@ const PLAT_LABEL: Record<string, string> = {
 };
 const PLATS = ["macos", "windows", "ios", "android"] as const;
 const WINDOW_LABEL: Record<number, string> = { 12: "12h", 24: "1d", 72: "3d" };
-const PIE_COLORS = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3", "#c5cdd8"];
+const PIE_COLORS = [
+  "#d4a574",
+  "#7eb8b0",
+  "#8eb4e0",
+  "#d4b45a",
+  "#d48890",
+  "#8b93a3",
+  "#c5cdd8",
+];
 
 type Props = {
   /** Capability token for /api/tv/snapshot polls. */
@@ -58,7 +66,8 @@ function fmt(v: number | null | undefined): string {
   const n = Number(v);
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 10_000) return `${Math.round(n / 1000)}k`;
-  if (Number.isInteger(n) || Math.abs(n) >= 100) return Math.round(n).toLocaleString();
+  if (Number.isInteger(n) || Math.abs(n) >= 100)
+    return Math.round(n).toLocaleString();
   return (Math.round(n * 10) / 10).toLocaleString();
 }
 
@@ -107,7 +116,9 @@ function downsample(series: SeriesPoint[], max = 42): SeriesPoint[] {
 }
 
 /** Index each series to its first positive value (= 1.0) so left edges align. */
-function indexToStart(values: Array<number | null | undefined>): Array<number | null> {
+function indexToStart(
+  values: Array<number | null | undefined>,
+): Array<number | null> {
   let base: number | null = null;
   for (const v of values) {
     if (v == null || !Number.isFinite(Number(v)) || Number(v) <= 0) continue;
@@ -150,7 +161,11 @@ function shortTime(t: number, hours: number): string {
   if (hours <= 24) {
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
-  return d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric" });
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+  });
 }
 
 type BuiltChart = {
@@ -158,7 +173,12 @@ type BuiltChart = {
   activeKeys: string[];
   stats: Record<
     string,
-    { latest: number | null; peak: number | null; trough: number | null; endPct: number | null }
+    {
+      latest: number | null;
+      peak: number | null;
+      trough: number | null;
+      endPct: number | null;
+    }
   >;
 };
 
@@ -260,18 +280,31 @@ function MultiLineChart({
     <div className="tv-chart-wrap">
       <div className="tv-chart-main">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 4, left: 2, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 8, right: 4, left: 2, bottom: 0 }}
+          >
             <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+              tick={{
+                fill: "#6b7382",
+                fontSize: 10,
+                fontFamily: plexMono.style.fontFamily,
+              }}
               tickLine={false}
               axisLine={false}
               minTickGap={28}
               interval="preserveStartEnd"
             />
             {/* Indexed-to-start charts: hide % ticks — every series starts at 100%. */}
-            <YAxis domain={[yMin, yMax]} width={0} tick={false} tickLine={false} axisLine={false} />
+            <YAxis
+              domain={[yMin, yMax]}
+              width={0}
+              tick={false}
+              tickLine={false}
+              axisLine={false}
+            />
             <Tooltip
               contentStyle={{
                 background: "#14161c",
@@ -283,7 +316,8 @@ function MultiLineChart({
               labelStyle={{ color: "#9aa3b2" }}
               formatter={(value: number, name: string, item) => {
                 const raw = item?.payload?.[`${name}_raw`];
-                const pct = value == null ? "—" : `${Math.round(value * 100)}% of start`;
+                const pct =
+                  value == null ? "—" : `${Math.round(value * 100)}% of start`;
                 const abs = raw == null ? "" : ` · now ${fmt(Number(raw))}`;
                 return [`${pct}${abs}`, PLAT_LABEL[name] || name];
               }}
@@ -340,7 +374,8 @@ function SingleLineChart({
   const nums = data.map((d) => d.v).filter((v): v is number => v != null);
   let yMin = Math.min(...nums);
   let yMax = Math.max(...nums);
-  const pad = yMin === yMax ? Math.max(1, Math.abs(yMin) * 0.05) : (yMax - yMin) * 0.15;
+  const pad =
+    yMin === yMax ? Math.max(1, Math.abs(yMin) * 0.05) : (yMax - yMin) * 0.15;
   yMin = Math.max(0, yMin - pad);
   yMax = yMax + pad;
 
@@ -350,7 +385,11 @@ function SingleLineChart({
         <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+          tick={{
+            fill: "#6b7382",
+            fontSize: 10,
+            fontFamily: plexMono.style.fontFamily,
+          }}
           tickLine={false}
           axisLine={false}
           minTickGap={32}
@@ -359,7 +398,11 @@ function SingleLineChart({
         <YAxis
           domain={[yMin, yMax]}
           width={40}
-          tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+          tick={{
+            fill: "#6b7382",
+            fontSize: 10,
+            fontFamily: plexMono.style.fontFamily,
+          }}
           tickLine={false}
           axisLine={false}
           tickFormatter={(v: number) => fmt(v)}
@@ -398,7 +441,10 @@ function PlatStats({
   series: SeriesPoint[];
   hours: number;
 }) {
-  const built = useMemo(() => buildIndexedChart(series, hours), [series, hours]);
+  const built = useMemo(
+    () => buildIndexedChart(series, hours),
+    [series, hours],
+  );
 
   return (
     <div className="tv-plat">
@@ -412,7 +458,7 @@ function PlatStats({
               : (raw as Record<string, number | null>)[hoursKey];
         const st = built.stats[p];
         // Prefer window total if present; else series latest
-        const latest = windowVal != null ? windowVal : st?.latest ?? null;
+        const latest = windowVal != null ? windowVal : (st?.latest ?? null);
         if (latest == null && st?.peak == null) return null;
         return (
           <span key={p} className="tv-plat-item">
@@ -470,16 +516,18 @@ export function TvBoard({
         setError("Missing auth token");
         return;
       }
-      const res = await fetch(`/api/tv/snapshot?token=${encodeURIComponent(token)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/tv/snapshot?token=${encodeURIComponent(token)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         const msg = body.error || `HTTP ${res.status}`;
-        if (res.status === 401 || res.status === 403) {
-          setSnap(null);
-        }
+        // AGENTS.md: clear stale data on error — never display old data with error flag.
+        setSnap(null);
         throw new Error(msg);
       }
       setSnap((await res.json()) as TvSnapshot);
@@ -490,10 +538,20 @@ export function TvBoard({
   }, [token]);
 
   useEffect(() => {
-    // Always refresh soon after mount (even if SSR gave initialSnap).
-    void load();
-    const id = setInterval(() => void load(), pollMs);
-    return () => clearInterval(id);
+    // Schedule the next poll *after* the current one settles so slow
+    // upstream calls (route allows 120 s) never overlap or resolve out of order.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await load();
+      if (!cancelled) timer = setTimeout(tick, pollMs);
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [load, pollMs]);
 
   const a = snap?.activity;
@@ -636,9 +694,13 @@ export function TvBoard({
         <div className="tv-rail-right">
           {error ? <span className="tv-status">{error}</span> : null}
           {snap?.partial ? (
-            <span className="tv-status">{snap.warnings?.[0] || "partial sources"}</span>
+            <span className="tv-status">
+              {snap.warnings?.[0] || "partial sources"}
+            </span>
           ) : null}
-          <span className="tv-fresh tv-mono">{ageLabel(snap?.generatedAt)}</span>
+          <span className="tv-fresh tv-mono">
+            {ageLabel(snap?.generatedAt)}
+          </span>
           <div className="tv-toggle" role="group" aria-label="Time window">
             {([12, 24, 72] as WindowHours[]).map((h) => (
               <button
@@ -725,7 +787,8 @@ export function TvBoard({
                 <div className="tv-rev-head">
                   <div className="tv-value">{fmtMoney(r.arr)}</div>
                   <div className="tv-caption">
-                    {fmt(r.subscriptionCount)} subscriptions · MRR {fmtMoney(r.mrr)}
+                    {fmt(r.subscriptionCount)} subscriptions · MRR{" "}
+                    {fmtMoney(r.mrr)}
                   </div>
                 </div>
                 <div className="tv-pie">
@@ -783,7 +846,10 @@ export function TvBoard({
                         }}
                       >
                         {pieData.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          <Cell
+                            key={i}
+                            fill={PIE_COLORS[i % PIE_COLORS.length]}
+                          />
                         ))}
                       </Pie>
                       <Tooltip
@@ -878,7 +944,11 @@ export function TvBoard({
               </div>
             </div>
             <div className="tv-chart">
-              <SingleLineChart series={m?.series || []} hours={24 * 40} color="#c5cdd8" />
+              <SingleLineChart
+                series={m?.series || []}
+                hours={24 * 40}
+                color="#c5cdd8"
+              />
             </div>
           </div>
         </section>
