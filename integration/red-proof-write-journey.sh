@@ -18,24 +18,25 @@
 #
 #   skip-seed             -> control_seeded          (R3's seeding is load-bearing:
 #                                                     with no control state the fence
-#                                                     denies, so the 202 above is not
+#                                                     denies, so the 200 above is not
 #                                                     a constant)
 #   unstale-epoch         -> stale_epoch_refused     (the 409 is caused by the EPOCH,
 #                                                     not by the route)
 #   wrong-door            -> create_admitted         ("not 2xx" absence, and a fence
 #                                                     counter that stays empty)
-#   registered-mismatch   -> door_agreement          (the tree says the real route
-#                                                     exists while the journey drives
-#                                                     the harness — the failure that
-#                                                     would otherwise leave two steps
-#                                                     PENDING forever, green)
+#   unregistered-tree     -> door_agreement          (a live door applying writes for
+#                                                     a path no WIRE_PATH_REGISTRY row
+#                                                     claims — rule 16/17's defect
+#                                                     class, and the guard that keeps
+#                                                     the wire and the tree from
+#                                                     drifting apart unnoticed)
 #
 # The last one is the one that matters most. Everything else here guards a step;
 # that one guards the STAGING, which is the only reason any step is allowed to
 # report `pending` at all.
 #
 #   integration/red-proof-write-journey.sh                     # all four
-#   integration/red-proof-write-journey.sh registered-mismatch # just one
+#   integration/red-proof-write-journey.sh unregistered-tree   # just one
 #
 # Exit 0 only if every mutation went red for the right reason.
 set -uo pipefail
@@ -50,13 +51,16 @@ read -r CORE_REPO PLATFORM_REPO <<<"$(printf '%s' "$REPO_PATHS_JSON" | node -e '
 if [[ -t 1 ]]; then R=$'\033[31m'; G=$'\033[32m'; B=$'\033[1m'; Y=$'\033[33m'; Z=$'\033[0m'
 else R=""; G=""; B=""; Y=""; Z=""; fi
 
-# Its own ports, deliberately not the dev-stack's: this script must be safe to
-# run beside a live stack, and it is about to break the thing it boots.
-DOOR_PORT="${OMI_RED_PROOF_DOOR_PORT:-4863}"
-DEAD_PORT="${OMI_RED_PROOF_DEAD_PORT:-4864}"
-TOKEN="omi-fence-integration-qa-token-v1"
-ACCOUNT="acct-fence-integration-fixture"
+# EPHEMERAL PORTS ONLY, for both servers. Fixed ports made two honest lanes
+# fight over a socket and reported it as a test failure in whichever lost; they
+# also leaked an orphan on 4853 that a different harness then read as its own
+# server's 404. The kernel answers, and this script binds what it was given.
+# (swarm-protocol §3b: this script also lives in the lane worktree it measures,
+#  and derives its targets from provenance relative to its own location — never
+#  from a shared scratch path.)
 TMP="$(mktemp -d)"
+DOOR_PORT=""; DEAD_PORT=""; DOOR_URL=""; DEAD_URL=""
+TOKEN=""; ACCOUNT=""
 DOOR_PID=""; DEAD_PID=""
 
 # Kill the LISTENER, not only the subshell. `( cd … && bun run … ) &` records
@@ -77,36 +81,53 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ── the real fence door ─────────────────────────────────────────────────────
-( cd "$PLATFORM_REPO" && TZ=UTC OMI_FENCE_INTEGRATION_PORT="$DOOR_PORT" \
-    bun run integration/control/fence-server.ts ) > "$TMP/door.log" 2>&1 &
+# ── THE REAL DOOR: the registered app, bound to a socket ────────────────────
+# `createLocalService` — the same app the dev server, the route tests and the
+# shipped binding use. Not the retired `fence-server.ts`, which answered this
+# same path from its own handler with bytes the product does not send.
+( cd "$PLATFORM_REPO" && exec bun run integration/control/live-service.ts ) > "$TMP/door.log" 2>&1 &
 DOOR_PID=$!
-for _ in $(seq 1 40); do
-  curl -fsS --max-time 1 "http://127.0.0.1:$DOOR_PORT/health" >/dev/null 2>&1 && break
+for _ in $(seq 1 60); do
+  grep -q live_service_listening "$TMP/door.log" 2>/dev/null && break
   sleep 0.25
 done
-curl -fsS --max-time 1 "http://127.0.0.1:$DOOR_PORT/health" >/dev/null 2>&1 \
-  || { echo "${R}the fence door never came up on $DOOR_PORT${Z}"; cat "$TMP/door.log"; exit 2; }
+read -r DOOR_URL TOKEN ACCOUNT <<<"$(node -e '
+  const fs=require("fs");
+  let line=null;
+  try{ line=fs.readFileSync(process.argv[1],"utf8").split("\n").find((l)=>l.includes("live_service_listening")) }catch{}
+  if(!line){console.log("");process.exit(0)}
+  try{const j=JSON.parse(line);console.log(`${j.url} ${j.devToken} ${j.ownerAccountId}`)}catch{console.log("")}
+' "$TMP/door.log" 2>/dev/null || echo "")"
+[[ -n "$DOOR_URL" ]] || { printf '%s\n' "${R}the write door never announced itself${Z}"; cat "$TMP/door.log"; exit 2; }
+DOOR_PORT="$(node -e 'console.log(new URL(process.argv[1]).port)' "$DOOR_URL")"
 
 # ── a door that is UP and serves nothing: absence wearing a refusal's clothes ─
 node -e '
-  require("http").createServer((_,res)=>{res.writeHead(404,{"content-type":"application/json"});res.end("{\"error\":\"not_found\"}")})
-    .listen(Number(process.argv[1]),"127.0.0.1");' "$DEAD_PORT" > "$TMP/dead.log" 2>&1 &
+  const s=require("http").createServer((_,res)=>{res.writeHead(404,{"content-type":"application/json"});res.end("{\"error\":\"not_found\"}")});
+  s.listen(0,"127.0.0.1",()=>process.stdout.write(JSON.stringify({port:s.address().port})+"\n"));' > "$TMP/dead.log" 2>&1 &
 DEAD_PID=$!
-sleep 0.5
+for _ in $(seq 1 40); do [[ -s "$TMP/dead.log" ]] && break; sleep 0.25; done
+DEAD_PORT="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).port)}catch{console.log("")}' "$TMP/dead.log")"
+[[ -n "$DEAD_PORT" ]] || { printf '%s\n' "${R}the dead door never came up${Z}"; exit 2; }
+DEAD_URL="http://127.0.0.1:$DEAD_PORT"
 
-# ── a platform tree that CLAIMS the route is registered ─────────────────────
+# ── a platform tree that does NOT register the write route ──────────────────
 # Not an edit to the real platform checkout: swarm-protocol §3a forbids that,
 # and a red-proof that dirties a shared tree blocks every other lane's L2.
-FAKE_PLATFORM="$TMP/platform-claiming-registered"
+#
+# The door is live and applying; the tree claims no such wire path. That is the
+# two-doors shape rule 16 and rule 17 exist for, and it is the guard that keeps
+# the journey's own staging honest in both directions — the mirror case (tree
+# registered, door not applying) is what stopped this journey from sitting on
+# the retired harness reporting PENDING forever.
+FAKE_PLATFORM="$TMP/platform-without-the-row"
 mkdir -p "$FAKE_PLATFORM/scripts"
 cat > "$FAKE_PLATFORM/scripts/lint-import-graph.ts" <<'REGISTRY'
 const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
   {
-    wirePath: "/v1/tasks/ops",
-    servedBy: "apps/service/routes/tasks-ops.ts",
-    boundVia: ["routes/tasks-ops", "app-facing"],
-    reason: "RED-PROOF FIXTURE — a tree that claims the write route is registered.",
+    wirePath: "/v1/memories",
+    servedBy: "apps/service/routes/memories.ts",
+    reason: "RED-PROOF FIXTURE — a tree with no row for the write route.",
   },
 ];
 REGISTRY
@@ -116,8 +137,8 @@ ln -s "$PLATFORM_REPO/node_modules" "$FAKE_PLATFORM/node_modules"
 declare -a PROOFS=(
   "skip-seed:control_seeded:--red-proof-skip-seed"
   "unstale-epoch:stale_epoch_refused:--stale-epoch 7"
-  "wrong-door:create_admitted:--door-override http://127.0.0.1:$DEAD_PORT"
-  "registered-mismatch:door_agreement:--platform-repo-override $FAKE_PLATFORM"
+  "wrong-door:door_agreement:--door-override $DEAD_URL"
+  "unregistered-tree:door_agreement:--platform-repo-override $FAKE_PLATFORM"
 )
 
 WANT="${1:-}"
@@ -129,7 +150,7 @@ for row in "${PROOFS[@]}"; do
   [[ -n "$WANT" && "$WANT" != "$proof" ]] && continue
   printf '\n%s\n' "${B}── red-proof: $proof  (must turn $expect red) ──${Z}"
 
-  door="http://127.0.0.1:$DOOR_PORT"
+  door="$DOOR_URL"
   platform_repo="$PLATFORM_REPO"
   args=()
   case "$extra" in
@@ -144,7 +165,7 @@ for row in "${PROOFS[@]}"; do
   # for the run, not by the driver noticing its own request failed.
   out="$TMP/$proof.json"
   node "$HERE/lib/write-journey.mjs" \
-    --door "$door" --control "http://127.0.0.1:$DOOR_PORT" \
+    --door "$door" --control "$DOOR_URL" \
     --token "$TOKEN" --account "$ACCOUNT" \
     --run "redproof-$proof-$$" --epoch 7 \
     --platform-repo "$platform_repo" \
@@ -180,7 +201,7 @@ done
 # simply stuck on.
 printf '\n%s\n' "${B}── control: the unmutated journey (must NOT fail) ──${Z}"
 node "$HERE/lib/write-journey.mjs" \
-  --door "http://127.0.0.1:$DOOR_PORT" --control "http://127.0.0.1:$DOOR_PORT" \
+  --door "$DOOR_URL" --control "$DOOR_URL" \
   --token "$TOKEN" --account "$ACCOUNT" --run "redproof-control-$$" --epoch 7 \
   --platform-repo "$PLATFORM_REPO" --out "$TMP/control.json" --json > "$TMP/control.log" 2>&1
 control_status=$?
