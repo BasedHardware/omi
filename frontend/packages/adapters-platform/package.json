@@ -2,7 +2,7 @@
   "name": "@omi-core/adapters-platform",
   "version": "0.0.0",
   "private": true,
-  "description": "The NEW backend generation's client half: makes the contracts-native platform service reachable through the same ports the surfaces already use. Unlike adapters-legacy this package is not a graveyard — it grows as domains are ratified. Today it carries the ratified 0.1.1 memory READ path only.",
+  "description": "The NEW backend generation's client half: makes the contracts-native platform service reachable through the same ports the surfaces already use. Unlike adapters-legacy this package is not a graveyard — it grows as domains are ratified. Today it carries the ratified memory READ path and the tasks WRITE op-sender.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +14,8 @@
   "dependencies": {
     "@omi-core/contracts": "workspace:*",
     "@omi-core/kernel": "workspace:*",
-    "@omi-core/ratified-contracts": "workspace:*"
+    "@omi-core/ratified-contracts": "workspace:*",
+    "@omi-core/sync": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

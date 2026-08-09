@@ -47,6 +47,9 @@ importers:
       '@omi-core/ratified-contracts':
         specifier: workspace:*
         version: link:../../contracts/ratified
+      '@omi-core/sync':
+        specifier: workspace:*
+        version: link:../sync
     devDependencies:
       typescript:
         specifier: ^5.7.2

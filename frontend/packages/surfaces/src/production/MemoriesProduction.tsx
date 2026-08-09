@@ -3,6 +3,7 @@ import type { Memory } from "@omi-core/contracts";
 import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionMemoryStore } from "./ProductionStores.js";
+import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
 import { presentMemoryContent } from "./memory-presentation.js";
@@ -232,7 +233,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
         </div>
       </div>
       {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "memories.emptyBody")}</p> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{visibleRows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
-      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(letter.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map(deadLetterView).map((view) => <div className="dead-letter" key={view.opId}><span>{t(locale, view.messageKey)}</span>{view.savedEdit !== null && <pre className="dead-letter-payload">{view.savedEdit}</pre>}{/* Discard only — a retry resubmits an envelope the epoch fence refuses forever (dead-letter-presentation.ts). */}<button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(view.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
       </section>
       <ProductionChrome locale={locale} active="memories" placement="bottom" />
     </main>

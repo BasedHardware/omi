@@ -99,6 +99,25 @@ export const EN_MESSAGES = {
   "queue.queuedCount": "Queued changes: {count}",
   "dead.title": "Needs attention",
   "dead.body": "This change could not be applied.",
+  // SIGNED BY DAVID in person, 2026-08-08 —
+  // data/run-2026-08-08c/decisions/DAVID-retention-and-refusal-copy.md §2.
+  // Reproduce it exactly; it is owner-signed copy and no delegate may edit it.
+  //
+  // RE-APPLY IS NOT RETRY, and that is why this string says "paste it back in"
+  // rather than offering a button. The dead envelope carries the epoch the op
+  // was authored under, so the fence refuses it every time, forever; a person
+  // retyping the content mints a NEW op under the CURRENT epoch, which is
+  // accepted normally. A "Try again" affordance here would resubmit the doomed
+  // envelope and fail silently for as long as anyone kept pressing it. If a
+  // one-tap affordance is ever wanted it must CONSTRUCT A NEW OP from the
+  // payload — see `deadLetterPresentation` in @omi-core/surfaces, which pins
+  // that no affordance can resubmit.
+  //
+  // "saved below" is a promise about the surface: this string renders only
+  // when the dead letter's payload is actually renderable. When it is not,
+  // `dead.body` renders instead, because the alternative is a signed string
+  // that lies.
+  "dead.staleEpoch": "We couldn't apply this change. Your edit is saved below — paste it back in to apply it now.",
   "dead.remove": "Discard change",
   "auth.required": "Sign in required",
   "auth.notAuthenticated": "Not signed in",

@@ -2,7 +2,7 @@
   "name": "@omi-core/testkit",
   "version": "0.0.0",
   "private": true,
-  "description": "Hermetic test harness: in-memory storage bridge with crash simulation, manual clock, scriptable transport \u2014 plus the failure-class conformance suites every domain must pass.",
+  "description": "Hermetic test harness: in-memory storage bridge with crash simulation, manual clock, scriptable transport — plus the failure-class conformance suites every domain must pass.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

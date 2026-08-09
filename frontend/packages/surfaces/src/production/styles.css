@@ -52,6 +52,10 @@ a { color: var(--accent); }
 .dead-letter-panel h2 { margin-top: 0; font-size: var(--type-heading-size); font-weight: var(--type-heading-weight); }
 .dead-letter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-sm) 0; border-top: 1px solid var(--border); }
 .dead-letter span:first-child { flex: 1; color: var(--content-secondary); }
+/* The saved edit David's signed stale-epoch copy promises is "below". It is the
+   user's own serialized op, verbatim, so it must wrap and scroll rather than
+   push the discard control off screen. */
+.dead-letter-payload { flex-basis: 100%; margin: 0; max-height: 12rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: var(--type-label-size); color: var(--content-secondary); }
 .bridge-unavailable { max-width: 520px; margin: 20vh auto; padding: var(--space-xl); border: 1px solid var(--border); border-radius: var(--radius-window); background: var(--surface-raised); }
 .bridge-unavailable a { display: inline-flex; min-height: var(--min-tap-target); align-items: center; }
 .production-nav { color: var(--content-tertiary); font-size: var(--type-label-size); }

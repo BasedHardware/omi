@@ -4,6 +4,7 @@ import { formatDate, formatDuration, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./conversation-fixtures.js";
 import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
+import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField, type ProductionFilterOption } from "./ProductionPrimitives.js";
 import "./conversations.css";
@@ -342,7 +343,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
           </section>)}
         </section>}
       </>}
-      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map(deadLetterView).map((view) => <div className="dead-letter" key={view.opId}><span>{t(locale, view.messageKey)}</span>{view.savedEdit !== null && <pre className="dead-letter-payload">{view.savedEdit}</pre>}{/* Discard only — a retry resubmits an envelope the epoch fence refuses forever (dead-letter-presentation.ts). */}<button type="button" onClick={() => void run(() => store.discardDeadLetter(view.opId))}>{t(locale, "dead.remove")}</button></div>)}</section>}
       </section>
       <ProductionChrome locale={locale} active="conversations" placement="bottom" />
     </main>

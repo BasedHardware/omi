@@ -123,6 +123,7 @@
 .tasks-dead-panel h2 { margin-top: 0; font-size: var(--type-heading-size); }
 .tasks-dead-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--border); }
 .tasks-dead-row span { color: var(--content-secondary); }
+.tasks-dead-payload { flex-basis: 100%; margin: 0; max-height: 12rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: var(--type-label-size); color: var(--content-secondary); }
 .tasks-mobile-fab { display: none; }
 
 html[data-platform="desktop"] .tasks-production-shell {
