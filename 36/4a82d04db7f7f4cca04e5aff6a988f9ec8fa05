@@ -1,0 +1,39 @@
+local/pixoo-omi-leaderboard/README.md
+  s_77c9254ea8c10e::t_82f9c988cca788 11,30
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-10,12-29,31-40
+local/pixoo-omi-leaderboard/pyproject.toml
+  s_77c9254ea8c10e::t_1cceff8ddc2506 11
+  s_77c9254ea8c10e::t_cd5af05d426f00 1-4,24-26
+  s_77c9254ea8c10e::t_77e49d3191ed82 5-10,12-23
+local/pixoo-omi-leaderboard/leaderboard/app.py
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-4,6-55,59-71,77,80-94,97-113,120-140
+  s_77c9254ea8c10e::t_82f9c988cca788 5,56-58,72-76,78-79,95-96,114-119
+local/pixoo-omi-leaderboard/tests/test_leaderboard.py
+  s_77c9254ea8c10e::t_82f9c988cca788 53-59
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-52,60-63
+local/pixoo-omi-leaderboard/.gitignore
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-6
+local/pixoo-omi-leaderboard/leaderboard/__init__.py
+  s_77c9254ea8c10e::t_77e49d3191ed82 1
+local/pixoo-omi-leaderboard/leaderboard/core.py
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-36,38-44,46-113
+  s_77c9254ea8c10e::t_ce209c3d0c82ce 37,45
+local/pixoo-omi-leaderboard/leaderboard/display.py
+  s_77c9254ea8c10e::t_77e49d3191ed82 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "364a82d04db7f7f4cca04e5aff6a988f9ec8fa05",
+  "prompts": {},
+  "sessions": {
+    "s_77c9254ea8c10e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe3d6-4ea1-7e80-8663-4c2fb063adeb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
