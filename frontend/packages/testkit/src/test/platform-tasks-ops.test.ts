@@ -118,8 +118,9 @@ test("the write id is minted at enqueue, journaled, and put on the wire unchange
   assert.equal(sent[0]!.envelope["domain"], "tasks");
   // red-proof: in outbox.ts `stamp()`, return `op` unchanged instead of the
   // stamped copy. The envelope then has no write_id, the sender reports the op
-  // unsendable, and no POST is made at all — this assertion fails.
-  // RED-PROOF PENDING.
+  // unsendable, and no POST is made at all. APPLIED, OBSERVED RED, REVERTED —
+  // it reddens six of this file's nine tests, which is the honest measure of
+  // how much of the write path hangs off that one line.
 });
 
 test("two ops never share a write id, and a replay after restart reuses its own", async () => {
@@ -148,10 +149,10 @@ test("two ops never share a write id, and a replay after restart reuses its own"
   assert.ok(replayIds.length >= 2, "the op was sent before and after the restart");
   assert.equal(new Set(replayIds).size, 1, "a replay reuses the journaled write id");
   void restarted;
-  // red-proof: make `enqueue` re-stamp an already-stamped op (drop the
-  // `op.writeId ??` guard) — replays still pass, because a replay does not go
-  // through enqueue. Mint inside `sendPlatformTaskOp` instead and this fails
-  // with two distinct ids. RED-PROOF PENDING.
+  // red-proof: mint in `sendPlatformTaskOp` instead of reading the journaled
+  // id — `buildWriteOpEnvelope` is handed a freshly minted `writeId` per send.
+  // The replay then carries a different id from the original, so the registry
+  // would never recognise it. APPLIED, OBSERVED RED, REVERTED (this test only).
 });
 
 test("an op that cannot be stamped is never journaled and never acknowledged", async () => {
@@ -167,7 +168,7 @@ test("an op that cannot be stamped is never journaled and never acknowledged", a
   assert.equal(reopened.pendingOps().length, 0, "nothing was journaled");
   // red-proof: move the `stamp()` call in enqueue to AFTER `log.append` — the
   // reopened outbox then replays an unstamped op and this fails.
-  // RED-PROOF PENDING.
+  // APPLIED, OBSERVED RED, REVERTED.
 });
 
 /* ── W1: control_unavailable is retryable, never a dead letter ───────────── */
@@ -192,7 +193,7 @@ test("control_unavailable refreshes control state, keeps the op, and never dead-
   // red-proof: map `control_unavailable` onto stale_epoch's permanent arm in
   // sendPlatformTaskOp (return the stale_epoch failure for a 503). The op is
   // then dead-lettered on the first response and both dead-letter assertions
-  // fail. RED-PROOF PENDING.
+  // fail. APPLIED, OBSERVED RED, REVERTED.
 });
 
 /* ── B2: 409 is two outcomes, and the client must not confuse them ───────── */
@@ -216,9 +217,11 @@ test("a stale-epoch 409 is permanent/stale_epoch; a conflict 409 stays conflict"
   assert.equal(dead2.length, 1);
   assert.equal(dead2[0]!.failure.reason, "conflict", "a real precondition failure is still a conflict");
   // red-proof: delete the `case "stale_epoch"` arm from
-  // classifyWriteOpsResponse — the straggler falls through to classifyStatus,
-  // 409 becomes permanent/conflict, and the first assertion fails while the
-  // second still passes. RED-PROOF PENDING.
+  // classifyWriteOpsResponse — the straggler falls through to classifyStatus
+  // and 409 becomes permanent/conflict. APPLIED, OBSERVED RED, REVERTED: this
+  // test fails on its first assertion while its conflict half still passes,
+  // and the dead-envelope pin below fails too, since it is a stale-epoch
+  // scenario.
 });
 
 test("a write refusal with no raw body is an unclassified gap, never a guessed conflict", async () => {
@@ -240,7 +243,7 @@ test("a write refusal with no raw body is an unclassified gap, never a guessed c
   // classifyStatus, the 409 becomes permanent/conflict, and the op is
   // dead-lettered — telling a person their edit lost a race that never
   // happened. Both the dead-letter and the gap assertions fail.
-  // RED-PROOF PENDING.
+  // APPLIED, OBSERVED RED, REVERTED.
 });
 
 /* ── THE PIN: a dead envelope is never resubmitted, by any path ──────────── */
@@ -289,7 +292,7 @@ test("after a stale-epoch dead letter, that write id never leaves the client aga
   // red-proof: in outbox.ts's `interpret`, skip the tombstone append for a
   // `dead` outcome (append it only when the outcome is confirmed). The relaunch
   // then replays the dead op and resends the identical envelope, so the
-  // exactly-once assertion fails with 2. RED-PROOF PENDING.
+  // exactly-once assertion fails with 2. APPLIED, OBSERVED RED, REVERTED.
 });
 
 /* ── the codec, and what it deliberately does not carry ─────────────────── */
@@ -322,7 +325,7 @@ test("the wire op carries the record and the keyed patch, and never the client-p
   }
   // red-proof: spread `...domainOp` into the create branch instead of naming
   // the fields — `opId` and `at` reach the bag and the last assertion fails.
-  // RED-PROOF PENDING.
+  // APPLIED, OBSERVED RED, REVERTED.
 });
 
 test("the epoch provider ignores regressions and junk, so a reorder cannot manufacture stragglers", () => {
@@ -339,5 +342,5 @@ test("the epoch provider ignores regressions and junk, so a reorder cannot manuf
   assert.equal(epochs.currentAccountEpoch(), 5);
   // red-proof: drop the `value < epoch` guard — observing 3 after 4 then wins,
   // the client stamps ops with an epoch the server has moved past, and every
-  // one of them comes back a straggler. RED-PROOF PENDING.
+  // one of them comes back a straggler. APPLIED, OBSERVED RED, REVERTED.
 });
