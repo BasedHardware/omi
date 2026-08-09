@@ -24,24 +24,28 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAdmin(request);
   if (auth instanceof NextResponse) return auth;
 
-  let body: {
+  // Parse JSON explicitly — a malformed body must return 400, not silently
+  // create a default 90-day, revenue-enabled link.
+  const raw = await request.text();
+  let parsed: unknown = {};
+  if (raw.trim()) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return NextResponse.json(
+      { error: "Request body must be a JSON object" },
+      { status: 400 },
+    );
+  }
+  const body = parsed as {
     label?: string;
     ttlDays?: number | null;
     includeRevenue?: boolean;
   };
-
-  // Parse JSON explicitly — a malformed body must return 400, not silently
-  // create a default 90-day, revenue-enabled link.
-  const raw = await request.text();
-  if (raw.trim()) {
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-  } else {
-    body = {};
-  }
 
   let ttlDays: number | null | undefined = body.ttlDays;
   try {
@@ -88,7 +92,12 @@ export async function POST(request: NextRequest) {
     });
 
     // Absolute URL when host is known (for copy-paste on TV).
-    const proto = request.headers.get("x-forwarded-proto") || "https";
+    // Derive protocol from the request so local HTTP dev doesn't get an
+    // unopenable https://localhost URL.
+    const proto =
+      request.headers.get("x-forwarded-proto") ||
+      request.nextUrl.protocol.replace(":", "") ||
+      "https";
     const host =
       request.headers.get("x-forwarded-host") || request.headers.get("host");
     const origin = host ? `${proto}://${host}` : "";

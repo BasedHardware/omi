@@ -533,6 +533,8 @@ export function TvBoard({
       setSnap((await res.json()) as TvSnapshot);
       setError(null);
     } catch (e) {
+      // Clear stale data on every failure — network errors, parse errors, etc.
+      setSnap(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [token]);

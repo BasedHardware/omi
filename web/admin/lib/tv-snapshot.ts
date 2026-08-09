@@ -648,11 +648,15 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     };
     // Determine success from settled query status, not from actSeries.length
     // (pivotPlatformSeries zero-fills buckets even when the query rejected).
-    const activityOk = results[0].status === "fulfilled";
+    // Count any fulfilled query that can populate a visible board.
     posthogOk =
-      activityOk ||
+      results[0].status === "fulfilled" ||
+      results[1].status === "fulfilled" ||
       results[2].status === "fulfilled" ||
-      results[4].status === "fulfilled";
+      results[3].status === "fulfilled" ||
+      results[4].status === "fulfilled" ||
+      results[6].status === "fulfilled" ||
+      results[7].status === "fulfilled";
   }
 
   // Ensure Stripe has settled before evaluating sources / building the
