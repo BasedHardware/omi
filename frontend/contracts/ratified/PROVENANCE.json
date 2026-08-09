@@ -169,8 +169,8 @@
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "4728bbf030190cefd1565864a26b97212be92ba71ded3b8f4b528207637382ab",
-      "bytes": 35884
+      "sha256": "ade7dcb1c74a5c9c20e7d48a7f5384d5192a5a844bf41500c4f919e17cb78cb1",
+      "bytes": 36294
     },
     {
       "path": "tsconfig.base.json",
@@ -183,5 +183,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "aab977dc88d08566797ffb46f496165cda2841bb44587cf6d317c07d1642326a"
+  "sourceDigest": "11c976a591d34e506c947314c858678960e2b26caa024a2a9d89cb5bf7a4d12c"
 }
