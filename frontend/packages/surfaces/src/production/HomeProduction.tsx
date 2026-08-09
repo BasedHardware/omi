@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
+import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { presentMemoryContent } from "./memory-presentation.js";
+import { combineHomeRefreshStatuses, homePhaseLabel } from "./home-presentation.js";
 import "./home.css";
 
 type Locale = string;
 
 export type SearchProjection<T> = {
   list(): Promise<T[]>;
+  status(): StoreStatus;
   subscribe(listener: () => void): () => void;
 };
 
@@ -53,6 +56,13 @@ function spineSearchText(row: HomeSpineRow): string {
   }
 }
 
+function readCombinedStatus(sources: HomeSearchSources): RefreshStatus {
+  return combineHomeRefreshStatuses(
+    sources.memories.status().refresh,
+    sources.conversations.status().refresh,
+  );
+}
+
 export function HomeProduction({ sources, locale = "en", onReady }: {
   sources: HomeSearchSources;
   locale?: Locale;
@@ -61,7 +71,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
   const [rows, setRows] = useState<HomeRows>(EMPTY_ROWS);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [refresh, setRefresh] = useState<RefreshStatus>(() => readCombinedStatus(sources));
   const searchRef = useRef<HTMLInputElement>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
@@ -78,7 +88,10 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
       memories: memories.status === "fulfilled" ? memories.value : current.memories,
       conversations: conversations.status === "fulfilled" ? conversations.value : current.conversations,
     }));
-    setLoadFailed([memories, conversations].some((result) => result.status === "rejected"));
+    setRefresh(combineHomeRefreshStatuses(
+      memorySource.status().refresh,
+      conversationSource.status().refresh,
+    ));
   }, [conversationSource, memorySource]);
 
   useEffect(() => {
@@ -120,9 +133,10 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
     return !needle || normalize(spineSearchText(row), locale).includes(needle);
   }), [kind, locale, needle, spine]);
   const filtering = Boolean(needle) || kind !== "all";
+  const notice = homePhaseLabel(refresh, locale);
 
   return (
-    <main className="production-shell home-production-shell" data-production-shell="true" data-route="home">
+    <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={refresh.phase}>
       <ProductionChrome locale={locale} active="home" placement="top" />
       <div className="home-workspace">
         <section className="home-search-hero" aria-labelledby="home-title">
@@ -149,7 +163,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
         </section>
 
         <section className="home-results-panel" aria-label={t(locale, "common.search")} aria-live="polite">
-          {loadFailed && <p className="home-load-error" role="alert">{t(locale, "lifecycle.error")}</p>}
+          {notice && <div className={`status-notice ${refresh.phase}`} role="status">{notice}</div>}
           <header className="home-results-header">
             <div className="home-kind-filter" aria-label={t(locale, "common.search")}>
               {(["all", "conversation", "memory"] as const).map((value) => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>
