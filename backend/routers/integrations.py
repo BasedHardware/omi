@@ -18,7 +18,8 @@ import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
-from utils.executors import run_blocking, db_executor
+from utils.subscription import is_trial_paywalled
+from utils.executors import run_blocking, db_executor, llm_executor
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 from utils.retrieval.tools.google_utils import (
     GMAIL_READONLY_SCOPE,
@@ -240,7 +241,7 @@ class ConnectorSynthesisResponse(BaseModel):
 
 
 @router.post("/v1/connectors/synthesize", tags=['integrations'], response_model=ConnectorSynthesisResponse)
-def synthesize_connector_data(
+async def synthesize_connector_data(
     body: ConnectorSynthesisRequest,
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "connectors:synthesize"))
@@ -254,11 +255,16 @@ def synthesize_connector_data(
     """
     from utils.llm import connector_synthesis
 
-    synthesis = connector_synthesis.synthesize_connector_items(
-        uid,
-        body.source,
-        body.items,
-        existing_memories=body.existing_memories,
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    synthesis = await run_blocking(
+        llm_executor,
+        lambda: connector_synthesis.synthesize_connector_items(
+            uid,
+            body.source,
+            body.items,
+            existing_memories=body.existing_memories,
+        ),
     )
     if synthesis is None:
         raise HTTPException(status_code=502, detail="connector_synthesis_failed")

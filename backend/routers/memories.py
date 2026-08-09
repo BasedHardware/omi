@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -49,6 +49,7 @@ from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, 
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
+from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 
@@ -464,10 +465,16 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> Mem
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
 
 
+# Matches the helper's own truncation budget so a caller cannot send text whose tail
+# the extractor would silently drop.
+MAX_EXTRACT_TEXT_CHARS = 40_000
+MAX_EXISTING_MEMORY_CHARS = 1_000
+
+
 class ExtractMemoryLogRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
-    text: str = Field(..., min_length=1, max_length=100_000)
+    text: str = Field(..., min_length=1, max_length=MAX_EXTRACT_TEXT_CHARS)
     text_source: str = Field(default="memory_log", min_length=1, max_length=64)
     existing_memories: List[str] = Field(default_factory=list, max_length=200)
 
@@ -480,7 +487,7 @@ class ExtractMemoryLogResponse(BaseModel):
 
 
 @router.post('/v1/memories/extract', tags=['memories'], response_model=ExtractMemoryLogResponse)
-def extract_memory_log(
+async def extract_memory_log(
     body: ExtractMemoryLogRequest,
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
@@ -493,13 +500,18 @@ def extract_memory_log(
     """
     from utils.llm import memories as memories_llm
 
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
     source = (body.text_source or "memory_log").strip() or "memory_log"
-    existing = [m.strip() for m in body.existing_memories if m.strip()][:200]
-    extraction = memories_llm.extract_memory_log_from_text(
-        uid,
-        body.text,
-        text_source=source,
-        existing_memories=existing,
+    existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in body.existing_memories if m.strip()][:200]
+    extraction = await run_blocking(
+        llm_executor,
+        lambda: memories_llm.extract_memory_log_from_text(
+            uid,
+            body.text,
+            text_source=source,
+            existing_memories=existing,
+        ),
     )
     if extraction is None:
         raise HTTPException(status_code=502, detail="memories_extract_failed")

@@ -47,10 +47,11 @@ from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils import byok
+from utils.subscription import is_trial_paywalled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -1245,7 +1246,7 @@ class ConversationTopicResponse(BaseModel):
 
 
 @router.post('/v1/conversations/topic', response_model=ConversationTopicResponse, tags=['conversations'])
-def generate_conversation_topic_endpoint(
+async def generate_conversation_topic_endpoint(
     body: ConversationTopicRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:topic")),
 ):
@@ -1257,7 +1258,12 @@ def generate_conversation_topic_endpoint(
     """
     from utils.llm import conversation_topic as conversation_topic_llm
 
-    topic = conversation_topic_llm.generate_conversation_topic(uid, body.transcript)
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    topic = await run_blocking(
+        llm_executor,
+        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+    )
     if topic is None:
         raise HTTPException(status_code=502, detail="conversation_topic_failed")
     return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")

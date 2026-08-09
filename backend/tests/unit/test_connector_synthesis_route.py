@@ -11,7 +11,13 @@ from utils.llm.connector_synthesis import ConnectorSynthesis, SynthesizedTask
 UID = 'uid-connector-synthesis'
 
 
-def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
+@pytest.fixture(autouse=True)
+def _entitled(monkeypatch):
+    """Default to an entitled account; the paywall gate has its own test."""
+    monkeypatch.setattr(integrations_router, 'is_trial_paywalled', lambda uid, platform: False)
+
+
+async def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
     def fake_synthesize(uid, source, items, **kwargs):
@@ -29,7 +35,7 @@ def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
 
     monkeypatch.setattr(connector_synthesis, 'synthesize_connector_items', fake_synthesize)
 
-    response = integrations_router.synthesize_connector_data(
+    response = await integrations_router.synthesize_connector_data(
         integrations_router.ConnectorSynthesisRequest(
             source='calendar',
             items=['[2026-08-11T09:00:00Z] Q3 demo'],
@@ -48,14 +54,25 @@ def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
     assert calls['kwargs']['existing_memories'] == ['Lives in NYC']
 
 
-def test_synthesize_connector_data_fails_closed_when_synthesis_returns_none(monkeypatch):
+async def test_synthesize_connector_data_fails_closed_when_synthesis_returns_none(monkeypatch):
     import utils.llm.connector_synthesis as connector_synthesis
 
     monkeypatch.setattr(connector_synthesis, 'synthesize_connector_items', lambda *a, **k: None)
 
     with pytest.raises(HTTPException) as exc:
-        integrations_router.synthesize_connector_data(
+        await integrations_router.synthesize_connector_data(
             integrations_router.ConnectorSynthesisRequest(source='notes', items=['Bought a piano']),
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_synthesize_connector_data_blocks_a_trial_expired_account(monkeypatch):
+    monkeypatch.setattr(integrations_router, 'is_trial_paywalled', lambda uid, platform: True)
+
+    with pytest.raises(HTTPException) as exc:
+        await integrations_router.synthesize_connector_data(
+            integrations_router.ConnectorSynthesisRequest(source='notes', items=['Bought a piano']),
+            uid=UID,
+        )
+    assert exc.value.status_code == 402

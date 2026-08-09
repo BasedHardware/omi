@@ -11,7 +11,13 @@ from utils.llm.memories import MemoryLogExtraction
 UID = 'uid-memories-extract'
 
 
-def test_extract_memory_log_returns_without_persisting(monkeypatch):
+@pytest.fixture(autouse=True)
+def _entitled(monkeypatch):
+    """Default to an entitled account; the paywall gate has its own test."""
+    monkeypatch.setattr(memories_router, 'is_trial_paywalled', lambda uid, platform: False)
+
+
+async def test_extract_memory_log_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
     def fake_extract(uid, text, **kwargs):
@@ -24,7 +30,7 @@ def test_extract_memory_log_returns_without_persisting(monkeypatch):
 
     monkeypatch.setattr(memories_llm, 'extract_memory_log_from_text', fake_extract)
 
-    response = memories_router.extract_memory_log(
+    response = await memories_router.extract_memory_log(
         memories_router.ExtractMemoryLogRequest(
             text='I like coffee',
             text_source='chatgpt',
@@ -41,14 +47,25 @@ def test_extract_memory_log_returns_without_persisting(monkeypatch):
     assert calls['kwargs']['existing_memories'] == ['Lives in NYC']
 
 
-def test_extract_memory_log_fails_closed_when_extractor_returns_none(monkeypatch):
+async def test_extract_memory_log_fails_closed_when_extractor_returns_none(monkeypatch):
     import utils.llm.memories as memories_llm
 
     monkeypatch.setattr(memories_llm, 'extract_memory_log_from_text', lambda *a, **k: None)
 
     with pytest.raises(HTTPException) as exc:
-        memories_router.extract_memory_log(
+        await memories_router.extract_memory_log(
             memories_router.ExtractMemoryLogRequest(text='something memorable'),
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_extract_memory_log_blocks_a_trial_expired_account(monkeypatch):
+    monkeypatch.setattr(memories_router, 'is_trial_paywalled', lambda uid, platform: True)
+
+    with pytest.raises(HTTPException) as exc:
+        await memories_router.extract_memory_log(
+            memories_router.ExtractMemoryLogRequest(text='something memorable'),
+            uid=UID,
+        )
+    assert exc.value.status_code == 402
