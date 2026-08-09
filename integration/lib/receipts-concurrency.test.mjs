@@ -24,14 +24,26 @@
  * single-writer test is exactly the false green this file exists to prevent.
  *
  * The measured claim: after both lanes write, each reads back ITS OWN receipt,
- * and neither can obtain the other's through the read path.
+ * and neither can obtain the other's through the read path — including when the
+ * two lanes' trees are BYTE-IDENTICAL, which is the ordinary case (two
+ * worktrees, same trunk commit, clean) and the only one in which the key's root
+ * component does any work.
  *
- * RED-PROOF (applied, observed red, reverted — recorded in the commit): revert
- * `receiptPath()` to schema 1's shape, `join(receiptsDir(root), lane + ".json")`.
- * Both lanes then address one file, the second write erases the first, and
- * "each lane reads back its own" fails with one lane holding the other's tree —
- * the exact artifact that was quoted as a lane's own result during the wave-3
- * run.
+ * RED-PROOFS, applied against real source, observed red, reverted:
+ *
+ *   - Revert `receiptPath()` to schema 1's shape, `<lane>.json`. Both lanes
+ *     address one file, the second write erases the first, and four of these
+ *     tests fail — the exact artifact that was quoted as a lane's own result
+ *     during the wave-3 run.
+ *   - Drop `repoRoot` from the stamps: same four fail, because a receipt that
+ *     cannot say which tree it measured cannot be attributed to one.
+ *   - Neutralise the root check, the schema-1 check, or the lane-id check in
+ *     `verifyReceiptObject`: one test each, by name.
+ *   - Drop `repoRoot` from the KEY (leaving it on the stamp): only the
+ *     identical-trees test below fails. It was added FOR that mutation —
+ *     without it the clause was unproven and, by §5, did not count. That is
+ *     recorded here rather than quietly fixed, because "the red-proof that
+ *     stayed green" is the finding, not the patch.
  */
 
 import { describe, it, before, after } from "node:test";
@@ -126,6 +138,11 @@ before(() => {
   writeFileSync(driverPath, DRIVER);
   lanes.a = makeRepo(join(scratch, "lane-a-platform"), "lane A content\n");
   lanes.b = makeRepo(join(scratch, "lane-b-platform"), "lane B content — deliberately different\n");
+  // Lane C is byte-identical to lane A at a DIFFERENT path. Two worktrees of
+  // one repo sitting on the same commit with clean trees is the ordinary case,
+  // not a contrived one, and it is the only case in which the root component
+  // of the key does any work at all.
+  lanes.c = makeRepo(join(scratch, "lane-c-platform"), "lane A content\n");
 });
 
 after(() => {
@@ -258,6 +275,35 @@ describe("two lanes writing receipts concurrently", () => {
       assert.equal(typeof entry.attribution.ok, "boolean");
       assert.ok(typeof entry.file === "string" && entry.file.length > 0);
     }
+  });
+
+  it("two lanes with IDENTICAL trees at different roots still get their own receipts", async () => {
+    clearReceipts();
+    // The case the tree hash alone cannot separate. Lane A and lane C have the
+    // same content, so the same tree hash — under a content-only key they share
+    // one file and the second write erases the first, which is the original
+    // defect surviving in the one configuration lanes are most likely to be in:
+    // two worktrees, same trunk commit, clean.
+    const [writtenA, writtenC] = await Promise.all([
+      asLane("a", { op: "write", lane: "L2", durationMs: 11, notes: "lane A" }),
+      asLane("c", { op: "write", lane: "L2", durationMs: 22, notes: "lane C" }),
+    ]);
+    assert.equal(
+      writtenA.stamps.platform.treeHash,
+      writtenC.stamps.platform.treeHash,
+      "this test is only meaningful while the two trees are byte-identical",
+    );
+    assert.notEqual(writtenA.stamps.platform.repoRoot, writtenC.stamps.platform.repoRoot);
+
+    assert.notEqual(writtenA.key, writtenC.key, "identical content at different roots is a different measurement");
+    assert.equal(readdirSync(receiptsDir()).length, 2, "neither lane's receipt was erased by the other");
+
+    const [readA, readC] = await Promise.all([
+      asLane("a", { op: "read", lane: "L2" }),
+      asLane("c", { op: "read", lane: "L2" }),
+    ]);
+    assert.equal(readA.notes, "lane A");
+    assert.equal(readC.notes, "lane C");
   });
 
   it("the receipt names its own identity, so a quoted receipt can still be checked", async () => {
