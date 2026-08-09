@@ -47,11 +47,26 @@ const RUN = "journey-unit";
 const WRITE_ID = "a".repeat(64);
 const REVISION = "219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022";
 
-const tally = (over = {}) => ({
+const fenceTally = (over = {}) => ({
   admitted: 2,
   refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 1, control_unavailable: 0 },
   preservedEnvelopes: 1,
   ...over,
+});
+
+const writeOpsTally = (over = {}) => ({
+  outcomes: {
+    accepted: 1, accepted_idempotent: 1, authentication: 0, authorization: 0, entitlement: 0,
+    stale_epoch: 1, validation: 0, write_id_reuse: 0, conflict: 0, control_unavailable: 0,
+    ...(over.outcomes ?? {}),
+  },
+  preservedEnvelopes: over.preservedEnvelopes ?? 1,
+});
+
+/** The pair as `/v1/qa/control/stats?run=` returns it. */
+const tally = (fenceOver = {}, writeOpsOver = {}) => ({
+  fence: fenceTally(fenceOver),
+  writeOps: writeOpsTally(writeOpsOver),
 });
 
 /**
@@ -106,9 +121,15 @@ function appliedJourney(over = {}) {
     },
     producer: {
       thisRun: tally(),
-      interleavedRun: tally({ admitted: 0, preservedEnvelopes: 1 }),
-      neverSentRun: null,
+      interleavedRun: tally(
+        { admitted: 0, preservedEnvelopes: 1 },
+        { outcomes: { accepted: 0, accepted_idempotent: 0 } },
+      ),
+      neverSentRun: { fence: null, writeOps: null },
     },
+    // The consumer-side observation of the apply, from a different endpoint
+    // over the same store, read after the refused patch.
+    store: { records: [{ record_id: `task-journey-${RUN}`, revision: REVISION }] },
   };
   return { ...journey, ...over };
 }
@@ -121,6 +142,13 @@ function fenceOnlyJourney() {
   const admitted = JSON.stringify({ fence: "admitted", account_epoch: 7 });
   j.steps.create.response = { status: 202, text: admitted, retryAfter: null };
   j.steps.replay.response = { status: 202, text: admitted, retryAfter: null };
+  // The retired harness had a fence counter and NOTHING else: no route outcome
+  // counter and no store to observe. `null` says "this door cannot answer",
+  // which is a different finding from a zero.
+  j.producer.thisRun = { fence: fenceTally(), writeOps: null };
+  j.producer.interleavedRun = { fence: fenceTally({ admitted: 0 }), writeOps: null };
+  j.producer.neverSentRun = { fence: null, writeOps: null };
+  j.store = { records: null };
   return j;
 }
 
@@ -204,7 +232,7 @@ test("RED-PROOF create_admitted: the server's decision counter disagrees with th
   // report three for two admitted responses. `admitted > 0` cannot see that;
   // equality can.
   const j = appliedJourney();
-  j.producer.thisRun = tally({ admitted: 3 });
+  j.producer.thisRun = tally({ admitted: 3 }, { outcomes: { accepted: 2, accepted_idempotent: 1 } });
   const r = outcome(j, "create_admitted");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /arbiters disagree/);
@@ -212,7 +240,7 @@ test("RED-PROOF create_admitted: the server's decision counter disagrees with th
 
 test("RED-PROOF create_admitted: a broken run-id join is a failure, never an implied zero", () => {
   const j = appliedJourney();
-  j.producer.thisRun = null;
+  j.producer.thisRun = { fence: null, writeOps: null };
   const r = outcome(j, "create_admitted");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /null, not zero/);
@@ -224,10 +252,70 @@ test("RED-PROOF server_applied_observation: the door applied to a different reco
   assert.equal(outcome(j, "server_applied_observation").result, "fail");
 });
 
-test("RED-PROOF server_applied_observation: a revision that changes per request is not a record's state", () => {
+test("RED-PROOF server_applied_observation: the door says it applied and the store does not have it", () => {
+  // THE one this assertion exists for. A route that answers `{applied: …}`
+  // built from the request it was handed, having written nothing, passes every
+  // check that reads only the door's own response.
   const j = appliedJourney();
-  j.steps.replay.response.text = JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: "f".repeat(64) }, idempotent: true });
-  assert.equal(outcome(j, "server_applied_observation").result, "fail");
+  j.store = { records: [] };
+  const r = outcome(j, "server_applied_observation");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /the store does not contain it/);
+});
+
+test("RED-PROOF server_applied_observation: the refused patch applied anyway", () => {
+  // The store is read AFTER the stale patch is refused, so a revision that has
+  // moved on means the refusal did not prevent the write. That is a straggler
+  // silently landing in a superseded generation — the thing the fence exists
+  // to make impossible.
+  const j = appliedJourney();
+  j.store = { records: [{ record_id: `task-journey-${RUN}`, revision: "f".repeat(64) }] };
+  const r = outcome(j, "server_applied_observation");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /refusal applied anyway/);
+});
+
+test("RED-PROOF server_applied_observation: the store could not be observed at all", () => {
+  const j = appliedJourney();
+  j.store = { records: { unobservable: "control /v1/qa/control/tasks -> 404" } };
+  const r = outcome(j, "server_applied_observation");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /no second measurement/);
+});
+
+test("RED-PROOF create_admitted: the fence admitted but the route never accepted", () => {
+  // Admitted-through-the-fence and applied are different events. A door that
+  // clears the fence and then fails to apply moves only the first counter, and
+  // a journey reading one tally would call that a working write path.
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ admitted: 2 }, { outcomes: { accepted: 0, accepted_idempotent: 0 } });
+  const r = outcome(j, "create_admitted");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /not the same event as applied/);
+});
+
+test("RED-PROOF idempotent_replay: the wire flag and the recorded outcome disagree", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = tally({}, { outcomes: { accepted: 2, accepted_idempotent: 0 } });
+  const r = outcome(j, "idempotent_replay");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /disagree/);
+});
+
+test("RED-PROOF stale_epoch_refused: the fence decided stale and the wire reported something else", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = tally({}, { outcomes: { stale_epoch: 0, conflict: 1 } });
+  const r = outcome(j, "stale_epoch_refused");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /did not reach the wire as the class the fence decided/);
+});
+
+test("RED-PROOF dead_letter_disposition: the fence preserved and the straggler table did not", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ preservedEnvelopes: 1 }, { preservedEnvelopes: 0 });
+  const r = outcome(j, "dead_letter_disposition");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /disagree about the same refusal/);
 });
 
 test("RED-PROOF idempotent_replay: the registry did not recognise the replayed write_id", () => {
@@ -264,7 +352,7 @@ test("RED-PROOF stale_epoch_refused: a refusal with no paired admission is indis
 
 test("RED-PROOF stale_epoch_refused: refused, but not by the fence", () => {
   const j = appliedJourney();
-  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 } });
+  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 } }, { outcomes: { stale_epoch: 0 } });
   assert.equal(outcome(j, "stale_epoch_refused").result, "fail");
 });
 
@@ -301,7 +389,7 @@ test("RED-PROOF dead_letter_disposition: the straggler's envelope was not preser
   // A straggler refused and NOT preserved is a silently lost edit — the one
   // refusal class that is supposed to keep the user's content recoverable.
   const j = appliedJourney();
-  j.producer.thisRun = tally({ preservedEnvelopes: 0 });
+  j.producer.thisRun = tally({ preservedEnvelopes: 0 }, { preservedEnvelopes: 0 });
   const r = outcome(j, "dead_letter_disposition");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /silently lost edit/);
@@ -336,13 +424,13 @@ test("RED-PROOF join_is_by_run_id: a counter that reports the same tally for eve
 
 test("RED-PROOF join_is_by_run_id: an all-zero tally is not the same finding as null", () => {
   const j = appliedJourney();
-  j.producer.neverSentRun = tally({ admitted: 0, refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 }, preservedEnvelopes: 0 });
+  j.producer.neverSentRun = tally({ admitted: 0, refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 }, preservedEnvelopes: 0 }, { outcomes: { accepted: 0, accepted_idempotent: 0, stale_epoch: 0 }, preservedEnvelopes: 0 });
   assert.equal(outcome(j, "join_is_by_run_id").result, "fail");
 });
 
 test("RED-PROOF join_is_by_run_id: this run's tally absorbed another run's traffic", () => {
   const j = appliedJourney();
-  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 2, control_unavailable: 0 } });
+  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 2, control_unavailable: 0 } }, { outcomes: { stale_epoch: 2 } });
   const r = outcome(j, "join_is_by_run_id");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /absorbed/);

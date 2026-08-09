@@ -137,11 +137,17 @@
 #   id. See integration/lib/write-journey.mjs for what each step's two arbiters
 #   are and why a dispatch-side number never appears in the verdict.
 #
-#   WHICH DOOR IT DRIVES IS NOT A FLAG. `write-journey.mjs --print-door-plan`
-#   answers it from platform's WIRE_PATH_REGISTRY: until `/v1/tasks/ops` has a
-#   row there, the door is the fence harness on 4854 (charter R11 stage a) and
-#   the journey does not gate L3; the moment the row lands, the door is the
-#   product backend and the journey gates. Nobody has to remember to switch it.
+#   THE DOOR IS THE REGISTERED APP — `integration/control/live-service.ts`,
+#   which is `createLocalService` bound to an ephemeral socket and constructs no
+#   route, handler, composition or store of its own. It is a SEPARATE PROCESS
+#   from the memories backend on 4851, which composes its own app and serves no
+#   write route. The retired `fence-server.ts` harness answered the same path
+#   with different bytes and is gone (R5).
+#
+#   WHETHER THE JOURNEY GATES L3 IS NOT A FLAG. `write-journey.mjs
+#   --print-door-plan` answers it from platform's WIRE_PATH_REGISTRY: with no
+#   `/v1/tasks/ops` row the journey is reported and not gated (charter R11);
+#   with the row it gates. Nobody has to remember to switch it.
 #
 #   Its control state is SEEDED BY THIS HARNESS (charter R3): nothing in
 #   platform mints control state by design, so the local stack drives
@@ -149,11 +155,12 @@
 #   legacy's and is untouched.
 #
 # PORTS IT USES     4851 new backend | 4852 surfaces | 4747 legacy fake
-#                   4854 write door (fence harness, stage a)
-#                   NOT 4853: integration/cross-side/wire-agreement.test.mjs
-#                   hard-codes 4853 for its own backend child, and L2 must stay
-#                   safe to run alongside a live stack. A live 4853 made that
-#                   test talk to the fence harness and read 404 for /v1/memories.
+#                   write door: EPHEMERAL, printed by the service and recorded
+#                   in $RUNDIR/write-door.json. Deliberately not a constant:
+#                   integration/cross-side/wire-agreement.test.mjs hard-codes
+#                   4853 for its own child, L2 must stay safe beside a live
+#                   stack, and two lanes on one fixed port report a socket
+#                   fight as a test failure in whichever lost.
 #                   5290 macOS shell's own loopback (it serves its bundled dist)
 # ============================================================================
 set -uo pipefail
@@ -206,15 +213,13 @@ LOGDIR="$RUNDIR/logs"
 BACKEND_PORT=4851
 SURFACES_PORT=4852
 LEGACY_PORT=4747
-WRITE_DOOR_PORT=4854
 BACKEND_URL="${OMI_BACKEND_URL:-http://127.0.0.1:$BACKEND_PORT}"
 
-# The fence harness's own credential and dev account (platform's
-# integration/control/fence-protocol.ts). Named here, not inlined, because
-# stage (b) replaces both with the product backend's and the diff should be
-# three assignments rather than a hunt through the script.
-FENCE_HARNESS_TOKEN="omi-fence-integration-qa-token-v1"
-FENCE_HARNESS_ACCOUNT="acct-fence-integration-fixture"
+# The write door announces its own token and owner account; nothing here
+# guesses either. A launcher that assumed the credential it remembered is how a
+# run measures a principal it does not have.
+WRITE_TOKEN=""
+WRITE_ACCOUNT=""
 WRITE_JOURNEY_EPOCH="${OMI_WRITE_JOURNEY_EPOCH:-7}"
 
 SEED="${OMI_SEED:-7}"
@@ -328,6 +333,7 @@ mkdir -p "$RUNDIR" "$LOGDIR"
 STATEFILE="$RUNDIR/state.json"
 FACTSFILE="$RUNDIR/facts.$RUN_ID.json"
 REPORTFILE="$RUNDIR/last-run.json"
+WRITE_DOOR_FILE="$RUNDIR/write-door.json"
 
 # ── doctor ──────────────────────────────────────────────────────────────────
 # Deliberately standalone and disposable: it boots nothing, needs no state from
@@ -435,6 +441,17 @@ free_port() {
   done
 }
 
+# The write door binds an EPHEMERAL port, so there is no constant to sweep. The
+# port the kernel actually gave it is recorded at boot; this reads it back.
+# Recording beats guessing for the same reason --status probes instead of
+# recalling: a port nobody wrote down is a port nobody can free.
+stop_write_door() {
+  [[ -f "$WRITE_DOOR_FILE" ]] || return 0
+  local port; port="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).port||"")}catch{console.log("")}' "$WRITE_DOOR_FILE" 2>/dev/null)"
+  [[ -n "$port" ]] && free_port "$port" "integration/control/live-service.ts"
+  rm -f "$WRITE_DOOR_FILE"
+}
+
 CLEANED=0
 # --up and --attach both mean "this process exits but the stack does not". The
 # EXIT trap must honor that, or `--up` would kill everything it just booted one
@@ -458,7 +475,7 @@ if [[ $STOP_ONLY -eq 1 ]]; then
   free_port "$BACKEND_PORT" "integration/server/serve.ts"
   free_port "$SURFACES_PORT" "dev-stack-static"
   free_port "$LEGACY_PORT" "qa-api-server"
-  free_port "$WRITE_DOOR_PORT" "integration/control/fence-server.ts"
+  stop_write_door
   ok "stopped whatever a previous run left behind."
   trap - EXIT; exit 0
 fi
@@ -510,7 +527,7 @@ if [[ $MODE_ATTACH -eq 0 ]]; then
   stop_tracked
   free_port "$BACKEND_PORT" "integration/server/serve.ts"
   free_port "$SURFACES_PORT" "dev-stack-static"
-  free_port "$WRITE_DOOR_PORT" "integration/control/fence-server.ts"
+  stop_write_door
 fi
 
 # ── 1. New backend (4851) ───────────────────────────────────────────────────
@@ -569,54 +586,88 @@ if [[ $BACKEND_OWNED -eq 1 ]]; then
 fi
 
 # ── 1b. The write door, and the scripted write journey ──────────────────────
-# WHICH DOOR, decided by asking write-journey.mjs rather than by grepping the
-# registry here. Two implementations of one fact is the defect class this whole
-# program exists to eliminate, and the launcher disagreeing with the verdict
-# about which stage the night is in would be exactly that, in the one place
-# nobody would look.
+# THE DOOR IS THE REGISTERED APP, and there is now only one of it.
+#
+# Until OPS landed `apps/service/routes/tasks-ops.ts` this booted
+# `integration/control/fence-server.ts` — a harness that stood up its own
+# Bun.serve, answered the same `/v1/tasks/ops`, and returned
+# `202 {"fence":"admitted"}` where the real route returns
+# `200 {applied, idempotent}`. Two doors, diverged at the byte level. R5
+# pre-ruled that it could not survive the registered route and OPS retired it;
+# fable's R14 quarantines every measurement taken against it while both stood.
+#
+# `integration/control/live-service.ts` is NOT its replacement in kind: it
+# constructs no route, handler, composition or store. It is `createLocalService`
+# — the same app the dev server, the route tests and the shipped binding use —
+# bound to a socket, because the properties under test are properties of the
+# BYTES and an in-process assertion compares JavaScript objects that can agree
+# while the status line, headers or framing differ.
+#
+# It binds an EPHEMERAL port and prints its url, dev token and owner account on
+# one line of JSON. Nothing here guesses any of the three: a launcher that
+# assumed the token would be the one it remembered is how a run measures a
+# principal it does not have.
+#
+# NOTE the write door is a SEPARATE PROCESS from the memories backend on 4851.
+# `integration/server/serve.ts` composes its own app and registers only the
+# memory routes, so `/v1/tasks/ops` 404s there. Verified by probe, not assumed.
 JOURNEY_FILE=""
 JOURNEY_STATUS=""
+WRITE_DOOR_URL=""
 DOOR_PLAN="$(node "$HERE/lib/write-journey.mjs" --print-door-plan --platform-repo "$PLATFORM_REPO" 2>/dev/null || echo '')"
 DOOR_STAGE="$(printf '%s' "$DOOR_PLAN" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).stage)}catch{console.log("")}})')"
 
-if [[ "$DOOR_STAGE" == "b" ]]; then
-  # The route is registered. The write door is the product backend, and a
-  # journey still pointed at the harness would be measuring the wrong process —
-  # which `door_agreement` fails on, loudly, rather than pending forever.
-  WRITE_DOOR_URL="$BACKEND_URL"
-  WRITE_CONTROL_URL="${OMI_WRITE_CONTROL_URL:-$BACKEND_URL}"
-  WRITE_TOKEN="${OMI_WRITE_TOKEN:-omi-integration-qa-key-v1}"
-  WRITE_ACCOUNT="${OMI_WRITE_ACCOUNT:-$FENCE_HARNESS_ACCOUNT}"
-  say "${B}write door${Z} — /v1/tasks/ops is a registered wire path: driving the product backend at $WRITE_DOOR_URL"
-elif [[ -n "$DOOR_STAGE" ]]; then
-  WRITE_DOOR_URL="http://127.0.0.1:$WRITE_DOOR_PORT"
-  WRITE_CONTROL_URL="$WRITE_DOOR_URL"
-  WRITE_TOKEN="$FENCE_HARNESS_TOKEN"
-  WRITE_ACCOUNT="$FENCE_HARNESS_ACCOUNT"
-  if [[ $MODE_ATTACH -eq 1 ]]; then
-    curl -fsS --max-time 2 "$WRITE_DOOR_URL/health" >/dev/null 2>&1 \
-      || warn "attach mode: nothing answering on the write door at $WRITE_DOOR_URL — the journey will report that, not skip it"
-  else
-    say "${B}write door${Z} — stage (a): /v1/tasks/ops has no registry row yet, booting the fence harness on $WRITE_DOOR_PORT"
-    ( cd "$PLATFORM_REPO" && TZ=UTC OMI_FENCE_INTEGRATION_PORT="$WRITE_DOOR_PORT" \
-        bun run integration/control/fence-server.ts ) > "$LOGDIR/write-door.log" 2>&1 &
-    track writedoor $!
-    for i in $(seq 1 40); do
-      curl -fsS --max-time 1 "$WRITE_DOOR_URL/health" >/dev/null 2>&1 && break
-      sleep 0.25
-      [[ $i -eq 40 ]] && warn "write door never became ready on $WRITE_DOOR_PORT — see $LOGDIR/write-door.log"
-    done
+if [[ $MODE_ATTACH -eq 1 ]]; then
+  # Attach never boots. Reuse the door the run that owns this stack recorded.
+  if [[ -f "$WRITE_DOOR_FILE" ]]; then
+    read -r WRITE_DOOR_URL WRITE_TOKEN WRITE_ACCOUNT <<<"$(node -e '
+      const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      console.log(`${j.url} ${j.devToken} ${j.ownerAccountId}`);' "$WRITE_DOOR_FILE" 2>/dev/null || echo "")"
+    [[ -n "$WRITE_DOOR_URL" ]] && say "${B}write door${Z} — attach mode: reusing $WRITE_DOOR_URL from the run that booted it"
   fi
+  [[ -z "$WRITE_DOOR_URL" ]] && warn "attach mode: no write door recorded by the run that booted this stack — the journey will not run"
 else
-  warn "could not read the write door plan from platform — the journey will not run this time"
+  say "${B}write door${Z} — booting the registered service (createLocalService) on an ephemeral port"
+  # `exec` so $! is BUN's pid and not the subshell's. Killing a subshell leaves
+  # the listener holding its port, and the leak is invisible until some other
+  # harness fails to bind and reads a stranger's 404 as its own server's answer.
+  ( cd "$PLATFORM_REPO" && exec bun run integration/control/live-service.ts ) > "$LOGDIR/write-door.log" 2>&1 &
+  track writedoor $!
+  for i in $(seq 1 60); do
+    grep -q live_service_listening "$LOGDIR/write-door.log" 2>/dev/null && break
+    sleep 0.25
+  done
+  read -r WRITE_DOOR_URL WRITE_TOKEN WRITE_ACCOUNT <<<"$(node -e '
+    const fs=require("fs");
+    let line=null;
+    try {
+      line=fs.readFileSync(process.argv[1],"utf8").split("\n").find((l)=>l.includes("live_service_listening"));
+    } catch {}
+    if(!line){console.log("");process.exit(0)}
+    try{const j=JSON.parse(line);console.log(`${j.url} ${j.devToken} ${j.ownerAccountId}`)}catch{console.log("")}
+  ' "$LOGDIR/write-door.log" 2>/dev/null || echo "")"
+  if [[ -n "$WRITE_DOOR_URL" ]]; then
+    # Remember it: --attach and --stop both need a door this process discovered
+    # rather than one they can guess, because the port is the kernel's answer.
+    WRITE_DOOR_URL="$WRITE_DOOR_URL" WRITE_TOKEN="$WRITE_TOKEN" WRITE_ACCOUNT="$WRITE_ACCOUNT" \
+      WRITE_DOOR_FILE="$WRITE_DOOR_FILE" node -e '
+        const e=process.env;
+        require("fs").writeFileSync(e.WRITE_DOOR_FILE, JSON.stringify({
+          url:e.WRITE_DOOR_URL, devToken:e.WRITE_TOKEN, ownerAccountId:e.WRITE_ACCOUNT,
+          port:Number(new URL(e.WRITE_DOOR_URL).port), wroteAt:new Date().toISOString(),
+        }, null, 2));'
+    ok "write door at $WRITE_DOOR_URL  (registered app, owner $WRITE_ACCOUNT)"
+  else
+    warn "the write door never announced itself — see $LOGDIR/write-door.log"
+  fi
 fi
 
-if [[ -n "$DOOR_STAGE" ]]; then
+if [[ -n "$WRITE_DOOR_URL" ]]; then
   JOURNEY_FILE="$RUNDIR/write-journey.$RUN_ID.json"
   # NOT piped. `cmd | tail` hands back tail's status, and that has already
   # produced one false "the assertion path is broken" report in this repo.
   node "$HERE/lib/write-journey.mjs" \
-    --door "$WRITE_DOOR_URL" --control "$WRITE_CONTROL_URL" \
+    --door "$WRITE_DOOR_URL" --control "$WRITE_DOOR_URL" \
     --token "$WRITE_TOKEN" --account "$WRITE_ACCOUNT" \
     --run "$RUN_ID" --epoch "$WRITE_JOURNEY_EPOCH" \
     --platform-repo "$PLATFORM_REPO" \
@@ -624,7 +675,7 @@ if [[ -n "$DOOR_STAGE" ]]; then
     --out "$JOURNEY_FILE" > "$LOGDIR/write-journey.log" 2>&1
   JOURNEY_STATUS=$?
   if [[ $JOURNEY_STATUS -eq 0 ]]; then
-    ok "write journey completed — verdict in the run report below (raw: $JOURNEY_FILE)"
+    ok "write journey completed (stage ${DOOR_STAGE:-?}) — verdict in the run report below (raw: $JOURNEY_FILE)"
   else
     warn "write journey FAILED (exit $JOURNEY_STATUS) — see $LOGDIR/write-journey.log"
   fi
