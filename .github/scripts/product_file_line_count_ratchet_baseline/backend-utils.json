@@ -1,7 +1,7 @@
 {
   "files": {
     "backend/utils/apps.py": 1652,
-    "backend/utils/conversations/process_conversation.py": 2082,
+    "backend/utils/conversations/process_conversation.py": 2078,
     "backend/utils/memory/canonical_consolidation.py": 1935,
     "backend/utils/memory/canonical_memory_adapter.py": 2012,
     "backend/utils/memory/legacy_backfill.py": 1723,
@@ -12,7 +12,6 @@
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
-    "backend/utils/conversations/process_conversation.py": "Speaker resolution runs on an app-owned loop after audio files are durable, on a deep copy, and persists its suggestions — the alternative pins a postprocess worker for the whole pipeline and races memory extraction; each pass is tracked and drained during app shutdown so a shutdown cannot abandon one mid-write, and the import stays function-local to keep this module's import graph unchanged.",
     "backend/utils/memory/canonical_consolidation.py": "Candidate selection, bounded retry leases, atomic promotion planning, and batch-level duplicate-supersede rejection remain one canonical long-term admission authority; extracting them would permit competing admission state machines (FC-split-mutation-authority).",
     "backend/utils/memory/canonical_memory_adapter.py": "Canonical conversation replacement coordinates source-generation fencing, bounded lineage discovery, and atomic replacement application; splitting this state machine would duplicate lifecycle authority (FC-split-mutation-authority).",
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873); the deletion purge path additionally records bounded storage wipe counters for telemetry.",
