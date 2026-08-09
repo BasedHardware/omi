@@ -6,11 +6,16 @@ enum KnowledgeGraphToolSupport {
     let edges: [[String: Any]]
   }
 
+  enum ResolveOutcome {
+    case success(ClientGraph)
+    case failure(String)
+  }
+
   /// Resolve `discovery_text` through backend knowledge_graph SSOT extract.
   static func resolveDiscoveryText(
     _ discoveryText: String,
     expectedOwnerId: String?
-  ) async -> Result<ClientGraph, String> {
+  ) async -> ResolveOutcome {
     let trimmed = discoveryText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
       return .failure("Error: 'discovery_text' or 'nodes' is required")
