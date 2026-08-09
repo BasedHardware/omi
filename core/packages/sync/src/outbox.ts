@@ -68,6 +68,46 @@ export class WriteStampUnavailableError extends Error {
   }
 }
 
+/**
+ * Thrown by `enqueue` when a caller hands it an op that is ALREADY stamped.
+ *
+ * B1's property is that a `write_id` is minted from independent entropy by the
+ * outbox. Until this existed, that property was enforced by the ABSENCE OF A
+ * CALLER rather than by the code: `stamp()` read `op.writeId ?? mint()`, so a
+ * caller-supplied id was journaled verbatim and mint was never reached. The
+ * comment defending it said "there is no such caller today" — a fact about the
+ * tree, not a property of the module, and a fact about the tree stops being
+ * true the moment somebody adds a caller.
+ *
+ * The reachable harm, measured rather than imagined: a malformed id is caught
+ * downstream (`buildWriteOpEnvelope` refuses to build an envelope on one), but
+ * a WELL-FORMED DUPLICATE passes every check and the server answers
+ * `write_id_reuse` — a permanent dead letter, which is a lost edit the user is
+ * told about. The same hole existed on the legacy path, where a planted stamp
+ * is journaled by an outbox with no stamp source and would be honoured later by
+ * a platform transport draining that same journal.
+ *
+ * So the stamps are the outbox's to mint, always, and an op that arrives
+ * carrying them is refused rather than silently overwritten. Refused, because a
+ * caller passing a `writeId` has a mistaken model of who owns idempotency, and
+ * quietly discarding their value would hide that instead of correcting it.
+ *
+ * A REPLAY IS NOT A CALLER. Journaled ops replay through `Outbox.open`, which
+ * pushes them into engine state directly and never calls `enqueue`, so a
+ * replayed op keeps its journaled stamps and this never fires for it. That is
+ * the case the `??` clause was written for, and it was never reaching `enqueue`
+ * to begin with.
+ */
+export class CallerSuppliedWriteStampError extends Error {
+  constructor(readonly field: "writeId" | "accountEpoch") {
+    super(
+      `outbox: ${field} is minted by the outbox at enqueue and may not be supplied by a caller ` +
+        `(COORD-write-path-rulings B1)`,
+    );
+    this.name = "CallerSuppliedWriteStampError";
+  }
+}
+
 type JournalEntry =
   | { t: "op"; op: PendingOp }
   | { t: "tombstone"; opId: string; outcome: import("@omi-core/contracts").OperationOutcome };
@@ -147,9 +187,9 @@ export class Outbox {
    * B1: when a `WriteStampSource` is configured, the write id and the account
    * epoch are stamped HERE — in the same statement that appends to the journal
    * — so a stamped op and a journaled op are the same object by construction.
-   * An op that arrives already stamped (there is no such caller today; a
-   * replay never comes back through `enqueue`) keeps its own stamps: minting a
-   * second id for one op is the exact defect B1 rejects.
+   * An op that arrives already stamped is REFUSED, on every path, stamped or
+   * legacy: see `CallerSuppliedWriteStampError` for why that is a property of
+   * the code rather than of who happens to call it today.
    */
   async enqueue(op: PendingOp): Promise<void> {
     const stamped = this.stamp(op);
@@ -158,10 +198,19 @@ export class Outbox {
   }
 
   private stamp(op: PendingOp): PendingOp {
+    // Checked BEFORE the stamp source, so the refusal is identical whether or
+    // not this outbox mints. A legacy outbox journals whatever it is handed,
+    // and a journal is not private to the transport that wrote it — the same
+    // durable log is what a platform transport would drain after a generation
+    // flip, at which point a planted id becomes a real `write_id` on a real
+    // wire. "Legacy behaves byte-identically" is true of ops that arrive
+    // unstamped, which after this is all of them.
+    if (op.writeId !== undefined) throw new CallerSuppliedWriteStampError("writeId");
+    if (op.accountEpoch !== undefined) throw new CallerSuppliedWriteStampError("accountEpoch");
     if (this.stamps === null) return op;
-    const writeId = op.writeId ?? this.stamps.mintWriteId();
+    const writeId = this.stamps.mintWriteId();
     if (writeId === null) throw new WriteStampUnavailableError("write-id");
-    const accountEpoch = op.accountEpoch ?? this.stamps.currentAccountEpoch();
+    const accountEpoch = this.stamps.currentAccountEpoch();
     if (accountEpoch === null) throw new WriteStampUnavailableError("account-epoch");
     return { ...op, writeId, accountEpoch };
   }
