@@ -81,8 +81,6 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
               <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
               <a href={href("memories")} aria-current={active === "memories" || active === "conversations" ? "page" : undefined}><ChromeIcon name="library" />{t(locale, "nav.library")}</a>
               <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
-              <span aria-disabled="true"><ChromeIcon name="rewind" />{t(locale, "nav.rewind")}</span>
-              <span aria-disabled="true"><ChromeIcon name="apps" />{t(locale, "nav.apps")}</span>
             </div>
             <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
               <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /><span className="visually-hidden">{t(locale, "nav.microphone")}</span></span>
@@ -99,7 +97,6 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
           <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
           <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" ? "page" : undefined}><ChromeIcon name="conversations" />{t(locale, "nav.conversations")}</a>
           <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
-          <span aria-disabled="true"><ChromeIcon name="apps" />{t(locale, "nav.apps")}</span>
         </div>
       </nav>
     </>
@@ -111,7 +108,6 @@ export function ProductionLibrarySegment({ locale, active }: { locale: Locale; a
     <div className="desktop-library-segment" aria-label={t(locale, "nav.library")}>
       <a href={href("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>
       <a href={href("memories")} aria-current={active === "memories" ? "page" : undefined}>{t(locale, "nav.memories")}</a>
-      <span aria-disabled="true">{t(locale, "nav.brainMap")}</span>
     </div>
     <div className="mobile-library-segment" aria-label={t(locale, "nav.library")}>
       <a href={href("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>

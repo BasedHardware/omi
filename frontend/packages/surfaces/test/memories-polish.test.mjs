@@ -39,12 +39,12 @@ test("shared chrome exposes platform hierarchy without fake destinations", async
   assert.match(source, /active === "conversations" \|\| active === "memories"/);
   assert.match(source, /href=\{href\("home"\)\}/);
   assert.match(source, /aria-current=\{active === "home" \? "page" : undefined\}/);
-  assert.match(source, /<span aria-disabled="true"><ChromeIcon name="apps"/);
+  assert.doesNotMatch(source, /nav\.apps|nav\.rewind|nav\.brainMap/);
   assert.match(styles, /html\[data-platform="desktop"\].*production-nav:first-child/);
   assert.match(styles, /html\[data-platform="mobile"\].*production-nav:last-child/);
   assert.match(styles, /env\(safe-area-inset-bottom/);
   assert.match(styles, /focus-visible/);
   assert.doesNotMatch(styles, /@media\s*\(/);
-  // red-proof: Home is a supported query surface, while placeholder links stay
-  // disabled; dropping the nested active rule leaves Memories with no mobile tab.
+  // red-proof: Home is a supported query surface with no placeholder destinations;
+  // dropping the nested active rule leaves Memories with no mobile tab.
 });
