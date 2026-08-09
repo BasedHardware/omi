@@ -627,14 +627,20 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       chat: { ...chatH, series: chatSeries },
       memories: { ...memH, series: memSeries },
     };
+    // Determine success from settled query status, not from actSeries.length
+    // (pivotPlatformSeries zero-fills buckets even when the query rejected).
+    const activityOk = results[0].status === "fulfilled";
     posthogOk =
-      actSeries.length > 0 ||
-      byHours["72"].total != null ||
-      convH.byHours["72"] != null ||
-      chatH.byHours["72"] != null ||
-      memH.byHours["72"] != null ||
-      million.totalUsers != null;
+      activityOk ||
+      results[2].status === "fulfilled" ||
+      results[4].status === "fulfilled";
   }
+
+  // Ensure Stripe has settled before evaluating sources / building the
+  // snapshot. Without this, a fast PostHog path can reach the source check
+  // while stripeOk is still false and revenue is still null, dropping
+  // ARR/MRR from otherwise successful responses.
+  await stripeP;
 
   if (!posthogOk && !(opts.includeRevenue && stripeOk)) {
     // Nothing useful to show — fail rather than caching an empty board.
