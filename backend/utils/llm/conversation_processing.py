@@ -893,6 +893,7 @@ def extract_action_items(
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
     • Use clear, direct language
     • Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
+    • When transcript lines begin with [segment:ID start-end], include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no segment markers.
     • Include only essential details
 
     • CRITICAL - Resolve ALL vague references:

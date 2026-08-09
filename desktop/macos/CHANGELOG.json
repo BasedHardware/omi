@@ -2,6 +2,30 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.154",
+      "date": "2026-08-09",
+      "changes": [
+        "Improved macOS beta release reliability when the trusted readiness stack starts slowly"
+      ]
+    },
+    {
+      "version": "0.12.153",
+      "date": "2026-08-08",
+      "changes": [
+        "Show Checking/Downloading/restart-ready update progress in the top bar and Settings → About (chat-first no longer hid Sparkle status in the unused sidebar)",
+        "Fixed Rewind privacy exclusions so the installed Omi app is not captured",
+        "Improved reliability of signed macOS Beta startup verification",
+        "Fixed dead zones that prevented dragging the window and opening Chat, Rewind, and Apps"
+      ]
+    },
+    {
+      "version": "0.12.152",
+      "date": "2026-08-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.151",
       "date": "2026-08-08",
       "changes": [
