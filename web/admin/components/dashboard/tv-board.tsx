@@ -29,7 +29,7 @@ const plexMono = IBM_Plex_Mono({
 
 const PLAT_COLORS: Record<string, string> = {
   macos: "#8eb4e0",
-  windows: "#a89fd4",
+  windows: "#c5cdd8",
   ios: "#7eb8b0",
   android: "#d4a574",
 };
@@ -41,7 +41,7 @@ const PLAT_LABEL: Record<string, string> = {
 };
 const PLATS = ["macos", "windows", "ios", "android"] as const;
 const WINDOW_LABEL: Record<number, string> = { 12: "12h", 24: "1d", 72: "3d" };
-const PIE_COLORS = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3", "#a89fd4"];
+const PIE_COLORS = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3", "#c5cdd8"];
 
 type Props = {
   getToken: () => Promise<string | null>;
@@ -156,18 +156,30 @@ type BuiltChart = {
 };
 
 function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
-  const sliced = downsample(sliceSeries(series, hours));
-  const rawByKey: Record<string, Array<number | null>> = {};
-  for (const k of PLATS) rawByKey[k] = sliced.map((p) => {
-    const v = p[k];
-    return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
-  });
-
+  const full = sliceSeries(series, hours);
+  // Peak/trough/latest from the full window; chart points may be downsampled.
+  const fullByKey: Record<string, Array<number | null>> = {};
+  for (const k of PLATS) {
+    fullByKey[k] = full.map((p) => {
+      const v = p[k];
+      return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
+    });
+  }
   const stats: BuiltChart["stats"] = {};
+  for (const k of PLATS) stats[k] = seriesStats(fullByKey[k]);
+
+  const sliced = downsample(full);
+  const rawByKey: Record<string, Array<number | null>> = {};
+  for (const k of PLATS) {
+    rawByKey[k] = sliced.map((p) => {
+      const v = p[k];
+      return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
+    });
+  }
+
   const indexed: Record<string, Array<number | null>> = {};
   const activeKeys: string[] = [];
   for (const k of PLATS) {
-    stats[k] = seriesStats(rawByKey[k]);
     const has = rawByKey[k].some((v) => v != null && v > 0);
     if (!has) continue;
     activeKeys.push(k);

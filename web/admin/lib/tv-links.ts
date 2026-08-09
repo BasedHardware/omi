@@ -6,6 +6,8 @@ export const DEFAULT_TV_LINK_TTL_DAYS = 90;
 
 export type TvLinkRecord = {
   tokenHash: string;
+  /** Full token so admins can re-copy the kiosk URL anytime. */
+  token: string;
   prefix: string;
   label: string;
   createdBy: string;
@@ -19,6 +21,9 @@ export type TvLinkRecord = {
 export type TvLinkPublic = {
   id: string;
   prefix: string;
+  /** Full token when available (legacy rows may omit). */
+  token: string | null;
+  path: string | null;
   label: string;
   createdBy: string;
   createdAt: number;
@@ -68,9 +73,12 @@ export function safeEqualHex(a: string, b: string): boolean {
 }
 
 function toPublic(id: string, data: TvLinkRecord): TvLinkPublic {
+  const token = typeof data.token === "string" && data.token.length >= 16 ? data.token : null;
   return {
     id,
     prefix: data.prefix,
+    token,
+    path: token ? `/tv/view/${token}` : null,
     label: data.label,
     createdBy: data.createdBy,
     createdAt: data.createdAt,
@@ -129,11 +137,11 @@ export async function createTvLink(input: {
   } else {
     ttlDays = DEFAULT_TV_LINK_TTL_DAYS;
   }
-  const expiresAt =
-    ttlDays == null ? null : now + ttlDays * 24 * 60 * 60 * 1000;
+  const expiresAt = ttlDays == null ? null : now + ttlDays * 24 * 60 * 60 * 1000;
 
   const record: TvLinkRecord = {
     tokenHash,
+    token,
     prefix,
     label,
     createdBy: input.createdBy,

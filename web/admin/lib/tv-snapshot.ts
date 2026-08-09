@@ -14,7 +14,7 @@ export type WindowHours = (typeof WINDOW_HOURS)[number];
 
 const CORE_EVENTS = `(
   'Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent',
-  'Phone Mic Recording Started','Action Items Page Opened','Action Item Completed',
+  'Phone Mic Recording Started','Desktop Recording Started','Action Items Page Opened','Action Item Completed',
   'Action Item Manually Added','Action Item Edited','Conversation List Item Clicked',
   'Conversation Detail Opened','Daily Summary Detail Viewed','Rewind Screenshot Viewed',
   'Task Added','Task Completed','Memory Created','Memory Extracted','App Launched'
@@ -29,8 +29,8 @@ const PLATFORM_EXPR = `multiIf(
 )`;
 
 const CHAT_EVENTS = `event IN ('Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent')`;
-const MEMORY_EVENTS = `event IN ('Memory Created','Memory Extracted')`;
-const CONV_EVENT = `event = 'Phone Mic Recording Started'`;
+const MEMORY_EVENTS = `event = 'Memory Extracted'`;
+const CONV_EVENT = `event IN ('Phone Mic Recording Started','Desktop Recording Started')`;
 
 export type SeriesPoint = {
   t: number;
@@ -84,7 +84,7 @@ export type TvSnapshot = {
 export function daysUntilMillion(
   totalUsers: number | null,
   dailyNew: Array<{ day: string; newUsers: number }>,
-  opts: { target?: number; rateDays?: number } = {},
+  opts: { target?: number; rateDays?: number; asOf?: Date | string } = {},
 ): TvSnapshot["million"] {
   const target = opts.target ?? MILLION_USERS;
   const rateDays = opts.rateDays ?? MILLION_RATE_DAYS;
@@ -99,9 +99,12 @@ export function daysUntilMillion(
   const daysSorted = Array.from(byDay.keys()).sort();
 
   let perDay: number | null = null;
+  // Anchor to latest *completed* UTC day (yesterday), not the last day that happened to have rows.
+  const asOf = opts.asOf ? new Date(opts.asOf) : new Date();
+  const end = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+  end.setUTCDate(end.getUTCDate() - 1);
+  const endMs = end.getTime();
   if (daysSorted.length) {
-    const end = daysSorted[daysSorted.length - 1];
-    const endMs = Date.parse(`${end}T00:00:00Z`);
     let sum = 0;
     for (let i = 0; i < rateDays; i++) {
       const d = new Date(endMs - i * 86400000);
@@ -254,7 +257,7 @@ function pivotPlatformSeries(
 export async function buildTvSnapshot(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
-  const cacheKey = `tv-snapshot:v5:rev=${opts.includeRevenue ? 1 : 0}`;
+  const cacheKey = `tv-snapshot:v6:rev=${opts.includeRevenue ? 1 : 0}`;
   const cached = await getPayload<TvSnapshot>(cacheKey);
   if (cached?.data && Date.now() - cached.freshAt < 2 * 60 * 1000) {
     return cached.data;
@@ -331,6 +334,9 @@ export async function buildTvSnapshot(opts: {
     const wh = 72;
     const lim = Math.ceil((wh * 60) / bm) + 5;
 
+    // Exclude the currently open 10m bucket so charts don't dip on a partial window.
+    const bucketCut = `toStartOfInterval(now(), INTERVAL ${bm} MINUTE)`;
+
     const qActivityPlat = `
 SELECT
   ${PLATFORM_EXPR} AS platform,
@@ -345,20 +351,33 @@ GROUP BY platform
 ORDER BY dau_72h DESC
 LIMIT 10`.trim();
 
+    // Global uniques (not sum of platforms — multi-platform people counted once).
+    const qActivityTotals = `
+SELECT
+  uniqIf(person_id, timestamp >= now() - INTERVAL 12 HOUR) AS dau_12h,
+  uniqIf(person_id, timestamp >= now() - INTERVAL 24 HOUR) AS dau_24h,
+  uniqIf(person_id, timestamp >= now() - INTERVAL 72 HOUR) AS dau_72h,
+  uniqIf(person_id, timestamp >= now() - INTERVAL 7 DAY) AS wau
+FROM events
+WHERE timestamp >= now() - INTERVAL 7 DAY AND timestamp < now()
+  AND event IN ${CORE_EVENTS}
+LIMIT 1`.trim();
+
     const qActivity10m = `
 SELECT
   toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
   ${PLATFORM_EXPR} AS platform,
   uniq(person_id) AS active
 FROM events
-WHERE timestamp >= now() - INTERVAL ${wh} HOUR AND timestamp < now()
+WHERE timestamp >= now() - INTERVAL ${wh} HOUR
+  AND timestamp < ${bucketCut}
   AND event IN ${CORE_EVENTS}
 GROUP BY bucket, platform
 ORDER BY bucket ASC
-LIMIT ${lim * 4}`.trim();
+LIMIT ${lim * 5}`.trim();
 
-    // Conversation = phone mic start (unique users). Chat = message / floating bar.
-    // Memories = created/extracted event counts by platform (volume, not users).
+    // Conversation = phone/desktop recording start. Chat = message / floating bar query sent.
+    // Memories = Memory Extracted volume only (Memory Created is a historical conversation alias).
     const qFeaturesPlat = `
 SELECT
   ${PLATFORM_EXPR} AS platform,
@@ -379,6 +398,24 @@ WHERE timestamp >= now() - INTERVAL 72 HOUR AND timestamp < now()
 GROUP BY platform
 LIMIT 10`.trim();
 
+    const qFeaturesTotals = `
+SELECT
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
+  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
+  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
+  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS memory_events_12h,
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS memory_events_24h,
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS memory_events_72h
+FROM events
+WHERE timestamp >= now() - INTERVAL 72 HOUR AND timestamp < now()
+  AND (
+    ${CONV_EVENT} OR ${CHAT_EVENTS} OR ${MEMORY_EVENTS}
+  )
+LIMIT 1`.trim();
+
     const qFeatures10m = `
 SELECT
   toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
@@ -387,13 +424,14 @@ SELECT
   uniqIf(person_id, ${CHAT_EVENTS}) AS chat_users,
   countIf(${MEMORY_EVENTS}) AS memory_events
 FROM events
-WHERE timestamp >= now() - INTERVAL ${wh} HOUR AND timestamp < now()
+WHERE timestamp >= now() - INTERVAL ${wh} HOUR
+  AND timestamp < ${bucketCut}
   AND (
     ${CONV_EVENT} OR ${CHAT_EVENTS} OR ${MEMORY_EVENTS}
   )
 GROUP BY bucket, platform
 ORDER BY bucket ASC
-LIMIT ${lim * 4}`.trim();
+LIMIT ${lim * 5}`.trim();
 
     const qPersonsTotal = `SELECT count() AS total_users FROM persons LIMIT 1`;
     const qPersonsDaily = `
@@ -409,6 +447,8 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       ph(creds, qFeatures10m),
       ph(creds, qPersonsTotal),
       ph(creds, qPersonsDaily),
+      ph(creds, qActivityTotals),
+      ph(creds, qFeaturesTotals),
     ]);
 
     const labels = [
@@ -418,6 +458,8 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "features_10m",
       "persons_total",
       "persons_daily",
+      "activity_totals",
+      "features_totals",
     ];
     results.forEach((r, i) => {
       if (r.status === "rejected") warnings.push(`${labels[i]}: ${r.reason}`);
@@ -429,40 +471,23 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
         : [];
 
     const actPlat = asRows(get(0), ["platform", "dau_12h", "dau_24h", "dau_72h", "wau"]);
+    const actTotals = asRows(get(6), ["dau_12h", "dau_24h", "dau_72h", "wau"])[0] || {};
     const byHours: TvSnapshot["activity"]["byHours"] = {
-      "12": { total: 0, platforms: {} },
-      "24": { total: 0, platforms: {} },
-      "72": { total: 0, platforms: {} },
+      "12": { total: num(actTotals.dau_12h), platforms: {} },
+      "24": { total: num(actTotals.dau_24h), platforms: {} },
+      "72": { total: num(actTotals.dau_72h), platforms: {} },
     };
-    let wau = 0;
-    let wauAny = false;
     for (const r of actPlat) {
       const plat = String(r.platform ?? "other");
       if (plat === "other") continue;
       const d12 = num(r.dau_12h);
       const d24 = num(r.dau_24h);
       const d72 = num(r.dau_72h);
-      const w = num(r.wau);
-      if (d12 != null) {
-        byHours["12"].platforms[plat] = d12;
-        byHours["12"].total = (byHours["12"].total || 0) + d12;
-      }
-      if (d24 != null) {
-        byHours["24"].platforms[plat] = d24;
-        byHours["24"].total = (byHours["24"].total || 0) + d24;
-      }
-      if (d72 != null) {
-        byHours["72"].platforms[plat] = d72;
-        byHours["72"].total = (byHours["72"].total || 0) + d72;
-      }
-      if (w != null) {
-        wau += w;
-        wauAny = true;
-      }
+      if (d12 != null) byHours["12"].platforms[plat] = d12;
+      if (d24 != null) byHours["24"].platforms[plat] = d24;
+      if (d72 != null) byHours["72"].platforms[plat] = d72;
     }
-    for (const h of ["12", "24", "72"] as const) {
-      if (!Object.keys(byHours[h].platforms).length) byHours[h].total = null;
-    }
+    const wau = num(actTotals.wau);
 
     const actSeries = pivotPlatformSeries(
       asRows(get(1), ["bucket", "platform", "active"]),
@@ -481,9 +506,31 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "memory_events_24h",
       "memory_events_72h",
     ]);
+    const featTotals = asRows(get(7), [
+      "conversation_users_12h",
+      "conversation_users_24h",
+      "conversation_users_72h",
+      "chat_users_12h",
+      "chat_users_24h",
+      "chat_users_72h",
+      "memory_events_12h",
+      "memory_events_24h",
+      "memory_events_72h",
+    ])[0] || {};
     const convH = buildFeatHours(featPlat, "conversation_users");
     const chatH = buildFeatHours(featPlat, "chat_users");
     const memH = buildFeatHours(featPlat, "memory_events");
+    // Prefer global uniques/counts over summed platforms.
+    for (const [board, prefix] of [
+      [convH, "conversation_users"],
+      [chatH, "chat_users"],
+      [memH, "memory_events"],
+    ] as const) {
+      for (const h of ["12", "24", "72"] as const) {
+        const v = num(featTotals[`${prefix}_${h}h`]);
+        if (v != null) board.byHours[h] = v;
+      }
+    }
 
     const feat10m = asRows(get(3), [
       "bucket",
@@ -506,7 +553,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
 
     activity = {
       byHours,
-      wau: wauAny ? wau : null,
+      wau,
       series: actSeries,
     };
     features = {
@@ -517,6 +564,9 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     posthogOk =
       actSeries.length > 0 ||
       byHours["72"].total != null ||
+      convH.byHours["72"] != null ||
+      chatH.byHours["72"] != null ||
+      memH.byHours["72"] != null ||
       million.totalUsers != null;
   }
 

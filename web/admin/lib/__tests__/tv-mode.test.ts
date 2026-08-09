@@ -66,7 +66,11 @@ describe("daysUntilMillion", () => {
       day: `2026-01-${String(i + 1).padStart(2, "0")}`,
       newUsers: 1000,
     }));
-    const m = daysUntilMillion(900_000, daily, { rateDays: 7 });
+    // asOf 2026-01-11 → completed window ends 2026-01-10
+    const m = daysUntilMillion(900_000, daily, {
+      rateDays: 7,
+      asOf: "2026-01-11T12:00:00Z",
+    });
     expect(m.perDay).toBe(1000);
     expect(m.days).toBe(100); // ceil(100000/1000)
   });
@@ -77,14 +81,19 @@ describe("daysUntilMillion", () => {
       { day: "2026-01-04", newUsers: 7000 },
       { day: "2026-01-10", newUsers: 7000 },
     ];
-    const m = daysUntilMillion(900_000, daily, { rateDays: 7 });
+    const m = daysUntilMillion(900_000, daily, {
+      rateDays: 7,
+      asOf: "2026-01-11T12:00:00Z",
+    });
     // (7000 + 0*5 + 7000) / 7 = 2000
     expect(m.perDay).toBe(2000);
     expect(m.days).toBe(50); // ceil(100000/2000)
   });
 
   it("returns null days when rate is zero", () => {
-    const m = daysUntilMillion(100, [{ day: "2026-01-01", newUsers: 0 }]);
+    const m = daysUntilMillion(100, [{ day: "2026-01-01", newUsers: 0 }], {
+      asOf: "2026-01-02T12:00:00Z",
+    });
     expect(m.days).toBeNull();
   });
 });
