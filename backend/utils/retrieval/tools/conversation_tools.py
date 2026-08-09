@@ -63,8 +63,8 @@ def _scoped_conversation_fetch(
         status_val = getattr(raw_status, 'value', raw_status)
         if status_val is not None and str(status_val) not in statuses:
             return [], f"No accessible conversation found for scoped id {conversation_id}."
-    start_ts = int(start_dt.timestamp()) if start_dt is not None else None
-    end_ts = int(end_dt.timestamp()) if end_dt is not None else None
+    start_ts = start_dt.timestamp() if start_dt is not None else None
+    end_ts = end_dt.timestamp() if end_dt is not None else None
     if start_ts is not None or end_ts is not None:
         if not conversation_matches_date_range(conv, start_ts, end_ts):
             return [], (

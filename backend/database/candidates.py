@@ -301,12 +301,14 @@ def _merge_task_provenance(current_task: dict[str, Any], evidence_refs: list[Evi
     provenance: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw_ref in list(current_task.get('provenance') or []) + [
-        ref.model_dump(mode='json', exclude_none=True) for ref in evidence_refs
+        ref.model_dump(mode='json', exclude_none=True, exclude_defaults=True) for ref in evidence_refs
     ]:
         if not isinstance(raw_ref, dict):
             continue
         try:
-            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(mode='json', exclude_none=True)
+            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(
+                mode='json', exclude_none=True, exclude_defaults=True
+            )
         except ValueError:
             normalized_ref = raw_ref
         identity = json.dumps(normalized_ref, sort_keys=True, default=str)

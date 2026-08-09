@@ -68,6 +68,7 @@ export interface ActionItem {
   description: string;
   due_at?: string | null;
   ownership_confidence?: number | null;
+  source_segment_ids?: Array<string>;
   target_task_id?: string | null;
   updated_at?: string | null;
 }
@@ -1672,10 +1673,13 @@ export type EvidenceKind = "conversation" | "memory_item" | "workstream_event" |
 
 export interface EvidenceRef {
   device_id?: string | null;
+  end_seconds?: number | null;
   excerpt_hash?: string | null;
   id: string;
   kind: EvidenceKind;
   scope: EvidenceScope;
+  start_seconds?: number | null;
+  transcript_segment_ids?: Array<string> | null;
   version?: string | null;
 }
 

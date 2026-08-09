@@ -1,7 +1,7 @@
 //
-//  SpineRowViews.swift — the four things a day is made of.
+//  SpineRowViews.swift — the things a day is made of.
 //
-//  A conversation, the memories it produced, the frames that were on screen, and the end-of-day map
+//  A conversation, the memories and tasks it produced, the frames that were on screen, and the map
 //  of what those memories connect to. They share one grid — a fixed time gutter on the left, content
 //  on the right, a hairline between them — because that gutter is what makes the list a clock rather
 //  than a stack of cards.
@@ -93,6 +93,7 @@ struct SpineRowView: View {
   /// state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
+  let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
   let onOpenMoment: (SpineMoment) -> Void
   let onOpenBrainMap: () -> Void
@@ -110,7 +111,7 @@ struct SpineRowView: View {
   private var gutterInset: CGFloat {
     switch row.content {
     case .conversation, .brainMap: return SpineMetrics.cardGutterInset
-    case .memories, .moments: return SpineMetrics.inlineGutterInset
+    case .memories, .tasks, .moments: return SpineMetrics.inlineGutterInset
     }
   }
 
@@ -163,7 +164,16 @@ struct SpineRowView: View {
         onToggleStar: { onToggleStar(summary.conversation) }
       )
     case .memories(let memories):
-      SpineMemoriesRow(memories: memories, showsTimestamps: !row.isAttached && !showsIndent)
+      SpineMemoriesRow(
+        memories: memories,
+        showsTimestamps: !row.isAttached && !showsIndent
+      )
+    case .tasks(let tasks):
+      SpineTasksRow(
+        tasks: tasks,
+        showsTimestamps: !row.isAttached && !showsIndent,
+        onToggle: onToggleTask
+      )
     case .moments(let shown, let total):
       SpineMomentsRow(moments: shown, total: total, onOpen: onOpenMoment)
     case .brainMap(let map):
@@ -255,7 +265,10 @@ struct SpineMemoriesRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
-        SpineMemoryLine(memory: memory, showsTimestamp: showsTimestamps && memories.count > 1)
+        SpineMemoryLine(
+          memory: memory,
+          showsTimestamp: showsTimestamps && memories.count > 1
+        )
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,6 +319,46 @@ private struct SpineMemoryLine: View {
     }
     // Two runs of one sentence: read as one utterance, not as a label and then a fragment.
     .accessibilityElement(children: .combine)
+  }
+}
+
+// MARK: - Tasks
+
+/// Tasks use the same quiet inline hierarchy as memories.
+struct SpineTasksRow: View {
+  let tasks: [SpineTask]
+  let showsTimestamps: Bool
+  let onToggle: (TaskActionItem) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
+      ForEach(tasks) { task in
+        HStack(alignment: .top, spacing: 9) {
+          Button {
+            onToggle(task.task)
+          } label: {
+            Image(systemName: task.task.completed ? "checkmark.circle.fill" : "circle")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundStyle(task.task.completed ? Ink.listeningGreen : Ink.secondary)
+          }
+          .buttonStyle(.plain)
+          .help(task.task.completed ? "Mark incomplete" : "Mark complete")
+
+          VStack(alignment: .leading, spacing: 3) {
+            Text(task.text)
+              .inkStyle(.prose, color: task.task.completed ? Ink.secondary : Ink.primary)
+              .strikethrough(task.task.completed, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            if showsTimestamps && tasks.count > 1 {
+              Text(SpineFormat.time(task.timestamp))
+                .inkStyle(.statusLabel, color: Ink.secondary)
+            }
+          }
+          .frame(maxWidth: SpineMetrics.proseMaxWidth, alignment: .leading)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 

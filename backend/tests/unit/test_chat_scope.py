@@ -177,3 +177,60 @@ def test_search_conversations_tool_rejects_other_exact_reference_under_scope():
             config=cfg,
         )
     assert "scoped to conversation only-me" in out.lower()
+
+
+def test_get_action_items_tool_forces_conversation_scope():
+    import utils.retrieval.tools.action_item_tools as action_tools
+
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "chat_scope": {"conversation_id": "only-me"},
+        }
+    }
+    with patch.object(action_tools.action_items_db, "get_action_items", return_value=[]) as get_items:
+        out = action_tools.get_action_items_tool.invoke({}, config=cfg)
+    assert get_items.call_args.kwargs.get("conversation_id") == "only-me"
+    assert "no action items" in out.lower() or "action item" in out.lower() or out
+
+
+def test_get_action_items_tool_rejects_foreign_conversation_under_scope():
+    import utils.retrieval.tools.action_item_tools as action_tools
+
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "chat_scope": {"conversation_id": "only-me"},
+        }
+    }
+    with patch.object(action_tools.action_items_db, "get_action_items") as get_items:
+        out = action_tools.get_action_items_tool.invoke({"conversation_id": "other"}, config=cfg)
+    assert "scoped to conversation only-me" in out.lower()
+    get_items.assert_not_called()
+
+
+def test_search_memories_tool_fail_closed_on_use_memory_under_timeframe():
+    import utils.retrieval.tools.memory_tools as memory_tools
+    from utils.memory.default_read_rollout import MemoryReadDecision
+    from utils.memory.memory_system import MemorySystem
+
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "chat_scope": {
+                "start_date": "2026-08-09T00:00:00+00:00",
+                "end_date": "2026-08-09T23:59:59+00:00",
+            },
+        }
+    }
+    fake = type(
+        "D",
+        (),
+        {"read_decision": MemoryReadDecision.USE_MEMORY, "text": "LEAKED", "fallback_reason": None},
+    )()
+    with patch.object(memory_tools, "pin_memory_system", return_value=MemorySystem.LEGACY), patch.object(
+        memory_tools, "search_memory_default_chat_memories_vector_decision_text", return_value=fake
+    ), patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"):
+        out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
+    assert "timeframe" in out.lower()
+    assert "LEAKED" not in out

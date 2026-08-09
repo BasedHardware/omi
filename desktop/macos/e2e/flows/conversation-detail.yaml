@@ -1,7 +1,7 @@
 version: 2
 name: conversation-detail
 tier: 2
-description: Hermetic conversation detail open + transcript drawer via capture seam
+description: Hermetic conversation detail open + full-width transcript pane via capture seam
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
@@ -35,7 +35,7 @@ steps:
       result.detail.conversation_count_increased: "true"
 
   - id: S3
-    name: Open latest conversation with transcript drawer
+    name: Open latest conversation in the transcript pane
     bridge.action:
       name: open_latest_conversation
       params:

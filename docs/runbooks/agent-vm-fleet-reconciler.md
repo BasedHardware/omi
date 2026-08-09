@@ -89,15 +89,15 @@ A name prefix or a provider 404 by itself is never sufficient to delete a
 predecessor, state disk, or temporary clone.
 
 If the immutable `bootImage` differs from the actual boot disk source, ordinary
-rollout records `recreate_required` and does not replace the VM. The sole
-exception is the explicit, development-only migration below; production keeps
-the fail-closed `recreate_required` behavior.
+rollout records `recreate_required` and does not replace the VM. Replacement
+requires a separately rendered and activated migration artifact. A normal
+development or production deploy never emits that artifact.
 
-## Development-only boot-image replacement
+## Explicit boot-image replacement
 
 Ordinary release rollout is never permission to replace a VM. A manifest may
-carry a separate `bootImageMigration` object only for a deliberately selected
-development owner:
+carry a separate `bootImageMigration` object only for deliberately selected
+owners:
 
 ```json
 {
@@ -105,27 +105,36 @@ development owner:
     "enabled": true,
     "allowedUids": ["development-only-owner"],
     "maxConcurrency": 1,
-    "soakSeconds": 600
+    "soakSeconds": 600,
+    "drainRunning": false
   }
 }
 ```
 
-The job rejects this object outside development, requires a non-empty explicit
-allowlist, and only considers an already stopped owner with no session/start or
-drain demand. It journals a deterministic replacement candidate, verifies its
+The job requires a non-empty explicit allowlist. Development can retain the
+stopped-owner-only rehearsal contract above. Production additionally requires
+the exact `state-preserving-v1` approval policy, exactly one owner, concurrency
+one, `drainRunning: true`, the exact `based-hardware` project, at least ten
+minutes of admission soak, and at least seven days of rollback retention. The
+production running-owner path first closes proxy admission, waits for zero
+active session leases, stops the
+numeric-ID-fenced predecessor, and atomically exchanges that drain for the
+durable migration journal. A crash between stop and journal creation leaves
+the release-scoped drain marker in place for the next run.
+
+The migration journals a deterministic replacement candidate, verifies its
 private authenticated health, release identity, and state receipt, then
 atomically cuts the owner pointer over while keeping proxy admission blocked.
-Every scheduled soak pass rechecks the exact candidate and receipt; only after
-the deadline and a healthy check does the journal retire the numeric-ID-fenced
-predecessor and reopen admission. Any pre-cutover failure immediately deletes
+Every scheduled admission-soak pass rechecks the exact candidate and receipt.
+After that short soak it reopens admission and continues checking the candidate
+while retaining the numeric-ID-fenced predecessor until the separate retention
+deadline. Any pre-cutover failure immediately deletes
 or detaches the exact candidate and restores the predecessor's exact state disk
 before a retry can clear the drain. Ambiguous cleanup stays drained and
-quarantined. Production replacement is hard-disabled
-in code. **Production remains disabled until dev proof** demonstrates state-disk
-continuity, source-clone attach/detach, the explicit ephemeral browser policy,
-active-owner `autoDelete: true`, and identity-fenced cleanup across a complete
-soak and rollback exercise. The production manifest must continue to omit the
-migration flag until that evidence is reviewed and accepted.
+quarantined. Browser caches, cookies, downloads, and other unlisted paths remain
+explicitly ephemeral; the production canary must communicate that expected
+re-login boundary. Production activation remains manual and one-owner-only even
+after code deployment. It is not permission for a fleet sweep.
 
 A pre-cutover failure remains retryable under the same immutable release. If a
 normal deployment advances the release first, the reconciler does not require
@@ -165,6 +174,56 @@ uses the current active-pointer generation for the compare-and-swap, and reads
 the activated generation back byte-for-byte. The next normal release manifest
 omits this flag, so migration cannot persist accidentally.
 
+### Production canary activation
+
+First install the production IAM and scheduler controls described below, with
+the scheduler intentionally paused. Deploy the desktop backend normally and
+verify that its normal active release contains no migration section. Render a
+production canary from those exact active release fields:
+
+```bash
+python3 backend/scripts/agent_vm_release.py \
+  --output /tmp/agent-vm-prod-canary.json \
+  --environment production \
+  --source-sha "$SOURCE_SHA" --image-digest "$IMAGE_DIGEST" \
+  --startup-uri "$STARTUP_URI" --startup-sha256 "$STARTUP_SHA256" \
+  --boot-image "$BOOT_IMAGE" --service-account "$SERVICE_ACCOUNT" \
+  --rollout-phase "$ROLLOUT_PHASE" \
+  --rollout-target-percent "$ROLLOUT_TARGET_PERCENT" \
+  --max-concurrency "$ROLLOUT_MAX_CONCURRENCY" \
+  --boot-image-migration-allowed-uid "$CANARY_UID" \
+  --boot-image-migration-soak-seconds 600 \
+  --boot-image-migration-retention-seconds 604800 \
+  --boot-image-migration-drain-running \
+  --boot-image-migration-approval-policy state-preserving-v1
+```
+
+Activate only through the production control. It requires the scheduler to be
+paused, a caller-supplied generation observed during the same rollout, the
+exact production project/bucket/image/startup/service-account identities, and
+a migration manifest whose non-migration fields exactly equal the active
+normal release:
+
+```bash
+AGENT_VM_MIGRATION_APPLY=1 \
+AGENT_VM_MIGRATION_APPROVAL_POLICY=state-preserving-v1 \
+AGENT_VM_MIGRATION_PROJECT=based-hardware \
+AGENT_VM_MIGRATION_BUCKET=based-hardware-agent \
+AGENT_VM_MIGRATION_EXPECTED_ACTIVE_GENERATION="$ACTIVE_GENERATION" \
+AGENT_VM_MIGRATION_MANIFEST=/tmp/agent-vm-prod-canary.json \
+bash backend/scripts/activate-agent-vm-prod-migration.sh
+```
+
+The control leaves the scheduler paused. Inspect the immutable pointer and the
+selected owner, then resume the scheduler or trigger one execution deliberately.
+Keep the canary manifest active through admission. Restore the normal pointer
+after the journal is `retained`; the immutable target-release snapshot
+keeps retirement recoverable across later normal deploys. Confirm the journal
+is `completed` after the seven-day retention deadline.
+Do not broaden the allowlist in place; production code rejects more than one
+owner. A separately reviewed batch policy follows a successful production
+canary.
+
 ## Installation order
 
 Deploy Agent Proxy with session leases first. Before the desktop-backend
@@ -193,7 +252,9 @@ AGENT_VM_RECONCILER_SCHEDULER_SA=agent-vm-reconciler-scheduler@based-hardware-de
 bash backend/scripts/apply-agent-vm-reconciler-scheduler.sh
 ```
 
-Repeat for `based-hardware`. The scheduler identity must be allowed to invoke
+Repeat for `based-hardware`, adding
+`AGENT_VM_RECONCILER_SCHEDULER_PAUSED=1` on the first production install. The
+scheduler identity must be allowed to invoke
 the Cloud Run Job. The scheduler helper creates the scheduler service account
 when absent and grants it `roles/run.invoker` on the named Cloud Run Job. The
 job identity is provisioned per environment with

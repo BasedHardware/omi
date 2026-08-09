@@ -256,6 +256,13 @@ def get_memories_tool(
         db_client=firestore_db,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        # Default-memory adapter has no date filter; fail closed under timeframe scope (#4515 / cubic).
+        if start_dt or end_dt:
+            return (
+                "Error: Chat is scoped to a timeframe. "
+                "Default memory results cannot honor date bounds; "
+                "clear the timeframe or ask about conversations in that window."
+            )
         logger.info("✅ get_memories_tool - using memory default chat memory list results")
         return default_memories.text or "No memory default memories found."
     if not chat_legacy_read_authorized(default_memories):
@@ -439,6 +446,13 @@ def search_memories_tool(
         db_client=firestore_db,
     )
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        # Default-memory vector adapter has no date filter; fail closed under timeframe scope.
+        if scope_start_dt or scope_end_dt:
+            return (
+                "Error: Chat is scoped to a timeframe. "
+                "Default memory vector results cannot honor date bounds; "
+                "clear the timeframe or ask about conversations in that window."
+            )
         logger.info("✅ search_memories_tool - using memory default chat memory results")
         return default_memories.text or f"No memory vector memories found matching '{query}'."
     if not chat_legacy_read_authorized(default_memories):

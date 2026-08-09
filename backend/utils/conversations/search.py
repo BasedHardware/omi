@@ -86,7 +86,7 @@ def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional
 
 
 def conversation_matches_date_range(
-    conversation: Dict[str, Any], start_date: Optional[int] = None, end_date: Optional[int] = None
+    conversation: Dict[str, Any], start_date: Optional[float] = None, end_date: Optional[float] = None
 ) -> bool:
     """Apply the same ``created_at`` timestamp filters to an exact hydrated conversation."""
     if start_date is None and end_date is None:
