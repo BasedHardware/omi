@@ -6,6 +6,8 @@ import type {
   HttpClient,
   Memory,
   MemoryPatch,
+  PlatformTaskCoverageState,
+  PlatformTaskItem,
   StorageBridge,
   SynthesizedMemoryItem,
   SynthesizedRecallState,
@@ -18,6 +20,7 @@ import {
   ConversationsStore,
   FoldersStore,
   MemoriesStore,
+  PlatformTasksStore,
   SynthesizedMemoriesStore,
   TasksStore,
 } from "@omi-core/domain";
@@ -139,6 +142,41 @@ export type ProductionSynthesizedMemoryStore = ObservableStore & {
 };
 
 /**
+ * The platform generation's task READ store.
+ *
+ * ADDITIVE AND SEPARATE from `ProductionTaskStore`, and the reason is NOT the
+ * one that separates the two memory stores. There the record classes genuinely
+ * differ and no honest mapping exists. Here the field sets are IDENTICAL by
+ * ruling — `DAVID-tasks-read-epoch-and-ci` D2 ratifies all thirteen precisely so
+ * the surface renders the same off either generation.
+ *
+ * What differs is `id`, and it is enough. `Task["id"]` is a `RecordId`; a
+ * platform task id is the ratified reader-scoped opaque ref, which is not a
+ * `RecordId`, does not parse as one, and is not stable across readers. And this
+ * store has no writes: `ProductionTaskStore` is a `WriteAwareStore` with
+ * `create`/`patch`/`delete` and dead letters, and satisfying that surface here
+ * would mean either inventing writes this wire does not have or handing back a
+ * store whose methods throw at runtime while satisfying the type.
+ *
+ * Writes for this generation go through `POST /v1/tasks/ops` — a separate
+ * ratified wire with its own envelope and idempotency, which is CLIENT's seam,
+ * not this one.
+ *
+ * IT IS AN `ObservableStore`, so `status()`, `subscribe()` and `refresh()`
+ * behave identically to every other store and a surface's offline/refresh
+ * rendering is unchanged across generations. That uniformity is the flip's
+ * precondition, not a nicety.
+ */
+export type ProductionPlatformTaskStore = ObservableStore & {
+  list(): Promise<readonly PlatformTaskItem[]>;
+  /** Honest coverage. `{ kind: "unknown" }` until an honest page is read. */
+  coverage(): PlatformTaskCoverageState;
+  hasMore(): boolean;
+  /** Append the next keyset page. No-op when there is no continuation. */
+  loadMore(): Promise<void>;
+};
+
+/**
  * A factory that can serve either generation, per domain.
  *
  * It IS a `ProductionStoreFactory` — every existing surface keeps working
@@ -150,6 +188,22 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
   /** Non-empty when the host asked for a generation it did not receive. */
   readonly rejected: readonly GenerationRejection[];
   openSynthesizedMemories(): Promise<ProductionSynthesizedMemoryStore>;
+  /**
+   * The platform generation's tasks READ store.
+   *
+   * NAMED SEPARATELY ON PURPOSE, and `openTasks()` is NOT repointed at it. Fable
+   * pre-ruled the flip PARKED for the wave-3 run (R7): production has no
+   * control-state publisher, so every platform-generation write denies, and no
+   * ratified path puts a real account's existing tasks behind the platform
+   * generation — a flip today serves an empty list to a real account and refuses
+   * every write. That is an outage, not a product event.
+   *
+   * So a surface that wants the platform read model asks for it BY NAME, exactly
+   * as `openSynthesizedMemories()` works. When David ratifies the data path, the
+   * flip is `openTasks: () => PlatformTasksStore.open(...)` — one line, and the
+   * rollback is the same line, which is what D2's parity bought.
+   */
+  openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
 };
 
 /**
@@ -197,5 +251,6 @@ export function createPlatformProductionStoreFactory(
     rejected,
     openSynthesizedMemories: () =>
       SynthesizedMemoriesStore.open(bridge, env, transports.platformHttp),
+    openPlatformTasks: () => PlatformTasksStore.open(bridge, env, transports.platformHttp),
   };
 }
