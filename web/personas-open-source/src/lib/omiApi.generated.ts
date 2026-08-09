@@ -1017,6 +1017,24 @@ export interface ColdStartSequenceTerminalReceipt {
   terminal_state: "completed" | "abandoned";
 }
 
+export interface ConnectorSynthesisRequest {
+  existing_memories?: Array<string>;
+  items: Array<string>;
+  source: "calendar" | "gmail" | "notes";
+}
+
+export interface ConnectorSynthesisResponse {
+  memories: Array<string>;
+  profile?: string;
+  tasks: Array<ConnectorSynthesisTask>;
+}
+
+export interface ConnectorSynthesisTask {
+  description: string;
+  due_at?: string;
+  priority?: string;
+}
+
 export type ContextMatchSignal = "app" | "person" | "document" | "meeting" | "free_time" | "dependency" | "agent";
 
 export interface ContinuationCheckpoint {
@@ -4083,6 +4101,9 @@ export interface OmiApiSchemas {
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
+  "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
+  "ConnectorSynthesisResponse": ConnectorSynthesisResponse;
+  "ConnectorSynthesisTask": ConnectorSynthesisTask;
   "ContextMatchSignal": ContextMatchSignal;
   "ContinuationCheckpoint": ContinuationCheckpoint;
   "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
@@ -5414,6 +5435,16 @@ export interface OmiApiPaths {
       operationId: "materialize_prompts_v1_chat_materialize_prompts_post";
       responses: {
         "200": MaterializePromptsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/connectors/synthesize": {
+    post: {
+      operationId: "synthesize_connector_data_v1_connectors_synthesize_post";
+      responses: {
+        "200": ConnectorSynthesisResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10298,6 +10329,27 @@ export async function record_chat_deferral_v1_chat_deferrals_post(header: { auth
 export async function materialize_prompts_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/chat/materialize-prompts`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function synthesize_connector_data_v1_connectors_synthesize_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConnectorSynthesisRequest, init?: OmiApiClientInit): Promise<ConnectorSynthesisResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/connectors/synthesize`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -16263,4 +16315,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 395 client methods generated.
+// Total: 396 client methods generated.
