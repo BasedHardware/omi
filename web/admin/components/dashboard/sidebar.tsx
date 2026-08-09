@@ -21,7 +21,6 @@ import {
   ShieldAlert,
   FlaskConical,
   Rocket,
-  Tv,
   Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,11 +52,6 @@ export function DashboardSidebar() {
       title: "Dashboard",
       href: "/dashboard",
       icon: LayoutGrid,
-    },
-    {
-      title: "TV wall links",
-      href: "/dashboard/tv-links",
-      icon: Tv,
     },
     {
       title: "Apps",
