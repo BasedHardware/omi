@@ -122,10 +122,26 @@ export const LANES = {
     // 280-282), so running it here instead of alongside them keeps the suite
     // from executing twice. It also re-verifies the vendored contract tarball
     // against contracts.lock.json, which is the seam this lane is really about.
+    /**
+     * THE FOURTH STEP IS NOT NEW COVERAGE — IT IS COVERAGE THAT RAN NOWHERE.
+     *
+     * `integration/lib/*.test.mjs` are the red-proofs for L3's own assertion
+     * path: the file that exists because the seventh failure of that night was
+     * inside the acceptance path built to catch the other six. They were run by
+     * no lane. `pnpm verify` is scoped to `core/` and these live outside it, so
+     * "an assertion that has never been seen red does not count" was being
+     * enforced by a suite nobody executed — the rule applied to product code and
+     * exempting the machinery that judges product code.
+     *
+     * They belong in L2 and not L1: they are outside `core/`, they are the
+     * companion of the cross-side test already in this lane, and they are
+     * hermetic — no ports, no servers, safe alongside a live stack.
+     */
     steps: [
       { cwd: PLATFORM_REPO, command: "bun run qa:contracts" },
       { cwd: PLATFORM_REPO, command: "bun test integration/" },
       { cwd: CORE_REPO, command: "node --test integration/cross-side/wire-agreement.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/lib/receipts.test.mjs integration/lib/run-report.test.mjs integration/lib/write-journey.test.mjs" },
     ],
   },
   L3: {
