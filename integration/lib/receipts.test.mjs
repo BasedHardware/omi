@@ -51,7 +51,8 @@ describe("a required arbiter must be OBSERVED, not merely present", () => {
       /requires OBSERVED arbiter counter\(s\) \[servedRequests, servedReads\]/,
     );
     // red-proof: restore `!(key in arbiters)` as the filter — null counters
-    // satisfy it and this throws nothing. RED-PROOF PENDING.
+    // satisfy it and nothing throws. APPLIED, OBSERVED RED, REVERTED: it
+    // reddens this test and the one-counter case below.
   });
 
   it("refuses a pass where only one counter was read", () => {
@@ -76,7 +77,9 @@ describe("a required arbiter must be OBSERVED, not merely present", () => {
     assert.equal(receipt.arbiters.servedReads, 0);
     // red-proof: change the filter to `!arbiters[key]` — zero is falsy, this
     // throws, and the lane loses the ability to record a served-nothing run.
-    // RED-PROOF PENDING.
+    // APPLIED, OBSERVED RED, REVERTED (this test only). The two mutations
+    // redden disjoint tests, which is what shows the guard is a band and not a
+    // one-sided check.
   });
 
   it("a FAIL receipt may record whatever it managed to observe, including nothing", () => {
