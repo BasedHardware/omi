@@ -324,13 +324,14 @@ async def test_returns_none_after_all_none_retries_exhausted():
     assert len(sleep_calls) == 2  # slept between retries
 
 
-def test_self_hosted_deepgram_options_never_enable_keepalive():
-    """The retained self-hosted socket must not create a keepalive thread (#5870)."""
-    from utils.stt.streaming import _self_hosted_deepgram_options
+def test_deepgram_options_never_enable_keepalive():
+    """No Deepgram socket may create a keepalive thread (#5870)."""
+    from utils.stt.streaming import DEEPGRAM_CLOUD_ENDPOINT, _deepgram_options
 
-    opts = _self_hosted_deepgram_options('https://dg.example.test')
-    assert 'keepalive' not in opts.options
-    assert opts.url == 'https://dg.example.test'
+    for endpoint in ('https://dg.example.test', DEEPGRAM_CLOUD_ENDPOINT):
+        opts = _deepgram_options(endpoint)
+        assert 'keepalive' not in opts.options
+        assert opts.url == endpoint
 
 
 @pytest.mark.asyncio

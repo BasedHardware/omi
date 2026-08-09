@@ -70,6 +70,19 @@ def test_production_resolver_fails_closed_for_legacy_memory_user(monkeypatch):
     assert decision.intelligence_product_enabled is False
 
 
+def test_removed_first_user_cannot_reenable_tasks_or_chat_first_via_stale_read_control():
+    decision = resolve_task_intelligence_for_user(
+        uid='vi7SA9ckQCe4ccobWNxlbdcNdC23',
+        workflow_mode='read',
+        account_generation=7,
+    )
+
+    assert decision.legacy_reads_authoritative is True
+    assert decision.legacy_writes_enabled is True
+    assert decision.intelligence_product_enabled is False
+    assert resolve_chat_first_ui(decision) is False
+
+
 def test_noncanonical_dev_fixture_cannot_bypass_the_code_owned_cohort(monkeypatch):
     monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
 

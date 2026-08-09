@@ -1,30 +1,48 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — embedded chat, insight cards, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — the query bar, the results panel and its header controls, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
 preconditions:
   - auth_ready
 
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app shows the Home tab. Top nav bar should have Home, Memory, Tasks, Apps buttons. Home should be the active/selected tab."
+    do: "Verify the app opens on the search surface. The top bar shows the Omi mark, Library and Apps on the left and three wordless icons (microphone, screen capture, settings) on the right. Below it, a query bar with the placeholder 'Search what you've seen and heard…' sits above a separate results panel with a visible gap between them."
     expect:
       interactive_count: { min: 6 }
       text_visible:
         - Home
 
   - id: S2
-    name: Verify chat input area
-    do: "Verify the chat input area is present on the Home tab. There should be a text field for typing messages and an Attachments button. Look for the send/connect button."
+    name: Verify the query bar is a composer
+    do: "Verify the query bar carries every control needed to hold a conversation: the text field, a paperclip (Attach files), the two keyboard hints ('⏎ Search' and '⌘⏎ Ask'), and the push-to-talk microphone disc."
     expect:
-      interactive_count: { min: 3 }
+      interactive_count: { min: 4 }
+
+  - id: S2b
+    name: Ask, then stop
+    do: "Type a question and press ⌘⏎. The panel swaps to the answer thread. While the answer is still streaming, verify the '⌘⏎ Ask' hint has been replaced by a 'Stop' button in the same slot, and click it. The turn ends without an error card."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S2c
+    name: Conversation menu and the way back
+    do: "In answer mode, open the '…' menu next to '‹ Results' and verify it offers Copy conversation, Clear conversation and AI settings. Click '‹ Results', then navigate to Conversations and back to Home: the panel's corner now offers a 'Chat ›' chip. Click it and verify the same conversation is still there with no duplicated turns."
+    expect:
+      interactive_count: { min: 2 }
 
   - id: S3
     name: Verify Capture and Listening status
@@ -33,10 +51,11 @@ steps:
       interactive_count: { min: 2 }
 
   - id: S4
-    name: Verify insight cards
-    do: "Check the Home page content area for insight cards or status banners. These may include screen recording permission warnings, task suggestions, or conversation observations."
+    name: Reach the Brain Map from the panel's filter row
+    do: "In results mode, verify the panel header carries a 'Brain Map ›' control beside 'Filter ›' — in the header, not among the All / Conversations / Memories / Rewind chips, which only narrow the list in place. Click it and verify the app lands on the Library page with its Brain Map view selected (the hub's own switcher shows Brain Map as current). Press Escape to return Home."
     expect:
-      interactive_count: { min: 1 }
+      text_visible:
+        - Brain Map
 
   - id: S5
     name: Verify Settings gear accessible

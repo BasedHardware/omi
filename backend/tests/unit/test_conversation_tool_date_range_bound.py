@@ -12,6 +12,7 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -70,7 +71,12 @@ for _name, _attrs in {
     "models.other": ["Person"],
     "utils.conversations.factory": ["deserialize_conversation"],
     "utils.conversations.render": ["conversations_to_string"],
-    "utils.conversations.search": ["keyword_search_conversation_ids", "merge_conversation_search_ids"],
+    "utils.conversations.search": [
+        "keyword_search_conversation_ids",
+        "merge_conversation_search_ids",
+        "parse_exact_conversation_reference",
+        "conversation_matches_date_range",
+    ],
     "utils.llm.clients": ["embeddings"],
     "utils.retrieval.agentic": ["agent_config_context"],
 }.items():
@@ -79,6 +85,34 @@ for _name, _attrs in {
         setattr(_m, _a, MagicMock())
 
 ct = _load("utils.retrieval.tools.conversation_tools", "utils/retrieval/tools/conversation_tools.py")
+
+
+class TestExactConversationReference:
+    def test_exact_reference_skips_semantic_search(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        ct.parse_exact_conversation_reference.return_value = conversation_id
+        ct.conversation_matches_date_range.return_value = True
+        ct.keyword_search_conversation_ids.reset_mock()
+        ct.vector_db.query_vectors = MagicMock(return_value=[])
+        ct.conversations_db.get_conversations_by_id = MagicMock(
+            return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]
+        )
+        ct.deserialize_conversation = MagicMock(
+            return_value=SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": conversation_id})
+        )
+        ct.conversations_to_string = MagicMock(return_value="[formatted]")
+        ct.notification_db.get_user_time_zone = MagicMock(return_value="UTC")
+
+        result = ct.search_conversations_tool.invoke(
+            {"query": conversation_id},
+            config={"configurable": {"user_id": "test-uid", "conversations_collected": []}},
+        )
+
+        assert "matching exactly" in result
+        assert "[formatted]" in result
+        ct.keyword_search_conversation_ids.assert_not_called()
+        ct.vector_db.query_vectors.assert_not_called()
+        ct.conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
 
 
 class TestCapConversationsForLlm:

@@ -4,6 +4,15 @@ import XCTest
 
 @MainActor
 final class DashboardIntelligenceStoreTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testEmptyProjectionIsAValidCalmState() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: [])
@@ -743,6 +752,15 @@ private final class MemoryDashboardOutbox: DashboardFeedbackOutboxPersisting {
 
 @MainActor
 final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "DashboardFeedbackOutboxOwnerIsolationTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

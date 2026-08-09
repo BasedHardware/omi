@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { PeriodChangeIndicator } from "@/components/dashboard/period-change-indicator";
+import { latestPeriodChange } from "@/lib/period-change";
 import {
   Bar,
   XAxis,
@@ -186,6 +188,12 @@ export default function ChatLabPage() {
     const total = up + down;
     return { total, up, down, pct: total > 0 ? Math.round((up / total) * 100) : 0 };
   }, [ratingsData]);
+
+  const ratingsPeriodChange = latestPeriodChange(
+    ratingsData?.weeks ?? [],
+    (week) => week.thumbs_up + week.thumbs_down,
+    "vs previous week",
+  );
 
   // --- Prompts ---
   const { data: promptsData, isLoading: promptsLoading } = useSWR<PromptsData>(
@@ -430,11 +438,12 @@ export default function ChatLabPage() {
 
       {/* Section 1: Production Ratings Chart */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
           <CardTitle className="flex items-center gap-2">
             Production Ratings
             {ratingsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
           </CardTitle>
+          <PeriodChangeIndicator change={ratingsPeriodChange} />
         </CardHeader>
         <CardContent>
           {ratingsData?.weeks?.length ? (

@@ -345,6 +345,9 @@ jobs:
             --allow-unauthenticated
             --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
+            --network=default
+            --subnet=default
+            --vpc-egress=private-ranges-only
             --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
           env_vars: |
@@ -353,6 +356,7 @@ jobs:
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
             GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com
             GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com
@@ -547,7 +551,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
           flags: >-
             --command=python
-            --args=-m,jobs.agent_vm_reconciler
+            '--args=-m,jobs.agent_vm_reconciler'
             --max-retries=0
             --task-timeout=3600s
             --service-account=agent-vm-reconciler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
@@ -560,6 +564,7 @@ jobs:
             AGENT_VM_ENVIRONMENT=production
             AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
+            AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS=86400
 
       - name: Save previous Agent VM release pointer
         if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
@@ -613,6 +618,7 @@ jobs:
           gcloud storage cp \
             "${{ steps.agent-vm-release.outputs.manifest_uri }}" \
             "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+            --cache-control='no-store,max-age=0' \
             --if-generation-match="$(cat "$RUNNER_TEMP/agent-vm-active-previous.generation")"
           echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
           activated_generation="$(gcloud storage objects describe \
@@ -641,7 +647,7 @@ jobs:
           restored_revision="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.traffic[percent=100].revisionName)')"
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
           if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
             echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
             exit 1
@@ -672,7 +678,8 @@ jobs:
           fi
           if [[ "$(cat "$RUNNER_TEMP/agent-vm-active-previous.state")" == "present" ]]; then
             gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
-              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --if-generation-match="$expected_generation"
+              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+              --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"
           else
             gcloud storage rm "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
               --if-generation-match="$expected_generation" --quiet

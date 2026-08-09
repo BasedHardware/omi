@@ -1238,7 +1238,7 @@ class ChatToolExecutor {
     }
     let changes: Int
     do {
-      changes = try await authorization.withCommitLease {
+      changes = try await authorization.withCommitLeaseSuppressingSupersededResult {
         try await dbQueue.write { db -> Int in
           try authorization.require()
           try db.execute(sql: query, arguments: StatementArguments(parameters))
@@ -2400,6 +2400,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 
@@ -2419,6 +2420,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 
@@ -2438,6 +2440,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 

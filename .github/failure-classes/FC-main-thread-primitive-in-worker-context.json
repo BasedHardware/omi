@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-main-thread-primitive-in-worker-context",
+  "violated_contract": "Code that an entrypoint schedules onto an executor or worker thread must not depend on main-thread-only process primitives (POSIX signal timers and handlers); deadline and interrupt enforcement must function in whichever execution context callers schedule.",
+  "canonical_prevention": "Enforce call deadlines with context-agnostic mechanisms (watchdog futures plus transport-level timeouts) instead of signal timers, and cover the seam with a regression test that exercises the wrapper from a non-main thread.",
+  "evidence_prs": [
+    11163
+  ],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

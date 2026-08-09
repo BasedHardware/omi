@@ -257,7 +257,6 @@ class AssistantCoordinator {
   /// Register the default set of assistants
   func registerDefaultAssistants() throws {
     // These will be added as we create the assistants
-    // try register(FocusAssistant())
     // try register(TaskAssistant())
   }
 }

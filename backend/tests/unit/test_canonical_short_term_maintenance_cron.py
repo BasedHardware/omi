@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -30,6 +31,17 @@ CANONICAL_B = "uid-canonical-b"
 def _enable_for(monkeypatch, *uids: str) -> None:
     monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "true")
     monkeypatch.setattr(cron, "list_canonical_cohort_uids", lambda: list(uids))
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_cohort_lifecycle",
+        lambda **_kwargs: SimpleNamespace(
+            write_enrolled_uids=(),
+            backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=0)),
+            backfill_ready_uids=tuple(uids),
+            generation_reconciled_uids=(),
+            generation_reconcile_errors=(),
+        ),
+    )
 
 
 def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenance(
@@ -50,6 +62,52 @@ def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenanc
     assert summary == cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron-disabled")
     list_uids.assert_not_called()
     run_maintenance.assert_not_called()
+
+
+def test_enabled_cohort_runs_lifecycle_before_maintenance(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    lifecycle_report = SimpleNamespace(
+        write_enrolled_uids=(CANONICAL_A,),
+        backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=1)),
+        backfill_ready_uids=(CANONICAL_A,),
+        generation_reconciled_uids=(CANONICAL_A,),
+        generation_reconcile_errors=(),
+    )
+    lifecycle_calls = []
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_cohort_lifecycle",
+        lambda **kwargs: lifecycle_calls.append(kwargs) or lifecycle_report,
+    )
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kwargs: MaintenanceReport(uid=uid),
+    )
+    client = object()
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=client,
+        now=NOW,
+        run_id="cron-lifecycle",
+    )
+
+    assert lifecycle_calls == [{"db_client": client}]
+    assert summary.lifecycle_write_enrolled_total == 1
+    assert summary.lifecycle_backfill_read_ready_total == 1
+    assert summary.lifecycle_generation_reconciled_total == 1
+
+
+def test_lifecycle_failure_blocks_graph_staging_but_not_per_user_maintenance(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    maintenance = MagicMock(side_effect=lambda uid, **_kwargs: MaintenanceReport(uid=uid))
+    monkeypatch.setattr(cron, "run_canonical_cohort_lifecycle", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError()))
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-lifecycle-failure")
+
+    assert summary.errors == ["canonical_cohort_lifecycle:RuntimeError"]
+    maintenance.assert_called_once()
 
 
 def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatch):
@@ -85,6 +143,34 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     assert graph_calls[0]["limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
     assert graph_calls[0]["apply_limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
     assert graph_calls[0]["scan_limit"] == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+
+
+def test_graph_backfill_uses_per_item_fences_while_lifecycle_staging_is_incomplete(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_cohort_lifecycle",
+        lambda **_kwargs: SimpleNamespace(
+            write_enrolled_uids=(),
+            backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=0)),
+            backfill_ready_uids=(),
+            generation_reconciled_uids=(),
+            generation_reconcile_errors=(),
+        ),
+    )
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kwargs: MaintenanceReport(uid=uid),
+    )
+    graph_calls = []
+    monkeypatch.setattr(cron, "run_enrichment", lambda **kwargs: graph_calls.append(kwargs) or {"outcomes": {}})
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-not-ready")
+
+    assert len(graph_calls) == 1
+    assert summary.graph_enriched_total == 0
 
 
 def test_graph_backfill_scan_size_is_bounded_to_the_current_page_multiple(monkeypatch):
