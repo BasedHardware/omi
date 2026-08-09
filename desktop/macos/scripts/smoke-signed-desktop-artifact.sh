@@ -554,7 +554,6 @@ assert_helper_runtime_integrity() {
   missing_runtime_payload="$(omi_agent_runtime_payload_missing "$APP_BUNDLE" | tr '\n' ' ')"
   [[ -z "${missing_runtime_payload// /}" ]] \
     || fail "agent runtime payload incomplete: $missing_runtime_payload"
-  [[ -f "$resources/agent/src/runtime/omi-tool-manifest.ts" ]] || fail "agent tool manifest missing"
   [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
   local sharp_arch expected_arch sharp_native libvips_native
   for sharp_arch in arm64 x64; do
@@ -745,7 +744,7 @@ if result.get("success") is not True or result.get("stage") != "complete":
     raise SystemExit(f"auth storage canary result: {result}")
 PY
   started_at=$SECONDS
-  while kill -0 "$canary_pid" >/dev/null 2>&1 && $((SECONDS - started_at)) -lt 5; do
+  while kill -0 "$canary_pid" >/dev/null 2>&1 && (( SECONDS - started_at < 5 )); do
     sleep 1
   done
   if kill -0 "$canary_pid" >/dev/null 2>&1; then

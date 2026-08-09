@@ -310,7 +310,7 @@ def get_current_goal_advice(
     if not goal:
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal['id'], uid)
+    return get_goal_advice(goal_id=goal['id'], uid=uid)
 
 
 class ProgressExtractRequest(BaseModel):

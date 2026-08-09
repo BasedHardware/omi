@@ -30,11 +30,11 @@
 //    strand a user in a window with no visible close control *and* no keyboard one.
 //  - **Moving has two handles, deliberately.** `.hiddenTitleBar` keeps a real (transparent) title bar
 //    over the top band, which still drags — that band is why the shell reserves
-//    `GlassShell.titlebarClearance` and draws nothing in it. `isMovableByWindowBackground` adds the
-//    second: on a window that is mostly desktop, the parts that are not a control drag it too, which is
-//    how the bar this file's chrome sits in becomes a drag handle without any view knowing it is one.
-//    Controls, text fields and scroll views consume their own drags and are unaffected. Views that own
-//    their own drags opt out with `mouseDownCanMoveWindow` (see `RewindTrackNSView`).
+//    `GlassShell.titlebarClearance` and draws nothing in it. SwiftUI's window-drag gesture covers the
+//    rest of the window. The native `isMovableByWindowBackground` switch cannot do that safely:
+//    AppKit sees a SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background,
+//    and steals its click. Keeping both recognition paths in SwiftUI lets its gesture arena give an
+//    ordinary click to the Button and a drag to the window without intercepting either event.
 //
 //  ## The two presentations, and why there are two
 //
@@ -159,7 +159,10 @@ enum ShellWindowChrome {
     // window between the two calls with no way to be closed at all.
     window.styleMask.formUnion(keyboardWindowCommands)
     hideStandardButtons(in: window)
-    window.isMovableByWindowBackground = true
+    // AppKit cannot see SwiftUI controls inside an NSHostingView. The hosting view reports that a
+    // mouse-down may move the window even when the point is a Button, so this native switch turns
+    // ordinary clicks into window drags. `ShellWindowDragSurface` keeps that ownership in SwiftUI.
+    window.isMovableByWindowBackground = false
     window.level = presentation == .summoned ? .floating : .normal
     // Always `false`, in both presentations, and asserted rather than omitted — see this file's
     // header. A shell that ordered itself out whenever another app took focus deleted the window
@@ -206,11 +209,52 @@ enum ShellWindowChrome {
       && window.titleVisibility == .hidden
       && window.titlebarSeparatorStyle == .none
       && buttonsAreHidden
-      && window.isMovableByWindowBackground
+      && !window.isMovableByWindowBackground
       && window.level == (presentation == .summoned ? .floating : .normal)
       && !window.hidesOnDeactivate
       && window.collectionBehavior.contains(.moveToActiveSpace)
       && hasExpectedSpaceBehavior
+  }
+
+  static func draggedOrigin(windowOrigin: NSPoint, translation: CGSize) -> NSPoint {
+    NSPoint(
+      x: windowOrigin.x + translation.width,
+      y: windowOrigin.y - translation.height)
+  }
+}
+
+/// Keeps click recognition and window-drag recognition in SwiftUI's gesture arena. This is the
+/// platform boundary AppKit's background-drag switch cannot see through an `NSHostingView`.
+@MainActor
+struct ShellWindowDragSurface: ViewModifier {
+  @State private var windowOrigin: NSPoint?
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if #available(macOS 15.0, *) {
+      content.gesture(WindowDragGesture(), including: .gesture)
+    } else {
+      // `WindowDragGesture` was introduced in macOS 15. Keep the macOS 14 deployment floor usable
+      // with a lower-precedence gesture: child controls keep their own clicks and drags, while the
+      // shell's non-control surfaces remain window handles.
+      content.gesture(
+        DragGesture(minimumDistance: 3)
+          .onChanged { value in
+            guard let window = ShellSummon.shellWindow() else { return }
+            let origin = windowOrigin ?? window.frame.origin
+            windowOrigin = origin
+            window.setFrameOrigin(
+              ShellWindowChrome.draggedOrigin(windowOrigin: origin, translation: value.translation))
+          }
+          .onEnded { _ in windowOrigin = nil },
+        including: .gesture)
+    }
+  }
+}
+
+extension View {
+  func shellWindowDragSurface() -> some View {
+    modifier(ShellWindowDragSurface())
   }
 }
 

@@ -143,6 +143,8 @@ env:
     value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: ACCOUNT_CUTOVER_ENFORCEMENT
