@@ -56,7 +56,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_LLM_GATEWAY_FEATURE_MODE:
-          value: 'off'
+          value: gateway
           category: rollout
         MEMORY_MODE:
           value: 'off'
@@ -190,7 +190,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           MEMORY_MODE:
             value: 'off'
@@ -266,7 +266,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           MEMORY_MODE:
             value: 'off'
@@ -323,7 +323,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           MEMORY_MODE:
             value: 'off'
@@ -362,7 +362,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           MEMORY_MODE:
             value: 'off'
@@ -381,7 +381,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           MEMORY_MODE:
             value: 'off'

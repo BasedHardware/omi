@@ -54,7 +54,7 @@ environment_shared:
           value: gateway
           category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
-          value: direct
+          value: gateway
           category: rollout
         GOOGLE_CLIENT_ID:
           config_map:
@@ -186,7 +186,7 @@ environment_shared:
             value: gateway
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
-            value: direct
+            value: gateway
             category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
@@ -266,7 +266,7 @@ environment_shared:
             value: gateway
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
-            value: direct
+            value: gateway
             category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
@@ -344,7 +344,7 @@ environment_shared:
             value: gateway
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
-            value: direct
+            value: gateway
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             provisional: true
@@ -440,7 +440,7 @@ environment_shared:
             value: gateway
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
-            value: direct
+            value: gateway
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             provisional: true
@@ -553,7 +553,7 @@ environment_shared:
             value: gateway
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
-            value: direct
+            value: gateway
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
