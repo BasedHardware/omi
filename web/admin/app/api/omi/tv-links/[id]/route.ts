@@ -6,12 +6,13 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } },
+  props: { params: Promise<{ id: string }> },
 ) {
   const auth = await verifyAdmin(request);
   if (auth instanceof NextResponse) return auth;
 
-  const id = context.params?.id;
+  const params = await props.params;
+  const id = params?.id;
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
