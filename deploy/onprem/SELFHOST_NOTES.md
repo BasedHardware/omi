@@ -107,14 +107,19 @@ Inference is **configured, not bundled**. The backend points at endpoints the op
 often a dedicated GPU host — instead of shipping an LLM as a prod service. Two groups:
 
 **LLM + embeddings — one OpenAI-compatible endpoint (external).** Ollama/vLLM/TEI serve both
-`/v1/chat/completions` and `/v1/embeddings`, so a single URL covers chat and embeddings. Wire it
-in `backend.env`:
+`/v1/chat/completions` and `/v1/embeddings`, so a single server covers both — but they reach it
+differently: **embeddings go direct** from the backend; **chat goes through the on-prem
+`llm_gateway` service** (the backend speaks lane ids, not model names — see "Chat LLM (on-prem)"
+below). Wire it in `backend.env`:
 
 ```
-# chat
+# chat — through the on-prem `llm_gateway` service (NOT the endpoint directly; see "Chat LLM
+# (on-prem)" below). The endpoint URL itself goes in llm_gateway.env (OPENAI_BASE_URL).
 OMI_LLM_GATEWAY_FEATURE_MODE=gateway
-OMI_LLM_GATEWAY_URL=http://<ollama-host>:11434/v1
-# embeddings (the one hard-cloud gap, now pointable)
+OMI_LLM_GATEWAY_URL=http://llm_gateway:9080
+OMI_LLM_GATEWAY_SERVICE_TOKEN=<same value as llm_gateway.env>
+OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true          # OMI_ENV_STAGE=offline is prod-like
+# embeddings — direct (they do NOT go through the gateway; the one hard-cloud gap, now pointable)
 OMI_EMBEDDINGS_BASE_URL=http://<ollama-host>:11434/v1
 OMI_EMBEDDINGS_MODEL=nomic-embed-text
 QDRANT_VECTOR_DIM=768        # MUST equal the embedding model's dimension
@@ -135,6 +140,44 @@ docker run --rm --network host \
   -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
   python -m pytest tests/contract/test_embeddings_live_contract.py -q -p no:cacheprovider
 # expected: 3 passed  (real vector, correct dim, deterministic, no OpenAI/Google egress)
+```
+
+### Chat LLM (on-prem) — via the `llm_gateway` service (D32)
+
+The mobile "Ask Omi" chat (`POST /v2/messages`) does **not** call your Ollama/vLLM directly: the
+backend sends an `omi:auto:*` **lane** id, and only the in-repo **`llm_gateway`** service resolves the
+lane to a concrete model and forwards OpenAI-compatibly to your endpoint. So on-prem chat needs the
+gateway running — pointing `OMI_LLM_GATEWAY_URL` straight at Ollama does **not** work (Ollama has no
+model named `omi:auto:chat-agent`). The gateway is a compose service (`profile: chat`) that reuses the
+backend image; the LLM itself stays operator-provided (ADR-0035, not bundled).
+
+Setup:
+```bash
+cd deploy/onprem
+cp llm_gateway.env.example llm_gateway.env      # set OPENAI_BASE_URL (your Ollama/vLLM /v1) + a token
+TOK=$(openssl rand -hex 24)
+sed -i "s|^OMI_LLM_GATEWAY_SERVICE_TOKEN=.*|OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK|" llm_gateway.env
+# backend.env: same token + the gateway wiring (see backend.env.example "chat LLM gateway"):
+#   OMI_LLM_GATEWAY_FEATURE_MODE=gateway · OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 ·
+#   OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK · OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
+# Pin the chat model to one your endpoint serves (all features -> one local model):
+#   deploy/onprem/llm_gateway/generated_route_overrides.yaml   (default: qwen2.5:14b)
+docker compose --profile chat up -d
+```
+
+Three on-prem requirements the gateway wiring encodes (each was a real failure the E2E caught):
+1. **the `llm_gateway` service must run** — `OMI_LLM_GATEWAY_URL` points at it (`:9080`), not at Ollama;
+2. **`OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true`** — gateway mode is blocked outside dev, and
+   `OMI_ENV_STAGE=offline` is treated as prod-like;
+3. **tiktoken encodings are baked into the backend image** (build-time) so the chat token-budget step
+   needs no runtime download (would hit `openaipublic.blob.core.windows.net` → fails no-egress).
+
+Reproducible live E2E (declarative, no ad-hoc `docker run`) — brings the profile up, sends a real
+chat message, asserts a streamed answer, and proves the backend has zero egress:
+```bash
+deploy/onprem/run-chat-e2e.sh
+# expected: PASS — real streamed answer from your local model; backend cannot reach api.openai.com.
+# (Uses LOCAL_DEVELOPMENT=true dev-auth, Bearer dev -> uid 123, for a focused chat smoke test.)
 ```
 
 Full on-prem semantic search round-trip (embeddings + vector store together — Qdrant on loopback):

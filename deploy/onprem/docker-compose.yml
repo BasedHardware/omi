@@ -159,6 +159,45 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # LLM gateway (D32, ADR-0035) — REQUIRED for on-prem chat. The backend never talks to Ollama/vLLM
+  # directly: it sends the gateway an omi:auto:* LANE id (not a model name), and only this service
+  # resolves the lane -> concrete model and forwards OpenAI-compatibly to the operator's endpoint
+  # (OPENAI_BASE_URL). Reuses the backend image (llm_gateway ships inside it). Joins `edge` because
+  # the operator's LLM host is outside the internal `omi` net (reached via host.docker.internal).
+  # Opt-in with the `chat` profile so the hermetic baseline (no egress) stays the default:
+  #   docker compose --profile chat up -d
+  # Point the backend at it in backend.env: OMI_LLM_GATEWAY_FEATURE_MODE=gateway +
+  # OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 + a matching OMI_LLM_GATEWAY_SERVICE_TOKEN.
+  llm_gateway:
+    image: omi-onprem-backend:latest
+    build:
+      context: ../../
+      dockerfile: backend/Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    profiles: ["chat"]
+    command:
+      - sh
+      - -c
+      - exec uvicorn llm_gateway.main:app --host 0.0.0.0 --port 9080 --loop uvloop
+    env_file:
+      - ./llm_gateway.env
+    # On-prem lane->model map (all features pinned to your single local model). Mounted OVER the
+    # image's cloud config so the committed config stays untouched; edit the model in this file.
+    volumes:
+      - ./llm_gateway/generated_route_overrides.yaml:/app/llm_gateway/config/generated_route_overrides.yaml:ro
+    # The operator LLM endpoint (OPENAI_BASE_URL) is outside compose; reach the host with this alias.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [omi, edge]
+    restart: unless-stopped
+
   # ---- Optional local inference (ADR-0035) — GPU services, opt-in via the `inference` profile.
   # These are the in-repo GPU servers (STT / diarization / translation). LLM + embeddings are
   # deliberately NOT here: they are an operator-provided OpenAI-compatible endpoint (Ollama/vLLM)
