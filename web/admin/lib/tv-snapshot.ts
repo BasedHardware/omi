@@ -137,10 +137,9 @@ export function daysUntilMillion(
   }
 
   const series: SeriesPoint[] = [];
-  if (total != null && daysSorted.length) {
-    // Use the completed-day total for the series when available, so today's
-    // partial signups don't inflate every historical point.
-    let running = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : total;
+  const seriesAnchor = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : total;
+  if (seriesAnchor != null && daysSorted.length) {
+    let running = seriesAnchor;
     const rev: SeriesPoint[] = [];
     for (let i = daysSorted.length - 1; i >= 0; i--) {
       const day = daysSorted[i];
@@ -676,8 +675,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       results[4].status === "fulfilled" ||
       results[5].status === "fulfilled" ||
       results[6].status === "fulfilled" ||
-      results[7].status === "fulfilled" ||
-      results[8].status === "fulfilled";
+      results[7].status === "fulfilled";
   }
 
   // Ensure Stripe has settled before evaluating sources / building the
