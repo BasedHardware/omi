@@ -17,6 +17,17 @@ import {
   resolveDeclaredContractVersion,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import {
+  TASKS_READ_CONTRACT_VERSION,
+  TASK_ITEM_FIELDS,
+  isTrustedTaskCompletenessHonest,
+  isTrustedTaskPageData,
+  isTrustedTaskWindowHonest,
+  parseTaskFrontier,
+  parseTaskItemId,
+  parseTaskPageJson,
+  type TaskRead,
+} from "@omi-core/ratified-contracts/projections/tasks";
+import {
   isTrustedRecallTraceData,
   parseRecallTraceJson,
   parseRecallTraceRef,
@@ -282,3 +293,97 @@ const sampleEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
 if (sampleEnvelope === null || !isTrustedWriteOpEnvelope(sampleEnvelope)) {
   throw new Error("a well-formed tasks envelope must parse");
 }
+
+// ── The tasks read wire, exercised across the tarball boundary ─────────────
+//
+// Same discipline as the write wire above: a consumer that only typechecks
+// proves the `.d.ts` parses, and the half that has been wrong before is the
+// shipped RUNTIME. Every assertion here runs against the packed tarball.
+const taskId = parseTaskItemId(`task1_${"c".repeat(64)}`);
+const taskDeclaredFrontier = parseTaskFrontier("frontier-v1:tasks-declared");
+if (!taskId || !taskDeclaredFrontier) throw new Error("tasks boundary values must parse");
+if (parseTaskItemId("task one two") !== null) throw new Error("an id carrying whitespace must not parse");
+if (parseTaskItemId("") !== null) throw new Error("an empty id must not parse");
+
+const taskPage: TaskRead.Page = {
+  contractVersion: TASKS_READ_CONTRACT_VERSION,
+  items: [{
+    id: taskId,
+    description: "Ship the tasks read wire",
+    completed: false,
+    completedAt: null,
+    dueAt: 1786000000,
+    owner: null,
+    source: "assistant",
+    provenance: ["assistant:summarizer-v3"],
+    sortOrder: 1.5,
+    indentLevel: 0,
+    createdAt: 1785900000,
+    updatedAt: 1785950000,
+    revision: "rev-9",
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "tasks-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: taskDeclaredFrontier,
+      newestAppliedFrontier: taskDeclaredFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+
+if (!isTrustedTaskWindowHonest(taskPage.window)) throw new Error("valid tasks window rejected");
+if (!isTrustedTaskCompletenessHonest(taskPage)) throw new Error("valid tasks coverage envelope rejected");
+if (!isTrustedTaskPageData(taskPage)) throw new Error("valid trusted tasks page rejected");
+if (!parseTaskPageJson(JSON.stringify(taskPage))) throw new Error("valid canonical tasks page JSON rejected");
+
+// The checkable half of `complete`: an applied frontier behind the declared one
+// contradicts the claim, and the validator must say so rather than trusting the
+// adjective.
+if (isTrustedTaskPageData({
+  ...taskPage,
+  completeness: {
+    ...taskPage.completeness,
+    frontiers: { ...taskPage.completeness.frontiers, newestAppliedFrontier: parseTaskFrontier("frontier-v1:tasks-behind")! },
+  },
+})) throw new Error("a lagging applied frontier must not read as complete coverage");
+
+// D2's thirteen, asserted over the exported list rather than over a retyped
+// one. The count is the ruling's own number.
+if (TASK_ITEM_FIELDS.length !== 13) throw new Error("the ratified tasks item must carry exactly thirteen fields");
+
+type TaskItemShapeMustStayFrozen = AssertNever<ExactKeys<
+  TaskRead.Item,
+  "id" | "description" | "completed" | "completedAt" | "dueAt" | "owner" | "source"
+  | "provenance" | "sortOrder" | "indentLevel" | "createdAt" | "updatedAt" | "revision"
+>>;
+type TaskPageShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Page, "contractVersion" | "items" | "window" | "completeness" | "absence">>;
+type TaskWindowShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Window, "status" | "complete" | "hasMore" | "nextCursor">>;
+void (null as unknown as TaskItemShapeMustStayFrozen);
+void (null as unknown as TaskPageShapeMustStayFrozen);
+void (null as unknown as TaskWindowShapeMustStayFrozen);
+
+// @ts-expect-error a complete tasks window cannot advertise a continuation cursor.
+const invalidTaskComplete: TaskRead.Page = { ...taskPage, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
+void invalidTaskComplete;
+
+// @ts-expect-error the memories envelope version cannot label a tasks envelope.
+const invalidTaskEnvelopeVersion: TaskRead.Completeness = { ...taskPage.completeness, version: "recall-completeness-v1" };
+void invalidTaskEnvelopeVersion;
+
+// @ts-expect-error a raw string cannot bypass the opaque-ref boundary on a task id.
+const invalidTaskId: TaskRead.Item = { ...taskPage.items[0]!, id: "task-9f21" };
+void invalidTaskId;
+
+const invalidTaskIncompleteReason: TaskRead.IncompleteCoverage = {
+  version: "tasks-completeness-v1",
+  status: "incomplete",
+  // @ts-expect-error incomplete tasks coverage excludes the higher-precedence degraded family.
+  reasons: ["projection_stale"],
+  frontiers: taskPage.completeness.frontiers,
+};
+void invalidTaskIncompleteReason;

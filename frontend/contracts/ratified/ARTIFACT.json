@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
-  "compatibility": "breaking",
-  "provenanceSha256": "e377ce50c15e81addde711e46efa1e450ae26e0632ee766e43017935489b9145",
-  "sourceDigest": "d332c562c4a091368da502e52d231c9b6a7a174fe0c5086be70291a2c0a3ecad",
-  "tarballSha256": "99df48efaca9443b5c401cd0b7baa986b09c78cf027aad54db12e3674508819c",
+  "compatibility": "additive",
+  "provenanceSha256": "f6352e6213155391e7eb699f69c7d6fcf53faac20985c0f94f08214f50affd66",
+  "sourceDigest": "073cd0e637b2ec0775b81dc30430ae22c7d51b54af3deab707cd77ba6783f8f2",
+  "tarballSha256": "2f2d060369094b5004d6d4d6da2f1007f2584974a4599d8a41b5460a7e360dfc",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",
@@ -15,6 +15,8 @@
     "package/dist/pagination/cursor.js",
     "package/dist/projections/synthesized.d.ts",
     "package/dist/projections/synthesized.js",
+    "package/dist/projections/tasks.d.ts",
+    "package/dist/projections/tasks.js",
     "package/dist/recall/trace.d.ts",
     "package/dist/recall/trace.js",
     "package/dist/wire/json.d.ts",
@@ -27,6 +29,8 @@
     "package/fixtures/recall-completeness.json",
     "package/fixtures/recall-trace.json",
     "package/fixtures/status-matrix.json",
+    "package/fixtures/tasks-read-conformance.json",
+    "package/fixtures/tasks-read-shape.json",
     "package/fixtures/write-ops-conformance.json",
     "package/fixtures/write-ops-outcomes.json",
     "package/package.json"

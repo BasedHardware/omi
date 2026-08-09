@@ -1,6 +1,6 @@
 {
   "name": "@omi-core/ratified-contracts",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Reviewed Omi client/backend contract seam",
   "packageManager": "pnpm@10.0.0",
@@ -13,6 +13,10 @@
     "./projections/synthesized": {
       "types": "./dist/projections/synthesized.d.ts",
       "import": "./dist/projections/synthesized.js"
+    },
+    "./projections/tasks": {
+      "types": "./dist/projections/tasks.d.ts",
+      "import": "./dist/projections/tasks.js"
     },
     "./recall/trace": {
       "types": "./dist/recall/trace.d.ts",
@@ -28,6 +32,8 @@
     "dist/pagination/cursor.d.ts",
     "dist/projections/synthesized.js",
     "dist/projections/synthesized.d.ts",
+    "dist/projections/tasks.js",
+    "dist/projections/tasks.d.ts",
     "dist/recall/trace.js",
     "dist/recall/trace.d.ts",
     "dist/wire/json.js",
@@ -42,6 +48,8 @@
     "fixtures/status-matrix.json",
     "fixtures/write-ops-outcomes.json",
     "fixtures/write-ops-conformance.json",
+    "fixtures/tasks-read-shape.json",
+    "fixtures/tasks-read-conformance.json",
     "PROVENANCE.json"
   ],
   "scripts": {

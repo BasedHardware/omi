@@ -21,6 +21,17 @@ import {
   resolveDeclaredContractVersion,
 } from "../dist/projections/synthesized.js";
 import {
+  isTrustedTaskCompletenessHonest,
+  isTrustedTaskPageData,
+  isTrustedTaskWindowHonest,
+  MAX_TASKS_PAGE_JSON_CODE_UNITS,
+  parseTaskFrontier,
+  parseTaskItemId,
+  parseTaskPageJson,
+  TASK_ITEM_FIELDS,
+  TASKS_READ_CONTRACT_VERSION,
+} from "../dist/projections/tasks.js";
+import {
   isTrustedRecallTraceData,
   MAX_RECALL_TRACE_JSON_CODE_UNITS,
   parseRecallTraceJson,
@@ -489,5 +500,142 @@ test("every write-ops corpus row agrees with the envelope validator", async () =
     if (row.response.status === 200) {
       assert.ok(isTrustedWriteAccepted(JSON.parse(row.response.body)), `${row.name}: success body rejected`);
     }
+  }
+});
+
+/* ── the ratified tasks READ wire (DAVID-tasks-read-epoch-and-ci D1/D2) ───── */
+
+const taskCorpus = async () =>
+  JSON.parse(await readFile(new URL("../fixtures/tasks-read-conformance.json", import.meta.url), "utf8"));
+const taskShape = async () =>
+  JSON.parse(await readFile(new URL("../fixtures/tasks-read-shape.json", import.meta.url), "utf8"));
+
+test("D2's parity is checked against the DOMAIN contract, not against a retyped list", async () => {
+  // This is the assertion D2 actually asks for. A hand-copied list of thirteen
+  // names would report parity forever while the wire quietly narrowed; the
+  // domain interface is the source, so the day it gains a fourteenth field this
+  // test — not a reviewer — is what notices.
+  //
+  // red-proof: drop `revision` from TASK_ITEM_FIELDS and from the Item
+  // interface -> red here on the set comparison. APPLIED AND OBSERVED RED.
+  const domainSource = await readFile(new URL("../../src/domain/tasks.ts", import.meta.url), "utf8");
+  const start = domainSource.indexOf("export interface Task {");
+  assert.ok(start >= 0, "could not locate the domain Task interface — this check is stale");
+  const body = domainSource.slice(start, domainSource.indexOf("\n}", start));
+  const domainFields = [...body.matchAll(/^ {2}(\w+)\??:/gm)].map((match) => match[1]);
+  assert.equal(domainFields.length, 13, "the domain Task no longer declares the thirteen D2 ratifies");
+  assert.deepEqual([...TASK_ITEM_FIELDS].sort(), [...domainFields].sort());
+});
+
+test("every tasks corpus row agrees with the page validator, at both boundaries", async () => {
+  // red-proof: delete the `hasExactKeys(value, TASK_ITEM_FIELDS)` guard in
+  // hasSafeItem and the extra-field and missing-field rows go red.
+  // APPLIED AND OBSERVED RED.
+  const corpus = await taskCorpus();
+  assert.ok(corpus.length >= 30, "corpus shrank — an empty corpus must never read as a pass");
+  assert.ok(corpus.some((row) => row.safe) && corpus.some((row) => !row.safe),
+    "a corpus with no refusals proves only that the validator says yes");
+  for (const row of corpus) {
+    assert.equal(isTrustedTaskPageData(structuredClone(row.page)), row.safe, row.wireCase);
+    assert.equal(parseTaskPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  }
+});
+
+test("the tasks schema of record and the module agree, and the corpus covers it", async () => {
+  const shape = await taskShape();
+  const corpus = await taskCorpus();
+  assert.deepEqual([...TASK_ITEM_FIELDS], shape.itemFields);
+  assert.equal(shape.contractVersion, TASKS_READ_CONTRACT_VERSION);
+  const covered = new Set(corpus.map((row) => row.wireCase));
+  for (const { case: declared } of [...shape.cases, ...shape.refusalLaws]) {
+    assert.ok(covered.has(declared), `${declared} is declared in the schema of record but absent from the corpus`);
+  }
+  // And the other direction: a corpus row naming a case the schema does not
+  // declare means the schema stopped describing the wire.
+  for (const wireCase of covered) {
+    assert.ok(
+      [...shape.cases, ...shape.refusalLaws].some((row) => row.case === wireCase),
+      `${wireCase} is exercised by the corpus but undeclared in the schema of record`,
+    );
+  }
+});
+
+test("tasks coverage status is derived from reasons, never asserted beside them", async () => {
+  // The specific over-claim this refuses: a server that lists a limitation and
+  // then declares `complete`. It is the tasks transposition of the memories
+  // envelope's hardest law.
+  //
+  // red-proof: make deriveCompletenessStatus return completeness.status
+  // unchanged -> red here. APPLIED AND OBSERVED RED.
+  const corpus = await taskCorpus();
+  const honest = structuredClone(corpus.find((row) => row.wireCase === "completeness:degraded").page);
+  assert.ok(isTrustedTaskCompletenessHonest(honest));
+  for (const claimed of ["complete", "incomplete", "partial"]) {
+    const lying = structuredClone(honest);
+    lying.completeness.status = claimed;
+    assert.equal(isTrustedTaskCompletenessHonest(lying), false, `degraded reasons must not read as ${claimed}`);
+  }
+});
+
+test("a complete tasks page must have caught up with its own declared frontier", async () => {
+  // `complete` is a checkable claim here rather than an adjective: the applied
+  // frontier must have reached the declared one, or the page must say plainly
+  // that no write has ever been applied.
+  //
+  // RED-PROOF, and the result is worth more than the assertion. Two separate
+  // mutations were applied and each STAYED GREEN:
+  //   - delete the `completeness.status === "complete"` frontier check
+  //   - delete the `pendingWrites !== reasons.includes(...)` coupling
+  // Only removing BOTH turns this test red. They are independently sufficient
+  // for this case, which is defence in depth rather than redundancy — but it
+  // means neither line is individually pinned by this test, and a future edit
+  // could delete either one without a single suite going red. Recorded here
+  // rather than quietly fixed, because a green-staying mutation is evidence
+  // about the assertion. APPLIED, BOTH SINGLES GREEN, THE PAIR OBSERVED RED.
+  const corpus = await taskCorpus();
+  const page = structuredClone(corpus.find((row) => row.wireCase === "window:complete_terminal").page);
+  assert.ok(isTrustedTaskPageData(structuredClone(page)));
+  const lagging = structuredClone(page);
+  lagging.completeness.frontiers.newestAppliedFrontier = "frontier-v1:tasks-behind";
+  assert.equal(isTrustedTaskPageData(lagging), false, "a lagging frontier cannot read as complete");
+  const noWrites = structuredClone(page);
+  noWrites.completeness.frontiers.newestAppliedFrontier = null;
+  noWrites.completeness.frontiers.missingAppliedFrontierReason = "no_applied_writes";
+  assert.ok(isTrustedTaskPageData(noWrites), "an account with no applied writes is honestly complete");
+});
+
+test("the tasks envelope cannot be confused with the memories envelope", async () => {
+  // The two carry different meanings under a similar shape, which
+  // COORD-contract-evolution-policy §1 classifies as different fields. The
+  // version string is what keeps them apart, in both directions.
+  const corpus = await taskCorpus();
+  const page = structuredClone(corpus.find((row) => row.wireCase === "window:complete_terminal").page);
+  page.completeness.version = "recall-completeness-v1";
+  assert.equal(isTrustedTaskPageData(page), false);
+  assert.equal(isTrustedTaskCompletenessHonest(page), false);
+});
+
+test("tasks boundary values are bounded, and the page has a size ceiling", () => {
+  assert.equal(parseTaskItemId(`task1_${"a".repeat(64)}`), `task1_${"a".repeat(64)}`);
+  assert.equal(parseTaskItemId(""), null);
+  assert.equal(parseTaskItemId("task one"), null, "whitespace is not printable-ASCII-only");
+  assert.equal(parseTaskItemId("a".repeat(1025)), null);
+  assert.equal(parseTaskFrontier("frontier-v1:x"), "frontier-v1:x");
+  assert.equal(parseTaskFrontier("frontier v1"), null);
+  assert.equal(MAX_TASKS_PAGE_JSON_CODE_UNITS, 2_000_000);
+  assert.equal(parseTaskPageJson("x".repeat(MAX_TASKS_PAGE_JSON_CODE_UNITS + 1)), null);
+});
+
+test("the tasks window law is the memories window law, verbatim in behaviour", async () => {
+  // Pagination honesty is not a per-domain question. Two spellings of one law
+  // is how the two doors disagreed the last time, so this asserts the tasks
+  // window predicate answers identically over the memories window corpus.
+  //
+  // red-proof: change the `more` branch to accept a null cursor -> red.
+  // APPLIED AND OBSERVED RED.
+  const windows = JSON.parse(await readFile(new URL("../fixtures/read-page-windows.json", import.meta.url), "utf8"));
+  assert.ok(windows.length >= 4);
+  for (const row of windows) {
+    assert.equal(isTrustedTaskWindowHonest(row.window), row.honest, `${row.name} must be judged identically by both wires`);
   }
 });

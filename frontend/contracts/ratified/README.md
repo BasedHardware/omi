@@ -59,6 +59,50 @@ FEAT-MEM-002, FC-AUTH-003, FEAT-AUTH-011, and COORD-contract-evolution-policy.
 `DIV-DOMCORE-001` and `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.
 
+## 0.6.0 - the ratified tasks READ wire (`additive`)
+
+`0.6.0` adds ONE export subpath, `./projections/tasks`, plus its schema of
+record (`fixtures/tasks-read-shape.json`) and conformance corpus
+(`fixtures/tasks-read-conformance.json`). No existing export, field, shape or
+validator changed, so every client built against `0.5.0` keeps working
+unchanged with no new obligation - which is what makes this `additive` under
+COORD-contract-evolution-policy.md §1. The precedent is `0.3.0`, which added
+`./write/ops` (required fields and all) and was classified the same way: §1's
+"adding a required field is breaking" governs a field added to an EXISTING
+shape, and a new namespace imposes nothing on a client that never imports it.
+
+Ruling of record: `DAVID-tasks-read-epoch-and-ci`, signed by David in person.
+**D1** - the tasks read mirrors the memories read model: reader-scoped opaque
+ids, cursor pagination, and a completeness envelope, served through the same
+registered composition rule 16 guards. **D2** - full parity with all thirteen
+fields `core/contracts/src/domain/tasks.ts` declares, because the point of
+parity is flip-ability: the surface renders identically off either generation,
+so the factory change is one line and so is its rollback. `id` is the ratified
+opaque ref, never the legacy server id, and the local slug/server-id alias
+`adapters-legacy` maintains does not cross this wire.
+
+The envelope is `tasks-completeness-v1`, deliberately NOT the memories
+`recall-completeness-v1`. Tasks have no short-term overlay and no accepted-work
+queue, so reusing that spelling would mean answering `no_eligible_stm` forever
+about a subsystem unrelated to tasks; §1 classifies a field whose MEANING
+differs as a different field even when the shape matches. Its checkable pair is
+`newestAppliedFrontier` against `declaredFrontier` - the transposition of the
+accepted-frontier law onto the concept tasks actually has, since
+`POST /v1/tasks/ops` applies writes into the projection a read serves from. A
+`complete` claim therefore requires the applied frontier to have reached the
+declared one, or an explicit `no_applied_writes`.
+
+The account epoch is NOT here. `DAVID-tasks-read-epoch-and-ci` D3 rides it on
+this response as an additive field in a SEPARATE bump, gated on a non-author's
+written ADR-012 §4 check. The bumps are split (fable, R9) precisely so this one
+is never blocked by that gate.
+
+**The `openTasks()` flip is not performed by this bump and is not authorized by
+it** (fable, R7). Production has no control-state publisher, so every
+platform-generation write denies, and no ratified path puts a real account's
+tasks behind the platform generation. Fixture-venue parity is the flip's
+precondition, never its trigger.
+
 ## 0.2.0 - the client contract version header (`additive`)
 
 `0.2.0` adds `APP_CONTRACT_VERSION_HEADER` (`x-omi-contract-version`),

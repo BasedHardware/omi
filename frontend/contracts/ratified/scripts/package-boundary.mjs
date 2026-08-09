@@ -37,18 +37,32 @@ const provenance = JSON.parse(provenanceBytes);
  *     shape it defines.
  *   - IS IT IRREVERSIBLE? No. 0.4.0 is adopted only on the platform trunk, with
  *     no client in the field, so rollback is a re-vendor.
+ *
+ * 0.6.0 is `additive`. It adds ONE new export subpath (`./projections/tasks`)
+ * and two fixture files, and changes no existing export, field, shape or
+ * validator. Every client built against 0.5.0 keeps working unchanged with no
+ * new obligation, which is §1's definition.
+ *
+ * The precedent is exact rather than argued: 0.3.0 added `./write/ops` — a
+ * subpath whose own shapes carry REQUIRED fields — and was classified
+ * `additive` for this same reason. §1's "adding a required field is breaking"
+ * governs a field added to an EXISTING shape; a new namespace imposes nothing
+ * on a client that never imports it. The tasks item's thirteen fields are all
+ * required inside a shape no prior version had.
  */
-const COMPATIBILITY_CLASS = "breaking";
+const COMPATIBILITY_CLASS = "additive";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
   throw new Error("compatibility class must be exactly 'additive' or 'breaking'");
 }
 
-const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./recall/trace", "./write/ops"];
+const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./projections/tasks", "./recall/trace", "./write/ops"];
 const expectedManifestFiles = [
   "dist/pagination/cursor.js",
   "dist/pagination/cursor.d.ts",
   "dist/projections/synthesized.js",
   "dist/projections/synthesized.d.ts",
+  "dist/projections/tasks.js",
+  "dist/projections/tasks.d.ts",
   "dist/recall/trace.js",
   "dist/recall/trace.d.ts",
   "dist/wire/json.js",
@@ -63,6 +77,8 @@ const expectedManifestFiles = [
   "fixtures/status-matrix.json",
   "fixtures/write-ops-outcomes.json",
   "fixtures/write-ops-conformance.json",
+  "fixtures/tasks-read-shape.json",
+  "fixtures/tasks-read-conformance.json",
   "PROVENANCE.json",
 ];
 const expectedTarFiles = [
@@ -72,6 +88,8 @@ const expectedTarFiles = [
   "package/dist/pagination/cursor.js",
   "package/dist/projections/synthesized.d.ts",
   "package/dist/projections/synthesized.js",
+  "package/dist/projections/tasks.d.ts",
+  "package/dist/projections/tasks.js",
   "package/dist/recall/trace.d.ts",
   "package/dist/recall/trace.js",
   "package/dist/wire/json.d.ts",
@@ -84,6 +102,8 @@ const expectedTarFiles = [
   "package/fixtures/recall-trace.json",
   "package/fixtures/page-conformance.json",
   "package/fixtures/status-matrix.json",
+  "package/fixtures/tasks-read-conformance.json",
+  "package/fixtures/tasks-read-shape.json",
   "package/fixtures/write-ops-conformance.json",
   "package/fixtures/write-ops-outcomes.json",
   "package/package.json",
@@ -91,7 +111,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.5.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.6.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");
@@ -112,6 +132,51 @@ for (const requiredField of [
   if (!new RegExp(`\\b${requiredField}\\??:`).test(declaration)) throw new Error(`frozen ready-item field missing: ${requiredField}`);
 }
 if (/\b(?:EmptyItem|FailedItem|ReadyItem)\b/.test(declaration)) throw new Error("non-ready item state escaped the projection");
+
+/**
+ * D2's parity, checked against the DOMAIN CONTRACT rather than against a list
+ * someone retyped here.
+ *
+ * `DAVID-tasks-read-epoch-and-ci` D2 ratifies "everything
+ * core/contracts/src/domain/tasks.ts already declares", and says why: parity is
+ * what makes the flip mechanical, because a narrower surface renders
+ * differently and turns a factory-line change into a product event. A hardcoded
+ * list of thirteen names here would go stale the day the domain gains a
+ * fourteenth field and would report parity while the wire had quietly narrowed.
+ *
+ * So the domain's `Task` interface is the source and this reads it. The file
+ * sits outside the package (`../../src/domain/tasks.ts`), which is why it is
+ * checked HERE and not in the packed fixtures: the tarball is standalone by
+ * design, and reaching out of it at consumer runtime would be the defect. The
+ * boundary script always runs in the source checkout.
+ */
+const taskDeclaration = readFileSync(resolve(root, "dist/projections/tasks.d.ts"), "utf8");
+/**
+ * COMMENTS ARE STRIPPED BEFORE THE `RecordId` BAN, and the first draft of this
+ * check proved why in about four seconds: the module header EXPLAINS that the
+ * id is never a `RecordId`, `tsc` emits doc comments into the `.d.ts`, and the
+ * check failed on its own rationale. That is this repo's already-shipped
+ * failure — a fence that banned an ordinary word and fired on prose while
+ * catching no real reference (`swarm-protocol.md` §8) — reproduced verbatim.
+ * Prose cannot type anything.
+ */
+const taskDeclarationCode = taskDeclaration
+  .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
+  .replace(/\/\/[^\n]*/g, "");
+if (/\bid:\s*RecordId\b/.test(taskDeclarationCode)) throw new Error("tasks item id incorrectly reuses RecordId — D2 requires the opaque ref");
+if (/\bRecordId\b/.test(taskDeclarationCode)) throw new Error("RecordId escaped into the tasks read wire");
+const domainTaskSource = readFileSync(resolve(root, "../src/domain/tasks.ts"), "utf8");
+const domainTaskBody = domainTaskSource.slice(
+  domainTaskSource.indexOf("export interface Task {"),
+  domainTaskSource.indexOf("\n}", domainTaskSource.indexOf("export interface Task {")),
+);
+if (!domainTaskBody.startsWith("export interface Task {")) throw new Error("could not locate the domain Task interface — the parity check is stale");
+const domainTaskFields = [...domainTaskBody.matchAll(/^\s{2}(\w+)[?]?:/gm)].map((match) => match[1]).sort();
+if (domainTaskFields.length !== 13) throw new Error(`domain Task declares ${domainTaskFields.length} fields, not the thirteen D2 ratifies — reconcile the wire before this bump lands`);
+const wireTaskFields = [...taskDeclarationCode.matchAll(/^\s{8}(\w+):/gm)].map((match) => match[1]);
+for (const field of domainTaskFields) {
+  if (!wireTaskFields.includes(field)) throw new Error(`tasks read wire is missing domain field \`${field}\` — D2 requires full parity`);
+}
 
 const traceDeclaration = readFileSync(resolve(root, "dist/recall/trace.d.ts"), "utf8");
 for (const forbiddenField of forbiddenTraceFields) {
