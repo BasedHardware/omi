@@ -498,6 +498,10 @@ const outboxFacts = (over = {}) => ({
     method: "POST", path: "/v1/tasks/ops", status: 409, text: STALE_BODY,
     body: { write_id: "b".repeat(64), account_epoch: 6, domain: "tasks", op: { op: "create", record_id: "flying-dragon-vibrant", content: {} } },
   },
+  drainWire: {
+    method: "POST", path: "/v1/tasks/ops", status: 200,
+    body: { write_id: "a".repeat(64), account_epoch: 7, domain: "tasks", op: { op: "create", record_id: "flying-dragon-vibrant", content: {} } },
+  },
   replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: true }) },
   ...over,
 });
@@ -535,7 +539,11 @@ test("RED-PROOF journaled_write_id: the id was minted at send time, not at enque
   // had already used, so the crash-replayed op applies a second time and the
   // user's edit is duplicated.
   const facts = outboxFacts({
-    replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: false }) },
+    drainWire: {
+    method: "POST", path: "/v1/tasks/ops", status: 200,
+    body: { write_id: "a".repeat(64), account_epoch: 7, domain: "tasks", op: { op: "create", record_id: "flying-dragon-vibrant", content: {} } },
+  },
+  replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: false }) },
   });
   const r = outboxOutcome(facts, outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
   assert.equal(r.result, "fail");
@@ -631,4 +639,28 @@ test("RED-PROOF straggler_wire_matches_its_journal: the transport received bytes
   const r = outboxOutcome(f, outboxProducer(), "straggler_wire_matches_its_journal");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /not the ratified refusal/);
+});
+
+test("RED-PROOF journaled_write_id: the outbox re-stamped the epoch on its way out", () => {
+  // B1's other named failure, invisible to any server-side answer: the fence
+  // admits either way, so only the journal-vs-wire comparison can see it.
+  const f = outboxFacts();
+  f.drainWire = { ...f.drainWire, body: { ...f.drainWire.body, account_epoch: 9 } };
+  const r = outboxOutcome(f, outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /re-stamping at send time/);
+});
+
+test("RED-PROOF journaled_write_id: the outbox sent an id its journal does not hold", () => {
+  const f = outboxFacts();
+  f.drainWire = { ...f.drainWire, body: { ...f.drainWire.body, write_id: "e".repeat(64) } };
+  const r = outboxOutcome(f, outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /minted at send time/);
+});
+
+test("RED-PROOF journaled_write_id: the outbox put nothing readable on the wire", () => {
+  const r = outboxOutcome(outboxFacts({ drainWire: null }), outboxProducer(), "journaled_write_id_is_the_one_the_server_registered");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /no readable envelope/);
 });
