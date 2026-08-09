@@ -25,6 +25,27 @@ export interface PendingOp {
   /** Human-readable summary for the dead-letter surface. */
   summary: string;
   attempts: number;
+  /**
+   * COORD-write-path-rulings B1. The 64-hex write id MINTED from independent
+   * entropy when this op was enqueued, and journaled WITH it, so every replay
+   * of this op carries the same id and the server registry recognises it.
+   *
+   * Optional because it is meaningless on the legacy wire, which has no
+   * registry, and because journals written before this field existed have
+   * none. It is NEVER minted at send time: a send-time mint produces a new id
+   * on every replay, which defeats the registry it exists to key.
+   */
+  writeId?: string;
+  /**
+   * The account epoch this op was CREATED under — the straggler stamp the
+   * account-epoch fence compares against (`backend:ADR-010`). Journaled with
+   * the op for the same reason `writeId` is: re-stamping at send time with
+   * whatever epoch is current would mean an op authored in a superseded
+   * generation quietly applies in the new one, which is precisely what the
+   * fence exists to refuse. The engine never reads it; the platform op-sender
+   * does.
+   */
+  accountEpoch?: number;
 }
 
 export interface EngineState {

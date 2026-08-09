@@ -4,6 +4,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { AppearanceSelection, SettingsSnapshot } from "./settings-merge.js";
 import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
+import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge } from "./ProductionPrimitives.js";
 import "./settings.css";
@@ -231,10 +232,14 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
         {dead.length > 0 && (
           <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}>
             <h2>{t(locale, "dead.title")}</h2>
-            {dead.map((letter) => (
-              <div className="dead-letter" key={letter.opId}>
-                <span>{t(locale, "dead.body")}</span>
-                <button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>
+            {dead.map(deadLetterView).map((view) => (
+              <div className="dead-letter" key={view.opId}>
+                <span>{t(locale, view.messageKey)}</span>
+                {view.savedEdit !== null && <pre className="dead-letter-payload">{view.savedEdit}</pre>}
+                {/* Discard only — a retry would resubmit an envelope the
+                    account-epoch fence refuses forever. See
+                    dead-letter-presentation.ts. */}
+                <button type="button" onClick={() => void run(() => store.discardDeadLetter(view.opId))}>
                   {t(locale, "dead.remove")}
                 </button>
               </div>
