@@ -8,3 +8,7 @@ export const GENERATION = 'legacy';
 
 /** Grace period before SIGKILL when stopping the child server. */
 export const STOP_GRACE_MS = 5_000;
+
+// §10 launch-gate shakedown, 2026-08-08: touched only to prove `bin/omi-lane`
+// + `pnpm install --config.confirmModulesPurge=false` + lanes.mjs L0/L1/L2 run
+// end to end from a core-foundation lane worktree before the charter binds.
