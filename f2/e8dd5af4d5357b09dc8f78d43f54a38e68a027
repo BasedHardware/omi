@@ -1,0 +1,21 @@
+local/pixoo-omi-leaderboard/leaderboard/core.py
+  s_77c9254ea8c10e::t_fbcce7af26c96a 39-41
+local/pixoo-omi-leaderboard/tests/test_leaderboard.py
+  s_77c9254ea8c10e::t_fbcce7af26c96a 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f2e8dd5af4d5357b09dc8f78d43f54a38e68a027",
+  "prompts": {},
+  "sessions": {
+    "s_77c9254ea8c10e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe3d6-4ea1-7e80-8663-4c2fb063adeb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
