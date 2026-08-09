@@ -7447,6 +7447,39 @@
         "title": "ConversationTestPromptResponse",
         "type": "object"
       },
+      "ConversationTopicRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "transcript": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "ConversationTopicRequest",
+        "type": "object"
+      },
+      "ConversationTopicResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ConversationTopicResponse",
+        "type": "object"
+      },
       "ConversationVisibility": {
         "enum": [
           "private",
@@ -33020,6 +33053,94 @@
           }
         ],
         "summary": "Search Conversations Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/topic": {
+      "post": {
+        "description": "Return-only emoji + short title through the managed conv_structure feature.\n\nDoes not write Firestore. Desktop clients call this for the fast provisional title\non a just-saved conversation instead of inventing one via Anthropic Haiku chat\ncompletions; full backend processing still overwrites it later.",
+        "operationId": "generate_conversation_topic_endpoint_v1_conversations_topic_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTopicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTopicResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Generate Conversation Topic Endpoint",
         "tags": [
           "conversations"
         ]

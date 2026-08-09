@@ -1198,6 +1198,15 @@ export interface ConversationTestPromptResponse {
   summary: string;
 }
 
+export interface ConversationTopicRequest {
+  transcript: string;
+}
+
+export interface ConversationTopicResponse {
+  emoji?: string;
+  title?: string;
+}
+
 export type ConversationVisibility = "private" | "shared" | "public";
 
 export interface ConversationsCountResponse {
@@ -4126,6 +4135,8 @@ export interface OmiApiSchemas {
   "ConversationStatusResponse": ConversationStatusResponse;
   "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
   "ConversationTestPromptResponse": ConversationTestPromptResponse;
+  "ConversationTopicRequest": ConversationTopicRequest;
+  "ConversationTopicResponse": ConversationTopicResponse;
   "ConversationVisibility": ConversationVisibility;
   "ConversationsCountResponse": ConversationsCountResponse;
   "CreateActionItemRequest": CreateActionItemRequest;
@@ -5503,6 +5514,16 @@ export interface OmiApiPaths {
       operationId: "search_conversations_endpoint_v1_conversations_search_post";
       responses: {
         "200": SearchConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/topic": {
+    post: {
+      operationId: "generate_conversation_topic_endpoint_v1_conversations_topic_post";
+      responses: {
+        "200": ConversationTopicResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10478,6 +10499,27 @@ export async function merge_conversations_v1_conversations_merge_post(header: { 
 export async function search_conversations_endpoint_v1_conversations_search_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SearchRequest, init?: OmiApiClientInit): Promise<SearchConversationsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/search`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function generate_conversation_topic_endpoint_v1_conversations_topic_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTopicRequest, init?: OmiApiClientInit): Promise<ConversationTopicResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/topic`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -16315,4 +16357,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 396 client methods generated.
+// Total: 397 client methods generated.
