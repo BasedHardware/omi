@@ -1,4 +1,5 @@
 import type { RefreshPhase, RefreshStatus } from "@omi-core/domain";
+import type { RefreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 
 /**
  * Conservative worst-of across Home's two search projections.
@@ -32,29 +33,23 @@ export function combineHomeRefreshStatuses(
   return { phase: "ready", hasSavedData };
 }
 
-export function homePhaseNoticeKey(phase: RefreshPhase):
-  | "lifecycle.loading"
-  | "lifecycle.refreshing"
-  | "lifecycle.savedFailed"
-  | "lifecycle.unavailable"
-  | null {
-  switch (phase) {
-    case "initial-loading": return "lifecycle.loading";
-    case "refreshing": return "lifecycle.refreshing";
-    case "saved-but-refresh-failed": return "lifecycle.savedFailed";
-    case "unavailable": return "lifecycle.unavailable";
-    default: return null;
-  }
-}
-
-/** Distinguishes what Home must render for a combined refresh status + loaded rows. */
-export function homeSurfacePresentation(status: RefreshStatus, rowCount: number): {
+/**
+ * Distinguishes what Home must render for a combined refresh status + loaded rows.
+ *
+ * Notice keys come from `refreshPhaseNoticeKey` (lifecycle-presentation.ts) —
+ * this module stays free of relative value imports so Node hermetic tests can
+ * execute it directly (same discipline as chat-reconcile.ts).
+ */
+export function homeSurfacePresentation(
+  status: RefreshStatus,
+  rowCount: number,
+  noticeKey: RefreshPhaseNoticeKey | null,
+): {
   phase: RefreshPhase;
-  noticeKey: ReturnType<typeof homePhaseNoticeKey>;
+  noticeKey: RefreshPhaseNoticeKey | null;
   showsSavedRows: boolean;
   showsFailureIndication: boolean;
 } {
-  const noticeKey = homePhaseNoticeKey(status.phase);
   return {
     phase: status.phase,
     noticeKey,

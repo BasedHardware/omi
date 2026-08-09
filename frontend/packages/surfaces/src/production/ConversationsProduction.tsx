@@ -5,6 +5,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./conversation-fixtures.js";
 import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField, type ProductionFilterOption } from "./ProductionPrimitives.js";
 import "./conversations.css";
@@ -14,13 +15,8 @@ type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type ConversationFilter = "all" | "starred" | `folder:${string}`;
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  switch (status.refresh.phase) {
-    case "initial-loading": return t(locale, "lifecycle.loading");
-    case "refreshing": return t(locale, "lifecycle.refreshing");
-    case "saved-but-refresh-failed": return t(locale, "lifecycle.savedFailed");
-    case "unavailable": return t(locale, "lifecycle.unavailable");
-    default: return null;
-  }
+  const key = refreshPhaseNoticeKey(status.refresh.phase);
+  return key === null ? null : t(locale, key);
 }
 
 function visibilityLabel(value: Conversation["visibility"], locale: Locale): string {

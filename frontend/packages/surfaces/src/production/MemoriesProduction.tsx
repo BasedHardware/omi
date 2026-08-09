@@ -6,19 +6,15 @@ import type { ProductionMemoryStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  switch (status.refresh.phase) {
-    case "initial-loading": return t(locale, "lifecycle.loading");
-    case "refreshing": return t(locale, "lifecycle.refreshing");
-    case "saved-but-refresh-failed": return t(locale, "lifecycle.savedFailed");
-    case "unavailable": return t(locale, "lifecycle.unavailable");
-    default: return null;
-  }
+  const key = refreshPhaseNoticeKey(status.refresh.phase);
+  return key === null ? null : t(locale, key);
 }
 
 function MemoryCard({ memory, store, locale, run }: {

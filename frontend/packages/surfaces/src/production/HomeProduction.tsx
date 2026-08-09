@@ -5,6 +5,7 @@ import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
+import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import "./home.css";
 
 type Locale = string;
@@ -134,7 +135,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
   }), [kind, locale, needle, spine]);
   const filtering = Boolean(needle) || kind !== "all";
   // Every notice / row visibility decision ships through this helper — JSX does not re-derive.
-  const presentation = homeSurfacePresentation(refresh, results.length);
+  const presentation = homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase));
 
   return (
     <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
