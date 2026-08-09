@@ -16,6 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
+
+from range_base import RangeBaseError, resolve_base
+
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 
 
@@ -336,7 +341,10 @@ def execute_checks(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="origin/main")
+    parser.add_argument(
+        "--base",
+        help="Base ref (default: recorded lane trunk, branch upstream, then origin/main).",
+    )
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--lane", choices=("local", "ci"), required=True)
     parser.add_argument("--manifest", type=Path)
@@ -379,13 +387,14 @@ def main() -> int:
         manifest_errors = validate_manifest(manifest, root)
         if manifest_errors:
             raise ValueError("; ".join(manifest_errors))
-        resolved_base = merge_base(root, args.base, args.head)
+        selected_base = resolve_base(root, args.base)
+        resolved_base = merge_base(root, selected_base, args.head)
         files = (
             [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line]
             if args.changed_files
-            else changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
+            else changed_files(root, selected_base, args.head, include_worktree=args.lane == "local")
         )
-    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+    except (OSError, ValueError, RangeBaseError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
     detected_platform = args.platform or detect_platform()
