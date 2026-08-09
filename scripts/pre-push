@@ -4,6 +4,13 @@ set -eo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Git exports repository-local variables to hooks. Once the checkout root is
+# known, clear them so child tools that inspect their own Git checkout (for
+# example Flutter deriving its SDK version) do not reopen this worktree.
+while IFS= read -r var; do
+  unset "$var"
+done < <(git rev-parse --local-env-vars)
+
 PUSH_REMOTE="${1:-origin}"
 BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"
 BASE_BRANCH="${PRE_PUSH_BASE_BRANCH:-}"

@@ -198,6 +198,9 @@ class SelectionTests(unittest.TestCase):
     def test_default_base_selects_only_the_lane_delta(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            clean_git_environment = {
+                key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+            }
 
             def git(*args: str) -> str:
                 result = subprocess.run(
@@ -207,7 +210,7 @@ class SelectionTests(unittest.TestCase):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+                    env=clean_git_environment,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return result.stdout.strip()
@@ -233,10 +236,13 @@ class SelectionTests(unittest.TestCase):
             git("add", "owned.txt")
             git("commit", "-qm", "owned lane change")
 
-            base = resolve_base(root, None)
-            self.assertEqual(base, "origin/core/foundation")
-            self.assertEqual(changed_files(root, base, "HEAD"), ["owned.txt"])
-            self.assertEqual(changed_files(root, "origin/main", "HEAD"), ["foreign.txt", "owned.txt"])
+            # Git exports repository-local state to hooks. Keep that state from
+            # redirecting these explicit-root queries back to the outer checkout.
+            with patch.dict(os.environ, clean_git_environment, clear=True):
+                base = resolve_base(root, None)
+                self.assertEqual(base, "origin/core/foundation")
+                self.assertEqual(changed_files(root, base, "HEAD"), ["owned.txt"])
+                self.assertEqual(changed_files(root, "origin/main", "HEAD"), ["foreign.txt", "owned.txt"])
 
     def test_default_base_falls_back_from_lane_trunk_to_upstream_then_main(self) -> None:
         root = Path("/repo")
