@@ -386,6 +386,78 @@ describe("the door is joinable: producer counters and a consumer observation", (
   });
 
   /**
+   * CORPUS lane dogfood, run-2026-08-09, landed as a durable test per the
+   * coordinator's instruction: a throwaway script that gets deleted means the
+   * run's best evidence exists only in a report. This is the exact sequence
+   * run by hand against `createLocalService` — the registered composition,
+   * the same factory `bin/dev-server.ts` uses — the first time the write
+   * path was observed working end to end from outside the suite that built
+   * it. Unlike the sibling test above, this walks all FOUR write outcomes
+   * (`accepted`, `accepted_idempotent`, `stale_epoch`, `write_id_reuse`) as
+   * one narrative journey rather than isolating any single one.
+   *
+   * red-proof: in write-id-registry.ts's `lookup`, always return
+   * `{ kind: "replay", outcome: row.outcome }` regardless of fingerprint
+   * match, so a genuine `write_id_reuse` (same key, different content) is
+   * misreported as an idempotent replay of the FIRST content instead of
+   * refused. APPLIED AND OBSERVED RED: the consumer-side status/outcome
+   * assertions on step 4 fail (200 idempotent-replay of the original title
+   * instead of 409 write_id_reuse), and the producer-side stats assertion
+   * fails independently in the same run (write_id_reuse: 0 instead of 1,
+   * accepted_idempotent: 2 instead of 1) — both sides move together, which is
+   * the property this test exists to pin.
+   */
+  test("CORPUS dogfood: all four write outcomes in one sequence, producer and consumer agree", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const run = `corpus-dogfood-${crypto.randomUUID()}`;
+    const recordId = "dogfood-task-1";
+    const original = { op: "create", record_id: recordId, content: { title: "corpus dogfood: is the door alive" } };
+    const wid = writeId("d0");
+
+    // 1. A genuine create.
+    const created = await post(booted, envelope({ writeId: wid, op: original }), { runId: run });
+    expect(created.status).toBe(200);
+    const createdBody = JSON.parse(created.text) as { idempotent: boolean; applied: { record_id: string } };
+    expect(createdBody.idempotent).toBe(false);
+    expect(createdBody.applied.record_id).toBe(recordId);
+
+    // 2. Crash-replay of the SAME write_id, SAME content — accepted_idempotent, never a failure.
+    const replayed = await post(booted, envelope({ writeId: wid, op: original }), { runId: run });
+    expect(replayed.status).toBe(200);
+    expect((JSON.parse(replayed.text) as { idempotent: boolean }).idempotent).toBe(true);
+
+    // 3. A straggler under a stale epoch — 409 stale_epoch, never conflict.
+    const stale = await post(
+      booted,
+      envelope({ writeId: writeId("d1"), epoch: STALE_EPOCH, op: { op: "patch", record_id: recordId, patch: { done: true } } }),
+      { runId: run },
+    );
+    expect(stale.status).toBe(409);
+    expect(JSON.parse(stale.text)).toEqual({ error: "stale_epoch", refusal_outcome: "stale_epoch" });
+
+    // 4. The SAME write_id as step 1, DIFFERENT content — write_id_reuse, never
+    // a silent second apply and never an idempotent replay of the wrong content.
+    const reused = await post(
+      booted,
+      envelope({ writeId: wid, op: { op: "create", record_id: recordId, content: { title: "a completely different title" } } }),
+      { runId: run },
+    );
+    expect(reused.status).toBe(409);
+    expect(JSON.parse(reused.text)).toEqual({ error: "write_id_reuse" });
+
+    // Producer-side counter, same run id — the second, independent measurement.
+    const stats = await statsFor(booted, run);
+    expect(stats["fence"]).toMatchObject({ admitted: 3, refused: { stale_epoch: 1 } });
+    expect(stats["writeOps"]).toMatchObject({
+      outcomes: {
+        accepted: 1, accepted_idempotent: 1, stale_epoch: 1, write_id_reuse: 1,
+        authentication: 0, authorization: 0, entitlement: 0, validation: 0, conflict: 0,
+      },
+    });
+  });
+
+  /**
    * The control probe that makes the numbers above mean something: without it,
    * a counter hard-coded to answer the same tally for every run would pass.
    */
