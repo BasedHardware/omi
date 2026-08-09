@@ -69,6 +69,16 @@ void main() {
       expect(AppEnvironmentProfile.mobileBeta.authCallbackScheme, 'omi-beta');
     });
 
+    test('mobile beta keeps OAuth on the production identity plane', () {
+      expect(
+        Env.authApiBaseUrlForProfile(
+          AppEnvironmentProfile.mobileBeta,
+          servingApiBaseUrl: 'https://api.omiapi.com/',
+        ),
+        Env.productionApiBaseUrl,
+      );
+    });
+
     test('local profile rejects a production Firebase project', () {
       expect(
         () => Env.validateFirebaseProject(
