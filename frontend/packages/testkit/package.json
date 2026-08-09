@@ -19,6 +19,7 @@
     "@omi-core/dev-recall-stub": "workspace:*",
     "@omi-core/domain": "workspace:*",
     "@omi-core/kernel": "workspace:*",
+    "@omi-core/ratified-contracts": "workspace:*",
     "@omi-core/sync": "workspace:*",
     "@omi-core/wire-listen": "workspace:*"
   },
