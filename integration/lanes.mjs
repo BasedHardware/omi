@@ -141,8 +141,38 @@ export const LANES = {
     steps: [
       { cwd: PLATFORM_REPO, command: "bun run qa:contracts" },
       { cwd: PLATFORM_REPO, command: "bun test integration/" },
-      { cwd: CORE_REPO, command: "node --test integration/cross-side/wire-agreement.test.mjs integration/cross-side/write-id-agreement.test.mjs integration/cross-side/tasks-wire-agreement.test.mjs" },
-      { cwd: CORE_REPO, command: "node --test integration/lib/receipts.test.mjs integration/lib/run-report.test.mjs integration/lib/write-journey.test.mjs" },
+      // EVERY cross-side file, by directory rather than by list. Three of these
+      // arrived from three different lanes and each ran in NO gate until
+      // someone remembered this line — CORPUS's rendering-parity harness and
+      // the provenance-agreement check were both sitting on trunk ungated. A
+      // hand-maintained list makes registration a thing to remember, and the
+      // measured failure mode of "a thing to remember" in this program is a
+      // test that exists and guards nothing.
+      //
+      // The rendering-parity harness belongs HERE and not in the unit step
+      // below: it boots `platform/integration/control/live-service.ts`, so its
+      // resource profile is a cross-side test's, not an in-process one, and its
+      // cost should be visible next to its peers rather than hidden in a step
+      // labelled as unit tests.
+      { cwd: CORE_REPO, command: "node --test integration/cross-side/*.test.mjs" },
+      // `receipts-concurrency.test.mjs` is here for the same reason as the rest
+      // of this step: CLIENT landed it with the receipts schema-2 fix and
+      // correctly did not touch this file, so until this line it ran in no
+      // gate — a measurement nobody reads, guarding a defect that made stdout
+      // truthful while the durable artifact described the wrong tree.
+      //
+      // Worth knowing what it covers, because its own red-proof is the
+      // interesting part: dropping `repoRoot` from the receipt KEY (leaving it
+      // on the stamp) left the suite GREEN, because every lane in the fixture
+      // had different content and the tree hash was already separating them.
+      // The clause exists for the case a tree hash CANNOT separate — two
+      // worktrees, same trunk commit, both clean, byte-identical at different
+      // paths — which is the ordinary configuration every lane in this run has
+      // been in, mine included. That case is now constructed explicitly, and it
+      // asserts the two tree hashes really are equal first, or it would pass
+      // vacuously the moment the fixtures drifted — the same shape as the
+      // mutation that stayed green.
+      { cwd: CORE_REPO, command: "node --test integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/write-journey.test.mjs" },
     ],
   },
   L3: {

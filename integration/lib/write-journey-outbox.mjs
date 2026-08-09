@@ -171,16 +171,35 @@ export async function runOutboxDrain(options) {
   const journaled = await readJournal(store, accountId);
   const deadAfterDrain = await box.deadLetters();
 
-  // ── the SAME journal, reopened: B1's replay ──────────────────────────────
-  // A fresh Outbox over the SAME durable store is an app relaunch. If the op
-  // is still pending it replays under its journaled write id and the server
-  // must recognise it. This is the only place a send-time mint is visible.
-  const replayStore = new MemoryStore();
-  const replayEnv = new ManualEnv();
-  const { box: replayBox, http: replayHttp } = await openBox({ epoch: activeEpoch, runIdForHttp: drainRunId, store: replayStore, env: replayEnv });
-  await replayBox.enqueue({ ...op("outbox-op-replay"), writeId: journaled.writeId, accountEpoch: journaled.accountEpoch });
-  const replayed = await drainUntil(replayEnv, async () => replayHttp.calls.some((c) => c.method === "POST"));
-  const replayPost = replayHttp.calls.filter((c) => c.method === "POST").at(-1) ?? null;
+  // ── B1's replay, WITHOUT handing the outbox a stamp ─────────────────────
+  //
+  // This used to open a second Outbox and enqueue the same op with the
+  // journaled `writeId`/`accountEpoch` supplied by hand. `41de6e8859` closed
+  // that door: the outbox mints the stamps and REFUSES an op that arrives
+  // carrying them, which is the right reading of B1 — a caller that can supply
+  // a write id is a caller that can supply a fresh one on every replay, which
+  // is the defect B1 exists to prevent. The old construction was simulating a
+  // replay through an API that must not be able to express one.
+  //
+  // So the replay is sent the way a replay actually reaches the server — the
+  // identical bytes the outbox itself put on the wire, resent — and the claim
+  // it establishes is unchanged and slightly stronger: the server's registry
+  // recognises the id the CLIENT journaled. The outbox is not asked to do
+  // something it now correctly refuses.
+  const drainWire = http1.calls.filter((c) => c.method === "POST").at(-1) ?? null;
+  let replayResponse = null;
+  if (drainWire !== null) {
+    const again = await fetchImpl(`${doorUrl}${drainWire.path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        [RUN_ID_HEADER]: drainRunId,
+      },
+      body: JSON.stringify(drainWire.body),
+    });
+    replayResponse = { status: again.status, text: await again.text() };
+  }
 
   // ── the straggler: an op authored under a SUPERSEDED epoch ───────────────
   // The client's epoch provider is behind. Nothing about the op is otherwise
@@ -205,8 +224,9 @@ export async function runOutboxDrain(options) {
     deadAfterDrain,
     deadLetters,
     controlRefreshes,
-    rounds: { drain: drained, replay: replayed, stale: stalled },
-    replayResponse: replayPost === null ? null : { status: replayPost.status, text: replayPost.text },
+    rounds: { drain: drained, stale: stalled },
+    drainWire,
+    replayResponse,
     // The straggler's own socket: the envelope bytes that left the client and
     // the refusal bytes that came back. Asserted by
     // `straggler_wire_matches_its_journal` — see that row for why neither the
@@ -284,6 +304,25 @@ export const OUTBOX_ASSERTIONS = [
       }
       if (o.journaled.accountEpoch === null) {
         return fail("the client journaled no account epoch — the straggler stamp the fence compares against is missing");
+      }
+      if (o.drainWire === null || typeof o.drainWire.body !== "object" || o.drainWire.body === null) {
+        return fail("the outbox put no readable envelope on the wire, so nothing links its journal to the server");
+      }
+      // The journal and the WIRE, before the server is consulted at all. B1's
+      // other named failure is an epoch re-stamped at send time, and no
+      // server-side answer can see it.
+      if (o.drainWire.body.write_id !== o.journaled.writeId) {
+        return fail(
+          `the journal holds write id ${String(o.journaled.writeId).slice(0, 12)}… and the outbox sent`
+          + ` ${String(o.drainWire.body.write_id).slice(0, 12)}… — a stamp minted at send time`,
+        );
+      }
+      if (o.drainWire.body.account_epoch !== o.journaled.accountEpoch) {
+        return fail(
+          `the journal holds account_epoch ${o.journaled.accountEpoch} and the outbox sent`
+          + ` ${o.drainWire.body.account_epoch} — re-stamping at send time makes an op authored in a`
+          + " superseded generation apply in the new one",
+        );
       }
       if (replayResponse === null) {
         return fail("the replay never reached the door, so nothing establishes that the server knows this write id");
