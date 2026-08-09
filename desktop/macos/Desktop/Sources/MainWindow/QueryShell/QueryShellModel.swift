@@ -31,6 +31,7 @@ enum QueryShellKind: String, CaseIterable, Identifiable, Sendable {
   case all
   case conversations
   case memories
+  case tasks
   case rewind
 
   var id: String { rawValue }
@@ -40,6 +41,7 @@ enum QueryShellKind: String, CaseIterable, Identifiable, Sendable {
     case .all: return "All"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
+    case .tasks: return "Tasks"
     case .rewind: return "Rewind"
     }
   }

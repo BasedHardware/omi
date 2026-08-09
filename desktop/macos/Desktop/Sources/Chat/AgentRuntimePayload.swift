@@ -27,6 +27,7 @@ enum AgentRuntimePayload {
   /// `agent/` and `pi-mono-extension/`. `agent/dist/index.js` is deliberately
   /// absent: `findBridgeScript()` already proved it exists.
   static let components: [Component] = [
+    Component(relativePath: "agent/dist/runtime/omi-tool-manifest.js", kind: .file),
     Component(relativePath: "agent/package.json", kind: .file),
     Component(relativePath: "agent/node_modules", kind: .directory),
     Component(relativePath: "pi-mono-extension/index.ts", kind: .file),

@@ -88,7 +88,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     # direct product route while shadow-only.
     assert provider.calls[0].model == 'gpt-5.6-luna'
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
-    assert provider.calls[0].request['temperature'] == 0
+    # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
+    # invalid_request_error param=temperature ("Only the default (1) value is supported").
+    # Gateway strips non-default temperatures so callers cannot trip that 400.
+    assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
 
@@ -427,6 +430,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
         'concrete_deliverable',
         'candidate_action',
         'target_task_id',
+        'source_segment_ids',
     ]
     assert 'default' not in action_item_schema['properties']['due_at']
 

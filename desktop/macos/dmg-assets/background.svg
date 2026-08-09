@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 610 365" width="1220" height="730">
-  <rect width="610" height="365" fill="#1d1d1d"/>
-  <path fill="#fff" d="M210 166h155v-21l36 31-36 31v-21H210z"/>
-  <text x="305" y="241" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle">
-    Drag to Applications to install
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 400" width="1360" height="800">
+  <rect width="680" height="400" fill="#f7f7f7"/>
+
+  <text x="45" y="101" fill="#202020" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="600">
+    Omi
   </text>
+  <text x="45" y="126" fill="#6e6e6e" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="400">
+    Drag Omi into Applications to install
+  </text>
+
+  <rect x="89" y="167" width="178" height="182" rx="18" fill="#ffffff" stroke="#d8d8d8" stroke-width="1.5"/>
+  <rect x="414" y="167" width="178" height="182" rx="18" fill="#ffffff" stroke="#d8d8d8" stroke-width="1.5"/>
+
+  <path fill="#929292" d="M286 244h82v-10l25 16-25 16v-10h-82a4 4 0 0 1 0-12z"/>
 </svg>
