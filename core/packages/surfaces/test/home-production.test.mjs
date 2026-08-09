@@ -4,19 +4,29 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { EN_MESSAGES } from "@omi-core/i18n";
+import {
+  combineHomeRefreshStatuses,
+  homePhaseNoticeKey,
+  homeSurfacePresentation,
+} from "../src/production/home-presentation.ts";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
+
+const refresh = (phase, hasSavedData) => ({ phase, hasSavedData });
 
 test("home search reads loaded projections without claiming backend completeness", async () => {
   const source = await read("src/production/HomeProduction.tsx");
   assert.match(source, /type SearchProjection<T>/);
   assert.match(source, /list\(\): Promise<T\[\]>/);
+  assert.match(source, /status\(\): StoreStatus/);
   assert.match(source, /subscribe\(listener: \(\) => void\)/);
   assert.match(source, /Promise\.allSettled/);
   assert.match(source, /memorySource\.list\(\)/);
   assert.match(source, /conversationSource\.list\(\)/);
   assert.doesNotMatch(source, /taskSource|Task\b/);
-  assert.doesNotMatch(source, /refresh\(|fetch\(|search\(|complete:\s*true|backend/i);
+  assert.doesNotMatch(source, /\brefresh\(|\bfetch\(|\bsearch\(|complete:\s*true|\bbackend\b/i);
   // red-proof: adding refresh/search/fetch or a completeness assertion makes
   // Home cease to be a filter over the already-loaded projections.
 });
@@ -55,4 +65,82 @@ test("home does not fabricate ask, chat, send, or mutation affordances", async (
   assert.doesNotMatch(source, /href=\{.*memory|href=\{.*task/i);
   // red-proof: adding an Ask button or clickable memory/task destination would
   // claim behavior the current loaded projections do not provide.
+});
+
+test("home renders each of the five refresh states distinguishably", async () => {
+  const source = await read("src/production/HomeProduction.tsx");
+  const presentation = await read("src/production/home-presentation.ts");
+
+  const phases = [
+    "initial-loading",
+    "refreshing",
+    "ready",
+    "saved-but-refresh-failed",
+    "unavailable",
+  ];
+  const seen = new Map();
+  for (const phase of phases) {
+    const hasSavedData = phase === "saved-but-refresh-failed" || phase === "refreshing";
+    const rowCount = phase === "saved-but-refresh-failed" ? 2 : phase === "unavailable" || phase === "initial-loading" ? 0 : phase === "ready" ? 0 : 1;
+    const view = homeSurfacePresentation(refresh(phase, hasSavedData), rowCount);
+    const fingerprint = `${view.phase}|${view.noticeKey}|rows:${view.showsSavedRows}|fail:${view.showsFailureIndication}`;
+    assert.equal(view.phase, phase);
+    assert.ok(!seen.has(fingerprint), `phase ${phase} collides with ${seen.get(fingerprint)}`);
+    seen.set(fingerprint, phase);
+  }
+  assert.equal(seen.size, 5);
+
+  // saved-but-refresh-failed must keep saved rows and the failure indication together.
+  const savedFailed = homeSurfacePresentation(refresh("saved-but-refresh-failed", true), 3);
+  assert.equal(savedFailed.noticeKey, "lifecycle.savedFailed");
+  assert.equal(savedFailed.showsSavedRows, true);
+  assert.equal(savedFailed.showsFailureIndication, true);
+  assert.equal(EN_MESSAGES["lifecycle.savedFailed"], "Showing saved data. Couldn't refresh.");
+
+  // Catalog keys already exist — inventing a new string fails i18n parity and this check.
+  for (const key of ["lifecycle.loading", "lifecycle.refreshing", "lifecycle.savedFailed", "lifecycle.unavailable"]) {
+    assert.equal(typeof EN_MESSAGES[key], "string");
+    assert.ok(EN_MESSAGES[key].length > 0);
+    assert.match(presentation, new RegExp(`"${key}"`));
+  }
+  assert.equal(homePhaseNoticeKey("ready"), null);
+
+  // The surface must bind the shared notice + data-surface-state, not a binary loadFailed.
+  assert.match(source, /data-surface-state=\{refresh\.phase\}/);
+  assert.match(source, /status-notice \$\{refresh\.phase\}/);
+  assert.match(source, /homePhaseLabel\(refresh, locale\)/);
+  assert.match(source, /combineHomeRefreshStatuses/);
+  assert.doesNotMatch(source, /loadFailed|setLoadFailed|home-load-error|lifecycle\.error/);
+  // red-proof: collapsing back to a boolean loadFailed, or dropping the
+  // saved-but-refresh-failed notice while rows remain, makes fingerprints collide
+  // and fails the saved-rows + failure-indication assertion above.
+});
+
+test("home combines two source phases with a conservative worst-of reading", () => {
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("ready", true), refresh("unavailable", false)),
+    refresh("saved-but-refresh-failed", true),
+  );
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("unavailable", false), refresh("unavailable", false)),
+    refresh("unavailable", false),
+  );
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("ready", true), refresh("saved-but-refresh-failed", true)),
+    refresh("saved-but-refresh-failed", true),
+  );
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("ready", true), refresh("initial-loading", false)),
+    refresh("initial-loading", true),
+  );
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("ready", true), refresh("refreshing", true)),
+    refresh("refreshing", true),
+  );
+  assert.deepEqual(
+    combineHomeRefreshStatuses(refresh("ready", true), refresh("ready", false)),
+    refresh("ready", true),
+  );
+  // red-proof: returning ready whenever either side is ready would tell the user
+  // Home is fine while the other projection is unavailable or stale-failed.
 });
