@@ -23,7 +23,8 @@
  *      §4). On `preserve_envelope`, the full envelope is retained before the
  *      refusal is written.
  *   4. THE `write_id` REGISTRY (ruling B1), and only then
- *   5. APPLY.
+ *   5. APPLY — with 4 and 5 enclosed by one storage unit of work, including
+ *      recording the applied outcome before commit.
  *
  * **The fence runs BEFORE the registry, and that ordering is load-bearing.**
  * Ruling B5 grounds registry GC on exactly it: "once the account epoch advances
@@ -69,8 +70,8 @@ import {
   type WriteOpsWireOutcome,
 } from "../observability/write-ops-counter";
 import type { StragglerTable } from "../stores/straggler-table";
-import type { TasksStore } from "../stores/tasks-store";
-import { exceedsFingerprintDepth, type WriteIdRegistry } from "../stores/write-id-registry";
+import { exceedsFingerprintDepth } from "../stores/write-id-registry";
+import type { WriteUnitOfWork } from "../stores/write-unit-of-work";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -99,8 +100,7 @@ export const WRITE_OPS_ROUTE_PATTERN = "/v1/:domain/ops";
 export interface TasksOpsRouteDependencies {
   /** Resolves a bearer token to a principal, or null. Never throws for bad input. */
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
-  readonly tasks: TasksStore;
-  readonly registry: WriteIdRegistry;
+  readonly unitOfWork: WriteUnitOfWork;
   readonly stragglers: StragglerTable;
   /** The fence's store and producer-side counter — its one composition. */
   readonly fence: {
@@ -217,38 +217,33 @@ export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencie
       return answer(decision.outcome, writeFenceRefusalResponse(decision));
     }
 
-    // ── 4. The `write_id` registry (ruling B1) ──────────────────────────────
-    const seen = deps.registry.lookup(principal.uid, envelope.write_id, opFingerprint(envelope));
-    if (seen.kind === "reuse") {
+    // ── 4–5. The `write_id` registry and apply, as one unit of work ─────────
+    const write = await deps.unitOfWork.execute({
+      accountId: principal.uid,
+      writeId: envelope.write_id,
+      fingerprintOf: opFingerprint(envelope),
+      accountEpoch: envelope.account_epoch,
+      op: envelope.op,
+    });
+    if (write.kind === "reuse") {
       return answer(
         "write_id_reuse",
         fixedResponse(WRITE_ERRORS.write_id_reuse.body, WRITE_ERRORS.write_id_reuse.status),
       );
     }
-    if (seen.kind === "replay") {
+    if (write.kind === "replay") {
       // A SUCCESS. The user's edit is in the record; reporting anything else
       // would be the false failure this contract exists to prevent.
       return answer("accepted_idempotent", fixedResponse(
-        JSON.stringify({ applied: seen.outcome, idempotent: true }),
+        JSON.stringify({ applied: write.outcome, idempotent: true }),
         200,
       ));
     }
-
-    // ── 5. Apply ────────────────────────────────────────────────────────────
-    const applied = deps.tasks.apply(principal.uid, envelope.op);
-    if (!applied.applied) {
+    if (write.kind === "conflict") {
       return answer("conflict", fixedResponse(WRITE_ERRORS.conflict.body, WRITE_ERRORS.conflict.status));
     }
-    const outcome = { record_id: applied.record_id, revision: applied.revision };
-    deps.registry.record({
-      accountId: principal.uid,
-      writeId: envelope.write_id,
-      fingerprintOf: opFingerprint(envelope),
-      accountEpoch: envelope.account_epoch,
-      outcome,
-    });
     return answer("accepted", fixedResponse(
-      JSON.stringify({ applied: outcome, idempotent: false }),
+      JSON.stringify({ applied: write.outcome, idempotent: false }),
       200,
     ));
   };

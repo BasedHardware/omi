@@ -9,6 +9,7 @@ import {
   SqliteStragglerTable,
   SqliteTasksStore,
   SqliteWriteIdRegistry,
+  SqliteWriteUnitOfWork,
   createSqliteLocalServiceStores,
 } from "./index";
 
@@ -148,6 +149,8 @@ describe("the four SQLite adapters", () => {
     });
     expect(injected.writePath.tasks).toBe(stores.tasks);
     expect(injected.writePath.registry).toBe(stores.registry);
+    expect(injected.writePath.unitOfWork).toBe(stores.unitOfWork);
+    expect(stores.unitOfWork).toBeInstanceOf(SqliteWriteUnitOfWork);
     expect(injected.writePath.stragglers).toBe(stores.stragglers);
     expect(injected.writePath.control).toBe(stores.control);
     sqliteDb.close();
@@ -218,5 +221,32 @@ describe("restart acceptance and red mutation", () => {
     const result = run(":memory:");
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain("restart persistence proof failed");
+  });
+});
+
+describe("apply and write-id record are one durable unit of work", () => {
+  const proof = new URL("./unit-of-work-crash-proof.ts", import.meta.url).pathname;
+
+  test("a real SIGKILL between apply and record rolls both back before replay", () => {
+    const root = `/tmp/i7-${process.pid}`;
+    mkdirSync(root, { recursive: true });
+    const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, "run", proof, `${root}/${nonce}.sqlite`, `${root}/${nonce}.marker`],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString()).toBe([
+      "child reached boundary: task applied, write_id not recorded",
+      "kill child: SIGKILL",
+      "restart child: complete",
+      "after crash: task_records=0 task_applies=0 registry_rows=0",
+      "replay same write_id: 200 idempotent=false",
+      "after replay: task_records=1 task_applies=1 registry_rows=1",
+      "second replay: 200 idempotent=true",
+      "unit-of-work crash proof: PASS",
+      "",
+    ].join("\n"));
   });
 });

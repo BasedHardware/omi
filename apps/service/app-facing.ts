@@ -30,6 +30,7 @@ import { prepareTasksRead } from "./composition/tasks-read";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
+import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
 
 /**
  * Builds the complete app-facing service.
@@ -42,8 +43,8 @@ import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/wr
  * (config parsing, socket binding, printing).
  *
  * The `db` option is the local recall-fixture database. Write-path persistence
- * is supplied independently through the four store ports; omitting it preserves
- * the historical in-memory test/dev composition.
+ * is supplied independently through the four store ports and their unit of
+ * work; omitting it preserves the historical in-memory test/dev composition.
  */
 
 const DEV_KEY_ID = "dev-local";
@@ -71,20 +72,26 @@ export interface LocalServiceOptions {
   readonly stores?: LocalServiceStores;
 }
 
-/** The four existing write-path ports, grouped only at the composition root. */
+/** The four stores and their atomic write boundary, grouped at composition. */
 export interface LocalServiceStores {
   readonly tasks: TasksStore;
   readonly registry: WriteIdRegistry;
+  readonly unitOfWork: WriteUnitOfWork;
   readonly stragglers: StragglerTable;
   readonly control: AccountControlProjectionStore;
 }
 
-export const createInMemoryLocalServiceStores = (): LocalServiceStores => Object.freeze({
-  tasks: createInMemoryTasksStore(),
-  registry: createInMemoryWriteIdRegistry(),
-  stragglers: createInMemoryStragglerTable(),
-  control: createInMemoryAccountControlProjectionStore(),
-});
+export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
+  const tasks = createInMemoryTasksStore();
+  const registry = createInMemoryWriteIdRegistry();
+  return Object.freeze({
+    tasks,
+    registry,
+    unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
+    stragglers: createInMemoryStragglerTable(),
+    control: createInMemoryAccountControlProjectionStore(),
+  });
+};
 
 export interface LocalService {
   readonly app: Hono;
@@ -105,6 +112,7 @@ export interface LocalService {
     readonly tasks: TasksStore;
     readonly tasksRead: TasksReadStore;
     readonly registry: WriteIdRegistry;
+    readonly unitOfWork: WriteUnitOfWork;
     readonly stragglers: StragglerTable;
     readonly control: AccountControlProjectionStore;
     readonly fenceCounter: WriteFenceCounter;
@@ -126,6 +134,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const tasks = stores.tasks;
   const writeIdRegistry = stores.registry;
+  const unitOfWork = stores.unitOfWork;
   const stragglers = stores.stragglers;
   const controlStore = stores.control;
 
@@ -269,8 +278,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   registerMemoryRoutes(app, { resolvePrincipal, prepareRead, counter });
   registerTasksOpsRoutes(app, {
     resolvePrincipal,
-    tasks,
-    registry: writeIdRegistry,
+    unitOfWork,
     stragglers,
     fence: { store: controlStore, counter: fenceCounter },
     counter: opsCounter,
@@ -318,6 +326,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       tasks,
       tasksRead: tasks,
       registry: writeIdRegistry,
+      unitOfWork,
       stragglers,
       control: controlStore,
       fenceCounter,

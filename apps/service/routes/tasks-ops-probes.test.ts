@@ -258,13 +258,13 @@ describe("idempotency under concurrency", () => {
    * separable by an interleaving, or one op applies twice and the second apply
    * is reported to the user as a success it did not ask for.
    *
-   * The route's handler is synchronous from `registry.lookup` through
-   * `registry.record` — there is no `await` between them, which is what closes
-   * the window. That is easy to break by adding an innocuous `await` later, and
-   * nothing else in the suite would notice.
+   * The route delegates lookup, apply and record to one unit-of-work call. The
+   * in-memory implementation has no suspension point inside that call; durable
+   * adapters own the database transaction. An `await` at the route boundary is
+   * safe because it does not split the unit itself.
    *
-   * red-proof: insert `await Bun.sleep(0);` between the registry lookup and the
-   * APPLY in `tasks-ops.ts`. APPLIED AND OBSERVED RED.
+   * Original red-proof: insert `await Bun.sleep(0);` between registry lookup and
+   * apply in the pre-unit-of-work route. APPLIED AND OBSERVED RED.
    *
    * The first attempt inserted it one line earlier — BEFORE the lookup — and
    * STAYED GREEN, correctly: a suspension before the lookup suspends the whole
