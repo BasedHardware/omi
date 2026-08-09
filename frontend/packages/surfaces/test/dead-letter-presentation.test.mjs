@@ -76,7 +76,7 @@ test("a stale-epoch letter renders the signed string and the saved edit beneath 
   assert.deepEqual(JSON.parse(view.savedEdit), OP, "the edit is reproducible by hand from what is shown");
   // red-proof: make deadLetterView return `savedEdit: null` unconditionally —
   // the signed string then renders over an empty panel and this fails.
-  // RED-PROOF PENDING.
+  // APPLIED, OBSERVED RED, REVERTED.
 });
 
 test("the signed string never renders when there is no edit to show", () => {
@@ -97,7 +97,7 @@ test("the signed string never renders when there is no edit to show", () => {
   assert.doesNotThrow(() => deadLetterSavedEdit(letter({ payload: "{not json" })));
   // red-proof: drop the `savedEdit !== null` condition from the messageKey
   // choice — both letters then render the promise with nothing beneath it.
-  // RED-PROOF PENDING.
+  // APPLIED, OBSERVED RED, REVERTED.
 });
 
 test("every other permanent reason keeps the long-standing generic string", () => {
@@ -118,7 +118,7 @@ test("no dead-letter affordance can resubmit the dead envelope", () => {
   }
   assert.deepEqual([...deadLetterView(letter()).affordances], ["discard"]);
   // red-proof: add "retry" to DEAD_LETTER_AFFORDANCES — all three assertions
-  // fail. RED-PROOF PENDING.
+  // fail. APPLIED, OBSERVED RED, REVERTED.
 });
 
 test("STATIC TRIPWIRE — no production dead-letter panel wires a send to a dead letter", async () => {
@@ -140,5 +140,5 @@ test("STATIC TRIPWIRE — no production dead-letter panel wires a send to a dead
   }
   // red-proof: add `<button onClick={() => store.patch(letter.recordId, {})}>`
   // inside TasksProduction's dead panel — the store.patch( pattern matches and
-  // this fails. RED-PROOF PENDING.
+  // this fails. APPLIED, OBSERVED RED, REVERTED.
 });
