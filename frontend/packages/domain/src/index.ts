@@ -8,6 +8,7 @@ export * from "./folders-store.js";
 export * from "./generation-selection.js";
 export * from "./memories-codec.js";
 export * from "./memories-store.js";
+export * from "./platform-tasks-store.js";
 export * from "./store-status.js";
 export * from "./synthesized-memories-store.js";
 export * from "./tasks-codec.js";
