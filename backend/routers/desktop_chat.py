@@ -27,6 +27,7 @@ from utils.llm.desktop_llm_stub import (
 )
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
+    CHAT_STRUCTURED_AUTO_LANE_ID,
     get_llm_gateway_base_url,
     get_llm_gateway_client,
     llm_gateway_headers,
@@ -209,7 +210,23 @@ _MANAGED_CHAT_ALIASES = {
     'omi-auto',
     CHAT_AGENT_AUTO_LANE_ID,
 }
+# Non-conversational desktop callers (the automation planner and the local-agent
+# loop) ask for a single-shot structured completion, not a chat turn. They select
+# the structured lane explicitly so they never inherit chat-agent routing.
+_MANAGED_STRUCTURED_ALIASES = {
+    'omi-structured',
+    CHAT_STRUCTURED_AUTO_LANE_ID,
+}
 _MAX_TOKENS = 16_384
+
+
+def _managed_lane_id(body: Mapping[str, object]) -> str:
+    """Lane a managed desktop request routes to. Chat is the default."""
+    model = body.get('model')
+    normalized = model.strip().lower() if isinstance(model, str) else ''
+    if normalized in _MANAGED_STRUCTURED_ALIASES:
+        return CHAT_STRUCTURED_AUTO_LANE_ID
+    return CHAT_AGENT_AUTO_LANE_ID
 
 
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
@@ -230,7 +247,7 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
     normalized = model.strip().lower()
     if not normalized:
         return True
-    if normalized in _MANAGED_CHAT_ALIASES:
+    if normalized in _MANAGED_CHAT_ALIASES or normalized in _MANAGED_STRUCTURED_ALIASES:
         return True
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
@@ -404,7 +421,7 @@ def _gateway_user_content(content: object) -> object:
     return blocks or ''
 
 
-def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
+def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, object]:
     messages = body.get('messages')
     if not isinstance(messages, list):
         raise ValueError('messages must be an array')
@@ -420,7 +437,7 @@ def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
             updated['content'] = ''
         translated.append(updated)
     gateway_body = {key: value for key, value in body.items() if key != 'omi_web_search'}
-    return {**gateway_body, 'model': CHAT_AGENT_AUTO_LANE_ID, 'messages': translated}
+    return {**gateway_body, 'model': lane_id, 'messages': translated}
 
 
 def _tool_choice(choice: object) -> dict[str, str] | None:
@@ -1216,8 +1233,8 @@ async def chat_completions(
             )
             gateway_mode = False
         if gateway_mode:
-            public_model = CHAT_AGENT_AUTO_LANE_ID
-            gateway_payload = _gateway_body(body)
+            public_model = _managed_lane_id(body)
+            gateway_payload = _gateway_body(body, public_model)
         else:
             public_model, payload = _request(body)
             gateway_payload = {}
