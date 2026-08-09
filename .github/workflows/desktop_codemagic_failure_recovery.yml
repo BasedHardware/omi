@@ -1,0 +1,75 @@
+name: Desktop Release Recovery Required
+
+on:
+  check_run:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Exact failed Codemagic build ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-codemagic-recovery-${{ github.event.check_run.id || inputs.build_id }}
+  cancel-in-progress: false
+
+jobs:
+  recovery-capsule:
+    name: Agent recovery capsule
+    if: >-
+      github.repository == 'BasedHardware/omi' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.check_run.name == 'Release OMI Desktop (Swift)' &&
+        github.event.check_run.status == 'completed' &&
+        github.event.check_run.conclusion == 'failure' &&
+        github.event.check_run.app.slug == 'codemagic-ci-cd' &&
+        startsWith(github.event.check_run.details_url, 'https://codemagic.io/app/66c95e6ec76853c447b8bcbb/build/')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Create credential-safe recovery capsule
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          EVENT_PATH: ${{ github.event_path }}
+          MANUAL_BUILD_ID: ${{ inputs.build_id }}
+        run: |
+          args=(
+            --profiles .github/scripts/desktop-codemagic-recovery-profiles.json
+            --output "$RUNNER_TEMP/desktop-codemagic-recovery.json"
+            --summary "$RUNNER_TEMP/desktop-codemagic-recovery.md"
+          )
+          if [[ "${{ github.event_name }}" == "check_run" ]]; then
+            args+=(--event "$EVENT_PATH")
+          else
+            args+=(--build-id "$MANUAL_BUILD_ID")
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            if python3 .github/scripts/desktop-codemagic-failure-recovery.py "${args[@]}"; then
+              break
+            fi
+            if [[ "$attempt" == "6" ]]; then
+              echo "Codemagic recovery metadata was not ready after six attempts" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          cat "$RUNNER_TEMP/desktop-codemagic-recovery.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain recovery capsule
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-codemagic-recovery-${{ github.event.check_run.id || inputs.build_id }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/desktop-codemagic-recovery.json
+          if-no-files-found: error
+          overwrite: false

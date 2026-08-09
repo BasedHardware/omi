@@ -21,6 +21,12 @@ final class ScreenPrivacyExclusionTests: XCTestCase {
     }
   }
 
+  func testRewindDefaultsExcludeInstalledOmiName() {
+    XCTAssertTrue(RewindSettings.defaultExcludedApps.contains("Omi"))
+    XCTAssertFalse(RewindSettings.defaultExcludedApps.contains("omi"))
+    XCTAssertTrue(RewindSettings.shared.isAppExcluded("Omi"))
+  }
+
   // MARK: - Each assistant's isAppExcluded respects Rewind exclusions
 
   @MainActor

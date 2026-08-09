@@ -30,6 +30,13 @@ PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID = 'omi:auto:public-shared-conversat
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
+# Narrow agentic-chat route pin. Independent of FEATURE_MODE so gateway can stay
+# on for non-chat features while chat stays on direct Anthropic (or the reverse).
+LLM_CHAT_AGENT_ROUTE_ENV_VAR = 'OMI_LLM_CHAT_AGENT_ROUTE'
+CHAT_AGENT_ROUTE_DIRECT = 'direct'
+CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
+_CHAT_AGENT_ROUTE_DIRECT_VALUES = frozenset({'direct', 'off', '0', 'false', 'no'})
+_CHAT_AGENT_ROUTE_GATEWAY_VALUES = frozenset({'gateway', '1', 'true', 'yes', 'luna', 'on'})
 LLM_GATEWAY_CALLER = 'backend'
 LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
 LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
@@ -141,6 +148,37 @@ def should_route_features_through_gateway() -> bool:
             f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway outside dev/local requires {LLM_GATEWAY_URL_ENV_VAR}'
         )
     return True
+
+
+def get_chat_agent_route() -> str:
+    """Return the effective agentic-chat route: ``direct`` or ``gateway``.
+
+    Explicit ``OMI_LLM_CHAT_AGENT_ROUTE`` wins. When unset, inherit the global
+    feature-mode switch so existing deployments keep prior behavior.
+    """
+    raw = os.getenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, '').strip().lower()
+    if raw in _CHAT_AGENT_ROUTE_DIRECT_VALUES:
+        return CHAT_AGENT_ROUTE_DIRECT
+    if raw in _CHAT_AGENT_ROUTE_GATEWAY_VALUES:
+        return CHAT_AGENT_ROUTE_GATEWAY
+    if raw:
+        raise RuntimeError(
+            f'{LLM_CHAT_AGENT_ROUTE_ENV_VAR}={raw!r} is invalid; '
+            f'expected one of {sorted(_CHAT_AGENT_ROUTE_DIRECT_VALUES | _CHAT_AGENT_ROUTE_GATEWAY_VALUES)}'
+        )
+    return CHAT_AGENT_ROUTE_GATEWAY if should_route_features_through_gateway() else CHAT_AGENT_ROUTE_DIRECT
+
+
+def should_route_chat_agent_through_gateway() -> bool:
+    """Whether managed agentic chat should use the gateway OpenAI-compatible lane.
+
+    Requires both the chat-agent route pin and global feature mode. This keeps
+    ``OMI_LLM_CHAT_AGENT_ROUTE=direct`` safe while ``FEATURE_MODE=gateway`` for
+    other features (the 2026-08 chat outage footgun class).
+    """
+    if get_chat_agent_route() != CHAT_AGENT_ROUTE_GATEWAY:
+        return False
+    return should_route_features_through_gateway()
 
 
 def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> None:
