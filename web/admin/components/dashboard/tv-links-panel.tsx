@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuthFetch } from "@/hooks/useAuthToken";
+import Link from "next/link";
+import { useAuthFetch, useAuthToken } from "@/hooks/useAuthToken";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tv, Copy, Trash2 } from "lucide-react";
+import { Tv, Copy, Trash2, ArrowLeft } from "lucide-react";
 
 type TvLinkRow = {
   id: string;
@@ -28,12 +29,17 @@ type TvLinkRow = {
   status: "active" | "expired" | "revoked";
 };
 
-function parseTtlDays(raw: string): { ok: true; value: number | null } | { ok: false; error: string } {
+function parseTtlDays(
+  raw: string,
+): { ok: true; value: number | null } | { ok: false; error: string } {
   const trimmed = raw.trim();
   if (trimmed === "" || trimmed === "0") return { ok: true, value: null };
   const n = Number(trimmed);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
-    return { ok: false, error: "Expiry must be a positive whole number of days, or empty for never." };
+    return {
+      ok: false,
+      error: "Expiry must be a positive whole number of days, or empty for never.",
+    };
   }
   if (n > 3650) {
     return { ok: false, error: "Expiry cannot exceed 3650 days." };
@@ -41,9 +47,15 @@ function parseTtlDays(raw: string): { ok: true; value: number | null } | { ok: f
   return { ok: true, value: n };
 }
 
-/** Create / list / revoke secret kiosk URLs. Board is only available via those links. */
-export function TvLinksPanel() {
-  const { fetchWithAuth } = useAuthFetch();
+type Props = {
+  /** page = full manage UI; used on /dashboard/tv-links */
+  variant?: "page";
+};
+
+/** Create / list / revoke secret kiosk URLs. Board is only via those links. */
+export function TvLinksPanel({ variant = "page" }: Props) {
+  const { fetchWithAuth, token } = useAuthFetch();
+  const { loading: authLoading } = useAuthToken();
   const [links, setLinks] = useState<TvLinkRow[]>([]);
   const [label, setLabel] = useState("Office TV");
   const [ttlDays, setTtlDays] = useState("90");
@@ -53,11 +65,13 @@ export function TvLinksPanel() {
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (!token) return;
     try {
       const res = await fetchWithAuth("/api/omi/tv-links");
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
         setLinks([]);
-        setError("Failed to load TV links");
+        setError(body.error || `Failed to load TV links (${res.status})`);
         return;
       }
       const data = await res.json();
@@ -67,11 +81,16 @@ export function TvLinksPanel() {
       setLinks([]);
       setError(e instanceof Error ? e.message : "Failed to load TV links");
     }
-  }, [fetchWithAuth]);
+  }, [fetchWithAuth, token]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!token) {
+      setError("Sign in required to manage TV links");
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [authLoading, token, refresh]);
 
   const onCreate = async () => {
     setBusy(true);
@@ -121,28 +140,45 @@ export function TvLinksPanel() {
   };
 
   return (
-    <Card id="tv-links">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <Tv className="h-5 w-5" />
-          TV wall links
-        </CardTitle>
-        <CardDescription>
-          Secret kiosk URLs for office displays. No Google login on the TV — create a
-          link and open it on the wall. Revoke anytime. Metrics only (ARR optional).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
-            {error}
+    <div className="space-y-4">
+      {variant === "page" ? (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Tv className="h-7 w-7" />
+              TV wall links
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
+              Secret kiosk URLs for office displays. No Google login on the TV —
+              create a link and open it on the wall. Revoke anytime. Metrics only
+              (ARR optional). This is the only way to open the TV board.
+            </p>
           </div>
-        )}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
-        <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-          <div className="text-sm font-medium">Create link</div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1.5">
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
+          {error}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Create link</CardTitle>
+          <CardDescription>
+            Default expiry 90 days. Full token is shown once — copy it to the TV browser.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
               <Label htmlFor="tv-label">Label</Label>
               <Input
                 id="tv-label"
@@ -151,7 +187,7 @@ export function TvLinksPanel() {
                 placeholder="Office TV"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="tv-ttl">Expiry (days, empty = never)</Label>
               <Input
                 id="tv-ttl"
@@ -170,12 +206,12 @@ export function TvLinksPanel() {
               <Label htmlFor="tv-rev">Include ARR / MRR</Label>
             </div>
           </div>
-          <Button onClick={() => void onCreate()} disabled={busy} size="sm">
+          <Button onClick={() => void onCreate()} disabled={busy || !token}>
             Generate TV link
           </Button>
 
           {createdUrl && (
-            <div className="rounded-md border bg-background p-3 space-y-2">
+            <div className="rounded-md border bg-muted/40 p-3 space-y-2">
               <div className="text-sm font-medium">Copy now — not shown again</div>
               <div className="flex gap-2 items-center">
                 <code className="text-xs break-all flex-1">{createdUrl}</code>
@@ -190,64 +226,76 @@ export function TvLinksPanel() {
               </div>
             </div>
           )}
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2 pr-3">Label</th>
-                <th className="py-2 pr-3">Prefix</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2 pr-3">Revenue</th>
-                <th className="py-2 pr-3">Created</th>
-                <th className="py-2 pr-3">Expires</th>
-                <th className="py-2 pr-3">Last used</th>
-                <th className="py-2"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {links.map((l) => (
-                <tr key={l.id} className="border-b border-border/60">
-                  <td className="py-2 pr-3 font-medium">{l.label}</td>
-                  <td className="py-2 pr-3 font-mono text-xs">{l.prefix}…</td>
-                  <td className="py-2 pr-3">{l.status}</td>
-                  <td className="py-2 pr-3">{l.includeRevenue ? "yes" : "no"}</td>
-                  <td className="py-2 pr-3 whitespace-nowrap">
-                    {new Date(l.createdAt).toLocaleString()}
-                  </td>
-                  <td className="py-2 pr-3 whitespace-nowrap">
-                    {l.expiresAt ? new Date(l.expiresAt).toLocaleDateString() : "never"}
-                  </td>
-                  <td className="py-2 pr-3 whitespace-nowrap">
-                    {l.lastUsedAt ? new Date(l.lastUsedAt).toLocaleString() : "—"}
-                  </td>
-                  <td className="py-2">
-                    {l.status === "active" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void onRevoke(l.id)}
-                        aria-label={`Revoke ${l.label}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
-                  </td>
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing links</CardTitle>
+          <CardDescription>
+            Only a short prefix is stored for display. Revoke to kill a leaked URL.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="py-2 pr-3">Label</th>
+                  <th className="py-2 pr-3">Prefix</th>
+                  <th className="py-2 pr-3">Status</th>
+                  <th className="py-2 pr-3">Revenue</th>
+                  <th className="py-2 pr-3">Created</th>
+                  <th className="py-2 pr-3">Expires</th>
+                  <th className="py-2 pr-3">Last used</th>
+                  <th className="py-2"> </th>
                 </tr>
-              ))}
-              {links.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-muted-foreground text-center">
-                    No TV links yet — generate one to open the wall view
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+              </thead>
+              <tbody>
+                {links.map((l) => (
+                  <tr key={l.id} className="border-b border-border/60">
+                    <td className="py-2 pr-3 font-medium">{l.label}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{l.prefix}…</td>
+                    <td className="py-2 pr-3">{l.status}</td>
+                    <td className="py-2 pr-3">{l.includeRevenue ? "yes" : "no"}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {new Date(l.createdAt).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {l.expiresAt ? new Date(l.expiresAt).toLocaleDateString() : "never"}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {l.lastUsedAt ? new Date(l.lastUsedAt).toLocaleString() : "—"}
+                    </td>
+                    <td className="py-2">
+                      {l.status === "active" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => void onRevoke(l.id)}
+                          aria-label={`Revoke ${l.label}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {links.length === 0 && !error && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-muted-foreground text-center">
+                      {authLoading || !token
+                        ? "Loading…"
+                        : "No TV links yet — generate one to open the wall view"}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

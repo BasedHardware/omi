@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -20,6 +21,7 @@ import {
   AlertTriangle,
   Smartphone,
   Share2,
+  Tv,
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
@@ -54,7 +56,6 @@ import {
   type ChartItem,
 } from "@/components/dashboard/resizable-chart-grid";
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
-import { TvLinksPanel } from "@/components/dashboard/tv-links-panel";
 import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
 import { calculatePeriodChange, latestPeriodChange } from "@/lib/period-change";
@@ -2544,11 +2545,18 @@ export default function AnalyticsPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">
           Analytics Dashboard
         </h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/tv-links"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Tv className="h-4 w-4" />
+            TV wall links
+          </Link>
           {[6, 12, 24].map((m) => (
             <button
               key={m}
@@ -2579,7 +2587,6 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      <TvLinksPanel />
 
       <ResizableChartGrid
         storageKey="admin:unified:v1"
