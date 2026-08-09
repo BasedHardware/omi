@@ -214,14 +214,32 @@ function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
   return { data, activeKeys, stats };
 }
 
+function windowPlatTotals(
+  platforms: Record<string, number | null | Record<string, number | null>> | undefined,
+  hoursKey: string,
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  if (!platforms) return out;
+  for (const k of PLATS) {
+    const raw = platforms[k];
+    if (raw == null) out[k] = null;
+    else if (typeof raw === "number") out[k] = raw;
+    else out[k] = (raw as Record<string, number | null>)[hoursKey] ?? null;
+  }
+  return out;
+}
+
 function MultiLineChart({
   series,
   hours,
+  totals,
 }: {
   series: SeriesPoint[];
   hours: number;
+  /** Window totals (same numbers as the top chips) — shown on the right. */
+  totals?: Record<string, number | null>;
 }) {
-  const { data, activeKeys, stats } = useMemo(
+  const { data, activeKeys } = useMemo(
     () => buildIndexedChart(series, hours),
     [series, hours],
   );
@@ -275,7 +293,7 @@ function MultiLineChart({
               formatter={(value: number, name: string, item) => {
                 const raw = item?.payload?.[`${name}_raw`];
                 const pct = value == null ? "—" : `${Math.round(value * 100)}% of start`;
-                const abs = raw == null ? "" : ` · now ${fmt(Number(raw))}`;
+                const abs = raw == null ? "" : ` · bucket ${fmt(Number(raw))}`;
                 return [`${pct}${abs}`, PLAT_LABEL[name] || name];
               }}
             />
@@ -295,14 +313,12 @@ function MultiLineChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="tv-end-labels" title="Relative to each line's start in this window">
+      <div className="tv-end-labels" title="Same window totals as the chips above">
         {activeKeys.map((k) => {
-          const pct = stats[k]?.endPct;
-          const label =
-            pct == null ? "—" : `${Math.round(pct * 100)}%`;
+          const total = totals?.[k];
           return (
             <span key={k} style={{ color: PLAT_COLORS[k] }}>
-              {PLAT_LABEL[k]} {label}
+              {PLAT_LABEL[k]} {fmt(total ?? null)}
             </span>
           );
         })}
@@ -674,7 +690,11 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart series={a?.series || []} hours={hours} />
+              <MultiLineChart
+                series={a?.series || []}
+                hours={hours}
+                totals={actSlot?.platforms || {}}
+              />
             </div>
           </div>
         </section>
@@ -698,7 +718,11 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart series={mem?.series || []} hours={hours} />
+              <MultiLineChart
+                series={mem?.series || []}
+                hours={hours}
+                totals={windowPlatTotals(mem?.platforms, hk)}
+              />
             </div>
           </div>
         </section>
@@ -825,7 +849,11 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart series={conv?.series || []} hours={hours} />
+              <MultiLineChart
+                series={conv?.series || []}
+                hours={hours}
+                totals={windowPlatTotals(conv?.platforms, hk)}
+              />
             </div>
           </div>
         </section>
@@ -849,7 +877,11 @@ export function TvBoard({
               hours={hours}
             />
             <div className="tv-chart">
-              <MultiLineChart series={chat?.series || []} hours={hours} />
+              <MultiLineChart
+                series={chat?.series || []}
+                hours={hours}
+                totals={windowPlatTotals(chat?.platforms, hk)}
+              />
             </div>
           </div>
         </section>
@@ -893,7 +925,11 @@ export function TvBoard({
               </div>
             </div>
             <div className="tv-chart">
-              <MultiLineChart series={a?.series || []} hours={hours} />
+              <MultiLineChart
+                series={a?.series || []}
+                hours={hours}
+                totals={actSlot?.platforms || {}}
+              />
             </div>
           </div>
         </section>
