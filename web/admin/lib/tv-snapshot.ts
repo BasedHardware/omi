@@ -137,7 +137,11 @@ export function daysUntilMillion(
   }
 
   const series: SeriesPoint[] = [];
-  const seriesAnchor = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : total;
+  // The historical series must anchor to a total measured at the same
+  // completed-day boundary as dailyNew. If seriesTotal (persons_total_completed)
+  // rejected, leave the series empty rather than falling back to the live total,
+  // which includes today's partial signups and would inflate every historical point.
+  const seriesAnchor = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : null;
   if (seriesAnchor != null && daysSorted.length) {
     let running = seriesAnchor;
     const rev: SeriesPoint[] = [];
