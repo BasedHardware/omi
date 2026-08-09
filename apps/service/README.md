@@ -2,7 +2,7 @@
 
 ## What this is
 
-This is a loopback-only HTTP service for testing a real macOS or iOS app against the new omi backend rewrite. It boots from a cold checkout with deterministic QA seed data and exposes the same Hono app that tests exercise via `createLocalService` in `app-facing.ts` — `bin/dev-server.ts` adds only process concerns (config, socket, printing). SQLite here is QA fixture storage only and is never production authority; there are no production credentials, cloud services, or deployment topology behind this binary.
+This is the canonical app-facing HTTP service, booted loopback-only for testing a real macOS or iOS app against the new omi backend rewrite. It starts from a cold checkout with deterministic QA seed data and exposes the same Hono app that tests exercise via `createLocalService` in `app-facing.ts` — `bin/dev-server.ts` adds only process concerns (config, socket, printing). The local composition uses in-memory and SQLite adapters; a deployed composition replaces those with production adapters and credentials.
 
 ## Run it
 
@@ -17,7 +17,7 @@ Zero environment variables are required. On success the server prints:
 ```
 omi local backend is up
 
-  base URL      http://127.0.0.1:4811
+  base URL      http://127.0.0.1:4851
   bound to      127.0.0.1 (loopback only - not reachable from the LAN)
   seed identity local-dev-user, 12 memories, America/Los_Angeles
   time anchor   2026-08-07T12:00:00.000Z
@@ -28,9 +28,9 @@ omi local backend is up
 
   try it
     TOKEN='<same token>'
-    curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4811/v1/memories?limit=5"
-    curl -s http://127.0.0.1:4811/v1/qa/status
-    curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4811/v1/qa/reset
+    curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4851/v1/conversations?limit=5"
+    curl -s http://127.0.0.1:4851/v1/qa/status
+    curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4851/v1/qa/reset
 
   served-request count prints below whenever it changes.
   if it stays at 0 while the app shows memories, the app is NOT talking to this backend.
@@ -39,14 +39,14 @@ omi local backend is up
 After domain traffic arrives, a `[served]` heartbeat line prints whenever counts change (once per second at most):
 
 ```
-[served] memories=1 denied=0 failed=0 other=1
+[served] domain-reads=1 denied=0 failed=0 other=1
 ```
 
 Stop with Ctrl-C (`omi dev-server: stopped`).
 
 ### Boot acceptance (for launchers)
 
-`bin/boot-acceptance.ts` spawns the real dev server on port **4812**, drives it over HTTP, and prints one JSON verdict line to stdout. Exit 0 only when every check passes:
+`bin/boot-acceptance.ts` spawns the real dev server on port **4851**, drives it over HTTP, and prints one JSON verdict line to stdout. Exit 0 only when every check passes:
 
 ```bash
 bun run apps/service/bin/boot-acceptance.ts
@@ -55,7 +55,7 @@ bun run apps/service/bin/boot-acceptance.ts
 Example passing output:
 
 ```json
-{"version":"boot-acceptance-v1","port":4812,"checks":[{"name":"boot","status":"pass","detail":"ready"},{"name":"health","status":"pass","detail":"status 200"},{"name":"memories-unauth","status":"pass","detail":"status 401"},{"name":"memories-page1","status":"pass","detail":"status 200 items 3"},{"name":"memories-pagination","status":"pass","detail":"pages 4 items 12"},{"name":"qa-served-count","status":"pass","detail":"served count 4"},{"name":"qa-reset","status":"pass","detail":"reset total"},{"name":"loopback","status":"pass","detail":"loopback pass"}],"servedCount":4,"verdict":"pass"}
+{"version":"boot-acceptance-v1","port":4851,"checks":[{"name":"boot","status":"pass","detail":"ready"},{"name":"health","status":"pass","detail":"status 200"},{"name":"memories-unauth","status":"pass","detail":"status 401"},{"name":"memories-page1","status":"pass","detail":"status 200 items 3"},{"name":"memories-pagination","status":"pass","detail":"pages 4 items 12"},{"name":"conversations-page1","status":"pass","detail":"status 200 items 1"},{"name":"qa-served-count","status":"pass","detail":"served count 5"},{"name":"qa-reset","status":"pass","detail":"reset total"},{"name":"loopback","status":"pass","detail":"loopback pass"}],"servedCount":5,"verdict":"pass"}
 ```
 
 ## Endpoints
@@ -66,6 +66,12 @@ Example passing output:
 | `GET` | `/ready` | none | Readiness (`{"status":"ready"}`) |
 | `GET` | `/v1/memories` | Bearer | Canonical paginated memory read (`limit`, `cursor`) |
 | `GET` | `/v1/memories/recall` | Bearer | Transitional alias — same handler, byte-identical responses |
+| `GET` | `/v1/conversations` | Bearer | Legacy-compatible conversation collection (`limit`, `offset`) |
+| `PATCH` | `/v1/conversations/{id}/title` | Bearer | Set title from `?title=` |
+| `PATCH` | `/v1/conversations/{id}/starred` | Bearer | Set starred from `?starred=true\|false` |
+| `PATCH` | `/v1/conversations/{id}/visibility` | Bearer | Set visibility from `?value=public\|private\|shared` |
+| `PATCH` | `/v1/conversations/{id}/folder` | Bearer | Set or clear folder with JSON `{folder_id}` |
+| `DELETE` | `/v1/conversations/{id}` | Bearer | Delete only with explicit `?cascade=false` |
 | `GET` | `/v1/qa/status` | none | Served-traffic counters and seed identity |
 | `POST` | `/v1/qa/reset` | Bearer (dev token) | Total deterministic reseed |
 
@@ -78,18 +84,22 @@ TOKEN='dev1.dev-local.eyJleHBpcmVzX2F0X2Vwb2NoX3NlY29uZHMiOjE3ODYxOTA0MDAsImlzc3
 
 # First page of memories
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4811/v1/memories?limit=5"
+  "http://127.0.0.1:4851/v1/memories?limit=5"
 
 # Transitional alias (identical bytes to /v1/memories)
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4811/v1/memories/recall?limit=5"
+  "http://127.0.0.1:4851/v1/memories/recall?limit=5"
+
+# Conversations use the adopted legacy limit/offset wire
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:4851/v1/conversations?limit=5&offset=0"
 
 # QA observability (no auth)
-curl -s http://127.0.0.1:4811/v1/qa/status
+curl -s http://127.0.0.1:4851/v1/qa/status
 
 # Reset seed to initial state
 curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:4811/v1/qa/reset
+  http://127.0.0.1:4851/v1/qa/reset
 ```
 
 Unauthenticated memory reads return `401` with body `{"error":"unauthorized"}`.
@@ -113,13 +123,13 @@ Poll `GET /v1/qa/status` (no auth). The `served` object tracks request outcomes:
 }
 ```
 
-**`domainReadsServed` must be greater than zero** after the app loads memories. It increments only when a `GET /v1/memories` (or the `/recall` alias) successfully returns a response body — not when auth fails, not when pagination params are bad. **`GET /health`, `GET /ready`, and `GET /v1/qa/status` only increment `nonDomainRequests`; they never move `domainReadsServed`.**
+**`domainReadsServed` must be greater than zero** after the app loads a served collection. It increments only when a memory or conversation GET successfully returns a response body — not when auth fails or validation fails. **`GET /health`, `GET /ready`, and `GET /v1/qa/status` only increment `nonDomainRequests`; they never move `domainReadsServed`.**
 
-The dev-server terminal also prints `[served] memories=N ...` whenever `domainReadsServed` changes. This matters because a client can appear healthy while silently serving its own fixtures or hitting a different listener — health checks alone cannot distinguish that failure mode.
+The dev-server terminal also prints `[served] domain-reads=N ...` whenever `domainReadsServed` changes. This matters because a client can appear healthy while silently serving its own fixtures or hitting a different listener — health checks alone cannot distinguish that failure mode.
 
 ## Reset and reseed
 
-`POST /v1/qa/reset` with the dev token clears and repopulates the SQLite QA snapshot to the same deterministic state as a fresh boot (same owner, memory count, timezone, and `QA_FIXTURE_TIME_ANCHOR_UTC`). The response includes the seed identity:
+`POST /v1/qa/reset` with the dev token clears and repopulates the owned in-memory QA stores and SQLite recall snapshot to the same deterministic state as a fresh boot, including the seeded conversation. The response includes the seed identity:
 
 ```json
 {"version":"qa-reset-v1","status":"reset","seed":{"owner_account_id":"local-dev-user","memory_count":12,"account_timezone":"America/Los_Angeles","fixture_time_anchor_utc":"2026-08-07T12:00:00.000Z"}}
@@ -133,7 +143,7 @@ All are optional.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OMI_PORT` | `4811` | Listen port. Only `4811` and `4812` are allowed (board registry). |
+| `OMI_PORT` | `4851` | The one app-facing listen port; other values are refused. |
 | `OMI_SEED_OWNER` | `local-dev-user` | Owner account id written into the QA seed. |
 | `OMI_SEED_MEMORIES` | `12` | Number of visible seeded memories. |
 | `OMI_ACCOUNT_TIMEZONE` | `America/Los_Angeles` | IANA timezone for local-day grouping in the seed and read path. |
@@ -147,27 +157,21 @@ All are optional.
 If something else holds the port, boot may fail with:
 
 ```
-omi dev-server: failed to bind 127.0.0.1:4811.
+omi dev-server: failed to bind 127.0.0.1:4851.
 ```
 
 Find the listener:
 
 ```bash
-lsof -nP -iTCP:4811 -sTCP:LISTEN
-```
-
-Use the spare allocated port:
-
-```bash
-OMI_PORT=4812 bun run apps/service/bin/dev-server.ts
+lsof -nP -iTCP:4851 -sTCP:LISTEN
 ```
 
 When Bun reports `EADDRINUSE`, the server instead prints:
 
 ```
-omi dev-server: port 4811 is already in use. Something else is listening.
-  Find it:  lsof -nP -iTCP:4811 -sTCP:LISTEN
-  Or boot on the spare port:  OMI_PORT=4812 bun run apps/service/bin/dev-server.ts
+omi dev-server: port 4851 is already in use. Something else is listening.
+  Find it:  lsof -nP -iTCP:4851 -sTCP:LISTEN
+  Stop the existing listener before booting the one service door.
 ```
 
 ### Invalid timezone
@@ -185,7 +189,7 @@ omi dev-server: cannot open the QA database at "/nonexistent/path/qa.db". Check 
 ### Port out of registry range
 
 ```
-omi dev-server: port 9999 is not allocated to this service. Use 4811 (or 4812), which are this agent's ports in the board registry.
+omi dev-server: port 9999 is not allocated to this service. Use 4851, the one app-facing door.
 ```
 
 ### 401 on memory reads
@@ -194,28 +198,28 @@ Missing or invalid `Authorization: Bearer <token>` returns `401` with `{"error":
 
 ## Verifying the loopback bind
 
-A loopback `curl` to `http://127.0.0.1:4811/health` succeeds even if the server is bound to all interfaces (`0.0.0.0`), which would expose it on the LAN. Verify binding with `lsof` **and** a LAN probe:
+A loopback `curl` to `http://127.0.0.1:4851/health` succeeds even if the server is bound to all interfaces (`0.0.0.0`), which would expose it on the LAN. Verify binding with `lsof` **and** a LAN probe:
 
 ```bash
 # 1. Confirm the listener is 127.0.0.1 only
-lsof -nP -iTCP:4811 -sTCP:LISTEN
-# Expect: TCP 127.0.0.1:4811 (LISTEN)
+lsof -nP -iTCP:4851 -sTCP:LISTEN
+# Expect: TCP 127.0.0.1:4851 (LISTEN)
 
 # 2. Automated check (used by boot-acceptance)
-bun run apps/service/net/assert-loopback.ts 4811
+bun run apps/service/net/assert-loopback.ts 4851
 ```
 
 Passing `assert-loopback` output looks like:
 
 ```json
-{"version":"loopback-assertion-v1","port":4811,"lsof":{"status":"pass","listenerCount":1},"lanProbe":{"status":"pass","probedAddresses":["..."]},"verdict":"pass"}
+{"version":"loopback-assertion-v1","port":4851,"lsof":{"status":"pass","listenerCount":1},"lanProbe":{"status":"pass","probedAddresses":["..."]},"verdict":"pass"}
 ```
 
 If any non-loopback IPv4 address on the host can reach `/health`, `lanProbe.status` is `"fail"` with reason `"LAN address reached /health"`.
 
 ## Known limitations
 
-- **No production database.** Storage is SQLite QA fixtures only. Postgres (or any durable production store) is an open platform decision — nothing here selects or implements it.
+- **No deployed Postgres adapter in this local binary.** The conversations application port is durable through SQLite locally; a production composition still owes its Postgres adapter and deployment credentials.
 - **Provisional served-memory selection.** The composition serves temporal **leaf** nodes (one synthesized memory per local day). That aligns with a timeline UI and the seeded fixture layout, but it is a QA composition choice, not a ratified product rule (`composition/memory-read.ts` documents this).
 - **No field negotiation** for optional response fields such as citations or provenance — clients receive the full ratified wire shape.
 - **Dev auth is a seam, not an auth system.** A fixed, committed signing label issues bearer tokens for loopback testing. A real deployment replaces this entire mechanism.

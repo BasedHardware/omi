@@ -26,7 +26,7 @@ import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
  */
 
 /** Ports allocated to this agent by the board's port registry. */
-const DEFAULT_PORT = 4811;
+const DEFAULT_PORT = 4851;
 
 /**
  * Fixed, non-secret dev key material.
@@ -69,8 +69,7 @@ const readConfig = (): BootConfig => {
     assertPortInRange(port);
   } catch {
     fail(
-      `port ${port} is not allocated to this service. `
-      + `Use 4811 (or 4812), which are this agent's ports in the board registry.`,
+      `port ${port} is not allocated to this service. Use 4851, the one app-facing door.`,
     );
   }
 
@@ -151,7 +150,7 @@ const main = (): void => {
       return fail(
         `port ${config.port} is already in use. Something else is listening.\n`
         + `  Find it:  lsof -nP -iTCP:${config.port} -sTCP:LISTEN\n`
-        + `  Or boot on the spare port:  OMI_PORT=4812 bun run apps/service/bin/dev-server.ts`,
+        + `  Stop the existing listener before booting the one service door.`,
       );
     }
     return fail(`failed to bind ${LOOPBACK_HOST}:${config.port}.`);
@@ -184,7 +183,7 @@ const main = (): void => {
     if (snapshot.domainReadsServed === lastReported) return;
     lastReported = snapshot.domainReadsServed;
     process.stdout.write(
-      `[served] memories=${snapshot.domainReadsServed}`
+      `[served] domain-reads=${snapshot.domainReadsServed}`
       + ` denied=${snapshot.domainReadsDenied}`
       + ` failed=${snapshot.domainReadsFailed}`
       + ` other=${snapshot.nonDomainRequests}\n`,

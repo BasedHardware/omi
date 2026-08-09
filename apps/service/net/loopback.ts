@@ -2,7 +2,7 @@ import { networkInterfaces } from "node:os";
 
 export const LOOPBACK_HOST = "127.0.0.1";
 
-const ALLOWED_PORTS = new Set([4811, 4812]);
+const ALLOWED_PORTS = new Set([4851]);
 
 export type LsofListenVerdict = {
   readonly pass: boolean;
@@ -32,7 +32,7 @@ export function loopbackServeOptions(port: number): LoopbackServeOptions {
 export function assertPortInRange(port: number): void {
   if (!ALLOWED_PORTS.has(port)) {
     throw new TypeError(
-      `port ${port} is outside the BE-SURFACE agent range (allowed: 4811, 4812)`,
+      `port ${port} is outside the app-facing service allocation (allowed: 4851)`,
     );
   }
 }

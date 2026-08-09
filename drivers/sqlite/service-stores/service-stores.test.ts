@@ -1,3 +1,5 @@
+// domain-pending(DIV-DOMCORE-013)
+// domain-pending(UNK-DOMCORE-002)
 import { mkdirSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
@@ -190,6 +192,7 @@ describe("the SQLite service-store adapters", () => {
       devSecretLabel: "injection-test",
       stores,
     });
+    expect(injected.writePath.conversations).toBe(stores.conversations);
     expect(injected.writePath.tasks).toBe(stores.tasks);
     expect(stores.conversations).toBeInstanceOf(SqliteConversationsStore);
     expect(injected.writePath.registry).toBe(stores.registry);

@@ -1,3 +1,5 @@
+// domain-pending(DIV-DOMCORE-013)
+// domain-pending(UNK-DOMCORE-002)
 import { describe, expect, test } from "bun:test";
 
 import {

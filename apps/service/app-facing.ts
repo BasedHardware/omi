@@ -1,4 +1,5 @@
 // domain-pending(DIV-DOMCORE-001)
+// domain-pending(UNK-DOMCORE-002)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 import { createHash } from "node:crypto";
@@ -21,6 +22,7 @@ import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
+import { registerConversationRoutes } from "./routes/conversations";
 import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
@@ -29,6 +31,8 @@ import { registerTasksReadRoutes } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
 import {
   createInMemoryConversationsStore,
+  type ConversationFolderReferenceLookup,
+  type ConversationRecord,
   type ConversationsStore,
 } from "./stores/conversations-store";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
@@ -47,7 +51,7 @@ import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/wr
  * (config parsing, socket binding, printing).
  *
  * The `db` option is the local recall-fixture database. Write-path persistence
- * is supplied independently through the four store ports and their unit of
+ * is supplied independently through the service store ports and their unit of
  * work; omitting it preserves the historical in-memory test/dev composition.
  */
 
@@ -86,11 +90,37 @@ export interface LocalServiceStores {
   readonly control: AccountControlProjectionStore;
 }
 
-export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
+const QA_CONVERSATION_FOLDER_IDS = new Set(["default-folder-qa", "work-folder-qa"]);
+const QA_CONVERSATION_FOLDERS: ConversationFolderReferenceLookup = Object.freeze({
+  hasFolder: (_accountId, folderId) => QA_CONVERSATION_FOLDER_IDS.has(folderId),
+});
+
+const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
+  id: "quiet-chat-qa",
+  structured: Object.freeze({
+    title: "QA bridge check",
+    overview: "A deterministic conversation for shell acceptance.",
+  }),
+  created_at: "2026-08-03T12:00:00.000Z",
+  updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+  started_at: "2026-08-07T11:50:00.000Z",
+  finished_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+  source: "omi",
+  status: "completed",
+  discarded: false,
+  starred: false,
+  visibility: "private",
+  is_locked: false,
+  folder_id: "work-folder-qa",
+});
+
+export const createInMemoryLocalServiceStores = (
+  conversationFolders: ConversationFolderReferenceLookup = QA_CONVERSATION_FOLDERS,
+): LocalServiceStores => {
   const tasks = createInMemoryTasksStore();
   const registry = createInMemoryWriteIdRegistry();
   return Object.freeze({
-    conversations: createInMemoryConversationsStore(),
+    conversations: createInMemoryConversationsStore(conversationFolders),
     tasks,
     registry,
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
@@ -115,6 +145,7 @@ export interface LocalService {
    * consumes this store read-only (R11), and the type is where that stays true.
    */
   readonly writePath: {
+    readonly conversations: ConversationsStore;
     readonly tasks: TasksStore;
     readonly tasksRead: TasksReadStore;
     readonly registry: WriteIdRegistry;
@@ -127,6 +158,9 @@ export interface LocalService {
 }
 
 export const createLocalService = (options: LocalServiceOptions): LocalService => {
+  const ownsStores = options.stores === undefined;
+  const stores = options.stores ?? createInMemoryLocalServiceStores();
+  const conversations = stores.conversations;
   const reseed = (): void => {
     resetQaSnapshot(options.db);
     seedQaSnapshot(options.db, {
@@ -134,10 +168,14 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       memory_count: options.memoryCount,
       account_timezone: options.accountTimezone,
     });
+    if (ownsStores) {
+      conversations.reset();
+      const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
+      if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
+    }
   };
   reseed();
 
-  const stores = options.stores ?? createInMemoryLocalServiceStores();
   const tasks = stores.tasks;
   const writeIdRegistry = stores.registry;
   const unitOfWork = stores.unitOfWork;
@@ -282,6 +320,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     return new Response(JSON.stringify({ status: "ready" }), { status: 200, headers: JSON_HEADERS });
   });
   registerMemoryRoutes(app, { resolvePrincipal, prepareRead, counter });
+  registerConversationRoutes(app, {
+    resolvePrincipal,
+    store: conversations,
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+  });
   registerTasksOpsRoutes(app, {
     resolvePrincipal,
     unitOfWork,
@@ -329,6 +373,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     reseed,
     seedIdentity,
     writePath: Object.freeze({
+      conversations,
       tasks,
       tasksRead: tasks,
       registry: writeIdRegistry,

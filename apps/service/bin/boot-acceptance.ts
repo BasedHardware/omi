@@ -14,7 +14,7 @@
 import { join } from "node:path";
 
 const VERDICT_VERSION = "boot-acceptance-v1";
-const PORT = 4812;
+const PORT = 4851;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const READY_MARKER = "omi local backend is up";
 const READY_TIMEOUT_MS = 30_000;
@@ -135,7 +135,7 @@ async function killChild(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
 async function runChecks(token: string): Promise<Verdict> {
   const checks: Check[] = [{ name: "boot", status: "pass", detail: "ready" }];
   let servedCount = 0;
-  let successfulMemoriesRequests = 0;
+  let successfulDomainRequests = 0;
 
   // a. GET /health -> 200
   {
@@ -176,7 +176,7 @@ async function runChecks(token: string): Promise<Verdict> {
     const nonEmpty = page !== null && page.items.length > 0;
     const pass = response.status === 200 && nonEmpty;
     if (pass && page !== null) {
-      successfulMemoriesRequests += 1;
+      successfulDomainRequests += 1;
       firstPageBody = body;
       nextCursor = page.window.nextCursor;
       for (const item of page.items) seenIds.add(item.id);
@@ -222,7 +222,7 @@ async function runChecks(token: string): Promise<Verdict> {
         unparseable = true;
         break;
       }
-      successfulMemoriesRequests += 1;
+      successfulDomainRequests += 1;
       pages += 1;
       for (const item of page.items) {
         if (seenIds.has(item.id)) {
@@ -259,7 +259,23 @@ async function runChecks(token: string): Promise<Verdict> {
     if (!pass) return failVerdict(checks, servedCount);
   }
 
-  // e. GET /v1/qa/status — central check
+  // e. The newly served conversations domain uses the same real listener.
+  {
+    const response = await fetch(`${BASE_URL}/v1/conversations?limit=1&offset=0`, {
+      headers: authHeader(token),
+    });
+    const value = await response.json().catch(() => null) as unknown;
+    const pass = response.status === 200 && Array.isArray(value) && value.length === 1;
+    if (pass) successfulDomainRequests += 1;
+    checks.push({
+      name: "conversations-page1",
+      status: pass ? "pass" : "fail",
+      detail: pass ? "status 200 items 1" : `status ${response.status}`,
+    });
+    if (!pass) return failVerdict(checks, servedCount);
+  }
+
+  // f. GET /v1/qa/status — central check
   {
     const response = await fetch(`${BASE_URL}/v1/qa/status`);
     const body = await response.text();
@@ -286,8 +302,8 @@ async function runChecks(token: string): Promise<Verdict> {
         servedCount = served;
         if (served <= 0) {
           detail = `served count ${served} expected greater than zero`;
-        } else if (served !== successfulMemoriesRequests) {
-          detail = `served count ${served} expected ${successfulMemoriesRequests}`;
+        } else if (served !== successfulDomainRequests) {
+          detail = `served count ${served} expected ${successfulDomainRequests}`;
         } else {
           pass = true;
           detail = `served count ${served}`;
@@ -302,7 +318,7 @@ async function runChecks(token: string): Promise<Verdict> {
     if (!pass) return failVerdict(checks, servedCount);
   }
 
-  // f. POST /v1/qa/reset -> 200, then page 1 byte-identical to first page-1 body
+  // g. POST /v1/qa/reset -> 200, then page 1 byte-identical to first page-1 body
   {
     const resetResponse = await fetch(`${BASE_URL}/v1/qa/reset`, {
       method: "POST",
@@ -335,7 +351,7 @@ async function runChecks(token: string): Promise<Verdict> {
     if (!pass) return failVerdict(checks, servedCount);
   }
 
-  // g. Loopback proof via the existing assert-loopback script
+  // h. Loopback proof via the existing assert-loopback script
   {
     const loopback = Bun.spawnSync(
       ["bun", "run", "apps/service/net/assert-loopback.ts", String(PORT)],

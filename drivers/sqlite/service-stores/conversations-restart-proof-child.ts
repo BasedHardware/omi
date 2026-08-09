@@ -1,3 +1,5 @@
+// domain-pending(DIV-DOMCORE-013)
+// domain-pending(UNK-DOMCORE-002)
 import { Database } from "bun:sqlite";
 
 import type { ConversationRecord } from "../../../apps/service/stores/conversations-store";
