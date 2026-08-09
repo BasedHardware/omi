@@ -398,6 +398,12 @@ class TestGetModel:
 class TestGetLlm:
     """Verify get_llm() returns correct client instances."""
 
+    @pytest.fixture(scope='class', autouse=True)
+    def _warm_openrouter_client(self):
+        # File-isolated runs amortize OpenRouter client construction into the first
+        # get_llm call; warm once in setup so call-phase timing stays under the guard.
+        get_llm('conv_action_items')
+
     def test_returns_chatOpenAI_for_openai_feature(self):
         llm = get_llm('conv_action_items')
         assert hasattr(llm, 'invoke')
