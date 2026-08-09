@@ -23,7 +23,7 @@ extension SettingsContentView {
                 .foregroundColor(Ink.primary)
               Text(googleOAuthSummary)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(Ink.tertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -65,7 +65,7 @@ extension SettingsContentView {
                 + "the Gmail API and Google Calendar API."
             )
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.tertiary)
+            .foregroundColor(Ink.secondary)
           }
 
           // account is optional on pre-fix grants; index-based identity keeps
@@ -130,7 +130,7 @@ extension SettingsContentView {
 
             Text(gmailAccountSummary)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.tertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Spacer()

@@ -83,7 +83,7 @@ final class GmailAccountSelectionTests: XCTestCase {
       "ok": true,
       "accounts": [
         ["name": "No Path", "email": "x@y.com"],
-        ["name": "Arc", "db_path": "/b/Default/Network/Cookies", "email": NSNull()],
+        ["name": "Arc", "db_path": "/b/Default/Network/Cookies", "email": "arc@example.com"],
       ],
     ]
 
