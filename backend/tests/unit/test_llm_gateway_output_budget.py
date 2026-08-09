@@ -16,6 +16,14 @@ def test_session_titles_has_an_explicit_but_disabled_output_budget_policy():
     assert route.output_budget == OutputBudgetPolicy(experiment='session_titles', max_completion_tokens=128)
 
 
+def test_session_titles_output_budget_survives_a_provider_repoint():
+    """The cap describes the title workload, not the provider it happens to run on."""
+    route = load_gateway_config(prod_mode=True).route_artifacts['route.session_titles.model_config.001']
+
+    assert route.primary.provider != 'gemini'
+    assert route.output_budget is not None
+
+
 def test_output_budget_policy_is_disabled_until_its_experiment_is_enabled(monkeypatch):
     monkeypatch.delenv(OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR, raising=False)
     request, decision = apply_output_budget(
