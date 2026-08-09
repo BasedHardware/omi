@@ -22,8 +22,6 @@ abstract class Env {
     _agentProxyWsUrlOverride = url;
   }
 
-  static String? get openAIAPIKey => _instance.openAIAPIKey;
-
   static String? get posthogApiKey => _instance.posthogApiKey;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
@@ -75,8 +73,6 @@ abstract class Env {
 }
 
 abstract class EnvFields {
-  String? get openAIAPIKey;
-
   String? get posthogApiKey;
 
   String? get apiBaseUrl;
