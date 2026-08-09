@@ -27,7 +27,33 @@ Before getting started, make sure your device is connected and unlocked. If you'
    .\setup\scripts\setup.ps1 android
    ```
 
+   `bash setup.sh ios` is the safe local-development path: it uses the local
+   API/emulator harness and the `demo-omi-local` Firebase project. For a real
+   iPhone, set `OMI_DEV_HOST` to the Mac's LAN address when the local harness is
+   reachable from the device.
+
    iOS setup requires macOS/Xcode, so Windows developers should use the Android setup path.
+
+### Mobile beta / dogfood
+
+The mobile beta is an explicit production-data profile. It uses the production
+Firebase project and user IDs, but routes serving traffic to
+`https://api.omiapi.com/`, matching the macOS beta serving plane:
+
+```bash
+export FIREBASE_SERVICE_ACCOUNT_KEY=/secure/path/to/firebase-service-account.json
+bash setup.sh ios beta
+
+# Android beta uses the existing prod flavor and package
+bash setup.sh android beta
+```
+
+The Firebase service account must be able to generate the production mobile
+configuration, and the beta bundle ID must be registered with both Firebase and
+the Apple team. Override the default bundle ID with
+`OMI_MOBILE_BETA_BUNDLE_ID` when your team uses a different registered ID. The
+beta build uses the `mobile_beta` profile and the `omi-beta://auth/callback`
+scheme; it must not be treated as a local-emulator build.
  
 3. Ensure GitHub SSH access is set up correctly for pulling certificates from repositories. After running the command below, if you're prompted for a passphrase, enter your SSH passphrase — or simply press Enter/Return if you haven't set one.
     ```bash

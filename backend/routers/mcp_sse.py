@@ -70,6 +70,7 @@ from utils.mcp_data import (
     end_of_day_utc,
     parse_date_only_utc,
 )
+from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -1458,12 +1459,7 @@ def handle_mcp_message(
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
-                    "instructions": (
-                        "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
-                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
-                        "task-specific evidence."
-                    ),
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             ),
             None,

@@ -8,7 +8,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4399,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1636,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6615,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1507
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "+26 to make the hover-revealed metadata band cost no layout height. The band was zero-height at rest and took its intrinsic height on reveal, so a hovered assistant row was ~16 pt taller and every row below it shifted down under the pointer mid-scroll; it now always measures zero and draws out of that frame into the gap the transcript already keeps after an assistant row. The added lines are the corrected mechanism comment, the band's own hover (its controls sit outside the row's bounds, so the row's hover cannot hold them open), and the reveal seam a hermetic test drives, because a test process is never the active application and cannot hover. Chat-first blocks, persisted local evidence, and the shared transcript/preview timestamp render at the existing chat-message resource boundary instead of creating a parallel transcript renderer. Final-assistant Omi mark ownership and canonical expandable tool-call presentation are row-level rendering contracts that belong with bubble equality and layout. The mark remains an overlay so it cannot shift bubbles horizontally, while its owner row reserves the mark's height to prevent an empty streaming reply from clipping at the transcript live edge.",

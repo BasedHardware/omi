@@ -490,7 +490,7 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
     async def anthropic_runner(*_args):
         raise AssertionError('gateway mode selected the Anthropic runner')
 
-    with patch.object(agentic_mod, 'should_route_features_through_gateway', return_value=True), patch.object(
+    with patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True), patch.object(
         agentic_mod, 'run_blocking', new=fake_run_blocking
     ), patch.object(agentic_mod, '_convert_tools', return_value=([], {})), patch.object(
         agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
@@ -542,7 +542,7 @@ async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
     async def gateway_runner(*_args):
         raise AssertionError('Anthropic BYOK must not select the gateway runner')
 
-    with patch.object(agentic_mod, 'should_route_features_through_gateway', return_value=True), patch.object(
+    with patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True), patch.object(
         agentic_mod, 'get_byok_key', return_value='sk-ant-test'
     ), patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking), patch.object(
         agentic_mod, '_convert_tools', return_value=([], {})

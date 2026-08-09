@@ -45,6 +45,17 @@ on:
           - chart-default
           - disabled
           - gateway
+      chat_agent_route:
+        # Independent kill switch for managed agentic/desktop chat (Luna lane).
+        # "direct" forces Anthropic direct without flipping FEATURE_MODE.
+        description: 'Optional OMI_LLM_CHAT_AGENT_ROUTE override (chart-default = values file; direct = off Luna chat)'
+        required: false
+        default: chart-default
+        type: choice
+        options:
+          - chart-default
+          - direct
+          - gateway
       allow_direct_model_exception:
         description: 'Optional OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION override (chart-default = values file)'
         required: false
@@ -242,6 +253,7 @@ jobs:
         env:
           VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
           GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
+          CHAT_AGENT_ROUTE: ${{ github.event.inputs.chat_agent_route }}
           ALLOW_DIRECT_MODEL_EXCEPTION: ${{ github.event.inputs.allow_direct_model_exception }}
           STT_SERVICE_MODELS: ${{ github.event.inputs.stt_service_models }}
           TRANSLATION_SERVICE_MODELS: ${{ github.event.inputs.translation_service_models }}
@@ -254,10 +266,15 @@ jobs:
           if [[ "${FEATURE_MODE_VALUE}" == "disabled" ]]; then
             FEATURE_MODE_VALUE="off"
           fi
+          CHAT_ROUTE_VALUE="${CHAT_AGENT_ROUTE:-}"
+          if [[ "${CHAT_ROUTE_VALUE}" == "chart-default" ]]; then
+            CHAT_ROUTE_VALUE=""
+          fi
           python3 .github/scripts/listen_helm_env_overrides.py \
             --values-file "$VALUES_FILE" \
             --output-argv-file "$ARGV_FILE" \
             --set "OMI_LLM_GATEWAY_FEATURE_MODE=${FEATURE_MODE_VALUE}" \
+            --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_ROUTE_VALUE}" \
             --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
             --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
             --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"

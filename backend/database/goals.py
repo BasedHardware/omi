@@ -502,7 +502,14 @@ def update_goal(
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
         patch['metric'] = metric.model_dump(mode='python') if metric is not None else None
-        patch.update(_metric_aliases(metric))
+        if metric is None:
+            # Dropping the metric must also clear the released numeric aliases:
+            # _metric_from_storage rebuilds a metric from stale goal_type/current_value
+            # etc., so leaving them resurrects the "cleared" metric on the next read.
+            for key in legacy_metric_keys:
+                patch[key] = None
+        else:
+            patch.update(_metric_aliases(metric))
     patch['updated_at'] = datetime.now(timezone.utc)
     ref.update(patch)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)

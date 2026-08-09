@@ -19,6 +19,9 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 SERVICE_ACCOUNT = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
+PRODUCTION_MIGRATION_APPROVAL_POLICY = "state-preserving-v1"
+PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS = 10 * 60
+PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS = 7 * 24 * 60 * 60
 
 
 def canonical_bytes(payload: Mapping[str, Any]) -> bytes:
@@ -42,16 +45,21 @@ def render_manifest(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
     # Replacement is deliberately a separately selected artifact, not an
-    # automatic consequence of publishing a newer boot image.  The runtime
-    # rejects this section outside development as a second independent fence.
+    # automatic consequence of publishing a newer boot image. Production adds
+    # a one-owner, seven-day-retention approval policy as a second fence.
     if args.boot_image_migration_allowed_uid:
-        if args.environment != "development":
-            raise ValueError("boot-image migration manifests may only target development")
         values["bootImageMigration"] = {
             "enabled": True,
             "allowedUids": sorted(set(args.boot_image_migration_allowed_uid)),
             "maxConcurrency": 1,
             "soakSeconds": args.boot_image_migration_soak_seconds,
+            "retentionSeconds": (args.boot_image_migration_retention_seconds or args.boot_image_migration_soak_seconds),
+            "drainRunning": args.boot_image_migration_drain_running,
+            **(
+                {"approvalPolicy": args.boot_image_migration_approval_policy}
+                if args.boot_image_migration_approval_policy
+                else {}
+            ),
         }
     validate_manifest(values)
     values["manifestSha256"] = hashlib.sha256(canonical_bytes(values)).hexdigest()
@@ -80,8 +88,6 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
         raise ValueError("serviceAccount must be a Google service-account email")
     migration = payload.get("bootImageMigration")
     if migration is not None:
-        if payload.get("environment") != "development":
-            raise ValueError("bootImageMigration is development-only")
         if (
             not isinstance(migration, Mapping)
             or migration.get("enabled") is not True
@@ -91,8 +97,27 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
             or migration.get("maxConcurrency") != 1
             or not isinstance(migration.get("soakSeconds"), int)
             or migration["soakSeconds"] < 60
+            or not isinstance(migration.get("retentionSeconds", migration.get("soakSeconds")), int)
+            or migration.get("retentionSeconds", migration.get("soakSeconds")) < migration["soakSeconds"]
+            or not isinstance(migration.get("drainRunning", False), bool)
         ):
-            raise ValueError("bootImageMigration must be an explicit development allowlist with a safe soak")
+            raise ValueError("bootImageMigration must be an explicit allowlist with a safe soak")
+        environment = payload.get("environment")
+        allowed_uids = {uid.strip() for uid in migration["allowedUids"]}
+        if environment == "production":
+            if (
+                migration.get("approvalPolicy") != PRODUCTION_MIGRATION_APPROVAL_POLICY
+                or len(allowed_uids) != 1
+                or migration["soakSeconds"] < PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS
+                or migration.get("retentionSeconds", migration["soakSeconds"])
+                < PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS
+                or migration.get("drainRunning") is not True
+            ):
+                raise ValueError(
+                    "production bootImageMigration requires one canary, fenced drain, approved policy, and seven-day retention"
+                )
+        elif environment != "development":
+            raise ValueError("bootImageMigration requires an approved environment")
     if "manifestSha256" in payload:
         unsigned = dict(payload)
         declared = unsigned.pop("manifestSha256")
@@ -119,9 +144,12 @@ def parser() -> argparse.ArgumentParser:
         "--boot-image-migration-allowed-uid",
         action="append",
         default=[],
-        help="Development-only explicit migration allowlist; repeat for each owner.",
+        help="Explicit migration allowlist; production accepts exactly one canary owner.",
     )
     command.add_argument("--boot-image-migration-soak-seconds", type=int, default=600)
+    command.add_argument("--boot-image-migration-retention-seconds", type=int)
+    command.add_argument("--boot-image-migration-drain-running", action="store_true")
+    command.add_argument("--boot-image-migration-approval-policy", default="")
     return command
 
 
