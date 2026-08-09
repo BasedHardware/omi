@@ -124,8 +124,12 @@ export function TvLinksPanel() {
       if (!res.ok) throw new Error(data.error || "Create failed");
       const url = data.url || (data.path ? absoluteUrl(data.path) : null);
       if (url) {
-        await copyText(url);
-        markCopied(data.link?.id || "new");
+        try {
+          await copyText(url);
+          markCopied(data.link?.id || "new");
+        } catch {
+          // Clipboard may be blocked; still refresh so the new link is visible.
+        }
       }
       await refresh();
     } catch (e) {

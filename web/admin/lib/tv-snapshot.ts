@@ -337,13 +337,17 @@ export async function buildTvSnapshot(opts: {
     // Exclude the currently open 10m bucket so charts don't dip on a partial window.
     const bucketCut = `toStartOfInterval(now(), INTERVAL ${bm} MINUTE)`;
 
+    // Use COALESCE(person_id, distinct_id) to count events whose person_id hasn't
+    // been materialized yet, matching established PostHog routes in this package.
+    const actorExpr = "COALESCE(person_id, distinct_id)";
+
     const qActivityPlat = `
 SELECT
   ${PLATFORM_EXPR} AS platform,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 12 HOUR) AS dau_12h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 24 HOUR) AS dau_24h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 72 HOUR) AS dau_72h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 7 DAY) AS wau
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 12 HOUR) AS dau_12h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 24 HOUR) AS dau_24h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 72 HOUR) AS dau_72h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 7 DAY) AS wau
 FROM events
 WHERE timestamp >= now() - INTERVAL 7 DAY AND timestamp < now()
   AND event IN ${CORE_EVENTS}
@@ -354,10 +358,10 @@ LIMIT 10`.trim();
     // Global uniques (not sum of platforms — multi-platform people counted once).
     const qActivityTotals = `
 SELECT
-  uniqIf(person_id, timestamp >= now() - INTERVAL 12 HOUR) AS dau_12h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 24 HOUR) AS dau_24h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 72 HOUR) AS dau_72h,
-  uniqIf(person_id, timestamp >= now() - INTERVAL 7 DAY) AS wau
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 12 HOUR) AS dau_12h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 24 HOUR) AS dau_24h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 72 HOUR) AS dau_72h,
+  uniqIf(${actorExpr}, timestamp >= now() - INTERVAL 7 DAY) AS wau
 FROM events
 WHERE timestamp >= now() - INTERVAL 7 DAY AND timestamp < now()
   AND event IN ${CORE_EVENTS}
@@ -367,7 +371,7 @@ LIMIT 1`.trim();
 SELECT
   toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
   ${PLATFORM_EXPR} AS platform,
-  uniq(person_id) AS active
+  uniq(${actorExpr}) AS active
 FROM events
 WHERE timestamp >= now() - INTERVAL ${wh} HOUR
   AND timestamp < ${bucketCut}
@@ -381,12 +385,12 @@ LIMIT ${lim * 5}`.trim();
     const qFeaturesPlat = `
 SELECT
   ${PLATFORM_EXPR} AS platform,
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS memory_events_12h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS memory_events_24h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS memory_events_72h
@@ -400,12 +404,12 @@ LIMIT 10`.trim();
 
     const qFeaturesTotals = `
 SELECT
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
-  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
-  uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
+  uniqIf(${actorExpr}, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS memory_events_12h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS memory_events_24h,
   countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS memory_events_72h
@@ -420,8 +424,8 @@ LIMIT 1`.trim();
 SELECT
   toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
   ${PLATFORM_EXPR} AS platform,
-  uniqIf(person_id, ${CONV_EVENT}) AS conversation_users,
-  uniqIf(person_id, ${CHAT_EVENTS}) AS chat_users,
+  uniqIf(${actorExpr}, ${CONV_EVENT}) AS conversation_users,
+  uniqIf(${actorExpr}, ${CHAT_EVENTS}) AS chat_users,
   countIf(${MEMORY_EVENTS}) AS memory_events
 FROM events
 WHERE timestamp >= now() - INTERVAL ${wh} HOUR

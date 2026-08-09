@@ -164,7 +164,8 @@ type BuiltChart = {
 
 function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
   const full = sliceSeries(series, hours);
-  // Peak/trough/latest from the full window; chart points may be downsampled.
+  // Peak/trough/latest/endPct from the full window (before downsampling)
+  // so omitted buckets still contribute to stats and chart baselines.
   const fullByKey: Record<string, Array<number | null>> = {};
   for (const k of PLATS) {
     fullByKey[k] = full.map((p) => {
@@ -173,44 +174,48 @@ function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
     });
   }
   const stats: BuiltChart["stats"] = {};
-  for (const k of PLATS) {
-    stats[k] = { ...seriesStats(fullByKey[k]), endPct: null };
-  }
 
-  const sliced = downsample(full);
-  const rawByKey: Record<string, Array<number | null>> = {};
-  for (const k of PLATS) {
-    rawByKey[k] = sliced.map((p) => {
-      const v = p[k];
-      return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
-    });
-  }
-
-  const indexed: Record<string, Array<number | null>> = {};
+  // Index the full series first, then downsample the indexed output for rendering.
   const activeKeys: string[] = [];
+  const indexedFull: Record<string, Array<number | null>> = {};
   for (const k of PLATS) {
-    const has = rawByKey[k].some((v) => v != null && v > 0);
+    const has = fullByKey[k].some((v) => v != null && v > 0);
     if (!has) continue;
     activeKeys.push(k);
-    indexed[k] = indexToStart(rawByKey[k]);
+    indexedFull[k] = indexToStart(fullByKey[k]);
+    const idx = indexedFull[k];
     // Tip of the line = % of window start (same scale as the chart).
-    const idx = indexed[k];
+    let endPct: number | null = null;
     for (let i = idx.length - 1; i >= 0; i--) {
       if (idx[i] != null && Number.isFinite(idx[i]!)) {
-        stats[k].endPct = idx[i];
+        endPct = idx[i];
         break;
       }
     }
+    stats[k] = { ...seriesStats(fullByKey[k]), endPct };
   }
 
-  const data = sliced.map((p, i) => {
+  // Build downsampled chart data from indexed full series.
+  // Use the same stride as downsample() so chart points correspond to full indices.
+  const maxPts = 42;
+  const fullIdxMap: number[] =
+    full.length <= maxPts
+      ? full.map((_, i) => i)
+      : (() => {
+          const out: number[] = [];
+          const step = (full.length - 1) / (maxPts - 1);
+          for (let i = 0; i < maxPts; i++) out.push(Math.round(i * step));
+          return out;
+        })();
+  const data = fullIdxMap.map((fi) => {
+    const p = full[fi];
     const row: Record<string, number | string | null> = {
       t: p.t,
       label: shortTime(p.t, hours),
     };
     for (const k of activeKeys) {
-      row[k] = indexed[k][i];
-      row[`${k}_raw`] = rawByKey[k][i];
+      row[k] = indexedFull[k][fi] ?? null;
+      row[`${k}_raw`] = fullByKey[k][fi] ?? null;
     }
     return row;
   });
@@ -520,7 +525,7 @@ export function TvBoard({
   const wlabel = WINDOW_LABEL[hours];
 
   const stickiness =
-    a?.wau && actSlot?.total
+    a?.wau != null && a.wau > 0 && actSlot?.total != null
       ? Math.round((Number(actSlot.total) / a.wau) * 1000) / 10
       : null;
 

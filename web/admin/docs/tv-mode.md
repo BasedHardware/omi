@@ -5,17 +5,22 @@
 | Path | Auth | Purpose |
 | --- | --- | --- |
 | `/dashboard` (TV wall links panel) | Firebase admin | Create / list / revoke share links |
+| `/dashboard/tv-links` | Firebase admin | Dedicated TV link management page |
 | `/tv/view/<token>` | Capability token in path | Kiosk wall view; no Google login |
 | `GET /api/tv/snapshot` | Admin bearer **or** TV token | Aggregate metrics only |
 | `GET/POST /api/omi/tv-links` | Firebase admin | Manage share links |
 | `DELETE /api/omi/tv-links/[id]` | Firebase admin | Revoke a share link |
 
-Standalone `/dashboard/tv` and `/dashboard/tv-links` routes were removed — kiosk is link-only; management lives on the main dashboard.
+Kiosk is link-only; link management lives on `/dashboard` and `/dashboard/tv-links`.
 
 ## Share links
 
 - Firestore collection: `admin_tv_links`
-- Store **SHA-256 hash** of the token only; show raw token once on create
+- Stores both the **SHA-256 hash** (for lookup/auth) and the **full raw token** (so admins
+  can re-copy the kiosk URL from the dashboard at any time). Treat stored records as
+  recoverable capability URLs: a Firestore exposure means existing links can be replayed
+  until revoked.
+- Show raw token on create; it remains copyable from the dashboard list
 - Default expiry 90 days (editable; empty = never)
 - `ttlDays` must be a positive integer, `null` for never, or omitted for default — invalid values are rejected
 - `includeRevenue` defaults true; revoke is immediate
