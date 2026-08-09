@@ -33,6 +33,7 @@
 // own PASS line" is not proof, "did the backend's independent counter move"
 // is.
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -46,7 +47,60 @@ import {
 } from "./provenance.mjs";
 
 /** Bumped when the receipt shape changes in a way a consumer must notice. */
-export const RECEIPTS_SCHEMA_VERSION = 1;
+export const RECEIPTS_SCHEMA_VERSION = 2;
+
+// ── WHY SCHEMA 2: ONE SLOT PER LANE WAS A FALSE-MEASUREMENT GENERATOR ────────
+//
+// Schema 1 wrote every receipt to `<workspace>/.omi/receipts/<lane>.json` — one
+// slot per lane id, in the workspace root, shared by every lane worktree on the
+// machine. Six lanes ran against it concurrently all night. Last writer won,
+// silently.
+//
+// MEASURED, twice, during the wave-3 run (see
+// `data/run-2026-08-09/blocked/CLIENT-lane-receipts-share-one-slot-per-lane-id.md`):
+//
+//   - A lane ran L1, saw PASS, and read back a receipt stamped
+//     `branch: "lane/read"` — a sibling's tree, in the file it had just written.
+//   - A lane ran L0, L1 and L2 in one command, all three printed PASS, and the
+//     L0/L1 receipts named the SHARED checkout at a two-day-old commit while L2's
+//     named the lane's own worktree.
+//
+// THE SHAPE OF THE DEFECT, which is why it belongs in a comment and not just a
+// changelog: **stdout was truthful and only the durable artifact was wrong.**
+// The lane genuinely ran, genuinely passed, and genuinely printed so. The
+// corruption is therefore invisible to whoever ran the lane and visible only to
+// whoever reads the file afterwards — the exact inversion of a useful failure,
+// sitting inside the verification system itself. And §4 leans on this file
+// directly: *"a commit claiming a lane must carry a receipt matching the tree it
+// lands as, so nobody can integrate on a stale measurement."* Under concurrency
+// that sentence was not true.
+//
+// THE FIX HAS TWO HALVES AND NEITHER IS SUFFICIENT ALONE.
+//
+//  1. **The path carries the measurement key.** A receipt's whole purpose is to
+//     be tree-hash-keyed, and `<lane>.json` threw that away at the last step.
+//     The filename is now `<lane>-<key>.json`, where the key digests the lane
+//     plus, for every repo the lane declares, that repo's NAME, ABSOLUTE ROOT
+//     and TREE HASH. Two lanes measuring two trees write two files; a reader
+//     computes the key from the tree it is standing in and can only ever open a
+//     receipt written for that tree. Cross-lane read-back stops being something
+//     to detect and becomes something that cannot be addressed.
+//
+//  2. **The receipt is self-describing enough to catch its own mismatch.** Each
+//     stamp now records the `repoRoot` it measured, and the receipt records its
+//     own `key` and `path`. `verifyReceiptObject()` will judge a receipt handed
+//     to it from ANYWHERE — read off disk by hand, pasted into a report, quoted
+//     in a commit message — against the tree the reader actually cares about.
+//     Half 1 protects the lookup; half 2 protects everything that does not go
+//     through the lookup, which is how this defect reached a human in the first
+//     place.
+//
+// ACCEPTED LIMIT, named and dated (2026-08-09): receipts are never pruned. One
+// file per (lane, tree) accumulates for the life of the workspace, a few KB
+// each. Count-based pruning was considered and rejected — the directory is
+// shared, so "keep the newest N" deletes a concurrent sibling's valid receipt
+// and reintroduces the evidence destruction this change exists to remove.
+// `make lane-sweep` or `rm -rf .omi/receipts` is the disposal path.
 
 /**
  * The lane registry. Adding a lane means adding a row here — deliberately a
@@ -114,8 +168,73 @@ function receiptsDir(workspaceRoot = WORKSPACE_ROOT) {
   return join(workspaceRoot, ".omi", "receipts");
 }
 
-export function receiptPath(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
-  return join(receiptsDir(workspaceRoot), `${lane}.json`);
+/**
+ * Stamp every repo a lane declares, recording the ROOT each stamp measured.
+ *
+ * `worktreeStamp` records repo, branch, commit and tree hash but not the path
+ * it read them from, and the path is exactly what distinguishes two lanes: two
+ * worktrees of one repo have the same `repo` name and different roots. Without
+ * it a receipt cannot say which of six trees it is about, which is the question
+ * a reader is actually asking.
+ */
+function stampDeclaredRepos(row) {
+  const stamps = {};
+  for (const repo of row.repos) {
+    const repoRoot = REPO_PATHS[repo];
+    if (!repoRoot) {
+      throw new Error(
+        `receipts: lane ${row.id} declares repo "${repo}" which is not in provenance.REPO_PATHS.`,
+      );
+    }
+    stamps[repo] = { ...worktreeStamp({ repo, repoRoot, artifact: "worktree" }), repoRoot };
+  }
+  return stamps;
+}
+
+/**
+ * The measurement key: what makes two receipts the same measurement.
+ *
+ * Digests the lane id plus, per declared repo, `<repo>\0<root>\0<treeHash>`,
+ * sorted so the key does not depend on object insertion order.
+ *
+ * ROOT IS IN THE KEY DELIBERATELY, even though two identical trees produce
+ * identical hashes and are, for the lane's purposes, the same source. Keeping
+ * the root makes the key answer "which tree did this measure", not merely "what
+ * did it contain" — and attribution is the property that failed. A lane worktree
+ * whose content happens to equal the shared checkout's still gets its own
+ * receipt, and the cost of that conservatism is one extra file.
+ *
+ * Truncated to 16 hex characters: this is a filename disambiguator among a
+ * handful of concurrent trees on one machine, not a security boundary. 64 bits
+ * is far past collision for that population, and a short name stays readable in
+ * the runner's output, which people do read.
+ */
+export function receiptKey(lane, stamps) {
+  const parts = Object.keys(stamps)
+    .sort()
+    .map((repo) => {
+      const stamp = stamps[repo] ?? {};
+      return `${repo} ${stamp.repoRoot ?? ""} ${stamp.treeHash ?? ""}`;
+    });
+  return createHash("sha256").update([lane, ...parts].join("")).digest("hex").slice(0, 16);
+}
+
+/**
+ * Where a receipt for `lane` measuring the CURRENT working tree lives.
+ *
+ * Takes no key argument on purpose. A caller that could pass its own key could
+ * pass someone else's, which is the door this change closes — so the key is
+ * always derived from the tree the caller is standing in. `stamps` exists only
+ * so `writeReceipt` can reuse the stamps it already took rather than shelling
+ * out to git a second time.
+ */
+export function receiptPath(lane, { workspaceRoot = WORKSPACE_ROOT, stamps } = {}) {
+  const row = LANE_REGISTRY[lane];
+  if (!row) {
+    throw new Error(`receiptPath: unknown lane "${lane}". Known lanes: ${LANE_IDS.join(", ")}.`);
+  }
+  const resolved = stamps ?? stampDeclaredRepos(row);
+  return join(receiptsDir(workspaceRoot), `${lane}-${receiptKey(lane, resolved)}.json`);
 }
 
 /**
@@ -160,16 +279,9 @@ export function writeReceipt({
     );
   }
 
-  const stamps = {};
-  for (const repo of row.repos) {
-    const repoRoot = REPO_PATHS[repo];
-    if (!repoRoot) {
-      throw new Error(
-        `writeReceipt: lane ${lane} declares repo "${repo}" which is not in provenance.REPO_PATHS.`,
-      );
-    }
-    stamps[repo] = worktreeStamp({ repo, repoRoot, artifact: "worktree" });
-  }
+  const stamps = stampDeclaredRepos(row);
+  const key = receiptKey(lane, stamps);
+  const path = receiptPath(lane, { workspaceRoot, stamps });
 
   const receipt = {
     schema: RECEIPTS_SCHEMA_VERSION,
@@ -178,31 +290,67 @@ export function writeReceipt({
     timestamp: now.toISOString(),
     durationMs,
     stamps,
+    // The receipt names its own identity and location. A receipt quoted out of
+    // its directory — pasted into a report, echoed in a commit message — still
+    // says which measurement it is, which is what lets a reader check it rather
+    // than trust it.
+    key,
+    path,
     arbiters,
     notes,
     command,
   };
 
   mkdirSync(receiptsDir(workspaceRoot), { recursive: true });
-  writeStampFile(receiptPath(lane, { workspaceRoot }), receipt);
+  writeStampFile(path, receipt);
   return receipt;
 }
 
-/** Returns null rather than throwing: no receipt is a normal finding. */
+/**
+ * The receipt for `lane` measuring the tree the caller is standing in, or null.
+ *
+ * There is deliberately NO fallback to schema 1's `<lane>.json`. A fallback
+ * would re-open the shared slot on the read side and hand back exactly the
+ * ambiguous artifact this change removes — and it would do so on the path that
+ * looks like it succeeded. A legacy file is reported by `listReceipts()` as
+ * `legacy: true` and is never returned as evidence.
+ */
 export function readReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
   return readStampFile(receiptPath(lane, { workspaceRoot }));
 }
 
-/** Every receipt currently on disk, for known lanes only. */
+/**
+ * Every receipt file on disk, for known lanes, with its attribution judged.
+ *
+ * Returns `{ lane, key, legacy, file, receipt, attribution }`. `attribution` is
+ * `verifyReceiptObject`'s verdict for the CURRENT tree — so a listing shows at a
+ * glance which receipts describe the tree you are in and which describe a
+ * sibling's, instead of presenting six files as if they were interchangeable.
+ * That indistinguishability is what let a two-day-old stamp be quoted as a
+ * lane's own result.
+ */
 export function listReceipts({ workspaceRoot = WORKSPACE_ROOT } = {}) {
   const dir = receiptsDir(workspaceRoot);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => f.slice(0, -".json".length))
-    .filter((lane) => lane in LANE_REGISTRY)
-    .map((lane) => ({ lane, receipt: readReceipt(lane, { workspaceRoot }) }))
-    .filter((entry) => entry.receipt !== null);
+  const out = [];
+  for (const file of readdirSync(dir).sort()) {
+    if (!file.endsWith(".json")) continue;
+    const base = file.slice(0, -".json".length);
+    const dash = base.indexOf("-");
+    const lane = dash === -1 ? base : base.slice(0, dash);
+    if (!(lane in LANE_REGISTRY)) continue;
+    const receipt = readStampFile(join(dir, file));
+    if (receipt === null) continue;
+    out.push({
+      lane,
+      key: dash === -1 ? null : base.slice(dash + 1),
+      legacy: dash === -1,
+      file: join(dir, file),
+      receipt,
+      attribution: verifyReceiptObject(lane, receipt),
+    });
+  }
+  return out;
 }
 
 /**
@@ -237,7 +385,53 @@ export function verifyReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
       kind: "absent",
       reason:
         `no receipt for ${lane} (${row.name}) — ${receiptPath(lane, { workspaceRoot })} does not exist. ` +
-        `The lane has not been run, or ran without calling writeReceipt().`,
+        `The lane has not been run against THIS tree, or ran without calling writeReceipt(). ` +
+        `A sibling lane's receipt for a different tree is a different file and is never read here.`,
+    };
+  }
+
+  return verifyReceiptObject(lane, receipt);
+}
+
+/**
+ * Judge a receipt OBJECT — from wherever it came — against the tree the reader
+ * is standing in.
+ *
+ * `verifyReceipt` reads by key, so the receipt it gets is already the right
+ * measurement and this mostly re-confirms it. That redundancy is the point.
+ * The defect that produced this function reached a person through a path with
+ * no lookup at all: a receipt read straight off disk with `JSON.parse`,
+ * carrying another lane's branch and commit, quoted as this lane's result. Any
+ * reader that obtains a receipt by any means can call this and be told whether
+ * it describes their tree, which is the property the schema-1 file could not
+ * offer at all.
+ *
+ * Extra `kind` over `verifyReceipt`'s set:
+ *
+ *   "misattributed"  the receipt is internally fine but measured a DIFFERENT
+ *                    root than the reader's — a sibling lane's worktree, or the
+ *                    shared checkout. Distinguished from "stale" on purpose:
+ *                    stale means *your* tree moved and the answer is to rerun;
+ *                    misattributed means this was never about your tree and
+ *                    rerunning changes nothing about the file you were reading.
+ */
+export function verifyReceiptObject(lane, receipt) {
+  const row = LANE_REGISTRY[lane];
+  if (!row) {
+    return {
+      ok: false,
+      kind: "unknown-lane",
+      reason: `"${lane}" is not a known lane. Known lanes: ${LANE_IDS.join(", ")}.`,
+    };
+  }
+  if (receipt === null || typeof receipt !== "object") {
+    return { ok: false, kind: "absent", reason: `no receipt object for ${lane}.` };
+  }
+  if (receipt.lane !== undefined && receipt.lane !== lane) {
+    return {
+      ok: false,
+      kind: "misattributed",
+      reason: `this receipt is ${receipt.lane}'s, not ${lane}'s.`,
     };
   }
 
@@ -245,7 +439,7 @@ export function verifyReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
     return {
       ok: false,
       kind: "failed",
-      reason: `${lane}'s last receipt recorded result="${receipt.result}" at ${receipt.timestamp}.`,
+      reason: `${lane}'s receipt recorded result="${receipt.result}" at ${receipt.timestamp}.`,
     };
   }
 
@@ -256,6 +450,36 @@ export function verifyReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
         ok: false,
         kind: "stale",
         reason: `${lane}'s receipt has no stamp for repo "${repo}" (required by LANE_REGISTRY.${lane}.repos).`,
+      };
+    }
+    // ATTRIBUTION BEFORE STALENESS, and the order matters. A receipt that
+    // measured a sibling's worktree is not stale — its own tree may be
+    // perfectly current — so checking staleness first would either accept it
+    // (when the two trees happen to match) or blame the reader's tree for a
+    // file that was never about it. Root equality is the question "is this
+    // mine", and it is asked first.
+    const readerRoot = REPO_PATHS[repo];
+    if (stamp.repoRoot !== undefined && readerRoot !== undefined && stamp.repoRoot !== readerRoot) {
+      return {
+        ok: false,
+        kind: "misattributed",
+        reason:
+          `${lane}'s receipt measured ${repo} at ${stamp.repoRoot} (${stamp.branch} @ ${short(stamp.commit)}), ` +
+          `but this reader's ${repo} is ${readerRoot}. It is a different tree's receipt, not a stale one.`,
+      };
+    }
+    if (stamp.repoRoot === undefined) {
+      // Schema 1. It cannot say which tree it measured, so it cannot be
+      // attributed — and an unattributable receipt is not weaker evidence, it
+      // is no evidence. Reported as its own kind rather than silently
+      // tree-hash-checked, because a schema-1 file that happens to match is
+      // still a file six lanes were overwriting.
+      return {
+        ok: false,
+        kind: "misattributed",
+        reason:
+          `${lane}'s receipt predates schema ${RECEIPTS_SCHEMA_VERSION} and records no repoRoot for ${repo}, ` +
+          `so it cannot be attributed to a tree. Rerun ${lane}.`,
       };
     }
     // Recomputes the working-tree hash using the STAMP's own repo/roots
