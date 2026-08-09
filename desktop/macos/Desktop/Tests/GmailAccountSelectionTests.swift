@@ -69,13 +69,13 @@ final class GmailAccountSelectionTests: XCTestCase {
 
     let accounts = GmailAccountProbe.parseAccounts(json)
 
-    XCTAssertEqual(accounts.count, 3)
-    XCTAssertEqual(accounts[0].browserName, "Arc")
-    XCTAssertNil(accounts[0].email)
-    XCTAssertEqual(accounts[1].browserName, "Chrome (Default)")
-    XCTAssertEqual(accounts[1].email, "junk@gmail.com")
-    XCTAssertEqual(accounts[2].browserName, "Chrome (Work)")
-    XCTAssertEqual(accounts[2].id, "/a/Profile 1/Network/Cookies")
+    // Rows without a non-empty email are filtered out; remaining rows are
+    // sorted by browser name.
+    XCTAssertEqual(accounts.count, 2)
+    XCTAssertEqual(accounts[0].browserName, "Chrome (Default)")
+    XCTAssertEqual(accounts[0].email, "junk@gmail.com")
+    XCTAssertEqual(accounts[1].browserName, "Chrome (Work)")
+    XCTAssertEqual(accounts[1].id, "/a/Profile 1/Network/Cookies")
   }
 
   func testParseAccountsSkipsRowsWithoutPath() {
