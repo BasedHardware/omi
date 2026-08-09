@@ -276,6 +276,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
 
   def in_fixture
     Dir.mktmpdir('rayban-dat-wrapper-test') do |root|
+      root = File.realpath(root)
       app = File.join(root, 'app')
       scripts = File.join(app, 'scripts')
       ios = File.join(app, 'ios')
