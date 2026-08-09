@@ -17,6 +17,12 @@ import {
   parseSynthesizedText,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import {
+  TASKS_READ_CONTRACT_VERSION,
+  TASK_ITEM_FIELDS,
+  isTrustedTaskPageData,
+  parseTaskPageJson,
+} from "@omi-core/ratified-contracts/projections/tasks";
+import {
   MAX_RECALL_TRACE_JSON_CODE_UNITS,
   isTrustedRecallTraceData,
   parseRecallTraceJson,
@@ -494,6 +500,8 @@ describe("ratified package runtime boundary", () => {
         "status-matrix.json",
         "write-ops-outcomes.json",
         "write-ops-conformance.json",
+        "tasks-read-shape.json",
+        "tasks-read-conformance.json",
       ],
     });
     for (const name of manifest.files) expect(await Bun.file(new URL(`fixtures/${name}`, installedRoot)).exists()).toBe(true);
@@ -641,3 +649,103 @@ describe("write-ops wire seam (COORD-write-path-rulings)", () => {
   });
 });
 
+
+// ── SERVER-side consumer of the tasks READ corpus of record (rule 15) ───────
+//
+// The client-side consumer is
+// core-foundation/core/packages/testkit/src/test/platform-tasks-adapter.test.ts.
+// This is the other end, and it reads the corpus out of the INSTALLED tarball —
+// the bytes a deployed backend would actually have, not the bytes in somebody's
+// source tree. The `ratified-tasks-read` row in
+// core-foundation/core/scripts/check-wire-conformance.mjs is what mechanically
+// requires the pair to exist.
+//
+// WHAT IT DOES NOT COVER, stated so nobody reads more into a green run than is
+// there: at this landing the tasks read ROUTE does not exist on this server.
+// These tests bind the vendored contract's validators — what a route will be
+// built out of — exactly as the write-ops section above did before its door
+// existed. When the route lands, its handler serializes pages that these same
+// rows judge, and they become live-response assertions without the corpus
+// changing.
+describe("tasks read wire seam (DAVID-tasks-read-epoch-and-ci D1/D2)", () => {
+  interface TasksReadCase {
+    wireCase: string;
+    label: string;
+    safe: boolean;
+    page: unknown;
+  }
+  interface TasksReadShape {
+    contractVersion: string;
+    completenessVersion: string;
+    route: string;
+    itemFields: string[];
+    limitationReasons: string[];
+    cases: { case: string }[];
+    refusalLaws: { case: string }[];
+  }
+
+  test("every corpus row is judged identically by the vendored validator", async () => {
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    expect(corpus.length).toBeGreaterThanOrEqual(30);
+    expect(corpus.some((row) => row.safe)).toBe(true);
+    expect(corpus.some((row) => !row.safe)).toBe(true);
+    for (const row of corpus) {
+      expect(isTrustedTaskPageData(structuredClone(row.page))).toBe(row.safe);
+      expect(parseTaskPageJson(JSON.stringify(row.page)) !== null).toBe(row.safe);
+    }
+  });
+
+  test("the schema of record and the shipped module agree on the thirteen fields", async () => {
+    // D2's parity, asserted on the SERVER side against the installed bytes. The
+    // core repo asserts the same set against the domain interface; this end
+    // asserts it against what was actually vendored, so a tarball built from a
+    // different tree cannot pass here.
+    const shape = await fixture<TasksReadShape>("tasks-read-shape.json");
+    expect([...TASK_ITEM_FIELDS]).toEqual(shape.itemFields);
+    expect(shape.itemFields.length).toBe(13);
+    expect(shape.contractVersion).toBe(TASKS_READ_CONTRACT_VERSION);
+  });
+
+  test("the corpus covers every declared case and every declared refusal law", async () => {
+    const shape = await fixture<TasksReadShape>("tasks-read-shape.json");
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    const covered = new Set(corpus.map((row) => row.wireCase));
+    for (const { case: declared } of [...shape.cases, ...shape.refusalLaws]) {
+      expect(covered.has(declared)).toBe(true);
+    }
+  });
+
+  test("the tasks envelope is a different field from the memories envelope", async () => {
+    // COORD-contract-evolution-policy §1: a field whose MEANING differs is a
+    // different field even when the shape matches. The version string is what
+    // keeps a tasks page from being read as a memories page, and vice versa.
+    const shape = await fixture<TasksReadShape>("tasks-read-shape.json");
+    expect(shape.completenessVersion).toBe("tasks-completeness-v1");
+    expect(shape.limitationReasons).not.toContain("accepted_work_pending");
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    const page = structuredClone(
+      corpus.find((row) => row.wireCase === "window:complete_terminal")!.page,
+    ) as { completeness: { version: string } };
+    page.completeness.version = "recall-completeness-v1";
+    expect(isTrustedTaskPageData(page)).toBe(false);
+    // And the memories validator must not accept a tasks page either.
+    const tasksPage = corpus.find((row) => row.wireCase === "window:complete_terminal")!.page;
+    expect(isTrustedSynthesizedPageData(structuredClone(tasksPage))).toBe(false);
+  });
+
+  test("no ratified tasks page carries a word slug as its public item id", async () => {
+    // backend:RISK-015 and D2's "the slug/server-id alias does not cross this
+    // wire", asserted over the serialized BYTES of every accepted page rather
+    // than over a type. The contract grammar cannot refuse a slug — it is
+    // printable ASCII — so this is the assertion that would catch a server
+    // minting one, and it is deliberately here rather than in the contract.
+    const corpus = await fixture<TasksReadCase[]>("tasks-read-conformance.json");
+    const slug = /^[a-z]{2,12}(?:-[a-z]{2,12}){2,4}$/;
+    for (const row of corpus.filter((entry) => entry.safe)) {
+      const page = row.page as { items: { id: string }[] };
+      for (const item of page.items) {
+        expect(slug.test(item.id)).toBe(false);
+      }
+    }
+  });
+});

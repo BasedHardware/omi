@@ -3,20 +3,20 @@
   "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.5.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.5.0-99df48ef.tgz"
+    "version": "0.6.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.6.0-2f2d0603.tgz"
   },
   "artifact": {
-    "compatibility": "breaking",
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.5.0-99df48ef.tgz",
-    "sha256": "99df48efaca9443b5c401cd0b7baa986b09c78cf027aad54db12e3674508819c",
-    "sha512": "35395f19eb616b14463011c7a85c0d48eb2a73c0b31ad02c7aba65a7fbfa293e6baffdbd9165e75a91c81d0425e8fe9acc7da9f64ae011fedf24dc904205b5b5",
-    "integrity": "sha512-NTlfGethaxRGMBHHqFwNSOsqc8CzGtAserplp/v6KT5rr/29kWXnWpHIHQQl6P6azH2p9krgEf7fJNyQQgW1tQ==",
+    "compatibility": "additive",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.6.0-2f2d0603.tgz",
+    "sha256": "2f2d060369094b5004d6d4d6da2f1007f2584974a4599d8a41b5460a7e360dfc",
+    "sha512": "13e02bebb021b3345bdebcc33b8fd8579dcae3db1bd124929cce4267ae43ee06202a0ffa9699e3f5d8b95cb7e161f08531dab3fd53f92fbb4da25a721c09710e",
+    "integrity": "sha512-E+Ar67AhszRb3rzDO4/YV53K49sb0SSSnM5CZ65D7gYgKg/6lpnj9di5XLfhYfCFMdqz/VP5L7tNolpyHAlxDg==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "300b64646ddb84ae4f70ebde2cb94ceb450ef5eb2fb8e96da40f2645a31b83ed",
+    "metadataSha256": "0113d359d78e556db15731735559511b0ed13ba2e1b5c8800d21f32b0d85aa03",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "e377ce50c15e81addde711e46efa1e450ae26e0632ee766e43017935489b9145",
-    "sourceDigest": "d332c562c4a091368da502e52d231c9b6a7a174fe0c5086be70291a2c0a3ecad",
+    "provenanceSha256": "f6352e6213155391e7eb699f69c7d6fcf53faac20985c0f94f08214f50affd66",
+    "sourceDigest": "073cd0e637b2ec0775b81dc30430ae22c7d51b54af3deab707cd77ba6783f8f2",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
@@ -24,6 +24,8 @@
       "package/dist/pagination/cursor.js",
       "package/dist/projections/synthesized.d.ts",
       "package/dist/projections/synthesized.js",
+      "package/dist/projections/tasks.d.ts",
+      "package/dist/projections/tasks.js",
       "package/dist/recall/trace.d.ts",
       "package/dist/recall/trace.js",
       "package/dist/wire/json.d.ts",
@@ -36,6 +38,8 @@
       "package/fixtures/recall-completeness.json",
       "package/fixtures/recall-trace.json",
       "package/fixtures/status-matrix.json",
+      "package/fixtures/tasks-read-conformance.json",
+      "package/fixtures/tasks-read-shape.json",
       "package/fixtures/write-ops-conformance.json",
       "package/fixtures/write-ops-outcomes.json",
       "package/package.json"
@@ -45,12 +49,12 @@
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
     "ref": "refs/heads/core/foundation",
-    "commit": "446711e0aa7aa0d3f1ce1f7a6bfbbc40d84c9e77",
+    "commit": "64745bd45f290dd02fc699d961086ce1dd00e908",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact 0.5.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites COORD-fable-rulings-wave2 alongside COORD-write-path-rulings and COORD-cross-generation-writes. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
+    "evidence": "The exact 0.6.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites DAVID-tasks-read-epoch-and-ci (D1/D2, signed by David in person) alongside the rulings 0.5.0 already carried. The hash was recorded only AFTER the push and read back with a real git ls-remote, per COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {

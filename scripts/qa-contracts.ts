@@ -82,6 +82,15 @@ const expectedExports = {
     types: "./dist/projections/synthesized.d.ts",
     import: "./dist/projections/synthesized.js",
   },
+  // The ratified TASKS READ wire (DAVID-tasks-read-epoch-and-ci D1/D2). Same
+  // reason as every other row: `requireJsonEqual` compares the WHOLE exports
+  // object, so a subpath that quietly appears or disappears in the vendored
+  // tarball fails the gate rather than being absorbed. Key ORDER is part of
+  // that comparison, so this sits where the package declares it.
+  "./projections/tasks": {
+    types: "./dist/projections/tasks.d.ts",
+    import: "./dist/projections/tasks.js",
+  },
   "./recall/trace": {
     types: "./dist/recall/trace.d.ts",
     import: "./dist/recall/trace.js",
