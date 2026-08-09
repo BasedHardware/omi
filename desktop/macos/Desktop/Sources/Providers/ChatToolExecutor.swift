@@ -2838,7 +2838,13 @@ class ChatToolExecutor {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     var nodesArray = args["nodes"] as? [[String: Any]]
     var edgesArray = args["edges"] as? [[String: Any]] ?? []
-    if let discoveryText = args["discovery_text"] as? String {
+    // Only the backend-extract path when there is text to extract from. A blank or
+    // whitespace-only `discovery_text` alongside explicit nodes/edges must still save
+    // the provided graph — the manifest keeps nodes/edges accepted for compatibility.
+    let discoveryText =
+      (args["discovery_text"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !discoveryText.isEmpty {
       switch await KnowledgeGraphToolSupport.resolveDiscoveryText(
         discoveryText, expectedOwnerId: expectedOwnerID)
       {
@@ -2846,7 +2852,15 @@ class ChatToolExecutor {
         nodesArray = graph.nodes
         edgesArray = graph.edges
       case .failure(let message):
-        return message
+        // Explicit nodes are a usable graph on their own; losing them because the
+        // extract call failed would be a regression of the compatibility path.
+        guard nodesArray != nil else { return message }
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "knowledge_graph",
+          from: "backend_extract",
+          to: "tool_provided_nodes",
+          reason: "extract_failed",
+          outcome: .degraded)
       }
     }
     guard let nodesArray else {
