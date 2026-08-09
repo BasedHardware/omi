@@ -1066,19 +1066,23 @@ const KG_NODE_TYPES = new Set(['person', 'organization', 'place', 'thing', 'conc
 export function createSaveKnowledgeGraphExecutor(
   deps?: Partial<SaveKnowledgeGraphDeps>
 ): ProductToolExecutor {
-  return async (input) => {
+  return async (input, ctx) => {
     let rawNodes = Array.isArray(input.nodes) ? input.nodes : []
     let rawEdges = Array.isArray(input.edges) ? input.edges : []
     const discoveryText =
       typeof input.discovery_text === 'string' ? input.discovery_text.trim() : ''
     if (discoveryText) {
+      // Network edge: a relay disconnect must abort the request and stop before the
+      // local write, like every other network-touching executor.
       const { backendJsonFetch } = await import('./backendTools')
       const extracted = await backendJsonFetch({
         method: 'POST',
         path: '/v1/knowledge-graph/extract',
         body: { text: discoveryText, include_existing: false },
         timeoutMs: 60_000,
+        signal: ctx?.signal
       })
+      if (ctx?.signal?.aborted) return 'Error: request was cancelled.'
       if (!extracted.ok) {
         return extracted.error.startsWith('Error:')
           ? extracted.error

@@ -892,7 +892,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
     promptGuidelines: [
       "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Prefer discovery_text with raw findings; backend extract builds the graph. nodes/edges remain accepted.",
     ],
     latency: "fast network",
     inputSchema: schema(
@@ -932,7 +931,9 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       [],
     ),
     annotations: localWrite,
-    timeoutClass: "normal",
+    // discovery_text makes this a network edge with a 60s backend request; the normal
+    // 30s relay deadline would report failure while that request is still in flight.
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Used by onboarding/knowledge graph flows."],

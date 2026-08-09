@@ -499,7 +499,7 @@ describe('save_knowledge_graph', () => {
       ok: true,
       data: {
         nodes: [
-          { id: 'n1', label: 'Alice', node_type: 'person', aliases: [] },
+          { id: 'n1', label: 'Alice', node_type: 'person', aliases: ['Ali'] },
           { id: 'n2', label: 'Coffee', node_type: 'thing', aliases: [] }
         ],
         edges: [{ id: 'e1', source_id: 'n1', target_id: 'n2', label: 'likes' }]
@@ -515,9 +515,10 @@ describe('save_knowledge_graph', () => {
       })
     )
     expect(out).toBe('OK: saved 2 entities and 1 relationships to your knowledge graph')
+    // Aliases from the backend must survive the mapping; an empty list stays empty.
     expect(upsert.mock.calls[0][0]).toEqual([
-      { id: 'n1', label: 'Alice', nodeType: 'person', aliases: undefined },
-      { id: 'n2', label: 'Coffee', nodeType: 'thing', aliases: undefined }
+      { id: 'n1', label: 'Alice', nodeType: 'person', aliases: ['Ali'] },
+      { id: 'n2', label: 'Coffee', nodeType: 'thing', aliases: [] }
     ])
     fetchSpy.mockRestore()
   })

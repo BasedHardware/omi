@@ -382,8 +382,7 @@ enum GeneratedToolCapabilities {
       "node_type must be one of: person, organization, place, thing, concept.",
       "Use when exploring the user's files during onboarding to build their knowledge graph.",
       "Deduplication is handled automatically; provide all entities you find.",
-      "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Prefer discovery_text with raw findings; backend extract builds the graph. nodes/edges remain accepted."
+      "Use when exploring the user's files during onboarding or knowledge-graph building."
     ]
     ),
     Capability(
