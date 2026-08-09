@@ -19,7 +19,9 @@ async function fetchMemoryStrings(): Promise<string[]> {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset: 0 } })
     const data = r.data as { memories?: Memory[] } | Memory[]
     const list = Array.isArray(data) ? data : (data.memories ?? [])
-    return list.map((m) => m.content).filter((c): c is string => typeof c === 'string' && !!c.trim())
+    return list
+      .map((m) => m.content)
+      .filter((c): c is string => typeof c === 'string' && !!c.trim())
   } catch {
     return []
   }
@@ -131,7 +133,18 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       const data = res.data as { nodes?: ExtractNode[]; edges?: ExtractEdge[] }
       parsed = extractResponseToParsed(data.nodes ?? [], data.edges ?? [])
     } catch (e) {
-      console.warn('[kg] backend knowledge-graph extract failed; saving deterministic floor only', e)
+      // Provider/correctness fallback: the saved graph loses its semantic layer and is
+      // still stamped fresh, so this must not look like a successful build. The renderer
+      // has no recordFallback emitter (see billing.ts), so this is the same structured,
+      // loud console record the fallback contract asks for.
+      console.error('[kg] fallback', {
+        component: 'knowledge_graph',
+        from: 'backend_extract',
+        to: 'deterministic_floor',
+        reason: 'extract_failed',
+        outcome: 'degraded',
+        error: e instanceof Error ? e.name : 'Error'
+      })
     }
 
     const graph = mergeGraph([...tech, ...appNodes, ...folderNodes], parsed, now)
@@ -157,9 +170,7 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       }
     }
 
-    const finalGraph = cardNode
-      ? { nodes: [...graph.nodes, cardNode], edges: graph.edges }
-      : graph
+    const finalGraph = cardNode ? { nodes: [...graph.nodes, cardNode], edges: graph.edges } : graph
     await window.omi.kgSaveGraph(finalGraph)
     return {
       nodeCount: finalGraph.nodes.length,
