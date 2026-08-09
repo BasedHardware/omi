@@ -88,7 +88,8 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     # direct product route while shadow-only.
     assert provider.calls[0].model == 'gpt-5.6-luna'
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
-    assert provider.calls[0].request['temperature'] == 0
+    # gpt-5.6-luna only accepts default temperature; non-default values are stripped.
+    assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
 
