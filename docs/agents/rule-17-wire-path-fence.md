@@ -1032,7 +1032,7 @@ testing the assumption the mechanism depends on rather than trusting that
 removing text parsing removed every gap.
 
 **What would unblock promotion:** land the per-line match-count check
-described above (or an equivalent that provably closes the same class), 
+described above (or an equivalent that provably closes the same class),
 re-run this round's two-constructions-on-one-line mutation against it and
 confirm it now fires, confirm the real `live-server.ts` hatch and the three
 existing hand-applied red-proofs all still pass, non-author re-reads.
