@@ -9,7 +9,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window = UIWindow(windowScene: windowScene)
 
     let lynxView = LynxView { builder in
-      builder.config = LynxConfig(provider: nil)
+      builder.config = LynxConfig(provider: TemplateProvider())
       builder.config?.register(OmiNativeModule.self)
 #if DEBUG
       builder.enableGenericResourceFetcher = .true
