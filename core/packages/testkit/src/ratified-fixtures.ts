@@ -49,7 +49,8 @@ export type RatifiedCorpusName =
   | "recall-trace"
   | "page-conformance"
   | "status-matrix"
-  | "write-ops-conformance";
+  | "write-ops-conformance"
+  | "tasks-read-conformance";
 
 export interface RatifiedFixtureManifest {
   readonly schemaVersion: number;
@@ -98,6 +99,34 @@ export function readRatifiedWriteOpsSchema(): {
   }[];
 } {
   return JSON.parse(readFileSync(new URL("write-ops-outcomes.json", FIXTURE_DIR), "utf8"));
+}
+
+/**
+ * The tasks-read SCHEMA OF RECORD — the declared case and refusal tables the
+ * corpus is checked for coverage against
+ * (`core/scripts/check-wire-conformance.mjs`, seam `ratified-tasks-read`).
+ *
+ * Read as an object rather than through `readRatifiedCorpus`, which requires an
+ * array: the two files are different kinds of thing. The corpus is a list of
+ * cases; this is the enumeration of everything the wire can answer AND
+ * everything it must refuse. The ratified package's own test asserts
+ * `itemFields` equals the module's exported `TASK_ITEM_FIELDS`, so it cannot
+ * drift into a second source of truth.
+ */
+export function readRatifiedTasksReadShape(): {
+  readonly schemaVersion: number;
+  readonly contractVersion: string;
+  readonly completenessVersion: string;
+  readonly route: string;
+  readonly itemFields: readonly string[];
+  readonly windowStates: readonly string[];
+  readonly completenessStatuses: readonly string[];
+  readonly limitationReasons: readonly string[];
+  readonly missingAppliedFrontierReasons: readonly string[];
+  readonly cases: readonly { readonly case: string }[];
+  readonly refusalLaws: readonly { readonly case: string }[];
+} {
+  return JSON.parse(readFileSync(new URL("tasks-read-shape.json", FIXTURE_DIR), "utf8"));
 }
 
 /**

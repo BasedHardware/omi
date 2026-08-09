@@ -6,6 +6,13 @@ import {
   isTrustedSynthesizedPageData,
   parseSynthesizedPageJson,
 } from "@omi-core/ratified-contracts/projections/synthesized";
+import {
+  isTrustedTaskCompletenessHonest,
+  isTrustedTaskPageData,
+  isTrustedTaskWindowHonest,
+  parseTaskPageJson,
+  TASK_ITEM_FIELDS,
+} from "@omi-core/ratified-contracts/projections/tasks";
 import { isTrustedRecallTraceData, parseRecallTraceJson } from "@omi-core/ratified-contracts/recall/trace";
 import {
   parseWriteOpEnvelopeJson,
@@ -96,6 +103,30 @@ for (const row of writeOpsSchema.outcomes) {
 }
 for (const row of await fixture("write-ops-conformance.json")) {
   assert.equal(parseWriteOpEnvelopeJson(row.requestBody) !== null, row.envelopeAccepted, row.name);
+}
+
+// The tasks read corpus of record, read from the INSTALLED package for the same
+// reason the write-ops corpus is: a consumer that hand-authors the counterpart's
+// payload is testing its author's memory of the wire (rule 15).
+const tasksShape = await fixture("tasks-read-shape.json");
+const tasksCorpus = await fixture("tasks-read-conformance.json");
+assert.ok(tasksCorpus.length >= tasksShape.cases.length + tasksShape.refusalLaws.length,
+  "the tasks corpus must cover at least every declared case and refusal law");
+assert.deepEqual([...TASK_ITEM_FIELDS], tasksShape.itemFields,
+  "the shipped module and the shipped schema of record must agree on the thirteen fields");
+const tasksCovered = new Set();
+for (const row of tasksCorpus) {
+  assert.equal(isTrustedTaskPageData(row.page), row.safe, row.wireCase);
+  assert.equal(parseTaskPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  // The window law is checked independently of the page law: a page can be
+  // rejected for a dozen reasons, so asserting only at the page level would let
+  // a broken window law hide behind an unrelated refusal.
+  if (row.safe) assert.ok(isTrustedTaskWindowHonest(row.page.window), `${row.wireCase} window`);
+  if (row.safe) assert.ok(isTrustedTaskCompletenessHonest(row.page), `${row.wireCase} coverage`);
+  tasksCovered.add(row.wireCase);
+}
+for (const { case: declared } of [...tasksShape.cases, ...tasksShape.refusalLaws]) {
+  assert.ok(tasksCovered.has(declared), `tasks case ${declared} is declared but has no corpus row`);
 }
 
 async function fixture(name) {

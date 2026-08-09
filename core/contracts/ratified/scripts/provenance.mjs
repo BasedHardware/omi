@@ -10,6 +10,7 @@ const inputs = [
   "README.md",
   "src/pagination/cursor.ts",
   "src/projections/synthesized.ts",
+  "src/projections/tasks.ts",
   "src/recall/trace.ts",
   "src/wire/json.ts",
   "src/write/ops.ts",
@@ -24,6 +25,8 @@ const inputs = [
   "fixtures/status-matrix.json",
   "fixtures/write-ops-outcomes.json",
   "fixtures/write-ops-conformance.json",
+  "fixtures/tasks-read-shape.json",
+  "fixtures/tasks-read-conformance.json",
   "fixtures/manifest.json",
   "test/contracts.test.mjs",
   "scripts/check-domain-markers.mjs",
@@ -56,6 +59,14 @@ const provenance = {
   // fixes it ("a cross-cutting ruling is cited by its document slug, prefixed
   // COORD-"), so the slug below is the defined form, not a best guess.
   //
+  // 0.6.0 adds "DAVID-tasks-read-epoch-and-ci" — D1 (the tasks read wire mirrors
+  // the memories read model: reader-scoped opaque ids, cursor pagination, a
+  // completeness envelope) and D2 (full thirteen-field parity), signed by David
+  // in person. It is cited by its document slug, which is the grammar the
+  // policy's "First exercise" section fixes; the COORD- prefix in the ids above
+  // is those documents' own filename prefix, not a required namespace, and
+  // stamping COORD- onto a David-signed record would misattribute who signed it.
+  //
   // 0.5.0 adds "COORD-fable-rulings-wave2" — W1, which SIGNS the fifth wire
   // value `control_unavailable` AND binds how this contract must record it: as
   // an availability signal, never as a fifth authorization outcome.
@@ -69,7 +80,7 @@ const provenance = {
   // POST /v1/{domain}/ops, B6 tasks-first but domain-generic). Per the
   // evolution policy §3 a bump is valid only if this array gains a ratified
   // ruling id the previous version did not carry; that is what this line is.
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2"],
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2", "DAVID-tasks-read-epoch-and-ci"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,
