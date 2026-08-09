@@ -96,6 +96,7 @@
 				76EA7E462E6D8D4700D30DAB /* Sources */,
 				76EA7E472E6D8D4700D30DAB /* Frameworks */,
 				76EA7E482E6D8D4700D30DAB /* Resources */,
+				AA7B0A0C0000000000000001 /* Copy Lynx bundle */,
 				DE64EA197CB51115409D1F2F /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
@@ -191,6 +192,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-LynxShell/Pods-LynxShell-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		AA7B0A0C0000000000000001 /* Copy Lynx bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../dist/main.lynx.bundle",
+			);
+			name = "Copy Lynx bundle";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/main.lynx.bundle",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nBUNDLE=\"${SRCROOT}/../dist/main.lynx.bundle\"\nif [ ! -f \"$BUNDLE\" ]; then\n  echo \"error: run 'bun run build' before building LynxShell\" >&2\n  exit 1\nfi\nmkdir -p \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ncp \"$BUNDLE\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/main.lynx.bundle\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */

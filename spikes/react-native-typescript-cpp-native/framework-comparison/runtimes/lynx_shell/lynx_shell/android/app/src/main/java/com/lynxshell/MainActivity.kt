@@ -14,12 +14,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        var uri = ""
-        uri = if (BuildConfig.DEBUG == true) {
-            "http://10.0.2.2:3000/main.lynx.bundle?fullscreen=true"
-        } else {
-            "main.lynx.bundle"
-        }
+        val uri = "main.lynx.bundle"
 
         val lynxView: LynxView = buildLynxView()
         setContentView(lynxView)

@@ -30,11 +30,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 #if DEBUG
     lynxView.loadTemplate(
-      fromURL: "http://localhost:3000/main.lynx.bundle?fullscreen=true",
+      fromURL: "main.lynx.bundle",
       initData: nil
     )
 #else
-    lynxView.loadTemplate(fromURL: "main.lynx")
+    lynxView.loadTemplate(fromURL: "main.lynx.bundle")
 #endif
 
     window?.makeKeyAndVisible()
