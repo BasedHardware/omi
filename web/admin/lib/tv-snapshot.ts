@@ -1,6 +1,6 @@
 /**
  * TV dashboard snapshot — product metrics shaped like omi-tv-metrics prototype.
- * PostHog via posthogResults + Stripe via computeRevenue. No Prometheus / no M1.
+ * PostHog via posthogResults + Stripe via computeRevenue. No Prometheus / no M1 / no habit.
  */
 
 import { posthogResults } from "@/lib/posthog";
@@ -28,25 +28,24 @@ const PLATFORM_EXPR = `multiIf(
   'other'
 )`;
 
-const HABIT_COND = `event IN (
-  'floating_bar_query_sent','Floating Bar Query Sent',
-  'floating_bar_ptt_started','Floating Bar PTT Started',
-  'Phone Mic Recording Started'
-)`;
-
 const CHAT_EVENTS = `event IN ('Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent')`;
-
-export type PlatformKey = "macos" | "windows" | "ios" | "android";
+const MEMORY_EVENTS = `event IN ('Memory Created','Memory Extracted')`;
+const CONV_EVENT = `event = 'Phone Mic Recording Started'`;
 
 export type SeriesPoint = {
-  t: number; // unix seconds
+  t: number;
   total?: number;
   macos?: number;
   windows?: number;
   ios?: number;
   android?: number;
-  memories_created?: number;
   v?: number;
+};
+
+export type FeatBoard = {
+  byHours: Record<string, number | null>;
+  platforms: Record<string, Record<string, number | null>>;
+  series: SeriesPoint[];
 };
 
 export type TvSnapshot = {
@@ -68,25 +67,9 @@ export type TvSnapshot = {
     series: SeriesPoint[];
   };
   features: {
-    conversation: {
-      byHours: Record<string, number | null>;
-      platforms: Record<string, Record<string, number | null>>;
-      series: SeriesPoint[];
-    };
-    chat: {
-      byHours: Record<string, number | null>;
-      platforms: Record<string, Record<string, number | null>>;
-      series: SeriesPoint[];
-    };
-    habit: {
-      byHours: Record<string, number | null>;
-      platforms: Record<string, Record<string, number | null>>;
-      series: SeriesPoint[];
-    };
-  };
-  fun: {
-    memoriesByHours: Record<string, number | null>;
-    series: SeriesPoint[];
+    conversation: FeatBoard;
+    chat: FeatBoard;
+    memories: FeatBoard;
   };
   million: {
     days: number | null;
@@ -148,32 +131,19 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function rowObj(row: unknown): Record<string, unknown> {
-  if (Array.isArray(row)) {
-    // callers pass column names separately when needed
-    return {};
-  }
-  if (row && typeof row === "object") return row as Record<string, unknown>;
-  return {};
-}
-
-function asRows(results: unknown[], columns?: string[]): Record<string, unknown>[] {
+function asRows(results: unknown[], columns: string[]): Record<string, unknown>[] {
   if (!results?.length) return [];
   if (Array.isArray(results[0])) {
-    const cols = columns || [];
     return (results as unknown[][]).map((r) => {
       const o: Record<string, unknown> = {};
       r.forEach((v, i) => {
-        o[cols[i] || String(i)] = v;
-      });
-      // also keep numeric indices
-      r.forEach((v, i) => {
+        o[columns[i] || String(i)] = v;
         o[String(i)] = v;
       });
       return o;
     });
   }
-  return results.map((r) => rowObj(r));
+  return results.map((r) => (r && typeof r === "object" ? (r as Record<string, unknown>) : {}));
 }
 
 function bucketTs(raw: unknown): number | null {
@@ -203,8 +173,8 @@ function emptyHours(): Record<string, number | null> {
 }
 
 function buildFeatHours(
-  featPlat: Record<string, unknown>[],
-  prefix: "conversation_users" | "chat_users" | "habit_users",
+  rows: Record<string, unknown>[],
+  prefix: string,
 ): {
   byHours: Record<string, number | null>;
   platforms: Record<string, Record<string, number | null>>;
@@ -213,8 +183,8 @@ function buildFeatHours(
   const platforms: Record<string, Record<string, number | null>> = {};
   const sums: Record<string, number> = { "12": 0, "24": 0, "72": 0 };
   const any: Record<string, boolean> = { "12": false, "24": false, "72": false };
-  for (const r of featPlat) {
-    const plat = String(r.platform ?? r[0] ?? "other");
+  for (const r of rows) {
+    const plat = String(r.platform ?? "other");
     if (plat === "other") continue;
     platforms[plat] = emptyHours();
     for (const [h, suffix] of [
@@ -242,19 +212,24 @@ function pivotPlatformSeries(
 ): SeriesPoint[] {
   const byT = new Map<number, SeriesPoint>();
   for (const r of rows) {
-    const t =
-      bucketTs(r.bucket ?? r.t ?? r[0]) ??
-      bucketTs(r.day);
+    const t = bucketTs(r.bucket ?? r.t);
     if (t == null) continue;
-    const plat = String(r.platform ?? r[1] ?? "other");
-    const v =
-      num(r[valueKey] ?? r.active ?? r[2] ?? r.users ?? r.conversation_users ?? r.chat_users ?? r.habit_users) ??
-      0;
-    const cur = byT.get(t) || { t, total: 0, macos: 0, windows: 0, ios: 0, android: 0 };
+    const plat = String(r.platform ?? "other");
+    const v = num(r[valueKey] ?? r.active) ?? 0;
+    const cur = byT.get(t) || {
+      t,
+      total: 0,
+      macos: 0,
+      windows: 0,
+      ios: 0,
+      android: 0,
+    };
     if (plat === "macos" || plat === "windows" || plat === "ios" || plat === "android") {
-      cur[plat] = (cur[plat] || 0) + v;
+      cur[plat] = (Number(cur[plat]) || 0) + v;
     }
-    cur.total = (cur.total || 0) + v;
+    if (plat !== "other") {
+      cur.total = (Number(cur.total) || 0) + v;
+    }
     byT.set(t, cur);
   }
   return Array.from(byT.values()).sort((a, b) => a.t - b.t);
@@ -263,7 +238,7 @@ function pivotPlatformSeries(
 export async function buildTvSnapshot(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
-  const cacheKey = `tv-snapshot:v3:rev=${opts.includeRevenue ? 1 : 0}`;
+  const cacheKey = `tv-snapshot:v4:rev=${opts.includeRevenue ? 1 : 0}`;
   const cached = await getPayload<TvSnapshot>(cacheKey);
   if (cached?.data && Date.now() - cached.freshAt < 2 * 60 * 1000) {
     return cached.data;
@@ -279,7 +254,6 @@ export async function buildTvSnapshot(opts: {
       stripeOk = !rev.unavailable;
       const byProduct = (rev.byProduct || []).map(
         (p: {
-          productId: string;
           productName: string;
           mrr: number;
           subscriptionCount: number;
@@ -309,7 +283,14 @@ export async function buildTvSnapshot(opts: {
     }
   }
 
-  const emptyActivity: TvSnapshot["activity"] = {
+  const emptyFeat = (): FeatBoard => ({
+    byHours: emptyHours(),
+    platforms: {},
+    series: [],
+  });
+
+  let posthogOk = false;
+  let activity: TvSnapshot["activity"] = {
     byHours: {
       "12": { total: null, platforms: {} },
       "24": { total: null, platforms: {} },
@@ -318,22 +299,10 @@ export async function buildTvSnapshot(opts: {
     wau: null,
     series: [],
   };
-  const emptyFeat = {
-    byHours: emptyHours(),
-    platforms: {} as Record<string, Record<string, number | null>>,
-    series: [] as SeriesPoint[],
-  };
-
-  let posthogOk = false;
-  let activity = emptyActivity;
   let features: TvSnapshot["features"] = {
-    conversation: { ...emptyFeat, platforms: {} },
-    chat: { ...emptyFeat, platforms: {} },
-    habit: { ...emptyFeat, platforms: {} },
-  };
-  let fun: TvSnapshot["fun"] = {
-    memoriesByHours: emptyHours(),
-    series: [],
+    conversation: emptyFeat(),
+    chat: emptyFeat(),
+    memories: emptyFeat(),
   };
   let million = daysUntilMillion(null, []);
 
@@ -371,24 +340,24 @@ GROUP BY bucket, platform
 ORDER BY bucket ASC
 LIMIT ${lim * 4}`.trim();
 
+    // Conversation = phone mic start (unique users). Chat = message / floating bar.
+    // Memories = created/extracted event counts by platform (volume, not users).
     const qFeaturesPlat = `
 SELECT
   ${PLATFORM_EXPR} AS platform,
-  uniqIf(person_id, event = 'Phone Mic Recording Started' AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
-  uniqIf(person_id, event = 'Phone Mic Recording Started' AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
-  uniqIf(person_id, event = 'Phone Mic Recording Started' AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 12 HOUR) AS conversation_users_12h,
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 24 HOUR) AS conversation_users_24h,
+  uniqIf(person_id, ${CONV_EVENT} AND timestamp >= now() - INTERVAL 72 HOUR) AS conversation_users_72h,
   uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS chat_users_12h,
   uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS chat_users_24h,
   uniqIf(person_id, ${CHAT_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS chat_users_72h,
-  uniqIf(person_id, ${HABIT_COND} AND timestamp >= now() - INTERVAL 12 HOUR) AS habit_users_12h,
-  uniqIf(person_id, ${HABIT_COND} AND timestamp >= now() - INTERVAL 24 HOUR) AS habit_users_24h,
-  uniqIf(person_id, ${HABIT_COND} AND timestamp >= now() - INTERVAL 72 HOUR) AS habit_users_72h
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 12 HOUR) AS memory_events_12h,
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 24 HOUR) AS memory_events_24h,
+  countIf(${MEMORY_EVENTS} AND timestamp >= now() - INTERVAL 72 HOUR) AS memory_events_72h
 FROM events
 WHERE timestamp >= now() - INTERVAL 72 HOUR AND timestamp < now()
-  AND event IN (
-    'Phone Mic Recording Started',
-    'Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent',
-    'floating_bar_ptt_started','Floating Bar PTT Started'
+  AND (
+    ${CONV_EVENT} OR ${CHAT_EVENTS} OR ${MEMORY_EVENTS}
   )
 GROUP BY platform
 LIMIT 10`.trim();
@@ -397,40 +366,17 @@ LIMIT 10`.trim();
 SELECT
   toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
   ${PLATFORM_EXPR} AS platform,
-  uniqIf(person_id, event = 'Phone Mic Recording Started') AS conversation_users,
+  uniqIf(person_id, ${CONV_EVENT}) AS conversation_users,
   uniqIf(person_id, ${CHAT_EVENTS}) AS chat_users,
-  uniqIf(person_id, ${HABIT_COND}) AS habit_users
+  countIf(${MEMORY_EVENTS}) AS memory_events
 FROM events
 WHERE timestamp >= now() - INTERVAL ${wh} HOUR AND timestamp < now()
-  AND event IN (
-    'Phone Mic Recording Started',
-    'Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent',
-    'floating_bar_ptt_started','Floating Bar PTT Started'
+  AND (
+    ${CONV_EVENT} OR ${CHAT_EVENTS} OR ${MEMORY_EVENTS}
   )
 GROUP BY bucket, platform
 ORDER BY bucket ASC
 LIMIT ${lim * 4}`.trim();
-
-    const qFunHours = `
-SELECT
-  countIf(event IN ('Memory Created','Memory Extracted') AND timestamp >= now() - INTERVAL 12 HOUR) AS m_12h,
-  countIf(event IN ('Memory Created','Memory Extracted') AND timestamp >= now() - INTERVAL 24 HOUR) AS m_24h,
-  countIf(event IN ('Memory Created','Memory Extracted') AND timestamp >= now() - INTERVAL 72 HOUR) AS m_72h
-FROM events
-WHERE timestamp >= now() - INTERVAL 72 HOUR AND timestamp < now()
-  AND event IN ('Memory Created','Memory Extracted')
-LIMIT 1`.trim();
-
-    const qFun10m = `
-SELECT
-  toStartOfInterval(timestamp, INTERVAL ${bm} MINUTE) AS bucket,
-  countIf(event IN ('Memory Created','Memory Extracted')) AS memories_created
-FROM events
-WHERE timestamp >= now() - INTERVAL ${wh} HOUR AND timestamp < now()
-  AND event IN ('Memory Created','Memory Extracted')
-GROUP BY bucket
-ORDER BY bucket ASC
-LIMIT ${lim}`.trim();
 
     const qPersonsTotal = `SELECT count() AS total_users FROM persons LIMIT 1`;
     const qPersonsDaily = `
@@ -444,8 +390,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       ph(creds, qActivity10m),
       ph(creds, qFeaturesPlat),
       ph(creds, qFeatures10m),
-      ph(creds, qFunHours),
-      ph(creds, qFun10m),
       ph(creds, qPersonsTotal),
       ph(creds, qPersonsDaily),
     ]);
@@ -455,8 +399,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "activity_10m",
       "features_plat",
       "features_10m",
-      "fun_hours",
-      "fun_10m",
       "persons_total",
       "persons_daily",
     ];
@@ -465,16 +407,11 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     });
 
     const get = (i: number) =>
-      results[i].status === "fulfilled" ? (results[i] as PromiseFulfilledResult<unknown[]>).value : [];
+      results[i].status === "fulfilled"
+        ? (results[i] as PromiseFulfilledResult<unknown[]>).value
+        : [];
 
-    // Activity by platform hours
-    const actPlat = asRows(get(0), [
-      "platform",
-      "dau_12h",
-      "dau_24h",
-      "dau_72h",
-      "wau",
-    ]);
+    const actPlat = asRows(get(0), ["platform", "dau_12h", "dau_24h", "dau_72h", "wau"]);
     const byHours: TvSnapshot["activity"]["byHours"] = {
       "12": { total: 0, platforms: {} },
       "24": { total: 0, platforms: {} },
@@ -483,12 +420,12 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     let wau = 0;
     let wauAny = false;
     for (const r of actPlat) {
-      const plat = String(r.platform ?? r[0] ?? "other");
-      const d12 = num(r.dau_12h ?? r[1]);
-      const d24 = num(r.dau_24h ?? r[2]);
-      const d72 = num(r.dau_72h ?? r[3]);
-      const w = num(r.wau ?? r[4]);
+      const plat = String(r.platform ?? "other");
       if (plat === "other") continue;
+      const d12 = num(r.dau_12h);
+      const d24 = num(r.dau_24h);
+      const d72 = num(r.dau_72h);
+      const w = num(r.wau);
       if (d12 != null) {
         byHours["12"].platforms[plat] = d12;
         byHours["12"].total = (byHours["12"].total || 0) + d12;
@@ -506,7 +443,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
         wauAny = true;
       }
     }
-    // null out zeros if nothing
     for (const h of ["12", "24", "72"] as const) {
       if (!Object.keys(byHours[h].platforms).length) byHours[h].total = null;
     }
@@ -516,7 +452,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "active",
     );
 
-    // Features by platform
     const featPlat = asRows(get(2), [
       "platform",
       "conversation_users_12h",
@@ -525,47 +460,30 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "chat_users_12h",
       "chat_users_24h",
       "chat_users_72h",
-      "habit_users_12h",
-      "habit_users_24h",
-      "habit_users_72h",
+      "memory_events_12h",
+      "memory_events_24h",
+      "memory_events_72h",
     ]);
     const convH = buildFeatHours(featPlat, "conversation_users");
     const chatH = buildFeatHours(featPlat, "chat_users");
-    const habitH = buildFeatHours(featPlat, "habit_users");
+    const memH = buildFeatHours(featPlat, "memory_events");
 
     const feat10m = asRows(get(3), [
       "bucket",
       "platform",
       "conversation_users",
       "chat_users",
-      "habit_users",
+      "memory_events",
     ]);
     const convSeries = pivotPlatformSeries(feat10m, "conversation_users");
     const chatSeries = pivotPlatformSeries(feat10m, "chat_users");
-    const habitSeries = pivotPlatformSeries(feat10m, "habit_users");
+    const memSeries = pivotPlatformSeries(feat10m, "memory_events");
 
-    // Fun memories
-    const funRow = asRows(get(4), ["m_12h", "m_24h", "m_72h"])[0] || {};
-    const memoriesByHours = {
-      "12": num(funRow.m_12h ?? funRow[0]),
-      "24": num(funRow.m_24h ?? funRow[1]),
-      "72": num(funRow.m_72h ?? funRow[2]),
-    };
-    const fun10m = asRows(get(5), ["bucket", "memories_created"]);
-    const funSeries: SeriesPoint[] = fun10m
-      .map((r) => {
-        const t = bucketTs(r.bucket ?? r[0]);
-        const v = num(r.memories_created ?? r[1]) ?? 0;
-        return t == null ? null : { t, memories_created: v, v };
-      })
-      .filter(Boolean) as SeriesPoint[];
-
-    // Million
-    const totRow = asRows(get(6), ["total_users"])[0] || {};
-    const totalUsers = num(totRow.total_users ?? totRow[0]);
-    const dailyNew = asRows(get(7), ["day", "new_users"]).map((r) => ({
-      day: String(r.day ?? r[0] ?? ""),
-      newUsers: num(r.new_users ?? r[1]) ?? 0,
+    const totRow = asRows(get(4), ["total_users"])[0] || {};
+    const totalUsers = num(totRow.total_users);
+    const dailyNew = asRows(get(5), ["day", "new_users"]).map((r) => ({
+      day: String(r.day ?? ""),
+      newUsers: num(r.new_users) ?? 0,
     }));
     million = daysUntilMillion(totalUsers, dailyNew);
 
@@ -577,9 +495,8 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     features = {
       conversation: { ...convH, series: convSeries },
       chat: { ...chatH, series: chatSeries },
-      habit: { ...habitH, series: habitSeries },
+      memories: { ...memH, series: memSeries },
     };
-    fun = { memoriesByHours, series: funSeries };
     posthogOk =
       actSeries.length > 0 ||
       byHours["72"].total != null ||
@@ -595,7 +512,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     revenue: opts.includeRevenue ? revenue : null,
     activity,
     features,
-    fun,
     million,
   };
 

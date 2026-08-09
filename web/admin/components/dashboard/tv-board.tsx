@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -39,6 +42,7 @@ const PLAT_LABEL: Record<string, string> = {
 };
 const PLATS = ["macos", "windows", "ios", "android"] as const;
 const WINDOW_LABEL: Record<number, string> = { 12: "12h", 24: "1d", 72: "3d" };
+const PIE_COLORS = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3", "#a89fd4"];
 
 type Props = {
   getToken: () => Promise<string | null>;
@@ -92,14 +96,51 @@ function sliceSeries(series: SeriesPoint[], hours: number): SeriesPoint[] {
   return series.filter((p) => p.t >= cut);
 }
 
-function downsample(series: SeriesPoint[], max = 48): SeriesPoint[] {
+function downsample(series: SeriesPoint[], max = 42): SeriesPoint[] {
   if (series.length <= max) return series;
   const out: SeriesPoint[] = [];
   const step = (series.length - 1) / (max - 1);
-  for (let i = 0; i < max; i++) {
-    out.push(series[Math.round(i * step)]);
-  }
+  for (let i = 0; i < max; i++) out.push(series[Math.round(i * step)]);
   return out;
+}
+
+/** Index each series to its first positive value (= 1.0) so left edges align. */
+function indexToStart(values: Array<number | null | undefined>): Array<number | null> {
+  let base: number | null = null;
+  for (const v of values) {
+    if (v == null || !Number.isFinite(Number(v)) || Number(v) <= 0) continue;
+    base = Number(v);
+    break;
+  }
+  if (base == null) return values.map(() => null);
+  return values.map((v) => {
+    if (v == null || !Number.isFinite(Number(v))) return null;
+    return Number(v) / base!;
+  });
+}
+
+function seriesStats(values: Array<number | null | undefined>): {
+  latest: number | null;
+  peak: number | null;
+  trough: number | null;
+} {
+  const nums = values
+    .map((v) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v)))
+    .filter((v): v is number => v != null);
+  if (!nums.length) return { latest: null, peak: null, trough: null };
+  let latest: number | null = null;
+  for (let i = values.length - 1; i >= 0; i--) {
+    const v = values[i];
+    if (v != null && Number.isFinite(Number(v))) {
+      latest = Number(v);
+      break;
+    }
+  }
+  return {
+    latest,
+    peak: Math.max(...nums),
+    trough: Math.min(...nums),
+  };
 }
 
 function shortTime(t: number, hours: number): string {
@@ -110,65 +151,141 @@ function shortTime(t: number, hours: number): string {
   return d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric" });
 }
 
+type BuiltChart = {
+  data: Array<Record<string, number | string | null>>;
+  activeKeys: string[];
+  stats: Record<string, { latest: number | null; peak: number | null; trough: number | null }>;
+};
+
+function buildIndexedChart(series: SeriesPoint[], hours: number): BuiltChart {
+  const sliced = downsample(sliceSeries(series, hours));
+  const rawByKey: Record<string, Array<number | null>> = {};
+  for (const k of PLATS) rawByKey[k] = sliced.map((p) => {
+    const v = p[k];
+    return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
+  });
+
+  const stats: BuiltChart["stats"] = {};
+  const indexed: Record<string, Array<number | null>> = {};
+  const activeKeys: string[] = [];
+  for (const k of PLATS) {
+    stats[k] = seriesStats(rawByKey[k]);
+    const has = rawByKey[k].some((v) => v != null && v > 0);
+    if (!has) continue;
+    activeKeys.push(k);
+    indexed[k] = indexToStart(rawByKey[k]);
+  }
+
+  const data = sliced.map((p, i) => {
+    const row: Record<string, number | string | null> = {
+      t: p.t,
+      label: shortTime(p.t, hours),
+    };
+    for (const k of activeKeys) {
+      row[k] = indexed[k][i];
+      row[`${k}_raw`] = rawByKey[k][i];
+    }
+    return row;
+  });
+
+  return { data, activeKeys, stats };
+}
+
 function MultiLineChart({
   series,
   hours,
-  keys = PLATS as unknown as string[],
-  colors = PLAT_COLORS,
 }: {
   series: SeriesPoint[];
   hours: number;
-  keys?: string[];
-  colors?: Record<string, string>;
 }) {
-  const data = useMemo(() => {
-    return downsample(sliceSeries(series, hours)).map((p) => ({
-      ...p,
-      label: shortTime(p.t, hours),
-    }));
-  }, [series, hours]);
+  const { data, activeKeys, stats } = useMemo(
+    () => buildIndexedChart(series, hours),
+    [series, hours],
+  );
 
-  if (data.length < 2) {
+  if (data.length < 2 || !activeKeys.length) {
     return <div className="tv-empty">No trend yet</div>;
   }
 
+  // Tight Y domain around indexed series so small relative moves are visible
+  const allIdx = data.flatMap((row) =>
+    activeKeys
+      .map((k) => row[k])
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v)),
+  );
+  let yMin = Math.min(...allIdx);
+  let yMax = Math.max(...allIdx);
+  if (yMin === yMax) {
+    yMin = Math.max(0, yMin - 0.05);
+    yMax = yMax + 0.05;
+  } else {
+    const pad = (yMax - yMin) * 0.2;
+    yMin = Math.max(0, yMin - pad);
+    yMax = yMax + pad;
+  }
+
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
-          tickLine={false}
-          axisLine={false}
-          minTickGap={28}
-          interval="preserveStartEnd"
-        />
-        <YAxis hide domain={["auto", "auto"]} />
-        <Tooltip
-          contentStyle={{
-            background: "#14161c",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 6,
-            fontSize: 11,
-            fontFamily: plexMono.style.fontFamily,
-          }}
-          labelStyle={{ color: "#9aa3b2" }}
-        />
-        {keys.map((k) => (
-          <Line
-            key={k}
-            type="monotone"
-            dataKey={k}
-            stroke={colors[k] || "#c5cdd8"}
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-            connectNulls
-          />
+    <div className="tv-chart-wrap">
+      <div className="tv-chart-main">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={28}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              domain={[yMin, yMax]}
+              width={36}
+              tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "#14161c",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 6,
+                fontSize: 11,
+                fontFamily: plexMono.style.fontFamily,
+              }}
+              labelStyle={{ color: "#9aa3b2" }}
+              formatter={(value: number, name: string, item) => {
+                const raw = item?.payload?.[`${name}_raw`];
+                const pct = value == null ? "—" : `${Math.round(value * 100)}% of start`;
+                const abs = raw == null ? "" : ` · now ${fmt(Number(raw))}`;
+                return [`${pct}${abs}`, PLAT_LABEL[name] || name];
+              }}
+            />
+            {activeKeys.map((k) => (
+              <Line
+                key={k}
+                type="monotone"
+                dataKey={k}
+                name={k}
+                stroke={PLAT_COLORS[k]}
+                strokeWidth={1.7}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="tv-end-labels">
+        {activeKeys.map((k) => (
+          <span key={k} style={{ color: PLAT_COLORS[k] }}>
+            {PLAT_LABEL[k]} {fmt(stats[k]?.latest)}
+          </span>
         ))}
-      </LineChart>
-    </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
 
@@ -176,27 +293,32 @@ function SingleLineChart({
   series,
   hours,
   color = "#c5cdd8",
-  dataKey = "v",
 }: {
   series: SeriesPoint[];
   hours: number;
   color?: string;
-  dataKey?: string;
 }) {
   const data = useMemo(() => {
     return downsample(sliceSeries(series, hours)).map((p) => ({
-      ...p,
+      t: p.t,
       label: shortTime(p.t, hours),
-      v: (p as Record<string, number | undefined>)[dataKey] ?? p.v ?? p.total ?? p.memories_created,
+      v: p.v ?? p.total ?? null,
     }));
-  }, [series, hours, dataKey]);
+  }, [series, hours]);
 
   if (data.length < 2) return <div className="tv-empty">No trend yet</div>;
 
+  const nums = data.map((d) => d.v).filter((v): v is number => v != null);
+  let yMin = Math.min(...nums);
+  let yMax = Math.max(...nums);
+  const pad = yMin === yMax ? Math.max(1, Math.abs(yMin) * 0.05) : (yMax - yMin) * 0.15;
+  yMin = Math.max(0, yMin - pad);
+  yMax = yMax + pad;
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+      <LineChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
         <XAxis
           dataKey="label"
           tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
@@ -205,7 +327,14 @@ function SingleLineChart({
           minTickGap={32}
           interval="preserveStartEnd"
         />
-        <YAxis hide domain={["auto", "auto"]} />
+        <YAxis
+          domain={[yMin, yMax]}
+          width={40}
+          tick={{ fill: "#6b7382", fontSize: 10, fontFamily: plexMono.style.fontFamily }}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={(v: number) => fmt(v)}
+        />
         <Tooltip
           contentStyle={{
             background: "#14161c",
@@ -214,12 +343,13 @@ function SingleLineChart({
             fontSize: 11,
             fontFamily: plexMono.style.fontFamily,
           }}
+          formatter={(value: number) => [fmt(value), ""]}
         />
         <Line
           type="monotone"
           dataKey="v"
           stroke={color}
-          strokeWidth={1.6}
+          strokeWidth={1.7}
           dot={false}
           isAnimationActive={false}
         />
@@ -228,28 +358,43 @@ function SingleLineChart({
   );
 }
 
-function PlatLegend({
+function PlatStats({
   platforms,
   hoursKey,
+  series,
+  hours,
 }: {
   platforms: Record<string, number | null | Record<string, number | null>>;
   hoursKey: string;
+  series: SeriesPoint[];
+  hours: number;
 }) {
+  const built = useMemo(() => buildIndexedChart(series, hours), [series, hours]);
+
   return (
     <div className="tv-plat">
       {PLATS.map((p) => {
         const raw = platforms[p];
-        const v =
+        const windowVal =
           raw == null
             ? null
             : typeof raw === "number"
               ? raw
               : (raw as Record<string, number | null>)[hoursKey];
-        if (v == null && raw == null) return null;
+        const st = built.stats[p];
+        // Prefer window total if present; else series latest
+        const latest = windowVal != null ? windowVal : st?.latest ?? null;
+        if (latest == null && st?.peak == null) return null;
         return (
-          <span key={p}>
+          <span key={p} className="tv-plat-item">
             <i style={{ background: PLAT_COLORS[p] }} />
-            {PLAT_LABEL[p]} <b>{fmt(typeof v === "number" ? v : null)}</b>
+            <b className="tv-plat-name">{PLAT_LABEL[p]}</b>
+            <b className="tv-plat-now">{fmt(latest)}</b>
+            {st?.peak != null && st?.trough != null ? (
+              <em className="tv-plat-range">
+                ↑{fmt(st.peak)} ↓{fmt(st.trough)}
+              </em>
+            ) : null}
           </span>
         );
       })}
@@ -315,10 +460,9 @@ export function TvBoard({
 
   const a = snap?.activity;
   const actSlot = a?.byHours?.[hk];
-  const conv = snap?.features.conversation;
-  const chat = snap?.features.chat;
-  const habit = snap?.features.habit;
-  const fun = snap?.fun;
+  const conv = snap?.features?.conversation;
+  const chat = snap?.features?.chat;
+  const mem = snap?.features?.memories;
   const m = snap?.million;
   const r = snap?.revenue;
 
@@ -331,16 +475,23 @@ export function TvBoard({
       }))
       .filter((p) => p.arr > 0)
       .sort((x, y) => y.arr - x.arr);
-    const rest = all.slice(5).reduce((s, p) => s + p.arr, 0);
+    const restArr = all.slice(5).reduce((s, p) => s + p.arr, 0);
+    const restSubs = all.slice(5).reduce((s, p) => s + p.subs, 0);
     const top = all.slice(0, 5);
-    if (rest > 0) top.push({ name: "Other", arr: rest, subs: 0 });
+    if (restArr > 0) top.push({ name: "Other", arr: restArr, subs: restSubs });
     return top;
   }, [r?.byProduct]);
   const maxArr = products[0]?.arr || 1;
   const sumArr = products.reduce((s, p) => s + p.arr, 0) || 1;
+  const pieData = products.map((p) => ({ name: p.name, value: p.arr }));
 
   const live = !snap ? "down" : snap.partial || error ? "stale" : "";
   const wlabel = WINDOW_LABEL[hours];
+
+  const stickiness =
+    a?.wau && actSlot?.total
+      ? Math.round((Number(actSlot.total) / a.wau) * 1000) / 10
+      : null;
 
   return (
     <div className={`tv-shell ${plexSans.className}`}>
@@ -350,8 +501,8 @@ export function TvBoard({
           --ink:#f2f3f5; --muted:#9aa3b2; --dim:#6b7382;
           --ok:#5bb98c; --warn:#d4b45a; --bad:#d48890;
           --gap:.45vw; --radius:.35vw;
-          --fs-lead:3.5vw; --fs-hero:2.75vw; --fs-stat:1.7vw;
-          --fs-label:.78vw; --fs-chip:.86vw; --fs-fine:.72vw;
+          --fs-lead:3.4vw; --fs-hero:2.6vw; --fs-stat:1.65vw;
+          --fs-label:.78vw; --fs-chip:.82vw; --fs-fine:.7vw;
           color:var(--ink); background:var(--bg);
           height:100vh; width:100vw; overflow:hidden;
           display:grid; grid-template-rows:auto 1fr auto;
@@ -361,85 +512,89 @@ export function TvBoard({
         .tv-shell *{box-sizing:border-box}
         .tv-mono{font-family:${plexMono.style.fontFamily}, ui-monospace, monospace}
         .tv-rail{display:flex;align-items:center;justify-content:space-between;gap:1vw;
-          padding:.55vw 1vw .35vw;border-bottom:1px solid var(--line)}
+          padding:.5vw 1vw .3vw;border-bottom:1px solid var(--line)}
         .tv-brand{display:flex;align-items:baseline;gap:.5vw}
         .tv-dot{width:.4vw;height:.4vw;min-width:7px;min-height:7px;border-radius:50%;
           background:var(--ok);align-self:center}
         .tv-dot.stale{background:var(--warn)}.tv-dot.down{background:var(--bad)}
-        .tv-brand-name{font-size:1.15vw;font-weight:600;letter-spacing:-.02em}
+        .tv-brand-name{font-size:1.1vw;font-weight:600;letter-spacing:-.02em}
         .tv-brand-sub{font-size:var(--fs-label);text-transform:uppercase;letter-spacing:.18em;color:var(--dim)}
-        .tv-rail-right{display:flex;align-items:center;gap:.85vw}
+        .tv-rail-right{display:flex;align-items:center;gap:.8vw}
         .tv-fresh,.tv-status{font-size:var(--fs-fine);color:var(--muted)}
-        .tv-status{color:var(--warn);max-width:16vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .tv-clock{font-size:1vw;font-weight:500;font-variant-numeric:tabular-nums}
-        .tv-toggle{display:inline-flex;gap:.12vw}
+        .tv-status{color:var(--warn);max-width:14vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .tv-clock{font-size:.95vw;font-weight:500;font-variant-numeric:tabular-nums}
+        .tv-toggle{display:inline-flex;gap:.1vw}
         .tv-toggle button{appearance:none;border:0;background:transparent;color:var(--dim);
-          font-size:var(--fs-fine);font-weight:500;letter-spacing:.04em;padding:.12vw .42vw;
+          font-size:var(--fs-fine);font-weight:500;letter-spacing:.04em;padding:.1vw .4vw;
           cursor:pointer;border-bottom:2px solid transparent;
           font-family:${plexMono.style.fontFamily}, monospace}
         .tv-toggle button.active{color:var(--ink);border-bottom-color:var(--ink)}
         .tv-chrome a{font-size:var(--fs-fine);color:var(--dim);text-decoration:none;
-          border:1px solid var(--line);padding:.15vw .45vw;border-radius:999px}
+          border:1px solid var(--line);padding:.12vw .42vw;border-radius:999px}
         .tv-chrome a:hover{color:var(--ink)}
-        .tv-board{display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:1.28fr 1fr 1fr;
-          gap:var(--gap);padding:.4vw 1vw .3vw;min-height:0}
+        .tv-board{display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:1.25fr 1fr 1fr;
+          gap:var(--gap);padding:.35vw 1vw .28vw;min-height:0}
         .tv-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-          padding:.5vw .65vw .4vw;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-        .tv-panel h2{margin:0 0 .22vw;display:flex;align-items:baseline;gap:.45vw;font-weight:500;font-size:inherit}
+          padding:.45vw .6vw .35vw;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+        .tv-panel h2{margin:0 0 .18vw;display:flex;align-items:baseline;gap:.4vw;font-weight:500;font-size:inherit}
         .tv-eyebrow{font-size:var(--fs-label);text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
         .tv-h2sub{font-size:var(--fs-fine);color:var(--dim);margin-left:auto;
           font-family:${plexMono.style.fontFamily}, monospace}
         .tv-body{flex:1;min-height:0;display:flex;flex-direction:column}
         .tv-stat-row{display:flex;align-items:flex-end;justify-content:space-between;gap:.5vw;flex:0 0 auto}
-        .tv-stat{display:flex;flex-direction:column;gap:.08vw;min-width:0}
+        .tv-stat{display:flex;flex-direction:column;gap:.06vw;min-width:0}
         .tv-value{font-family:${plexMono.style.fontFamily}, monospace;font-size:var(--fs-stat);
           font-weight:500;letter-spacing:-.03em;line-height:.95;font-variant-numeric:tabular-nums}
         .tv-lead .tv-value{font-size:var(--fs-lead)}
         .tv-hero .tv-value{font-size:var(--fs-hero)}
         .tv-caption{font-size:var(--fs-fine);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
         .tv-side .tv-value{font-size:var(--fs-stat);color:var(--muted)}
-        .tv-plat{display:flex;flex-wrap:wrap;gap:.2vw .7vw;margin-top:.2vw;font-size:var(--fs-chip);color:var(--muted)}
-        .tv-plat span{display:inline-flex;align-items:baseline;gap:.22vw}
-        .tv-plat i{width:.42vw;height:.16vw;min-width:6px;min-height:2px;align-self:center;display:inline-block}
-        .tv-plat b{font-family:${plexMono.style.fontFamily}, monospace;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
-        .tv-chart{position:relative;flex:1 1 0;min-height:0;margin-top:.12vw}
+        .tv-plat{display:flex;flex-wrap:wrap;gap:.15vw .55vw;margin-top:.15vw;font-size:var(--fs-chip);color:var(--muted)}
+        .tv-plat-item{display:inline-flex;align-items:baseline;gap:.18vw}
+        .tv-plat i{width:.4vw;height:.15vw;min-width:6px;min-height:2px;align-self:center;display:inline-block}
+        .tv-plat-name{font-weight:500;color:var(--muted)}
+        .tv-plat-now{font-family:${plexMono.style.fontFamily}, monospace;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+        .tv-plat-range{font-style:normal;font-family:${plexMono.style.fontFamily}, monospace;font-size:.72em;color:var(--dim);margin-left:.15em}
+        .tv-chart{position:relative;flex:1 1 0;min-height:0;margin-top:.08vw}
+        .tv-chart-wrap{height:100%;display:grid;grid-template-columns:1fr auto;gap:.25vw;min-height:0}
+        .tv-chart-main{min-width:0;min-height:0}
+        .tv-end-labels{display:flex;flex-direction:column;justify-content:center;gap:.2vw;
+          font-family:${plexMono.style.fontFamily}, monospace;font-size:var(--fs-fine);font-weight:600;
+          white-space:nowrap;padding-right:.1vw}
         .tv-empty{height:100%;display:grid;place-items:center;color:var(--dim);font-size:var(--fs-chip)}
-        .tv-rev{flex:1;min-height:0;display:flex;flex-direction:column;gap:.28vw}
-        .tv-rev-head .tv-value{font-size:2.05vw}
-        .tv-rev-list{flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:.28vw;overflow:hidden}
-        .tv-rev-row{display:grid;grid-template-columns:5.4vw 1fr 3.3vw;align-items:center;gap:.35vw;font-size:var(--fs-chip)}
+        .tv-rev{flex:1;min-height:0;display:grid;grid-template-rows:auto 1fr auto;gap:.2vw}
+        .tv-rev-head .tv-value{font-size:1.95vw}
+        .tv-rev-mid{min-height:0;display:grid;grid-template-columns:1.05fr .95fr;gap:.35vw}
+        .tv-rev-list{min-height:0;display:flex;flex-direction:column;justify-content:center;gap:.22vw;overflow:hidden}
+        .tv-rev-row{display:grid;grid-template-columns:4.8vw 1fr 2.9vw;align-items:center;gap:.28vw;font-size:var(--fs-chip)}
         .tv-rev-row .name{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .tv-rev-row .bar{height:.38vw;min-height:4px;background:rgba(255,255,255,.06);overflow:hidden}
-        .tv-rev-row .bar>i{display:block;height:100%;background:#d4a574}
-        .tv-rev-row:nth-child(2) .bar>i{background:#7eb8b0}
-        .tv-rev-row:nth-child(3) .bar>i{background:#8eb4e0}
-        .tv-rev-row:nth-child(4) .bar>i{background:#d4b45a}
-        .tv-rev-row:nth-child(5) .bar>i{background:#d48890}
-        .tv-rev-row:nth-child(6) .bar>i{background:#8b93a3}
+        .tv-rev-row .bar{height:.34vw;min-height:4px;background:rgba(255,255,255,.06);overflow:hidden}
+        .tv-rev-row .bar>i{display:block;height:100%}
         .tv-rev-row .amt{font-family:${plexMono.style.fontFamily}, monospace;font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
-        .tv-rev-row .pct{color:var(--dim);margin-left:.18em}
-        .tv-mixbar{display:flex;width:100%;height:.5vw;min-height:5px;overflow:hidden;background:rgba(255,255,255,.04);margin-top:.15vw}
-        .tv-mixbar>i{display:block;height:100%}
-        .tv-mixcap{margin-top:.2vw;font-size:var(--fs-fine);text-transform:uppercase;letter-spacing:.1em;color:var(--dim)}
+        .tv-rev-row .pct{color:var(--dim);margin-left:.12em;font-size:.9em}
+        .tv-pie{min-height:0;position:relative}
+        .tv-pie-center{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+          font-family:${plexMono.style.fontFamily}, monospace;font-size:.85vw;color:var(--muted);text-align:center;line-height:1.15}
+        .tv-pie-center b{display:block;color:var(--ink);font-size:1.05vw;font-weight:500}
         .tv-foot{display:flex;justify-content:space-between;align-items:center;gap:1vw;
-          padding:.32vw 1vw .45vw;border-top:1px solid var(--line)}
+          padding:.28vw 1vw .4vw;border-top:1px solid var(--line)}
         .tv-warn{font-size:var(--fs-fine);color:var(--warn);max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
           font-family:${plexMono.style.fontFamily}, monospace}
         .tv-hint{font-size:var(--fs-fine);color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
         #p-dau{grid-column:1/7;grid-row:1}
         #p-mem{grid-column:7/10;grid-row:1}
         #p-rev{grid-column:10/13;grid-row:1/3}
-        #p-conv{grid-column:1/4;grid-row:2}
-        #p-chat{grid-column:4/7;grid-row:2}
-        #p-habit{grid-column:7/10;grid-row:2}
-        #p-mil{grid-column:1/9;grid-row:3}
-        #p-stick{grid-column:9/13;grid-row:3}
+        #p-conv{grid-column:1/5;grid-row:2}
+        #p-chat{grid-column:5/10;grid-row:2}
+        #p-mil{grid-column:1/8;grid-row:3}
+        #p-stick{grid-column:8/13;grid-row:3}
         @media (max-width:1100px){
           .tv-shell{height:auto;min-height:100vh;overflow:auto;
-            --fs-lead:2.2rem;--fs-hero:1.75rem;--fs-stat:1.2rem;--fs-label:.65rem;--fs-chip:.72rem;--fs-fine:.62rem;--gap:.5rem;--radius:.4rem}
+            --fs-lead:2.1rem;--fs-hero:1.7rem;--fs-stat:1.15rem;--fs-label:.65rem;--fs-chip:.7rem;--fs-fine:.62rem;--gap:.5rem;--radius:.4rem}
           .tv-board{grid-template-columns:1fr 1fr;grid-template-rows:auto}
           .tv-panel{grid-column:auto!important;grid-row:auto!important;min-height:14rem}
           #p-dau,#p-mil,#p-rev{grid-column:1/-1!important}
+          .tv-rev-mid{grid-template-columns:1fr}
         }
       `}</style>
 
@@ -454,9 +609,7 @@ export function TvBoard({
         <div className="tv-rail-right">
           {error ? <span className="tv-status">{error}</span> : null}
           {snap?.partial ? (
-            <span className="tv-status">
-              {snap.warnings?.[0] || "partial sources"}
-            </span>
+            <span className="tv-status">{snap.warnings?.[0] || "partial sources"}</span>
           ) : null}
           <span className="tv-fresh tv-mono">{ageLabel(snap?.generatedAt)}</span>
           <div className="tv-toggle" role="group" aria-label="Time window">
@@ -500,7 +653,12 @@ export function TvBoard({
                 </div>
               </div>
             </div>
-            <PlatLegend platforms={actSlot?.platforms || {}} hoursKey={hk} />
+            <PlatStats
+              platforms={actSlot?.platforms || {}}
+              hoursKey={hk}
+              series={a?.series || []}
+              hours={hours}
+            />
             <div className="tv-chart">
               <MultiLineChart series={a?.series || []} hours={hours} />
             </div>
@@ -515,17 +673,18 @@ export function TvBoard({
           <div className="tv-body">
             <div className="tv-stat-row">
               <div className="tv-stat">
-                <div className="tv-value">{fmt(fun?.memoriesByHours?.[hk])}</div>
-                <div className="tv-caption">created · {wlabel}</div>
+                <div className="tv-value">{fmt(mem?.byHours?.[hk])}</div>
+                <div className="tv-caption">events · {wlabel}</div>
               </div>
             </div>
+            <PlatStats
+              platforms={mem?.platforms || {}}
+              hoursKey={hk}
+              series={mem?.series || []}
+              hours={hours}
+            />
             <div className="tv-chart">
-              <SingleLineChart
-                series={fun?.series || []}
-                hours={hours}
-                color="#c5cdd8"
-                dataKey="memories_created"
-              />
+              <MultiLineChart series={mem?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -545,42 +704,74 @@ export function TvBoard({
                 <div className="tv-rev-head">
                   <div className="tv-value">{fmtMoney(r.arr)}</div>
                   <div className="tv-caption">
-                    {fmt(r.subscriptionCount)} subscriptions
+                    {fmt(r.subscriptionCount)} subscriptions · MRR {fmtMoney(r.mrr)}
                   </div>
                 </div>
-                <div className="tv-rev-list">
-                  {products.map((p) => {
-                    const w = Math.max(2, Math.round((p.arr / maxArr) * 100));
-                    const pct = Math.round((p.arr / sumArr) * 100);
-                    return (
-                      <div className="tv-rev-row" key={p.name}>
-                        <span className="name">{p.name}</span>
-                        <span className="bar">
-                          <i style={{ width: `${w}%` }} />
-                        </span>
-                        <span className="amt">
-                          {fmtMoney(p.arr)}
-                          <span className="pct">{pct}%</span>
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className="tv-rev-mid">
+                  <div className="tv-rev-list">
+                    {products.map((p, i) => {
+                      const w = Math.max(2, Math.round((p.arr / maxArr) * 100));
+                      const pct = Math.round((p.arr / sumArr) * 100);
+                      return (
+                        <div className="tv-rev-row" key={p.name}>
+                          <span className="name">{p.name}</span>
+                          <span className="bar">
+                            <i
+                              style={{
+                                width: `${w}%`,
+                                background: PIE_COLORS[i % PIE_COLORS.length],
+                              }}
+                            />
+                          </span>
+                          <span className="amt">
+                            {fmtMoney(p.arr)}
+                            <span className="pct">{pct}%</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="tv-pie">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius="58%"
+                          outerRadius="88%"
+                          paddingAngle={1.5}
+                          stroke="rgba(12,13,16,0.6)"
+                          strokeWidth={1}
+                          isAnimationActive={false}
+                        >
+                          {pieData.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: "#14161c",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontFamily: plexMono.style.fontFamily,
+                          }}
+                          formatter={(value: number, name: string) => [
+                            fmtMoney(value),
+                            name,
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="tv-pie-center">
+                      <span>
+                        <b>{fmtMoney(r.arr)}</b>
+                        ARR mix
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="tv-mixbar" aria-hidden>
-                  {products.map((p, i) => {
-                    const colors = ["#d4a574", "#7eb8b0", "#8eb4e0", "#d4b45a", "#d48890", "#8b93a3"];
-                    return (
-                      <i
-                        key={p.name}
-                        style={{
-                          width: `${Math.max(1.5, (p.arr / sumArr) * 100)}%`,
-                          background: colors[i % colors.length],
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="tv-mixcap">product mix · list-price ARR</div>
               </div>
             )}
           </div>
@@ -595,10 +786,15 @@ export function TvBoard({
             <div className="tv-stat-row">
               <div className="tv-stat">
                 <div className="tv-value">{fmt(conv?.byHours?.[hk])}</div>
-                <div className="tv-caption">users · {wlabel}</div>
+                <div className="tv-caption">users starting rec · {wlabel}</div>
               </div>
             </div>
-            <PlatLegend platforms={conv?.platforms || {}} hoursKey={hk} />
+            <PlatStats
+              platforms={conv?.platforms || {}}
+              hoursKey={hk}
+              series={conv?.series || []}
+              hours={hours}
+            />
             <div className="tv-chart">
               <MultiLineChart series={conv?.series || []} hours={hours} />
             </div>
@@ -614,31 +810,17 @@ export function TvBoard({
             <div className="tv-stat-row">
               <div className="tv-stat">
                 <div className="tv-value">{fmt(chat?.byHours?.[hk])}</div>
-                <div className="tv-caption">users · {wlabel}</div>
+                <div className="tv-caption">users sending msgs · {wlabel}</div>
               </div>
             </div>
-            <PlatLegend platforms={chat?.platforms || {}} hoursKey={hk} />
+            <PlatStats
+              platforms={chat?.platforms || {}}
+              hoursKey={hk}
+              series={chat?.series || []}
+              hours={hours}
+            />
             <div className="tv-chart">
               <MultiLineChart series={chat?.series || []} hours={hours} />
-            </div>
-          </div>
-        </section>
-
-        <section className="tv-panel tv-hero" id="p-habit">
-          <h2>
-            <span className="tv-eyebrow">Habit forming</span>
-            <span className="tv-h2sub">{wlabel}</span>
-          </h2>
-          <div className="tv-body">
-            <div className="tv-stat-row">
-              <div className="tv-stat">
-                <div className="tv-value">{fmt(habit?.byHours?.[hk])}</div>
-                <div className="tv-caption">users · {wlabel}</div>
-              </div>
-            </div>
-            <PlatLegend platforms={habit?.platforms || {}} hoursKey={hk} />
-            <div className="tv-chart">
-              <MultiLineChart series={habit?.series || []} hours={hours} />
             </div>
           </div>
         </section>
@@ -660,7 +842,7 @@ export function TvBoard({
               </div>
             </div>
             <div className="tv-chart">
-              <SingleLineChart series={m?.series || []} hours={24 * 30} color="#c5cdd8" />
+              <SingleLineChart series={m?.series || []} hours={24 * 40} color="#c5cdd8" />
             </div>
           </div>
         </section>
@@ -668,15 +850,13 @@ export function TvBoard({
         <section className="tv-panel tv-hero" id="p-stick">
           <h2>
             <span className="tv-eyebrow">Stickiness</span>
-            <span className="tv-h2sub">DAU / WAU</span>
+            <span className="tv-h2sub">window / WAU</span>
           </h2>
           <div className="tv-body">
             <div className="tv-stat-row">
               <div className="tv-stat">
                 <div className="tv-value">
-                  {a?.wau && actSlot?.total
-                    ? `${Math.round((Number(actSlot.total) / a.wau) * 1000) / 10}%`
-                    : "—"}
+                  {stickiness == null ? "—" : `${stickiness}%`}
                 </div>
                 <div className="tv-caption">
                   {fmt(actSlot?.total)} of {fmt(a?.wau)} weekly actives
@@ -694,7 +874,7 @@ export function TvBoard({
         <span className="tv-warn">
           {snap?.warnings?.length
             ? `${snap.warnings.length} warning(s): ${snap.warnings[0]}`
-            : "aggregate metrics · no PII"}
+            : "lines indexed to window start · absolute latest on right"}
         </span>
         <span className="tv-hint">auto-refresh</span>
       </footer>
