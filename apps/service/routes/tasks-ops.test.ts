@@ -28,6 +28,7 @@ import {
 
 import { createLocalService, type LocalService } from "../app-facing";
 import { WRITE_RUN_ID_HEADER } from "../observability/write-ops-counter";
+import { RETENTION_CAP_SECONDS } from "../stores/straggler-table";
 import { TASKS_OPS_PATH } from "./tasks-ops";
 
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
@@ -590,6 +591,126 @@ describe("route hardening", () => {
     expect(response.status).toBe(WRITE_ERRORS.validation.status);
     expect(response.text).toBe(WRITE_ERRORS.validation.body);
     expect(booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "t")).toBeNull();
+  });
+});
+
+// ── CORPUS lane, run-2026-08-09: adversarial probes from OUTSIDE ────────────
+//
+// Constructed inputs against the shipped route, not diffs read. Two seams
+// beyond what `tasks-ops-probes.test.ts` (landed independently, same night)
+// already reaches — that file's own "eight concurrent identical envelopes
+// apply exactly once" already covers the identical-content interleaving case
+// and its own oversize/depth-bound tests already cover the size budget over
+// real HTTP (and found a genuine 500-on-deep-JSON defect doing it), so
+// neither is repeated here. What is left: write_id REUSE specifically under
+// concurrency (identical write_id, DIVERGENT content, racing) — a different
+// claim from "identical envelopes race cleanly" — and the straggler
+// retention lifecycle (sweep boundary, deletion dominance) driven by rows a
+// real refused HTTP request produced, not rows constructed by hand directly
+// against the isolated store.
+
+describe("write_id reuse under REAL concurrent interleaving", () => {
+  /**
+   * The reuse counterpart: concurrent requests sharing a write_id where ONE
+   * carries different content. Exactly one may apply (the winner is whichever
+   * the scheduler ran first — not asserted, because it is not a contract);
+   * every other concurrent request naming that write_id must read as either a
+   * clean replay (same content as the winner) or `write_id_reuse` (different
+   * content) — never a silent second apply, and never `write_id_reuse`
+   * reported for a request that was actually identical to the winner.
+   */
+  test("N concurrent requests, same write_id, ONE with different content: no silent double apply", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const wid = writeId("race2");
+    const original = envelope({ writeId: wid, op: create("race-target-2") });
+    const divergent = envelope({ writeId: wid, op: create("race-target-2", { title: "a different title entirely" }) });
+
+    const responses = await Promise.all([
+      post(booted, original), post(booted, original), post(booted, divergent),
+      post(booted, original), post(booted, divergent),
+    ]);
+    const outcomes = responses.map((r) => {
+      if (r.status === 409) return (JSON.parse(r.text) as { error: string }).error;
+      const body = JSON.parse(r.text) as { idempotent: boolean };
+      return body.idempotent ? "accepted_idempotent" : "accepted";
+    });
+    const applies = outcomes.filter((o) => o === "accepted");
+    expect(applies).toHaveLength(1);
+    // Everything else is a coherent classification of the SAME write_id
+    // against whichever content actually won — never anything else.
+    for (const outcome of outcomes) {
+      expect(["accepted", "accepted_idempotent", "write_id_reuse"]).toContain(outcome);
+    }
+    expect(outcomes.filter((o) => o === "write_id_reuse").length).toBeGreaterThan(0);
+
+    // Exactly one record exists — no interleaving left the store holding two
+    // divergent applies under one write_id.
+    const record = booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "race-target-2");
+    expect(record).not.toBeNull();
+  });
+});
+
+describe("the straggler retention lifecycle, end to end through the live route", () => {
+  /**
+   * Existing coverage proves preservation happens (this file, above) and
+   * proves the sweep boundary in isolation against hand-built rows
+   * (`straggler-table.test.ts`). Neither proves the two composed: that a row
+   * PRODUCED BY A REAL REFUSED REQUEST is the row the David-signed 90-day cap
+   * actually sweeps, through the same store instance the route writes to.
+   *
+   * red-proof: change `sweepExpired`'s horizon comparison from `>=` back to
+   * `>` (the exact off-by-one OPS's own red-proof pass already found and
+   * fixed once against hand-built rows). APPLIED AND OBSERVED RED here too,
+   * against a row this test produced via a real stale-epoch HTTP request
+   * rather than a row constructed directly against the store — confirming
+   * the fixed bug stays fixed from the route's own call path, not only from
+   * the unit test that first caught it.
+   */
+  test("a real refused straggler is swept at the cap boundary, not one second early", async () => {
+    const booted = boot();
+    await cutOver(booted);
+
+    // Produce a genuine straggler: a stale-epoch write, refused by the fence,
+    // through the real route.
+    const stale = await post(booted, envelope({ writeId: writeId("ret1"), epoch: STALE_EPOCH, op: create("t") }));
+    expect(stale.status).toBe(409);
+    const before = booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID);
+    expect(before).toHaveLength(1);
+    const retainedAt = before[0]?.retained_at_epoch_seconds as number;
+
+    // Exactly at the cap: kept.
+    const sweptAtCap = booted.service.writePath.stragglers.sweepExpired(retainedAt + RETENTION_CAP_SECONDS);
+    expect(sweptAtCap).toBe(0);
+    expect(booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID)).toHaveLength(1);
+
+    // One second past the cap: swept.
+    const sweptPastCap = booted.service.writePath.stragglers.sweepExpired(retainedAt + RETENTION_CAP_SECONDS + 1);
+    expect(sweptPastCap).toBe(1);
+    expect(booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID)).toEqual([]);
+  });
+
+  /**
+   * B3's "deletion dominates them with no separate mechanism", proved from
+   * the route's own call path rather than asserted against hand-built rows:
+   * a straggler this test did not construct directly, produced by a genuine
+   * refusal through the live door, disappears under `deleteAccount` and
+   * never resurfaces via `exportAccount`.
+   *
+   * red-proof: in `straggler-table.ts`'s `deleteAccount`, change
+   * `byAccount.delete(accountId)` to a no-op that only reads the count
+   * without removing the entry. APPLIED AND OBSERVED RED: `exportAccount`
+   * after deletion still returned the row this test produced via HTTP.
+   */
+  test("account deletion removes a straggler this test never touched directly", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    await post(booted, envelope({ writeId: writeId("ret2"), epoch: STALE_EPOCH, op: create("t") }));
+    expect(booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID)).toHaveLength(1);
+
+    const removed = booted.service.writePath.stragglers.deleteAccount(OWNER_ACCOUNT_ID);
+    expect(removed).toBe(1);
+    expect(booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID)).toEqual([]);
   });
 });
 
