@@ -3,6 +3,20 @@ import Foundation
 /// Builds `local_kg_*` records from parsed extraction payloads.
 /// Mirrors the merge semantics of `ChatToolExecutor.executeSaveKnowledgeGraph`.
 enum KnowledgeGraphRecordBuilder {
+  /// Node types the extraction is allowed to emit. Model output for OCR/window
+  /// title is untrusted, so anything outside this set is dropped rather than
+  /// written into ``local_kg_*``.
+  static let allowedNodeTypes: Set<String> = [
+    "person", "place", "organization", "thing", "concept",
+  ]
+
+  /// Bounds for untrusted model output. OCR/window title can carry adversarial
+  /// text, so ids, labels, aliases, and edge labels are length-capped and the
+  /// graph size is bounded.
+  static let maxFieldLength = 200
+  static let maxNodes = 500
+  static let maxEdges = 2_000
+
   struct ParsedNode {
     let id: String
     let label: String
@@ -14,6 +28,34 @@ enum KnowledgeGraphRecordBuilder {
     let sourceId: String
     let targetId: String
     let label: String
+  }
+
+  /// Whether ``value`` is safe to store as an id or edge label. Untrusted model
+  /// output must not smuggle control characters or SQL-/shell-significant text
+  /// into durable records.
+  static func isSafeIdentifier(_ value: String) -> Bool {
+    guard !value.isEmpty, value.count <= maxFieldLength else { return false }
+    for scalar in value.unicodeScalars {
+      let ok =
+        (scalar >= "a" && scalar <= "z")
+        || (scalar >= "A" && scalar <= "Z")
+        || (scalar >= "0" && scalar <= "9")
+        || scalar == "_" || scalar == "-" || scalar == "."
+      if !ok { return false }
+    }
+    return true
+  }
+
+  /// Normalize a free-text label: trim, collapse whitespace, and cap length.
+  static func normalizedLabel(_ value: String) -> String? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let collapsed =
+      trimmed
+      .split(whereSeparator: \.isWhitespace)
+      .joined(separator: " ")
+    guard collapsed.count <= maxFieldLength else { return nil }
+    return collapsed
   }
 
   static func buildRecords(
@@ -83,21 +125,34 @@ enum KnowledgeGraphRecordBuilder {
     let nodesArray = root["nodes"] as? [[String: Any]] ?? []
     let edgesArray = root["edges"] as? [[String: Any]] ?? []
 
-    let nodes: [ParsedNode] = nodesArray.compactMap { node in
-      guard let id = node["id"] as? String,
-        let label = node["label"] as? String
-      else { return nil }
+    var nodes: [ParsedNode] = []
+    for node in nodesArray {
+      guard let rawId = node["id"] as? String,
+        let rawLabel = node["label"] as? String,
+        isSafeIdentifier(rawId),
+        let label = normalizedLabel(rawLabel)
+      else { continue }
       let nodeType = node["node_type"] as? String ?? "concept"
-      let aliases = node["aliases"] as? [String] ?? []
-      return ParsedNode(id: id, label: label, nodeType: nodeType, aliases: aliases)
+      guard allowedNodeTypes.contains(nodeType) else { continue }
+      let aliases = (node["aliases"] as? [String] ?? [])
+        .compactMap(normalizedLabel)
+        .prefix(8)
+      nodes.append(ParsedNode(id: rawId, label: label, nodeType: nodeType, aliases: Array(aliases)))
+      if nodes.count >= maxNodes { break }
     }
 
-    let edges: [ParsedEdge] = edgesArray.compactMap { edge in
+    var edges: [ParsedEdge] = []
+    for edge in edgesArray {
       guard let sourceId = edge["source_id"] as? String,
         let targetId = edge["target_id"] as? String,
-        let label = edge["label"] as? String
-      else { return nil }
-      return ParsedEdge(sourceId: sourceId, targetId: targetId, label: label)
+        let rawLabel = edge["label"] as? String,
+        isSafeIdentifier(sourceId),
+        isSafeIdentifier(targetId),
+        let label = normalizedLabel(rawLabel),
+        isSafeIdentifier(label)
+      else { continue }
+      edges.append(ParsedEdge(sourceId: sourceId, targetId: targetId, label: label))
+      if edges.count >= maxEdges { break }
     }
 
     return (nodes, edges)
