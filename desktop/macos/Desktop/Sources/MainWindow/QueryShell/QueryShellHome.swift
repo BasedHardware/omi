@@ -42,6 +42,7 @@ struct QueryShellHome: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
+  @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
   /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
@@ -278,12 +279,13 @@ struct QueryShellHome: View {
   private func panelBody(request: QueryShellRequest) -> some View {
     switch mode {
     case .results:
-      // The seam's occupant: one merged chronological spine — a conversation, the memories it
-      // produced and the screen you were on, in the order they happened. See `SpineStream`.
+      // The seam's occupant: one merged chronological spine — a conversation, the memories and
+      // tasks it produced, and the screen you were on, in the order they happened. See `SpineStream`.
       SpineStream(
         request: request,
         appState: appState,
         memoriesViewModel: memoriesViewModel,
+        tasksStore: tasksStore,
         onOpenConversation: openConversation,
         onOpenBrainMap: openBrainMap,
         onOpenRewind: openRewind
@@ -512,6 +514,15 @@ struct QueryShellHome: View {
     navigate(.conversation)
   }
 
+  private func openConversationSource(_ id: String, transcriptSegmentIds: [String]) {
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: id,
+      showTranscript: true,
+      transcriptSegmentIds: transcriptSegmentIds
+    )
+    navigate(.conversation)
+  }
+
   private func openMemories() {
     navigate(.memories)
   }
@@ -547,7 +558,8 @@ struct QueryShellHome: View {
   private var total: Int? {
     guard let screenCount else { return nil }
     let conversations = appState.conversations.filter { $0.deleted != true }.count
-    return conversations + memoriesViewModel.memories.count + screenCount
+    let tasks = tasksStore.tasks.filter { !$0.isRetired }.count
+    return conversations + memoriesViewModel.memories.count + tasks + screenCount
   }
 
   private func loadScreenCount() async {

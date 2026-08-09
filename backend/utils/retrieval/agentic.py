@@ -76,10 +76,10 @@ from utils.observability.langsmith import is_langsmith_enabled
 import logging
 
 try:
-    from utils.llm.gateway_client import should_route_features_through_gateway
+    from utils.llm.gateway_client import should_route_chat_agent_through_gateway
 except ImportError:
 
-    def should_route_features_through_gateway() -> bool:
+    def should_route_chat_agent_through_gateway() -> bool:
         return False
 
 
@@ -1224,10 +1224,8 @@ async def execute_agentic_chat_stream(
         if setup_remaining <= 0:
             raise asyncio.TimeoutError()
         async with asyncio.timeout(setup_remaining):
-            # Anthropic BYOK is an explicit direct-provider choice. It must not
-            # enter the managed OpenAI-compatible lane, whose route override
-            # would otherwise attach an Anthropic key to a Luna/OpenAI route.
-            gateway_feature_mode = should_route_features_through_gateway() and not bool(get_byok_key('anthropic'))
+            # BYOK Anthropic and CHAT_AGENT_ROUTE=direct stay off the managed OpenAI lane.
+            gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
