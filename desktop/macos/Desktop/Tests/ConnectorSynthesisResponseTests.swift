@@ -7,7 +7,7 @@ import XCTest
 final class ConnectorSynthesisResponseTests: XCTestCase {
 
   func testDecodesMemoriesTasksAndProfile() throws {
-    let json = """
+    let rawJSON = """
       {
         "memories": ["The user runs a weekly standup"],
         "tasks": [
@@ -15,8 +15,9 @@ final class ConnectorSynthesisResponseTests: XCTestCase {
         ],
         "profile": "Engineering manager."
       }
-      """.data(using: .utf8)!
+      """
 
+    let json = try XCTUnwrap(rawJSON.data(using: .utf8))
     let response = try JSONDecoder().decode(ConnectorSynthesisResponse.self, from: json)
 
     XCTAssertEqual(response.memories, ["The user runs a weekly standup"])
@@ -28,10 +29,11 @@ final class ConnectorSynthesisResponseTests: XCTestCase {
   }
 
   func testDecodesEmptySynthesis() throws {
-    let json = """
+    let rawJSON = """
       {"memories": [], "tasks": [], "profile": ""}
-      """.data(using: .utf8)!
+      """
 
+    let json = try XCTUnwrap(rawJSON.data(using: .utf8))
     let response = try JSONDecoder().decode(ConnectorSynthesisResponse.self, from: json)
 
     XCTAssertTrue(response.memories.isEmpty)
