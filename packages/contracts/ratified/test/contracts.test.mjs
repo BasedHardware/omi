@@ -28,6 +28,7 @@ import {
   parseTaskFrontier,
   parseTaskItemId,
   parseTaskPageJson,
+  readTaskPageAccountEpoch,
   TASK_ITEM_FIELDS,
   TASKS_READ_CONTRACT_VERSION,
 } from "../dist/projections/tasks.js";
@@ -637,5 +638,75 @@ test("the tasks window law is the memories window law, verbatim in behaviour", a
   assert.ok(windows.length >= 4);
   for (const row of windows) {
     assert.equal(isTrustedTaskWindowHonest(row.window), row.honest, `${row.name} must be judged identically by both wires`);
+  }
+});
+
+test("D3's account epoch is genuinely optional — a page without it is still valid", async () => {
+  // This is the assertion that decides whether 0.7.0 is `additive` or
+  // `breaking`, and the policy turns on exactly one word. A REQUIRED sixth key
+  // would mean every client built against 0.6.0 refuses every page a 0.7.0
+  // server serves — lockstep deploys, which per-account batched migration
+  // cannot do. So both key sets must be law, measured over the corpus of
+  // record rather than over one hand-written page.
+  //
+  // red-proof: in isTrustedTaskPageData, drop the five-key branch so only the
+  // six-key set is accepted. Every safe row in the tasks corpus — all of which
+  // predate this field — goes red.
+  const corpus = await taskCorpus();
+  const safeRows = corpus.filter((row) => row.safe);
+  assert.ok(safeRows.length >= 5, "need real pages to test against");
+  for (const row of safeRows) {
+    assert.equal(isTrustedTaskPageData(structuredClone(row.page)), true, `${row.wireCase} without an epoch`);
+    assert.equal(readTaskPageAccountEpoch(row.page), null, `${row.wireCase} reports absence as null, never zero`);
+  }
+});
+
+test("a page carrying the account epoch validates, and junk in that field is refused", async () => {
+  // red-proof: delete the `withEpoch && !isAccountEpoch(...)` guard — the
+  // string, float, negative and null rows all become "valid" and this fails.
+  // A server could then ship `"7"` and a client would stamp write envelopes
+  // with a string.
+  const corpus = await taskCorpus();
+  const base = corpus.find((row) => row.safe).page;
+
+  for (const epoch of [0, 1, 7, Number.MAX_SAFE_INTEGER]) {
+    const page = { ...structuredClone(base), accountEpoch: epoch };
+    assert.equal(isTrustedTaskPageData(page), true, `epoch ${epoch} is a valid generation`);
+    assert.equal(readTaskPageAccountEpoch(page), epoch);
+    assert.equal(parseTaskPageJson(JSON.stringify(page)) !== null, true, `epoch ${epoch} at the raw boundary`);
+  }
+
+  for (const junk of ["7", 1.5, -1, null, true, Number.MAX_SAFE_INTEGER + 2]) {
+    const page = { ...structuredClone(base), accountEpoch: junk };
+    assert.equal(isTrustedTaskPageData(page), false, `epoch ${String(junk)} must be refused`);
+    assert.equal(parseTaskPageJson(JSON.stringify(page)), null, `epoch ${String(junk)} refused at the raw boundary too`);
+  }
+
+  // Optional must not mean "anything goes": an unknown SIXTH key is still
+  // refused, on both branches. This is what stops a server from smuggling an
+  // unratified field onto a ratified wire under cover of the epoch's arrival.
+  assert.equal(isTrustedTaskPageData({ ...structuredClone(base), migrationProgress: 0.4 }), false);
+  assert.equal(isTrustedTaskPageData({ ...structuredClone(base), accountEpoch: 3, migrationProgress: 0.4 }), false);
+});
+
+test("the epoch does not move the wire-shape version, and never reaches an item", async () => {
+  // Bumping TASKS_READ_CONTRACT_VERSION would refuse every page every deployed
+  // server serves today — an additive intent delivered as a breaking change,
+  // because the validator compares it for equality.
+  //
+  // red-proof: change TASKS_READ_CONTRACT_VERSION to "1.1.0" — every corpus
+  // row goes red, which is the whole point.
+  assert.equal(TASKS_READ_CONTRACT_VERSION, "1.0.0");
+
+  // The epoch is a property of the ACCOUNT, not of a task. On an item it would
+  // be repeated per row and would invite a per-row generation, which is not a
+  // thing that exists.
+  assert.equal(TASK_ITEM_FIELDS.includes("accountEpoch"), false);
+  const corpus = await taskCorpus();
+  const base = corpus.find((row) => row.safe).page;
+  const withItemEpoch = structuredClone(base);
+  if (withItemEpoch.items.length > 0) {
+    withItemEpoch.items[0].accountEpoch = 3;
+    assert.equal(isTrustedTaskPageData(withItemEpoch), false, "an epoch on an item is an unknown field");
   }
 });
