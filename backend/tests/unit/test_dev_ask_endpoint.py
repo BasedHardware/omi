@@ -112,3 +112,19 @@ def test_ask_endpoint_is_bound_to_the_dev_ask_rate_limited_dependency():
 
     assert uid == "u1"
     assert enforced["policy"] == "dev:ask"
+
+
+def test_ask_lives_on_public_developer_api_not_app_client_firebase():
+    """POST /v1/dev/user/ask is developerApiKey-only. It must not appear in the Firebase
+    app-client OpenAPI (which would stamp firebaseBearer and mis-teach agents/SDKs).
+    Regression for the docs-accuracy review on #10314."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    public = json.loads((root / "docs/api-reference/openapi.json").read_text())
+    app_client = json.loads((root / "docs/api-reference/app-client-openapi.json").read_text())
+
+    ask = public["paths"]["/v1/dev/user/ask"]["post"]
+    assert ask["security"] == [{"developerApiKey": []}]
+    assert "/v1/dev/user/ask" not in app_client["paths"]
