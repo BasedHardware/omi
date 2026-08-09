@@ -285,7 +285,7 @@ def extract_memory_log_from_text(
     if len(content) > 40_000:
         content = content[:40_000]
 
-    existing = [m.strip() for m in (existing_memories or []) if isinstance(m, str) and m.strip()]
+    existing = [m.strip() for m in (existing_memories or []) if m.strip()]
     existing_block = "\n".join(f"- {m}" for m in existing[:200]) if existing else "(none)"
 
     try:
@@ -303,8 +303,8 @@ def extract_memory_log_from_text(
         except Exception as e:
             logger.error("Error parsing memory log extraction: %s", type(e).__name__)
             return None
-        memories = [m.strip() for m in parsed.memories if isinstance(m, str) and m.strip()]
-        profile = parsed.profile.strip() if isinstance(parsed.profile, str) else ""
+        memories = [m.strip() for m in parsed.memories if m.strip()]
+        profile = (parsed.profile or "").strip()
         return MemoryLogExtraction(memories=memories, profile=profile)
     except Exception:
         logger.exception("Error extracting memory log for uid=%s source=%s", uid, text_source)

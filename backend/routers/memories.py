@@ -494,7 +494,7 @@ def extract_memory_log(
     from utils.llm import memories as memories_llm
 
     source = (body.text_source or "memory_log").strip() or "memory_log"
-    existing = [m.strip() for m in body.existing_memories if isinstance(m, str) and m.strip()][:200]
+    existing = [m.strip() for m in body.existing_memories if m.strip()][:200]
     extraction = memories_llm.extract_memory_log_from_text(
         uid,
         body.text,
