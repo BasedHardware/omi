@@ -598,6 +598,41 @@ extension APIClient {
     )
   }
 
+  /// Return-only SSOT memory-log extraction through managed memories (OpenRouter Luna).
+  func extractMemoryLogImpl(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let text: String
+      let textSource: String
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case text
+        case textSource = "text_source"
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/memories/extract",
+      body: Body(
+        text: text,
+        textSource: textSource,
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization)
+  }
+
   /// Creates a new memory (manual or extracted)
   func createMemory(
     content: String,
@@ -791,6 +826,11 @@ extension APIClient {
     throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
+}
+
+struct MemoryLogExtractResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let profile: String
 }
 
 /// The create endpoint returns the stored memory, including its authoritative

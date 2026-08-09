@@ -464,6 +464,48 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> Mem
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
 
 
+class ExtractMemoryLogRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    text: str = Field(..., min_length=1, max_length=100_000)
+    text_source: str = Field(default="memory_log", min_length=1, max_length=64)
+    existing_memories: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ExtractMemoryLogResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str]
+    profile: str = ""
+
+
+@router.post('/v1/memories/extract', tags=['memories'], response_model=ExtractMemoryLogResponse)
+def extract_memory_log(
+    body: ExtractMemoryLogRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
+    ),
+):
+    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+
+    Does not write Firestore. Desktop onboarding/import should call this instead of inventing
+    memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
+    """
+    from utils.llm import memories as memories_llm
+
+    source = (body.text_source or "memory_log").strip() or "memory_log"
+    existing = [m.strip() for m in body.existing_memories if isinstance(m, str) and m.strip()][:200]
+    extraction = memories_llm.extract_memory_log_from_text(
+        uid,
+        body.text,
+        text_source=source,
+        existing_memories=existing,
+    )
+    if extraction is None:
+        raise HTTPException(status_code=502, detail="memories_extract_failed")
+    return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
+
+
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 async def create_memory(
     request: Request,

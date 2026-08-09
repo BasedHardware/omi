@@ -254,6 +254,21 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
   }
+
+  func extractMemoryLog(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    try await extractMemoryLogImpl(
+      text: text,
+      textSource: textSource,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 }
 
 // MARK: - User Settings Models

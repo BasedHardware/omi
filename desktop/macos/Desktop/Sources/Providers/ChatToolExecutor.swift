@@ -2838,31 +2838,15 @@ class ChatToolExecutor {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     var nodesArray = args["nodes"] as? [[String: Any]]
     var edgesArray = args["edges"] as? [[String: Any]] ?? []
-    if let discoveryText = args["discovery_text"] as? String,
-      !discoveryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    {
-      do {
-        let extracted = try await APIClient.shared.extractKnowledgeGraph(
-          text: discoveryText,
-          expectedOwnerId: expectedOwnerID)
-        nodesArray = extracted.nodes.map { node in
-          [
-            "id": node.id,
-            "label": node.label,
-            "node_type": node.nodeType.rawValue,
-            "aliases": node.aliases,
-          ] as [String: Any]
-        }
-        edgesArray = extracted.edges.map { edge in
-          [
-            "source_id": edge.sourceId,
-            "target_id": edge.targetId,
-            "label": edge.label,
-          ] as [String: Any]
-        }
-      } catch {
-        logError("Tool save_knowledge_graph backend extract failed", error: error)
-        return "Error: backend knowledge graph extract failed: \(error.localizedDescription)"
+    if let discoveryText = args["discovery_text"] as? String {
+      switch await KnowledgeGraphToolSupport.resolveDiscoveryText(
+        discoveryText, expectedOwnerId: expectedOwnerID)
+      {
+      case .success(let graph):
+        nodesArray = graph.nodes
+        edgesArray = graph.edges
+      case .failure(let message):
+        return message
       }
     }
     guard let nodesArray else {

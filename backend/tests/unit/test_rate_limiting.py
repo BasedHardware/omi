@@ -505,6 +505,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "knowledge_graph:rebuild",
             "knowledge_graph:extract",
             "knowledge_graph:canonical",
+            "memories:extract",
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",
