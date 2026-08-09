@@ -25,6 +25,8 @@ import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
 import { registerTasksOpsRoutes } from "./routes/tasks-ops";
+import { registerTasksReadRoutes } from "./routes/tasks-read";
+import { prepareTasksRead } from "./composition/tasks-read";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
@@ -174,6 +176,39 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     });
   };
 
+  /**
+   * The tasks read's prepared ports, per principal.
+   *
+   * `appliedFrontierState` is DECLARED here, and this call site is where the
+   * declaration is earned rather than asserted: `registerTasksOpsRoutes` applies
+   * into `tasks` SYNCHRONOUSLY, in-process, before it answers — so at the moment
+   * this read runs there is no applied write that is not already in the store it
+   * serves from. `caught_up` is therefore a property of this wiring, not a
+   * guess, and `no_applied_writes` is the honest answer for an account the write
+   * door has never touched. Deriving either from a row count would be the oracle
+   * `composition/tasks-read.ts` refuses: a count varies with rows the reader is
+   * not authorized to see.
+   *
+   * A deployment that ever applies writes ASYNCHRONOUSLY must declare `lagging`
+   * here instead. That is the whole reason the state is a caller declaration and
+   * not something the composition works out for itself.
+   */
+  const prepareTasksReadFor = (principal: DevPrincipal) => prepareTasksRead({
+    store: tasks as TasksReadStore,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    appliedFrontierState: tasks.listRecords(principal.uid).length === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
   const seedIdentity = () => Object.freeze({
     owner_account_id: options.ownerAccountId,
     memory_count: options.memoryCount,
@@ -218,6 +253,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     // The same fixed instant the read path uses. No wall clock anywhere.
     now: () => anchorEpochSeconds,
   });
+  registerTasksReadRoutes(app, { resolvePrincipal, prepareRead: prepareTasksReadFor, counter });
   registerQaControlRoutes(app, {
     resolvePrincipal,
     fence: { store: controlStore, counter: fenceCounter },

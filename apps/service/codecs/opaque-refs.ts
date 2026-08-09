@@ -19,6 +19,27 @@ const STABLE_VISIBLE_KEY = /^vk1_[a-f0-9]{64}$/;
 const ITEM_REF = /^mem1_[a-f0-9]{64}$/;
 const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
 const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
+/**
+ * The tasks read wire's public item handle.
+ *
+ * A DISTINCT PREFIX AND A DISTINCT DOMAIN LABEL, both deliberate. Fable's R8
+ * says to reuse this module with a tasks domain label and never fork it, and the
+ * two halves of that are load-bearing for different reasons:
+ *
+ * - the LABEL keeps the keying separate, so the same internal coordinate under
+ *   the same reader cannot produce the same handle in two domains. Without it, a
+ *   task and a memory that happened to share a storage id would share a public
+ *   id, and a client joining on that id would join across domains;
+ * - the PREFIX makes the domain visible in the value, so a handle that leaks
+ *   into the wrong request is refused by grammar rather than by luck.
+ *
+ * Forking the module was the alternative and it is exactly rule 16's defect one
+ * layer down: two modules deriving reader-scoped handles is two implementations,
+ * and the measured cost of that was one memory served under two public ids.
+ */
+const TASK_ITEM_REF = /^task1_[a-f0-9]{64}$/;
+/** The tasks coverage envelope's frontier handle. Content-free, reader-scoped. */
+const TASK_FRONTIER_REF = /^frontier-v1:[a-f0-9]{64}$/;
 
 /** Key-derivation label for the per-reader subkey. */
 const READER_SUBKEY_LABEL = "omi.service.opaque-reader-subkey.v1";
@@ -27,6 +48,8 @@ const DOMAIN_VISIBLE_KEY = "omi.service.opaque-visible-key.v1";
 const DOMAIN_ITEM_REF = "omi.service.opaque-item-ref.v1";
 const DOMAIN_CITATION_REF = "omi.service.opaque-citation-ref.v1";
 const DOMAIN_TRACE_REF = "omi.service.opaque-trace-ref.v1";
+const DOMAIN_TASK_ITEM_REF = "omi.service.opaque-task-item-ref.v1";
+const DOMAIN_TASK_FRONTIER = "omi.service.opaque-task-frontier.v1";
 
 const CONFIG_KEYS = Object.freeze(["reader_projection_digest", "root_secret"] as const);
 
@@ -42,6 +65,15 @@ export interface ReaderScopedOpaqueCodecs {
   readonly encodeItemRef: (input: string) => string;
   readonly encodeCitationRef: (input: string) => string;
   readonly encodeTraceRef: (input: string) => string;
+  /**
+   * The ratified tasks read wire's public item id
+   * (`DAVID-tasks-read-epoch-and-ci` D2: "`id` is the ratified opaque ref, not
+   * the legacy server id"). Same construction as the four above, different
+   * domain label and prefix — see TASK_ITEM_REF.
+   */
+  readonly encodeTaskItemRef: (input: string) => string;
+  /** The tasks coverage envelope's reader-scoped frontier handle. */
+  readonly encodeTaskFrontier: (input: string) => string;
 }
 
 const configurationError = (message: string): never => {
@@ -143,5 +175,9 @@ export const createReaderScopedOpaqueCodecs = (
       encodeOpaque(readerSubkey, DOMAIN_CITATION_REF, "cit1_", CITATION_REF, input),
     encodeTraceRef: (input: string): string =>
       encodeOpaque(readerSubkey, DOMAIN_TRACE_REF, "tr1_", TRACE_REF, input),
+    encodeTaskItemRef: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_TASK_ITEM_REF, "task1_", TASK_ITEM_REF, input),
+    encodeTaskFrontier: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_TASK_FRONTIER, "frontier-v1:", TASK_FRONTIER_REF, input),
   });
 };

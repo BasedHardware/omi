@@ -132,6 +132,20 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "(apps/mcp/protocol.ts, apps/service/routes/memories.ts) stay separate, "
       + "everything below them is shared.",
   },
+  {
+    portType: "TasksReadPorts",
+    composedIn: ["apps/service/composition/tasks-read.ts"],
+    reason:
+      "Registered on the FIRST construction site rather than the second, which is a "
+      + "deliberate departure from this registry's opt-in default and is fable's call, "
+      + "not the lane's (R8: the tasks read gets \"its own composition/tasks-read.ts as "
+      + "the ONE construction site for its ports, with its own PORT_REGISTRY row\"). The "
+      + "default exists so the registry does not fire on ordinary single-implementation "
+      + "code; it is overridden here because this is the night\u2019s largest new surface, "
+      + "the write door and the read door already share the store beneath it, and the "
+      + "measured cost of discovering a second composition after the fact was one memory "
+      + "served under two different public ids with every assertion green.",
+  },
 ];
 /**
  * ── RULE 17: THE WIRE-PATH FENCE ─────────────────────────────────────────────
@@ -248,6 +262,21 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
       + "APPLIED nothing was the only door anybody could point a test at. One route "
       + "module owns this path now; a second would put the epoch fence, the write_id "
       + "registry and the straggler table in two places at once.",
+  },
+  {
+    wirePath: "/v1/tasks",
+    servedBy: "apps/service/routes/tasks-read.ts",
+    boundVia: ["routes/tasks-read", "app-facing"],
+    reason:
+      "The ratified tasks READ wire (DAVID-tasks-read-epoch-and-ci D1/D2). It reads out "
+      + "of the same store /v1/tasks/ops applies into, so a second door answering this "
+      + "path would serve the same record under a different public id than the one the "
+      + "write door\u2019s own replay reports \u2014 the exact divergence rule 17 exists for, and "
+      + "the one already measured once when a hand-rolled harness served /v1/memories "
+      + "with raw fixture row ids as public item ids while the registered route minted "
+      + "reader-scoped opaque refs. Both were green. It is also the surface D3 will ride "
+      + "the account epoch on, which makes a second, unregistered door a place an epoch "
+      + "could reach a caller without authority over the account.",
   },
 ];
 /**
