@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "repository": "BasedHardware/omi",
   "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
@@ -20,7 +20,8 @@
     "COORD-write-path-rulings",
     "COORD-cross-generation-writes",
     "COORD-fable-rulings-wave2",
-    "DAVID-tasks-read-epoch-and-ci"
+    "DAVID-tasks-read-epoch-and-ci",
+    "FABLE-R26-task-field-vocabulary-signed"
   ],
   "compiler": {
     "name": "typescript",
@@ -89,8 +90,8 @@
     },
     {
       "path": "fixtures/write-ops-conformance.json",
-      "sha256": "3f6f0a4c72f7cf828377651ea31e1fbfa59eb9b436e5c6fd2d7b9d1500330b44",
-      "bytes": 11591
+      "sha256": "1d8697dc7de947c0a09eeb3dabf1e9c474bb162273a80dfdfb64c4d764b26247",
+      "bytes": 11671
     },
     {
       "path": "fixtures/write-ops-outcomes.json",
@@ -99,7 +100,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "96af68293b006d3f6350ee4a654f13dec8940fdaa929b3e8d1271220163c0714",
+      "sha256": "726906eb7dc26f1643acefd83dc1e4838dd876eaa55ab763576cf17eba7e4ccf",
       "bytes": 2412
     },
     {
@@ -109,8 +110,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "88aff3cbfe24454157fd05485a8431c6eaccc89ed51e6b810311389054e11837",
-      "bytes": 10819
+      "sha256": "a5574d89bf29c24a4a687fed163e0e411ff410c034cf1b23fdfb91e60280cc35",
+      "bytes": 11846
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -124,13 +125,13 @@
     },
     {
       "path": "scripts/package-boundary.mjs",
-      "sha256": "d6d0728c77160497e47336a55a649ad750d1c96d3154fc3d0ea1f47b2010c4d5",
-      "bytes": 15473
+      "sha256": "188c5eaf7c4ee692f887ad91fca8e296b17d56ed6d00f2859f5a5bc8030c7085",
+      "bytes": 16082
     },
     {
       "path": "scripts/provenance.mjs",
-      "sha256": "df1d684bfa7015cbcbf4d7f8fa1b7dd284e12a482630f37a093db049c5e8a24c",
-      "bytes": 4707
+      "sha256": "8348e93122f9a8a2505d75a9fca4b4cb590e277a8de3c56ad6c65d36e63429df",
+      "bytes": 5122
     },
     {
       "path": "scripts/verify-ci.mjs",
@@ -183,5 +184,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "11c976a591d34e506c947314c858678960e2b26caa024a2a9d89cb5bf7a4d12c"
+  "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f"
 }

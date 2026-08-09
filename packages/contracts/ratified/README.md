@@ -59,6 +59,25 @@ FEAT-MEM-002, FC-AUTH-003, FEAT-AUTH-011, and COORD-contract-evolution-policy.
 `DIV-DOMCORE-001` and `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.
 
+## 0.8.0 - ratified task writes use the domain vocabulary (additive)
+
+0.8.0 changes only the serialized task op bags in
+fixtures/write-ops-conformance.json: title becomes description in five bags
+and done becomes completed in ten. The one memories-domain text bag key is
+unchanged because the ruling names only the two task-field renames.
+fixtures/write-ops-outcomes.json has no request bags and is unchanged.
+
+Ruling of record:
+data/run-2026-08-09b/decisions/FABLE-R26-task-field-vocabulary-signed.md,
+amendment A1. A1 orders this source corpus bump before the separately owned
+write-door enforcement; this package does not implement or authorize that door.
+
+This bump is additive under COORD-contract-evolution-policy.md: it changes no
+export, type, validator, wire outcome, or obligation for a client built against
+an older version. The corpus of record now exercises the signed task domain
+vocabulary across the existing wire cases. Rollback is a re-vendor of 0.7.0;
+these request examples define no persisted data shape.
+
 ## 0.7.0 - the account epoch rides on the tasks read (`additive`)
 
 `0.7.0` adds ONE optional field, `TaskRead.Page.accountEpoch`, and one reader,
