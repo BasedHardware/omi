@@ -62,6 +62,20 @@ abstract class Env {
 
   static String get authRedirectUri => '$authCallbackScheme://auth/callback';
 
+  /// OAuth remains on the production identity plane even when mobile Beta
+  /// uses the development serving API for product traffic.
+  static String get authApiBaseUrl => authApiBaseUrlForProfile(profile, servingApiBaseUrl: apiBaseUrl);
+
+  static String authApiBaseUrlForProfile(
+    AppEnvironmentProfile configuredProfile, {
+    String? servingApiBaseUrl,
+  }) {
+    if (configuredProfile == AppEnvironmentProfile.mobileBeta) {
+      return productionApiBaseUrl;
+    }
+    return servingApiBaseUrl ?? configuredProfile.defaultApiBaseUrl;
+  }
+
   static void validateProfilePairing() {
     final productionFlavor = F.env == Environment.prod;
     if (!productionFlavor && profile != AppEnvironmentProfile.localDev) {
