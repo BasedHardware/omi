@@ -12,3 +12,6 @@ turning any draft into runtime code.
 - `mcp-final-reauthorization/`: incomplete protocol draft; its exact receipt
   shape is coupled to the unresolved authority decision.
 
+<!-- §10 launch-gate shakedown, 2026-08-08: this line only proves the mandated
+     lane loop runs end to end from a lane worktree before the charter binds. -->
+
