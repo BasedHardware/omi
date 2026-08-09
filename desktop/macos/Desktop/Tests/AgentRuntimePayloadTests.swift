@@ -40,6 +40,7 @@ final class AgentRuntimePayloadTests: XCTestCase {
   /// Mirrors what `run.sh` packages into `Contents/Resources`.
   private func installCompleteRuntime() throws {
     try write("agent/dist/index.js")
+    try write("agent/dist/runtime/omi-tool-manifest.js")
     try write("agent/package.json")
     try write("agent/node_modules/@omi/placeholder/package.json")
     try write("pi-mono-extension/index.ts")
@@ -78,6 +79,13 @@ final class AgentRuntimePayloadTests: XCTestCase {
     XCTAssertEqual(
       AgentRuntimePayload.missingComponents(bridgeScriptPath: bridgeScriptPath),
       ["agent/node_modules"])
+  }
+
+  func testAMissingCompiledToolManifestIsReportedBeforeAnySpawn() throws {
+    try remove("agent/dist/runtime/omi-tool-manifest.js")
+    XCTAssertEqual(
+      AgentRuntimePayload.missingComponents(bridgeScriptPath: bridgeScriptPath),
+      ["agent/dist/runtime/omi-tool-manifest.js"])
   }
 
   /// A partially-copied bundle leaves the directory behind with nothing in it.

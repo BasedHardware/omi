@@ -74,7 +74,12 @@ struct DesktopTopBar: View {
               selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
           },
           compactNavigation: { compactNavigationMenu },
-          persistentControls: { ShellStatusIcons(appState: appState) },
+          persistentControls: {
+            HStack(spacing: OmiSpacing.sm) {
+              DesktopUpdateStatusChip()
+              ShellStatusIcons(appState: appState)
+            }
+          },
           settings: { settingsButton }
         )
         // The inset first, then the lane: the *glass* is exactly `laneWidth`, so the bar shares a

@@ -2940,47 +2940,42 @@ actor RewindDatabase {
   }
 
   /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
-  /// If the total count for the range is <= targetCount, returns all rows ASC.
-  /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
-  func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+  /// Returns all rows within `targetCount`; otherwise samples evenly while retaining both endpoints.
+  func getScreenshotsSampled(
+    from startDate: Date, to endDate: Date, targetCount: Int, appFilter: String? = nil
+  ) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.read { db in
-      // Get total count for the range
-      let totalCount =
-        try Screenshot
-        .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-        .fetchCount(db)
+      var request = Screenshot.filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+      if let appFilter {
+        request = request.filter(Column("appName") == appFilter)
+      }
+
+      // Count only rows eligible for the timeline, so sparse app filters get a full sample.
+      let totalCount = try request.fetchCount(db)
 
       if totalCount <= targetCount {
         // Return all, ordered ASC (oldest first)
-        return
-          try Screenshot
-          .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-          .order(Column("timestamp").asc)
-          .fetchAll(db)
+        return try request.order(Column("timestamp").asc).fetchAll(db)
       }
 
       // Fetch all IDs + timestamps ordered ASC, then pick every Nth
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id FROM screenshots
-              WHERE timestamp >= ? AND timestamp <= ?
-              ORDER BY timestamp ASC
-          """, arguments: [startDate, endDate])
+      let idRequest = request.select(Column("id")).order(Column("timestamp").asc)
+      let rows = try Row.fetchAll(db, idRequest)
 
-      let step = Double(totalCount) / Double(targetCount)
-      var sampledIds: [Int64] = []
-      var i: Double = 0
-      while Int(i) < totalCount && sampledIds.count < targetCount {
-        let index = Int(i)
-        if index < rows.count {
-          sampledIds.append(rows[index]["id"])
-        }
-        i += step
+      let sampleCount = max(1, targetCount)
+      let sampledIds: [Int64] = (0..<sampleCount).compactMap { slot in
+        let index =
+          sampleCount == 1
+          ? totalCount - 1
+          : Int(
+            (Double(slot) * Double(totalCount - 1) / Double(sampleCount - 1))
+              .rounded())
+        guard rows.indices.contains(index) else { return nil }
+        return rows[index]["id"]
       }
 
       // Batch-fetch the sampled rows and return in ASC order

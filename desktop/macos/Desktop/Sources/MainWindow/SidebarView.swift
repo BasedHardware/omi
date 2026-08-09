@@ -182,10 +182,13 @@ struct SidebarView: View {
           // Subscription upgrade banner
           // upgradeToPro
 
-          // Update available widget
-          if updaterViewModel.updateAvailable || updaterViewModel.updateSessionInProgress {
+          // Update available widget (also surfaced in DesktopTopBar for chat-first)
+          if updaterViewModel.updateAvailable || updaterViewModel.updateSessionInProgress
+            || updaterViewModel.updateRestartImminent
+            || updaterViewModel.updateDeferredForActiveRecording
+          {
             Spacer().frame(height: OmiSpacing.md)
-            updateAvailableWidget
+            DesktopUpdateStatusBanner(isCollapsed: isCollapsed, iconWidth: iconWidth)
               .transition(.opacity)
           }
 
@@ -393,72 +396,6 @@ struct SidebarView: View {
               .strokeBorder(Ink.separator, lineWidth: 1)
           )
       )
-  }
-
-  // MARK: - Update Available Widget
-  @State private var updateGlowAnimating = false
-
-  private var updateAvailableWidget: some View {
-    let isDownloading = updaterViewModel.updateSessionInProgress
-
-    return Button(action: {
-      if updaterViewModel.canCheckForUpdates {
-        updaterViewModel.checkForUpdates()
-      }
-    }) {
-      HStack(spacing: OmiSpacing.md) {
-        if isDownloading {
-          ProgressView()
-            .controlSize(.small)
-            .tint(Ink.surface)
-            .frame(width: iconWidth)
-        } else {
-          Image(systemName: "arrow.down.circle.fill")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.surface)
-            .frame(width: iconWidth)
-        }
-
-        if !isCollapsed {
-          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(isDownloading ? "Downloading Update…" : "Update Available")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(Ink.surface)
-
-            if !isDownloading, !updaterViewModel.availableVersion.isEmpty {
-              Text("v\(updaterViewModel.availableVersion)")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.surface.opacity(0.8))
-            }
-          }
-
-          Spacer()
-
-          if !isDownloading {
-            Image(systemName: "chevron.right")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.surface.opacity(0.7))
-          }
-        }
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(Ink.primary)
-      )
-      .shadow(color: Ink.primary.opacity(updateGlowAnimating ? 0.28 : 0.14), radius: 12, y: 4)
-    }
-    .buttonStyle(.plain)
-    .help(
-      isCollapsed
-        ? (isDownloading ? "Downloading update…" : "Update Available — click to install") : ""
-    )
-    .onAppear {
-      OmiMotion.withGated(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-        updateGlowAnimating = true
-      }
-    }
   }
 
   // MARK: - Profile Menu

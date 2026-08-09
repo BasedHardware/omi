@@ -22,6 +22,10 @@ class ExtractedActionItem(BaseModel):
     )
     candidate_action: Optional[Literal['create', 'update', 'complete']] = None
     target_task_id: Optional[str] = None
+    source_segment_ids: List[str] = Field(
+        default_factory=list,
+        description='Transcript segment IDs that directly support this action item',
+    )
 
     def to_action_item(self) -> ActionItem:
         return ActionItem(
@@ -34,6 +38,7 @@ class ExtractedActionItem(BaseModel):
             concrete_deliverable=self.concrete_deliverable,
             candidate_action=self.candidate_action,
             target_task_id=self.target_task_id,
+            source_segment_ids=self.source_segment_ids,
         )
 
 

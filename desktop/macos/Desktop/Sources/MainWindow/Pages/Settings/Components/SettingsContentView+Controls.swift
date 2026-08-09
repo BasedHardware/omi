@@ -594,6 +594,14 @@ extension SettingsContentView {
 
       // Software Updates
       settingsCard(settingId: "about.updates") {
+        let updateStatus = DesktopUpdateStatusPresentation.kind(
+          sessionInProgress: updaterViewModel.updateSessionInProgress,
+          updateAvailable: updaterViewModel.updateAvailable,
+          availableVersion: updaterViewModel.availableVersion,
+          restartImminent: updaterViewModel.updateRestartImminent,
+          deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
+          userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
+        )
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
@@ -606,7 +614,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Check Now") {
+            Button(updateStatus.checkActionTitle) {
               updaterViewModel.checkForUpdates()
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -615,7 +623,38 @@ extension SettingsContentView {
               updaterViewModel.canManuallyCheckForUpdates
                 ? "Check for app updates"
                 : updaterViewModel.updateSessionInProgress
-                  ? "An update is already downloading…" : "Already checking for updates…")
+                  ? "An update is already in progress…" : "Already checking for updates…")
+          }
+
+          if updateStatus.isVisible {
+            HStack(alignment: .center, spacing: OmiSpacing.sm) {
+              if updateStatus.showsProgress {
+                ProgressView()
+                  .controlSize(.small)
+              } else {
+                Image(systemName: "arrow.down.circle.fill")
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.accent)
+              }
+
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(updateStatus.title)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(Ink.primary)
+                if let detail = updateStatus.detail {
+                  Text(detail)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
+                }
+              }
+              Spacer(minLength: 0)
+            }
+            .padding(OmiSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Ink.rowFill)
+            .cornerRadius(OmiChrome.elementRadius)
+            .accessibilityIdentifier("settings-update-status")
+            .accessibilityLabel(updateStatus.accessibilityLabel)
           }
 
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {

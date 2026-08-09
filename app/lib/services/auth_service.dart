@@ -460,7 +460,8 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
@@ -485,7 +486,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               completer.complete(uri.toString());
@@ -507,7 +508,7 @@ class AuthService {
           final urlString = call.arguments as String;
           Logger.debug('Received callback URI via method channel: $urlString');
           final uri = Uri.parse(urlString);
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               _deepLinkChannel.setMethodCallHandler(null);
@@ -815,7 +816,8 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
@@ -845,7 +847,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             linkSubscription.cancel();
             completer.complete(uri.toString());
           }

@@ -142,8 +142,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)
-    conversation_capture.process_before_legacy = MagicMock(return_value=False)
-    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.process_conversation_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_conversation_fields = MagicMock(return_value={})
     conversation_capture.legacy_document_ids = MagicMock(return_value=None)
     conversation_capture.reconcile_after_legacy = MagicMock()
     add("utils.task_intelligence.conversation_capture", conversation_capture)
@@ -965,8 +965,10 @@ def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
     conversation.is_locked = False
     conversation.structured.action_items = [action_item]
 
-    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
-    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(
+        process_conversation.conversation_capture, 'process_conversation_before_legacy', lambda *args: False
+    )
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_conversation_fields', lambda *args: {})
     monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
     monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
     monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])

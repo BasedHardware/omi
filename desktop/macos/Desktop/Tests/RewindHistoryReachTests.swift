@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Rewind is a one-day-at-a-time player, so "how far back does this go" is a question it answers in
-/// words. These pin the two things that wording has to get right:
+/// Rewind's track spans retained history, while the day popover states the same boundary in words
+/// and offers precise day jumps. These pin the two things that wording has to get right:
 ///
 ///  1. **Not-yet-surveyed is not "none".** The capture-day walk runs behind first paint; an empty
 ///     list before it finishes means "not looked yet". Printing "No screen capture yet" over an
