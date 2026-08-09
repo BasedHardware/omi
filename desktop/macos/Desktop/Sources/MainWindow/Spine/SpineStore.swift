@@ -41,11 +41,13 @@ final class SpineStore: ObservableObject {
   private var screen: [Date: SpineDayScreen] = [:]
   private var conversations: [ServerConversation] = []
   private var memories: [SpineMemory] = []
+  private var tasks: [SpineTask] = []
 
   /// Cheap change detection. Recomposing because a view re-evaluated is the whole class of waste
   /// this store exists to avoid, so ingestion compares a digest before doing any work.
   private var conversationDigest = 0
   private var memoryDigest = 0
+  private var taskDigest = 0
 
   /// Days whose screen capture has been read, so a scroll never re-queries a day it already has.
   private var loadedScreenDays: Set<Date> = []
@@ -86,26 +88,45 @@ final class SpineStore: ObservableObject {
 
   // MARK: - Input
 
-  /// Take the current projection of the two account-level stores.
+  /// Take the current projection of the three account-level stores.
   ///
   /// Called from the view's `onReceive`/`onChange`, which fire far more often than the data
   /// actually changes — hence the digest.
-  func ingest(conversations: [ServerConversation], memories: [ServerMemory]) {
+  func ingest(
+    conversations: [ServerConversation],
+    memories: [ServerMemory],
+    tasks: [TaskActionItem] = []
+  ) {
     let conversationDigest = Self.digest(conversations)
     let memoryDigest = Self.digest(memories)
+    let taskDigest = Self.digest(tasks)
     guard
       conversationDigest != self.conversationDigest || memoryDigest != self.memoryDigest
+        || taskDigest != self.taskDigest
     else { return }
 
     self.conversationDigest = conversationDigest
     self.memoryDigest = memoryDigest
+    self.taskDigest = taskDigest
     self.conversations = conversations
+    let conversationTitles = Dictionary(
+      lastWriteWins: conversations.map { conversation in
+        let title = conversation.structured.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (conversation.id, title.isEmpty ? "Untitled conversation" : title)
+      })
     self.memories = memories.map {
       SpineMemory(
         id: $0.id,
         text: $0.content,
         timestamp: $0.capturedAt ?? $0.createdAt,
-        conversationID: $0.conversationId
+        conversationID: $0.conversationId,
+        sourceConversationTitle: $0.conversationId.flatMap { conversationTitles[$0] }
+      )
+    }
+    self.tasks = tasks.filter { !$0.isRetired }.map {
+      SpineTask(
+        task: $0,
+        sourceConversationTitle: $0.conversationId.flatMap { conversationTitles[$0] }
       )
     }
     recomposeSoon()
@@ -126,6 +147,7 @@ final class SpineStore: ObservableObject {
     case .all: return .everything
     case .conversations: return .conversations
     case .memories: return .memories
+    case .tasks: return .tasks
     case .rewind: return .screen
     }
   }
@@ -253,6 +275,7 @@ final class SpineStore: ObservableObject {
     composed = SpineComposer.compose(
       conversations: conversations,
       memories: memories,
+      tasks: tasks,
       screen: screen,
       calendar: calendar
     )
@@ -288,6 +311,31 @@ final class SpineStore: ObservableObject {
     for memory in memories {
       hasher.combine(memory.id)
       hasher.combine(memory.content)
+    }
+    return hasher.finalize()
+  }
+
+  private static func digest(_ tasks: [TaskActionItem]) -> Int {
+    var hasher = Hasher()
+    hasher.combine(tasks.count)
+    for task in tasks {
+      hasher.combine(task.id)
+      hasher.combine(task.description)
+      hasher.combine(task.completed)
+      hasher.combine(task.createdAt)
+      hasher.combine(task.conversationId)
+      hasher.combine(task.source)
+      hasher.combine(task.isRetired)
+      hasher.combine(task.provenance?.count ?? 0)
+      for evidence in task.provenance ?? [] {
+        hasher.combine(evidence.id)
+        hasher.combine(evidence.kind.rawValue)
+        hasher.combine(evidence.scope.rawValue)
+        hasher.combine(evidence.deviceId)
+        hasher.combine(evidence.startSeconds)
+        hasher.combine(evidence.endSeconds)
+        hasher.combine(evidence.transcriptSegmentIds)
+      }
     }
     return hasher.finalize()
   }

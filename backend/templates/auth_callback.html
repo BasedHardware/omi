@@ -66,7 +66,7 @@
         }
 
         .manual-link {
-            display: none;
+            display: inline-block;
             margin-top: 24px;
             padding: 12px 24px;
             background-color: #333;
@@ -88,19 +88,22 @@
         <p id="message">Redirecting you back to the app...</p>
         <div class="spinner" id="spinner"></div>
         <div class="error" id="error"></div>
-        <a href="#" id="manualLink" class="manual-link">Open App Manually</a>
+        <!-- Keep the server-rendered native-app link visible: mobile browsers
+             can block script-driven custom-scheme navigation, but honor a
+             user-initiated link tap even without JavaScript. -->
+        <a href="{{ redirect_url | default('#') }}" id="manualLink" class="manual-link">Open App Manually</a>
     </div>
 
     <script>
         // Get values from template variables (passed from backend).
         // Use |tojson for safe JS interpolation (prevents XSS via template injection).
-        // ``baseRedirect`` was validated server-side at /authorize time; here
-        // we still re-check the scheme/host before navigating, as defense in
-        // depth against a misconfigured upstream.
+        // ``redirectUrl`` was built from the redirect URI validated server-side
+        // at /authorize time. Re-check the scheme/host before navigating as
+        // defense in depth against a misconfigured upstream.
         const code = {{ code | tojson }};
         const state = {{ state | tojson }};
         const error = {{ (error if error is defined else '') | tojson }};
-        const baseRedirect = {{ redirect_uri | default('omi://auth/callback') | tojson }};
+        const redirectUrl = {{ redirect_url | default('') | tojson }};
 
         const errorElement = document.getElementById('error');
         const messageElement = document.getElementById('message');
@@ -147,17 +150,12 @@
             spinnerElement.style.display = 'none';
             messageElement.textContent = 'Please close this window and try again.';
         } else if (code) {
-            if (!isAllowedRedirect(baseRedirect)) {
+            if (!isAllowedRedirect(redirectUrl)) {
                 errorElement.textContent = 'Invalid redirect target. Please close this window.';
                 spinnerElement.style.display = 'none';
+                manualLinkElement.style.display = 'none';
                 messageElement.textContent = '';
             } else {
-                // Append code + state preserving any existing query params.
-                const sep = baseRedirect.indexOf('?') === -1 ? '?' : '&';
-                let redirectUrl = baseRedirect + sep + 'code=' + encodeURIComponent(code);
-                if (state) {
-                    redirectUrl += '&state=' + encodeURIComponent(state);
-                }
                 const isLoopback = redirectUrl.indexOf('http://') === 0;
 
                 // Loopback users (CLI / desktop apps) get a "you can close this tab" hint —
@@ -169,8 +167,6 @@
                     messageElement.textContent = 'Redirecting you back to the app...';
                 }
 
-                // Set up manual link
-                manualLinkElement.href = redirectUrl;
                 if (isLoopback) {
                     manualLinkElement.textContent = 'Open Manually';
                 }
@@ -178,7 +174,7 @@
                 // Attempt automatic redirect
                 try {
                     console.log('Redirecting to:', redirectUrl);
-                    window.location.href = redirectUrl;
+                    window.location.assign(redirectUrl);
 
                     // Show manual link after 3 seconds if automatic redirect doesn't work
                     setTimeout(() => {

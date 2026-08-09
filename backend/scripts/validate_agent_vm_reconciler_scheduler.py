@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 EXPECTED_SCHEDULE = "*/5 * * * *"
-EXPECTED_STATE = "ENABLED"
 EXPECTED_TIME_ZONE = "Etc/UTC"
 EXPECTED_HTTP_METHOD = "POST"
 
@@ -31,12 +30,13 @@ def validate_scheduler_state(
     scheduler_job: str,
     cloud_run_job: str,
     scheduler_service_account: str | None = None,
+    expected_state: str = "ENABLED",
 ) -> list[str]:
     http_target = _mapping(state.get("httpTarget"))
     oauth_token = _mapping(http_target.get("oauthToken"))
     expected = {
         "name": f"projects/{project}/locations/{region}/jobs/{scheduler_job}",
-        "state": EXPECTED_STATE,
+        "state": expected_state,
         "schedule": EXPECTED_SCHEDULE,
         "timeZone": EXPECTED_TIME_ZONE,
         "httpTarget.httpMethod": EXPECTED_HTTP_METHOD,
@@ -71,6 +71,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--scheduler-job", required=True)
     command.add_argument("--cloud-run-job", required=True)
     command.add_argument("--scheduler-service-account")
+    command.add_argument("--expected-state", choices=("ENABLED", "PAUSED"), default="ENABLED")
     return command
 
 
@@ -91,6 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         scheduler_job=args.scheduler_job,
         cloud_run_job=args.cloud_run_job,
         scheduler_service_account=args.scheduler_service_account,
+        expected_state=args.expected_state,
     )
     if errors:
         print("agent VM reconciler scheduler contract: FAIL", file=sys.stderr)
