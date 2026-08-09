@@ -137,6 +137,84 @@ void main() {
       expect(provider.filteredApps.map((app) => app.name), ['ADHD Assistant']);
     });
 
+    /// Narrowing by category while the same text is still loading. The query text
+    /// is identical across both requests, so anything that identifies a request by
+    /// its text alone cannot tell these two apart.
+    test('a filter change during an in-flight search queues a replacement', () async {
+      final firstRequest = Completer<SearchResponse>();
+      final secondRequest = Completer<SearchResponse>();
+      final categoriesRequested = <String?>[];
+      var requestCount = 0;
+
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        categoriesRequested.add(category);
+        return requestCount == 1 ? firstRequest.future : secondRequest.future;
+      };
+
+      provider.searchApps('adhd');
+      await Future<void>.delayed(Duration.zero);
+
+      provider.addOrRemoveCategoryFilter(Category(title: 'Productivity', id: 'productivity'));
+      unawaited(provider.applyFilters());
+      await Future<void>.delayed(Duration.zero);
+
+      firstRequest.complete(_response([_app('unfiltered', 'Unfiltered Result')]));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(requestCount, 2, reason: 'the category change must queue a replacement search');
+      expect(categoriesRequested.last, 'productivity', reason: 'the replacement must carry the new filter');
+
+      secondRequest.complete(_response([_app('filtered', 'Filtered Result')]));
+      await Future<void>.delayed(Duration.zero);
+
+      // The unfiltered results were computed before the category was chosen, so
+      // publishing them would show the user a listing they did not ask for.
+      expect(provider.filteredApps.map((app) => app.name), ['Filtered Result']);
+    });
+
+    test('clearing the search box discards a request that is still in flight', () async {
+      final inFlight = Completer<SearchResponse>();
+      var requestCount = 0;
+
+      provider.searchAppsOverride = ({
+        String? query,
+        String? category,
+        double? minRating,
+        String? capability,
+        String? sort,
+        bool? myApps,
+        bool? installedApps,
+        int offset = 0,
+        int limit = 50,
+      }) {
+        requestCount++;
+        return inFlight.future;
+      };
+
+      provider.searchApps('adhd');
+      await Future<void>.delayed(Duration.zero);
+
+      provider.searchApps('');
+      await Future<void>.delayed(Duration.zero);
+
+      inFlight.complete(_response([_app('late', 'Late Result')]));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.filteredApps, isEmpty, reason: 'results for a query the user has cleared must not land');
+      expect(requestCount, 1, reason: 'an empty box with no filters has nothing to ask the server');
+    });
+
     test('a single search still settles out of the searching state', () async {
       provider.searchAppsOverride = ({
         String? query,

@@ -231,6 +231,10 @@ class AppProvider extends BaseProvider {
     searchQuery = query.toLowerCase();
 
     if (query.trim().isEmpty && !_hasServerSideFilters()) {
+      // Emptying the box is a search change like any other. Without its own
+      // revision, a request already in flight would still count as current and
+      // would land its results on top of the cleared list.
+      _latestSearchRevision++;
       searchResults = [];
       isSearching = false;
       filterApps();
@@ -248,15 +252,23 @@ class AppProvider extends BaseProvider {
         filters.containsKey('Apps');
   }
 
-  String _pendingSearchQuery = '';
+  /// Identifies the newest search the user has asked for.
+  ///
+  /// A revision rather than the query text, because the text is not what makes a
+  /// search unique: narrowing by category while the same word is still loading
+  /// changes the results completely and changes the text not at all. Anything
+  /// keyed on the text alone cannot tell those two requests apart, and answers
+  /// the second with the first one's unfiltered results.
+  int _latestSearchRevision = 0;
 
   bool _isDrainingSearchQueue = false;
 
   Future<void> performServerSearch() async {
-    // Always update pending query to the latest
-    _pendingSearchQuery = searchQuery;
+    // Every call is a fresh statement of what the user wants, whether the text or
+    // the filters moved.
+    final revision = ++_latestSearchRevision;
 
-    // A run already under way will pick this query up when its current request
+    // A run already under way will pick this revision up when its current request
     // returns. Starting a second one would race it for the results.
     if (_isDrainingSearchQueue) {
       return;
@@ -268,16 +280,16 @@ class AppProvider extends BaseProvider {
 
     try {
       // Drain the queue inside one run rather than ending and restarting per
-      // query. Ending in between would publish "not searching" with the results
-      // of a query the user has already left behind — which the apps screen
+      // request. Ending in between would publish "not searching" with the results
+      // of a search the user has already moved past — which the apps screen
       // renders as "No apps found" for a search that is still outstanding.
-      var queryBeingSearched = _pendingSearchQuery;
+      var revisionBeingSearched = revision;
       while (true) {
-        await _runOneSearch(queryBeingSearched);
-        if (_pendingSearchQuery == queryBeingSearched) {
+        await _runOneSearch(revisionBeingSearched);
+        if (_latestSearchRevision == revisionBeingSearched) {
           break;
         }
-        queryBeingSearched = _pendingSearchQuery;
+        revisionBeingSearched = _latestSearchRevision;
       }
     } finally {
       _isDrainingSearchQueue = false;
@@ -287,7 +299,18 @@ class AppProvider extends BaseProvider {
   }
 
   /// Runs one search request and publishes it only if it is still the current one.
-  Future<void> _runOneSearch(String queryBeingSearched) async {
+  Future<void> _runOneSearch(int revisionBeingSearched) async {
+    // Read the query and filters this request is for before awaiting, so a change
+    // made while it is in flight cannot be mistaken for what it asked the server.
+    final queryBeingSearched = searchQuery;
+
+    // Nothing to ask the server: an empty box with no filter narrowing it. Reached
+    // when clearing the box supersedes a request that was already in flight;
+    // searchApps has cleared the results for that case already.
+    if (queryBeingSearched.trim().isEmpty && !_hasServerSideFilters()) {
+      return;
+    }
+
     try {
       final result = await (searchAppsOverride ?? retrieveAppsSearch)(
         query: queryBeingSearched.isEmpty ? null : queryBeingSearched,
@@ -300,8 +323,8 @@ class AppProvider extends BaseProvider {
         limit: 100,
       );
 
-      // The user typed on while this was in flight; these results are stale.
-      if (queryBeingSearched != _pendingSearchQuery) {
+      // The user changed the search while this was in flight; these results are stale.
+      if (revisionBeingSearched != _latestSearchRevision) {
         return;
       }
 
