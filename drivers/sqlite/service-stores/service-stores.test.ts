@@ -6,6 +6,7 @@ import { createLocalService } from "../../../apps/service/app-facing";
 import type { AccountControlObservation } from "../../../core/control/account-control";
 import {
   SqliteAccountControlProjectionStore,
+  SqliteConversationsStore,
   SqliteStragglerTable,
   SqliteTasksStore,
   SqliteWriteIdRegistry,
@@ -33,7 +34,49 @@ const observation = (
   ...overrides,
 });
 
-describe("the four SQLite adapters", () => {
+describe("the SQLite service-store adapters", () => {
+  test("conversations persist typed fields, mutations, ordering, and revision after reopen", () => {
+    const path = databasePath("conversations");
+    const firstDb = open(path);
+    const first = new SqliteConversationsStore(firstDb);
+    const row = {
+      id: "conversation-a",
+      structured: { title: "first", overview: "overview" },
+      created_at: "2026-08-03T12:00:00.000Z",
+      updated_at: "2026-08-03T12:00:00.000Z",
+      started_at: "2026-08-03T12:00:00.000Z",
+      finished_at: "2026-08-03T12:05:00.000Z",
+      source: "omi",
+      status: "completed",
+      discarded: false,
+      starred: false,
+      visibility: "private" as const,
+      is_locked: false,
+      folder_id: null,
+    };
+    expect(first.upsert("acct-a", row).stored).toBe(true);
+    const beforeMissingFolder = first.readRecord("acct-a", "conversation-a");
+    expect(first.updateFolder(
+      "acct-a", "conversation-a", "missing-folder", "2026-08-07T12:00:00.000Z",
+    )).toEqual({ updated: false, reason: "folder_not_found" });
+    expect(first.readRecord("acct-a", "conversation-a")).toEqual(beforeMissingFolder);
+    expect(first.readStateRevision("acct-a")).toBe(0);
+    expect(first.updateStarred(
+      "acct-a", "conversation-a", true, "2026-08-07T12:00:00.000Z",
+    )).toMatchObject({ updated: true, state_revision: 1 });
+    firstDb.close();
+
+    const secondDb = open(path);
+    const second = new SqliteConversationsStore(secondDb);
+    expect(second.readRecord("acct-a", "conversation-a")).toMatchObject({
+      structured: { title: "first", overview: "overview" },
+      starred: true,
+      updated_at: "2026-08-07T12:00:00.000Z",
+    });
+    expect(second.readStateRevision("acct-a")).toBe(1);
+    secondDb.close();
+  });
+
   test("tasks preserve revision chains, tombstones, content, and order after reopen", () => {
     const path = databasePath("tasks");
     const firstDb = open(path);
@@ -148,6 +191,7 @@ describe("the four SQLite adapters", () => {
       stores,
     });
     expect(injected.writePath.tasks).toBe(stores.tasks);
+    expect(stores.conversations).toBeInstanceOf(SqliteConversationsStore);
     expect(injected.writePath.registry).toBe(stores.registry);
     expect(injected.writePath.unitOfWork).toBe(stores.unitOfWork);
     expect(stores.unitOfWork).toBeInstanceOf(SqliteWriteUnitOfWork);

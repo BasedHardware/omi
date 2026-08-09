@@ -27,6 +27,10 @@ import { registerQaControlRoutes } from "./routes/qa-control";
 import { registerTasksOpsRoutes } from "./routes/tasks-ops";
 import { registerTasksReadRoutes } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
+import {
+  createInMemoryConversationsStore,
+  type ConversationsStore,
+} from "./stores/conversations-store";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
@@ -72,8 +76,9 @@ export interface LocalServiceOptions {
   readonly stores?: LocalServiceStores;
 }
 
-/** The four stores and their atomic write boundary, grouped at composition. */
+/** The service stores and the tasks atomic write boundary, grouped at composition. */
 export interface LocalServiceStores {
+  readonly conversations: ConversationsStore;
   readonly tasks: TasksStore;
   readonly registry: WriteIdRegistry;
   readonly unitOfWork: WriteUnitOfWork;
@@ -85,6 +90,7 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
   const tasks = createInMemoryTasksStore();
   const registry = createInMemoryWriteIdRegistry();
   return Object.freeze({
+    conversations: createInMemoryConversationsStore(),
     tasks,
     registry,
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
