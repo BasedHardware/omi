@@ -7,6 +7,8 @@
     "page-conformance.json",
     "status-matrix.json",
     "write-ops-outcomes.json",
-    "write-ops-conformance.json"
+    "write-ops-conformance.json",
+    "tasks-read-shape.json",
+    "tasks-read-conformance.json"
   ]
 }

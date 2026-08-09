@@ -166,6 +166,15 @@ test("the ratified fixture manifest names exactly the corpora this suite runs", 
       // `write-ops-conformance.test.ts`, in this same suite, and the
       // `ratified-write-ops` row in `core/scripts/check-wire-conformance.mjs`
       // is what mechanically requires that consumer to exist and read them.
+      // The tasks READ seam's two files, named here for the same reason and
+      // under the same rule: this list is exact so that a corpus added
+      // upstream cannot go unrun by anybody. Their consumer is
+      // `platform-tasks-adapter.test.ts` in this suite, and the
+      // `ratified-tasks-read` row in `core/scripts/check-wire-conformance.mjs`
+      // is what mechanically requires that consumer to exist and read them.
+      // The list is compared SORTED, so position is not decorative.
+      "tasks-read-conformance.json",
+      "tasks-read-shape.json",
       "write-ops-conformance.json",
       "write-ops-outcomes.json",
     ],

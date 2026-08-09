@@ -153,6 +153,57 @@ const WIRE_SEAMS = [
     consumers: ["packages/testkit/src/test/write-ops-conformance.test.ts"],
     consumptionEvidence: ["readRatifiedCorpus", "readRatifiedWriteOpsSchema"],
   },
+  {
+    /**
+     * The client-facing tasks READ wire — `GET /v1/tasks`, ratified by
+     * `DAVID-tasks-read-epoch-and-ci` D1 (opaque ids, cursor pagination,
+     * completeness envelope) and D2 (all thirteen fields).
+     *
+     * A NEW SHARED WIRE MEANS A NEW ROW, and this one is a wire two components
+     * genuinely speak: `packages/adapters-platform/src/tasks.ts` on the client
+     * and the platform service's tasks read route on the server. The memories
+     * seam above is the precedent for why this cannot be left to each side's
+     * own suite — the two doors agreed on every node-level assertion while
+     * serving one record under two different public ids.
+     *
+     * COVERAGE IS CHECKED AGAINST BOTH TABLES the schema of record declares:
+     * `cases` (what the wire can answer) and `refusalLaws` (what it must
+     * refuse). A read wire's refusals are half its contract — "this page is
+     * complete" is only meaningful because a lagging one is rejected — so a
+     * schema listing only the happy cases would leave the expensive half of
+     * the shape to each side's imagination, which is the whole of rule 15.
+     */
+    name: "ratified-tasks-read",
+    schemaOfRecord: "contracts/ratified/fixtures/tasks-read-shape.json",
+    corpus: "contracts/ratified/fixtures/tasks-read-conformance.json",
+    declaredFrames(schema) {
+      return [...(schema.cases ?? []), ...(schema.refusalLaws ?? [])].map((row) => ({
+        defName: row.case,
+        type: row.case,
+        // Nothing here is a reservation. Every case is producible by any server
+        // that serves this wire and every refusal is reachable by any client
+        // that can send bytes, so `emitted` has no analogue — the listen
+        // protocol's reserved-frame case is what that flag exists for.
+        emitted: true,
+      }));
+    },
+    corpusFrames(corpus) {
+      const types = new Set();
+      for (const row of corpus ?? []) {
+        if (typeof row?.wireCase === "string") types.add(row.wireCase);
+      }
+      return types;
+    },
+    consumers: ["packages/testkit/src/test/platform-tasks-adapter.test.ts"],
+    // The SERVER-side consumer is deliberately not listed, for the same reason
+    // the write-ops seam does not list one: it lives in the sibling `platform`
+    // repository, and reaching across `../../platform/` from this script would
+    // make `pnpm verify` in a core-only checkout fail on a missing sibling —
+    // a worse defect than the one it would catch. The platform's own L0 runs
+    // its conformance file against these bytes out of the INSTALLED tarball,
+    // which is a stronger consumption than a path this script could check.
+    consumptionEvidence: ["readRatifiedCorpus", "readRatifiedTasksReadShape"],
+  },
 ];
 
 for (const seam of WIRE_SEAMS) {
