@@ -49,6 +49,27 @@ const provenance = JSON.parse(provenanceBytes);
  * governs a field added to an EXISTING shape; a new namespace imposes nothing
  * on a client that never imports it. The tasks item's thirteen fields are all
  * required inside a shape no prior version had.
+ *
+ * 0.7.0 is `additive`, and it is the harder case, because unlike 0.6.0 it DOES
+ * add a field to an existing shape: `TaskRead.Page.accountEpoch`
+ * (`DAVID-tasks-read-epoch-and-ci` D3). §1 says a REQUIRED field is breaking
+ * and an OPTIONAL field is additive, so the classification turns entirely on
+ * that word, and the word has to be true of the validator and not only of the
+ * type:
+ *
+ *   - `isTrustedTaskPageData` accepts BOTH key sets. A 0.6.0 page — five keys,
+ *     no epoch — still validates, so a client on 0.7.0 keeps reading a server
+ *     on 0.6.0, and the clean-consumer fixture asserts exactly that rather
+ *     than leaving it to be believed.
+ *   - `TASKS_READ_CONTRACT_VERSION` does NOT move. It is compared for
+ *     equality, so bumping it would refuse every page any deployed server is
+ *     serving today — an additive intent delivered as a breaking change.
+ *   - Exact-keys is preserved on both branches, so an unknown SIXTH key is
+ *     still refused. Optional must not become "anything goes".
+ *
+ * §8 rollback: re-vendor 0.6.0. Nothing is persisted in a shape this contract
+ * defines, and a client that never reads the field is unaffected by its
+ * absence.
  */
 const COMPATIBILITY_CLASS = "additive";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
@@ -111,7 +132,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.6.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.7.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");

@@ -59,6 +59,44 @@ FEAT-MEM-002, FC-AUTH-003, FEAT-AUTH-011, and COORD-contract-evolution-policy.
 `DIV-DOMCORE-001` and `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.
 
+## 0.7.0 - the account epoch rides on the tasks read (`additive`)
+
+`0.7.0` adds ONE optional field, `TaskRead.Page.accountEpoch`, and one reader,
+`readTaskPageAccountEpoch`. No new subpath, no new fixture file, no change to
+any existing field, shape or validator.
+
+Ruling of record: `DAVID-tasks-read-epoch-and-ci` **D3**, signed by David in
+person - the account epoch rides on the ratified read as an additive field. No
+new endpoint, no second auth path, no separate availability signal: *a client
+that can read can always write.*
+
+**Why `additive` and not `breaking`, given that it adds a field to an existing
+shape.** §1 makes the classification turn on one word, so the word has to be
+true of the validator and not only of the type. `isTrustedTaskPageData` accepts
+both key sets, so a five-key `0.6.0` page still validates and a client on
+`0.7.0` keeps reading a server on `0.6.0`. `TASKS_READ_CONTRACT_VERSION` does
+not move - it is compared for equality, so bumping it would refuse every page
+any deployed server serves today. Exact-keys is preserved on both branches, so
+an unknown sixth key is still refused: optional does not mean anything goes.
+
+**Absent is not zero.** `0` is a claim about a generation; "I was not told" is
+the absence of one. Read it through `readTaskPageAccountEpoch`, which returns
+`null` for absent - a client that defaults to zero stamps every write envelope
+with a generation nobody asserted, and the account-epoch fence then refuses
+those as stragglers, turning a missing field into lost edits.
+
+**The migration-progress question was checked, not assumed.** `backend:ADR-012`
+§4 forbids a wire that lets a caller probe migration state, and a non-author
+answered that in writing before this landed (`AUDIT-adr012-epoch-check.md`).
+The answer rests on three properties this field does not itself guarantee: the
+read route resolves the account only from the bearer token; the value is
+per-account, never a fleet counter; and refusals stay epoch-free and
+byte-identical to an unknown route, which is where `COORD-fable-rulings-wave2`
+W1's "the active epoch is never returned" is scoped and where it reconciles
+with D3.
+
+Rollback is a re-vendor of `0.6.0`.
+
 ## 0.6.0 - the ratified tasks READ wire (`additive`)
 
 `0.6.0` adds ONE export subpath, `./projections/tasks`, plus its schema of

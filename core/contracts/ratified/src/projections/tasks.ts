@@ -56,11 +56,10 @@
  *   server that serves this wire — nothing here is a reserved frame nobody
  *   emits, which is the shape rule 15 exists for.
  *
- * NOT IN THIS MODULE, deliberately: the account epoch. `DAVID-tasks-read-epoch-
- * and-ci` D3 rides it on this response as an ADDITIVE field, and that is
- * CLIENT's bump, second of the night's two (fable R9), gated on a non-author's
- * written ADR-012 §4 check (R10). This module is the first bump and is never
- * blocked by that gate — which is the whole reason the two are split.
+ * THE ACCOUNT EPOCH now rides here, as `Page.accountEpoch` — the second of the
+ * night's two bumps (fable R9), landed after the non-author ADR-012 §4 check
+ * R10 required returned "does not leak". See `accountEpoch` on `PageBase` for
+ * the whole of that argument; the paragraph this replaces said it was coming.
  */
 
 import type { KeysetCursor } from "../pagination/cursor.js";
@@ -225,6 +224,59 @@ export declare namespace TaskRead {
   interface PageBase {
     contractVersion: typeof TASKS_READ_CONTRACT_VERSION;
     items: readonly Item[];
+    /**
+     * THE ACCOUNT EPOCH — `DAVID-tasks-read-epoch-and-ci` D3, signed by David
+     * in person. The generation stamp a client puts on `POST /v1/{domain}/ops`
+     * envelopes, so the account-epoch fence can tell a current write from a
+     * straggler authored in a superseded generation.
+     *
+     * WHY IT RIDES HERE AND NOWHERE ELSE. D3 is explicit: no new endpoint, no
+     * second auth path, no separate availability signal, no new failure mode a
+     * client must handle before it can write — *a client that can read can
+     * always write*. Every alternative costs a second thing that can be down,
+     * a second thing that can be denied, and a second thing a write path must
+     * wait on before it may journal an op.
+     *
+     * WHY IT IS OPTIONAL, which is what makes this bump `additive` rather than
+     * `breaking`. The page predicate is exact-keys, so a REQUIRED sixth key
+     * would make every client built against 0.6.0 reject every page a 0.7.0
+     * server serves — lockstep deploys, which per-account batched migration
+     * cannot do. Optional means: a server that has not been taught the field
+     * omits it, a client that has not been taught it ignores it, and neither
+     * is broken by the other. `TASKS_READ_CONTRACT_VERSION` therefore does NOT
+     * move: bumping it would refuse every existing 1.0.0 page and turn an
+     * additive change into a breaking one by accident.
+     *
+     * WHY IT IS NOT A MIGRATION-PROGRESS ORACLE, checked rather than assumed.
+     * `backend:ADR-012` §4 forbids a wire that lets a caller probe migration
+     * state. A NON-AUTHOR answered that question in writing before this landed
+     * (`AUDIT-adr012-epoch-check.md`, R10's two named questions), and the
+     * answer rests on three properties this field does not itself guarantee —
+     * so they are written here, where the next person to move this code will
+     * read them:
+     *
+     *   1. The read route resolves the account ONLY from the bearer token. No
+     *      caller-supplied account id exists on any read path, so no request
+     *      can address an account it lacks authority over. The epoch rides
+     *      inside an already-closed channel, exactly like the thirteen fields
+     *      beside it.
+     *   2. The value is PER-ACCOUNT, read from a per-account control
+     *      projection. It is not a fleet counter, so it cannot report anyone
+     *      else's progress.
+     *   3. Refusals stay epoch-free and byte-identical to an unknown route.
+     *      `COORD-fable-rulings-wave2` W1's condition — "the active epoch is
+     *      never returned" — is scoped to fence refusal and availability
+     *      responses, and reconciles with D3 exactly there: this field is
+     *      served only AFTER auth resolves. A diff that leaks it onto a
+     *      refusal, an availability body, or any pre-auth surface breaks W1,
+     *      not merely this comment.
+     *
+     * Absent is not zero and must never be read as zero. `0` is a claim about
+     * a generation; "I was not told" is the absence of one, and a client that
+     * defaults to zero stamps every op with a generation nobody asserted. Use
+     * `readTaskPageAccountEpoch`, which returns `null` for absent.
+     */
+    accountEpoch?: number;
   }
 
   interface CompleteTerminalPage extends PageBase {
@@ -402,9 +454,21 @@ function isMissingAppliedFrontierReason(value: unknown): boolean {
  */
 export function isTrustedTaskPageData(value: unknown): value is TaskRead.Page {
   if (!isPlainJsonDataGraph(value)) return false;
-  if (!hasExactKeys(value, ["contractVersion", "items", "window", "completeness", "absence"])) return false;
-  const page = value as { contractVersion: unknown; items: unknown; window: unknown; completeness: unknown; absence: unknown };
+  // D3's `accountEpoch` is OPTIONAL, so both key sets are law: a 0.6.0 server
+  // omits it and a 0.7.0 server sends it, and neither page may be refused by a
+  // client that knows the other. Spelled as two exact key sets rather than as
+  // "at least these keys", because the exactness is the guard — an unknown
+  // sixth key is still refused, which is what stops a server from smuggling an
+  // unratified field onto a ratified wire.
+  const withEpoch = hasExactKeys(value, ["contractVersion", "items", "window", "completeness", "absence", "accountEpoch"]);
+  if (!withEpoch && !hasExactKeys(value, ["contractVersion", "items", "window", "completeness", "absence"])) return false;
+  const page = value as { contractVersion: unknown; items: unknown; window: unknown; completeness: unknown; absence: unknown; accountEpoch?: unknown };
   if (page.contractVersion !== TASKS_READ_CONTRACT_VERSION || !Array.isArray(page.items)) return false;
+  // Present means valid. `undefined` is unreachable here — the key set above
+  // decides presence — so a present-but-junk epoch is refused rather than
+  // silently ignored, which would let a server ship `"3"` and a client stamp
+  // its ops with a string.
+  if (withEpoch && !isAccountEpoch(page.accountEpoch)) return false;
   if (!page.items.every(hasSafeItem)) return false;
   const itemIds = page.items.map((item) => (item as { id: string }).id);
   if (new Set(itemIds).size !== itemIds.length) return false;
@@ -428,6 +492,27 @@ export function isTrustedTaskPageData(value: unknown): value is TaskRead.Page {
 /** Authoritative no-execution boundary for untrusted canonical JSON text. */
 export function parseTaskPageJson(raw: string): TaskRead.Page | null {
   return parseCanonicalJson(raw, MAX_TASKS_PAGE_JSON_CODE_UNITS, isTrustedTaskPageData);
+}
+
+/** A generation counter: a safe non-negative integer. Never a float, never a string. */
+function isAccountEpoch(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * The account epoch this page reports, or `null` when the server did not send
+ * one (D3).
+ *
+ * A named reader rather than a property access, so there is one place that
+ * decides what absence means and it cannot quietly become `?? 0` at a call
+ * site. Zero is a real epoch; "not told" is not an epoch at all, and a client
+ * that conflates them stamps write envelopes with a generation no server ever
+ * asserted — which the fence would then refuse as a straggler, turning a
+ * missing field into lost edits.
+ */
+export function readTaskPageAccountEpoch(page: TaskRead.Page): number | null {
+  const epoch = (page as { accountEpoch?: unknown }).accountEpoch;
+  return isAccountEpoch(epoch) ? epoch : null;
 }
 
 /**
