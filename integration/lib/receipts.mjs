@@ -278,12 +278,36 @@ export function writeReceipt({
   if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0) {
     throw new Error("writeReceipt: durationMs must be a non-negative finite number.");
   }
-  const missingArbiters = row.requiredArbiters.filter((key) => !(key in arbiters));
-  if (result === "pass" && missingArbiters.length > 0) {
+  // PRESENCE OF A KEY IS NOT PRESENCE OF A COUNTER.
+  //
+  // This filter used to be `!(key in arbiters)`, and `"servedRequests" in
+  // { servedRequests: null }` is TRUE — so a receipt recording
+  // `servedRequests: null` satisfied a guard whose own comment says it exists
+  // to stop a caller "laundering a bare exit code into what looks like
+  // cross-checked evidence". A null counter is exactly that.
+  //
+  // Reachable, not hypothetical. `lanes.mjs`'s L3 arbiter read is
+  // `report.backend?.stats?.servedRequests ?? null` over a JSON report from a
+  // shared default directory, so a report that is absent, foreign, or merely
+  // shaped differently yields `null` for every counter — and the receipt
+  // recorded a PASS carrying nulls where the two independent measurements
+  // belong. AUDIT found the read side (a lane can ingest another lane's or a
+  // fabricated report); this is the half that lives in this file, and it is
+  // the half that decides whether such a report can become a green receipt.
+  //
+  // `null` and `undefined` are refused; `0` is NOT. Zero is a real observation
+  // — "servedReads: 0 means nothing is talking to it, no matter how good the
+  // UI looks" is this program's signature false-green — and it must stay
+  // recordable so a lane can fail on it honestly rather than be unable to say
+  // it.
+  const unobservedArbiters = row.requiredArbiters.filter(
+    (key) => !(key in arbiters) || arbiters[key] === null || arbiters[key] === undefined,
+  );
+  if (result === "pass" && unobservedArbiters.length > 0) {
     throw new Error(
-      `writeReceipt: lane ${lane} requires arbiter counter(s) [${missingArbiters.join(", ")}] ` +
-        `on a pass — pass them in \`arbiters\`, or write result: "fail" if the lane did not ` +
-        `actually observe them.`,
+      `writeReceipt: lane ${lane} requires OBSERVED arbiter counter(s) [${unobservedArbiters.join(", ")}] ` +
+        `on a pass — each must be present AND non-null. A null counter means the lane did not ` +
+        `read one, which is not a pass: supply the real values, or write result: "fail".`,
     );
   }
 

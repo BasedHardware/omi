@@ -30,6 +30,72 @@ afterEach(() => {
   rmSync(workspaceRoot, { recursive: true, force: true });
 });
 
+describe("a required arbiter must be OBSERVED, not merely present", () => {
+  // The guard's own comment says it stops a caller "laundering a bare exit code
+  // into what looks like cross-checked evidence". Until this test existed it did
+  // not: it asked `key in arbiters`, and that is true of an explicit null.
+  //
+  // Reachable, not hypothetical. `lanes.mjs`'s L3 arbiter read is
+  // `report.backend?.stats?.servedRequests ?? null` over a report file from a
+  // shared default directory, so an absent or foreign report yields null for
+  // every counter — and the receipt claimed a pass carrying them.
+  it("refuses a pass whose required counters are null", () => {
+    assert.throws(
+      () => writeReceipt({
+        lane: "L3",
+        result: "pass",
+        durationMs: 1000,
+        arbiters: { servedRequests: null, servedReads: null },
+        workspaceRoot,
+      }),
+      /requires OBSERVED arbiter counter\(s\) \[servedRequests, servedReads\]/,
+    );
+    // red-proof: restore `!(key in arbiters)` as the filter — null counters
+    // satisfy it and this throws nothing. RED-PROOF PENDING.
+  });
+
+  it("refuses a pass where only one counter was read", () => {
+    assert.throws(
+      () => writeReceipt({
+        lane: "L3", result: "pass", durationMs: 1000,
+        arbiters: { servedRequests: 12, servedReads: null }, workspaceRoot,
+      }),
+      /\[servedReads\]/,
+    );
+  });
+
+  it("ZERO is a real observation and must remain recordable", () => {
+    // "servedReads: 0 means nothing is talking to it, no matter how good the UI
+    // looks" is this program's signature false-green. A guard that refused zero
+    // would make the lane unable to state it, which is worse than the hole it
+    // closes — so zero passes the guard and the LANE decides what it means.
+    const receipt = writeReceipt({
+      lane: "L3", result: "pass", durationMs: 1000,
+      arbiters: { servedRequests: 0, servedReads: 0 }, workspaceRoot,
+    });
+    assert.equal(receipt.arbiters.servedReads, 0);
+    // red-proof: change the filter to `!arbiters[key]` — zero is falsy, this
+    // throws, and the lane loses the ability to record a served-nothing run.
+    // RED-PROOF PENDING.
+  });
+
+  it("a FAIL receipt may record whatever it managed to observe, including nothing", () => {
+    // The guard is about what a PASS is allowed to claim. A failing lane that
+    // could not read its counters must still be able to write the receipt that
+    // says so, or the failure has no durable record at all.
+    const receipt = writeReceipt({
+      lane: "L3", result: "fail", durationMs: 10,
+      arbiters: { servedRequests: null, servedReads: null }, workspaceRoot,
+    });
+    assert.equal(receipt.result, "fail");
+    assert.equal(receipt.arbiters.servedRequests, null);
+  });
+
+  it("lanes with no required arbiters are unaffected", () => {
+    assert.ok(writeReceipt({ lane: "L1", result: "pass", durationMs: 5, workspaceRoot }));
+  });
+});
+
 describe("writeReceipt / readReceipt round trip", () => {
   // red-proof: in writeReceipt(), stop putting `arbiters` on the written
   // object (delete the `arbiters,` line from the receipt literal) — the
@@ -139,9 +205,14 @@ describe("verifyReceipt: a failed run is never valid evidence", () => {
 
 describe("writeReceipt: required arbiters are a registry-driven gate", () => {
   it("L3 refuses a pass receipt missing its required arbiter counters", () => {
+    // Matched on the lane and the counter NAMES rather than on the sentence
+    // around them. The wording changed when the guard learned that an explicit
+    // null is not an observation, and a test pinned to prose fails on a
+    // rewording while saying nothing about the property — the names are the
+    // property.
     assert.throws(
       () => writeReceipt({ lane: "L3", result: "pass", durationMs: 90000, arbiters: {}, workspaceRoot }),
-      /requires arbiter counter/,
+      /lane L3 requires .*\[servedRequests, servedReads\]/,
     );
   });
 
