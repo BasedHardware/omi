@@ -183,6 +183,32 @@ def test_chat_agent_default_route_reasoning_effort_is_none():
     assert provider_request.get('reasoning_effort') == 'none'
 
 
+def test_gpt56_tools_strip_bool_temperature():
+    """True==1 must not bypass the temperature sanitize (OpenAI rejects non-default)."""
+    config = gateway_config()
+    route = config.route_artifacts['route.chat_agent.model_config.001']
+    config.route_artifacts['route.chat_agent.model_config.001'] = route.model_copy(
+        update={'provider_options': {**dict(route.provider_options), 'temperature': True}}
+    )
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+    assert 'temperature' not in provider_request
+
+
 @pytest.mark.asyncio
 async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
     active_route = active_route_with_fallbacks([]).model_copy(

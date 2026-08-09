@@ -459,7 +459,13 @@ def _sanitize_openai_chat_completions_request(
         if effort not in (None, 'none'):
             provider_request['reasoning_effort'] = 'none'
 
-    if 'temperature' in provider_request and provider_request.get('temperature') != 1:
+    # OpenAI live 400 (2026-08): "Unsupported value: 'temperature' does not support 0.7
+    # with this model. Only the default (1) value is supported." Booleans must not slip
+    # through via True==1.
+    temperature = provider_request.get('temperature', None)
+    if 'temperature' in provider_request and (
+        isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or temperature != 1
+    ):
         provider_request.pop('temperature', None)
 
 
