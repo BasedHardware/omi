@@ -724,7 +724,11 @@ def public_contract_routes(app) -> list[APIRoute]:
 def app_client_contract_routes(app) -> list[APIRoute]:
     routes: list[APIRoute] = []
     for route in app.routes:
-        if not isinstance(route, APIRoute) or not is_app_client_contract_path(route.path) or not route.include_in_schema:
+        if (
+            not isinstance(route, APIRoute)
+            or not is_app_client_contract_path(route.path)
+            or not route.include_in_schema
+        ):
             continue
         methods = {m.upper() for m in (route.methods or set()) if m.upper() in HTTP_METHODS}
         if methods and all(is_app_client_excluded_route(method, route.path) for method in methods):
