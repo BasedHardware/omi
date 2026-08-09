@@ -49,6 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Public TV kiosk is capability-token auth only — never run admin redirects
+    // or sign-out side effects that can interrupt the wall board fetch.
+    if (isPublicTvKiosk) {
+      setLoading(false);
+      return;
+    }
+
     if (bypassAuth) {
       setUser(createBypassUser());
       setIsAdmin(true);
@@ -71,23 +78,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAdmin(true);
             console.log(`Admin user ${currentUser.email} signed in.`);
           } else {
-            console.warn(`User ${currentUser.email} is not an admin.`);
+            console.warn(`User ${currentUser.email} is not an admin. Signing out.`);
             await firebaseSignOut(auth);
             setUser(null);
             setIsAdmin(false);
-            // Public TV kiosk must not bounce non-admin browser sessions to login.
-            if (!isPublicTvKiosk) {
-              router.push('/login?error=unauthorized');
-            }
+            router.push('/login?error=unauthorized');
           }
         } catch (error) {
           console.error('Error checking admin status:', error);
           await firebaseSignOut(auth);
           setUser(null);
           setIsAdmin(false);
-          if (!isPublicTvKiosk) {
-            router.push('/login?error=check_failed');
-          }
+          router.push('/login?error=check_failed');
         }
       } else {
         setUser(null);
@@ -98,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [bypassAuth, router, isPublicTvKiosk]); // Add router to dependency array
+  }, [bypassAuth, router, isPublicTvKiosk]);
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>

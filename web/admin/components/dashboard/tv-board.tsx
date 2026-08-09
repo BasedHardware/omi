@@ -446,23 +446,27 @@ export function TvBoard({
     try {
       const token = await getToken();
       if (!token) {
-        // Clear metrics on missing/revoked capability so walls don't keep last-good data.
         setSnap(null);
         setError("Missing auth token");
         return;
       }
-      const res = await fetch("/api/tv/snapshot", {
+      // Header is primary; ?token= is a fallback for proxies that strip Authorization.
+      const res = await fetch(`/api/tv/snapshot?token=${encodeURIComponent(token)}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${res.status}`);
+        const msg = body.error || `HTTP ${res.status}`;
+        // Revoked / unauthorized: clear the wall. Transient 5xx: keep last-good data.
+        if (res.status === 401 || res.status === 403) {
+          setSnap(null);
+        }
+        throw new Error(msg);
       }
       setSnap((await res.json()) as TvSnapshot);
       setError(null);
     } catch (e) {
-      setSnap(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [getToken]);
@@ -881,9 +885,13 @@ export function TvBoard({
 
       <footer className="tv-foot">
         <span className="tv-warn">
-          {snap?.warnings?.length
-            ? `${snap.warnings.length} warning(s): ${snap.warnings[0]}`
-            : "lines indexed to window start · absolute latest on right"}
+          {error
+            ? error
+            : snap?.warnings?.length
+              ? `${snap.warnings.length} warning(s): ${snap.warnings[0]}`
+              : snap
+                ? "lines indexed to window start · absolute latest on right"
+                : "loading metrics…"}
         </span>
         <span className="tv-hint">auto-refresh</span>
       </footer>
