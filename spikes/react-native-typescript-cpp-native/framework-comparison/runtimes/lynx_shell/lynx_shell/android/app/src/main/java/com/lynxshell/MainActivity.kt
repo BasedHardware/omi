@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import com.lynxshell.providers.GenericResourceFetcher
 import com.lynxshell.providers.TemplateProvider
+import com.lynxshell.modules.OmiNativeModule
 import com.lynx.tasm.LynxBooleanOption
 import com.lynx.tasm.LynxView
 import com.lynx.tasm.LynxViewBuilder
@@ -33,6 +34,7 @@ class MainActivity : Activity() {
         viewBuilder.setTemplateProvider(TemplateProvider(this))
         viewBuilder.isEnableGenericResourceFetcher = LynxBooleanOption.TRUE
         viewBuilder.setGenericResourceFetcher(GenericResourceFetcher())
+        viewBuilder.registerModule("OmiNativeModule", OmiNativeModule::class.java)
 
         return viewBuilder.build(this)
     }

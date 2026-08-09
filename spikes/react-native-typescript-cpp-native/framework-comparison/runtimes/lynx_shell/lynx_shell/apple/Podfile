@@ -1,6 +1,8 @@
 source 'https://cdn.cocoapods.org/'
 
-platform :ios, '10.0'
+platform :ios, '15.0'
+
+install! 'cocoapods', :disable_input_output_paths => true
 
 target 'LynxShell' do
   pod 'Lynx', '3.4.1', :subspecs => [
@@ -28,4 +30,20 @@ target 'LynxShell' do
   # XElement
   pod 'XElement', '3.4.1'
   pod 'DebugRouter', '5.0.13-rc.1'
+
+  # LynxDevtool 3.4.1 resolves pre-release PrimJS artifacts; pin them so
+  # CocoaPods does not reject the transitive prerelease dependency.
+  pod 'PrimJS/quickjs_debugger', '2.14.0-rc.1'
+  pod 'PrimJS/quickjs_heapprofiler', '2.14.0-rc.1'
+  pod 'PrimJS/quickjs_profiler', '2.14.0-rc.1'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      config.build_settings['OTHER_CPLUSPLUSFLAGS'] =
+        "$(inherited) -Wno-error=c99-designator -Wno-error=nontrivial-memcall -Wno-error=unused-result"
+    end
+  end
 end

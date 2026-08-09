@@ -71,7 +71,15 @@ test('App', async () => {
             <text
               class="Hint"
             >
-              omi-relay-contract:v1|native-seam:pending|payload:bounded|gap:explicit
+              omi-relay-contract:v1|native-seam:lynx-module|payload:bounded|gap:explicit
+            </text>
+            <text
+              class="Hint"
+            >
+              native:
+              <wrapper>
+                NATIVE_ADAPTER_UNAVAILABLE
+              </wrapper>
             </text>
           </view>
           <view
