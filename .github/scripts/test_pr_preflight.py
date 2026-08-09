@@ -19,7 +19,7 @@ from unittest.mock import Mock, patch
 
 import preflight_runner
 from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
-from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
+from pr_preflight import changed_files, format_failure_class_suggest, resolve_base, resolve_pr_metadata, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -190,9 +190,69 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn(
-            "python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
+            "python3 .github/scripts/pr_preflight.py --lane local",
             result.stdout,
         )
+        self.assertNotIn("--base origin/main", result.stdout)
+
+    def test_default_base_selects_only_the_lane_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def git(*args: str) -> str:
+                result = subprocess.run(
+                    ["git", "-c", "core.hooksPath=/dev/null", *args],
+                    cwd=root,
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+
+            git("init", "-q")
+            git("config", "user.email", "preflight@example.test")
+            git("config", "user.name", "Preflight Test")
+            (root / "seed.txt").write_text("seed\n", encoding="utf-8")
+            git("add", "seed.txt")
+            git("commit", "-qm", "seed")
+            git("branch", "-M", "main")
+            git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+            git("switch", "-qc", "core/foundation")
+            (root / "foreign.txt").write_text("TODO: pre-existing foreign marker\n", encoding="utf-8")
+            git("add", "foreign.txt")
+            git("commit", "-qm", "foreign trunk change")
+            git("update-ref", "refs/remotes/origin/core/foundation", "HEAD")
+
+            git("switch", "-qc", "lane/test")
+            git("config", "branch.lane/test.omiLaneTrunk", "core/foundation")
+            (root / "owned.txt").write_text("owned\n", encoding="utf-8")
+            git("add", "owned.txt")
+            git("commit", "-qm", "owned lane change")
+
+            base = resolve_base(root, None)
+            self.assertEqual(base, "origin/core/foundation")
+            self.assertEqual(changed_files(root, base, "HEAD"), ["owned.txt"])
+            self.assertEqual(changed_files(root, "origin/main", "HEAD"), ["foreign.txt", "owned.txt"])
+
+    def test_default_base_falls_back_from_lane_trunk_to_upstream_then_main(self) -> None:
+        root = Path("/repo")
+        with patch("range_base.run_git", side_effect=["feature", "fork/topic"]), patch(
+            "range_base.git_config_value", return_value=None
+        ):
+            self.assertEqual(resolve_base(root, None), "fork/topic")
+        with patch("range_base.run_git", return_value=""), patch("range_base.git_config_value") as config:
+            self.assertEqual(resolve_base(root, None), "origin/main")
+            config.assert_not_called()
+
+    def test_explicit_base_wins_without_reading_repository_state(self) -> None:
+        with patch("range_base.run_git") as run_git, patch("range_base.git_config_value") as config:
+            self.assertEqual(resolve_base(Path("/repo"), "review/base"), "review/base")
+            run_git.assert_not_called()
+            config.assert_not_called()
 
     def test_9402_equivalent_diff_selects_invariants_changelog_and_e2e(self) -> None:
         checks = select_checks(

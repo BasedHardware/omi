@@ -13,6 +13,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
+
+from range_base import RangeBaseError, resolve_base
+
 from pr_metadata import TransientPRMetadataError, PullRequestMetadata, load_from_api, load_from_event_file, load_from_gh
 from run_checks import detect_platform, load_manifest, resolve_checks
 
@@ -133,7 +138,10 @@ def resolve_pr_metadata(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="origin/main")
+    parser.add_argument(
+        "--base",
+        help="Base ref (default: recorded lane trunk, branch upstream, then origin/main).",
+    )
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--lane", choices=("local", "ci"), default="ci")
     parser.add_argument("--pr-body-file", type=Path)
@@ -163,10 +171,12 @@ def main() -> int:
     root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
     started = time.monotonic()
     try:
+        args.base = resolve_base(root, args.base)
         merge_base = run_git(root, "merge-base", args.base, args.head)
         files = changed_files(root, args.base, args.head)
-    except subprocess.CalledProcessError as exc:
-        print(f"FAIL: could not resolve preflight diff: {exc.stderr.strip()}", file=sys.stderr)
+    except (RangeBaseError, subprocess.CalledProcessError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        print(f"FAIL: could not resolve preflight diff: {detail}", file=sys.stderr)
         return 1
     checks = select_checks(files, args.lane)
     summary = f"PR preflight: lane={args.lane} base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}"

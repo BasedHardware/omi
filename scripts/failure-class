@@ -21,6 +21,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from range_base import RangeBaseError, resolve_base
+
 
 OUTPUT_SCHEMA_VERSION = 1
 DEFINITION_SCHEMA_VERSION = 1
@@ -352,46 +354,6 @@ def run_git(root: Path, *args: str) -> str:
         detail = result.stderr.strip() or result.stdout.strip()
         raise CliError(f"git {' '.join(args)} failed: {detail}")
     return result.stdout.strip()
-
-
-def git_config_value(root: Path, key: str) -> str | None:
-    result = subprocess.run(
-        ["git", "config", "--get", key],
-        cwd=root,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode == 1:
-        return None
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise CliError(f"git config --get {key} failed: {detail}")
-    return result.stdout.strip() or None
-
-
-def resolve_base(root: Path, explicit_base: str | None) -> str:
-    if explicit_base is not None:
-        return explicit_base
-
-    branch = run_git(root, "branch", "--show-current")
-    if branch:
-        lane_trunk = git_config_value(root, f"branch.{branch}.omiLaneTrunk")
-        if lane_trunk:
-            # omi-lane records the local branch name after branching from the
-            # corresponding origin ref. The local trunk may have moved or be stale.
-            return f"origin/{lane_trunk}"
-        upstream = run_git(
-            root,
-            "for-each-ref",
-            "--format=%(upstream:short)",
-            f"refs/heads/{branch}",
-        )
-        if upstream:
-            return upstream
-
-    return "origin/main"
 
 
 def merge_base(root: Path, base: str, head: str) -> str:
@@ -821,7 +783,7 @@ def main() -> int:
             payload, exit_code = report_command(args, root)
         else:  # argparse makes this unreachable; preserve fail-closed behavior.
             raise CliError(f"unsupported command: {args.command}")
-    except CliError as exc:
+    except (CliError, RangeBaseError) as exc:
         payload = {
             "schema_version": OUTPUT_SCHEMA_VERSION,
             "command": args.command,

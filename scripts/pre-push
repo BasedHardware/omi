@@ -6,15 +6,16 @@ cd "$(git rev-parse --show-toplevel)"
 
 PUSH_REMOTE="${1:-origin}"
 BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"
-BASE_BRANCH="${PRE_PUSH_BASE_BRANCH:-main}"
-BASE_REMOTE_REF="refs/remotes/${BASE_REMOTE}/${BASE_BRANCH}"
-
-if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
-  BASE_REMOTE_REF="refs/remotes/origin/${BASE_BRANCH}"
+BASE_BRANCH="${PRE_PUSH_BASE_BRANCH:-}"
+if [ -n "${PRE_PUSH_BASE_REMOTE+x}" ] || [ -n "${PRE_PUSH_BASE_BRANCH+x}" ]; then
+  BASE_BRANCH="${BASE_BRANCH:-main}"
+  BASE_REMOTE_REF="${BASE_REMOTE}/${BASE_BRANCH}"
+else
+  BASE_REMOTE_REF="$(python3 scripts/range_base.py)"
 fi
 
 if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
-  echo "FAIL: cannot find ${BASE_REMOTE}/${BASE_BRANCH} or origin/${BASE_BRANCH}. Run git fetch origin ${BASE_BRANCH}." >&2
+  echo "FAIL: cannot find pre-push range base ${BASE_REMOTE_REF}. Fetch that ref before pushing." >&2
   exit 1
 fi
 
@@ -31,9 +32,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF}."
 else
-  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF} (merge-base ${BASE_REF:0:12})"
 fi
 
 declare -a CHANGED_FILES=()
@@ -204,7 +205,7 @@ check_pr_preflight() {
   #   scripts/pr-preflight --suggest
   #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
   # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
-  scripts/pr-preflight --lane local --base "$BASE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+  scripts/pr-preflight --lane local --base "$BASE_REMOTE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
   if [ "$has_supplied_pr_body" -eq 1 ]; then
     ci_prediction_note_verified "shared PR contract, hygiene, and supplied PR body"
   else
