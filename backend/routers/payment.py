@@ -289,12 +289,22 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
 
+    When the local Firestore row is missing or stale (no ``stripe_subscription_id``),
+    fall back to Stripe as the source of truth so a pending-cancellation
+    subscription Stripe still holds for this user can be reactivated instead of
+    dropping into a fresh-checkout flow.
+
     Returns:
         dict with reactivation details if successful, None otherwise
     """
     current_subscription = users_db.get_user_subscription(uid)
     if not current_subscription or not current_subscription.stripe_subscription_id:
-        return None
+        # The local row may be missing/stale (e.g. read-after-write lag or a
+        # sync issue). Stripe is the recovery source of truth: find the active
+        # paid subscription there and use its id to attempt reactivation.
+        current_subscription = find_active_paid_subscription_for_user(uid)
+        if not current_subscription or not current_subscription.stripe_subscription_id:
+            return None
 
     try:
         # Retrieve current subscription from Stripe to check status

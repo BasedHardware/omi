@@ -124,6 +124,49 @@ def test_upgrade_releases_attached_schedule_before_change():
     assert release_pos < upgrade_section.index("SubscriptionSchedule.create"), "release must precede schedule create"
 
 
+def test_reactivate_falls_back_to_stripe_when_local_subscription_is_stale():
+    """A pending-cancellation subscription found from Stripe must still reactivate.
+
+    When the local Firestore row is missing/stale (no stripe_subscription_id),
+    _try_reactivate_subscription must fall back to Stripe as source of truth and
+    clear cancel_at_period_end instead of dropping into a fresh-checkout flow.
+    """
+    router = _setup_payment_module(include_client=False)
+
+    # Local row is stale: no stripe_subscription_id.
+    router.users_db.get_user_subscription.return_value = SimpleNamespace(
+        plan="basic", status="active", stripe_subscription_id=None
+    )
+    # Stripe is the recovery source of truth: it holds the pending-cancellation sub.
+    stripe_found = MagicMock()
+    stripe_found.stripe_subscription_id = "sub_from_stripe"
+    stripe_found.plan = "pro"
+    stripe_found.status = "active"
+    stripe_found.current_price_id = "price_same"
+    stripe_found.cancel_at_period_end = True
+    stripe_found.model_dump.return_value = {"stripe_subscription_id": "sub_from_stripe"}
+    router.find_active_paid_subscription_for_user.return_value = stripe_found
+
+    stripe_subscription = MagicMock()
+    stripe_subscription.to_dict.return_value = {
+        "id": "sub_from_stripe",
+        "status": "active",
+        "cancel_at_period_end": True,
+        "current_period_end": 2_000_000_000,
+        "items": {"data": [{"id": "si_1", "price": {"id": "price_same"}}]},
+    }
+
+    with patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription), patch.object(
+        router.stripe.Subscription, "modify"
+    ) as mock_modify:
+        result = router._try_reactivate_subscription("u1", "price_same")
+
+    assert result is not None
+    assert result["status"] == "reactivated"
+    # The Stripe-side subscription must be reactivated, not a new checkout created.
+    mock_modify.assert_called_once_with("sub_from_stripe", cancel_at_period_end=False)
+
+
 def test_checkout_catches_stripe_invalid_request_error():
     source = _read_source(PAYMENT_SOURCE)
     checkout_start = source.index("def create_checkout_session_endpoint")

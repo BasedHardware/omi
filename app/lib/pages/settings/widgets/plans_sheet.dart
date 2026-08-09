@@ -1388,6 +1388,11 @@ class _PlansSheetState extends State<PlansSheet> {
                                       ),
                                     ),
                                   );
+                                  // The user may have paid an overdue invoice or
+                                  // recovered a canceled plan inside the portal, so
+                                  // refresh subscription state on return instead of
+                                  // leaving the UI showing Free until a manual reload.
+                                  await provider.fetchSubscription();
                                 } else {
                                   AppSnackbar.showSnackbarError(l10n.couldNotOpenPaymentSettings);
                                 }
