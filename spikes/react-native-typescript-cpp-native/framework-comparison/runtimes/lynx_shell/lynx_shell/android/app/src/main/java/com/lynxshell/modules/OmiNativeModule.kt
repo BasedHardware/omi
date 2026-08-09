@@ -7,23 +7,27 @@ import org.json.JSONObject
 
 /**
  * Minimal Lynx-to-native seam for the Omi spike.
- * The module intentionally returns explicit capability state until the shared
- * C++ boundary is linked into the Android host.
+ * The module loads the shared Omi C++ boundary through a small JNI adapter.
  */
 class OmiNativeModule(context: Context) : LynxModule(context) {
+    companion object {
+        init {
+            System.loadLibrary("omi_lynx_native")
+        }
+    }
+
+    private external fun nativeCapabilities(): String
+    private external fun nativeNormalizePacket(raw: String): String
+
     @LynxMethod
-    fun getNativeCapabilities(): String = JSONObject()
+    fun getNativeCapabilities(): String = JSONObject(nativeCapabilities())
         .put("framework", "lynx")
         .put("platform", "android")
         .put("bridge", "lynx-native-module")
-        .put("cppBoundary", "NATIVE_ADAPTER_UNAVAILABLE")
+        .put("cppBoundary", "linked")
         .put("contract", "omi-relay-contract:v1")
         .toString()
 
     @LynxMethod
-    fun normalizePacket(raw: String): String = JSONObject()
-        .put("status", "NATIVE_ADAPTER_UNAVAILABLE")
-        .put("reason", "shared C++ boundary not linked in this host yet")
-        .put("rawLength", raw.length)
-        .toString()
+    fun normalizePacket(raw: String): String = nativeNormalizePacket(raw)
 }
