@@ -102,11 +102,11 @@ def synthesize_connector_items(
     if guidance is None:
         raise ValueError(f"unsupported connector source: {source}")
 
-    cleaned = [i.strip()[:MAX_ITEM_CHARS] for i in items if isinstance(i, str) and i.strip()][:MAX_ITEMS]
+    cleaned = [i.strip()[:MAX_ITEM_CHARS] for i in items if i.strip()][:MAX_ITEMS]
     if not cleaned:
         return ConnectorSynthesis(memories=[], tasks=[], profile="")
 
-    existing = [m.strip() for m in (existing_memories or []) if isinstance(m, str) and m.strip()][:MAX_EXISTING]
+    existing = [m.strip() for m in (existing_memories or []) if m.strip()][:MAX_EXISTING]
     existing_block = "\n".join(f"- {m}" for m in existing) if existing else "(none)"
 
     try:
@@ -133,8 +133,6 @@ def synthesize_connector_items(
     seen = {m.lower() for m in existing}
     memories: List[str] = []
     for memory in parsed.memories:
-        if not isinstance(memory, str):
-            continue
         text = memory.strip()
         key = text.lower()
         if not text or key in seen:
@@ -152,5 +150,5 @@ def synthesize_connector_items(
             priority = "medium"
         tasks.append(SynthesizedTask(description=description, priority=priority, due_at=(task.due_at or "").strip()))
 
-    profile = parsed.profile.strip() if isinstance(parsed.profile, str) else ""
+    profile = parsed.profile.strip()
     return ConnectorSynthesis(memories=memories, tasks=tasks, profile=profile)

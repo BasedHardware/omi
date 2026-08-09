@@ -67,6 +67,6 @@ def generate_conversation_topic(uid: str, transcript: str) -> Optional[Conversat
         logger.exception("Error generating conversation topic for uid=%s", uid)
         return None
 
-    emoji = parsed.emoji.strip() if isinstance(parsed.emoji, str) else ""
-    title = parsed.title.strip() if isinstance(parsed.title, str) else ""
+    emoji = parsed.emoji.strip()
+    title = parsed.title.strip()
     return ConversationTopic(emoji=emoji, title=title)
