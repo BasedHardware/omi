@@ -63,7 +63,8 @@
 #                   stops nothing. This is how you check a stack you did not start.
 #   --json          emit one machine-readable object for the run on stdout.
 #   --status        what is running RIGHT NOW (add --json). Boots nothing.
-#   --doctor        standalone recovery check: deps, dist freshness, ports, branch.
+#   --doctor        recovery check: deps; surface stamp; named dependency build
+#                   outputs; adapters-platform mtime; ports; branches.
 #
 # HEADLESS IS THE DEFAULT. Any automated shape (--up, --assert, --json, --attach,
 # or any non-TTY caller) puts NO window on screen and never takes focus. Only a
@@ -340,10 +341,18 @@ WRITE_DOOR_FILE="$RUNDIR/write-door.json"
 # a previous run, and answers the question an agent actually has when something
 # is wrong — "what about my machine is not ready?" — with an action per finding.
 # Worth more than another test lane, because the failures it catches (missing
-# node_modules, a stale dist, the wrong branch) are the ones that make every
-# other lane lie.
+# node_modules, stale named build outputs, the wrong branch) are the ones that
+# make every other lane lie. `doctor.sh` checks the surfaces provenance stamp
+# and adapters-platform's source/output mtime. The companion check covers the
+# manifest-declared type outputs of the workspace packages surfaces resolves
+# through; neither check claims freshness for unnamed artifacts.
 if [[ $DOCTOR_ONLY -eq 1 ]]; then
-  exec "$HERE/doctor.sh"
+  doctor_status=0
+  dependency_dist_status=0
+  "$HERE/doctor.sh" || doctor_status=$?
+  node "$HERE/check-surfaces-dependency-dist.mjs" || dependency_dist_status=$?
+  (( doctor_status == 0 && dependency_dist_status == 0 ))
+  exit $?
 fi
 
 # ── --status ────────────────────────────────────────────────────────────────
@@ -518,6 +527,25 @@ if [[ $WANT_IOS -eq 1 ]]; then
   elif [[ ! -d "$IOS_SHELL/app" ]]; then warn "iOS shell prototype not found at $IOS_SHELL — skipping iOS"; WANT_IOS=0; fi
 fi
 ok "tools present"
+
+# Both the surfaces typecheck and the backend-only write journey resolve core
+# workspace packages through their declared dist entrypoints. Installing only
+# repairs node_modules; it says nothing about those ignored build outputs. Build
+# the workspace before either consumer can run. This
+# replaces late TS2305/ERR_MODULE_NOT_FOUND failures with an early named build
+# failure and a log, rather than with an assertion that guessed at freshness.
+if [[ $MODE_ATTACH -eq 0 ]]; then
+  say "${B}core workspace${Z} — building local-stack packages"
+  ( cd "$CORE_REPO/core" \
+      && pnpm install --config.confirmModulesPurge=false --silent \
+      && node "$HERE/check-surfaces-dependency-dist.mjs" --prepare-build \
+      && pnpm -r build ) \
+    > "$LOGDIR/core-workspace-build.log" 2>&1 \
+    || fixit "core workspace build failed" \
+      "Log: $LOGDIR/core-workspace-build.log" \
+      "$(tail -15 "$LOGDIR/core-workspace-build.log")"
+  ok "core workspace built"
+fi
 
 # Clear our own leftovers before binding anything — but NEVER in attach mode,
 # where the entire contract is "measure what is already there". An attach that
@@ -727,12 +755,9 @@ if [[ $MODE_ATTACH -eq 1 ]]; then
     && ok "surfaces already served at http://127.0.0.1:$SURFACES_PORT/" \
     || warn "nothing serving surfaces on $SURFACES_PORT (attach mode does not start one)"
 else
-say "${B}surfaces${Z} — building @omi-core/surfaces"
-( cd "$CORE_REPO/core" && pnpm install --config.confirmModulesPurge=false --silent && pnpm --filter @omi-core/surfaces build ) \
-  > "$LOGDIR/surfaces-build.log" 2>&1 \
-  || fixit "surfaces build failed" "Log: $LOGDIR/surfaces-build.log" "$(tail -15 "$LOGDIR/surfaces-build.log")"
-[[ -f "$SURFACES/dist/index.html" ]] || fixit "surfaces build produced no dist/index.html" \
-  "Log: $LOGDIR/surfaces-build.log"
+say "${B}surfaces${Z} — using bundle from the core workspace build"
+[[ -f "$SURFACES/dist/index.html" ]] || fixit "workspace build produced no surfaces dist/index.html" \
+  "Log: $LOGDIR/core-workspace-build.log"
 ok "surfaces built -> $SURFACES/dist"
 
 say "${B}surfaces${Z} — serving on $SURFACES_PORT"
