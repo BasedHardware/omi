@@ -36,8 +36,8 @@ describe("the row is the whole envelope, not a summary", () => {
    * edit was lost and roughly what it was, but cannot reproduce it." The patch
    * is the reproducible part and it must survive.
    *
-   * red-proof: have `preserve` store `{ write_id, account_epoch }` and drop
-   * `envelope_json`.
+   * red-proof: have `preserve` replace `envelope_json` with a summary string.
+   * APPLIED AND OBSERVED RED.
    */
   test("the exact request bytes survive, patch included", () => {
     const table = createInMemoryStragglerTable();
@@ -59,8 +59,15 @@ describe("B3's lifecycle join, as a property of the module's shape", () => {
    * forgetting this module, because no reachable row is outside the account
    * being deleted.
    *
-   * This test goes red when somebody adds a `listAll()` for convenience, which
-   * is exactly when it should.
+   * red-proofs, both APPLIED AND OBSERVED RED: add a `listAll()` to the
+   * returned object, and widen `exportAccount` with a second parameter.
+   *
+   * ONE STAYED GREEN, recorded because it bounds what this assertion claims:
+   * adding `listAll()` to the `StragglerTable` INTERFACE without implementing
+   * it leaves this green. That is the correct outcome — a type-level method
+   * with no runtime existence cannot export a row — but it means this test
+   * pins the runtime object, not the declared surface, and a reader should not
+   * mistake it for a check on the type.
    */
   test("no reachable read path exists that is not account-scoped", () => {
     const table = createInMemoryStragglerTable();
@@ -73,7 +80,8 @@ describe("B3's lifecycle join, as a property of the module's shape", () => {
   });
 
   /**
-   * red-proof: make `deleteAccount` a no-op returning 0.
+   * red-proof: drop the `byAccount.delete(accountId)` from `deleteAccount`, so
+   * it reports a count it did not remove. APPLIED AND OBSERVED RED.
    */
   test("deleting an account removes every one of its rows and nobody else's", () => {
     const table = createInMemoryStragglerTable();
@@ -88,6 +96,7 @@ describe("B3's lifecycle join, as a property of the module's shape", () => {
 
   /**
    * red-proof: have `exportAccount` ignore its argument and return every row.
+   * APPLIED AND OBSERVED RED.
    */
   test("an export returns only the account it was asked about", () => {
     const table = createInMemoryStragglerTable();

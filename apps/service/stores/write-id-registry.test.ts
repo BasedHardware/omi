@@ -31,7 +31,8 @@ describe("replay, reuse, and the difference between them", () => {
    * the tombstone, interleaved write, replay. Answering `conflict` would tell
    * the user a saved edit failed.
    *
-   * red-proof: make `lookup` return `{ kind: "reuse" }` whenever a row exists.
+   * red-proof: make `lookup` answer `reuse` whenever a row exists, without
+   * comparing fingerprints. APPLIED AND OBSERVED RED.
    */
   test("the same write_id with the same content replays the recorded outcome", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -41,9 +42,9 @@ describe("replay, reuse, and the difference between them", () => {
   });
 
   /**
-   * red-proof: make `lookup` return `{ kind: "replay" }` without comparing
-   * fingerprints. Two different ops then launder through one key and the
-   * second is answered with the first one's outcome.
+   * red-proof: make `lookup` answer `replay` without comparing fingerprints —
+   * two different ops then launder through one key and the second is answered
+   * with the first one's outcome. APPLIED AND OBSERVED RED.
    */
   test("the same write_id with different content is reuse", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -63,8 +64,8 @@ describe("replay, reuse, and the difference between them", () => {
    * call the second one reuse, answer 409, and the client would dead-letter an
    * op identical to one that already succeeded.
    *
-   * red-proof: replace `stableSerialize` with `JSON.stringify` in
-   * `write-id-registry.ts`.
+   * red-proof: replace `stableSerialize` with `JSON.stringify` inside
+   * `fingerprint`. APPLIED AND OBSERVED RED.
    */
   test("the same op re-serialized with a different key order is a REPLAY, not reuse", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -88,7 +89,7 @@ describe("replay, reuse, and the difference between them", () => {
    * A global key would let one caller learn whether ANOTHER account had used a
    * given write_id, by observing `write_id_reuse` instead of an apply.
    *
-   * red-proof: drop the account from `keyOf`.
+   * red-proof: drop the account from `keyOf`. APPLIED AND OBSERVED RED.
    */
   test("a write_id recorded for one account is fresh for another", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -103,8 +104,9 @@ describe("replay, reuse, and the difference between them", () => {
    * The key is (account, write_id) and it is built length-prefixed, so no pair
    * of account ids can collide by concatenation.
    *
-   * red-proof: build the key as `${accountId}:${writeId}` and this goes red —
-   * account "a" with write id "b:c" collides with account "a:b" and id "c".
+   * red-proof: build the key as `${accountId}:${writeId}` — account "a" with
+   * write id "b:c" then collides with account "a:b" and id "c".
+   * APPLIED AND OBSERVED RED.
    */
   test("account ids containing the separator cannot collide", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -116,9 +118,9 @@ describe("replay, reuse, and the difference between them", () => {
 describe("GC is keyed to epoch advance, not to a timer (ruling B5)", () => {
   /**
    * red-proof: change `row.accountEpoch >= activeEpoch` to `>` in
-   * `collectBelowEpoch`. The row at the active epoch is then collected while a
+   * `collectBelowEpoch` — the row AT the active epoch is then collected while a
    * replay of it is still admitted by the fence, so the next replay applies a
-   * second time.
+   * second time. APPLIED AND OBSERVED RED.
    */
   test("rows below the active epoch go; rows AT it stay", () => {
     const registry = createInMemoryWriteIdRegistry();
@@ -137,7 +139,7 @@ describe("GC is keyed to epoch advance, not to a timer (ruling B5)", () => {
 
   /**
    * red-proof: make `collectBelowEpoch` ignore its account argument and sweep
-   * every account.
+   * every account. APPLIED AND OBSERVED RED.
    */
   test("collecting one account does not touch another", () => {
     const registry = createInMemoryWriteIdRegistry();

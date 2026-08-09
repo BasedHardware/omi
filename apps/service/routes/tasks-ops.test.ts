@@ -143,8 +143,8 @@ describe("an admitted write is APPLIED, not acknowledged", () => {
    * downstream of the fence was ever proven. Here the same request is visible
    * in the store the tasks read route reads from.
    *
-   * red-proof: in `tasks-ops.ts`, return the accepted body without calling
-   * `deps.tasks.apply`. APPLIED AND OBSERVED RED — the record was absent.
+   * red-proof: return an accepted outcome without calling `deps.tasks.apply`.
+   * APPLIED AND OBSERVED RED — the record was absent from the read side.
    */
   test("a create reaches the store the read interface serves from", async () => {
     const booted = boot();
@@ -165,9 +165,9 @@ describe("an admitted write is APPLIED, not acknowledged", () => {
    * Ruling B1. The user's edit IS in the record; reporting anything else would
    * be the false failure the contract exists to prevent.
    *
-   * red-proof: in `tasks-ops.ts`, delete the `seen.kind === "replay"` branch so
-   * a replay falls through to apply. APPLIED AND OBSERVED RED — `idempotent`
-   * came back false and the revision advanced.
+   * red-proofs, both APPLIED AND OBSERVED RED: make the `seen.kind ===
+   * "replay"` branch unreachable so a replay falls through to apply; and key
+   * the registry lookup on a constant instead of the principal's account.
    */
   test("a byte-identical replay is a SUCCESS answered from the registry", async () => {
     const booted = boot();
@@ -189,7 +189,7 @@ describe("an admitted write is APPLIED, not acknowledged", () => {
   });
 
   /**
-   * red-proof: in `tasks-ops.ts`, answer `write_id_reuse` as `conflict`.
+   * red-proof: answer `write_id_reuse` with the `conflict` status and body.
    * APPLIED AND OBSERVED RED.
    */
   test("the same write_id laundering different content is refused, and applies nothing", async () => {
@@ -233,8 +233,9 @@ describe("the account epoch fence runs in the shipped route", () => {
    * process and the same body grammar. A broken route cannot produce the 200,
    * so it cannot produce this pair.
    *
-   * red-proof: in `tasks-ops.ts`, drop the `if (!decision.admitted)` block.
-   * APPLIED AND OBSERVED RED — the stale envelope was applied and answered 200.
+   * red-proof: make the `!decision.admitted` branch unreachable, so an
+   * un-admitted decision falls through to apply. APPLIED AND OBSERVED RED —
+   * the stale envelope was applied and answered 200.
    */
   test("a stale epoch is refused 409 while the same envelope at the active epoch is applied", async () => {
     const booted = boot();
@@ -252,7 +253,7 @@ describe("the account epoch fence runs in the shipped route", () => {
    * whole fence that preserves, and the row is the only surviving copy of what
    * the user wrote.
    *
-   * red-proof: in `tasks-ops.ts`, delete the `preserve_envelope` block.
+   * red-proof: make the `preserve_envelope` branch unreachable.
    * APPLIED AND OBSERVED RED — the export came back empty.
    */
   test("a refused straggler's full envelope is retained, patch included", async () => {
@@ -290,8 +291,9 @@ describe("the account epoch fence runs in the shipped route", () => {
    * ADR-012 §4 and the read door's discipline: no reason, no epoch, no account
    * identifier on the wire.
    *
-   * red-proof: interpolate `decision.reason` into the refusal body in
-   * `fence-http.ts`. APPLIED AND OBSERVED RED.
+   * red-proof: add the fence's internal reason to the refusal body in
+   * `fence-http.ts`. APPLIED AND OBSERVED RED (and it reddens
+   * `fence-contract-agreement.test.ts` too, which is the point of that test).
    */
   test("no refusal body carries a reason, an epoch or an account id", async () => {
     const booted = boot();
@@ -308,8 +310,9 @@ describe("the account epoch fence runs in the shipped route", () => {
    * principal — `epoch-fence.test.ts` pins the same property on the harness,
    * and the registered door must keep it.
    *
-   * red-proof: in `tasks-ops.ts`, move the authentication block below
-   * `applyWriteFence`. APPLIED AND OBSERVED RED.
+   * red-proof: remove the authentication early-return and let the fence run
+   * with an anonymous account id — the shape of "authenticate after the
+   * fence". APPLIED AND OBSERVED RED.
    */
   test("a request refused before the fence produces no fence decision", async () => {
     const booted = boot();
@@ -340,11 +343,9 @@ describe("the door is joinable: producer counters and a consumer observation", (
    * both. Here the consumer side is what this test received; the producer side
    * is what the process counted where the outcome was produced.
    *
-   * red-proof: in `tasks-ops.ts`, move `deps.counter.record(...)` to the top of
-   * the handler and record a literal `"accepted"` — the dispatch-side number
-   * STATE.md forbids. APPLIED AND OBSERVED RED — the server reported 4
-   * accepted for a run in which the client observed 1 accepted, 1 idempotent
-   * and 2 stale_epoch.
+   * red-proof: record a literal `"accepted"` at the TOP of the handler — the
+   * dispatch-side number STATE.md forbids, added alongside the real one.
+   * APPLIED AND OBSERVED RED.
    */
   test("the process's own outcome counts match what the client received", async () => {
     const booted = boot();
@@ -424,7 +425,8 @@ describe("route hardening", () => {
    * Authentication precedes validation: an unauthenticated caller learns
    * nothing about whether its envelope would have parsed.
    *
-   * red-proof: swap the two blocks in `tasks-ops.ts`. APPLIED AND OBSERVED RED.
+   * red-proof: answer the authentication failure with the validation class
+   * instead. APPLIED AND OBSERVED RED.
    */
   test("a garbage body from an unauthenticated caller is authentication, not validation", async () => {
     const booted = boot();
@@ -463,8 +465,7 @@ describe("route hardening", () => {
    * otherwise be silently resolved in the parser's favour.
    *
    * red-proof: parse with `JSON.parse` + `isTrustedWriteOpEnvelope` instead of
-   * `parseWriteOpEnvelopeJson`. APPLIED AND OBSERVED RED on the duplicate-key
-   * case.
+   * `parseWriteOpEnvelopeJson`. APPLIED AND OBSERVED RED.
    */
   test("duplicate keys and pretty-printing are refused as validation", async () => {
     const booted = boot();
@@ -484,8 +485,26 @@ describe("route hardening", () => {
    * The envelope's domain and the path's must agree. A `tasks` envelope posted
    * at another domain's path is malformed for where it was sent.
    *
-   * red-proof: drop the `envelope.domain !== pathDomain` clause. APPLIED AND
-   * OBSERVED RED.
+   * red-proof: drop BOTH clauses of the domain guard
+   * (`!isWritableDomain(pathDomain) || envelope.domain !== pathDomain`).
+   * APPLIED AND OBSERVED RED — the envelope was applied under the wrong path.
+   *
+   * TWO RED-PROOFS ON THIS ASSERTION STAYED GREEN, and they are recorded here
+   * rather than dropped, because what they say about the guard is worth more
+   * than the one that went red:
+   *
+   * - dropping only `envelope.domain !== pathDomain`: STAYED GREEN. The path
+   *   domain `memories` is not writable, so the other clause still refuses.
+   * - dropping only `!isWritableDomain(pathDomain)`: STAYED GREEN. The
+   *   envelope says `tasks` and the path says `memories`, so the disagreement
+   *   clause still refuses.
+   *
+   * The two clauses are individually redundant for every input reachable
+   * TODAY, and no test can separate them, because separating them needs a path
+   * domain that is writable AND different from the envelope's — impossible
+   * while `WRITABLE_DOMAINS` has one member. **Accepted limit, named and dated
+   * 2026-08-09:** the second writable domain is when this becomes testable, and
+   * the lane that adds it owns splitting this assertion in two.
    */
   test("a tasks envelope at another domain's path is validation, not an apply", async () => {
     const booted = boot();
@@ -509,8 +528,18 @@ describe("the vendored write-ops corpus, executed", () => {
    * illustrative), and this test respects that distinction rather than pinning
    * an unratified byte and calling it conformance.
    *
-   * red-proof: change one refusal body constant in the ratified contract's
-   * dist (`WRITE_ERRORS.validation.body`) and every validation row goes red.
+   * red-proofs, both APPLIED AND OBSERVED RED: replace the route's use of
+   * `WRITE_ERRORS.validation.body` with a different two-byte JSON body (five
+   * corpus rows red), and change the conflict status to 418 (one row red).
+   *
+   * ONE STAYED GREEN, recorded because it says something real: dropping the
+   * route's entire path-domain guard leaves this suite green. The corpus row
+   * "memories is not a writable domain" is enforced by the CONTRACT's own
+   * predicate — `isTrustedWriteOpEnvelope` rejects a non-writable
+   * `envelope.domain` before the route looks at the path — so that row proves
+   * the contract, not the route. The route's guard covers a different input
+   * (a valid `tasks` envelope at a foreign path) and is red-proofed in
+   * "route hardening" above.
    */
   test("every corpus case's status and ratified bytes are what this route answers", async () => {
     const corpus = await Bun.file(CORPUS).json() as ReadonlyArray<{

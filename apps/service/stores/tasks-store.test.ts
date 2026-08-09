@@ -16,8 +16,8 @@ const OTHER_ACCOUNT = "acct-store-other";
 
 describe("revisions", () => {
   /**
-   * red-proof: in `tasks-store.ts`, return a fixed string from `nextRevision`.
-   * APPLIED AND OBSERVED RED — "expected 'x' to match /^[0-9a-f]{64}$/".
+   * red-proof: truncate `nextRevision`'s digest to 8 hex.
+   * APPLIED AND OBSERVED RED.
    */
   test("every applied revision is 64 lowercase hex, the ratified grammar", () => {
     const store = createInMemoryTasksStore();
@@ -36,9 +36,8 @@ describe("revisions", () => {
    * produced B, which is the lost-update blind spot the ratified contract says
    * `base_revision` exists to cover.
    *
-   * red-proof: make `nextRevision` hash only `[recordId, content]` (drop the
-   * previous link). APPLIED AND OBSERVED RED — the two A revisions became
-   * equal.
+   * red-proof: make `nextRevision` hash only `[recordId, content]` — drop the
+   * previous link. APPLIED AND OBSERVED RED.
    */
   test("editing a record back to an earlier state does not reuse the earlier revision", () => {
     const store = createInMemoryTasksStore();
@@ -57,7 +56,8 @@ describe("revisions", () => {
    * clock or a random nonce in the revision would make a conformance corpus
    * unpinnable.
    *
-   * red-proof: mix `Date.now()` into `nextRevision`. APPLIED AND OBSERVED RED.
+   * red-proof: mix `Math.random()` into `nextRevision`'s input.
+   * APPLIED AND OBSERVED RED.
    */
   test("the same sequence of ops produces the same revisions in a fresh store", () => {
     const run = () => {
@@ -73,9 +73,8 @@ describe("revisions", () => {
 
 describe("base_revision is a precondition, and it is the ONLY precondition", () => {
   /**
-   * red-proof: in `preconditionHolds`, `return true` unconditionally. APPLIED
-   * AND OBSERVED RED — the stale patch applied and the conflict expectation
-   * failed.
+   * red-proof: in `preconditionHolds`, `return true` unconditionally.
+   * APPLIED AND OBSERVED RED.
    */
   test("a patch whose base_revision does not match the record is a conflict", () => {
     const store = createInMemoryTasksStore();
@@ -132,8 +131,8 @@ describe("deletes", () => {
    * a null revision". A deleted record has no current revision, and minting one
    * would hand a client a precondition token for something that is not there.
    *
-   * red-proof: return the previous revision instead of null on delete. APPLIED
-   * AND OBSERVED RED.
+   * red-proof: return the record's previous revision instead of null on delete.
+   * APPLIED AND OBSERVED RED.
    */
   test("a delete answers a null revision and removes the record from the read side", () => {
     const store = createInMemoryTasksStore();
@@ -177,8 +176,7 @@ describe("the read interface the tasks read route consumes", () => {
    * lost a record.
    *
    * red-proof: in `apply`, set `first_seen_seq: sequence` unconditionally
-   * (rather than keeping the record's original). APPLIED AND OBSERVED RED —
-   * patching the first record moved it to the end.
+   * rather than keeping the record's original. APPLIED AND OBSERVED RED.
    */
   test("editing a record does not move it in the read order", () => {
     const store = createInMemoryTasksStore();
@@ -191,8 +189,8 @@ describe("the read interface the tasks read route consumes", () => {
   /**
    * A consumer cannot mutate the store by holding what it read.
    *
-   * red-proof: return the live array from `listRecords` instead of a frozen
-   * copy. APPLIED AND OBSERVED RED.
+   * red-proofs, both APPLIED AND OBSERVED RED: drop the `Object.freeze` around
+   * the sorted copy, and return the sorted array without freezing it at all.
    */
   test("the returned page is frozen and detached from the store", () => {
     const store = createInMemoryTasksStore();
@@ -208,8 +206,8 @@ describe("the read interface the tasks read route consumes", () => {
    * field — everything the read route projects comes either from the bag or
    * from a store-owned fact, and nothing is invented in between.
    *
-   * red-proof: have `apply` stamp `updated_at: Date.now()` into the stored
-   * content. APPLIED AND OBSERVED RED.
+   * red-proof: have `apply` stamp an `updated_at` into the stored content.
+   * APPLIED AND OBSERVED RED.
    */
   test("the stored content is exactly the field bag that arrived", () => {
     const store = createInMemoryTasksStore();
