@@ -59,20 +59,6 @@ function SetupFirebase {
 }
 
 
-function SetupFirebaseWithServiceAccountIos {
-    dart pub global activate flutterfire_cli
-
-    flutterfire config `
-        --platforms="ios" `
-        --out="lib/firebase_options_prod.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.beta" `
-        --ios-out="ios/Config/Prod/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware" `
-        --ios-target="Runner" `
-        --yes
-}
-
 function SetupFirebaseWithServiceAccountAndroid {
     dart pub global activate flutterfire_cli
 
@@ -106,7 +92,7 @@ function SetupAppEnv {
         [string]$ApiBaseUrl = ""
     )
     if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
-        $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "10.0.2.2" }
+        $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "127.0.0.1" }
         $ApiBaseUrl = "http://$devHost`:8000/"
     }
     if ($Profile -eq "mobile_beta") {
@@ -189,6 +175,14 @@ $platform = if ($args.Count -eq 0) {
 # Replace the existing switch block with this:
 switch ($platform.ToLower()) {
     "ios" {
+        if ($args.Count -gt 1) {
+            if ($args[1].ToLower() -eq "beta") {
+                Write-Error "ios beta is only supported by bash setup.sh on macOS; use 'bash setup.sh ios beta'."
+            } else {
+                Write-Error "Unsupported iOS setup profile '$($args[1])'."
+            }
+            exit 1
+        }
         Write-Host "`nSetting up iOS platform..."
         SetupFirebase
         SetupAppEnv

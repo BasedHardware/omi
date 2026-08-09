@@ -218,6 +218,7 @@ case "${1}" in
         && run_build_ios prod --dart-define=OMI_APP_PROFILE=mobile_beta
     else
       setup_firebase \
+        && bash scripts/generate_ios_dev_info_plist.sh \
         && generate_ios_custom_config Dev omi-dev \
         && setup_app_env local_dev \
         && run_build_ios dev \

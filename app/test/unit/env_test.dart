@@ -71,7 +71,10 @@ void main() {
 
     test('local profile rejects a production Firebase project', () {
       expect(
-        () => Env.validateFirebaseProject(projectId: 'based-hardware'),
+        () => Env.validateFirebaseProject(
+          projectId: 'based-hardware',
+          configuredProfile: AppEnvironmentProfile.localDev,
+        ),
         throwsStateError,
       );
     });

@@ -74,10 +74,14 @@ abstract class Env {
     }
   }
 
-  static void validateFirebaseProject({required String projectId}) {
-    if (projectId != profile.firebaseProjectId) {
+  static void validateFirebaseProject({
+    required String projectId,
+    AppEnvironmentProfile? configuredProfile,
+  }) {
+    final effectiveProfile = configuredProfile ?? profile;
+    if (projectId != effectiveProfile.firebaseProjectId) {
       throw StateError(
-        'Mobile profile ${profile.name} requires Firebase project ${profile.firebaseProjectId}, '
+        'Mobile profile ${effectiveProfile.name} requires Firebase project ${effectiveProfile.firebaseProjectId}, '
         'but the app was initialized with $projectId.',
       );
     }

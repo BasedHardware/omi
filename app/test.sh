@@ -28,7 +28,7 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist macos/GoogleService-Info.plist
-  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Dev/
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Dev/GoogleService-Info.plist
 
   mkdir -p android/app/src/prod/ ios/Config/Prod/ macos/Config/Prod
   cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_prod.dart
