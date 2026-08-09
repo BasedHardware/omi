@@ -1239,7 +1239,7 @@ export default function AnalyticsPage() {
                 <Legend />
                 <Bar yAxisId="left" dataKey="mentorSent" name="Omi says sent" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
                 <Bar yAxisId="left" dataKey="marketplaceMentorSent" name="Marketplace sent" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
-                <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#14b8a6" strokeWidth={2} dot={false} />
                 <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMarketplace" name="Marketplace unique users" stroke="#fbbf24" strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -2709,7 +2709,7 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
                   <Legend />
                   <Bar yAxisId="count" dataKey="thumbs_up" name="👍 Likes" fill="#22c55e" radius={[4, 4, 0, 0]} />
                   <Bar yAxisId="count" dataKey="thumbs_down" name="👎 Dislikes" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                  <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
