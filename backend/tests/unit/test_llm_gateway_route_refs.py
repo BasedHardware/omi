@@ -61,15 +61,17 @@ def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
 
 def test_route_ref_preserves_provider_route_options():
     openrouter_ref = get_route_ref('wrapped_analysis')
-    gemini_ref = get_route_ref('followup')
+    followup_ref = get_route_ref('followup')
 
     assert isinstance(openrouter_ref, ExplicitRouteRef)
     assert openrouter_ref.provider == 'openrouter'
+    assert openrouter_ref.model == 'gpt-5.6-luna'
     assert openrouter_ref.options == {'temperature': 0.7}
 
-    assert isinstance(gemini_ref, ExplicitRouteRef)
-    assert gemini_ref.provider == 'gemini'
-    assert gemini_ref.options == {'thinking_budget': 0}
+    assert isinstance(followup_ref, ExplicitRouteRef)
+    assert followup_ref.provider == 'openrouter'
+    assert followup_ref.model == 'gpt-5.6-luna'
+    assert followup_ref.options == {}
 
 
 @pytest.mark.parametrize(

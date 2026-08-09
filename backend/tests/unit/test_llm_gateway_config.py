@@ -66,11 +66,14 @@ def test_memory_l2_gateway_lane_resolves_to_luna():
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('translation') == 'gemini-2.5-flash-lite'
-    assert get_provider('translation') == 'gemini'
+    assert get_model('translation') == 'gpt-5.6-luna'
+    assert get_provider('translation') == 'openrouter'
     lane = config.lanes['omi:auto:translation']
     assert lane.capabilities.translation is True
     assert lane.capabilities.structured_output.value == 'json_schema'
+    route = config.route_artifacts[lane.active_route]
+    assert route.primary.provider == 'openrouter'
+    assert route.primary.model == 'openai/gpt-5.6-luna'
 
 
 def test_translation_capability_requires_json_schema_output():

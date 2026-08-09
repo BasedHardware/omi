@@ -76,15 +76,23 @@ class TestP1_GetLlmRouting:
         assert response.content.strip(), f"{feature} returned empty response"
         print(f"  P1 {feature} ({get_model(feature)}): {response.content.strip()[:60]}")
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set")
-    def test_gemini_features_respond(self):
-        """Gemini features in premium profile (flash-lite) respond to real prompts."""
-        gemini_features = [f for f, (m, p) in MODEL_QOS_PROFILES['premium'].items() if p == 'gemini']
-        for feature in gemini_features:
+    def test_former_gemini_features_respond_via_openrouter_luna(self):
+        """Former Gemini-direct product features now respond via OpenRouter Luna."""
+        former_gemini_features = [
+            'session_titles',
+            'followup',
+            'onboarding',
+            'app_integration',
+            'trends',
+            'translation',
+        ]
+        for feature in former_gemini_features:
+            assert get_provider(feature) == 'openrouter'
+            assert get_model(feature) == 'gpt-5.6-luna'
             llm = get_llm(feature)
             response = llm.invoke(SIMPLE_PROMPT)
             assert response.content.strip(), f"{feature} returned empty"
-            print(f"  P1 gemini {feature} ({get_model(feature)}): {response.content.strip()[:60]}")
+            print(f"  P1 luna {feature} ({get_model(feature)}): {response.content.strip()[:60]}")
 
 
 # ---------------------------------------------------------------------------
@@ -247,14 +255,15 @@ class TestP6_StructuredOutput:
         assert isinstance(result, self.SimpleOutput)
         print(f"  P6 structured external_structure: {result.word}")
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set — trends is on Gemini in premium")
-    def test_structured_output_trends_gemini(self):
-        """trends is on gemini-2.5-flash-lite in premium — test SO on Gemini."""
+    def test_structured_output_trends_luna(self):
+        """trends uses OpenRouter Luna structured output in premium."""
+        assert get_model('trends') == 'gpt-5.6-luna'
+        assert get_provider('trends') == 'openrouter'
         llm = get_llm('trends')
         structured = llm.with_structured_output(self.SimpleOutput)
         result = structured.invoke("Reply with a JSON object containing a single word: hello")
         assert isinstance(result, self.SimpleOutput)
-        print(f"  P6 structured trends (gemini): {result.word}")
+        print(f"  P6 structured trends (luna): {result.word}")
 
     def test_structured_output_features_set(self):
         assert _STRUCTURED_OUTPUT_FEATURES == {

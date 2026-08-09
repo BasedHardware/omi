@@ -70,7 +70,7 @@ model_config_features:
     pinned:
       - fair_use
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; managed OpenAI-family text features resolve to OpenRouter openai/gpt-5.6-luna; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed; OpenAI-family BYOK on OpenRouter-hosted routes remaps to direct OpenAI keys.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; managed product text features resolve to OpenRouter openai/gpt-5.6-luna (including former Gemini-lite and wrapped_analysis routes); web_search remains Perplexity; residual gateway Gemini native Vertex paths are out of model_config; Gemini BYOK remains unsupported and fails closed; OpenAI-family BYOK on OpenRouter-hosted routes remaps to direct OpenAI keys.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane

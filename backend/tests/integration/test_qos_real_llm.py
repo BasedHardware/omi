@@ -155,12 +155,12 @@ class TestPremiumVision:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gemini-2.5-flash-lite features (free-text cost optimization)
+# Premium profile — former Gemini-lite features (now OpenRouter Luna)
 # ---------------------------------------------------------------------------
-class TestPremiumGemini:
-    """Test gemini-2.5-flash-lite features in premium profile respond to real prompts."""
+class TestPremiumFormerGeminiFeatures:
+    """Former Gemini-lite product features respond via OpenRouter Luna."""
 
-    GEMINI_FEATURES = [
+    FORMER_GEMINI_FEATURES = [
         'session_titles',
         'followup',
         'onboarding',
@@ -168,11 +168,11 @@ class TestPremiumGemini:
         'trends',
     ]
 
-    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set")
-    @pytest.mark.parametrize("feature", GEMINI_FEATURES)
-    def test_gemini_feature_responds(self, feature):
+    @pytest.mark.parametrize("feature", FORMER_GEMINI_FEATURES)
+    def test_former_gemini_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gemini-2.5-flash-lite', f"{feature} should be gemini-2.5-flash-lite in premium, got {model}"
+        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
+        assert get_provider(feature) == 'openrouter'
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -180,14 +180,15 @@ class TestPremiumGemini:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — OpenRouter (only wrapped_analysis)
+# Premium profile — wrapped_analysis via OpenRouter Luna
 # ---------------------------------------------------------------------------
 class TestPremiumOpenRouter:
-    """Test OpenRouter feature responds."""
+    """Test OpenRouter Luna feature responds."""
 
     def test_wrapped_analysis(self):
         model = get_model('wrapped_analysis')
-        assert model == 'gemini-3-flash-preview'
+        assert model == 'gpt-5.6-luna'
+        assert get_provider('wrapped_analysis') == 'openrouter'
         llm = get_llm('wrapped_analysis')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"wrapped_analysis ({model}) returned empty response"
@@ -245,8 +246,6 @@ class TestProfileRouting:
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['premium'].values()}
         expected = {
             'gpt-5.6-luna',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected, f"Unexpected premium variants: {distinct}"
@@ -255,8 +254,6 @@ class TestProfileRouting:
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['max'].values()}
         expected = {
             'gpt-5.6-luna',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected, f"Unexpected max variants: {distinct}"
@@ -265,8 +262,6 @@ class TestProfileRouting:
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['byok'].values()}
         expected = {
             'gpt-5.6-luna',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected, f"Unexpected byok variants: {distinct}"

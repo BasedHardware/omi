@@ -52,10 +52,10 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 
 # All QoS profiles deliberately share this map. Keeping independent copies below
 # retains profile selection semantics while preventing a higher tier or BYOK
-# route from reintroducing a retired direct-OpenAI text model. Managed
-# OpenAI-family text is gpt-5.6-luna via OpenRouter only.
+# route from reintroducing a retired direct-provider text model. Managed product
+# text is gpt-5.6-luna via OpenRouter only; web_search stays on Perplexity.
 _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
-    # OpenAI-family — managed Luna via OpenRouter
+    # Managed product text — Luna via OpenRouter
     'conv_action_items': ('gpt-5.6-luna', 'openrouter'),
     'conv_structure': ('gpt-5.6-luna', 'openrouter'),
     'conv_app_result': ('gpt-5.6-luna', 'openrouter'),
@@ -86,15 +86,15 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_category': ('gpt-5.6-luna', 'openrouter'),
     'smart_glasses': ('gpt-5.6-luna', 'openrouter'),
     'persona_chat': ('gpt-5.6-luna', 'openrouter'),
-    # Non-OpenAI routes remain intentionally unchanged.
-    'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
-    'followup': ('gemini-2.5-flash-lite', 'gemini'),
-    'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
-    'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
-    'trends': ('gemini-2.5-flash-lite', 'gemini'),
-    'translation': ('gemini-2.5-flash-lite', 'gemini'),
+    'session_titles': ('gpt-5.6-luna', 'openrouter'),
+    'followup': ('gpt-5.6-luna', 'openrouter'),
+    'onboarding': ('gpt-5.6-luna', 'openrouter'),
+    'app_integration': ('gpt-5.6-luna', 'openrouter'),
+    'trends': ('gpt-5.6-luna', 'openrouter'),
+    'translation': ('gpt-5.6-luna', 'openrouter'),
     'chat_agent': ('gpt-5.6-luna', 'openrouter'),
-    'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+    'wrapped_analysis': ('gpt-5.6-luna', 'openrouter'),
+    # Provider search stays on Perplexity; it is not a general text-generation route.
     'web_search': ('sonar-pro', 'perplexity'),
 }
 
