@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.6.0"
+    "version": "0.7.0"
   },
   "repository": "BasedHardware/omi",
   "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
@@ -34,8 +34,8 @@
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
-      "sha256": "21afd477e7be3911ad133851f7383c9b082152f152a54b26787bd71182ebd16e",
-      "bytes": 18101
+      "sha256": "fa4ac48f893ede966d2374c5e19d783d89886027446fadb12d2ba21f19ce78c6",
+      "bytes": 19902
     },
     {
       "path": "fixtures/clean-consumer/tsconfig.json",
@@ -99,7 +99,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "64eefdb2354f53cdf1b13c0f2e2d2d4523dfc48efb102fa785e85e47b9a64b43",
+      "sha256": "96af68293b006d3f6350ee4a654f13dec8940fdaa929b3e8d1271220163c0714",
       "bytes": 2412
     },
     {
@@ -109,8 +109,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "bf8b20e19cdfc159b29d614aea6f18e4239c20086786040191fd84c6ef5790bb",
-      "bytes": 8629
+      "sha256": "88aff3cbfe24454157fd05485a8431c6eaccc89ed51e6b810311389054e11837",
+      "bytes": 10819
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -124,8 +124,8 @@
     },
     {
       "path": "scripts/package-boundary.mjs",
-      "sha256": "9fadc94078df5d20f92d3e68da49e97725849b1af99be5675374c5b99b065d45",
-      "bytes": 14265
+      "sha256": "d6d0728c77160497e47336a55a649ad750d1c96d3154fc3d0ea1f47b2010c4d5",
+      "bytes": 15473
     },
     {
       "path": "scripts/provenance.mjs",
@@ -149,8 +149,8 @@
     },
     {
       "path": "src/projections/tasks.ts",
-      "sha256": "8b830a795e5cdbd9f6b9dfcf60feed03ca366b38bf40d44d0a992cde0690bb5d",
-      "bytes": 22302
+      "sha256": "a53f82e2c58e7be39d5e83f90d0ee71977ab020032e9b5ce20ac2e17559edf8c",
+      "bytes": 27411
     },
     {
       "path": "src/recall/trace.ts",
@@ -169,8 +169,8 @@
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "279bc7a0186479280c35a56299ffe31e7b1eb3968843730fa9cdb23c21bffb07",
-      "bytes": 31957
+      "sha256": "4728bbf030190cefd1565864a26b97212be92ba71ded3b8f4b528207637382ab",
+      "bytes": 35884
     },
     {
       "path": "tsconfig.base.json",
@@ -183,5 +183,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "073cd0e637b2ec0775b81dc30430ae22c7d51b54af3deab707cd77ba6783f8f2"
+  "sourceDigest": "aab977dc88d08566797ffb46f496165cda2841bb44587cf6d317c07d1642326a"
 }

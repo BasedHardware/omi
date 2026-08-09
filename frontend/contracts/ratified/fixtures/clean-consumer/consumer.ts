@@ -25,6 +25,7 @@ import {
   parseTaskFrontier,
   parseTaskItemId,
   parseTaskPageJson,
+  readTaskPageAccountEpoch,
   type TaskRead,
 } from "@omi-core/ratified-contracts/projections/tasks";
 import {
@@ -361,11 +362,47 @@ type TaskItemShapeMustStayFrozen = AssertNever<ExactKeys<
   "id" | "description" | "completed" | "completedAt" | "dueAt" | "owner" | "source"
   | "provenance" | "sortOrder" | "indentLevel" | "createdAt" | "updatedAt" | "revision"
 >>;
-type TaskPageShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Page, "contractVersion" | "items" | "window" | "completeness" | "absence">>;
+// `accountEpoch` joins the frozen key list because it is now part of the
+// shape (D3). It is OPTIONAL — see below, where a page WITHOUT it must still
+// typecheck, which is the property that makes this bump additive rather than
+// a lockstep deploy.
+type TaskPageShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Page, "contractVersion" | "items" | "window" | "completeness" | "absence" | "accountEpoch">>;
 type TaskWindowShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Window, "status" | "complete" | "hasMore" | "nextCursor">>;
 void (null as unknown as TaskItemShapeMustStayFrozen);
 void (null as unknown as TaskPageShapeMustStayFrozen);
 void (null as unknown as TaskWindowShapeMustStayFrozen);
+
+// D3's account epoch, from a CLEAN CONSUMER's side — the one place that proves
+// the bump is additive rather than merely declared to be.
+//
+// (a) A page WITHOUT the field still typechecks and still parses. That is
+//     precisely what a 0.6.0 server serves, and a 0.7.0 client must keep
+//     reading it.
+const taskPageWithoutEpoch: TaskRead.Page = taskPage;
+if (!parseTaskPageJson(JSON.stringify(taskPageWithoutEpoch))) {
+  throw new Error("a page without an account epoch must still parse — otherwise this bump is breaking");
+}
+if (readTaskPageAccountEpoch(taskPageWithoutEpoch) !== null) {
+  throw new Error("absent must read as null, never as zero");
+}
+
+// (b) A page WITH the field parses, and the reader returns it.
+const taskPageWithEpoch: TaskRead.Page = { ...taskPage, accountEpoch: 7 };
+if (!parseTaskPageJson(JSON.stringify(taskPageWithEpoch))) {
+  throw new Error("a page carrying an account epoch must parse");
+}
+if (readTaskPageAccountEpoch(taskPageWithEpoch) !== 7) {
+  throw new Error("the account epoch must read back exactly");
+}
+
+// (c) A present-but-junk epoch is refused, not ignored. A server that ships a
+//     string would otherwise have a client stamping write envelopes with it.
+if (parseTaskPageJson(JSON.stringify({ ...taskPage, accountEpoch: "7" }))) {
+  throw new Error("a non-integer account epoch must be refused");
+}
+if (parseTaskPageJson(JSON.stringify({ ...taskPage, accountEpoch: -1 }))) {
+  throw new Error("a negative account epoch must be refused");
+}
 
 // @ts-expect-error a complete tasks window cannot advertise a continuation cursor.
 const invalidTaskComplete: TaskRead.Page = { ...taskPage, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
