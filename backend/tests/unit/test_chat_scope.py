@@ -88,7 +88,7 @@ def test_get_conversations_tool_honors_conversation_scope():
         "is_locked": False,
     }
     with (
-        patch.object(tools.conversations_db, "get_conversation", return_value=conv) as get_one,
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]) as get_one,
         patch.object(tools.conversations_db, "get_conversations") as get_many,
         patch.object(
             tools,
@@ -103,7 +103,7 @@ def test_get_conversations_tool_honors_conversation_scope():
     ):
         out = tools.get_conversations_tool.invoke({}, config=cfg)
     assert "SCOPED_ONLY" in out
-    get_one.assert_called_once_with("u1", "only-me")
+    get_one.assert_called_once_with("u1", ["only-me"], include_discarded=True)
     get_many.assert_not_called()
 
 
@@ -122,7 +122,7 @@ def test_get_conversations_tool_hides_discarded_under_scope():
         "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
     }
     with (
-        patch.object(tools.conversations_db, "get_conversation", return_value=conv),
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
         patch.object(tools.conversations_db, "get_conversations") as get_many,
     ):
         out = tools.get_conversations_tool.invoke({}, config=cfg)
@@ -153,7 +153,7 @@ def test_get_conversations_tool_fail_closed_on_timeframe_scope():
         "is_locked": False,
     }
     with (
-        patch.object(tools.conversations_db, "get_conversation", return_value=conv),
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
         patch.object(tools, "conversation_matches_date_range", return_value=False),
         patch.object(tools.conversations_db, "get_conversations") as get_many,
         patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
@@ -191,7 +191,7 @@ def test_get_action_items_tool_forces_conversation_scope():
     with patch.object(action_tools.action_items_db, "get_action_items", return_value=[]) as get_items:
         out = action_tools.get_action_items_tool.invoke({}, config=cfg)
     assert get_items.call_args.kwargs.get("conversation_id") == "only-me"
-    assert "no action items" in out.lower() or "action item" in out.lower() or out
+    assert "no action items found" in out.lower()
 
 
 def test_get_action_items_tool_rejects_foreign_conversation_under_scope():
@@ -228,9 +228,11 @@ def test_search_memories_tool_fail_closed_on_use_memory_under_timeframe():
         (),
         {"read_decision": MemoryReadDecision.USE_MEMORY, "text": "LEAKED", "fallback_reason": None},
     )()
-    with patch.object(memory_tools, "pin_memory_system", return_value=MemorySystem.LEGACY), patch.object(
-        memory_tools, "search_memory_default_chat_memories_vector_decision_text", return_value=fake
-    ), patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"):
+    with (
+        patch.object(memory_tools, "pin_memory_system", return_value=MemorySystem.LEGACY),
+        patch.object(memory_tools, "search_memory_default_chat_memories_vector_decision_text", return_value=fake),
+        patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"),
+    ):
         out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
     assert "timeframe" in out.lower()
     assert "LEAKED" not in out

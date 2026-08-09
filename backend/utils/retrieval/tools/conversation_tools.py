@@ -53,7 +53,10 @@ def _scoped_conversation_fetch(
     statuses: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Load one owned conversation and enforce the same visibility filters as list fetch."""
-    conv = conversations_db.get_conversation(uid, conversation_id)
+    # Prefer get_conversations_by_id so missing stored `id` is backfilled from the doc key
+    # (same as list/search hydration); get_conversation alone can silently drop those rows.
+    convs = conversations_db.get_conversations_by_id(uid, [conversation_id], include_discarded=True)
+    conv = convs[0] if convs else None
     if not conv or conv.get('is_locked', False):
         return [], f"No accessible conversation found for scoped id {conversation_id}."
     if not include_discarded and conv.get('discarded', False):

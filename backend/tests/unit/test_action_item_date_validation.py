@@ -122,6 +122,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
     "utils.retrieval.agentic",
+    "utils.retrieval.chat_scope",
     "utils.conversations",
     "utils.conversations.render",
     "langchain_core",
@@ -275,6 +276,22 @@ import contextvars
 
 agentic_stub = _stub_module("utils.retrieval.agentic")
 agentic_stub.agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope_stub = _stub_module("utils.retrieval.chat_scope")
+_chat_scope_stub.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope_stub.chat_scope_from_config = _chat_scope_from_config
 
 # ---------------------------------------------------------------------------
 # Load production code

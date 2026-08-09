@@ -52,6 +52,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     SafetyGuardError,
@@ -1356,8 +1357,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
-
-    from utils.retrieval.chat_scope import build_chat_scope
 
     chat_scope = build_chat_scope(context)
 
