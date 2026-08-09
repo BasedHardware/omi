@@ -378,20 +378,21 @@ def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
             # never reset a claimed/running/completed job backwards.
             if isinstance(existing_job_id, str) and existing_job_id:
                 status = data.get('wipe_status')
-                # A retry can recover a request that crashed after intent was
-                # committed but before it promoted that exact job to pending. The
-                # promotion below is itself job-id-fenced and transactional, so
-                # concurrent retries can race safely: exactly one gets ``True``
-                # and dispatches.
+                # ``deleting_auth`` is a legacy pre-worker state. New admissions
+                # create ``pending`` atomically, but a retry may safely promote an
+                # older durable intent because the worker owns Firebase Auth
+                # deletion.
                 if status == 'deleting_auth':
+                    tx.update(path, {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)})
                     return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
                 if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
                     return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
         tx.set(
             path,
             {
-                'wipe_status': 'deleting_auth',
+                'wipe_status': 'pending',
                 'wipe_intent_at': datetime.now(timezone.utc),
+                'wipe_queued_at': datetime.now(timezone.utc),
                 'wipe_job_id': wipe_job_id,
             },
             merge=True,
