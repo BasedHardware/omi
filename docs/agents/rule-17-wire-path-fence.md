@@ -5,7 +5,7 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 7).** Landed 2026-08-08 with the W4
+Status: **PROVISIONAL, HELD (round 8).** Landed 2026-08-08 with the W4
 rebuild; it runs immediately, per §8, and continues to run at full strength
 while held — holding is not disabling. Rounds 1–4 each found a working
 bypass in a comment-marker escape hatch (file-wide scope; a bare substring
@@ -17,13 +17,18 @@ a ruling, not a bypass:** the marker mechanism was replaced entirely with a
 granularity (two constructions on one physical line sharing a registry
 key), fixed by making that shape an unconditional failure — see
 **AUDIT-17 — round 6**. Round 7 found that the round-6 fix over-corrected:
-the failure fires on ANY file combining two of the four server-construction
+the failure fired on ANY file combining two of the four server-construction
 patterns on one line, including the ordinary, common
-`Bun.serve({ fetch: new Hono().fetch })` idiom, **whether or not the file
-names the registered wire path at all** — a false positive with tree-wide
-blast radius, not a bypass. See **AUDIT-17 — round 7**. The DOOR lane wrote
-the original; a non-author (the coordinator) wrote every fix and the
-round-5 replacement, and said so
+`Bun.serve({ fetch: new Hono().fetch })` idiom, whether or not the file
+named the registered wire path at all — a false positive with tree-wide
+blast radius, not a bypass, fixed by narrowing the *count* to
+socket-binding patterns while keeping *detection* at all four — see
+**AUDIT-17 — round 7**. Round 8 found that narrowing reopened round 6's own
+class for the patterns it excluded: two independent, unbound `new Hono(`
+routers sharing a line with an existing hatch are invisible to the
+ambiguity check, because it now only counts socket binds — see
+**AUDIT-17 — round 8**. The DOOR lane wrote the original; a non-author (the
+coordinator) wrote every fix and the round-5 replacement, and said so
 explicitly rather than promoting their own work each time. If it fires on
 another lane, that is a swarm-wide blocker, never something to route around,
 regardless of held status.
@@ -1091,3 +1096,140 @@ fix) and one design ruling, none found by reading. The rate of new findings
 has not gone to zero; the last two rounds were opposite-direction problems
 in the exemption path's immediate neighborhood, which reads as the
 mechanism settling, not as it being sound yet.
+
+## AUDIT-17 — round 8, non-author re-audit of `d3389795f0`, 2026-08-08
+
+The coordinator reproduced round 7's false positive before fixing it
+(confirmed `grep -c memories` on the audit's own fixture returns 0, and
+lint fired anyway), then split `serverConstructionPatterns` (unchanged,
+still four — used for site *detection*) from a new `socketBindPatterns`
+(three — `Bun.serve(`, `Deno.serve(`, `createServer(`, used only for the
+*ambiguity count*), with an explicit converse test pinning that a
+Hono-only door that never calls a binder still counts as a site.
+
+**All four red-proofs in `d3389795f0`'s commit message reproduced, each
+against the real files or a standalone fixture:**
+
+- `Bun.serve({ fetch: new Hono().fetch })`, confirmed to contain zero
+  occurrences of "memories" → **stays green** (round 7's false positive
+  fixed).
+- Two real `Bun.serve(` calls crammed onto the real, hatched
+  `live-server.ts:67` (round 6's original mutation) → **still fires**,
+  naming that line.
+- A Hono-only door naming the path, never calling any binder → **still
+  fires** — detection breadth is genuinely unchanged, not merely claimed.
+- Reverting `constructionsOn` to sum all four patterns again (not just
+  `socketBindPatterns`) → exactly **1 of 12** tests goes red — the
+  round-7 false-positive test, and only it. Restored; 12/12 green.
+
+**New finding, round 8: narrowing the count to `socketBindPatterns`
+reopened round 6's exact class for the patterns it excluded.**
+`serverSites` (site detection, used both to decide *what needs a hatch*
+and to drive the ambiguity check's iteration) still uses `.some(...)`
+across all four patterns — a boolean, not a count. The ambiguity check
+now only counts `socketBindPatterns` matches, so two independent,
+**unbound** `new Hono(` calls on one physical line are invisible to it:
+`constructionsOn` returns 0 (no socket binds), so the check never
+considers that line ambiguous, even though `serverSites` treats it as
+exactly one site — same as any other line.
+
+Demonstrated with a temporary, self-declared `WIRE_PATH_HATCHES` row
+simulating a legitimate hatch on a Hono-only site (there is no real one
+in the tree today, so this could not be shown against existing code the
+way round 6's finding could):
+
+```ts
+const legit = new Hono(); const rogue = new Hono();
+rogue.get("/v1/memories", () => new Response(JSON.stringify({ id: "raw-fixture-row-id" })));
+```
+
+With a hatch row registered for `legit`'s line (simulating "this Hono
+instance is a fixture/test double, never bound, exempt for a stated
+reason"), the same line's second, wholly independent `rogue` router —
+naming the registered path and never reaching the registered route —
+**is silently exempted by the same row.** Without the hatch row, the
+identical file correctly fires. Reverted the temporary row; `diff`
+against the pre-mutation checker was empty.
+
+**Severity.** Structurally identical to round 6 — needs a pre-existing,
+legitimate hatch to hide behind — but currently *more* latent than round
+6 was: the one real hatch in the tree binds a socket (`Bun.serve`), so it
+sits in the still-covered `socketBindPatterns` subset and this specific
+gap is not reachable against any file in the tree today. It becomes live
+the first time anyone legitimately hatches a Hono-only site.
+
+**Recommended fix**, keeping round 7's real insight (a router nested
+inside its own binder's call is not a second server) while restoring
+round 6's actual guarantee (no two independent sites share a hatch key):
+fail when `socketBindPatterns` matches 2+ times on a line (unchanged), OR
+when there are zero socket binds on the line and `new Hono(` matches 2+
+times (two independent, unbound routers — genuinely ambiguous, since
+neither is any other one's argument). The one case this does not
+resolve, and which is narrower still — a single real socket bind sharing
+a line with a genuinely unrelated, independent router that is *not* that
+bind's own argument — is a residual gap on the order of the already-
+accepted same-construction-behavior-drift limitation, not something this
+round's fix needs to chase to land.
+
+### Verdict: HOLD (round 8)
+
+Rounds 1–7 all stay closed; nothing here reopens any of them. This is
+round 6's class, in the one place round 7's narrowing left uncovered —
+not a new mechanism failure, a gap at the seam between two correct-in-
+isolation fixes.
+
+**What would unblock promotion:** land the two-part ambiguity condition
+above, re-run this round's two-independent-Hono-routers fixture against
+it and confirm it now fires (with a hatch row present) while a genuine
+`Bun.serve({ fetch: new Hono().fetch })` and a genuine Hono-only door
+each still pass, re-run all existing red-proofs, non-author re-reads.
+
+**Blast radius if this HOLD is wrong:** small — additive to the ambiguity
+check only, does not touch detection, hatch resolution, or staleness, and
+does not change any case already verified correct across eight rounds.
+Not reachable against any file in the tree today.
+
+**What is still open after eight rounds:** the unbound-router-pair gap
+in the ambiguity check (blocking). Everything recorded open after round 4
+that rounds 5–7 did not touch — the pre-existing multi-server false-
+positive imprecision, the same-construction-behavior-drift gap, and rule
+16's unfixed round-2-class hatch — remains open and unchanged.
+
+### What eight rounds on one fence actually say
+
+The coordinator asked for this in their own words, and it is worth
+recording plainly rather than only in the per-round log above: **every
+one of the coordinator's seven claims of "this closes it" was wrong**,
+in both directions, and none of the eight findings — four bypasses in the
+deleted marker mechanism, one granularity gap in the registry that
+replaced it, one over-correction of that fix into a false positive, one
+narrowing of *that* fix that reopened the original class for a different
+pattern subset — was found by reading a diff. Every one was found by
+building the specific input the fix's own stated boundary implied should
+be safe, and running it. That includes this round's: the round-7 fix's
+own header comment already said "narrowing the count must not narrow
+what counts as a site," which is the correct principle, applied one
+pattern-subset short of everywhere it needed to hold.
+
+The direction of the errors is itself informative. Rounds 1–4 were all
+under-firing (the fence missed something it should have caught); round 6
+was under-firing again after the marker was removed; round 7 was over-
+firing (the fence caught something it shouldn't have); round 8 is under-
+firing once more, but narrower and more localized than any of rounds
+1–4. That is not a fence converging monotonically toward correctness — it
+is a fence whose failure mode keeps changing shape as each specific
+defect closes, which is exactly what "no bound short of a real lexer" and
+"no bound short of exhaustively reasoning about every pattern
+combination" predict, for the two different mechanisms (the marker, and
+now the multi-pattern ambiguity count) that have each carried this
+property in turn. The lesson is not "this author is unreliable" — every
+individual fix was correct against the case that motivated it, verified
+independently each time, and two of the eight findings were the author's
+own self-caught mistakes reported before the audit even saw them. The
+lesson is that **confidence about a hand-written guard's completeness is
+not evidence**, regardless of who holds it or how carefully the previous
+round was reasoned through, and this fence's own audit history is now the
+clearest demonstration of that claim this program has produced: eight
+rounds, eight times a stated boundary turned out to have an edge nobody
+had constructed yet, zero of them caught by re-reading code that had
+already been read carefully the round before.
