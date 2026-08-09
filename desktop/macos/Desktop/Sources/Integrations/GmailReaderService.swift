@@ -154,7 +154,7 @@ actor GmailReaderService {
   ) async throws
     -> [GmailEmail]
   {
-if userInitiated {
+    if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     let oauth = GoogleOAuthConnectionManager.shared
@@ -170,7 +170,7 @@ if userInitiated {
         query: query,
         feedPath: nil,
         allowBootstrap: false,
-selectedCookiePath: selectedCookiePath
+        selectedCookiePath: selectedCookiePath
       )
       let labelEmails = try fetchGmailViaLabelFeeds(
         maxResults: maxResults, query: query, selectedCookiePath: selectedCookiePath)
@@ -187,12 +187,12 @@ selectedCookiePath: selectedCookiePath
         .map(\.self)
     } else {
       emails = try fetchGmailViaAtomFeedSingle(
-maxResults: maxResults, query: query, selectedCookiePath: selectedCookiePath)
+        maxResults: maxResults, query: query, selectedCookiePath: selectedCookiePath)
     }
     return emails.sorted { $0.date > $1.date }
   }
 
-private func readRecentEmailsViaOAuth(
+  private func readRecentEmailsViaOAuth(
     manager: GoogleOAuthConnectionManager,
     maxResults: Int,
     query: String
@@ -228,7 +228,7 @@ private func readRecentEmailsViaOAuth(
         firstFailure = firstFailure ?? .networkError(error.localizedDescription)
       }
     }
-if successfulReads {
+    if successfulReads {
       return Array(
         merged.values.sorted { $0.date > $1.date }.prefix(maxResults))
     }
@@ -496,7 +496,7 @@ if successfulReads {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-let browserConfigs = GmailSelectionStore.filter(
+    let browserConfigs = GmailSelectionStore.filter(
       BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService"),
       selectedCookiePath: selectedCookiePath)
 

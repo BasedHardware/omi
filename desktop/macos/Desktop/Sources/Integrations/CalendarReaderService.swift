@@ -234,7 +234,7 @@ actor CalendarReaderService {
   ) async throws
     -> [CalendarEvent]
   {
-if userInitiated {
+    if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     let oauth = GoogleOAuthConnectionManager.shared
@@ -321,7 +321,7 @@ if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     do {
-let manager = GoogleOAuthConnectionManager.shared
+      let manager = GoogleOAuthConnectionManager.shared
       if manager.hasGrants() {
         _ = try await readEventsViaOAuth(
           manager: manager, daysBack: 1, daysForward: 1, maxResults: 1)
@@ -597,7 +597,7 @@ let manager = GoogleOAuthConnectionManager.shared
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-let browserConfigs = GmailSelectionStore.filter(
+    let browserConfigs = GmailSelectionStore.filter(
       BrowserGoogleSession.configsForPython(
         logPrefix: "CalendarReaderService",
         userInitiated: userInitiated
