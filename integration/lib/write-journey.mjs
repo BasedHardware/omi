@@ -18,11 +18,14 @@
 //
 // 1. **A dispatch-side number never appears in a verdict.** Nothing here counts
 //    "requests sent". Every admission and every refusal in a verdict is read
-//    back from the SERVER's `/control/fence-stats?run=<id>` — the counter that
-//    records the decision where the decision is produced — and cross-checked
-//    against the bytes this driver actually received. `servedCount=4 status=PASS`
-//    while the backend served zero is the exact shape this refuses to be able to
-//    express.
+//    back from the SERVER's `GET /v1/qa/control/stats?run=<id>`, on the same
+//    process that serves the door — the counters that record each decision
+//    where it is produced — and cross-checked against the bytes this driver
+//    actually received. There are TWO of them, deliberately: the fence's epoch
+//    decision and the route's outcome. A door that passed the fence and then
+//    failed to apply moves one and not the other, which no single tally can
+//    express. `servedCount=4 status=PASS` while the backend served zero is the
+//    exact shape this refuses to be able to state.
 //
 // 2. **"Not 2xx" is not evidence of a fence.** A 404, a crash, a typo'd path and
 //    a server refusing everything all satisfy it. So the stale-epoch refusal is
@@ -60,8 +63,19 @@ export const WRITE_JOURNEY_SCHEMA_VERSION = 1;
 /** Ratified: ruling B4's route shape on ruling B6's first writable domain. */
 export const OPS_PATH = "/v1/tasks/ops";
 
-/** Joins a fence decision to the run that caused it (`fence-protocol.ts`). */
+/** Joins a fence and write-ops decision to the run that caused it. */
 export const RUN_ID_HEADER = "x-omi-run-id";
+
+/**
+ * The dev control plane, registered on the SAME app that serves the door
+ * (`apps/service/routes/qa-control.ts`). Not a harness server: the retired
+ * `integration/control/fence-server.ts` stood up its own `Bun.serve` and
+ * answered `/v1/tasks/ops` with `202 {"fence":"admitted"}` where the registered
+ * route answers `200 {applied, idempotent}` — two doors that had diverged at
+ * the byte level (R5, and fable's R14 quarantine of everything measured
+ * against the harness while both stood).
+ */
+export const CONTROL_BASE = "/v1/qa/control";
 
 /**
  * The corpus this journey is judged against is the one the DOOR was built
@@ -140,6 +154,13 @@ const textOf = async (response) => ({
  */
 export function classifyDoor(createResponse) {
   let body = null;
+  // A 404 gets its own name. "There is no write door in this process" and "the
+  // door answered something I do not recognise" are different findings, and
+  // the first one is what a tree without OPS's route looks like — the message
+  // has to say so rather than sending someone to debug a parser.
+  if (createResponse.status === 404) {
+    return { capability: "absent", why: "answered 404 — this process serves no write door at all" };
+  }
   try {
     body = JSON.parse(createResponse.text);
   } catch {
@@ -188,13 +209,29 @@ export async function runWriteJourney(options) {
   const otherRunId = `${runId}-interleaved`;
   const silentRunId = `${runId}-never-sent`;
 
+  // ── THE DEV CONTROL PLANE IS ON THE PROCESS THAT SERVES THE DOOR ──────────
+  // `/v1/qa/control/*`, registered by `apps/service/routes/qa-control.ts` on
+  // the same app that answers `/v1/tasks/ops`. A counter in a sidecar is the
+  // evidence shape that proved nothing in wave 9 — `servedCount=4 status=PASS`
+  // while the backend served zero, both numbers accurate. The producer-side
+  // tallies are read from the process that produced them or they are not
+  // arbiters.
+  //
+  // The mutating routes require the bearer, and they OVERWRITE the
+  // observation's `account_id` with the authenticated principal's: a QA surface
+  // that let a caller name the account whose control state it seeds would be
+  // ADR-012 §4's "possession of an identifier as evidence". So `accountId`
+  // below is what the door told us its principal is, never what we asked for.
   const control = async (path, body) => {
     const response = await fetchImpl(`${controlUrl}${path}`, {
       method: body === undefined ? "GET" : "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(token === undefined || token === null ? {} : { authorization: `Bearer ${token}` }),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    if (!response.ok) throw new Error(`control ${path} -> ${response.status}`);
+    if (!response.ok) throw new Error(`control ${path} -> ${response.status} ${await response.text()}`);
     return response.json();
   };
 
@@ -224,20 +261,21 @@ export async function runWriteJourney(options) {
     steps: [],
   };
   if (!skipSeed) {
-    seed.steps.push({ name: "reset", response: await control("/control/reset", {}) });
+    seed.steps.push({ name: "reset", response: await control(`${CONTROL_BASE}/reset`, {}) });
+    // ADR-010 §1's forward activation order, driven through the registered app.
     for (const [name, obs] of [
       ["observe:legacy", observation({})],
       ["observe:migrating", observation({ control_revision: 2, account_generation: "migrating" })],
       ["observe:new", observation({ control_revision: 3, account_generation: "new", account_epoch: activeEpoch })],
     ]) {
-      seed.steps.push({ name, response: await control("/control/observe", obs) });
+      seed.steps.push({ name, response: await control(`${CONTROL_BASE}/observe`, obs) });
     }
     seed.steps.push({
       name: "activate",
-      response: await control("/control/activate", { epoch: activeEpoch, at_control_revision: 3 }),
+      response: await control(`${CONTROL_BASE}/activate`, { epoch: activeEpoch, at_control_revision: 3 }),
     });
   } else {
-    await control("/control/reset", {});
+    await control(`${CONTROL_BASE}/reset`, {});
   }
 
   const sendOp = async ({ writeId, op, epoch, runIdOverride }) => {
@@ -287,9 +325,31 @@ export async function runWriteJourney(options) {
     runIdOverride: otherRunId,
   });
 
+  // TWO producer-side counters, not one, and they are independent: the fence
+  // records the epoch decision, `writeOps` records the outcome the route
+  // returned. A route that admitted through the fence and then failed to apply
+  // moves one and not the other, which no single tally can express.
   const tallyFor = async (id) => {
-    const stats = await control(`/control/fence-stats?run=${encodeURIComponent(id)}`);
-    return stats.tally ?? null;
+    const stats = await control(`${CONTROL_BASE}/stats?run=${encodeURIComponent(id)}`);
+    return { fence: stats.fence ?? null, writeOps: stats.writeOps ?? null };
+  };
+
+  /**
+   * THE CONSUMER-SIDE OBSERVATION OF THE APPLY, from a different endpoint over
+   * the same store. The door's own `applied` block is the door talking about
+   * itself; this is the record being there afterwards. It carries record ids
+   * and revisions and no user content, so it is not a read door.
+   */
+  const observedRecords = async () => {
+    try {
+      const body = await control(`${CONTROL_BASE}/tasks`);
+      return body.records ?? null;
+    } catch (error) {
+      // `null` means "could not observe", never an empty list — "the store has
+      // no such record" and "we could not ask" are different findings and
+      // collapsing them into `[]` would report a working apply as broken.
+      return { unobservable: error.message };
+    }
   };
 
   return {
@@ -310,6 +370,10 @@ export async function runWriteJourney(options) {
       // tally for every run id would satisfy every assertion above.
       neverSentRun: await tallyFor(silentRunId),
     },
+    // Read LAST, after the refused stale patch: the record must still carry the
+    // create's revision, which is what proves the refusal happened before the
+    // apply rather than after it.
+    store: { records: await observedRecords() },
   };
 }
 
@@ -340,6 +404,14 @@ export const JOURNEY_ASSERTIONS = [
     evaluate: (j) => {
       const { capability, why } = j.door;
       if (capability === "unknown") return fail(`the door's create response is unreadable — ${why}`);
+      if (capability === "absent") {
+        return fail(
+          `no write door at ${j.door.url}: it ${why}.`
+          + ` ${j.tree.path} says registered=${j.tree.registered}.`
+          + " The retired fence harness is gone (R5), so there is no second door to fall back to —"
+          + " this journey has measured nothing about the write path.",
+        );
+      }
       if (j.tree.registered && capability !== "applies") {
         return fail(
           `${j.tree.path} registers ${j.door.opsPath}, but the live door at ${j.door.url} ${why}.`
@@ -386,8 +458,8 @@ export const JOURNEY_ASSERTIONS = [
     evaluate: (j) => {
       const observed = j.steps.create.response;
       if (observed === null) return fail(`the shipped adapter refused to build the create envelope: ${JSON.stringify(j.steps.create.envelopeBuild)}`);
-      const tally = j.producer.thisRun;
-      if (tally === null) {
+      const { fence, writeOps } = j.producer.thisRun;
+      if (fence === null) {
         return fail(
           `the server reports NO fence decision at all for run ${j.runId} (tally is null, not zero)`
           + ` — the run id join is broken, so nothing this journey observed is attributable`,
@@ -402,20 +474,32 @@ export const JOURNEY_ASSERTIONS = [
       // a decision counter from an arrival counter.
       const driverAdmissions = [j.steps.create.response, j.steps.replay.response]
         .filter((r) => r !== null && (r.status === 200 || r.status === 202)).length;
-      if (tally.admitted !== driverAdmissions) {
+      if (fence.admitted !== driverAdmissions) {
         return fail(
           `the driver received ${driverAdmissions} admitted response(s) on run ${j.runId} but the server`
-          + ` counted ${tally.admitted} fence admission(s) — the two arbiters disagree`,
+          + ` counted ${fence.admitted} fence admission(s) — the two arbiters disagree`,
         );
       }
-      return pass(`server counted ${tally.admitted} admission(s) for run ${j.runId}; driver received exactly ${driverAdmissions} (create ${observed.status}, replay ${j.steps.replay.response?.status})`);
+      // The fence admitting and the ROUTE accepting are different events, and a
+      // door that passed the fence and then failed to apply moves only the
+      // first. Where the route keeps its own outcome counter, both must agree.
+      if (writeOps !== null) {
+        const accepted = writeOps.outcomes.accepted + writeOps.outcomes.accepted_idempotent;
+        if (accepted !== driverAdmissions) {
+          return fail(
+            `the fence admitted ${fence.admitted} and the driver saw ${driverAdmissions} 2xx, but the route's own`
+            + ` outcome counter recorded ${accepted} accepted — admitted through the fence is not the same event as applied`,
+          );
+        }
+      }
+      return pass(`server counted fence admitted=${fence.admitted}${writeOps === null ? "" : `, route accepted=${writeOps.outcomes.accepted}+${writeOps.outcomes.accepted_idempotent} idempotent`} for run ${j.runId}; driver received exactly ${driverAdmissions} (create ${observed.status}, replay ${j.steps.replay.response?.status})`);
     },
   },
   {
     name: "server_applied_observation",
-    claim: "the create the door admitted was actually applied to a record, as observed from the server's own answer",
-    measuredBy: "wire: the door's `applied` block (record_id + revision)",
-    corroboratedBy: "wire: the replay below returns the SAME revision, so the value is a record's state and not a per-request constant",
+    claim: "the create the door said it applied is actually in the store afterwards, at the revision the door named",
+    measuredBy: "wire: the door's own `applied` block (record_id + revision)",
+    corroboratedBy: "store: GET /v1/qa/control/tasks — a DIFFERENT endpoint over the same store, read after the run",
     evaluate: (j) => {
       if (j.door.capability !== "applies") {
         return pending(
@@ -431,18 +515,35 @@ export const JOURNEY_ASSERTIONS = [
       if (applied.record_id !== j.recordId) {
         return fail(`the door applied to ${applied.record_id}, but the op named ${j.recordId}`);
       }
-      const replayed = JSON.parse(j.steps.replay.response.text).applied ?? null;
-      if (replayed === null || replayed.revision !== applied.revision) {
-        return fail(`the create reported revision ${applied?.revision} and the replay reported ${replayed?.revision} — a revision that changes per request is not a record's state`);
+      // THE SECOND MEASUREMENT. Reading only the door's own response is one
+      // side of one question: a route that answers `{applied:…}` from the
+      // request it was handed, having written nothing, satisfies it perfectly.
+      const records = j.store?.records ?? null;
+      if (records === null || !Array.isArray(records)) {
+        return fail(`the store could not be observed (${JSON.stringify(records)}) — the door's claim to have applied has no second measurement`);
       }
-      return pass(`applied ${applied.record_id} at revision ${String(applied.revision).slice(0, 12)}…, stable across replay`);
+      const found = records.find((r) => r.record_id === applied.record_id) ?? null;
+      if (found === null) {
+        return fail(
+          `the door reported applying ${applied.record_id} and the store does not contain it`
+          + ` (it holds ${records.length} record(s): ${records.map((r) => r.record_id).join(", ") || "none"})`,
+        );
+      }
+      if (found.revision !== applied.revision) {
+        return fail(
+          `the door reported revision ${String(applied.revision).slice(0, 12)}… and the store holds`
+          + ` ${String(found.revision).slice(0, 12)}… — read AFTER the stale patch was refused, so either the`
+          + " refusal applied anyway or the door's answer was never the record's state",
+        );
+      }
+      return pass(`door applied ${applied.record_id}@${String(applied.revision).slice(0, 12)}…; the store independently reports the same revision after the refused patch`);
     },
   },
   {
     name: "idempotent_replay",
     claim: "replaying the byte-identical envelope under the same journaled write_id is a SUCCESS, not a conflict",
     measuredBy: "wire: the replay response's `idempotent` flag and status",
-    corroboratedBy: "corpus: the vendored accepted_idempotent row (B1)",
+    corroboratedBy: "server: the route's own outcome counter for this run (accepted_idempotent), plus the vendored corpus row (B1)",
     evaluate: (j, { corpus }) => {
       if (j.door.capability !== "applies") {
         return pending(
@@ -466,7 +567,20 @@ export const JOURNEY_ASSERTIONS = [
       if (JSON.parse(first.text).idempotent !== false) {
         return fail(`the FIRST send already reported idempotent=true — the registry is answering from a row this journey did not create`);
       }
-      return pass(`first send idempotent=false, replay idempotent=true, same write_id ${j.steps.create.request.writeId.slice(0, 12)}…`);
+      const writeOps = j.producer.thisRun.writeOps;
+      if (writeOps !== null) {
+        // The response saying `idempotent:true` and the SERVER having recorded
+        // an idempotent outcome are two different claims. A route that sets the
+        // flag from the request while recording a fresh apply moves only one.
+        if (writeOps.outcomes.accepted_idempotent !== 1 || writeOps.outcomes.accepted !== 1) {
+          return fail(
+            `the driver saw one fresh apply and one idempotent replay, but the route recorded`
+            + ` accepted=${writeOps.outcomes.accepted} accepted_idempotent=${writeOps.outcomes.accepted_idempotent}`
+            + ` — the flag on the wire and the outcome the server recorded disagree`,
+          );
+        }
+      }
+      return pass(`first send idempotent=false, replay idempotent=true, same write_id ${j.steps.create.request.writeId.slice(0, 12)}…; server recorded accepted=1 accepted_idempotent=1`);
     },
   },
   {
@@ -488,12 +602,15 @@ export const JOURNEY_ASSERTIONS = [
       if (observed.status !== expectedStatus) {
         return fail(`stale op answered ${observed.status}; the vendored corpus ratifies ${expectedStatus}`);
       }
-      const tally = j.producer.thisRun;
-      if (tally === null) return fail(`no fence decision recorded for run ${j.runId} — the join is broken`);
-      if (tally.refused.stale_epoch !== 1) {
-        return fail(`the driver received one stale_epoch refusal but the server counted ${tally.refused.stale_epoch} for this run — the two arbiters disagree`);
+      const { fence, writeOps } = j.producer.thisRun;
+      if (fence === null) return fail(`no fence decision recorded for run ${j.runId} — the join is broken`);
+      if (fence.refused.stale_epoch !== 1) {
+        return fail(`the driver received one stale_epoch refusal but the fence counted ${fence.refused.stale_epoch} for this run — the two arbiters disagree`);
       }
-      return pass(`server counted stale_epoch=1 for run ${j.runId}; driver received ${observed.status}, paired with a ${admitted.status} admission differing only in account_epoch`);
+      if (writeOps !== null && writeOps.outcomes.stale_epoch !== 1) {
+        return fail(`the fence refused one stale op but the route recorded ${writeOps.outcomes.stale_epoch} stale_epoch outcome(s) — the refusal did not reach the wire as the class the fence decided`);
+      }
+      return pass(`server counted stale_epoch=1 on both the fence and the route's outcome counter for run ${j.runId}; driver received ${observed.status}, paired with a ${admitted.status} admission differing only in account_epoch`);
     },
   },
   {
@@ -522,11 +639,14 @@ export const JOURNEY_ASSERTIONS = [
     measuredBy: "server: fence tally preservedEnvelopes for this run id",
     corroboratedBy: "client: the shipped classifyWriteOpsResponse run over the REAL refusal bytes",
     evaluate: (j, { classify }) => {
-      const tally = j.producer.thisRun;
-      if (tally === null) return fail(`no fence decision recorded for run ${j.runId} — the join is broken`);
-      if (tally.preservedEnvelopes !== 1) {
+      const { fence, writeOps } = j.producer.thisRun;
+      if (fence === null) return fail(`no fence decision recorded for run ${j.runId} — the join is broken`);
+      if (writeOps !== null && writeOps.preservedEnvelopes !== fence.preservedEnvelopes) {
+        return fail(`the fence preserved ${fence.preservedEnvelopes} envelope(s) and the route recorded ${writeOps.preservedEnvelopes} — the straggler table and the fence disagree about the same refusal`);
+      }
+      if (fence.preservedEnvelopes !== 1) {
         return fail(
-          `the server preserved ${tally.preservedEnvelopes} envelope(s) for this run's single stale refusal.`
+          `the server preserved ${fence.preservedEnvelopes} envelope(s) for this run's single stale refusal.`
           + " `preserve_envelope` is what makes the user's edit recoverable; a straggler that is refused"
           + " and not preserved is a silently lost edit.",
         );
@@ -543,7 +663,7 @@ export const JOURNEY_ASSERTIONS = [
           + " server refused an op authored in a superseded generation, is a false report about their content.",
         );
       }
-      return pass(`server preserved ${tally.preservedEnvelopes} envelope; shipped client classified the same bytes as permanent/stale_epoch`);
+      return pass(`server preserved ${fence.preservedEnvelopes} envelope (fence and route agree); shipped client classified the same bytes as permanent/stale_epoch`);
     },
   },
   {
@@ -552,19 +672,19 @@ export const JOURNEY_ASSERTIONS = [
     measuredBy: "server: fence tally for a run id that sent nothing — must be null, not an all-zero tally",
     corroboratedBy: "server: the interleaved run's own tally, which must hold its traffic and not this run's",
     evaluate: (j) => {
-      if (j.producer.neverSentRun !== null) {
+      if (j.producer.neverSentRun.fence !== null || j.producer.neverSentRun.writeOps !== null) {
         return fail(
           `a run id that sent nothing has tally ${JSON.stringify(j.producer.neverSentRun)}.`
           + " `null` is what distinguishes 'the fence refused N writes for this run' from"
           + " 'this counter reports N for everything'.",
         );
       }
-      const other = j.producer.interleavedRun;
+      const other = j.producer.interleavedRun.fence;
       if (other === null) return fail("the interleaved run sent an op and has no tally — the join dropped it");
       if (other.refused.stale_epoch !== 1) {
         return fail(`the interleaved run sent one stale op and the server counted ${other.refused.stale_epoch}`);
       }
-      const mine = j.producer.thisRun;
+      const mine = j.producer.thisRun.fence;
       if (mine.refused.stale_epoch !== 1) {
         return fail(`this run's tally absorbed the interleaved run's traffic (stale_epoch=${mine.refused.stale_epoch}, expected 1)`);
       }
