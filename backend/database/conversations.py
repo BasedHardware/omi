@@ -1768,7 +1768,18 @@ def remove_conversation_speaker_suggestion(
         ]
         if len(remaining) == len(stored_suggestions):
             return None
-        transaction.update(doc_ref, {'speaker_label_suggestions': remaining})
+        # Record the settlement so a later finalization pass cannot resurrect a
+        # suggestion the user dismissed. The pass computes its list from a
+        # snapshot taken before the LLM work; without this marker it would write
+        # the dismissed speaker back because the segments are still unresolved.
+        dismissed = conversation_data.get('dismissed_speaker_ids')
+        if not isinstance(dismissed, list):
+            dismissed = []
+        if speaker_id not in dismissed:
+            dismissed = dismissed + [speaker_id]
+            transaction.update(doc_ref, {'speaker_label_suggestions': remaining, 'dismissed_speaker_ids': dismissed})
+        else:
+            transaction.update(doc_ref, {'speaker_label_suggestions': remaining})
         return remaining
 
     return run_transactional(client, _remove)
@@ -1834,6 +1845,14 @@ def persist_speaker_resolution_suggestions(
                 continue
             if segment.get('is_user') or segment.get('person_id'):
                 settled.add(stored_speaker_id)
+
+        # A speaker the user dismissed has no resolved segment (the segments are
+        # untouched), so it would not appear in ``settled``. The stored
+        # ``dismissed_speaker_ids`` marker is what keeps the pass from
+        # resurrecting a suggestion the user already declined.
+        dismissed = conversation_data.get('dismissed_speaker_ids')
+        if isinstance(dismissed, list):
+            settled.update(i for i in dismissed if isinstance(i, int) and not isinstance(i, bool))
 
         kept = [item for item in incoming if item.get('speaker_id') not in settled]
         if not kept:

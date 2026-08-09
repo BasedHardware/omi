@@ -799,6 +799,41 @@ class TestSuggestionWritesAreTransactional:
         assert database.transactions[-1].updates == []
         assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == []
 
+    def test_a_dismissed_suggestion_is_not_resurrected_by_the_pass(self):
+        """A dismiss leaves the segments unresolved, so the pass must rely on the dismissal marker.
+
+        The user dismissed speaker 1 while the finalization pass was still
+        running. The segments still carry no ``person_id`` (dismiss touches only
+        the suggestion), so the segment-based settle check alone would re-write
+        the suggestion. The stored ``dismissed_speaker_ids`` marker is what keeps
+        the pass from undoing the dismissal.
+        """
+        database = self.store(
+            [stored_segment('s1', speaker_id=1), stored_segment('s2', speaker_id=2)],
+            [],
+        )
+        database.rows[('users', 'uid-1', 'conversations', 'conv-1')]['dismissed_speaker_ids'] = [1]
+
+        written = conversations_db.persist_speaker_resolution_suggestions(
+            'uid-1', 'conv-1', [stored_suggestion(1), stored_suggestion(2, 'Sam')], firestore_client=database
+        )
+
+        assert [item['speaker_id'] for item in written] == [2]
+        assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == [2]
+
+    def test_dismiss_records_the_settlement_marker(self):
+        """Dismissing a suggestion records the speaker so a later pass cannot resurrect it."""
+        database = self.store([stored_segment('s1')], [stored_suggestion(1), stored_suggestion(2, 'Sam')])
+
+        removed = conversations_db.remove_conversation_speaker_suggestion(
+            'uid-1', 'conv-1', 1, firestore_client=database
+        )
+
+        assert [item['speaker_id'] for item in removed] == [2]
+        stored = self.row(database)
+        assert [item['speaker_id'] for item in stored['speaker_label_suggestions']] == [2]
+        assert stored['dismissed_speaker_ids'] == [1]
+
     def test_only_unsettled_suggestions_are_persisted(self):
         database = self.store(
             [stored_segment('s1', speaker_id=1, person_id='person-alex'), stored_segment('s2', speaker_id=2)],
