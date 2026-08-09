@@ -95,7 +95,10 @@ def parse_args() -> argparse.Namespace:
 
     prepare = subparsers.add_parser("prepare", help="Return a non-destructive PR-body declaration patch.")
     add_common_arguments(prepare)
-    prepare.add_argument("--base", default="origin/main")
+    prepare.add_argument(
+        "--base",
+        help="Base ref (default: recorded lane trunk, branch upstream, then origin/main).",
+    )
     prepare.add_argument("--head", default="HEAD")
     prepare.add_argument("--pr-body-file", type=Path, required=True)
 
@@ -105,7 +108,10 @@ def parse_args() -> argparse.Namespace:
 
     validate = subparsers.add_parser("validate", help="Validate definitions and a PR-body declaration offline.")
     add_common_arguments(validate)
-    validate.add_argument("--base", default="origin/main")
+    validate.add_argument(
+        "--base",
+        help="Base ref (default: recorded lane trunk, branch upstream, then origin/main).",
+    )
     validate.add_argument("--head", default="HEAD")
     validate.add_argument("--pr-body-file", type=Path, required=True)
 
@@ -346,6 +352,46 @@ def run_git(root: Path, *args: str) -> str:
         detail = result.stderr.strip() or result.stdout.strip()
         raise CliError(f"git {' '.join(args)} failed: {detail}")
     return result.stdout.strip()
+
+
+def git_config_value(root: Path, key: str) -> str | None:
+    result = subprocess.run(
+        ["git", "config", "--get", key],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode == 1:
+        return None
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise CliError(f"git config --get {key} failed: {detail}")
+    return result.stdout.strip() or None
+
+
+def resolve_base(root: Path, explicit_base: str | None) -> str:
+    if explicit_base is not None:
+        return explicit_base
+
+    branch = run_git(root, "branch", "--show-current")
+    if branch:
+        lane_trunk = git_config_value(root, f"branch.{branch}.omiLaneTrunk")
+        if lane_trunk:
+            # omi-lane records the local branch name after branching from the
+            # corresponding origin ref. The local trunk may have moved or be stale.
+            return f"origin/{lane_trunk}"
+        upstream = run_git(
+            root,
+            "for-each-ref",
+            "--format=%(upstream:short)",
+            f"refs/heads/{branch}",
+        )
+        if upstream:
+            return upstream
+
+    return "origin/main"
 
 
 def merge_base(root: Path, base: str, head: str) -> str:
@@ -763,6 +809,8 @@ def main() -> int:
     args = parse_args()
     try:
         root = repository_root(args.root)
+        if args.command in ("prepare", "validate"):
+            args.base = resolve_base(root, args.base)
         if args.command == "validate":
             payload, exit_code = validate_command(args, root)
         elif args.command == "prepare":
