@@ -651,7 +651,9 @@ test("D3's account epoch is genuinely optional — a page without it is still va
   //
   // red-proof: in isTrustedTaskPageData, drop the five-key branch so only the
   // six-key set is accepted. Every safe row in the tasks corpus — all of which
-  // predate this field — goes red.
+  // predate this field — goes red. APPLIED, OBSERVED RED, REVERTED: it reddens
+  // this test and two of READ's corpus tests, which is the honest measure of
+  // how breaking that one word would have been.
   const corpus = await taskCorpus();
   const safeRows = corpus.filter((row) => row.safe);
   assert.ok(safeRows.length >= 5, "need real pages to test against");
@@ -665,7 +667,7 @@ test("a page carrying the account epoch validates, and junk in that field is ref
   // red-proof: delete the `withEpoch && !isAccountEpoch(...)` guard — the
   // string, float, negative and null rows all become "valid" and this fails.
   // A server could then ship `"7"` and a client would stamp write envelopes
-  // with a string.
+  // with a string. APPLIED, OBSERVED RED, REVERTED (this test only).
   const corpus = await taskCorpus();
   const base = corpus.find((row) => row.safe).page;
 
@@ -695,7 +697,9 @@ test("the epoch does not move the wire-shape version, and never reaches an item"
   // because the validator compares it for equality.
   //
   // red-proof: change TASKS_READ_CONTRACT_VERSION to "1.1.0" — every corpus
-  // row goes red, which is the whole point.
+  // row goes red, which is the whole point. APPLIED, OBSERVED RED, REVERTED:
+  // six tests fail, including READ's, which is exactly the blast radius that
+  // makes moving this constant a breaking change rather than a version tidy.
   assert.equal(TASKS_READ_CONTRACT_VERSION, "1.0.0");
 
   // The epoch is a property of the ACCOUNT, not of a task. On an item it would
