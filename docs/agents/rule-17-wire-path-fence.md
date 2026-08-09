@@ -5,41 +5,109 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 9).** Landed 2026-08-08 with the W4
-rebuild; it runs immediately, per §8, and continues to run at full strength
-while held — holding is not disabling. Rounds 1–4 each found a working
-bypass in a comment-marker escape hatch (file-wide scope; a bare substring
-search; string-blindness in the shared comment stripper; no `${…}`
-interpolation-depth tracking) and each fix left a smaller hole. **Round 5 is
-a ruling, not a bypass:** the marker mechanism was replaced entirely with a
-`WIRE_PATH_HATCHES` registry, keyed by `(file, line)` — see
-**AUDIT-17 — round 5**. Round 6 found a gap in that replacement's own
-granularity (two constructions on one physical line sharing a registry
-key), fixed by making that shape an unconditional failure — see
-**AUDIT-17 — round 6**. Round 7 found that the round-6 fix over-corrected:
-the failure fired on ANY file combining two of the four server-construction
-patterns on one line, including the ordinary, common
-`Bun.serve({ fetch: new Hono().fetch })` idiom, whether or not the file
-named the registered wire path at all — a false positive with tree-wide
-blast radius, not a bypass, fixed by narrowing the *count* to
-socket-binding patterns while keeping *detection* at all four — see
-**AUDIT-17 — round 7**. Round 8 found that narrowing reopened round 6's own
-class for the patterns it excluded: two independent, unbound `new Hono(`
-routers sharing a line with an existing hatch are invisible to the
-ambiguity check, because it now only counts socket binds — see
-**AUDIT-17 — round 8**. Round 9 found that the round-8 fix restored round
-6's protection but reintroduced round 7's shape at the root: the
-"two constructions on one line" check still runs unconditionally, for
-every file in the tree, independent of whether that file is relevant to
-any registered wire path at all — so two unrelated, unbound routers
-sharing a line, in a file with zero connection to `/v1/memories`, still
-fail — see **AUDIT-17 — round 9**, including why this points at a fix
-scoped to the root cause rather than the next per-pattern instance. The
-DOOR lane wrote the original; a non-author (the
-coordinator) wrote every fix and the round-5 replacement, and said so
-explicitly rather than promoting their own work each time. If it fires on
-another lane, that is a swarm-wide blocker, never something to route around,
-regardless of held status.
+## What ten rounds on one fence actually say
+
+*(Moved here from the bottom of this document on promotion — round 10,
+2026-08-08. It was written after round 8 and is the most useful thing in
+this file; it does not belong as a footnote to the round-by-round log
+below it.)*
+
+Between landing and promotion, this fence went through **ten rounds** of
+non-author audit. **Nine of the coordinator's claims of "this closes it"
+were wrong before the tenth held**, in both directions, and not one of
+the nine findings was caught by reading a diff. Every one was found by
+building the specific input the fix's own stated boundary implied should
+be safe, and running it. Four were bypasses in the original comment-marker
+escape hatch (file-wide scope; a bare substring search; string-blindness
+in the shared comment stripper; no `${…}` interpolation-depth tracking).
+One was a granularity gap in the registry that replaced the marker
+entirely (line-keying collapsing two constructions to one key). Two were
+opposite-direction false positives from fixes that narrowed a symptom
+instead of a cause (round 6's fix over-firing on an ordinary
+router-plus-binder idiom; round 8's fix over-firing again on two
+unrelated routers, through code the *previous* fix had just added). One
+was the structural cause behind both of those false positives, found not
+by reading either fix but by asking what neither of them had changed.
+
+The direction of the errors is itself informative. Rounds 1–4 were all
+under-firing (the fence missed something it should have caught); round 6
+was under-firing again after the marker was removed; round 7 was
+over-firing; round 8 was under-firing once more, narrower than rounds
+1–4; round 9 was over-firing again, at the root of round 7's cause rather
+than a new one. That is not a fence converging monotonically toward
+correctness — it is a fence whose failure mode kept changing shape as
+each specific defect closed, which is exactly what "no bound short of a
+real lexer" and "no bound short of exhaustively reasoning about every
+pattern combination" predict, for the two different mechanisms (the
+marker, and the multi-pattern ambiguity count) that each carried this
+property in turn.
+
+The lesson is not "this author is unreliable." Every individual fix was
+correct against the case that motivated it, verified independently every
+time, and three of the nine findings were the author's own self-caught
+mistakes — reported before the audit ever saw them, including a numeric
+error in a commit message the author corrected without being asked twice.
+The lesson is that **confidence about a hand-written guard's completeness
+is not evidence**, regardless of who holds it or how carefully the
+previous round was reasoned through. This fence's audit history is the
+clearest demonstration of that claim this program has produced: ten
+rounds, nine times a stated boundary turned out to have an edge nobody
+had constructed yet, zero of them caught by re-reading code that had
+already been read carefully the round before.
+
+**What finally closed it was not a tenth bypass — it was finding the flaw
+in the stopping rule itself.** Through round 8, the working standard was
+"promote when a round finds nothing reachable in the tree and nothing new
+in kind." Round 9 showed that standard would have promoted three times in
+a row — after round 7, after round 8, after round 9 — on a fence
+producing the identical false-positive shape from the same unaddressed
+structural cause each time, because narrowing *which pattern trips a
+check* is not the same as narrowing *where the check runs*, and a bar
+built only from the last two rounds' fixtures cannot tell the difference.
+The bar that actually held:
+
+> **Promote when a round finds nothing reachable in the tree, nothing new
+> in kind, and no open finding traces to a structural cause still capable
+> of producing another instance in a different specific form — with every
+> residual written down as an accepted limit, named and dated.**
+
+This is the general form, not a rule-17-specific one: for any fence, a
+round that fixes a trigger without asking whether the mechanism behind it
+is still standing has not earned a promotion, no matter how narrow the
+next reachable instance looks. It has been lifted into
+infra/mechanics/swarm-protocol.md §8 (the workspace-root process document,
+outside this repo, hence unquoted here per this doc's own convention) so
+it governs the next fence this program lands, not only this one.
+
+**Round 10 applied that bar and it cleared: nothing reachable, nothing new
+in kind, and every remaining structural cause was already closed at its
+root, not just its latest symptom.** See **AUDIT-17 — round 10** below for
+what was checked, and **Accepted limits — named and dated** for every
+residual this fence carries forward rather than blocking on.
+
+Status: **PROMOTED, round 10, 2026-08-08.** Landed 2026-08-08 with the W4
+rebuild; ran PROVISIONAL through nine rounds of non-author audit, each
+documented below in full. Round 1 held on a file-wide comment-marker
+hatch. Rounds 2–4 each held on a narrower bypass of that marker's
+successive fixes (a bare substring search; string-blindness in the shared
+comment stripper; no `${…}` interpolation-depth tracking) — see
+**AUDIT-17 — round 2** through **round 4**. **Round 5 replaced the marker
+entirely** with a `WIRE_PATH_HATCHES` registry keyed by `(file, line)`,
+after the audit ruled that no bound on "is this text really a comment"
+existed short of a real lexer — see **AUDIT-17 — round 5**. Round 6 held
+on a granularity gap in that registry (two constructions on one line
+sharing a key); its fix over-corrected into a false positive round 7 held
+on; round 8 found the round-7 fix had reopened round 6's class for a
+different pattern; round 9 traced rounds 7 and 8 to their shared,
+unaddressed root (the ambiguity check's unconditional scope) and held on
+a second symptom of it — see **AUDIT-17 — round 6** through **round 9**.
+Round 10 verified the root-cause fix, found nothing reachable and nothing
+new in kind, and promoted under the bar above. The DOOR lane wrote the
+original; a non-author (the coordinator) wrote every fix, the round-5
+replacement, and the round-9 root-cause fix, and declined to promote
+their own work at every step. If it fires on another lane, that is still
+a swarm-wide blocker — promotion changes who may extend it without a
+fresh non-author read, not what happens when it misfires.
 
 Implementation: `WIRE_PATH_REGISTRY` in the platform repo's
 scripts/lint-import-graph.ts, which runs in `bun test` and in `make l0`.
@@ -1203,48 +1271,11 @@ that rounds 5–7 did not touch — the pre-existing multi-server false-
 positive imprecision, the same-construction-behavior-drift gap, and rule
 16's unfixed round-2-class hatch — remains open and unchanged.
 
-### What eight rounds on one fence actually say
-
-The coordinator asked for this in their own words, and it is worth
-recording plainly rather than only in the per-round log above: **every
-one of the coordinator's seven claims of "this closes it" was wrong**,
-in both directions, and none of the eight findings — four bypasses in the
-deleted marker mechanism, one granularity gap in the registry that
-replaced it, one over-correction of that fix into a false positive, one
-narrowing of *that* fix that reopened the original class for a different
-pattern subset — was found by reading a diff. Every one was found by
-building the specific input the fix's own stated boundary implied should
-be safe, and running it. That includes this round's: the round-7 fix's
-own header comment already said "narrowing the count must not narrow
-what counts as a site," which is the correct principle, applied one
-pattern-subset short of everywhere it needed to hold.
-
-The direction of the errors is itself informative. Rounds 1–4 were all
-under-firing (the fence missed something it should have caught); round 6
-was under-firing again after the marker was removed; round 7 was over-
-firing (the fence caught something it shouldn't have); round 8 is under-
-firing once more, but narrower and more localized than any of rounds
-1–4. That is not a fence converging monotonically toward correctness — it
-is a fence whose failure mode keeps changing shape as each specific
-defect closes, which is exactly what "no bound short of a real lexer" and
-"no bound short of exhaustively reasoning about every pattern
-combination" predict, for the two different mechanisms (the marker, and
-now the multi-pattern ambiguity count) that have each carried this
-property in turn. The lesson is not "this author is unreliable" — every
-individual fix was correct against the case that motivated it, verified
-independently each time, and two of the eight findings were the author's
-own self-caught mistakes reported before the audit even saw them. The
-lesson is that **confidence about a hand-written guard's completeness is
-not evidence**, regardless of who holds it or how carefully the previous
-round was reasoned through, and this fence's own audit history is now the
-clearest demonstration of that claim this program has produced: eight
-rounds, eight times a stated boundary turned out to have an edge nobody
-had constructed yet, zero of them caught by re-reading code that had
-already been read carefully the round before.
-
-*(This paragraph moves to the top of the document on promotion — see
-**AUDIT-17 — round 9**'s closing note. Round 9 did not promote, so it
-stays here for now.)*
+*(The retrospective originally written here — "What eight rounds on one
+fence actually say" — has moved to the top of this document, under
+"What ten rounds on one fence actually say," per the coordinator's
+request on promotion. It now covers rounds 9 and 10 as well; nothing in
+it was removed, only extended.)*
 
 ## Correction to the historical record
 
@@ -1412,3 +1443,153 @@ both mechanism-level from the start, and neither has reopened. It is a
 sharper version of the same bar, aimed at the one place in this fence's
 history where the same failure shape was allowed to recur because a
 symptom was patched twice before its cause was named once.
+
+## AUDIT-17 — round 10, non-author verification of `f51b9f5017`, and promotion
+
+The coordinator adopted the round-9 bar addition as written, without
+amendment, and implemented the root-cause fix it specified: the
+"two constructions on one line" ambiguity check now runs only for files
+where `WIRE_PATH_REGISTRY.some((row) => namesWirePath(code, row.wirePath))`
+is true — a file that can never hold a `WIRE_PATH_HATCHES` row has
+nothing for the check to protect. They also corrected their own prior
+commit message's test count (`63578dbac1` claimed 716; the real number
+was 715, caught and disclosed by the author before this audit re-checked
+it) and recorded it accurately this time (716, read after the rebase).
+
+**All five red-proofs in `f51b9f5017`'s commit message reproduced, each
+against a standalone fixture or the real hatched file:**
+
+- Two plain `new Hono()` declarations, zero occurrences of "memories"
+  anywhere in the fixture → **stays green** (round 9's false positive
+  fixed).
+- Two unbound routers sharing a line, one naming the path → **still
+  fires** (round 8's protection intact).
+- Two real `Bun.serve(` calls crammed onto the real, hatched
+  `live-server.ts:67` → **still fires** (round 6's protection intact).
+  Reverted; diff against the pre-mutation file was empty.
+- `Bun.serve({ fetch: new Hono().fetch })` → **stays green** (round 7's
+  fix intact).
+- Removing the relevance gate → exactly **1 of 14** tests goes red — the
+  round-9 test, and only it. Restored; 14/14 green.
+
+Full suite: **716 pass, 0 fail**, confirmed independently on the rebased
+tree.
+
+**Adversarial probing beyond the coordinator's own five, targeting the
+gate specifically, since a new conditional is exactly where a tenth thing
+would hide:**
+
+1. A line carrying both the wire-path reference and two ambiguous
+   constructions at once (not the separated-lines shape every earlier
+   round used) → both the ambiguity failure and the main unhatched-site
+   failure fire correctly, together, on the same line.
+2. A fragment-assembled path (`"/v1/" + "memories"`) inside an otherwise
+   ambiguous two-router file → the gate stays closed, the file is
+   invisible to both the ambiguity check and the main check. Confirmed
+   this is **not a new gap**: `namesWirePath` was already blind to
+   fragment-assembled paths before round 9 existed (a disclosed limit
+   since the original DOOR audit), and the main check was *already*
+   invisible to such a file for the identical reason — gating the
+   ambiguity check on the same predicate does not create new exposure,
+   it inherits an existing, already-named one.
+3. A file that names the wire path via a client call on one line, with a
+   *second, wholly unrelated* pair of ambiguous routers on a different
+   line that has nothing to do with the wire path → **fires**, blaming
+   the unrelated line. Confirmed this is **not a new finding**: it is the
+   pre-existing multi-server false-positive imprecision, named in
+   **AUDIT-17 — round 2** and re-confirmed in **round 3**
+   ("`standsUpAServer` and `namesWirePath` are still file-wide
+   conditions"), manifesting through the same file-level scoping the
+   round-9 gate reuses rather than reinvents. The gate did not widen this
+   limit's reach; it shares its existing shape.
+
+None of the three probes surfaced anything reachable, and none surfaced
+anything new in kind — every one traces to a limit already named in an
+earlier round, confirmed still accurately described rather than newly
+discovered.
+
+### Verdict: PROMOTE
+
+Applying the round-9 bar precisely:
+
+1. **Nothing reachable in the tree.** No mutation, real or simulated,
+   produced a live false negative (a rogue door slipping through) or an
+   unconditional false positive against any file that actually exists on
+   trunk.
+2. **Nothing new in kind.** Every adversarial probe this round resolved
+   to an already-named, already-dated limit (fragment assembly; the
+   multi-server false-positive imprecision) or confirmed a fix works as
+   specified.
+3. **No open finding traces to a live structural cause.** The one
+   structural cause this fence's audit history actually found — the
+   ambiguity check's unconditional, tree-wide scope, responsible for both
+   round 7's and round 9's false positives — was closed at the mechanism
+   level in `f51b9f5017`, not patched at the trigger level a third time.
+   The remaining open items (below, named and dated) are stable,
+   long-disclosed, low-severity residuals that predate this fence's
+   registry redesign and have not grown or mutated across ten rounds of
+   deliberate probing.
+
+Rule 17 is promoted. See **Accepted limits — named and dated** for the
+complete list of what promotion does *not* claim to have closed, and
+**What ten rounds on one fence actually say** at the top of this document
+for what the process as a whole demonstrated.
+
+## Accepted limits — named and dated
+
+Every gap this fence's audit history found and did not chase to zero,
+in one place, so promotion does not read as a claim that none exist.
+
+1. **Fragment-assembled wire paths are invisible to detection.**
+   `"/v1/" + "memories"` never matches `namesWirePath`'s literal substring
+   search. Named in DOOR's original "Known limits" section (this
+   document, pre-audit) with a citation to documented precedent of an
+   agent string-splitting a route to dodge a regex elsewhere in this
+   program. Re-confirmed independently in **AUDIT-17 — round 1**
+   (2026-08-08) and again in **round 10** (2026-08-08) as still present
+   and unchanged.
+2. **The server-construction pattern list is syntactic and finite.** A
+   door built on a framework not in `serverConstructionPatterns` —
+   `express()`, a hand-rolled `net` listener, a future framework not yet
+   registered — is invisible to detection entirely. Named in DOOR's
+   original "Known limits" section (pre-audit); unchanged through ten
+   rounds.
+3. **The fence does not run over `core-foundation`.** The linter walks
+   the `platform` tree only;
+   `core/packages/dev-recall-stub/src/create_dev_recall_stub_server.ts`
+   serves the registered path in the sibling repo, entirely out of reach.
+   Named in DOOR's original "Known limits" section (pre-audit); confirmed
+   in **AUDIT-17 — round 1** (2026-08-08) to be an honestly-labeled `DEV
+   ONLY` stub, not a claimant to being the real backend.
+4. **The pre-existing multi-server false-positive imprecision.**
+   `standsUpAServer` and `namesWirePath` are file-wide conditions; an
+   unrelated, unhatched server sharing a file with a legitimate
+   wire-path reference gets blamed for a violation that is really
+   somewhere else in the same file. Named in **AUDIT-17 — non-author
+   audit** (round 1, 2026-08-08), re-confirmed in **round 3**
+   (2026-08-08) and **round 10** (2026-08-08, against the round-9 gate
+   specifically). No file in the tree has this shape today.
+5. **A hatched construction's own body can drift from its stated
+   reason.** No version of this fence — comment marker or registry row —
+   can verify that a construction still does what its justification
+   claims once the code beneath it is edited. Named in **AUDIT-17 —
+   round 3** (2026-08-08): this is a PR-review problem, not a
+   static-analysis one, and rule 16's hatch (`port-composition-ok`) has
+   the identical property.
+6. **A single real socket bind sharing a line with a genuinely unrelated,
+   independent router is not flagged as ambiguous.** Only the case where
+   a line has *zero* socket binds and 2+ routers, or 2+ socket binds, is
+   caught; one bind plus one unrelated router (not that bind's own
+   argument) is not. Named in **AUDIT-17 — round 8** (2026-08-08),
+   re-confirmed present and unchanged in **round 9** (2026-08-08) and
+   **round 10** (2026-08-08). No file in the tree has this shape today;
+   the tree's one real hatch has no router anywhere near it.
+7. **Rule 16's own hatch (`port-composition-ok`) remains open to round
+   2's plain-string bypass class.** It never adopted rule 17's
+   comment-awareness fix from `b9e0c9a915`, let alone the registry
+   replacement from `7a0602a844`. Named in **AUDIT-17 — round 2**
+   (2026-08-08) and **round 4** (2026-08-08); filed for rule 16's own
+   promotion pass, not fixed here, because folding an unaudited change to
+   a different, independently-tracked fence into rule 17's evidence would
+   blur which audit verified which change — confirmed the right call in
+   **round 4**, not overcautious.
