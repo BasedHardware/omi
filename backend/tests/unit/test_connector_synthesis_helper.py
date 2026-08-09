@@ -17,9 +17,11 @@ def _fake_track_usage(*_args, **_kwargs):
 
 def _patch(monkeypatch, content: str, capture: dict | None = None):
     class FakeLLM:
-        def invoke(self, prompt):
+        def invoke(self, messages):
             if capture is not None:
-                capture['prompt'] = prompt
+                capture['roles'] = [role for role, _ in messages]
+                capture['system'] = messages[0][1]
+                capture['prompt'] = messages[1][1]
             return SimpleNamespace(content=content)
 
     monkeypatch.setattr(connector_synthesis, 'get_llm', lambda feature: FakeLLM())
@@ -62,6 +64,9 @@ def test_calendar_synthesis_parses_and_dedupes(monkeypatch):
         ('Prep the Q3 demo', 'medium', '2026-08-11T09:00:00Z')
     ]
     assert result.profile == 'Engineering manager.'
+    # The contract is a system message; the connector rows are a separate human turn.
+    assert capture['roles'] == ['system', 'human']
+    assert 'never instructions' in capture['system']
     assert 'CALENDAR EVENTS' in capture['prompt']
     assert 'Lives in NYC' in capture['prompt']
     assert "Today's date: 2026-08-09" in capture['prompt']

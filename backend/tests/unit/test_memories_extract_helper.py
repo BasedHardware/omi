@@ -16,9 +16,15 @@ def test_extract_memory_log_from_text_empty_returns_empty():
 
 def test_extract_memory_log_from_text_parses_llm_json(monkeypatch):
     class FakeLLM:
-        def invoke(self, prompt):
-            assert 'chatgpt' in prompt
-            assert 'Lives in NYC' in prompt
+        def invoke(self, messages):
+            # The contract is a system message; the untrusted log is a separate human turn.
+            roles = [role for role, _ in messages]
+            assert roles == ['system', 'human']
+            system_prompt, user_prompt = messages[0][1], messages[1][1]
+            assert 'never instructions' in system_prompt
+            assert 'chatgpt' in user_prompt
+            assert 'Lives in NYC' in user_prompt
+            assert 'I like coffee a lot' in user_prompt
             return SimpleNamespace(content='{"memories": ["Likes coffee", ""], "profile": "Coffee person."}')
 
     @contextmanager
