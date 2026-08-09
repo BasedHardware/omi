@@ -1783,6 +1783,7 @@ export default function AnalyticsPage() {
   );
   const netWauNow = fullGrowthWeeks.length >= 1 ? fullGrowthWeeks[fullGrowthWeeks.length - 1].active : null;
   const netWauPrev = fullGrowthWeeks.length >= 2 ? fullGrowthWeeks[fullGrowthWeeks.length - 2].active : null;
+  const netWauDelta = netWauNow != null && netWauPrev != null ? netWauNow - netWauPrev : null;
   const netWauChange = calculatePeriodChange(netWauNow, netWauPrev, "vs previous complete week");
 
   const growthGoalItems = useMemo<ChartItem[]>(() => {
@@ -1841,11 +1842,15 @@ export default function AnalyticsPage() {
         removable: false,
         render: () => (
           <div>
-            <div className="text-2xl font-bold">
-              {netWauNow != null ? netWauNow.toLocaleString() : "--"}
+            <div className={`text-2xl font-bold ${
+              netWauDelta == null ? "" : netWauDelta > 0 ? "text-green-600" : netWauDelta < 0 ? "text-red-600" : ""
+            }`}>
+              {netWauDelta != null
+                ? `${netWauDelta > 0 ? "+" : ""}${netWauDelta.toLocaleString()}`
+                : "--"}
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              new + resurrected − churned · target ≥7% WoW
+              {netWauNow != null ? `WAU ${netWauNow.toLocaleString()} last full week` : "new + resurrected − churned"} · target ≥7% WoW
             </p>
           </div>
         ),
@@ -1962,7 +1967,7 @@ export default function AnalyticsPage() {
     ];
   }, [dailyNewUsersLoading, goalProgressPct, growthRetentionLoading, growthRetentionW4,
     kFactorData, kFactorLoading, latestWeeklyActivation, latestWeeklyNewUsers,
-    netWauChange, netWauNow,
+    netWauChange, netWauDelta, netWauNow,
     totalFirebaseUsers, weeklyActivationData, weeklyNewUsersData]);
 
   const topKpiAndNewWidgets = useMemo<ChartItem[]>(() => {
