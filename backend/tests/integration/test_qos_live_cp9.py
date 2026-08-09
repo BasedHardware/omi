@@ -48,7 +48,6 @@ from utils.llm.clients import (
     _get_or_create_gemini_llm,
     _get_or_create_openai_llm,
     _get_or_create_openrouter_llm,
-    anthropic_client,
     get_llm,
     get_model,
     get_provider,
@@ -64,12 +63,14 @@ HAS_GEMINI_KEY = bool(os.environ.get('GEMINI_API_KEY', ''))
 # P1: get_llm() routing — real invocations for every premium OpenAI feature
 # ---------------------------------------------------------------------------
 class TestP1_GetLlmRouting:
-    """P1: Every feature in premium profile that routes to OpenAI responds to real prompts."""
+    """P1: Every premium OpenRouter GPT feature responds to real prompts."""
 
-    OPENAI_FEATURES = [f for f, (m, p) in MODEL_QOS_PROFILES['premium'].items() if p == 'openai']
+    OPENROUTER_GPT_FEATURES = [
+        f for f, (m, p) in MODEL_QOS_PROFILES['premium'].items() if p == 'openrouter' and m.startswith('gpt-')
+    ]
 
-    @pytest.mark.parametrize("feature", OPENAI_FEATURES)
-    def test_openai_feature_responds(self, feature):
+    @pytest.mark.parametrize("feature", OPENROUTER_GPT_FEATURES)
+    def test_openrouter_gpt_feature_responds(self, feature):
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} returned empty response"
@@ -188,14 +189,23 @@ class TestP5_BYOKProfileFixed:
         # Even if active is 'max', BYOK stays 'byok'
         assert _byok_profile_name != _active_profile_name or _active_profile_name == 'byok'
 
-    def test_byok_mostly_openai(self):
-        """byok profile should use OpenAI for most features (chat_agent/web_search are exceptions)."""
-        exceptions = {'chat_agent': 'anthropic', 'web_search': 'perplexity', 'wrapped_analysis': 'openrouter'}
+    def test_byok_mostly_openrouter(self):
+        """byok profile should use OpenRouter GPT for most features (gemini/perplexity specialty routes excepted)."""
+        exceptions = {
+            'web_search': 'perplexity',
+            'wrapped_analysis': 'openrouter',
+            'translation': 'gemini',
+            'session_titles': 'gemini',
+            'followup': 'gemini',
+            'onboarding': 'gemini',
+            'app_integration': 'gemini',
+            'trends': 'gemini',
+        }
         for feature, (model, provider) in MODEL_QOS_PROFILES['byok'].items():
             if feature in exceptions:
                 assert provider == exceptions[feature], f'byok {feature} expected {exceptions[feature]}, got {provider}'
             else:
-                assert provider == 'openai', f'byok feature {feature} uses {provider}, expected openai'
+                assert provider == 'openrouter', f'byok feature {feature} uses {provider}, expected openrouter'
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +263,8 @@ class TestP6_StructuredOutput:
             'conv_app_select',
             'external_structure',
             'trends',
+            'translation',
+            'what_matters_now',
         }
 
 
@@ -320,21 +332,20 @@ class TestP9_OpenRouterConfig:
 
 
 # ---------------------------------------------------------------------------
-# P10: Anthropic via get_model() + anthropic_client
+# P10: chat_agent via get_llm() OpenRouter
 # ---------------------------------------------------------------------------
-class TestP10_Anthropic:
-    """P10: chat_agent via Anthropic client with real API call."""
+class TestP10_ChatAgentOpenRouter:
+    """P10: chat_agent via OpenRouter with real API call."""
 
-    @pytest.mark.asyncio
-    async def test_chat_agent(self):
+    def test_chat_agent(self):
         model = get_model('chat_agent')
-        assert 'claude' in model
-        response = await anthropic_client.messages.create(
-            model=model, max_tokens=50, messages=[{"role": "user", "content": SIMPLE_PROMPT}]
-        )
-        text = response.content[0].text.strip()
-        assert text, "Anthropic returned empty"
-        print(f"  P10 anthropic {model}: {text[:60]}")
+        assert model == 'gpt-5.6-luna'
+        assert get_provider('chat_agent') == 'openrouter'
+        llm = get_llm('chat_agent')
+        response = llm.invoke(SIMPLE_PROMPT)
+        text = response.content.strip()
+        assert text, "chat_agent returned empty"
+        print(f"  P10 openrouter {model}: {text[:60]}")
 
 
 # ---------------------------------------------------------------------------

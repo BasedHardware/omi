@@ -27,6 +27,20 @@ rate_cards:
     output_micro_usd_per_million: 1200000
     cache_write_micro_usd_per_million: 250000
 
+  - rate_card_id: openrouter.openai.gpt-5.6-luna.2026-08-09
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+    input_micro_usd_per_million: 1000000
+    cached_input_micro_usd_per_million: 100000
+    output_micro_usd_per_million: 6000000
+
+  - rate_card_id: openrouter.openai.gpt-5-nano.2026-08-09
+    provider: openrouter
+    model: openai/gpt-5-nano
+    input_micro_usd_per_million: 50000
+    cached_input_micro_usd_per_million: 5000
+    output_micro_usd_per_million: 400000
+
   - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
     provider: gemini
     model: gemini-2.5-flash

@@ -429,7 +429,8 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    if not provider_ref.model.startswith('gpt-5.6'):
+    model_basename = provider_ref.model.rsplit('/', 1)[-1]
+    if not model_basename.startswith('gpt-5.6'):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
