@@ -19,6 +19,7 @@ The fastest way to get started — no installation required.
     Developer API key from **Settings → Developer → Create Key**. Developer API keys look like
     `omi_dev_...`.
     </Note>
+
   </Step>
   <Step title="Configure Your Client" icon="sliders">
     Use the following connection details:
@@ -26,6 +27,7 @@ The fastest way to get started — no installation required.
     - **Server URL:** `https://api.omi.me/v1/mcp/sse`
     - **Authorization:** `Bearer omi_mcp_...` (your generated key)
     - **Transport:** Streamable HTTP (MCP 2025-03-26 spec)
+
   </Step>
 </Steps>
 
@@ -54,6 +56,7 @@ The fastest way to get started — no installation required.
     - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
     - Windows PowerShell: `$env:APPDATA\Claude\claude_desktop_config.json`
     - Windows cmd: `%APPDATA%\Claude\claude_desktop_config.json`
+
   </Tab>
   <Tab title="Cursor" icon="i-cursor">
     Go to **Cursor Settings → MCP** and add a new server:
@@ -62,11 +65,43 @@ The fastest way to get started — no installation required.
     - **Transport:** SSE
     - **URL:** `https://api.omi.me/v1/mcp/sse`
     - **Headers:** `Authorization: Bearer omi_mcp_YOUR_KEY_HERE`
+
+  </Tab>
+  <Tab title="OpenCode" icon="terminal">
+    Add to your project's `opencode.json` (or `~/.config/opencode/opencode.json` globally):
+
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "omi": {
+          "type": "remote",
+          "url": "https://api.omi.me/v1/mcp/sse",
+          "enabled": true,
+          "headers": {
+            "Authorization": "Bearer {env:OMI_MCP_API_KEY}"
+          }
+        }
+      }
+    }
+    ```
+
+    Store your key in a local `.env` file (or export `OMI_MCP_API_KEY` in your environment):
+
+    ```bash
+    OMI_MCP_API_KEY=omi_mcp_YOUR_KEY_HERE
+    ```
+
+    <Note>
+    Be sure to use an MCP key generated from **Settings → Developer → MCP** (starts with `omi_mcp_`). Developer API keys (`omi_dev_...`) only authenticate REST endpoints and will return `401 Unauthorized`.
+    </Note>
+
   </Tab>
   <Tab title="Poke" icon="circle-play">
     <img src="/images/poke-mcp-setup.png" alt="Poke MCP Setup" className="rounded-xl border border-gray-200 dark:border-gray-800" />
 
     Enter the server URL and API key in Poke's MCP connection settings.
+
   </Tab>
   <Tab title="Custom Client" icon="code">
     Any MCP client that supports the **Streamable HTTP** transport (2025-03-26 spec) will work:
@@ -83,6 +118,7 @@ The fastest way to get started — no installation required.
     # Body (JSON-RPC 2.0)
     {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
     ```
+
   </Tab>
 </Tabs>
 
@@ -112,11 +148,13 @@ If you prefer to run the MCP server locally:
       }
     }
     ```
+
   </Step>
 </Steps>
 
 <Tip>
-The API key can also be provided with each tool call. If not provided, the server uses the `OMI_API_KEY` environment variable as a fallback.
+  The API key can also be provided with each tool call. If not provided, the
+  server uses the `OMI_API_KEY` environment variable as a fallback.
 </Tip>
 
 ---
@@ -130,5 +168,6 @@ export OMI_API_BASE_URL="https://your-backend-url.com"
 ```
 
 <Note>
-Only needed for self-hosted Omi instances. The default URL points to the official Omi API.
+  Only needed for self-hosted Omi instances. The default URL points to the
+  official Omi API.
 </Note>

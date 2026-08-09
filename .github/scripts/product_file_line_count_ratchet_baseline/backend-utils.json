@@ -10,7 +10,7 @@
     "backend/utils/retrieval/agentic.py": 1512,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
     "backend/utils/stt/streaming.py": 1523,
-    "backend/utils/sync/pipeline.py": 2491
+    "backend/utils/sync/pipeline.py": 2499
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
@@ -21,7 +21,7 @@
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873); the deletion purge path additionally records bounded storage wipe counters for telemetry.",
     "backend/utils/retrieval/agentic.py": "Split setup vs post-setup TTFT clocks, emit an early think: progress event after setup, and persist typed timeout/failure answers so the chat router cannot append the generic canned sorry after error: (SCA-296). +8 accepts a shared absolute setup deadline from the chat router so metadata + prompt/tool load use one budget (SCA-296).",
     "backend/utils/stt/streaming.py": "Restoring hosted Deepgram added the provider client lifecycle back to this module: a lazily built account client, the self-hosted endpoint guard, and BYOK selection. The lifecycle is a coherent unit and should move to utils/stt/deepgram_client.py; this entry records the debt rather than hiding it.",
-    "backend/utils/sync/pipeline.py": "Plan-aware soft-cap evaluation and its default-tier fallback remain in a small helper beside Sync's idempotent fresh-speech metering rather than overgrowing the durable worker coordinator."
+    "backend/utils/sync/pipeline.py": "Partial merge survivors still need private-cloud audio backing before conversation-relative rewrite (#4769 David CR); sliced upload lives in merge_audio.py, but process_segment must branch full vs partial store beside the merge dedupe gate."
   },
   "threshold": 1500
 }
