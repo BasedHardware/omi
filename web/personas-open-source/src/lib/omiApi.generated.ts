@@ -1714,6 +1714,28 @@ export interface ExternalIntegration {
 
 export type ExternalIntegrationConversationSource = "audio_transcript" | "message" | "other_text";
 
+export interface ExtractKnowledgeGraphRequest {
+  include_existing?: boolean;
+  text: string;
+  user_name?: string | null;
+}
+
+export interface ExtractKnowledgeGraphResponse {
+  edges: Array<Record<string, unknown>>;
+  nodes: Array<Record<string, unknown>>;
+}
+
+export interface ExtractMemoryLogRequest {
+  existing_memories?: Array<string>;
+  text: string;
+  text_source?: string;
+}
+
+export interface ExtractMemoryLogResponse {
+  memories: Array<string>;
+  profile?: string;
+}
+
 export interface FairUseDailyGenerationsBudgetResponse {
   daily_limit_ms: number;
   exhausted: boolean;
@@ -4153,6 +4175,10 @@ export interface OmiApiSchemas {
   "ExecuteToolResponse": ExecuteToolResponse;
   "ExternalIntegration": ExternalIntegration;
   "ExternalIntegrationConversationSource": ExternalIntegrationConversationSource;
+  "ExtractKnowledgeGraphRequest": ExtractKnowledgeGraphRequest;
+  "ExtractKnowledgeGraphResponse": ExtractKnowledgeGraphResponse;
+  "ExtractMemoryLogRequest": ExtractMemoryLogRequest;
+  "ExtractMemoryLogResponse": ExtractMemoryLogResponse;
   "FairUseDailyGenerationsBudgetResponse": FairUseDailyGenerationsBudgetResponse;
   "FairUseLimitsResponse": FairUseLimitsResponse;
   "FairUseStatusResponse": FairUseStatusResponse;
@@ -6481,6 +6507,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/knowledge-graph/extract": {
+    post: {
+      operationId: "extract_knowledge_graph_v1_knowledge_graph_extract_post";
+      responses: {
+        "200": ExtractKnowledgeGraphResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/knowledge-graph/rebuild": {
     post: {
       operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
@@ -6766,6 +6802,16 @@ export interface OmiApiPaths {
       responses: {
         "200": McpSseInfoResponse;
         "401": void;
+      };
+    };
+  };
+  "/v1/memories/extract": {
+    post: {
+      operationId: "extract_memory_log_v1_memories_extract_post";
+      responses: {
+        "200": ExtractMemoryLogResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -12392,6 +12438,27 @@ export async function get_canonical_knowledge_graph_v1_knowledge_graph_canonical
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function extract_knowledge_graph_v1_knowledge_graph_extract_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ExtractKnowledgeGraphRequest, init?: OmiApiClientInit): Promise<ExtractKnowledgeGraphResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/knowledge-graph/extract`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function rebuild_graph_v1_knowledge_graph_rebuild_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RebuildResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/knowledge-graph/rebuild`;
@@ -12892,6 +12959,27 @@ export async function mcp_sse_info_v1_mcp_sse_info_get(init?: OmiApiClientInit):
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function extract_memory_log_v1_memories_extract_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ExtractMemoryLogRequest, init?: OmiApiClientInit): Promise<ExtractMemoryLogResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/memories/extract`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -16175,4 +16263,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 393 client methods generated.
+// Total: 395 client methods generated.
