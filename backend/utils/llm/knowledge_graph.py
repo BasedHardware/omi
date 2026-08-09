@@ -124,7 +124,7 @@ def extract_kg_from_text(
     strict_parse: bool = False,
     usage_memory_id: str = "extract",
 ) -> Optional[KnowledgeGraphExtraction]:
-    """Run SSOT KG extraction via get_llm('knowledge_graph') without persisting.
+    """Run SSOT KG extraction via the managed knowledge_graph feature without persisting.
 
     Desktop onboarding and other local-cache writers should call this (or the
     /v1/knowledge-graph/extract HTTP surface) instead of inventing nodes/edges

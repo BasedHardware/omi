@@ -666,8 +666,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify endpoints = 12
-        self.assertEqual(len(matches), 12, f"memories.py expected 12 rate limits, got {len(matches)}")
+        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify = 13
+        self.assertEqual(len(matches), 13, f"memories.py expected 13 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
