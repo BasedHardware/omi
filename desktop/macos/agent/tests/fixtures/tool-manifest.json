@@ -3551,7 +3551,7 @@
       "destructiveHint": false,
       "openWorldHint": false
     },
-    "timeoutClass": "normal",
+    "timeoutClass": "long",
     "executor": {
       "kind": "swiftTool",
       "executorName": "chatToolExecutor"
