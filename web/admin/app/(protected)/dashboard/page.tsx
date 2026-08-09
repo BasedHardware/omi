@@ -56,7 +56,7 @@ import {
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
 import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
-import { latestPeriodChange } from "@/lib/period-change";
+import { calculatePeriodChange, latestPeriodChange } from "@/lib/period-change";
 import {
   completedWeeklyNewUsers,
   maturedWeeklyActivation,
@@ -397,9 +397,11 @@ const tooltipStyle = {
 };
 
 const SOFTWARE_USER_GOAL = 1_000_000;
-const ONE_MILLION_ORDER_REVISION = "1m-growth-v1";
+const ONE_MILLION_ORDER_REVISION = "1m-growth-v2";
 const ONE_MILLION_PRIORITY_IDS = [
   "header-1m-growth",
+  "kpi-total-users-goal",
+  "kpi-net-wau",
   "kpi-weekly-new-users",
   "kpi-weekly-activated-users",
   "kpi-w4-retention",
@@ -1773,6 +1775,16 @@ export default function AnalyticsPage() {
     ? Math.min(100, (totalFirebaseUsers / SOFTWARE_USER_GOAL) * 100)
     : null;
 
+  // Net WAU: compare the last two FULL weeks — the trailing
+  // growth-accounting bucket is the current partial week.
+  const fullGrowthWeeks = useMemo(
+    () => (vm?.growthAccounting ?? []).slice(0, -1),
+    [vm],
+  );
+  const netWauNow = fullGrowthWeeks.length >= 1 ? fullGrowthWeeks[fullGrowthWeeks.length - 1].active : null;
+  const netWauPrev = fullGrowthWeeks.length >= 2 ? fullGrowthWeeks[fullGrowthWeeks.length - 2].active : null;
+  const netWauChange = calculatePeriodChange(netWauNow, netWauPrev, "vs previous complete week");
+
   const growthGoalItems = useMemo<ChartItem[]>(() => {
     const kFactorValue = kFactorData?.available && kFactorData.kFactor != null
       ? kFactorData.kFactor.toFixed(2)
@@ -1794,6 +1806,49 @@ export default function AnalyticsPage() {
         initialLayout: { cols: 12, rows: 1 },
         removable: false,
         render: () => null,
+      },
+      {
+        id: "kpi-total-users-goal",
+        title: "Total Users",
+        variant: "kpi",
+        icon: <Target className="h-3.5 w-3.5" />,
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className="text-2xl font-bold text-green-600">
+              {totalFirebaseUsers != null ? totalFirebaseUsers.toLocaleString() : "--"}
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-green-500"
+                style={{ width: `${goalProgressPct ?? 0}%` }}
+              />
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {goalProgressPct != null ? `${goalProgressPct.toFixed(1)}% of 1M` : "of 1M"}
+            </p>
+          </div>
+        ),
+      },
+      {
+        id: "kpi-net-wau",
+        title: "Net WAU Growth",
+        variant: "kpi",
+        icon: <Activity className="h-3.5 w-3.5" />,
+        periodChange: netWauChange,
+        initialLayout: { cols: 3, rows: 1 },
+        removable: false,
+        render: () => (
+          <div>
+            <div className="text-2xl font-bold">
+              {netWauNow != null ? netWauNow.toLocaleString() : "--"}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              new + resurrected − churned · target ≥7% WoW
+            </p>
+          </div>
+        ),
       },
       {
         id: "kpi-weekly-new-users",
@@ -1907,6 +1962,7 @@ export default function AnalyticsPage() {
     ];
   }, [dailyNewUsersLoading, goalProgressPct, growthRetentionLoading, growthRetentionW4,
     kFactorData, kFactorLoading, latestWeeklyActivation, latestWeeklyNewUsers,
+    netWauChange, netWauNow,
     totalFirebaseUsers, weeklyActivationData, weeklyNewUsersData]);
 
   const topKpiAndNewWidgets = useMemo<ChartItem[]>(() => {
