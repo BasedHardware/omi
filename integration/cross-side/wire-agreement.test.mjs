@@ -86,29 +86,90 @@ function realHttpClient(base, token = TOKEN) {
   };
 }
 
+/**
+ * READINESS COMES FROM THE CHILD, NOT FROM A PORT.
+ *
+ * This hook used to pin port 4853 with the comment "harness-local; avoids the
+ * registry's fixed allocations" and then wait for `GET /health` on that port to
+ * answer 200. Both halves were wrong, and together they produced the exact
+ * defect class this whole test exists to catch.
+ *
+ *   - 4853 is NOT unallocated. It is `platform/integration/control/
+ *     fence-server.ts`'s `DEFAULT_PORT`.
+ *   - The probe asked a URL, not the child. So when the spawn could not bind,
+ *     the probe reached WHOEVER ELSE held 4853, got a 200, and declared "the
+ *     backend is ready". Every assertion afterwards measured a foreign process.
+ *
+ * Observed live during the wave-3 run: an orphaned fence server (PPID 1) held
+ * 4853, answered `/health` with `{"status":"ok"}` and 404'd everything else, and
+ * this suite reported three failures about a diff that was green — including
+ * "unauthenticated caller: expected 401, actual 404", which is a 404 from a
+ * server that never had the route. That was the lucky direction. A squatter
+ * that answered plausibly would have produced a false GREEN in L2, the gate the
+ * entire integration loop rests on.
+ * (`data/run-2026-08-09/blocked/READ-l2-cross-side-port-4853-collides-with-fence-server.md`)
+ *
+ * So the port is now OS-ASSIGNED (`OMI_INTEGRATION_PORT=0`) and the readiness
+ * signal is the child's OWN `integration_backend_listening` line on its stdout,
+ * which reports `server.port` — the port it actually bound. There is no port to
+ * collide with and no way to be handed somebody else's process: the URL under
+ * test is the one the process under test printed about itself.
+ *
+ * The failure paths are loud on purpose. A child that dies during boot fails
+ * with its captured stderr instead of a bare status, because "backend exited
+ * before readiness (status 1)" is what sent someone to read a toolchain.
+ */
 before(async () => {
-  const port = 4853; // harness-local; avoids the registry's fixed allocations
   child = spawn("bun", ["run", "integration/server/serve.ts"], {
     cwd: PLATFORM_REPO,
-    env: { ...process.env, TZ: "UTC", OMI_INTEGRATION_PORT: String(port) },
+    // Port 0 asks the OS for a free port. Nothing here may pin one: this suite
+    // shares a machine with every other lane, and a pinned port is a shared
+    // mutable resource with no owner.
+    env: { ...process.env, TZ: "UTC", OMI_INTEGRATION_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  baseUrl = `http://127.0.0.1:${port}`;
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+
+  const readListeningUrl = () => {
+    for (const line of stdout.split("\n")) {
+      if (!line.includes("integration_backend_listening")) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.event === "integration_backend_listening" && typeof event.url === "string") {
+          return event.url;
+        }
+      } catch {
+        // A partial line; the next chunk completes it.
+      }
+    }
+    return null;
+  };
 
   const deadline = Date.now() + BOOT_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    const url = readListeningUrl();
+    if (url !== null) {
+      baseUrl = url;
+      return;
+    }
     if (child.exitCode !== null) {
-      throw new Error(`backend exited before readiness (status ${child.exitCode})`);
+      throw new Error(
+        `backend exited before readiness (status ${child.exitCode})\n`
+        + `stdout: ${stdout.trim() || "(empty)"}\nstderr: ${stderr.trim() || "(empty)"}`,
+      );
     }
-    try {
-      const probe = await fetch(`${baseUrl}/health`);
-      if (probe.ok) return;
-    } catch {
-      // not up yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error("backend did not become ready");
+  throw new Error(
+    `backend never announced a listening port within ${BOOT_TIMEOUT_MS}ms\n`
+    + `stdout: ${stdout.trim() || "(empty)"}\nstderr: ${stderr.trim() || "(empty)"}`,
+  );
 });
 
 after(async () => {
