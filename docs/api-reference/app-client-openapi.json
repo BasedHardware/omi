@@ -10872,7 +10872,7 @@
             "type": "array"
           },
           "text": {
-            "maxLength": 100000,
+            "maxLength": 40000,
             "minLength": 1,
             "title": "Text",
             "type": "string"
@@ -41992,7 +41992,7 @@
     },
     "/v1/knowledge-graph/extract": {
       "post": {
-        "description": "Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/file-index should call this instead of\ninventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.",
+        "description": "Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/file-index should call this instead of\ninventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.\n\n``strict_parse`` is on at this HTTP boundary so a malformed model response fails\nclosed (502) instead of returning 200 with an empty graph, which a client cannot\ntell apart from a genuine \"no entities\" answer.",
         "operationId": "extract_knowledge_graph_v1_knowledge_graph_extract_post",
         "parameters": [
           {
