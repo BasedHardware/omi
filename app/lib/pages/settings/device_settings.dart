@@ -16,6 +16,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
@@ -719,10 +720,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               trailing: Switch(
                 value: _omiButtonActionsEnabled,
                 activeThumbColor: Colors.white,
-                activeTrackColor: const Color(0xFF8B5CF6),
+                activeTrackColor: Colors.white,
                 onChanged: (value) {
                   setState(() => _omiButtonActionsEnabled = value);
                   SharedPreferencesUtil().omiButtonActionsEnabled = value;
+                  if (!value) {
+                    // Drop any in-flight voice-command session so audio captured
+                    // while actions were enabled is not submitted after disabling.
+                    context.read<CaptureProvider>().cancelActiveVoiceSession();
+                  }
                 },
               ),
             ),

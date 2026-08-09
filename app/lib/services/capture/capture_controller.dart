@@ -710,7 +710,17 @@ class CaptureController extends ChangeNotifier
   // and device-button voice commands are ignored. This gate intentionally does
   // NOT apply to interactive onboarding, which must still receive button events.
   bool get _omiButtonActionsDisabled =>
-      _recordingDevice?.type == DeviceType.omi && !SharedPreferencesUtil().omiButtonActionsEnabled;
+      _isOmiButtonActionsDevice(_recordingDevice) && !SharedPreferencesUtil().omiButtonActionsEnabled;
+
+  /// Whether this device is an Omi (not an OmiGlass) that honors the Omi button
+  /// actions preference. Some OmiGlass units advertise with ``DeviceType.omi``
+  /// during discovery, so the gate uses the normalized name-based identity the
+  /// connection layer uses, rather than the raw discovery type.
+  bool _isOmiButtonActionsDevice(BtDevice? device) {
+    if (device == null || device.type != DeviceType.omi) return false;
+    final name = device.name.toLowerCase();
+    return !(name.contains('openglass') || name.contains('omiglass') || name.contains('glass'));
+  }
 
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
     if (_omiButtonActionsDisabled) return;
@@ -757,6 +767,17 @@ class CaptureController extends ChangeNotifier
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
     _processVoiceCommandBytes(deviceId, data);
+  }
+
+  /// Cancel an in-flight voice-command session without submitting the collected
+  /// audio. Used when the user disables Omi button actions mid-session so the
+  /// captured bytes are dropped instead of being sent after the toggle flips.
+  void cancelActiveVoiceSession() {
+    _voiceCommandTimeoutTimer?.cancel();
+    _voiceCommandTimeoutTimer = null;
+    _voiceCommandSession = null;
+    _voiceSessionStartedByLegacyLongPress = false;
+    _commandBytes = [];
   }
 
   Future streamButton(String deviceId) async {
