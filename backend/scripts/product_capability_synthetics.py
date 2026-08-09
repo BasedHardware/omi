@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from fastapi.testclient import TestClient
 from llm_gateway.gateway.auth import LEGACY_SERVICE_TOKEN_ENV_VAR, PRIMARY_SERVICE_TOKEN_ENV_VAR
+from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app as llm_gateway_app
@@ -183,6 +184,29 @@ def mcp_oauth_metadata_check(config: SyntheticConfig) -> tuple[str, str, dict[st
     return STATUS_PASS, "MCP/OAuth discovery metadata is reachable and advertises required capabilities.", details
 
 
+SYNTHETIC_LANE_ID = "omi:auto:chat-structured"
+
+
+def _lane_provider_keys(lane_id: str) -> tuple[str, ...]:
+    """Providers the lane's routes actually declare.
+
+    Hardcoding a provider here makes the smoke fail with invalid_route_config the
+    moment a lane is repointed (e.g. OpenAI -> OpenRouter), so the fake registry is
+    keyed off the loaded gateway config instead.
+    """
+    gateway_config = load_gateway_config()
+    lane = gateway_config.lanes[lane_id]
+    keys: list[str] = []
+    for route_id in (lane.active_route, lane.last_known_good):
+        artifact = gateway_config.route_artifacts.get(route_id)
+        if artifact is None:
+            continue
+        for target in [artifact.primary, *artifact.fallbacks]:
+            if target.provider not in keys:
+                keys.append(target.provider)
+    return tuple(keys)
+
+
 def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, dict[str, Any]]:
     sentinel_token = "product-synthetic-sentinel-token"
     service_token_env_vars = (PRIMARY_SERVICE_TOKEN_ENV_VAR, LEGACY_SERVICE_TOKEN_ENV_VAR)
@@ -192,7 +216,7 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
 
     provider = FakeChatCompletionProvider()
     llm_gateway_app.dependency_overrides[llm_gateway_dependencies.get_provider_registry] = lambda: ProviderRegistry(
-        {"openai": provider}
+        {key: provider for key in _lane_provider_keys(SYNTHETIC_LANE_ID)}
     )
     try:
         response = TestClient(llm_gateway_app).post(
@@ -203,7 +227,7 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
                 "x-omi-user-uid": "synthetic-product-capability-user",
             },
             json={
-                "model": "omi:auto:chat-structured",
+                "model": SYNTHETIC_LANE_ID,
                 "messages": [{"role": "user", "content": "Return a JSON object with capability true."}],
                 "response_format": {
                     "type": "json_schema",
@@ -235,7 +259,7 @@ def llm_gateway_fake_provider_check(config: SyntheticConfig) -> tuple[str, str, 
             {"status_code": response.status_code, "body": response.text[:500]},
         )
     body = response.json()
-    if body.get("object") != "chat.completion" or body.get("model") != "omi:auto:chat-structured" or not provider.calls:
+    if body.get("object") != "chat.completion" or body.get("model") != SYNTHETIC_LANE_ID or not provider.calls:
         return STATUS_FAIL, "LLM gateway response did not match the OpenAI-compatible chat contract.", {"body": body}
     return (
         STATUS_PASS,
