@@ -12,11 +12,22 @@ import {
   type DevPrincipal,
 } from "./auth/dev-token";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
+import { createWriteFenceCounter, type WriteFenceCounter } from "./control/fence-counter";
+import {
+  createInMemoryAccountControlProjectionStore,
+  type AccountControlProjectionStore,
+} from "./control/projection-store";
 import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
+import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
+import { registerQaControlRoutes } from "./routes/qa-control";
+import { registerTasksOpsRoutes } from "./routes/tasks-ops";
+import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
+import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
+import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
 
 /**
  * Builds the complete app-facing service.
@@ -57,6 +68,24 @@ export interface LocalService {
   readonly counter: ServedCounter;
   readonly reseed: () => void;
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
+  /**
+   * The write path's stores and arbiters, exposed so a test or a booted stack
+   * can drive and read them WITHOUT standing up a second server. The fence
+   * harness existed because there was nowhere else to reach these; there is
+   * now, which is what R5 asked for.
+   *
+   * `tasksRead` is deliberately typed as the READ interface: the read route
+   * consumes this store read-only (R11), and the type is where that stays true.
+   */
+  readonly writePath: {
+    readonly tasks: TasksStore;
+    readonly tasksRead: TasksReadStore;
+    readonly registry: WriteIdRegistry;
+    readonly stragglers: StragglerTable;
+    readonly control: AccountControlProjectionStore;
+    readonly fenceCounter: WriteFenceCounter;
+    readonly opsCounter: WriteOpsCounter;
+  };
 }
 
 export const createLocalService = (options: LocalServiceOptions): LocalService => {
@@ -152,6 +181,23 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     fixture_time_anchor_utc: QA_FIXTURE_TIME_ANCHOR_UTC,
   });
 
+  // ── The write path ────────────────────────────────────────────────────────
+  //
+  // Constructed here for the same reason everything else is: TESTS EXERCISE THE
+  // REAL APP. There is one wiring of the write door, and it is this one.
+  //
+  // The control projection starts EMPTY on purpose. Nothing in platform mints
+  // control state (`EPOCH-fence-interface.md`), so every write denies
+  // `control_unavailable` until a dev account is seeded through
+  // `/v1/qa/control/*` (R3). Seeding it here by default would make the local
+  // service disagree with the fail-closed posture the fence is built on.
+  const tasks = createInMemoryTasksStore();
+  const writeIdRegistry = createInMemoryWriteIdRegistry();
+  const stragglers = createInMemoryStragglerTable();
+  const controlStore = createInMemoryAccountControlProjectionStore();
+  const fenceCounter = createWriteFenceCounter();
+  const opsCounter = createWriteOpsCounter();
+
   const app = new Hono({ strict: true });
   app.get("/health", () => {
     counter.recordNonDomainRequest();
@@ -162,6 +208,27 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     return new Response(JSON.stringify({ status: "ready" }), { status: 200, headers: JSON_HEADERS });
   });
   registerMemoryRoutes(app, { resolvePrincipal, prepareRead, counter });
+  registerTasksOpsRoutes(app, {
+    resolvePrincipal,
+    tasks,
+    registry: writeIdRegistry,
+    stragglers,
+    fence: { store: controlStore, counter: fenceCounter },
+    counter: opsCounter,
+    // The same fixed instant the read path uses. No wall clock anywhere.
+    now: () => anchorEpochSeconds,
+  });
+  registerQaControlRoutes(app, {
+    resolvePrincipal,
+    fence: { store: controlStore, counter: fenceCounter },
+    writeOpsCounter: opsCounter,
+    stragglers,
+    resetWriteState: () => {
+      tasks.reset();
+      writeIdRegistry.reset();
+      stragglers.reset();
+    },
+  });
   registerQaRoutes(app, {
     counter,
     resetSeed: reseed,
@@ -173,5 +240,20 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: JSON_HEADERS });
   });
 
-  return Object.freeze({ app, devToken, counter, reseed, seedIdentity });
+  return Object.freeze({
+    app,
+    devToken,
+    counter,
+    reseed,
+    seedIdentity,
+    writePath: Object.freeze({
+      tasks,
+      tasksRead: tasks,
+      registry: writeIdRegistry,
+      stragglers,
+      control: controlStore,
+      fenceCounter,
+      opsCounter,
+    }),
+  });
 };

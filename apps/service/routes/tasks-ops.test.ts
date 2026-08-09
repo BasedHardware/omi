@@ -1,0 +1,618 @@
+/**
+ * `POST /v1/tasks/ops` — the write door, against THE REAL SERVICE.
+ *
+ * Boots `createLocalService`, the same factory `bin/dev-server.ts` uses, so
+ * every byte asserted here is produced by the shipped wiring rather than by a
+ * lookalike assembled in this file. That is the whole reason `app-facing.ts`
+ * exists, and the reason the fence harness's own header gave for why a
+ * placeholder door was a problem.
+ *
+ * THE CONFORMANCE SUITE AT THE BOTTOM IS DRIVEN BY THE VENDORED CORPUS, not by
+ * a list retyped here. A retyped list agrees with itself; the corpus is the
+ * contract's own bytes.
+ *
+ * Every invariant carries a red-proof applied to the real source and observed.
+ * The ones that did NOT go red are recorded as such, in place — a red-proof
+ * that stays green is evidence about the assertion.
+ */
+
+import { Database } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
+
+import {
+  WRITE_AVAILABILITY,
+  WRITE_ERRORS,
+  WRITE_REFUSALS,
+  isTrustedWriteAccepted,
+} from "@omi-core/ratified-contracts/write/ops";
+
+import { createLocalService, type LocalService } from "../app-facing";
+import { WRITE_RUN_ID_HEADER } from "../observability/write-ops-counter";
+import { TASKS_OPS_PATH } from "./tasks-ops";
+
+const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
+const OWNER_ACCOUNT_ID = "local-dev-user";
+const ACTIVE_EPOCH = 7;
+const STALE_EPOCH = 6;
+
+const CORPUS = new URL(
+  "../../../node_modules/@omi-core/ratified-contracts/fixtures/write-ops-conformance.json",
+  import.meta.url,
+);
+const OUTCOMES_OF_RECORD = new URL(
+  "../../../node_modules/@omi-core/ratified-contracts/fixtures/write-ops-outcomes.json",
+  import.meta.url,
+);
+
+interface Booted {
+  readonly service: LocalService;
+  readonly auth: string;
+}
+
+const boot = (): Booted => {
+  const service = createLocalService({
+    db: new Database(":memory:"),
+    ownerAccountId: OWNER_ACCOUNT_ID,
+    memoryCount: 2,
+    accountTimezone: "America/Los_Angeles",
+    devSecretLabel: DEV_KEY_MATERIAL_LABEL,
+  });
+  return { service, auth: `Bearer ${service.devToken}` };
+};
+
+const control = async (booted: Booted, path: string, body: unknown): Promise<Response> =>
+  booted.service.app.request(path, {
+    method: "POST",
+    headers: { authorization: booted.auth, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** Drives ADR-010 §1's forward activation order through the registered app. */
+const cutOver = async (booted: Booted, epoch = ACTIVE_EPOCH): Promise<void> => {
+  const observation = (overrides: Record<string, unknown>) => ({
+    control_revision: 1,
+    account_generation: "legacy",
+    account_epoch: null,
+    lifecycle_state: "active",
+    deletion_epoch: null,
+    ...overrides,
+  });
+  await control(booted, "/v1/qa/control/observe", observation({}));
+  await control(booted, "/v1/qa/control/observe", observation({ control_revision: 2, account_generation: "migrating" }));
+  await control(booted, "/v1/qa/control/observe", observation({
+    control_revision: 3, account_generation: "new", account_epoch: epoch,
+  }));
+  const activated = await control(booted, "/v1/qa/control/activate", { epoch, at_control_revision: 3 });
+  expect(await activated.json()).toMatchObject({ activated: true });
+};
+
+const writeId = (seed: string): string => seed.padEnd(64, "0").slice(0, 64).replace(/[^0-9a-f]/g, "0");
+
+interface Wire {
+  readonly status: number;
+  readonly text: string;
+  readonly retryAfter: string | null;
+}
+
+const post = async (
+  booted: Booted,
+  body: string,
+  options: { readonly path?: string; readonly token?: string | null; readonly runId?: string } = {},
+): Promise<Wire> => {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const token = options.token === undefined ? booted.auth : options.token;
+  if (token !== null) headers["authorization"] = token;
+  if (options.runId !== undefined) headers[WRITE_RUN_ID_HEADER] = options.runId;
+  const response = await booted.service.app.request(options.path ?? TASKS_OPS_PATH, {
+    method: "POST", headers, body,
+  });
+  return {
+    status: response.status,
+    text: await response.text(),
+    retryAfter: response.headers.get("retry-after"),
+  };
+};
+
+/** A canonical envelope: compact, key order as written. */
+const envelope = (input: {
+  readonly writeId: string;
+  readonly epoch?: number;
+  readonly domain?: string;
+  readonly op: unknown;
+}): string => JSON.stringify({
+  write_id: input.writeId,
+  account_epoch: input.epoch ?? ACTIVE_EPOCH,
+  domain: input.domain ?? "tasks",
+  op: input.op,
+});
+
+const create = (id: string, content: Record<string, unknown> = { title: "buy oat milk" }) =>
+  ({ op: "create", record_id: id, content });
+
+const statsFor = async (booted: Booted, run: string): Promise<Record<string, unknown>> => {
+  const response = await booted.service.app.request(`/v1/qa/control/stats?run=${encodeURIComponent(run)}`);
+  return (await response.json()) as Record<string, unknown>;
+};
+
+// ── The door applies, and the read side sees it ─────────────────────────────
+
+describe("an admitted write is APPLIED, not acknowledged", () => {
+  /**
+   * The property the fence harness could not have: it answered an admitted
+   * write with `202 {"fence":"admitted"}` and touched no record, so nothing
+   * downstream of the fence was ever proven. Here the same request is visible
+   * in the store the tasks read route reads from.
+   *
+   * red-proof: in `tasks-ops.ts`, return the accepted body without calling
+   * `deps.tasks.apply`. APPLIED AND OBSERVED RED — the record was absent.
+   */
+  test("a create reaches the store the read interface serves from", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const response = await post(booted, envelope({ writeId: writeId("a"), op: create("task-1") }));
+
+    expect(response.status).toBe(200);
+    const body: unknown = JSON.parse(response.text);
+    expect(isTrustedWriteAccepted(body)).toBe(true);
+    expect((body as { idempotent: boolean }).idempotent).toBe(false);
+
+    const stored = booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "task-1");
+    expect(stored?.content).toEqual({ title: "buy oat milk" });
+    expect(stored?.revision).toBe((body as { applied: { revision: string } }).applied.revision);
+  });
+
+  /**
+   * Ruling B1. The user's edit IS in the record; reporting anything else would
+   * be the false failure the contract exists to prevent.
+   *
+   * red-proof: in `tasks-ops.ts`, delete the `seen.kind === "replay"` branch so
+   * a replay falls through to apply. APPLIED AND OBSERVED RED — `idempotent`
+   * came back false and the revision advanced.
+   */
+  test("a byte-identical replay is a SUCCESS answered from the registry", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const bytes = envelope({ writeId: writeId("b"), op: create("task-2") });
+
+    const first = await post(booted, bytes);
+    const replay = await post(booted, bytes);
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(JSON.parse(replay.text)).toEqual({
+      applied: JSON.parse(first.text).applied,
+      idempotent: true,
+    });
+    // And it applied nothing the second time: the revision did not advance.
+    expect(booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "task-2")?.revision)
+      .toBe(JSON.parse(first.text).applied.revision);
+  });
+
+  /**
+   * red-proof: in `tasks-ops.ts`, answer `write_id_reuse` as `conflict`.
+   * APPLIED AND OBSERVED RED.
+   */
+  test("the same write_id laundering different content is refused, and applies nothing", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const id = writeId("c");
+    await post(booted, envelope({ writeId: id, op: create("task-3", { title: "first" }) }));
+    const reuse = await post(booted, envelope({ writeId: id, op: create("task-3", { title: "second" }) }));
+
+    expect(reuse.status).toBe(WRITE_ERRORS.write_id_reuse.status);
+    expect(reuse.text).toBe(WRITE_ERRORS.write_id_reuse.body);
+    expect(booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "task-3")?.content)
+      .toEqual({ title: "first" });
+  });
+
+  test("a failed base_revision precondition is `conflict`, distinct from write_id_reuse", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const first = await post(booted, envelope({ writeId: writeId("d"), op: create("task-4") }));
+    const revision = JSON.parse(first.text).applied.revision as string;
+    await post(booted, envelope({
+      writeId: writeId("e"), op: { op: "patch", record_id: "task-4", patch: { title: "x" } },
+    }));
+
+    const stale = await post(booted, envelope({
+      writeId: writeId("f"),
+      op: { op: "patch", record_id: "task-4", patch: { title: "y" }, base_revision: revision },
+    }));
+    expect(stale.status).toBe(WRITE_ERRORS.conflict.status);
+    expect(stale.text).toBe(WRITE_ERRORS.conflict.body);
+    expect(stale.text).not.toBe(WRITE_ERRORS.write_id_reuse.body);
+  });
+});
+
+// ── The fence, in the registered door ───────────────────────────────────────
+
+describe("the account epoch fence runs in the shipped route", () => {
+  /**
+   * The pair, carried over from the fence harness's own discipline: one field
+   * of one request separates the refusal from the acceptance, against the same
+   * process and the same body grammar. A broken route cannot produce the 200,
+   * so it cannot produce this pair.
+   *
+   * red-proof: in `tasks-ops.ts`, drop the `if (!decision.admitted)` block.
+   * APPLIED AND OBSERVED RED — the stale envelope was applied and answered 200.
+   */
+  test("a stale epoch is refused 409 while the same envelope at the active epoch is applied", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const stale = await post(booted, envelope({ writeId: writeId("1a"), epoch: STALE_EPOCH, op: create("t") }));
+    const fresh = await post(booted, envelope({ writeId: writeId("1b"), epoch: ACTIVE_EPOCH, op: create("t") }));
+
+    expect(stale.status).toBe(WRITE_REFUSALS.stale_epoch.status);
+    expect(stale.text).toBe(WRITE_REFUSALS.stale_epoch.body);
+    expect(fresh.status).toBe(200);
+  });
+
+  /**
+   * A stale-epoch refusal must LOSE NOTHING. This is the only refusal in the
+   * whole fence that preserves, and the row is the only surviving copy of what
+   * the user wrote.
+   *
+   * red-proof: in `tasks-ops.ts`, delete the `preserve_envelope` block.
+   * APPLIED AND OBSERVED RED — the export came back empty.
+   */
+  test("a refused straggler's full envelope is retained, patch included", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const bytes = envelope({
+      writeId: writeId("2a"), epoch: STALE_EPOCH,
+      op: { op: "patch", record_id: "t", patch: { title: "buy oat milk" } },
+    });
+    await post(booted, bytes);
+
+    const preserved = booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID);
+    expect(preserved).toHaveLength(1);
+    expect(preserved[0]?.envelope_json).toBe(bytes);
+    expect(preserved[0]?.envelope_json).toContain("buy oat milk");
+  });
+
+  /**
+   * The refusals that do NOT preserve must not quietly start retaining user
+   * content — that is how the record class whose retention window is
+   * owner-signed gets manufactured faster than the owner can sign a policy for
+   * it (W2's exact objection).
+   */
+  test("backpressure retains nothing", async () => {
+    const booted = boot();
+    // No control state at all: fail-closed `control_unavailable`.
+    const fenced = await post(booted, envelope({ writeId: writeId("3a"), op: create("t") }));
+    expect(fenced.status).toBe(WRITE_AVAILABILITY.control_unavailable.status);
+    expect(fenced.text).toBe(WRITE_AVAILABILITY.control_unavailable.body);
+    expect(fenced.retryAfter).toBe("60");
+    expect(booted.service.writePath.stragglers.exportAccount(OWNER_ACCOUNT_ID)).toEqual([]);
+  });
+
+  /**
+   * ADR-012 §4 and the read door's discipline: no reason, no epoch, no account
+   * identifier on the wire.
+   *
+   * red-proof: interpolate `decision.reason` into the refusal body in
+   * `fence-http.ts`. APPLIED AND OBSERVED RED.
+   */
+  test("no refusal body carries a reason, an epoch or an account id", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const stale = await post(booted, envelope({ writeId: writeId("4a"), epoch: STALE_EPOCH, op: create("t") }));
+    expect(Object.keys(JSON.parse(stale.text)).sort()).toEqual(["error", "refusal_outcome"]);
+    for (const secret of [OWNER_ACCOUNT_ID, "request_epoch_behind", String(ACTIVE_EPOCH)]) {
+      expect(stale.text).not.toContain(secret);
+    }
+  });
+
+  /**
+   * The fence's own counter must not move for a request that never had a
+   * principal — `epoch-fence.test.ts` pins the same property on the harness,
+   * and the registered door must keep it.
+   *
+   * red-proof: in `tasks-ops.ts`, move the authentication block below
+   * `applyWriteFence`. APPLIED AND OBSERVED RED.
+   */
+  test("a request refused before the fence produces no fence decision", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const run = `pre-fence-${crypto.randomUUID()}`;
+    const unauthenticated = await post(
+      booted,
+      envelope({ writeId: writeId("5a"), op: create("t") }),
+      { token: null, runId: run },
+    );
+    expect(unauthenticated.status).toBe(WRITE_REFUSALS.authentication.status);
+    expect(unauthenticated.text).toBe(WRITE_REFUSALS.authentication.body);
+
+    const stats = await statsFor(booted, run);
+    expect(stats["fence"]).toBeNull();
+    // The ROUTE, however, did produce an outcome — the two counters measure
+    // different things and must not be confused for one another.
+    expect(stats["writeOps"]).toMatchObject({ outcomes: { authentication: 1 } });
+  });
+});
+
+// ── Two independent measurements, joined by run id ──────────────────────────
+
+describe("the door is joinable: producer counters and a consumer observation", () => {
+  /**
+   * `STATE.md`: a claim of working behaviour names a producer-side counter AND
+   * a consumer-side observation, joined by run id, and the claiming agent runs
+   * both. Here the consumer side is what this test received; the producer side
+   * is what the process counted where the outcome was produced.
+   *
+   * red-proof: in `tasks-ops.ts`, move `deps.counter.record(...)` to the top of
+   * the handler and record a literal `"accepted"` — the dispatch-side number
+   * STATE.md forbids. APPLIED AND OBSERVED RED — the server reported 4
+   * accepted for a run in which the client observed 1 accepted, 1 idempotent
+   * and 2 stale_epoch.
+   */
+  test("the process's own outcome counts match what the client received", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const run = `arbiter-${crypto.randomUUID()}`;
+    const otherRun = `arbiter-other-${crypto.randomUUID()}`;
+
+    const bytes = envelope({ writeId: writeId("6a"), op: create("t") });
+    const observed: Record<string, number> = {};
+    const seen = (key: string) => { observed[key] = (observed[key] ?? 0) + 1; };
+
+    const first = await post(booted, bytes, { runId: run });
+    seen(JSON.parse(first.text).idempotent ? "accepted_idempotent" : "accepted");
+    const replay = await post(booted, bytes, { runId: run });
+    seen(JSON.parse(replay.text).idempotent ? "accepted_idempotent" : "accepted");
+    for (const seed of ["6b", "6c"]) {
+      const stale = await post(booted, envelope({ writeId: writeId(seed), epoch: STALE_EPOCH, op: create("t") }), { runId: run });
+      seen(JSON.parse(stale.text).refusal_outcome as string);
+    }
+    // Interleaved traffic under a DIFFERENT run id. A counter that only kept
+    // totals would agree with the wrong answer here.
+    await post(booted, envelope({ writeId: writeId("6d"), epoch: STALE_EPOCH, op: create("t") }), { runId: otherRun });
+
+    expect(observed).toEqual({ accepted: 1, accepted_idempotent: 1, stale_epoch: 2 });
+
+    const stats = await statsFor(booted, run);
+    expect(stats["writeOps"]).toMatchObject({
+      outcomes: { accepted: 1, accepted_idempotent: 1, stale_epoch: 2, validation: 0, conflict: 0 },
+      preservedEnvelopes: 2,
+    });
+    // The fence's independent count of the same events: it saw two admissions
+    // (the replay is admitted by the fence and then answered by the registry)
+    // and two stale-epoch refusals.
+    expect(stats["fence"]).toMatchObject({
+      admitted: 2, refused: { stale_epoch: 2 }, preservedEnvelopes: 2,
+    });
+    expect((await statsFor(booted, otherRun))["writeOps"]).toMatchObject({ outcomes: { stale_epoch: 1 } });
+  });
+
+  /**
+   * The control probe that makes the numbers above mean something: without it,
+   * a counter hard-coded to answer the same tally for every run would pass.
+   */
+  test("a run that sent nothing has no tally at all — null, not zero", async () => {
+    const booted = boot();
+    const stats = await statsFor(booted, `never-sent-${crypto.randomUUID()}`);
+    expect(stats["writeOps"]).toBeNull();
+    expect(stats["fence"]).toBeNull();
+  });
+});
+
+// ── Route hardening, at parity with the read door ───────────────────────────
+
+describe("route hardening", () => {
+  test("only POST is answered; every other method is a plain 404", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    for (const method of ["GET", "PUT", "PATCH", "DELETE"]) {
+      const response = await booted.service.app.request(TASKS_OPS_PATH, {
+        method, headers: { authorization: booted.auth },
+      });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "not_found" });
+    }
+  });
+
+  test("a trailing slash is a different path and 404s", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const response = await post(booted, envelope({ writeId: writeId("7a"), op: create("t") }), {
+      path: `${TASKS_OPS_PATH}/`,
+    });
+    expect(response.status).toBe(404);
+  });
+
+  /**
+   * Authentication precedes validation: an unauthenticated caller learns
+   * nothing about whether its envelope would have parsed.
+   *
+   * red-proof: swap the two blocks in `tasks-ops.ts`. APPLIED AND OBSERVED RED.
+   */
+  test("a garbage body from an unauthenticated caller is authentication, not validation", async () => {
+    const booted = boot();
+    const response = await post(booted, "not json at all", { token: null });
+    expect(response.status).toBe(WRITE_REFUSALS.authentication.status);
+    expect(response.text).toBe(WRITE_REFUSALS.authentication.body);
+  });
+
+  test("a bare token without the Bearer prefix is authentication", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const response = await post(booted, envelope({ writeId: writeId("8a"), op: create("t") }), {
+      token: booted.service.devToken,
+    });
+    expect(response.status).toBe(WRITE_REFUSALS.authentication.status);
+  });
+
+  /**
+   * The route defines NO query parameters. It ignores them rather than
+   * refusing, and this pins that so nobody later builds behaviour on one: a
+   * query string must not change the outcome.
+   */
+  test("a query string cannot change the outcome", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const response = await post(booted, envelope({ writeId: writeId("9a"), op: create("t") }), {
+      path: `${TASKS_OPS_PATH}?limit=1&limit=2`,
+    });
+    expect(response.status).toBe(200);
+  });
+
+  /**
+   * Non-canonical JSON is refused by the contract's own parser, not by a second
+   * one written here. Duplicate keys are the case that matters: `JSON.parse`
+   * keeps the last, so a body carrying two `account_epoch` values would
+   * otherwise be silently resolved in the parser's favour.
+   *
+   * red-proof: parse with `JSON.parse` + `isTrustedWriteOpEnvelope` instead of
+   * `parseWriteOpEnvelopeJson`. APPLIED AND OBSERVED RED on the duplicate-key
+   * case.
+   */
+  test("duplicate keys and pretty-printing are refused as validation", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const good = envelope({ writeId: writeId("aa"), op: create("t") });
+    for (const bad of [
+      good.replace('"account_epoch":7', '"account_epoch":6,"account_epoch":7'),
+      JSON.stringify(JSON.parse(good), null, 2),
+    ]) {
+      const response = await post(booted, bad);
+      expect(response.status).toBe(WRITE_ERRORS.validation.status);
+      expect(response.text).toBe(WRITE_ERRORS.validation.body);
+    }
+  });
+
+  /**
+   * The envelope's domain and the path's must agree. A `tasks` envelope posted
+   * at another domain's path is malformed for where it was sent.
+   *
+   * red-proof: drop the `envelope.domain !== pathDomain` clause. APPLIED AND
+   * OBSERVED RED.
+   */
+  test("a tasks envelope at another domain's path is validation, not an apply", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const response = await post(booted, envelope({ writeId: writeId("bb"), op: create("t") }), {
+      path: "/v1/memories/ops",
+    });
+    expect(response.status).toBe(WRITE_ERRORS.validation.status);
+    expect(response.text).toBe(WRITE_ERRORS.validation.body);
+    expect(booted.service.writePath.tasksRead.readRecord(OWNER_ACCOUNT_ID, "t")).toBeNull();
+  });
+});
+
+// ── Conformance against the vendored corpus ─────────────────────────────────
+
+describe("the vendored write-ops corpus, executed", () => {
+  /**
+   * Driven by the contract's own fixture file. The corpus distinguishes bodies
+   * that are RATIFIED byte-for-byte from bodies that are not
+   * (`bodyRatified: false` for the accepted cases, whose revision values are
+   * illustrative), and this test respects that distinction rather than pinning
+   * an unratified byte and calling it conformance.
+   *
+   * red-proof: change one refusal body constant in the ratified contract's
+   * dist (`WRITE_ERRORS.validation.body`) and every validation row goes red.
+   */
+  test("every corpus case's status and ratified bytes are what this route answers", async () => {
+    const corpus = await Bun.file(CORPUS).json() as ReadonlyArray<{
+      name: string; wireOutcome: string; path: string; requestBody: string;
+      response: { status: number; body: string };
+    }>;
+    const outcomes = await Bun.file(OUTCOMES_OF_RECORD).json() as {
+      outcomes: ReadonlyArray<{ outcome: string; bodyRatified: boolean }>;
+    };
+    const ratifiedBody = new Map(outcomes.outcomes.map((row) => [row.outcome, row.bodyRatified]));
+
+    // Cases whose outcome this route cannot reach from a request alone: the
+    // authorization/entitlement classes need a grant composition that does not
+    // exist in this service yet, and `control_unavailable` is covered above by
+    // the fail-closed path. Named rather than silently skipped — a suite that
+    // quietly drops rows is how a corpus stops being a corpus.
+    const notReachableHere = new Set(["authorization", "entitlement", "control_unavailable"]);
+
+    const executed: string[] = [];
+    let rebasedCases = 0;
+    for (const entry of corpus) {
+      if (notReachableHere.has(entry.wireOutcome)) continue;
+      const booted = boot();
+      await cutOver(booted);
+
+      // The idempotent-replay row is a SECOND send of the row above it.
+      if (entry.wireOutcome === "accepted_idempotent") await post(booted, entry.requestBody, { path: entry.path });
+      // The reuse and conflict rows need a prior applied op to collide with.
+      if (entry.wireOutcome === "write_id_reuse") {
+        const first = JSON.parse(entry.requestBody) as { write_id: string; account_epoch: number; domain: string; op: unknown };
+        await post(booted, JSON.stringify({ ...first, op: { op: "create", record_id: "task-9f21", content: { seed: true } } }), { path: entry.path });
+      }
+
+      /**
+       * THE ONE PLACE A CORPUS BYTE IS REWRITTEN, and why it is legitimate.
+       *
+       * Two rows carry a `base_revision`: the accepted patch, and the conflict.
+       * The accepted one presumes the record's CURRENT revision equals the
+       * fixture's literal — and revision values are exactly the bytes the
+       * corpus marks `bodyRatified: false`, because they are whatever the
+       * serving store's scheme produces. No implementation can satisfy that
+       * literal except by adopting the fixture author's hash function, which is
+       * not ratified and is not the property under test.
+       *
+       * So the setup seeds the record and substitutes the REAL current revision
+       * into the accepted case, leaving the conflict case's literal alone —
+       * that one is *supposed* not to match. Both substitutions are asserted
+       * below so this cannot silently degrade into "patch with no precondition".
+       */
+      const parsed = JSON.parse(entry.requestBody) as {
+        write_id: string; account_epoch: number; domain: string;
+        op: { op: string; record_id: string; base_revision?: string };
+      };
+      let requestBody = entry.requestBody;
+      // Only the rows whose precondition is actually EVALUATED get a seeded
+      // record. The stale-epoch and validation rows also carry a
+      // `base_revision`, and both are refused before the store is consulted —
+      // seeding them would send their (stale, or malformed) envelope through
+      // the door twice and measure the setup instead of the case.
+      const preconditionIsEvaluated = entry.wireOutcome === "accepted" || entry.wireOutcome === "conflict";
+      if (preconditionIsEvaluated && typeof parsed.op.base_revision === "string") {
+        expect(parsed.op.base_revision).toMatch(/^[0-9a-f]{64}$/);
+        const seeded = await post(booted, JSON.stringify({
+          write_id: "9".repeat(64), account_epoch: parsed.account_epoch, domain: parsed.domain,
+          op: { op: "create", record_id: parsed.op.record_id, content: { seed: true } },
+        }), { path: entry.path });
+        expect(seeded.status).toBe(200);
+        if (entry.wireOutcome !== "conflict") {
+          const live = JSON.parse(seeded.text).applied.revision as string;
+          expect(live).not.toBe(parsed.op.base_revision);
+          requestBody = entry.requestBody.replace(parsed.op.base_revision, live);
+          rebasedCases += 1;
+        }
+      }
+
+      const token = entry.wireOutcome === "authentication" ? null : undefined;
+      const response = await post(booted, requestBody, { path: entry.path, token });
+
+      expect({ case: entry.name, status: response.status })
+        .toEqual({ case: entry.name, status: entry.response.status });
+      if (ratifiedBody.get(entry.wireOutcome) === true) {
+        expect({ case: entry.name, body: response.text })
+          .toEqual({ case: entry.name, body: entry.response.body });
+      } else {
+        // Not byte-ratified: assert the SHAPE the contract does ratify.
+        const body: unknown = JSON.parse(response.text);
+        expect({ case: entry.name, accepted: isTrustedWriteAccepted(body) })
+          .toEqual({ case: entry.name, accepted: true });
+        expect((body as { idempotent: boolean }).idempotent)
+          .toBe(entry.wireOutcome === "accepted_idempotent");
+      }
+      executed.push(entry.name);
+    }
+
+    // The count is asserted so a corpus row that stops being executed — by a
+    // rename, a filter, or a throw swallowed somewhere — fails instead of
+    // quietly shrinking the suite.
+    expect(executed.length).toBe(corpus.length - corpus.filter((entry) => notReachableHere.has(entry.wireOutcome)).length);
+    expect(executed.length).toBeGreaterThan(10);
+    // Exactly one row had its unratified revision literal rebased. If a future
+    // corpus adds another, this fails and somebody reads the paragraph above
+    // rather than discovering the rewrite by accident.
+    expect(rebasedCases).toBe(1);
+  });
+});

@@ -237,6 +237,18 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
       + "reader-scoped opaque refs. Both were green; the harness was the door humans "
       + "dogfooded. Rule 16 could not see it because it composed no registered port.",
   },
+  {
+    wirePath: "/v1/tasks/ops",
+    servedBy: "apps/service/routes/tasks-ops.ts",
+    boundVia: ["routes/tasks-ops", "app-facing"],
+    reason:
+      "The ratified write wire (ruling B4) on the first writable domain (B6). It was "
+      + "served by a harness before it was served by the app, and that harness answered "
+      + "an admitted write with a placeholder that touched no record — so a door that "
+      + "APPLIED nothing was the only door anybody could point a test at. One route "
+      + "module owns this path now; a second would put the epoch fence, the write_id "
+      + "registry and the straggler table in two places at once.",
+  },
 ];
 /**
  * Server-construction sites exempted from rule 17. Keyed by (file, 1-indexed
