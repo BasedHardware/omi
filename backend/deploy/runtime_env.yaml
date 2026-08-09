@@ -47,6 +47,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: direct
+            category: rollout
           GOOGLE_CLIENT_ID:
             config_map:
               name: dev-omi-backend-config
@@ -375,6 +378,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
+              category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -500,6 +506,9 @@ environments:
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
@@ -640,6 +649,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -773,6 +785,9 @@ environments:
               category: memory_rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
@@ -910,6 +925,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1000,7 +1018,10 @@ environments:
             value: primary
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
+            value: 'off'
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: direct
             category: rollout
           GOOGLE_CLIENT_ID:
             config_map:
@@ -1269,7 +1290,10 @@ environments:
               value: primary
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
@@ -1409,7 +1433,10 @@ environments:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
@@ -1549,7 +1576,10 @@ environments:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
@@ -1684,7 +1714,10 @@ environments:
               value: 'false'
               category: memory_rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
@@ -1802,7 +1835,10 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: direct
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'

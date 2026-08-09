@@ -13,9 +13,21 @@
 **Owner:** llm-gateway / platform team.
 
 **First checks:**
-1. Confirm the current Cloud Run revisions are still `OMI_LLM_GATEWAY_FEATURE_MODE=direct` unless a deliberately gated promotion has occurred.
+1. Confirm the current Cloud Run revisions are still `OMI_LLM_GATEWAY_FEATURE_MODE=direct`/`off` unless a deliberately gated promotion has occurred. After the 2026-08 chat outage, prod Cloud Run defaults to `FEATURE_MODE=off` and `OMI_LLM_CHAT_AGENT_ROUTE=direct`.
 2. Run the same evidence chain used by promotion: `verify-llm-gateway-serving.py` for deployment/Service/EndpointSlice/Ingress/ILB attachment, followed by the Cloud Run VPC probe. Do not treat a reserved IP as proof of reachability.
-3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
+3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and structured `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
 4. Inspect `llm_gateway_requests_total` by `route_serving_class`, `fallback_reason`, and bounded from/to route artifact labels. Treat `route_serving_class="lkg"` as rollout exposure unless a separate error signal is present.
+
+## Agentic chat outage class (2026-08)
+
+**Signature:** `unsupported lane surface: anthropic.messages` on `feature=chat_agent` / `model=omi:auto:chat-agent` while `FEATURE_MODE=gateway`.
+
+**Mitigation:** emergency Cloud Run env `OMI_LLM_GATEWAY_FEATURE_MODE=off`. Durable config keeps that off and pins `OMI_LLM_CHAT_AGENT_ROUTE=direct`.
+
+**Re-enable order (do not skip):**
+1. Prove caller surface matches gateway lane for `omi:auto:chat-agent` (OpenAI chat-completions / Luna vs Anthropic Messages). Config digest / image SHA must match.
+2. Dev: set `OMI_LLM_CHAT_AGENT_ROUTE=gateway` with `FEATURE_MODE=gateway`; dogfood agentic chat.
+3. Only then consider prod `FEATURE_MODE=gateway` and/or `CHAT_AGENT_ROUTE=gateway`.
+4. Keep `CHAT_AGENT_ROUTE=direct` if non-chat gateway features need `FEATURE_MODE=gateway` first.
 
 **Severity:** Ticket — investigate during business hours unless user-facing chat error rates also rise.

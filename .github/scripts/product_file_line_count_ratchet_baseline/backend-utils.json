@@ -7,7 +7,7 @@
     "backend/utils/memory/legacy_backfill.py": 1758,
     "backend/utils/memory_ingestion/pipeline.py": 1711,
     "backend/utils/other/storage.py": 1587,
-    "backend/utils/retrieval/agentic.py": 1514,
+    "backend/utils/retrieval/agentic.py": 1512,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
     "backend/utils/stt/streaming.py": 1523,
     "backend/utils/sync/pipeline.py": 2491
