@@ -1,0 +1,26 @@
+app/lib/env/env.dart
+  s_127c8f68489383::t_7248b01ecefa39 65-78
+app/lib/services/auth_service.dart
+  s_127c8f68489383::t_7248b01ecefa39 468,582,824
+app/README.md
+  s_127c8f68489383::t_39d6f33a4d0e8f 57-58
+  s_127c8f68489383::t_9c848fe6e80a30 56
+app/test/unit/env_test.dart
+  s_127c8f68489383::t_7248b01ecefa39 72-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ee165f786179456a7ca65eac3c5fb435613b6378",
+  "prompts": {},
+  "sessions": {
+    "s_127c8f68489383": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe845-fb92-7221-9ca6-07b627aba99d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
