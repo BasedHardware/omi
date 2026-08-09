@@ -202,7 +202,7 @@ extension SettingsContentView {
     gmailMemoriesSaved = 0
 
     do {
-let emails = try await GmailReaderService.shared.readRecentEmails(
+      let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 50,
         userInitiated: true
       )

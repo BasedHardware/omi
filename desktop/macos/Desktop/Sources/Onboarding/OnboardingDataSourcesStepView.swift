@@ -112,7 +112,7 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.gmailInsightsFinished,
-scanDeferred: coordinator.gmailInsightsDeferred,
+        scanDeferred: coordinator.gmailInsightsDeferred,
         scanFailed: coordinator.gmailInsightsFailed,
         actionTitle: "Choose account",
         action: {

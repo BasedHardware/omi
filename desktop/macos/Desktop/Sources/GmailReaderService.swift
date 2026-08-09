@@ -154,7 +154,7 @@ actor GmailReaderService {
   ) async throws
     -> [GmailEmail]
   {
-if userInitiated {
+    if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     // Snapshot the selection once for the whole read: readRecentEmails runs
@@ -169,7 +169,7 @@ if userInitiated {
         query: query,
         feedPath: nil,
         allowBootstrap: false,
-userInitiated: userInitiated,
+        userInitiated: userInitiated,
         selectedCookiePath: selectedCookiePath
       )
       let labelEmails = try fetchGmailViaLabelFeeds(
@@ -193,7 +193,7 @@ userInitiated: userInitiated,
       emails = try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
         query: query,
-userInitiated: userInitiated,
+        userInitiated: userInitiated,
         selectedCookiePath: selectedCookiePath
       )
     }
@@ -211,7 +211,7 @@ userInitiated: userInitiated,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
         allowBootstrap: false,
-userInitiated: userInitiated,
+        userInitiated: userInitiated,
         selectedCookiePath: selectedCookiePath
       )
       return .connected(verifiedAt: Date())
@@ -438,7 +438,7 @@ userInitiated: userInitiated,
     query: String = "newer_than:1d",
     feedPath: String? = nil,
     allowBootstrap: Bool? = nil,
-userInitiated: Bool = false,
+    userInitiated: Bool = false,
     selectedCookiePath: String? = nil
   ) throws
     -> [GmailEmail]
@@ -799,7 +799,7 @@ userInitiated: Bool = false,
   }
 
   private func fetchGmailViaLabelFeeds(
-maxResults: Int,
+    maxResults: Int,
     query: String,
     userInitiated: Bool = false,
     selectedCookiePath: String? = nil
@@ -829,7 +829,7 @@ maxResults: Int,
         query: query,
         feedPath: feedPath,
         allowBootstrap: false,
-userInitiated: userInitiated,
+        userInitiated: userInitiated,
         selectedCookiePath: selectedCookiePath
       )
       for email in feedEmails {

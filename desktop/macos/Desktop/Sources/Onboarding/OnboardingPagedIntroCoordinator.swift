@@ -853,7 +853,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
-func loadGmailAccounts() async {
+  func loadGmailAccounts() async {
     guard gmailAccounts.isEmpty else { return }
     isProbingGmailAccounts = true
     defer { isProbingGmailAccounts = false }
@@ -922,7 +922,7 @@ func loadGmailAccounts() async {
     waiter.resume()
   }
 
-/// Dismissing the picker without a choice must not strand the gmail
+  /// Dismissing the picker without a choice must not strand the gmail
   /// background task: fall back to the automatic (first readable) account.
   func cancelGmailAccountSelection() {
     showingGmailAccountPicker = false
