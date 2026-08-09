@@ -99,6 +99,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:extract": (30, 3600),
     # Return-only SSOT calendar/gmail/notes synthesis for desktop connector imports
     "connectors:synthesize": (30, 3600),
+    # Return-only SSOT provisional conversation topic (emoji + short title)
+    "conversations:topic": (60, 3600),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),

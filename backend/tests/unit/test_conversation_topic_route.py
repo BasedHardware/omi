@@ -1,0 +1,47 @@
+"""Return-only conversation topic uses the managed conv_structure feature."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from routers import conversations as conversations_router
+from utils.llm.conversation_topic import ConversationTopic
+
+UID = 'uid-conversation-topic'
+
+
+def test_generate_topic_returns_without_persisting(monkeypatch):
+    calls: dict[str, object] = {}
+
+    def fake_generate(uid, transcript):
+        calls['uid'] = uid
+        calls['transcript'] = transcript
+        return ConversationTopic(emoji='🎧', title='Weekly standup')
+
+    import utils.llm.conversation_topic as conversation_topic_llm
+
+    monkeypatch.setattr(conversation_topic_llm, 'generate_conversation_topic', fake_generate)
+
+    response = conversations_router.generate_conversation_topic_endpoint(
+        conversations_router.ConversationTopicRequest(transcript='we discussed the sprint'),
+        uid=UID,
+    )
+
+    assert response.emoji == '🎧'
+    assert response.title == 'Weekly standup'
+    assert calls['uid'] == UID
+    assert calls['transcript'] == 'we discussed the sprint'
+
+
+def test_generate_topic_fails_closed_when_generation_returns_none(monkeypatch):
+    import utils.llm.conversation_topic as conversation_topic_llm
+
+    monkeypatch.setattr(conversation_topic_llm, 'generate_conversation_topic', lambda *a, **k: None)
+
+    with pytest.raises(HTTPException) as exc:
+        conversations_router.generate_conversation_topic_endpoint(
+            conversations_router.ConversationTopicRequest(transcript='anything'),
+            uid=UID,
+        )
+    assert exc.value.status_code == 502

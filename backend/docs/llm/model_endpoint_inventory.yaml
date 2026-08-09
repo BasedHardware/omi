@@ -166,3 +166,10 @@ surfaces:
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
+  - surface: conversation_topic
+    code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
+    current_provider_model: openrouter/openai/gpt-5.6-luna conv_structure feature
+    request_shape: return-only emoji + short title for a finished transcript
+    gateway_lane_capability_needed: generated omi:auto:conv-structure lane
+    migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py

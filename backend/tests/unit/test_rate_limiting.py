@@ -536,8 +536,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
-        # create, reprocess, search, merge, and events = 5 endpoints
-        self.assertEqual(len(matches), 5, f"conversations.py expected 5 rate limits, got {len(matches)}")
+        # create, reprocess, topic, search, merge, and events = 6 endpoints
+        self.assertEqual(len(matches), 6, f"conversations.py expected 6 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
