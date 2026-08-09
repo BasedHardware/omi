@@ -51,12 +51,10 @@
  *
  * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────────
  *
- * Durable. It is in-memory, said plainly, for the same reason
- * `control/projection-store.ts` is: the durable store is `WS-003`/`ADR-009`'s
- * and there is no adapter for it in this repo. Writing one to host a schema
- * that is itself the thing under test would be inventing a data plane. What an
- * in-memory store does buy is real — apply, precondition, ordering and replay
- * semantics exercised across a real process over real HTTP.
+ * A storage-engine decision. This module owns the port, its in-memory default,
+ * and the deterministic revision/precondition rules shared by adapters. The
+ * local durable implementation lives in `drivers/sqlite/service-stores/`; a
+ * production PostgreSQL adapter can replace it without changing this port.
  */
 
 import { createHash } from "node:crypto";
@@ -138,7 +136,7 @@ export interface TasksStore extends TasksReadStore {
  */
 const canonicalBytes = (value: unknown): string => JSON.stringify(value);
 
-const nextRevision = (
+export const computeTasksRevision = (
   previous: string | null,
   recordId: string,
   content: Readonly<Record<string, unknown>>,
@@ -157,7 +155,10 @@ const nextRevision = (
  *   that is not there, and answering "applied" would let a delete-then-recreate
  *   race silently overwrite the recreation.
  */
-const preconditionHolds = (current: TasksRecord | undefined, baseRevision: string | undefined): boolean => {
+export const tasksPreconditionHolds = (
+  current: TasksRecord | undefined,
+  baseRevision: string | undefined,
+): boolean => {
   if (baseRevision === undefined) return true;
   return current !== undefined && current.revision === baseRevision;
 };
@@ -224,7 +225,7 @@ export const createInMemoryTasksStore = (): TasksStore => {
       const priorSeq = current?.first_seen_seq ?? buried.get(op.record_id)?.first_seen_seq;
 
       if (op.op === "delete") {
-        if (!preconditionHolds(current, op.base_revision)) return { applied: false, reason: "conflict" };
+        if (!tasksPreconditionHolds(current, op.base_revision)) return { applied: false, reason: "conflict" };
         if (current !== undefined) {
           buried.set(op.record_id, {
             revision: current.revision,
@@ -244,7 +245,7 @@ export const createInMemoryTasksStore = (): TasksStore => {
         // OF, and the contract's own validator refuses `base_revision` here.
         // A create over a live record therefore REPLACES its content and
         // continues its chain rather than forking a second history for one id.
-        const revision = nextRevision(priorRevision, op.record_id, op.content);
+        const revision = computeTasksRevision(priorRevision, op.record_id, op.content);
         records.set(op.record_id, {
           record_id: op.record_id,
           revision,
@@ -266,7 +267,7 @@ export const createInMemoryTasksStore = (): TasksStore => {
       // false about its own op, which is the failure class this program exists
       // to eliminate. A client that wants "only if it exists" has a ratified way
       // to say so — send `base_revision` — and that path does refuse.
-      if (!preconditionHolds(current, op.base_revision)) return { applied: false, reason: "conflict" };
+      if (!tasksPreconditionHolds(current, op.base_revision)) return { applied: false, reason: "conflict" };
 
       // A patch is a SHALLOW MERGE over the opaque bag. Shallow is the only
       // merge this module is entitled to: a deep merge would have to decide
@@ -274,7 +275,7 @@ export const createInMemoryTasksStore = (): TasksStore => {
       // and that is field semantics, which R6 says are unratified. A client
       // that needs to replace a nested value sends the whole value.
       const merged: Record<string, unknown> = { ...(current?.content ?? {}), ...op.patch };
-      const revision = nextRevision(priorRevision, op.record_id, merged);
+      const revision = computeTasksRevision(priorRevision, op.record_id, merged);
       records.set(op.record_id, {
         record_id: op.record_id,
         revision,

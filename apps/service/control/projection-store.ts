@@ -3,18 +3,10 @@
  *
  * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────────
  *
- * It is not the durable store. `backend:ADR-009` puts the subordinate projection
- * in PostgreSQL and `WS-003` owns that; there is no PostgreSQL adapter in this
- * repo, and SQLite here is QA fixture storage that is "never production
- * authority" (`apps/service/app-facing.ts`). Writing either one would be
- * inventing a data plane to host a record whose schema is the thing under test.
- *
- * So this is an in-memory store, said plainly rather than dressed up. What it
- * buys is real: the fence, the ordering rules and the activation protocol are
- * exercised across a real process over real HTTP against state that persists
- * between requests, which is where a fence's defects actually live. What it does
- * not buy — durability, restore behaviour, cross-node agreement — is
- * `WS-003`'s, and no test here claims it.
+ * It is not a storage-engine decision. This module owns the port and its
+ * in-memory default. The local durable adapter lives in
+ * `drivers/sqlite/service-stores/`; the production PostgreSQL adapter remains a
+ * driver swap and must preserve the transition rules imported from `core/`.
  *
  * ── FAIL-CLOSED BY CONSTRUCTION ──────────────────────────────────────────────
  *

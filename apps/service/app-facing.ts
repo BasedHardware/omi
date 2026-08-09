@@ -41,7 +41,9 @@ import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/wr
  * There is one wiring, here, and `bin/dev-server.ts` only adds process concerns
  * (config parsing, socket binding, printing).
  *
- * SQLite is QA fixture storage only and is never production authority.
+ * The `db` option is the local recall-fixture database. Write-path persistence
+ * is supplied independently through the four store ports; omitting it preserves
+ * the historical in-memory test/dev composition.
  */
 
 const DEV_KEY_ID = "dev-local";
@@ -62,7 +64,27 @@ export interface LocalServiceOptions {
   readonly accountTimezone: string;
   /** Non-secret dev label; a loopback fixture service has no real credential. */
   readonly devSecretLabel: string;
+  /**
+   * Write-path adapters. Omit for the historical in-memory local/test wiring.
+   * The caller owns their lifecycle, including any SQLite Database handle.
+   */
+  readonly stores?: LocalServiceStores;
 }
+
+/** The four existing write-path ports, grouped only at the composition root. */
+export interface LocalServiceStores {
+  readonly tasks: TasksStore;
+  readonly registry: WriteIdRegistry;
+  readonly stragglers: StragglerTable;
+  readonly control: AccountControlProjectionStore;
+}
+
+export const createInMemoryLocalServiceStores = (): LocalServiceStores => Object.freeze({
+  tasks: createInMemoryTasksStore(),
+  registry: createInMemoryWriteIdRegistry(),
+  stragglers: createInMemoryStragglerTable(),
+  control: createInMemoryAccountControlProjectionStore(),
+});
 
 export interface LocalService {
   readonly app: Hono;
@@ -100,6 +122,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     });
   };
   reseed();
+
+  const stores = options.stores ?? createInMemoryLocalServiceStores();
+  const tasks = stores.tasks;
+  const writeIdRegistry = stores.registry;
+  const stragglers = stores.stragglers;
+  const controlStore = stores.control;
 
   const counter = createServedCounter();
   const issuer = createDevTokenIssuer({
@@ -226,10 +254,6 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   // `control_unavailable` until a dev account is seeded through
   // `/v1/qa/control/*` (R3). Seeding it here by default would make the local
   // service disagree with the fail-closed posture the fence is built on.
-  const tasks = createInMemoryTasksStore();
-  const writeIdRegistry = createInMemoryWriteIdRegistry();
-  const stragglers = createInMemoryStragglerTable();
-  const controlStore = createInMemoryAccountControlProjectionStore();
   const fenceCounter = createWriteFenceCounter();
   const opsCounter = createWriteOpsCounter();
 

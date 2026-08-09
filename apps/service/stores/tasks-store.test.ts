@@ -16,7 +16,7 @@ const OTHER_ACCOUNT = "acct-store-other";
 
 describe("revisions", () => {
   /**
-   * red-proof: truncate `nextRevision`'s digest to 8 hex.
+   * red-proof: truncate `computeTasksRevision`'s digest to 8 hex.
    * APPLIED AND OBSERVED RED.
    */
   test("every applied revision is 64 lowercase hex, the ratified grammar", () => {
@@ -36,7 +36,7 @@ describe("revisions", () => {
    * produced B, which is the lost-update blind spot the ratified contract says
    * `base_revision` exists to cover.
    *
-   * red-proof: make `nextRevision` hash only `[recordId, content]` — drop the
+   * red-proof: make `computeTasksRevision` hash only `[recordId, content]` — drop the
    * previous link. APPLIED AND OBSERVED RED.
    */
   test("editing a record back to an earlier state does not reuse the earlier revision", () => {
@@ -56,7 +56,7 @@ describe("revisions", () => {
    * clock or a random nonce in the revision would make a conformance corpus
    * unpinnable.
    *
-   * red-proof: mix `Math.random()` into `nextRevision`'s input.
+   * red-proof: mix `Math.random()` into `computeTasksRevision`'s input.
    * APPLIED AND OBSERVED RED.
    */
   test("the same sequence of ops produces the same revisions in a fresh store", () => {
@@ -73,7 +73,7 @@ describe("revisions", () => {
 
 describe("base_revision is a precondition, and it is the ONLY precondition", () => {
   /**
-   * red-proof: in `preconditionHolds`, `return true` unconditionally.
+   * red-proof: in `tasksPreconditionHolds`, `return true` unconditionally.
    * APPLIED AND OBSERVED RED.
    */
   test("a patch whose base_revision does not match the record is a conflict", () => {
@@ -95,7 +95,7 @@ describe("base_revision is a precondition, and it is the ONLY precondition", () 
    * "As I last saw it" is false of a record that is not there. Answering
    * `applied` would let a delete-then-recreate race overwrite the recreation.
    *
-   * red-proof: in `preconditionHolds`, treat `current === undefined` as
+   * red-proof: in `tasksPreconditionHolds`, treat `current === undefined` as
    * satisfied. APPLIED AND OBSERVED RED.
    */
   test("a base_revision against an absent record is a conflict, not an upsert", () => {
