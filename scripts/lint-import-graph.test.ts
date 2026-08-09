@@ -245,6 +245,27 @@ test("rule 17 does not call a router plus its binder two servers", () => {
   );
 });
 
+test("rule 17's ambiguity check does not run on files with no registered wire path", () => {
+  // Round-9 audit, and the ROOT of rounds 7 and 8 rather than a third instance.
+  // The ambiguity check protects WIRE_PATH_HATCHES, whose key is (file, line). A
+  // file naming no registered path can never hold a hatch row, so it has nothing
+  // to protect — yet the check ran there, unconditionally, tree-wide, and twice
+  // fired on ordinary code. Both earlier fixes narrowed which patterns COUNT;
+  // neither narrowed where the check RUNS, so the shape recurred through whatever
+  // the last fix had just added. This fixture contains no "memories" at all.
+  withWirePathFixture(
+    [
+      'import { Hono } from "hono";',
+      "const publicApp = new Hono(); const adminApp = new Hono();",
+      "export { publicApp, adminApp };",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("rule 17: two unbound routers on one line is still ambiguous", () => {
   // Round-8 audit. Round 7 narrowed the ambiguity count to socket binds, which
   // was right for `Bun.serve({ fetch: new Hono().fetch })` — and reopened round

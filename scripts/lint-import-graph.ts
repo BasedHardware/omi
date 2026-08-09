@@ -428,7 +428,27 @@ for (const file of files(root)) {
       const binds = constructionsOn(line);
       return binds > 0 ? binds : routersOn(line);
     };
-    for (const index of serverSites) {
+    /**
+     * SCOPE, and this is the root rounds 7 and 8 each patched a symptom of.
+     *
+     * The ambiguity check exists to protect `WIRE_PATH_HATCHES`, whose key is
+     * (file, line). A file that names no registered wire path can never hold a
+     * hatch row, so it has nothing to protect — and running the check there made
+     * it an unconditional, tree-wide gate that twice fired on ordinary code
+     * (round 7: a router and its binder; round 9: two plain router declarations).
+     *
+     * Both fixes narrowed WHICH PATTERNS COUNT. Neither narrowed WHERE THE CHECK
+     * RUNS, so the same shape recurred through whatever the last fix added, and
+     * the next framework pattern anyone registers would have reopened it a third
+     * time. Gating on relevance ends the class rather than the instance.
+     *
+     * `live-server.ts` stays in scope — it names the path as a client call — so
+     * round 6's protection is unaffected.
+     */
+    const fileNamesARegisteredPath = WIRE_PATH_REGISTRY.some(
+      (row) => namesWirePath(code, row.wirePath),
+    );
+    for (const index of fileNamesARegisteredPath ? serverSites : []) {
       if (ambiguousSiteCount(codeLines[index] ?? "") < 2) continue;
       failures.push(
         `${shown}:${index + 1}: two HTTP servers are constructed on one line. `
