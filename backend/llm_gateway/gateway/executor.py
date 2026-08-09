@@ -38,6 +38,7 @@ from llm_gateway.gateway.schemas import (
     RouteServingClass,
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
+from utils.llm.openrouter_model_catalog import apply_openrouter_completion_clamp
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -434,7 +435,11 @@ def _provider_request(
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
-    return provider_request
+    return apply_openrouter_completion_clamp(
+        provider_request,
+        provider=provider_ref.provider,
+        model=provider_ref.model,
+    )
 
 
 def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
