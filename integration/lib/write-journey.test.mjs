@@ -492,6 +492,12 @@ const outboxFacts = (over = {}) => ({
   deadAfterDrain: [],
   deadLetters: [{ opId: "outbox-op-stale", failure: { kind: "permanent", reason: "stale_epoch" } }],
   controlRefreshes: [],
+  staleJournaled: { count: 1, writeId: "b".repeat(64), accountEpoch: 6, opId: "outbox-op-stale" },
+  epoch: { active: 7, straggler: 6 },
+  staleResponse: {
+    method: "POST", path: "/v1/tasks/ops", status: 409, text: STALE_BODY,
+    body: { write_id: "b".repeat(64), account_epoch: 6, domain: "tasks", op: { op: "create", record_id: "flying-dragon-vibrant", content: {} } },
+  },
   replayResponse: { status: 200, text: JSON.stringify({ applied: { record_id: "flying-dragon-vibrant", revision: REVISION }, idempotent: true }) },
   ...over,
 });
@@ -503,10 +509,10 @@ const outboxProducer = (over = {}) => ({
 });
 
 const outboxOutcome = (facts, producer, name) =>
-  judgeOutbox(facts, { producer }).assertions.find((a) => a.name === name);
+  judgeOutbox(facts, { producer, corpus }).assertions.find((a) => a.name === name);
 
 test("stage (c) baseline: a clean outbox drain passes every assertion", () => {
-  const v = judgeOutbox(outboxFacts(), { producer: outboxProducer() });
+  const v = judgeOutbox(outboxFacts(), { producer: outboxProducer(), corpus });
   assert.deepEqual(v.assertions.filter((a) => a.result !== "pass").map((a) => `${a.name}: ${a.detail}`), []);
   assert.equal(v.result, "pass");
 });
@@ -577,4 +583,52 @@ test("RED-PROOF straggler_dead_letters_as_stale_epoch: refused but not preserved
   const r = outboxOutcome(outboxFacts(), p, "straggler_dead_letters_as_stale_epoch");
   assert.equal(r.result, "fail");
   assert.match(r.detail, /silently lost edit/);
+});
+
+test("RED-PROOF straggler_wire_matches_its_journal: the epoch was re-stamped at send time", () => {
+  // B1's second named failure, and the one the other three arbiters cannot see:
+  // the provider is behind either way, so the fence still refuses, the envelope
+  // is still preserved, and the client still dead-letters correctly — while the
+  // field that decides which generation an op belongs to is wrong.
+  const f = outboxFacts();
+  f.staleResponse = { ...f.staleResponse, body: { ...f.staleResponse.body, account_epoch: 7 } };
+  const r = outboxOutcome(f, outboxProducer(), "straggler_wire_matches_its_journal");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /AUTHORED under/);
+});
+
+test("RED-PROOF straggler_wire_matches_its_journal: the write id on the wire is not the journaled one", () => {
+  const f = outboxFacts();
+  f.staleResponse = { ...f.staleResponse, body: { ...f.staleResponse.body, write_id: "c".repeat(64) } };
+  const r = outboxOutcome(f, outboxProducer(), "straggler_wire_matches_its_journal");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /minted at send time/);
+});
+
+test("RED-PROOF straggler_wire_matches_its_journal: the straggler never left the client", () => {
+  // The fence tally and the dead letter are both satisfiable by a run in which
+  // nothing was sent. This is the row that says the op reached the wire.
+  const r = outboxOutcome(outboxFacts({ staleResponse: null }), outboxProducer(), "straggler_wire_matches_its_journal");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /never reached the wire/);
+});
+
+test("RED-PROOF straggler_wire_matches_its_journal: the 'straggler' was not actually superseded", () => {
+  const f = outboxFacts();
+  f.staleJournaled = { ...f.staleJournaled, accountEpoch: 7 };
+  f.staleResponse = { ...f.staleResponse, body: { ...f.staleResponse.body, account_epoch: 7 } };
+  const r = outboxOutcome(f, outboxProducer(), "straggler_wire_matches_its_journal");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /proves nothing about stragglers/);
+});
+
+test("RED-PROOF straggler_wire_matches_its_journal: the transport received bytes the door does not send", () => {
+  // `stale_epoch` and `conflict` are both 409 and differ only in the body, which
+  // is why sendPlatformTaskOp calls the `text` requirement load-bearing. A
+  // classification can be right for the wrong input; this pins the input.
+  const f = outboxFacts();
+  f.staleResponse = { ...f.staleResponse, text: JSON.stringify({ error: "conflict" }) };
+  const r = outboxOutcome(f, outboxProducer(), "straggler_wire_matches_its_journal");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /not the ratified refusal/);
 });

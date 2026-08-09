@@ -191,17 +191,26 @@ export async function runOutboxDrain(options) {
   await staleBox.enqueue(op("outbox-op-stale"));
   const stalled = await drainUntil(staleEnv, async () => (await staleBox.deadLetters()).length > 0);
   const deadLetters = await staleBox.deadLetters();
+  // The straggler's OWN journal row, read back out of its durable log. The
+  // drain box's journal says nothing about what the straggler was stamped with.
+  const staleJournaled = await readJournal(staleStore, accountId);
 
   return {
     drainRunId,
     staleRunId,
     recordId,
     journaled,
+    staleJournaled,
+    epoch: { active: activeEpoch, straggler: activeEpoch - 1 },
     deadAfterDrain,
     deadLetters,
     controlRefreshes,
     rounds: { drain: drained, replay: replayed, stale: stalled },
     replayResponse: replayPost === null ? null : { status: replayPost.status, text: replayPost.text },
+    // The straggler's own socket: the envelope bytes that left the client and
+    // the refusal bytes that came back. Asserted by
+    // `straggler_wire_matches_its_journal` — see that row for why neither the
+    // dead letter nor the fence tally can stand in for this.
     staleResponse: (staleHttp.calls.filter((c) => c.method === "POST").at(-1) ?? null),
   };
 }
@@ -337,6 +346,83 @@ export const OUTBOX_ASSERTIONS = [
         return fail(`the straggler triggered ${o.controlRefreshes.length} control refresh(es) — stale_epoch is not backpressure and must not be handled as W1's availability signal`);
       }
       return pass(`fence refused stale_epoch=1 and preserved 1 envelope for run ${o.staleRunId}; the client holds exactly 1 dead letter, reason stale_epoch`);
+    },
+  },
+  {
+    /**
+     * WHY THIS EXISTS WHEN THE FENCE TALLY AND THE DEAD LETTER ALREADY AGREE.
+     *
+     * Those two are the server's DECISION and the client's CLASSIFICATION. The
+     * bytes on the straggler's own socket are neither, and they carry the one
+     * thing this stage's own module header claims to catch and — until this row
+     * — did not actually check: that the envelope the outbox PUT ON THE WIRE
+     * carries the write id and account epoch its journal holds.
+     *
+     * B1 is explicit that the account epoch is the epoch the op was AUTHORED
+     * under, journaled with it, and never re-stamped at send time — because an
+     * op re-stamped with whatever is current applies in the generation it was
+     * not authored for, which is exactly the straggler the fence cannot catch.
+     * A transport that dropped, defaulted or rewrote the field would still
+     * produce a `stale_epoch` refusal here (the provider is behind either way),
+     * a preserved envelope, and a correct dead letter. All three existing
+     * arbiters would agree, and the field would be wrong.
+     *
+     * It also pins the refusal BYTES the client's transport actually received,
+     * rather than trusting that the classification came from the right input:
+     * `sendPlatformTaskOp` calls the `text` requirement load-bearing because
+     * `stale_epoch` and `conflict` are both 409 and differ only in the body.
+     */
+    name: "straggler_wire_matches_its_journal",
+    claim: "the envelope the outbox actually sent carries the write id and the superseded account epoch its own journal holds, and the refusal it received is the ratified stale_epoch body",
+    measuredBy: "client: the straggler's row in the durable journal",
+    corroboratedBy: "wire: the request and response bytes on the straggler's own socket, against the vendored corpus row",
+    evaluate: (o, { corpus }) => {
+      const wire = o.staleResponse;
+      if (wire === null) {
+        return fail(
+          "the straggler never reached the wire at all. The fence tally and the dead letter below can both be"
+          + " satisfied by a run in which nothing was sent, so this is the row that says the op left the client.",
+        );
+      }
+      const envelope = wire.body ?? null;
+      if (envelope === null || typeof envelope !== "object") {
+        return fail(`the outbox sent no readable envelope: ${JSON.stringify(envelope)}`);
+      }
+      const journaled = o.staleJournaled;
+      if (journaled.writeId === null || journaled.accountEpoch === null) {
+        return fail(`the straggler was journaled without a stamp (write_id=${journaled.writeId}, account_epoch=${journaled.accountEpoch})`);
+      }
+      if (envelope.write_id !== journaled.writeId) {
+        return fail(
+          `the journal holds write id ${String(journaled.writeId).slice(0, 12)}… and the wire carried`
+          + ` ${String(envelope.write_id).slice(0, 12)}… — an id minted at send time is a replay the registry cannot recognise`,
+        );
+      }
+      if (envelope.account_epoch !== journaled.accountEpoch) {
+        return fail(
+          `the journal holds account_epoch ${journaled.accountEpoch} and the wire carried ${envelope.account_epoch}.`
+          + " B1: the epoch is the one the op was AUTHORED under. Re-stamping at send time makes an op authored in a"
+          + " superseded generation apply in the new one — the straggler the fence exists to catch, walking past it.",
+        );
+      }
+      if (!(envelope.account_epoch < o.epoch.active)) {
+        return fail(
+          `the straggler carried account_epoch ${envelope.account_epoch} and the active epoch is ${o.epoch.active}.`
+          + " It is not superseded, so the refusal below proves nothing about stragglers.",
+        );
+      }
+      const row = corpus.byOutcome.get("stale_epoch");
+      if (row === undefined) return fail("the vendored corpus has no stale_epoch row — there is no arbiter for these bytes");
+      if (wire.status !== row.status || wire.text !== row.body) {
+        return fail(
+          `the bytes the outbox's transport received are not the ratified refusal.\n    wire:   ${wire.status} ${wire.text}`
+          + `\n    corpus: ${row.status} ${row.body}`,
+        );
+      }
+      return pass(
+        `the outbox sent write_id ${String(envelope.write_id).slice(0, 12)}… at account_epoch ${envelope.account_epoch}`
+        + ` (< active ${o.epoch.active}), exactly as journaled, and received the corpus-exact stale_epoch refusal`,
+      );
     },
   },
 ];

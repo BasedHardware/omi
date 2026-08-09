@@ -862,7 +862,7 @@ if (process.argv[1] && process.argv[1].endsWith("write-journey.mjs")) {
         return { fence: body.fence ?? null, writeOps: body.writeOps ?? null };
       };
       const producer = { drain: await statsFor(facts.drainRunId), stale: await statsFor(facts.staleRunId) };
-      outbox = { ...outboxModule.judgeOutbox(facts, { producer }), producer, facts };
+      outbox = { ...outboxModule.judgeOutbox(facts, { producer, corpus: readVendoredWriteOutcomes(platformRepo) }), producer, facts };
     } catch (error) {
       outbox = {
         result: "fail",
