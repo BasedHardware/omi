@@ -245,6 +245,27 @@ test("rule 17 does not call a router plus its binder two servers", () => {
   );
 });
 
+test("rule 17: two unbound routers on one line is still ambiguous", () => {
+  // Round-8 audit. Round 7 narrowed the ambiguity count to socket binds, which
+  // was right for `Bun.serve({ fetch: new Hono().fetch })` — and reopened round
+  // 6's class for lines with NO socket bind: two independent routers collapse to
+  // one site, so one hatch row would exempt both. Not reachable in the tree today
+  // (its one hatch binds a socket); it goes live the first time anyone hatches a
+  // Hono-only site.
+  withWirePathFixture(
+    [
+      'import { Hono } from "hono";',
+      "const legit = new Hono(); const rogue = new Hono();",
+      'rogue.get("/v1/memories", () => new Response("{}"));',
+      "export default legit;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("two HTTP servers are constructed on one line");
+    },
+  );
+});
+
 test("rule 17 still catches a Hono-only door that never calls Bun.serve", () => {
   // The converse, and the reason `new Hono(` stays in DETECTION: a router
   // carrying the registered path is the door regardless of who binds it later.

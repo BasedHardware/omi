@@ -410,8 +410,26 @@ for (const file of files(root)) {
     // registry's safety property assumes one line, one construction, and nothing
     // was checking that assumption. Removing the ambiguity beats patching around
     // it — the same reasoning that replaced the comment marker with this table.
+    /**
+     * Unbound routers, counted separately. Round 7 narrowed the ambiguity check
+     * to socket binds — correct, because a router nested inside its own binder's
+     * call is not a second server. But `serverSites` still detects on all four
+     * patterns, so two independent, UNBOUND `new Hono(` calls on one line
+     * collapsed to a single site with no socket bind to count, reopening round
+     * 6's class at exactly the seam round 7 left open.
+     *
+     * Only when there is no socket bind on the line: with one present, the
+     * router is overwhelmingly its argument, which is the case round 7 exists to
+     * permit.
+     */
+    const routersOn = (line: string): number =>
+      (line.match(/\bnew\s+Hono\s*\(/g) ?? []).length;
+    const ambiguousSiteCount = (line: string): number => {
+      const binds = constructionsOn(line);
+      return binds > 0 ? binds : routersOn(line);
+    };
     for (const index of serverSites) {
-      if (constructionsOn(codeLines[index] ?? "") < 2) continue;
+      if (ambiguousSiteCount(codeLines[index] ?? "") < 2) continue;
       failures.push(
         `${shown}:${index + 1}: two HTTP servers are constructed on one line. `
         + `WIRE_PATH_HATCHES is keyed by (file, line), so a single exemption would `
