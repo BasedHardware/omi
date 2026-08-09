@@ -258,6 +258,27 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert 'get_conversations' not in names
 
 
+def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'initialize'})
+    instructions = response['result']['instructions']
+
+    assert session_id is None
+    assert response['result']['serverInfo']['name'] == 'omi-mcp-server'
+    for tool in (
+        'get_user_profile',
+        'search_memories',
+        'search_conversations',
+        'get_people',
+        'get_action_items',
+        'get_screen_activity',
+    ):
+        assert f'`{tool}`' in instructions
+    assert 'Use only tools exposed by `tools/list`' in instructions
+    assert 'confirm important claims' in instructions
+    assert 'user clearly asked' in instructions
+
+
 @pytest.mark.asyncio
 async def test_sse_post_tools_list_accepts_missing_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])

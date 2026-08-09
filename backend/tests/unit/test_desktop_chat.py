@@ -835,7 +835,7 @@ async def test_chat_completions_routes_public_web_search_to_direct_anthropic(mon
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
 
@@ -882,7 +882,7 @@ async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
 
@@ -933,7 +933,7 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_chat_quota_question', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'get_direct_anthropic_client', lambda **_: object())
@@ -973,7 +973,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(
         desktop_chat,
         'get_byok_key',
@@ -1030,7 +1030,7 @@ async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
     monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(desktop_chat.gateway_circuit, 'reset', lambda: None)
@@ -1068,7 +1068,7 @@ def _wire_direct_lane(monkeypatch, quota_calls):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
 
     async def record_quota(*args, **kwargs):
@@ -1190,7 +1190,7 @@ async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(mo
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
 
     with pytest.raises(desktop_chat.HTTPException) as error:
@@ -1212,7 +1212,7 @@ async def test_chat_completions_rejects_explicit_null_model_before_gateway(monke
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
 
     with pytest.raises(desktop_chat.HTTPException) as error:
@@ -1407,7 +1407,7 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda provider: 'sk-test' if provider == 'anthropic' else None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
     fallbacks = []
@@ -1479,7 +1479,7 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
 
@@ -1529,7 +1529,7 @@ async def test_chat_completions_gateway_config_error_is_http_503(monkeypatch):
     def raise_config_error():
         raise RuntimeError('OMI_LLM_GATEWAY_URL required')
 
-    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', raise_config_error)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', raise_config_error)
 
     with pytest.raises(desktop_chat.HTTPException) as error:
         await desktop_chat.chat_completions(

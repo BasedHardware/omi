@@ -30,7 +30,7 @@ from utils.llm.gateway_client import (
     get_llm_gateway_base_url,
     get_llm_gateway_client,
     llm_gateway_headers,
-    should_route_features_through_gateway,
+    should_route_chat_agent_through_gateway,
 )
 from utils.llm.gateway_observability import record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
@@ -1195,7 +1195,7 @@ async def chat_completions(
     try:
         direct_web_search_requested = _direct_web_search_requested(body)
         gateway_mode = (
-            should_route_features_through_gateway()
+            should_route_chat_agent_through_gateway()
             and _uses_managed_chat_agent(body)
             and not direct_web_search_requested
         )
