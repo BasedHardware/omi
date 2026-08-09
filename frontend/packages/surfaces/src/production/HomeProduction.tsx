@@ -4,7 +4,7 @@ import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { presentMemoryContent } from "./memory-presentation.js";
-import { combineHomeRefreshStatuses, homePhaseLabel } from "./home-presentation.js";
+import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
 import "./home.css";
 
 type Locale = string;
@@ -133,10 +133,11 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
     return !needle || normalize(spineSearchText(row), locale).includes(needle);
   }), [kind, locale, needle, spine]);
   const filtering = Boolean(needle) || kind !== "all";
-  const notice = homePhaseLabel(refresh, locale);
+  // Every notice / row visibility decision ships through this helper — JSX does not re-derive.
+  const presentation = homeSurfacePresentation(refresh, results.length);
 
   return (
-    <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={refresh.phase}>
+    <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
       <ProductionChrome locale={locale} active="home" placement="top" />
       <div className="home-workspace">
         <section className="home-search-hero" aria-labelledby="home-title">
@@ -163,7 +164,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
         </section>
 
         <section className="home-results-panel" aria-label={t(locale, "common.search")} aria-live="polite">
-          {notice && <div className={`status-notice ${refresh.phase}`} role="status">{notice}</div>}
+          {presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role="status">{t(locale, presentation.noticeKey)}</div>}
           <header className="home-results-header">
             <div className="home-kind-filter" aria-label={t(locale, "common.search")}>
               {(["all", "conversation", "memory"] as const).map((value) => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>
@@ -173,12 +174,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
             </div>
             <span className="home-result-count">{t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })}</span>
           </header>
-          {results.length === 0 ? (
-            <div className="home-no-results">
-              <p>{t(locale, "common.noResults")}</p>
-              {needle && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }}>{t(locale, "common.clearSearch")}</button>}
-            </div>
-          ) : (
+          {presentation.showsSavedRows ? (
             <div className="home-result-spine">
               {results.map((row) => {
                 const date = formatDate(row.timestamp, locale, { dateStyle: "medium" });
@@ -191,6 +187,11 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
                   <div className="home-result-copy"><p>{row.value.title || t(locale, "conversations.untitled")}</p><small>{[t(locale, "nav.conversations"), date, row.value.overview].filter(Boolean).join(" · ")}</small></div>
                 </a>;
               })}
+            </div>
+          ) : (
+            <div className="home-no-results">
+              <p>{t(locale, "common.noResults")}</p>
+              {needle && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }}>{t(locale, "common.clearSearch")}</button>}
             </div>
           )}
         </section>
