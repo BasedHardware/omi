@@ -68,7 +68,9 @@ const SURFACES_DIST = join(REPO_PATHS["core-foundation"], "core", "packages", "s
  * merely true of the machine. A run in which none of these ran is inconclusive
  * however green the rest looks — see the guard at the bottom of buildReport.
  */
-export const PROVES_BEHAVIOR = new Set(["served_reads_by_this_run", "no_generation_mismatch", "window_alive"]);
+export const PROVES_BEHAVIOR = new Set([
+  "served_reads_by_this_run", "no_generation_mismatch", "window_alive", "write_journey",
+]);
 
 export const ASSERTIONS = [
   {
@@ -158,6 +160,60 @@ export const ASSERTIONS = [
         return { result: "fail", detail: `generation selection rejected: ${JSON.stringify(rejected)}` };
       }
       return { result: "pass", detail: `selected memories=${state.selected?.memories}, rendered ${state.rendered.surface} (${state.rendered.memoriesGeneration})` };
+    },
+  },
+  {
+    /**
+     * THE WRITE JOURNEY, folded into the run's verdict.
+     *
+     * The journey judges itself (`write-journey.mjs`) and this row does not
+     * re-judge it — a second judgement could disagree with the first, and only
+     * one of the two would be in the report. What this row adds is the one
+     * thing the journey cannot know: whether its result is allowed to redden
+     * L3 for six lanes on a shared trunk tonight.
+     *
+     * Charter R11 excludes the stage-(a) journey from the green gate. That
+     * exclusion is DERIVED, not declared: `gating` is true exactly when
+     * `/v1/tasks/ops` has a WIRE_PATH_REGISTRY row, so it retires itself the
+     * moment OPS's route lands. Until then a journey failure is reported in
+     * full, in the same object, and this lane gates on it through
+     * `dev-stack.sh`'s own exit status — it is excluded from L3's verdict, not
+     * from anybody's attention.
+     */
+    name: "write_journey",
+    claim: "the scripted write journey — create, applied, idempotent replay, forced stale epoch, dead letter — holds against a live write door",
+    measuredBy: "server: the fence's own decision counter, joined to this run's id",
+    corroboratedBy: "wire + client: the bytes this run received, read by the shipped classifyWriteOpsResponse",
+    applies: (report) => report.writeJourney !== null,
+    evaluate: (report) => {
+      const j = report.writeJourney;
+      const failed = j.assertions.filter((a) => a.result === "fail");
+      if (failed.length > 0 && j.gating !== true) {
+        // `advisory`, NOT `pass`. Returning "pass" here would have been the
+        // exact move this file already criticises two rows down: converting "we
+        // do not know" into "we checked". An advisory result does not fail the
+        // run and does not count toward the behavioural guard either, so a
+        // broken stage-(a) journey can neither redden six lanes' trunk nor
+        // silently satisfy the "this run proved something" test.
+        return {
+          result: "advisory",
+          detail:
+            `journey ${j.result.toUpperCase()} at stage (${j.stage}) with ${failed.length} failing step(s)`
+            + ` — NOT GATING L3 (${j.gatingNote}).`
+            + ` Failing: ${failed.map((a) => `${a.name}: ${a.detail}`).join(" | ")}`,
+        };
+      }
+      if (failed.length > 0) {
+        return { result: "fail", detail: failed.map((a) => `${a.name}: ${a.detail}`).join(" | ") };
+      }
+      const pendingNames = j.pending ?? [];
+      return {
+        result: "pass",
+        detail:
+          `stage (${j.stage}) door ${j.door.url}: ${j.assertions.filter((a) => a.result === "pass").length} step(s) green`
+          + (pendingNames.length > 0 ? `, ${pendingNames.length} PENDING on a door that does not exist yet (${pendingNames.join(", ")})` : "")
+          + (j.gating === true ? "" : ` — not gating L3 (${j.gatingNote})`),
+      };
     },
   },
   {
@@ -314,6 +370,11 @@ export function buildReport(facts) {
       readsByThisRun,
     },
     apps: { macos, ios: facts.ios ?? null },
+    // The verdict the journey wrote about itself, carried verbatim. Not
+    // re-judged here: two judgements of one journey can disagree, and only one
+    // of them would end up in this object.
+    writeJourney: facts.writeJourney ?? null,
+    writeJourneyPath: facts.writeJourneyPath ?? null,
     assertions: [],
     result: "pass",
   };
@@ -351,7 +412,10 @@ export function buildReport(facts) {
    * BEHAVIOR run? That is the property "an agent may only claim something works
    * at the lane it actually ran" is really about.
    */
-  const behavioral = report.assertions.filter((a) => PROVES_BEHAVIOR.has(a.name));
+  // `advisory` results are excluded: an assertion the run chose not to gate on
+  // has not established behaviour either. Counting it would let a suppressed
+  // row supply the very evidence its suppression says it cannot supply.
+  const behavioral = report.assertions.filter((a) => PROVES_BEHAVIOR.has(a.name) && a.result !== "advisory");
   if (report.result === "pass" && behavioral.length === 0) {
     report.result = "inconclusive";
   }
@@ -371,7 +435,7 @@ export function formatHuman(report) {
     + `  (this run's client ${report.run.clientId}: ${report.backend.readsByThisRun ?? "not counted by this backend"})`);
   out.push("");
   for (const a of report.assertions) {
-    const mark = a.result === "pass" ? "PASS" : "FAIL";
+    const mark = { pass: "PASS", fail: "FAIL", advisory: "ADVS" }[a.result] ?? "FAIL";
     out.push(`  [${mark}] ${a.name}`);
     out.push(`         claim:  ${a.claim}`);
     out.push(`         by:     ${a.measuredBy}`);
@@ -402,6 +466,14 @@ export function nextActions(report) {
     if (a.name === "backend_reachable") {
       actions.push("start the backend: integration/dev-stack.sh --only-backend --up, or unset OMI_BACKEND_URL if you pointed at someone else's");
     }
+    if (a.name === "write_journey") {
+      actions.push(`read the full journey verdict: node core-foundation/integration/lib/write-journey.mjs --format ${report.writeJourneyPath ?? "<the run's write-journey json>"}`);
+    }
+  }
+  // An advisory row is not a failure and must still be actionable, or the
+  // suppression quietly becomes silence.
+  for (const a of report.assertions.filter((x) => x.result === "advisory")) {
+    actions.push(`${a.name} was reported and NOT gated: ${a.detail.slice(0, 200)}`);
   }
   if (report.result === "inconclusive") {
     actions.push("this run asserted NOTHING — it proves nothing. Check that the mode you ran actually launched an app.");

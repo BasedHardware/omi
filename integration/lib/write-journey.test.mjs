@@ -1,0 +1,379 @@
+// LIFECYCLE: permanent
+//
+// RED-PROOFS FOR THE WRITE JOURNEY'S VERDICT PATH.
+//
+// `run-report.test.mjs` exists because the seventh failure of that night was
+// inside the acceptance path built to catch the other six. This file exists for
+// the same reason, one layer further in: the write journey is the artifact that
+// will be cited as "the write path works end to end", so its verdict logic is
+// the single most attractive place in this repository for a decoration that
+// happens to be green.
+//
+// Every assertion in JOURNEY_ASSERTIONS gets a mutation engineered to violate
+// exactly that assertion, and is required to go red. These are the CHEAP half:
+// they prove the evaluator CAN fail. The expensive half is applying the same
+// mutations to the real running door — `integration/red-proof-write-journey.sh`.
+// An evaluator that fails on doctored facts still says nothing about whether
+// the driver feeds it honest facts.
+//
+// The corpus and the classifier here are the REAL ones — platform's vendored
+// write-ops-outcomes.json and the shipped `classifyWriteOpsResponse` from the
+// built adapter dist. A re-typed copy of either would agree with itself no
+// matter what the server sent, which is the cross-side defect in miniature.
+//
+// Run: node --test integration/lib/write-journey.test.mjs
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  JOURNEY_ASSERTIONS,
+  classifyDoor,
+  gatingOf,
+  judgeJourney,
+  mintWriteId,
+  readVendoredWriteOutcomes,
+} from "./write-journey.mjs";
+
+const corpus = readVendoredWriteOutcomes();
+const { classifyWriteOpsResponse: classify } = await import(
+  new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+);
+const judge = (journey) => judgeJourney(journey, { corpus, classify });
+const outcome = (journey, name) => judge(journey).assertions.find((a) => a.name === name);
+
+const STALE_BODY = corpus.byOutcome.get("stale_epoch").body;
+const RUN = "journey-unit";
+const WRITE_ID = "a".repeat(64);
+const REVISION = "219a4807d8970548f0af5a687bb16d444d7090c74e203b37e072baae95a5f022";
+
+const tally = (over = {}) => ({
+  admitted: 2,
+  refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 1, control_unavailable: 0 },
+  preservedEnvelopes: 1,
+  ...over,
+});
+
+/**
+ * A journey against an APPLYING door in which every assertion passes. Mutating
+ * from a fully-green baseline is what makes each red-proof attributable to one
+ * mutation rather than to the shape of the fixture.
+ */
+function appliedJourney(over = {}) {
+  const createBody = JSON.stringify({
+    write_id: WRITE_ID, account_epoch: 7, domain: "tasks",
+    op: { op: "create", record_id: `task-journey-${RUN}`, content: { title: "t", done: false } },
+  });
+  const journey = {
+    schema: 1,
+    runId: RUN,
+    door: { url: "http://127.0.0.1:4851", opsPath: "/v1/tasks/ops", capability: "applies", why: "its create response carries an `applied` block" },
+    tree: { path: "/x/scripts/lint-import-graph.ts", registered: true },
+    control: {
+      url: "http://127.0.0.1:4851",
+      seed: {
+        accountId: "acct-dev-fixture",
+        steps: [
+          { name: "reset", response: { status: "reset" } },
+          { name: "observe:legacy", response: { accepted: true } },
+          { name: "activate", response: { activated: true } },
+        ],
+      },
+    },
+    epoch: { active: 7, stale: 6 },
+    recordId: `task-journey-${RUN}`,
+    steps: {
+      create: {
+        envelopeBuild: { ok: true, path: "/v1/tasks/ops" },
+        request: { path: "/v1/tasks/ops", body: createBody, writeId: WRITE_ID, epoch: 7 },
+        response: { status: 200, text: JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: REVISION }, idempotent: false }), retryAfter: null },
+      },
+      replay: {
+        envelopeBuild: { ok: true, path: "/v1/tasks/ops" },
+        request: { path: "/v1/tasks/ops", body: createBody, writeId: WRITE_ID, epoch: 7 },
+        response: { status: 200, text: JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: REVISION }, idempotent: true }), retryAfter: null },
+      },
+      stale: {
+        envelopeBuild: { ok: true, path: "/v1/tasks/ops" },
+        request: { path: "/v1/tasks/ops", body: "{}", writeId: "b".repeat(64), epoch: 6 },
+        response: { status: 409, text: STALE_BODY, retryAfter: null },
+      },
+      interleaved: {
+        envelopeBuild: { ok: true, path: "/v1/tasks/ops" },
+        request: { path: "/v1/tasks/ops", body: "{}", writeId: "c".repeat(64), epoch: 6 },
+        response: { status: 409, text: STALE_BODY, retryAfter: null },
+      },
+    },
+    producer: {
+      thisRun: tally(),
+      interleavedRun: tally({ admitted: 0, preservedEnvelopes: 1 }),
+      neverSentRun: null,
+    },
+  };
+  return { ...journey, ...over };
+}
+
+/** The stage-(a) shape: the fence harness door, no route registered. */
+function fenceOnlyJourney() {
+  const j = appliedJourney();
+  j.door = { url: "http://127.0.0.1:4853", opsPath: "/v1/tasks/ops", capability: "fence-only", why: "admitted through the fence and applied nothing (`{fence:\"admitted\"}`)" };
+  j.tree = { path: "/x/scripts/lint-import-graph.ts", registered: false };
+  const admitted = JSON.stringify({ fence: "admitted", account_epoch: 7 });
+  j.steps.create.response = { status: 202, text: admitted, retryAfter: null };
+  j.steps.replay.response = { status: 202, text: admitted, retryAfter: null };
+  return j;
+}
+
+// ── The baseline must be green, or every red below proves nothing ───────────
+
+test("baseline: an applying door passes every assertion", () => {
+  const verdict = judge(appliedJourney());
+  const notPass = verdict.assertions.filter((a) => a.result !== "pass");
+  assert.deepEqual(notPass.map((a) => `${a.name}: ${a.detail}`), []);
+  assert.equal(verdict.result, "pass");
+  assert.equal(verdict.stage, "b");
+});
+
+test("baseline: the stage-(a) fence door passes everything the fence can answer, and PENDS the rest", () => {
+  const verdict = judge(fenceOnlyJourney());
+  assert.deepEqual(verdict.pending, ["server_applied_observation", "idempotent_replay"]);
+  assert.equal(verdict.result, "partial");
+  assert.equal(verdict.stage, "a");
+  // PARTIAL IS NOT A PASS. This is the property the whole staging plan rests on.
+  assert.notEqual(verdict.result, "pass");
+  // …and the fence-answerable half is genuinely green, not skipped.
+  for (const name of ["create_admitted", "stale_epoch_refused", "refusal_bytes_are_corpus_exact", "dead_letter_disposition", "join_is_by_run_id"]) {
+    assert.equal(outcome(fenceOnlyJourney(), name).result, "pass", name);
+  }
+});
+
+/**
+ * A CHECKLIST, and labelled as one rather than dressed up as a proof: it fails
+ * when someone adds a row to JOURNEY_ASSERTIONS without adding a red-proof
+ * below. It cannot verify that the red-proofs are good — only that a new
+ * assertion cannot arrive unaccompanied.
+ */
+const RED_PROOFED = new Set([
+  "door_agreement", "control_seeded", "create_admitted", "server_applied_observation",
+  "idempotent_replay", "stale_epoch_refused", "refusal_bytes_are_corpus_exact",
+  "dead_letter_disposition", "join_is_by_run_id",
+]);
+
+test("no assertion arrives without a red-proof below", () => {
+  assert.deepEqual(
+    JOURNEY_ASSERTIONS.map((a) => a.name).filter((n) => !RED_PROOFED.has(n)),
+    [],
+    "an assertion with no red-proof in this file is a decoration",
+  );
+});
+
+// ── Red-proofs ──────────────────────────────────────────────────────────────
+
+test("RED-PROOF door_agreement: the route is registered but the journey drove the harness", () => {
+  // The failure this exists for: OPS lands the route, STACK's journey keeps
+  // pointing at the stage-(a) fence server, everything it can measure stays
+  // green, and two of its steps stay PENDING forever while the report reads as
+  // healthy progress.
+  const j = fenceOnlyJourney();
+  j.tree = { path: "/x", registered: true };
+  const r = outcome(j, "door_agreement");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /STACK stage b/);
+});
+
+test("RED-PROOF door_agreement: a door applies writes for a path no registry row claims", () => {
+  const j = appliedJourney();
+  j.tree = { path: "/x", registered: false };
+  assert.equal(outcome(j, "door_agreement").result, "fail");
+});
+
+test("RED-PROOF door_agreement: an unreadable door response is a failure, not a pending", () => {
+  const j = appliedJourney();
+  j.door = { ...j.door, capability: "unknown", why: "the create response is not JSON" };
+  assert.equal(outcome(j, "door_agreement").result, "fail");
+});
+
+test("RED-PROOF control_seeded: the fence had nothing to admit against", () => {
+  const j = appliedJourney();
+  j.control.seed.steps[1].response = { accepted: false, reason: "out_of_order" };
+  assert.equal(outcome(j, "control_seeded").result, "fail");
+});
+
+test("RED-PROOF create_admitted: the server's decision counter disagrees with the bytes received", () => {
+  // A counter incremented at REQUEST ENTRY rather than at the decision would
+  // report three for two admitted responses. `admitted > 0` cannot see that;
+  // equality can.
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ admitted: 3 });
+  const r = outcome(j, "create_admitted");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /arbiters disagree/);
+});
+
+test("RED-PROOF create_admitted: a broken run-id join is a failure, never an implied zero", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = null;
+  const r = outcome(j, "create_admitted");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /null, not zero/);
+});
+
+test("RED-PROOF server_applied_observation: the door applied to a different record", () => {
+  const j = appliedJourney();
+  j.steps.create.response.text = JSON.stringify({ applied: { record_id: "task-somebody-else", revision: REVISION }, idempotent: false });
+  assert.equal(outcome(j, "server_applied_observation").result, "fail");
+});
+
+test("RED-PROOF server_applied_observation: a revision that changes per request is not a record's state", () => {
+  const j = appliedJourney();
+  j.steps.replay.response.text = JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: "f".repeat(64) }, idempotent: true });
+  assert.equal(outcome(j, "server_applied_observation").result, "fail");
+});
+
+test("RED-PROOF idempotent_replay: the registry did not recognise the replayed write_id", () => {
+  // B1's demonstrated failure: applied, crashed before the tombstone, replayed.
+  // A door that reports a fresh apply on replay has applied the op twice.
+  const j = appliedJourney();
+  j.steps.replay.response.text = JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: REVISION }, idempotent: false });
+  const r = outcome(j, "idempotent_replay");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /applied twice/);
+});
+
+test("RED-PROOF idempotent_replay: the FIRST send already claimed idempotent", () => {
+  const j = appliedJourney();
+  j.steps.create.response.text = JSON.stringify({ applied: { record_id: `task-journey-${RUN}`, revision: REVISION }, idempotent: true });
+  assert.equal(outcome(j, "idempotent_replay").result, "fail");
+});
+
+test("RED-PROOF idempotent_replay: a replay that did not send identical bytes proves nothing", () => {
+  const j = appliedJourney();
+  j.steps.replay.request.body = `${j.steps.replay.request.body} `;
+  assert.equal(outcome(j, "idempotent_replay").result, "fail");
+});
+
+test("RED-PROOF stale_epoch_refused: a refusal with no paired admission is indistinguishable from a broken door", () => {
+  // The whole point. A 404, a crash, a typo'd path and a server refusing
+  // everything all satisfy "not 2xx"; none of them can also produce the 202.
+  const j = appliedJourney();
+  j.steps.create.response = { status: 404, text: '{"error":"not_found"}', retryAfter: null };
+  const r = outcome(j, "stale_epoch_refused");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /indistinguishable/);
+});
+
+test("RED-PROOF stale_epoch_refused: refused, but not by the fence", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 } });
+  assert.equal(outcome(j, "stale_epoch_refused").result, "fail");
+});
+
+test("RED-PROOF stale_epoch_refused: the corpus status is the arbiter, not the driver's expectation", () => {
+  const j = appliedJourney();
+  j.steps.stale.response.status = 403;
+  assert.equal(outcome(j, "stale_epoch_refused").result, "fail");
+});
+
+test("RED-PROOF refusal_bytes_are_corpus_exact: an extra field in the refusal body", () => {
+  const j = appliedJourney();
+  j.steps.stale.response.text = JSON.stringify({ error: "stale_epoch", refusal_outcome: "stale_epoch", detail: "epoch 6 < 7" });
+  assert.equal(outcome(j, "refusal_bytes_are_corpus_exact").result, "fail");
+});
+
+test("RED-PROOF refusal_bytes_are_corpus_exact: the leak check fires even on corpus-exact bytes", () => {
+  // W1's load-bearing condition, and ADR-012 §4's: a caller without authority
+  // over the account must not be able to probe migration progress off a
+  // refusal. The byte-compare above cannot cover this on its own — a body can
+  // be corpus-exact and still contain the account's own identifier if the
+  // identifier happens to be a substring of it. So the leak scan runs
+  // independently, and this mutation makes the account id a substring of the
+  // ratified body to prove the scan is live rather than shadowed by the
+  // byte-compare.
+  const j = appliedJourney();
+  j.control.seed.accountId = "stale_epoch";
+  assert.equal(j.steps.stale.response.text, STALE_BODY, "the bytes are still corpus-exact");
+  const r = outcome(j, "refusal_bytes_are_corpus_exact");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /leaks/);
+});
+
+test("RED-PROOF dead_letter_disposition: the straggler's envelope was not preserved", () => {
+  // A straggler refused and NOT preserved is a silently lost edit — the one
+  // refusal class that is supposed to keep the user's content recoverable.
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ preservedEnvelopes: 0 });
+  const r = outcome(j, "dead_letter_disposition");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /silently lost edit/);
+});
+
+test("RED-PROOF dead_letter_disposition: the shipped client would call it a conflict", () => {
+  // B2 rules `conflict` out by name: telling a person their saved edit
+  // conflicted, when the server refused an op authored in a superseded
+  // generation, is a false report about their own content.
+  const j = appliedJourney();
+  const verdict = judgeJourney(j, { corpus, classify: () => ({ kind: "permanent", reason: "conflict", detail: "x" }) });
+  const r = verdict.assertions.find((a) => a.name === "dead_letter_disposition");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /B2 rules out/);
+});
+
+test("RED-PROOF dead_letter_disposition: a classifier that reads the refusal as success", () => {
+  const j = appliedJourney();
+  const verdict = judgeJourney(j, { corpus, classify: () => null });
+  assert.equal(verdict.assertions.find((a) => a.name === "dead_letter_disposition").result, "fail");
+});
+
+test("RED-PROOF join_is_by_run_id: a counter that reports the same tally for every run", () => {
+  // Without this probe, a counter hard-coded to return one admitted and one
+  // stale_epoch would satisfy every other assertion in this file.
+  const j = appliedJourney();
+  j.producer.neverSentRun = tally();
+  const r = outcome(j, "join_is_by_run_id");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /reports N for everything/);
+});
+
+test("RED-PROOF join_is_by_run_id: an all-zero tally is not the same finding as null", () => {
+  const j = appliedJourney();
+  j.producer.neverSentRun = tally({ admitted: 0, refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 0, control_unavailable: 0 }, preservedEnvelopes: 0 });
+  assert.equal(outcome(j, "join_is_by_run_id").result, "fail");
+});
+
+test("RED-PROOF join_is_by_run_id: this run's tally absorbed another run's traffic", () => {
+  const j = appliedJourney();
+  j.producer.thisRun = tally({ refused: { authentication: 0, authorization: 0, entitlement: 0, stale_epoch: 2, control_unavailable: 0 } });
+  const r = outcome(j, "join_is_by_run_id");
+  assert.equal(r.result, "fail");
+  assert.match(r.detail, /absorbed/);
+});
+
+// ── Properties of the verdict itself ────────────────────────────────────────
+
+test("an assertion that throws is reported as a failure, and does not erase the others", () => {
+  const j = appliedJourney();
+  j.steps.stale.response = null;
+  const verdict = judge(j);
+  assert.equal(verdict.assertions.length, JOURNEY_ASSERTIONS.length);
+  assert.equal(verdict.result, "fail");
+});
+
+test("gating is derived from the registry row, never declared", () => {
+  assert.equal(gatingOf({ tree: { registered: true }, door: { opsPath: "/v1/tasks/ops" } }).gating, true);
+  const off = gatingOf(fenceOnlyJourney());
+  assert.equal(off.gating, false);
+  assert.match(off.gatingNote, /gates automatically/);
+});
+
+test("classifyDoor reads the capability off the bytes, and calls unrecognised bytes unknown", () => {
+  assert.equal(classifyDoor({ text: '{"applied":{"record_id":"r","revision":null},"idempotent":false}' }).capability, "applies");
+  assert.equal(classifyDoor({ text: '{"fence":"admitted","account_epoch":7}' }).capability, "fence-only");
+  assert.equal(classifyDoor({ text: "not json" }).capability, "unknown");
+  assert.equal(classifyDoor({ text: '{"ok":true}' }).capability, "unknown");
+});
+
+test("mintWriteId produces the ratified 64-lowercase-hex shape", () => {
+  const id = mintWriteId();
+  assert.match(id, new RegExp(corpus.writeIdPattern));
+  assert.notEqual(id, mintWriteId());
+});

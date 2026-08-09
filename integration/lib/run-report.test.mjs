@@ -21,7 +21,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildReport } from "./run-report.mjs";
+import { buildReport, nextActions } from "./run-report.mjs";
 import { workspaceStamps } from "./provenance.mjs";
 
 const CLIENT = "run-test-client";
@@ -234,6 +234,107 @@ test("RED-PROOF: a run that drove nothing is INCONCLUSIVE, never a pass", () => 
   assert.equal(report.assertions.some((a) => ["served_reads_by_this_run", "no_generation_mismatch", "window_alive"].includes(a.name)), false,
     "but none of them is about what an app did");
   assert.equal(report.result, "inconclusive", "…so the run proves nothing");
+});
+
+// ── The write journey's row ─────────────────────────────────────────────────
+// The journey judges itself; this row decides only whether its verdict is
+// allowed to redden L3 tonight. These red-proofs are about THAT decision.
+
+/** A journey verdict of the given shape, as `write-journey.mjs` would write it. */
+const journeyVerdict = ({ gating, failing = 0, pending = [] }) => ({
+  schema: 1,
+  runId: "run-test",
+  stage: gating ? "b" : "a",
+  door: { url: gating ? "http://127.0.0.1:4851" : "http://127.0.0.1:4853", opsPath: "/v1/tasks/ops" },
+  assertions: [
+    { name: "create_admitted", result: "pass", detail: "ok" },
+    ...Array.from({ length: failing }, (_, i) => ({ name: `broken_${i}`, result: "fail", detail: "the two arbiters disagree" })),
+    ...pending.map((name) => ({ name, result: "pending", detail: "the door does not exist yet" })),
+  ],
+  pending,
+  result: failing > 0 ? "fail" : (pending.length > 0 ? "partial" : "pass"),
+  gating,
+  gatingNote: gating ? null : "stage (a): /v1/tasks/ops has no WIRE_PATH_REGISTRY row",
+});
+
+test("a stage-(a) journey with pending steps passes, and says which steps it could not measure", () => {
+  const report = buildReport(healthyFacts({
+    writeJourney: journeyVerdict({ gating: false, pending: ["server_applied_observation", "idempotent_replay"] }),
+  }));
+  const a = assertionNamed(report, "write_journey");
+  assert.equal(a.result, "pass");
+  assert.match(a.detail, /2 PENDING/);
+  assert.match(a.detail, /server_applied_observation/);
+});
+
+test("RED-PROOF write_journey: a failing journey at a REGISTERED door fails the run", () => {
+  // The retirement condition, made mechanical. Once /v1/tasks/ops has a
+  // registry row the journey gates like anything else — no edit, no flag,
+  // nobody having to remember.
+  const report = buildReport(healthyFacts({ writeJourney: journeyVerdict({ gating: true, failing: 1 }) }));
+  assert.equal(assertionNamed(report, "write_journey").result, "fail");
+  assert.equal(report.result, "fail");
+});
+
+test("RED-PROOF write_journey: a failing stage-(a) journey is ADVISORY — never a pass, never silent", () => {
+  // The trap this avoids: returning "pass" for a suppressed row. That would
+  // convert "we chose not to gate on this" into "we checked", and it would let
+  // a broken journey satisfy the behavioural guard below all by itself.
+  const report = buildReport(healthyFacts({ writeJourney: journeyVerdict({ gating: false, failing: 2 }) }));
+  const a = assertionNamed(report, "write_journey");
+  assert.equal(a.result, "advisory");
+  assert.match(a.detail, /NOT GATING L3/);
+  assert.match(a.detail, /broken_0/, "the failing step names are in the record, not just a count");
+  assert.equal(report.result, "pass", "an advisory does not redden six lanes' trunk");
+  assert.ok(
+    nextActions(report).some((x) => x.includes("was reported and NOT gated")),
+    "…and it is not silent either",
+  );
+});
+
+test("RED-PROOF write_journey: an advisory journey cannot supply the behavioural evidence a run needs", () => {
+  // `--only-backend` plus a broken, non-gating journey. Nothing about an app
+  // was established, so the run must be INCONCLUSIVE rather than pass.
+  const report = buildReport({
+    runId: "run-journey-only",
+    startedAt: new Date().toISOString(),
+    clientId: CLIENT,
+    generation: "legacy",
+    mode: "run",
+    backendUrl: "http://127.0.0.1:4851",
+    wantSurfaces: false,
+    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    backendStatsAfter: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    macos: null,
+    ios: null,
+    writeJourney: journeyVerdict({ gating: false, failing: 1 }),
+  });
+  assert.equal(assertionNamed(report, "write_journey").result, "advisory");
+  assert.equal(report.result, "inconclusive");
+});
+
+test("a green gating journey IS behavioural evidence on its own", () => {
+  const report = buildReport({
+    runId: "run-journey-only-green",
+    startedAt: new Date().toISOString(),
+    clientId: CLIENT,
+    generation: "legacy",
+    mode: "run",
+    backendUrl: "http://127.0.0.1:4851",
+    wantSurfaces: false,
+    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    backendStatsAfter: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    macos: null,
+    ios: null,
+    writeJourney: journeyVerdict({ gating: true }),
+  });
+  assert.equal(report.result, "pass");
+});
+
+test("no journey at all means the row does not apply — and the run cannot borrow its credit", () => {
+  const report = buildReport(healthyFacts());
+  assert.equal(report.assertions.some((a) => a.name === "write_journey"), false);
+  assert.equal(report.writeJourney, null);
 });
 
 test("readsByThisRun is null, not 0, when the backend cannot answer the question", () => {
