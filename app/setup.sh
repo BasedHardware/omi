@@ -46,12 +46,14 @@ echo ""
 echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
+echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
 echo ""
 
-
-# Honor caller override so local-backend setup actually writes that URL to .dev.env
-# (#9404 review). Default remains community remote staging.
-API_BASE_URL="${API_BASE_URL:-https://api.omiapi.com/}"
+LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
+LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${LOCAL_DEV_HOST}:8000/}"
+ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
+ANDROID_LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${ANDROID_DEV_HOST}:8000/}"
+BETA_API_BASE_URL="${OMI_BETA_API_BASE_URL:-https://api.omiapi.com/}"
 
 ######################################
 # Generate device suffix from hostname
@@ -66,37 +68,27 @@ function generate_device_suffix() {
 # Generate custom configs for iOS
 ######################################
 function generate_ios_custom_config() {
-  bash scripts/generate_ios_custom_config.sh ios/Config/Dev/GoogleService-Info.plist ios/Flutter \
+  local config_name="${1:-Dev}"
+  local callback_scheme="${2:-omi-dev}"
+  bash scripts/generate_ios_custom_config.sh "ios/Config/${config_name}/GoogleService-Info.plist" ios/Flutter
 
-  # Custom bundle identifier
-  SUFFIX=$(generate_device_suffix)
-  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
-  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "ios/Flutter/Custom.xcconfig"
-}
-
-######################################
-# Setup Firebase with prebuilt configs
-######################################
-function setup_firebase() {
-  mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-  cp setup/prebuilt/google-services.json android/app/src/dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
-
-  # Warn: Mocking, should remove
-  mkdir -p android/app/src/prod/ ios/Config/Prod/
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
-  cp setup/prebuilt/google-services.json android/app/src/prod/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
-
-  validate_firebase_api_alignment
+  if [[ "$config_name" == "Dev" ]]; then
+    # Keep ordinary local builds installable beside the App Store build.
+    local suffix
+    suffix=$(generate_device_suffix)
+    echo "APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12-${suffix}" >> ios/Flutter/Custom.xcconfig
+  else
+    # Beta uses a distinct bundle/callback identity and must be provisioned
+    # explicitly by the developer's Apple team.
+    echo "APP_BUNDLE_IDENTIFIER=${OMI_MOBILE_BETA_BUNDLE_ID:-com.friend-app-with-wearable.ios12.beta}" >> ios/Flutter/Custom.xcconfig
+    echo "AUTH_CALLBACK_SCHEME=${callback_scheme}" >> ios/Flutter/Custom.xcconfig
+  fi
 }
 
 ##############################################################################
-# Fail closed when community remote-staging API cannot verify Firebase tokens
-# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
-# Compares every prebuilt artifact the app copies (json + dart + plist).
+# Fail closed when the local Firebase trio the app copies disagrees (#9404).
+# Default community setup uses *-local + local/emulator API (#11273). Beta
+# regenerates against based-hardware via FlutterFire — never based-hardware-dev.
 ##############################################################################
 function _firebase_project_id_from_prebuilt() {
   local file="$1"
@@ -107,14 +99,12 @@ function _firebase_project_id_from_prebuilt() {
         | sed -E 's/.*"([^"]+)"[[:space:]]*$/\1/'
       ;;
     *.plist)
-      # PROJECT_ID key followed by <string>...</string>
       tr '\n' ' ' <"${file}" \
         | grep -oE '<key>PROJECT_ID</key>[[:space:]]*<string>[^<]+</string>' \
         | head -1 \
         | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/'
       ;;
     *.dart)
-      # Require a single projectId across platforms in firebase_options.dart
       local ids
       ids="$(grep -oE "projectId:[[:space:]]*'[^']+'" "${file}" | sed -E "s/.*'([^']+)'.*/\1/" | sort -u)"
       if [[ "$(echo "${ids}" | grep -c .)" -eq 1 ]]; then
@@ -125,41 +115,77 @@ function _firebase_project_id_from_prebuilt() {
 }
 
 function validate_firebase_api_alignment() {
-  local json_proj dart_proj plist_proj project
-  json_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/google-services.json)"
-  dart_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/firebase_options.dart)"
-  plist_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/GoogleService-Info.plist)"
+  local json_proj dart_proj plist_proj
+  json_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/google-services-local.json)"
+  dart_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/firebase_options_local.dart)"
+  plist_proj="$(_firebase_project_id_from_prebuilt setup/prebuilt/GoogleService-Info-Local.plist)"
 
   if [[ -z "${json_proj}" || -z "${dart_proj}" || -z "${plist_proj}" ]]; then
-    echo "ERROR: could not parse Firebase project id from app/setup/prebuilt/* (#9404)."
-    echo "  google-services.json → '${json_proj}'"
-    echo "  firebase_options.dart → '${dart_proj}'"
-    echo "  GoogleService-Info.plist → '${plist_proj}'"
+    echo "ERROR: could not parse Firebase project id from app/setup/prebuilt/*-local (#9404)."
+    echo "  google-services-local.json → '${json_proj}'"
+    echo "  firebase_options_local.dart → '${dart_proj}'"
+    echo "  GoogleService-Info-Local.plist → '${plist_proj}'"
     exit 1
   fi
   if [[ "${json_proj}" != "${dart_proj}" || "${json_proj}" != "${plist_proj}" ]]; then
-    echo "ERROR: prebuilt Firebase configs disagree on project id (#9404)."
-    echo "  google-services.json → '${json_proj}'"
-    echo "  firebase_options.dart → '${dart_proj}'"
-    echo "  GoogleService-Info.plist → '${plist_proj}'"
-    echo "Regenerate the full trio via FlutterFire (do NOT text-replace — #5945)."
+    echo "ERROR: local Firebase prebuilt configs disagree on project id (#9404)."
+    echo "  google-services-local.json → '${json_proj}'"
+    echo "  firebase_options_local.dart → '${dart_proj}'"
+    echo "  GoogleService-Info-Local.plist → '${plist_proj}'"
+    echo "Regenerate the local trio together (do NOT text-replace — #5945)."
     exit 1
   fi
-  project="${json_proj}"
+  # Remote staging rejects based-hardware-dev tokens (#9404 / #5939). Default
+  # setup must never ship that project as the copied local identity.
+  if [[ "${json_proj}" == "based-hardware-dev" ]]; then
+    echo "ERROR: local Firebase prebuilt still targets based-hardware-dev (#9404)."
+    echo "Community default setup must use the emulator/local demo project (or"
+    echo "based-hardware only after FlutterFire regen for remote staging)."
+    exit 1
+  fi
+}
 
-  if [[ "${API_BASE_URL}" == "https://api.omiapi.com/" && "${project}" != "based-hardware" ]]; then
-    echo "ERROR: Firebase project '${project}' cannot authenticate to ${API_BASE_URL}."
-    echo "Community remote staging requires Firebase project 'based-hardware' (#9404)."
-    echo "Tokens from '${project}' are rejected with 401 by the live backend."
-    echo ""
-    echo "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
-    echo "  based-hardware for com.friend.ios.dev / com.friend-app-with-wearable.ios12.development"
-    echo "  (do NOT text-replace project IDs — closed PR #5945)."
-    echo ""
-    echo "Isolated local backend / emulator workaround (honors API_BASE_URL override):"
-    echo "  API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios"
-    exit 1
-  fi
+######################################
+# Setup Firebase with prebuilt configs
+######################################
+function setup_firebase() {
+  validate_firebase_api_alignment
+  mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev/ ios/Config/Prod/ ios/Runner/
+  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+  cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
+}
+
+##########################################
+# Setup Firebase with Service Account Json
+##########################################
+function setup_firebase_with_service_account_ios() {
+  dart pub global activate flutterfire_cli
+  flutterfire config \
+    --platforms=ios \
+    --out=lib/firebase_options_prod.dart \
+    --ios-bundle-id=${OMI_MOBILE_BETA_BUNDLE_ID:-com.friend-app-with-wearable.ios12.beta} \
+    --ios-out=ios/Config/Prod/ \
+    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
+    --project="based-hardware" \
+    --ios-target="Runner" \
+    --yes
+}
+
+function setup_firebase_with_service_account_android() {
+  dart pub global activate flutterfire_cli
+  flutterfire config \
+    --platforms=android \
+    --out=lib/firebase_options_prod.dart \
+    --android-app-id=com.friend.ios \
+    --android-out=android/app/src/prod/ \
+    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
+    --project="based-hardware" \
+    --yes
 }
 
 ######################################
@@ -182,9 +208,15 @@ function setup_provisioning_profile() {
 # Set up App .env
 #################
 function setup_app_env() {
-  echo API_BASE_URL=$API_BASE_URL > .dev.env
-  echo USE_WEB_AUTH=true >> .dev.env
-  echo USE_AUTH_CUSTOM_TOKEN=true >> .dev.env
+  local profile="${1:-local_dev}"
+  local configured_api_base_url="${2:-}"
+  local env_file='.dev.env'
+  local api_base_url="${configured_api_base_url:-$LOCAL_API_BASE_URL}"
+  if [[ "$profile" == "mobile_beta" ]]; then
+    env_file='.env'
+    api_base_url="$BETA_API_BASE_URL"
+  fi
+  printf 'API_BASE_URL=%s\nUSE_WEB_AUTH=true\nUSE_AUTH_CUSTOM_TOKEN=true\n' "$api_base_url" > "$env_file"
 }
 
 # #######################
@@ -198,36 +230,84 @@ function setup_keystore_android() {
 # Build
 # #####
 function run_build_android() {
+  local flavor="${1:-dev}"
+  local profile='local_dev'
+  local api_base_url="$ANDROID_LOCAL_API_BASE_URL"
+  local emulator_host="$ANDROID_DEV_HOST"
+  if [[ "$flavor" == "prod" ]]; then
+    profile='mobile_beta'
+    api_base_url="$BETA_API_BASE_URL"
+    emulator_host=''
+  fi
+  local flutter_args=(
+    --flavor "$flavor"
+    "--dart-define=OMI_APP_PROFILE=$profile"
+    "--dart-define=OMI_API_BASE_URL=$api_base_url"
+  )
+  if [[ -n "$emulator_host" ]]; then
+    flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$emulator_host")
+  fi
   flutter pub get \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run "${flutter_args[@]}"
 }
 
 # #########
 # Build iOS
 # #########
 function run_build_ios() {
+  local flavor="${1:-dev}"
+  shift || true
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run --flavor "$flavor" "$@"
 }
 
 
 case "${1}" in
   ios)
+    if [[ "${2:-}" == "beta" ]]; then
+      if [[ -z "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ]]; then
+        echo "ios beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
+        exit 1
+      fi
       setup_firebase \
-      && generate_ios_custom_config \
-      && setup_app_env \
-      && run_build_ios
+        && setup_firebase_with_service_account_ios \
+        && generate_ios_custom_config Prod omi-beta \
+        && setup_app_env mobile_beta \
+        && run_build_ios prod --dart-define=OMI_APP_PROFILE=mobile_beta
+    else
+      setup_firebase \
+        && bash scripts/generate_ios_dev_info_plist.sh \
+        && generate_ios_custom_config Dev omi-dev \
+        && setup_app_env local_dev \
+        && run_build_ios dev \
+          --dart-define=OMI_APP_PROFILE=local_dev \
+          --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
+          --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
+    fi
     ;;
   android)
-    setup_keystore_android \
-      && setup_firebase \
-      && setup_app_env \
-      && run_build_android
+    if [[ "${2:-}" == "beta" ]]; then
+      if [[ -z "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ]]; then
+        echo "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
+        exit 1
+      fi
+      setup_keystore_android \
+        && setup_firebase \
+        && setup_firebase_with_service_account_android \
+        && setup_app_env mobile_beta "$BETA_API_BASE_URL" \
+        && run_build_android prod
+    else
+      setup_keystore_android \
+        && setup_firebase \
+        && setup_app_env local_dev "$ANDROID_LOCAL_API_BASE_URL" \
+        && run_build_android dev
+    fi
     ;;
   *)
-    error "Unexpected platform '${1}'"
+    echo "Unexpected platform '${1}'" >&2
+    exit 1
     ;;
 esac

@@ -39,11 +39,10 @@ signing errors. Instead:
       iPhone's UDID. `fastlane match development --readonly` only downloads the
       existing profile; it cannot register a new device or regenerate it.
 - [ ] Keep the original bundle id (`com.friend-app-with-wearable.ios12.development`).
-      Community remote staging (`api.omiapi.com`) requires Firebase project
-      **`based-hardware`** ([#9404](https://github.com/BasedHardware/omi/issues/9404)).
-      Until prebuilt configs are regenerated, use a local backend
-      (`API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios`) rather than expecting
-      `based-hardware-dev` tokens to pass remote auth (they return 401).
+      Default community setup uses the local/emulator Firebase trio + local API
+      ([#11273](https://github.com/BasedHardware/omi/pull/11273)). Remote staging
+      (`api.omiapi.com`) requires Firebase **`based-hardware`** — never expect
+      `based-hardware-dev` tokens to pass remote auth (401; [#9404](https://github.com/BasedHardware/omi/issues/9404)).
 - [ ] Build and install via
       `FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter app/scripts/rayban_dat.sh run -d <device-id>`.
       Never hand-install a stale `build/ios/iphoneos/Runner.app`.

@@ -40,36 +40,10 @@ Write-Host "- Gradle (v8.10)"
 Write-Host "- NDK (28.2.13676358)"
 Write-Host ""
 
-# Honor caller override so local-backend setup actually writes that URL to .dev.env
-# (#9404 review). Default remains community remote staging.
-if ([string]::IsNullOrWhiteSpace($env:API_BASE_URL)) {
-    $script:API_BASE_URL = "https://api.omiapi.com/"
-} else {
-    $script:API_BASE_URL = $env:API_BASE_URL
-}
 
-function SetupFirebase {
-    # Create directories if they don't exist
-    New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
-    
-    # Copy files
-    Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_dev.dart"
-    Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/dev/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Dev/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Runner/"
-
-    # Mocking setup
-    New-Item -ItemType Directory -Force -Path "android/app/src/prod/", "ios/Config/Prod/"
-    Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_prod.dart"
-    Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/prod/"
-    Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Prod/"
-
-    Validate-FirebaseApiAlignment
-}
-
-# Fail closed when community remote-staging API cannot verify Firebase tokens
-# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
-# Compares every prebuilt artifact the app copies (json + dart + plist).
+# Fail closed when the local Firebase trio the app copies disagrees (#9404).
+# Force Match pipelines to arrays under Set-StrictMode — a single unique
+# projectId otherwise becomes a scalar string and .Count throws.
 function Get-FirebaseProjectIdFromPrebuilt {
     param([string]$Path)
     $text = Get-Content -Raw $Path
@@ -84,7 +58,7 @@ function Get-FirebaseProjectIdFromPrebuilt {
         return ""
     }
     if ($Path -like "*.dart") {
-        $ids = [regex]::Matches($text, "projectId:\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        $ids = @([regex]::Matches($text, "projectId:\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
         if ($ids.Count -eq 1) { return $ids[0] }
         return ""
     }
@@ -92,39 +66,63 @@ function Get-FirebaseProjectIdFromPrebuilt {
 }
 
 function Validate-FirebaseApiAlignment {
-    $jsonProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/google-services.json"
-    $dartProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/firebase_options.dart"
-    $plistProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/GoogleService-Info.plist"
+    $jsonProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/google-services-local.json"
+    $dartProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/firebase_options_local.dart"
+    $plistProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/GoogleService-Info-Local.plist"
 
     if ([string]::IsNullOrWhiteSpace($jsonProj) -or [string]::IsNullOrWhiteSpace($dartProj) -or [string]::IsNullOrWhiteSpace($plistProj)) {
-        Write-Host "ERROR: could not parse Firebase project id from app/setup/prebuilt/* (#9404)."
-        Write-Host "  google-services.json → '$jsonProj'"
-        Write-Host "  firebase_options.dart → '$dartProj'"
-        Write-Host "  GoogleService-Info.plist → '$plistProj'"
+        Write-Host "ERROR: could not parse Firebase project id from app/setup/prebuilt/*-local (#9404)."
+        Write-Host "  google-services-local.json → '$jsonProj'"
+        Write-Host "  firebase_options_local.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info-Local.plist → '$plistProj'"
         exit 1
     }
     if ($jsonProj -ne $dartProj -or $jsonProj -ne $plistProj) {
-        Write-Host "ERROR: prebuilt Firebase configs disagree on project id (#9404)."
-        Write-Host "  google-services.json → '$jsonProj'"
-        Write-Host "  firebase_options.dart → '$dartProj'"
-        Write-Host "  GoogleService-Info.plist → '$plistProj'"
-        Write-Host "Regenerate the full trio via FlutterFire (do NOT text-replace — #5945)."
+        Write-Host "ERROR: local Firebase prebuilt configs disagree on project id (#9404)."
+        Write-Host "  google-services-local.json → '$jsonProj'"
+        Write-Host "  firebase_options_local.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info-Local.plist → '$plistProj'"
+        Write-Host "Regenerate the local trio together (do NOT text-replace — #5945)."
         exit 1
     }
-    $project = $jsonProj
+    if ($jsonProj -eq "based-hardware-dev") {
+        Write-Host "ERROR: local Firebase prebuilt still targets based-hardware-dev (#9404)."
+        Write-Host "Community default setup must use the emulator/local demo project."
+        exit 1
+    }
+}
 
-    if ($script:API_BASE_URL -eq "https://api.omiapi.com/" -and $project -ne "based-hardware") {
-        Write-Host "ERROR: Firebase project '$project' cannot authenticate to $($script:API_BASE_URL)."
-        Write-Host "Community remote staging requires Firebase project 'based-hardware' (#9404)."
-        Write-Host "Tokens from '$project' are rejected with 401 by the live backend."
-        Write-Host ""
-        Write-Host "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
-        Write-Host "  based-hardware (do NOT text-replace project IDs — closed PR #5945)."
-        Write-Host ""
-        Write-Host "Isolated local backend / emulator workaround (honors API_BASE_URL override):"
-        Write-Host "  `$env:API_BASE_URL='http://127.0.0.1:8000/'; then re-run setup.ps1"
-        exit 1
-    }
+function SetupFirebase {
+    Validate-FirebaseApiAlignment
+
+    # Create directories if they don't exist
+    New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
+    
+    # Copy files
+    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
+    Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/dev/google-services.json"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Dev/GoogleService-Info.plist"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Runner/GoogleService-Info.plist"
+
+    # Mocking setup
+    New-Item -ItemType Directory -Force -Path "android/app/src/prod/", "ios/Config/Prod/"
+    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
+    Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/prod/google-services.json"
+    Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Prod/GoogleService-Info.plist"
+}
+
+
+function SetupFirebaseWithServiceAccountAndroid {
+    dart pub global activate flutterfire_cli
+
+    flutterfire config `
+        --platforms="android" `
+        --out="lib/firebase_options_prod.dart" `
+        --android-app-id="com.friend.ios" `
+        --android-out="android/app/src/prod/" `
+        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
+        --project="based-hardware" `
+        --yes
 }
 
 function SetupProvisioningProfile {
@@ -142,9 +140,23 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
+    param(
+        [string]$Profile = "local_dev",
+        [string]$ApiBaseUrl = ""
+    )
+    if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+        $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "127.0.0.1" }
+        $ApiBaseUrl = "http://$devHost`:8000/"
+    }
+    if ($Profile -eq "mobile_beta") {
+        $ApiBaseUrl = if ($env:OMI_BETA_API_BASE_URL) { $env:OMI_BETA_API_BASE_URL } else { "https://api.omiapi.com/" }
+        $envFile = ".env"
+    } else {
+        $envFile = ".dev.env"
+    }
     # Using Set-Content with UTF8 encoding
-    $content = "API_BASE_URL=$($script:API_BASE_URL)"
-    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
+    $content = "API_BASE_URL=$ApiBaseUrl`nUSE_WEB_AUTH=true`nUSE_AUTH_CUSTOM_TOKEN=true"
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) $envFile), $content, [System.Text.Encoding]::UTF8)
 }
 
 function SetupKeystoreAndroid {
@@ -165,7 +177,25 @@ function BuildiOS {
 }
 
 function RunDev {
-    flutter run --flavor dev
+    $devHost = if ($env:OMI_DEV_HOST) { $env:OMI_DEV_HOST } else { "10.0.2.2" }
+    $apiBaseUrl = if ($env:OMI_LOCAL_API_BASE_URL) { $env:OMI_LOCAL_API_BASE_URL } else { "http://$devHost`:8000/" }
+    $flutterArgs = @(
+        "run", "--flavor", "dev",
+        "--dart-define=OMI_APP_PROFILE=local_dev",
+        "--dart-define=OMI_API_BASE_URL=$apiBaseUrl",
+        "--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$devHost"
+    )
+    & flutter @flutterArgs
+}
+
+function RunAndroidBeta {
+    $apiBaseUrl = if ($env:OMI_BETA_API_BASE_URL) { $env:OMI_BETA_API_BASE_URL } else { "https://api.omiapi.com/" }
+    $flutterArgs = @(
+        "run", "--flavor", "prod",
+        "--dart-define=OMI_APP_PROFILE=mobile_beta",
+        "--dart-define=OMI_API_BASE_URL=$apiBaseUrl"
+    )
+    & flutter @flutterArgs
 }
 
 # Function to show menu and get platform choice
@@ -188,6 +218,8 @@ function Show-PlatformMenu {
     }
 }
 
+# Get platform from argument or menu — skip when dot-sourced (parser fixtures).
+if ($MyInvocation.InvocationName -ne '.') {
 # Get platform from argument or menu
 $platform = if ($args.Count -eq 0) {
     Show-PlatformMenu
@@ -198,6 +230,14 @@ $platform = if ($args.Count -eq 0) {
 # Replace the existing switch block with this:
 switch ($platform.ToLower()) {
     "ios" {
+        if ($args.Count -gt 1) {
+            if ($args[1].ToLower() -eq "beta") {
+                Write-Error "ios beta is only supported by bash setup.sh on macOS; use 'bash setup.sh ios beta'."
+            } else {
+                Write-Error "Unsupported iOS setup profile '$($args[1])'."
+            }
+            exit 1
+        }
         Write-Host "`nSetting up iOS platform..."
         SetupFirebase
         SetupAppEnv
@@ -206,13 +246,28 @@ switch ($platform.ToLower()) {
     }
     "android" {
         Write-Host "`nSetting up Android platform..."
-        SetupKeystoreAndroid
-        SetupFirebase
-        SetupAppEnv
-        Build
+        if ($args.Count -gt 1 -and $args[1].ToLower() -eq "beta") {
+            if ([string]::IsNullOrWhiteSpace($env:FIREBASE_SERVICE_ACCOUNT_KEY)) {
+                Write-Error "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY"
+                exit 1
+            }
+            SetupKeystoreAndroid
+            SetupFirebase
+            SetupFirebaseWithServiceAccountAndroid
+            SetupAppEnv -Profile "mobile_beta"
+            Build
+            RunAndroidBeta
+        } else {
+            SetupKeystoreAndroid
+            SetupFirebase
+            SetupAppEnv -Profile "local_dev"
+            Build
+            RunDev
+        }
     }
     default {
         Write-Host "Unexpected platform '$platform'. Please use 'ios' or 'android'"
         exit 1
     }
+}
 } 

@@ -226,6 +226,7 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
         service_env = _job_env_block(output, service)
         assert 'OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in service_env
+        assert 'OMI_LLM_CHAT_AGENT_ROUTE=gateway' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://172.16.160.108' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://127.0.0.1:9' not in service_env
 

@@ -194,29 +194,21 @@ Manual setup gives you full control, allowing you to use your own backend.
   <Step title="Setup Firebase" icon="fire">
     Firebase is **mandatory** for the app to run.
 
-    Community mobile auth must match the backend that will verify ID tokens:
+    Community mobile auth must match the backend that will verify ID tokens
+    ([#9404](https://github.com/BasedHardware/omi/issues/9404), profiles clarified in [#11273](https://github.com/BasedHardware/omi/pull/11273)):
 
-    | Profile | `API_BASE_URL` | Firebase project |
+    | Profile | API | Firebase identity |
     | --- | --- | --- |
-    | Community remote staging | `https://api.omiapi.com/` | `based-hardware` |
-    | Isolated local / emulator | your local backend URL | emulator or your own / `based-hardware-dev` |
+    | Community local / emulator (default `setup.sh`) | local backend | `app/setup/prebuilt/*-local` (e.g. `demo-omi-local`) |
+    | Mobile beta / remote staging (`setup.sh ios beta`) | `https://api.omiapi.com/` | `based-hardware` via FlutterFire + service account |
 
     The live `api.omiapi.com` backend verifies Firebase tokens against **`based-hardware`**.
-    Signing into `based-hardware-dev` and then calling that API returns **401** after an apparently successful login ([#9404](https://github.com/BasedHardware/omi/issues/9404), follow-up to [#5939](https://github.com/BasedHardware/omi/issues/5939)).
+    Tokens from **`based-hardware-dev`** are rejected with **401** after an apparently successful login.
 
     <Warning>
-    `setup.sh` / `setup.ps1` copy prebuilt configs from `app/setup/prebuilt/`, then **fail closed** if those configs are not `based-hardware` while the default API is `https://api.omiapi.com/`.
-
-    Until maintainers regenerate the prebuilt trio via FlutterFire against `based-hardware` (do **not** text-replace project IDs — see closed PR [#5945](https://github.com/BasedHardware/omi/pull/5945)), point setup at a local backend. `setup.sh` / `setup.ps1` honor an existing `API_BASE_URL` override and validate that `google-services.json`, `firebase_options.dart`, and `GoogleService-Info.plist` agree on one project id:
-
-    ```bash
-    API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios
-    ```
-
-    ```powershell
-    $env:API_BASE_URL='http://127.0.0.1:8000/'
-    # then re-run setup.ps1 from app/
-    ```
+    `setup.sh` / `setup.ps1` copy the `*-local` trio, then **fail closed** if those three files disagree on project id or still target `based-hardware-dev`.
+    Beta FlutterFire must use `--project=based-hardware` (never `based-hardware-dev`).
+    Do **not** text-replace project IDs in prebuilt configs — see closed PR [#5945](https://github.com/BasedHardware/omi/pull/5945).
 
     **Never run `flutterfire configure`** against Omi's bundle IDs — it overwrites the prebuilt prod credentials in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, and `app/android/app/src/prod/`.
     </Warning>
@@ -279,11 +271,10 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     - Accept all Android licenses: `flutter doctor --android-licenses`
   </Accordion>
   <Accordion title="Firebase auth not working / 401 after sign-in" icon="fire">
-    - If `API_BASE_URL` is `https://api.omiapi.com/`, Firebase must be project **`based-hardware`**. Tokens from `based-hardware-dev` are rejected with 401 ([#9404](https://github.com/BasedHardware/omi/issues/9404)).
+    - Default `setup.sh` uses the local/emulator Firebase trio + local API. Remote staging (`api.omiapi.com`) requires Firebase **`based-hardware`** (beta FlutterFire path) — tokens from `based-hardware-dev` are rejected with 401 ([#9404](https://github.com/BasedHardware/omi/issues/9404)).
     - Enable Google/Apple sign-in in Firebase Console
     - Verify SHA1/SHA256 keys are added to Firebase
     - Check bundle IDs match your Firebase configuration
-    - For isolated local backends, point `API_BASE_URL` at your server before running setup (`API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios`) when using `based-hardware-dev` / emulator configs against a non-remote API
   </Accordion>
   <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
     **Error Message:**
