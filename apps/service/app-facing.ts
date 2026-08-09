@@ -253,7 +253,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     // The same fixed instant the read path uses. No wall clock anywhere.
     now: () => anchorEpochSeconds,
   });
-  registerTasksReadRoutes(app, { resolvePrincipal, prepareRead: prepareTasksReadFor, counter });
+  registerTasksReadRoutes(app, {
+    resolvePrincipal,
+    prepareRead: prepareTasksReadFor,
+    fence: { store: controlStore },
+    counter,
+  });
   registerQaControlRoutes(app, {
     resolvePrincipal,
     fence: { store: controlStore, counter: fenceCounter },

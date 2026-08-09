@@ -38,9 +38,11 @@ import {
   resolveDeclaredContractVersion,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
+import { ApplicationReadDenied } from "../../../core/retrieve/authorization-boundary";
 import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedTasksRead } from "../composition/tasks-read";
 import { UnprojectableTaskRecordError, readTasksPage } from "../composition/tasks-read";
+import type { AccountControlProjectionStore } from "../control/projection-store";
 import type { ServedCounter } from "../observability/served-count";
 
 const JSON_HEADERS = Object.freeze({
@@ -70,6 +72,10 @@ export interface TasksReadRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   /** Builds the prepared read for one principal. */
   readonly prepareRead: (principal: DevPrincipal) => PreparedTasksRead;
+  /** The write fence's existing per-account projection store. */
+  readonly fence: {
+    readonly store: AccountControlProjectionStore;
+  };
   readonly counter: ServedCounter;
 }
 
@@ -175,12 +181,29 @@ export const registerTasksReadRoutes = (app: Hono, deps: TasksReadRouteDependenc
     try {
       const prepared = deps.prepareRead(principal);
       const result = readTasksPage({ limit: page.limit, cursor: page.cursor }, prepared);
+      const projection = deps.fence.store.read(principal.uid);
+      const accountEpoch = projection === null ? null : projection.account_epoch;
+      // Presence, never truthiness: epoch 0 is a real epoch, while an absent
+      // projection (or one with no asserted epoch) preserves the optional 0.6.0
+      // key set instead of fabricating generation zero.
+      const body = accountEpoch === null
+        ? result.canonical_json
+        : JSON.stringify({
+            ...(JSON.parse(result.canonical_json) as Record<string, unknown>),
+            accountEpoch,
+          });
       // Counted only here: after the domain response body actually exists.
       // Counting earlier is the wave-9 bug — a served count that moves when
       // nothing was served makes a stalled backend look healthy.
       deps.counter.recordDomainRead("served");
-      return new Response(result.canonical_json, { status: 200, headers: JSON_HEADERS });
+      return new Response(body, { status: 200, headers: JSON_HEADERS });
     } catch (error) {
+      if (error instanceof ApplicationReadDenied) {
+        // Match the memories read: every internal authorization denial collapses
+        // onto one fixed body, with no account or epoch material interpolated.
+        deps.counter.recordDomainRead("denied");
+        return fixedResponse(FORBIDDEN_BODY, 403);
+      }
       // A record whose opaque bag does not satisfy the ratified read model is a
       // SERVER fault, not a client-controlled one, and it answers 500 — never
       // 400, and never a short page. Answering 400 would let a caller learn
