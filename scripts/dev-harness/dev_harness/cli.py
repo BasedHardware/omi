@@ -730,9 +730,11 @@ def _start_services(cfg: config.HarnessConfig) -> None:
 # 45 s (the old flat deadline shared across *all* services) is not enough.
 _HEALTH_TIMEOUTS: dict[str, float] = {
     "firestore": 45.0,
-    "auth": 45.0,
+    # The combined Firebase process can report Firestore ready before Auth has
+    # finished its cold startup on the qualification runner.
+    "auth": 90.0,
     "typesense": 45.0,
-    "backend": 90.0,
+    "backend": 180.0,
     "desktop-backend": 60.0,
     "redis": 30.0,
 }
@@ -776,7 +778,8 @@ def _wait_health(
         for service in list(pending):
             if now >= deadlines[service]:
                 url = pending[service][0]
-                failures.setdefault(service, f"not healthy after {deadlines[service] - start:.0f}s at {url}")
+                endpoint = url or f"127.0.0.1:{cfg.redis_port}"
+                failures[service] = f"not healthy after {deadlines[service] - start:.0f}s at {endpoint}"
                 pending.pop(service)
         if not pending:
             break
@@ -794,18 +797,18 @@ def _wait_health(
                 if _port_open("127.0.0.1", cfg.redis_port):
                     print("redis: healthy (port-open)")
                     pending.pop(service)
+                    failures.pop(service, None)
                 continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
+                failures.pop(service, None)
             else:
                 failures[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, (url, _) in pending.items():
-        failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending] if failures else []
+    return [f"{service}: {detail}" for service, detail in failures.items()]
 
 
 def cmd_up(args: argparse.Namespace) -> int:

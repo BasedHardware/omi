@@ -58,6 +58,9 @@ if (
     or migration.get("maxConcurrency") != 1
     or not isinstance(migration.get("soakSeconds"), int)
     or migration["soakSeconds"] < 60
+    or not isinstance(migration.get("retentionSeconds", migration["soakSeconds"]), int)
+    or migration.get("retentionSeconds", migration["soakSeconds"]) < migration["soakSeconds"]
+    or not isinstance(migration.get("drainRunning", False), bool)
 ):
     raise SystemExit("migration manifest is not a canonical explicit development plan")
 print(declared)
