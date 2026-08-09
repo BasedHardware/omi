@@ -118,5 +118,14 @@ class HostMvpAdapter implements OmiNative {
   async capturePhoto() { await wait(20); return {accepted: false, reason: 'camera native module not installed in host MVP'}; }
 }
 
-export const omiNative: OmiNative = (NativeModules.OmiNative as OmiNative | undefined) ?? new HostMvpAdapter();
-export const isNativeModuleInstalled = Boolean(NativeModules.OmiNative);
+export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
+  return {
+    adapter: nativeModule ?? new HostMvpAdapter(),
+    installed: nativeModule != null,
+  };
+}
+
+const selectedOmiNative = resolveOmiNative(NativeModules.OmiNative as OmiNative | undefined);
+
+export const omiNative: OmiNative = selectedOmiNative.adapter;
+export const isNativeModuleInstalled = selectedOmiNative.installed;

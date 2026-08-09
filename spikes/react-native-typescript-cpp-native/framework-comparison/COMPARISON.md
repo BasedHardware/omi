@@ -14,7 +14,7 @@ omi-relay-contract:v1|native-seam:<framework boundary>|payload:bounded|gap:expli
 
 | Candidate | Strength | Current proof | Blocking gap | Opinion |
 |---|---|---|---|---|
-| React Native | Best TypeScript ecosystem and native-module path | TypeScript MVP cockpit, full typed Omi capability contract tests, Bun lint/Jest/tsc, Android `assembleDebug`, C++ CTest | Real platform module and hardware execution still pending | Best TS-first baseline |
+| React Native | Best TypeScript ecosystem and native-module path | TypeScript MVP cockpit, full typed Omi capability contract tests, registered Android `OmiNative` JNI/C++ module, iOS Objective-C++/C++ counterpart, Bun lint/Jest/tsc, Android `assembleDebug`, iOS CocoaPods workspace build, C++ CTest | Hardware adapters (BLE/audio/camera/background) and physical-device runtime proof | Best TS-first baseline |
 | Flutter | Strongest existing Omi/native parity | `flutter pub get`, `flutter analyze`, and macOS debug build pass | Dart owns the UI layer; no new native adapter in this spike | Safest shipping baseline |
 | Lynx | Native-oriented TS/React model | Bun install, Rspeedy bundle, and Vitest pass | No real native-module Android/iOS run | Best challenger to RN |
 | Valdi | Strong native-view and polyglot-module design | Bun dependency install and module resolution pass | Android Bazel build, lint, and tests fail | Highest-upside but currently highest-risk |
@@ -65,7 +65,7 @@ Bazel's Xcode provider resolves `/Applications/Xcode Beta.app/Contents/Developer
 ## Recommended order
 
 1. Keep Flutter as the current parity/shipping control.
-2. Finish the existing React Native Android path and fix the iOS compiler environment.
+2. Finish the existing React Native Android path and iOS simulator-native build; physical hardware remains a separate gate.
 3. Add one real native function to Lynx and run its Android host.
 4. Complete Valdi's clean Android build and test gate.
 5. Compare the four on the same BLE/native adapter rather than on more UI scaffolds.

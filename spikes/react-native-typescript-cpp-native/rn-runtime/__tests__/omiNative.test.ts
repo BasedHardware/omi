@@ -1,4 +1,21 @@
-import {omiNative} from '../src/omiNative';
+import {omiNative, resolveOmiNative, type OmiNative} from '../src/omiNative';
+
+test('native module selection prefers the registered implementation', () => {
+  const nativeModule = {} as OmiNative;
+
+  const selected = resolveOmiNative(nativeModule);
+
+  expect(selected.installed).toBe(true);
+  expect(selected.adapter).toBe(nativeModule);
+});
+
+test('native module selection falls back when no implementation is registered', () => {
+  const selected = resolveOmiNative(undefined);
+
+  expect(selected.installed).toBe(false);
+  expect(selected.adapter).not.toBeUndefined();
+  expect(selected.adapter).not.toBe(null);
+});
 
 test('host adapter exposes every Omi native capability category', async () => {
   const snapshot = await omiNative.getSnapshot();
