@@ -130,7 +130,30 @@
 #   renders in local time, so without this, Today/Tomorrow/Later assertions
 #   drift with your machine's timezone.
 #
+# THE WRITE JOURNEY
+#   Every --assert run also drives the scripted write journey — create, applied,
+#   idempotent replay, forced stale epoch, dead letter — against a live write
+#   door, and judges it with the SERVER's own fence counter joined to this run's
+#   id. See integration/lib/write-journey.mjs for what each step's two arbiters
+#   are and why a dispatch-side number never appears in the verdict.
+#
+#   WHICH DOOR IT DRIVES IS NOT A FLAG. `write-journey.mjs --print-door-plan`
+#   answers it from platform's WIRE_PATH_REGISTRY: until `/v1/tasks/ops` has a
+#   row there, the door is the fence harness on 4854 (charter R11 stage a) and
+#   the journey does not gate L3; the moment the row lands, the door is the
+#   product backend and the journey gates. Nobody has to remember to switch it.
+#
+#   Its control state is SEEDED BY THIS HARNESS (charter R3): nothing in
+#   platform mints control state by design, so the local stack drives
+#   observe/activate for its dev account only. The production publisher is
+#   legacy's and is untouched.
+#
 # PORTS IT USES     4851 new backend | 4852 surfaces | 4747 legacy fake
+#                   4854 write door (fence harness, stage a)
+#                   NOT 4853: integration/cross-side/wire-agreement.test.mjs
+#                   hard-codes 4853 for its own backend child, and L2 must stay
+#                   safe to run alongside a live stack. A live 4853 made that
+#                   test talk to the fence harness and read 404 for /v1/memories.
 #                   5290 macOS shell's own loopback (it serves its bundled dist)
 # ============================================================================
 set -uo pipefail
@@ -183,7 +206,16 @@ LOGDIR="$RUNDIR/logs"
 BACKEND_PORT=4851
 SURFACES_PORT=4852
 LEGACY_PORT=4747
+WRITE_DOOR_PORT=4854
 BACKEND_URL="${OMI_BACKEND_URL:-http://127.0.0.1:$BACKEND_PORT}"
+
+# The fence harness's own credential and dev account (platform's
+# integration/control/fence-protocol.ts). Named here, not inlined, because
+# stage (b) replaces both with the product backend's and the diff should be
+# three assignments rather than a hunt through the script.
+FENCE_HARNESS_TOKEN="omi-fence-integration-qa-token-v1"
+FENCE_HARNESS_ACCOUNT="acct-fence-integration-fixture"
+WRITE_JOURNEY_EPOCH="${OMI_WRITE_JOURNEY_EPOCH:-7}"
 
 SEED="${OMI_SEED:-7}"
 # Which backend generation the APP should use for memories.
@@ -426,6 +458,7 @@ if [[ $STOP_ONLY -eq 1 ]]; then
   free_port "$BACKEND_PORT" "integration/server/serve.ts"
   free_port "$SURFACES_PORT" "dev-stack-static"
   free_port "$LEGACY_PORT" "qa-api-server"
+  free_port "$WRITE_DOOR_PORT" "integration/control/fence-server.ts"
   ok "stopped whatever a previous run left behind."
   trap - EXIT; exit 0
 fi
@@ -477,6 +510,7 @@ if [[ $MODE_ATTACH -eq 0 ]]; then
   stop_tracked
   free_port "$BACKEND_PORT" "integration/server/serve.ts"
   free_port "$SURFACES_PORT" "dev-stack-static"
+  free_port "$WRITE_DOOR_PORT" "integration/control/fence-server.ts"
 fi
 
 # ── 1. New backend (4851) ───────────────────────────────────────────────────
@@ -534,12 +568,85 @@ if [[ $BACKEND_OWNED -eq 1 ]]; then
   fi
 fi
 
+# ── 1b. The write door, and the scripted write journey ──────────────────────
+# WHICH DOOR, decided by asking write-journey.mjs rather than by grepping the
+# registry here. Two implementations of one fact is the defect class this whole
+# program exists to eliminate, and the launcher disagreeing with the verdict
+# about which stage the night is in would be exactly that, in the one place
+# nobody would look.
+JOURNEY_FILE=""
+JOURNEY_STATUS=""
+DOOR_PLAN="$(node "$HERE/lib/write-journey.mjs" --print-door-plan --platform-repo "$PLATFORM_REPO" 2>/dev/null || echo '')"
+DOOR_STAGE="$(printf '%s' "$DOOR_PLAN" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).stage)}catch{console.log("")}})')"
+
+if [[ "$DOOR_STAGE" == "b" ]]; then
+  # The route is registered. The write door is the product backend, and a
+  # journey still pointed at the harness would be measuring the wrong process —
+  # which `door_agreement` fails on, loudly, rather than pending forever.
+  WRITE_DOOR_URL="$BACKEND_URL"
+  WRITE_CONTROL_URL="${OMI_WRITE_CONTROL_URL:-$BACKEND_URL}"
+  WRITE_TOKEN="${OMI_WRITE_TOKEN:-omi-integration-qa-key-v1}"
+  WRITE_ACCOUNT="${OMI_WRITE_ACCOUNT:-$FENCE_HARNESS_ACCOUNT}"
+  say "${B}write door${Z} — /v1/tasks/ops is a registered wire path: driving the product backend at $WRITE_DOOR_URL"
+elif [[ -n "$DOOR_STAGE" ]]; then
+  WRITE_DOOR_URL="http://127.0.0.1:$WRITE_DOOR_PORT"
+  WRITE_CONTROL_URL="$WRITE_DOOR_URL"
+  WRITE_TOKEN="$FENCE_HARNESS_TOKEN"
+  WRITE_ACCOUNT="$FENCE_HARNESS_ACCOUNT"
+  if [[ $MODE_ATTACH -eq 1 ]]; then
+    curl -fsS --max-time 2 "$WRITE_DOOR_URL/health" >/dev/null 2>&1 \
+      || warn "attach mode: nothing answering on the write door at $WRITE_DOOR_URL — the journey will report that, not skip it"
+  else
+    say "${B}write door${Z} — stage (a): /v1/tasks/ops has no registry row yet, booting the fence harness on $WRITE_DOOR_PORT"
+    ( cd "$PLATFORM_REPO" && TZ=UTC OMI_FENCE_INTEGRATION_PORT="$WRITE_DOOR_PORT" \
+        bun run integration/control/fence-server.ts ) > "$LOGDIR/write-door.log" 2>&1 &
+    track writedoor $!
+    for i in $(seq 1 40); do
+      curl -fsS --max-time 1 "$WRITE_DOOR_URL/health" >/dev/null 2>&1 && break
+      sleep 0.25
+      [[ $i -eq 40 ]] && warn "write door never became ready on $WRITE_DOOR_PORT — see $LOGDIR/write-door.log"
+    done
+  fi
+else
+  warn "could not read the write door plan from platform — the journey will not run this time"
+fi
+
+if [[ -n "$DOOR_STAGE" ]]; then
+  JOURNEY_FILE="$RUNDIR/write-journey.$RUN_ID.json"
+  # NOT piped. `cmd | tail` hands back tail's status, and that has already
+  # produced one false "the assertion path is broken" report in this repo.
+  node "$HERE/lib/write-journey.mjs" \
+    --door "$WRITE_DOOR_URL" --control "$WRITE_CONTROL_URL" \
+    --token "$WRITE_TOKEN" --account "$WRITE_ACCOUNT" \
+    --run "$RUN_ID" --epoch "$WRITE_JOURNEY_EPOCH" \
+    --platform-repo "$PLATFORM_REPO" \
+    ${WRITE_JOURNEY_EXTRA:-} \
+    --out "$JOURNEY_FILE" > "$LOGDIR/write-journey.log" 2>&1
+  JOURNEY_STATUS=$?
+  if [[ $JOURNEY_STATUS -eq 0 ]]; then
+    ok "write journey completed — verdict in the run report below (raw: $JOURNEY_FILE)"
+  else
+    warn "write journey FAILED (exit $JOURNEY_STATUS) — see $LOGDIR/write-journey.log"
+  fi
+fi
+
 if [[ $WANT_SURFACES -eq 0 && $WANT_MACOS -eq 0 && $WANT_IOS -eq 0 ]]; then
   echo
+  [[ -n "$JOURNEY_FILE" && -f "$JOURNEY_FILE" ]] \
+    && node "$HERE/lib/write-journey.mjs" --format "$JOURNEY_FILE"
   if [[ $MODE_UP -eq 1 ]]; then
     LEAVE_RUNNING=1
     ok "backend only, left running. Stop it with: integration/dev-stack.sh --stop"
-    exit 0
+    exit ${JOURNEY_STATUS:-0}
+  fi
+  # `--only-backend --assert` used to fall through to `sleep 3600` — an
+  # automated caller asking for a verdict got a hang instead, which is the same
+  # class of trap `--up` and `--assert` were added to remove. It now returns the
+  # only verdict a backend-only run can honestly produce: the write journey's.
+  # No app was driven, so nothing here claims the app works.
+  if [[ $MODE_ASSERT -eq 1 ]]; then
+    [[ -z "$JOURNEY_FILE" ]] && warn "backend only, --assert, and no write journey ran: this run asserted NOTHING"
+    exit ${JOURNEY_STATUS:-1}
   fi
   ok "backend only. Ctrl-C to stop."
   while true; do sleep 3600; done
@@ -908,15 +1015,22 @@ RUN_ID="$RUN_ID" STARTED_AT="$RUN_STARTED_AT" CLIENT_ID="$RUN_CLIENT_ID" GENERAT
 BACKEND_URL="$BACKEND_URL" STATS_BEFORE="$STATS_BEFORE" STATS_AFTER="$STATS_AFTER" \
 MACOS_FACTS="$MACOS_FACTS" ATTACH="$MODE_ATTACH" WANT_SURFACES="$WANT_SURFACES" \
 MODE="$([[ $MODE_ATTACH -eq 1 ]] && echo attach || { [[ $MODE_UP -eq 1 ]] && echo up || echo run; })" \
-FACTSFILE="$FACTSFILE" \
+FACTSFILE="$FACTSFILE" JOURNEY_FILE="${JOURNEY_FILE:-}" \
 node -e '
-  const e=process.env;
-  require("fs").writeFileSync(e.FACTSFILE, JSON.stringify({
+  const e=process.env, fs=require("fs");
+  // The journey verdict is read from the FILE the journey itself wrote, not
+  // re-derived here and not scraped from its log. A launcher that re-judged the
+  // journey could disagree with the journey, and only one of the two would be
+  // in the report.
+  let writeJourney=null;
+  if (e.JOURNEY_FILE) { try { writeJourney=JSON.parse(fs.readFileSync(e.JOURNEY_FILE,"utf8")) } catch {} }
+  fs.writeFileSync(e.FACTSFILE, JSON.stringify({
     runId:e.RUN_ID, startedAt:e.STARTED_AT, clientId:e.CLIENT_ID||null, generation:e.GENERATION,
     mode:e.MODE, attach:e.ATTACH==="1", backendUrl:e.BACKEND_URL,
     wantSurfaces:e.WANT_SURFACES==="1",
     backendStatsBefore:e.STATS_BEFORE, backendStatsAfter:e.STATS_AFTER,
     macos:JSON.parse(e.MACOS_FACTS), ios:null,
+    writeJourneyPath:e.JOURNEY_FILE||null, writeJourney,
   }, null, 2));'
 
 # Remember what this run was, so a later --attach can join traffic to it by
