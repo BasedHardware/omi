@@ -33,8 +33,15 @@
 // own PASS line" is not proof, "did the backend's independent counter move"
 // is.
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   REPO_PATHS,
@@ -42,12 +49,11 @@ import {
   worktreeStamp,
   verifyArtifact,
   readStampFile,
-  writeStampFile,
   short,
 } from "./provenance.mjs";
 
 /** Bumped when the receipt shape changes in a way a consumer must notice. */
-export const RECEIPTS_SCHEMA_VERSION = 2;
+export const RECEIPTS_SCHEMA_VERSION = 3;
 
 // ── WHY SCHEMA 2: ONE SLOT PER LANE WAS A FALSE-MEASUREMENT GENERATOR ────────
 //
@@ -95,12 +101,20 @@ export const RECEIPTS_SCHEMA_VERSION = 2;
 //     through the lookup, which is how this defect reached a human in the first
 //     place.
 //
+// SCHEMA 3: THE KEY IS A HISTORY, NOT A SLOT. Schema 2 separated different
+// lane+tree measurements, but still wrote every rerun of the SAME measurement
+// to `<lane>-<key>.json`. A later pass could therefore erase an earlier fail.
+// Schema 3 uses `<lane>-<key>/<append-id>.json`: one immutable file per run.
+// There is no mutable `current` pointer; readers derive current from the newest
+// append id. A schema-2 flat file remains readable as the oldest history entry
+// so this upgrade does not invalidate existing current-receipt callers.
+//
 // ACCEPTED LIMIT, named and dated (2026-08-09): receipts are never pruned. One
-// file per (lane, tree) accumulates for the life of the workspace, a few KB
-// each. Count-based pruning was considered and rejected — the directory is
-// shared, so "keep the newest N" deletes a concurrent sibling's valid receipt
-// and reintroduces the evidence destruction this change exists to remove.
-// `make lane-sweep` or `rm -rf .omi/receipts` is the disposal path.
+// file per RUN accumulates for the life of the workspace, a few KB each.
+// Count-based pruning was considered and rejected — the directory is shared,
+// so "keep the newest N" deletes valid evidence and reintroduces the evidence
+// destruction this change exists to remove. `make lane-sweep` or removing the
+// local `.omi/receipts` directory is the explicit disposal path.
 
 /**
  * The lane registry. Adding a lane means adding a row here — deliberately a
@@ -227,14 +241,32 @@ export function receiptKey(lane, stamps) {
   return createHash("sha256").update([lane, ...parts].join("")).digest("hex").slice(0, 16);
 }
 
+function receiptHistoryDir(lane, key, workspaceRoot = WORKSPACE_ROOT) {
+  return join(receiptsDir(workspaceRoot), `${lane}-${key}`);
+}
+
+function schema2ReceiptPath(lane, key, workspaceRoot = WORKSPACE_ROOT) {
+  return join(receiptsDir(workspaceRoot), `${lane}-${key}.json`);
+}
+
+function historyEntryPaths(lane, key, workspaceRoot = WORKSPACE_ROOT) {
+  const dir = receiptHistoryDir(lane, key, workspaceRoot);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((file) => file.endsWith(".json"))
+    .sort()
+    .map((file) => join(dir, file));
+}
+
 /**
- * Where a receipt for `lane` measuring the CURRENT working tree lives.
+ * Where the CURRENT receipt for `lane` measuring the current tree lives.
  *
  * Takes no key argument on purpose. A caller that could pass its own key could
  * pass someone else's, which is the door this change closes — so the key is
  * always derived from the tree the caller is standing in. `stamps` exists only
  * so `writeReceipt` can reuse the stamps it already took rather than shelling
- * out to git a second time.
+ * out to git a second time. Before any receipt exists, returns the history
+ * directory (which also makes an absent-receipt diagnostic useful).
  */
 export function receiptPath(lane, { workspaceRoot = WORKSPACE_ROOT, stamps } = {}) {
   const row = LANE_REGISTRY[lane];
@@ -242,7 +274,42 @@ export function receiptPath(lane, { workspaceRoot = WORKSPACE_ROOT, stamps } = {
     throw new Error(`receiptPath: unknown lane "${lane}". Known lanes: ${LANE_IDS.join(", ")}.`);
   }
   const resolved = stamps ?? stampDeclaredRepos(row);
-  return join(receiptsDir(workspaceRoot), `${lane}-${receiptKey(lane, resolved)}.json`);
+  const key = receiptKey(lane, resolved);
+  const entries = historyEntryPaths(lane, key, workspaceRoot);
+  if (entries.length > 0) return entries.at(-1);
+  const schema2Path = schema2ReceiptPath(lane, key, workspaceRoot);
+  if (existsSync(schema2Path)) return schema2Path;
+  return receiptHistoryDir(lane, key, workspaceRoot);
+}
+
+/** Every immutable run for the current lane+tree, oldest first. */
+export function readReceiptHistory(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
+  const row = LANE_REGISTRY[lane];
+  if (!row) {
+    throw new Error(
+      `readReceiptHistory: unknown lane "${lane}". Known lanes: ${LANE_IDS.join(", ")}.`,
+    );
+  }
+  const stamps = stampDeclaredRepos(row);
+  const key = receiptKey(lane, stamps);
+  const receipts = [];
+
+  // A schema-2 receipt is the pre-upgrade current value. Preserve it as the
+  // oldest known run; all schema-3 writes go only to immutable history files.
+  const schema2Receipt = readStampFile(schema2ReceiptPath(lane, key, workspaceRoot));
+  if (schema2Receipt) receipts.push(schema2Receipt);
+  for (const path of historyEntryPaths(lane, key, workspaceRoot)) {
+    const receipt = readStampFile(path);
+    if (receipt) receipts.push(receipt);
+  }
+  return receipts;
+}
+
+/** Has this lane+tree ever recorded anything other than a pass? */
+export function hasNonPassReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
+  return readReceiptHistory(lane, { workspaceRoot }).some(
+    (receipt) => receipt.result !== "pass",
+  );
 }
 
 /**
@@ -313,7 +380,17 @@ export function writeReceipt({
 
   const stamps = stampDeclaredRepos(row);
   const key = receiptKey(lane, stamps);
-  const path = receiptPath(lane, { workspaceRoot, stamps });
+  // `hrtime` is system-monotonic across the short-lived lane processes used by
+  // the runner. Padding makes lexicographic order equal append-start order;
+  // PID plus UUID makes the filename unique even for two processes racing in
+  // the same nanosecond. The exclusive link below is the final collision fence.
+  const appendId = [
+    process.hrtime.bigint().toString().padStart(20, "0"),
+    String(process.pid).padStart(10, "0"),
+    randomUUID(),
+  ].join("-");
+  const historyDir = receiptHistoryDir(lane, key, workspaceRoot);
+  const path = join(historyDir, `${appendId}.json`);
 
   const receipt = {
     schema: RECEIPTS_SCHEMA_VERSION,
@@ -327,14 +404,23 @@ export function writeReceipt({
     // says which measurement it is, which is what lets a reader check it rather
     // than trust it.
     key,
+    appendId,
     path,
     arbiters,
     notes,
     command,
   };
 
-  mkdirSync(receiptsDir(workspaceRoot), { recursive: true });
-  writeStampFile(path, receipt);
+  mkdirSync(historyDir, { recursive: true });
+  const temporaryPath = join(historyDir, `.${appendId}.tmp`);
+  writeFileSync(temporaryPath, `${JSON.stringify(receipt, null, 2)}\n`, { flag: "wx" });
+  try {
+    // Link publishes a fully written entry atomically and refuses EEXIST. It
+    // cannot replace an earlier run, unlike rename/writeFile on a shared slot.
+    linkSync(temporaryPath, path);
+  } finally {
+    unlinkSync(temporaryPath);
+  }
   return receipt;
 }
 
@@ -348,7 +434,7 @@ export function writeReceipt({
  * `legacy: true` and is never returned as evidence.
  */
 export function readReceipt(lane, { workspaceRoot = WORKSPACE_ROOT } = {}) {
-  return readStampFile(receiptPath(lane, { workspaceRoot }));
+  return readReceiptHistory(lane, { workspaceRoot }).at(-1) ?? null;
 }
 
 /**
@@ -365,22 +451,36 @@ export function listReceipts({ workspaceRoot = WORKSPACE_ROOT } = {}) {
   const dir = receiptsDir(workspaceRoot);
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const file of readdirSync(dir).sort()) {
-    if (!file.endsWith(".json")) continue;
-    const base = file.slice(0, -".json".length);
+  const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const entry of entries) {
+    const file = entry.name;
+    const base = file.endsWith(".json") ? file.slice(0, -".json".length) : file;
     const dash = base.indexOf("-");
     const lane = dash === -1 ? base : base.slice(0, dash);
     if (!(lane in LANE_REGISTRY)) continue;
-    const receipt = readStampFile(join(dir, file));
-    if (receipt === null) continue;
-    out.push({
-      lane,
-      key: dash === -1 ? null : base.slice(dash + 1),
-      legacy: dash === -1,
-      file: join(dir, file),
-      receipt,
-      attribution: verifyReceiptObject(lane, receipt),
-    });
+    let paths = [];
+    if (entry.isDirectory()) {
+      paths = readdirSync(join(dir, file))
+        .filter((name) => name.endsWith(".json"))
+        .sort()
+        .map((name) => join(dir, file, name));
+    } else if (file.endsWith(".json")) {
+      paths = [join(dir, file)];
+    }
+    for (const path of paths) {
+      const receipt = readStampFile(path);
+      if (receipt === null) continue;
+      out.push({
+        lane,
+        key: receipt.key ?? (dash === -1 ? null : base.slice(dash + 1)),
+        legacy: dash === -1,
+        file: path,
+        receipt,
+        attribution: verifyReceiptObject(lane, receipt),
+      });
+    }
   }
   return out;
 }
@@ -599,7 +699,7 @@ export function parseLaneClaimOverride(message) {
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────────────
-// `node integration/lib/receipts.mjs <write|read|verify|list> [flags]`
+// `node integration/lib/receipts.mjs <write|read|history|has-non-pass|verify|list> [flags]`
 // A thin manual-testing surface, not the enforcement path — that is
 // check-lane-claims.mjs. See --help for flags.
 import { fileURLToPath } from "node:url";
@@ -613,11 +713,13 @@ function printHelp() {
       '  write --lane <L0|L1|L2|L3> --result <pass|fail> [--duration-ms N]',
       "         [--arbiters '<json>'] [--notes <text>] [--command <text>]",
       "  read --lane <lane>",
+      "  history --lane <lane>",
+      "  has-non-pass --lane <lane>",
       "  verify --lane <lane>",
       "  list",
       "  --help",
       "",
-      "Writes/reads under <workspace>/.omi/receipts/<lane>.json.",
+      "Writes/reads immutable history under <workspace>/.omi/receipts/<lane>-<key>/.",
     ].join("\n") + "\n",
   );
 }
@@ -666,6 +768,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const receipt = readReceipt(lane);
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
     if (receipt === null) process.exit(1);
+  } else if (cmd === "history") {
+    const lane = flag("--lane");
+    process.stdout.write(`${JSON.stringify(readReceiptHistory(lane), null, 2)}\n`);
+  } else if (cmd === "has-non-pass") {
+    const lane = flag("--lane");
+    process.stdout.write(`${JSON.stringify({ lane, hasNonPass: hasNonPassReceipt(lane) }, null, 2)}\n`);
   } else if (cmd === "verify") {
     const lane = flag("--lane");
     const outcome = verifyReceipt(lane);

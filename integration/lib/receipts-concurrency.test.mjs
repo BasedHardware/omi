@@ -88,6 +88,8 @@ if (op === "write") {
   out = mod.writeReceipt({ lane, result: "pass", durationMs: req.durationMs, notes: req.notes, workspaceRoot });
 } else if (op === "read") {
   out = mod.readReceipt(lane, { workspaceRoot });
+} else if (op === "history") {
+  out = mod.readReceiptHistory(lane, { workspaceRoot });
 } else if (op === "verify") {
   out = mod.verifyReceipt(lane, { workspaceRoot });
 } else if (op === "verifyObject") {
@@ -153,6 +155,31 @@ const receiptsDir = () => join(workspaceRoot, ".omi", "receipts");
 const clearReceipts = () => rmSync(receiptsDir(), { recursive: true, force: true });
 
 describe("two lanes writing receipts concurrently", () => {
+  it("two appends racing on the SAME lane+tree both survive", async () => {
+    clearReceipts();
+    const [first, second] = await Promise.all([
+      asLane("a", { op: "write", lane: "L2", durationMs: 31, notes: "same-key A" }),
+      asLane("a", { op: "write", lane: "L2", durationMs: 32, notes: "same-key B" }),
+    ]);
+
+    assert.equal(first.key, second.key, "this test must race two writers on the same key");
+    assert.notEqual(
+      first.path,
+      second.path,
+      "each append must publish a distinct immutable file",
+    );
+    const history = await asLane("a", { op: "history", lane: "L2" });
+    assert.equal(
+      history.length,
+      2,
+      `both same-key appends must survive: ${JSON.stringify(history)}`,
+    );
+    assert.deepEqual(
+      history.map((receipt) => receipt.notes).sort(),
+      ["same-key A", "same-key B"],
+    );
+  });
+
   it("gives each lane a distinct file, and neither can read back the other's", async () => {
     clearReceipts();
     // Preconditions, asserted rather than assumed. If either became false this
@@ -312,7 +339,8 @@ describe("two lanes writing receipts concurrently", () => {
     // The three facts a reader needs when a receipt arrives detached from its
     // directory — which measurement, which file, which trees.
     assert.match(written.key, /^[0-9a-f]{16}$/);
-    assert.ok(written.path.endsWith(`L2-${written.key}.json`));
+    assert.ok(written.path.includes(`L2-${written.key}/`));
+    assert.ok(written.path.endsWith(`${written.appendId}.json`));
     for (const repo of ["core-foundation", "platform"]) {
       assert.ok(written.stamps[repo].repoRoot, `${repo} stamp must record the root it measured`);
       assert.ok(written.stamps[repo].branch, `${repo} stamp must record the branch it measured`);
@@ -324,6 +352,6 @@ describe("two lanes writing receipts concurrently", () => {
     assert.equal(onDisk.path, written.path);
     const { schema } = await asLane("a", { op: "schema" });
     assert.equal(onDisk.schema, schema);
-    assert.equal(schema, 2, "schema 2 is the shape this whole file is about");
+    assert.equal(schema, 3, "schema 3 is the append-only history shape");
   });
 });
