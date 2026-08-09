@@ -9,6 +9,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window = UIWindow(windowScene: windowScene)
 
     let lynxView = LynxView { builder in
+      builder.config = LynxConfig(provider: nil)
+      builder.config?.register(OmiNativeModule.self)
 #if DEBUG
       builder.enableGenericResourceFetcher = .true
       builder.genericResourceFetcher = GenericResourceFetcher()
@@ -19,8 +21,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     lynxView.preferredLayoutWidth = windowScene.screen.bounds.size.width
     lynxView.preferredLayoutHeight = windowScene.screen.bounds.size.height
-    lynxView.layoutWidthMode = .exact
-    lynxView.layoutHeightMode = .exact
+    lynxView.layoutWidthMode = LynxViewSizeMode(rawValue: 1)!
+    lynxView.layoutHeightMode = LynxViewSizeMode(rawValue: 1)!
 
      let rootViewController = UIViewController()
     window?.rootViewController = rootViewController

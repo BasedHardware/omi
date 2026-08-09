@@ -42,8 +42,10 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      config.build_settings['OTHER_CFLAGS'] =
+        "$(inherited) -Wno-error=deprecated-declarations -Wno-error=deprecated-implementations -Wno-error=gnu-folding-constant"
       config.build_settings['OTHER_CPLUSPLUSFLAGS'] =
-        "$(inherited) -Wno-error=c99-designator -Wno-error=nontrivial-memcall -Wno-error=unused-result"
+        "$(inherited) -Wno-error=c99-designator -Wno-error=nontrivial-memcall -Wno-error=unused-result -Wno-error=deprecated-declarations -Wno-error=deprecated-implementations -Wno-error=gnu-folding-constant"
     end
   end
 end
