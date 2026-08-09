@@ -96,34 +96,50 @@ test("rule 16 does not fire on prose, on a commented-out composition, or on a pa
   );
 });
 
-test("rule 16's escape hatch is honoured, and only with a reason", () => {
-  withPortFixture(
-    [
-      'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',
-      "// port-composition-ok(fixture: proves the hatch is read from the line above)",
-      "export const above: ApplicationReadPorts = {} as ApplicationReadPorts;",
-      "export const trailing: ApplicationReadPorts = {} as ApplicationReadPorts; // port-composition-ok(same line)",
-    ].join("\n"),
-    (result) => {
-      expect(`${result.stdout}${result.stderr}`).not.toContain("second composition");
-      expect(result.status).toBe(0);
-    },
-  );
-});
-
-test("rule 16's hatch marker must be in a COMMENT, not a string literal on the same line", () => {
-  // AUDIT-16 round 1 (data/run-2026-08-09/AUDIT-rule16-promotion-round1.md),
-  // the exact rule-17 round-2 shape (`fd38dc5e33` -> fixed in `b9e0c9a915`)
-  // ported to rule 16: `hatched`'s construction-line check was a bare
-  // substring search over RAW, unstripped text, so any rogue file self-exempts
-  // on first write by putting the marker in an ordinary property VALUE on the
-  // very line it exempts — no pre-existing hatch needed, unlike the round-1
-  // finding this one is worse than.
-  //
-  // The marker MUST sit on the same physical line as the construction, which
-  // is the only line this check searches. A fixture that put it one line
-  // below would pass for the wrong reason — the exact mistake rule 17's own
-  // fix commit records making and catching with its own isolation proof.
+/**
+ * RULE 16's HATCH IS NOW A `(file, line)` REGISTRY, `PORT_COMPOSITION_HATCHES`
+ * — no marker, no comment, no text consulted at all. This replaces, rather
+ * than tightens further, the marker apparatus that carried TWO consecutive
+ * audit-found bypasses in sequence:
+ *
+ *   AUDIT-16 round 1  bare substring search over raw text — a marker as an
+ *                      ordinary string VALUE on the construction line hatched
+ *                      it, no pre-existing hatch needed
+ *                      (data/run-2026-08-09/AUDIT-rule16-promotion-round1.md)
+ *   AUDIT-16 round 2  the round-1 fix's "is this a comment" check
+ *                      (`withoutComments()` blanking the line) is string-
+ *                      blind: a `/* ... *​/`-SHAPED STRING VALUE blanks
+ *                      identically to a real comment, so the marker still
+ *                      hatched it wrapped in fake comment syntax
+ *                      (data/run-2026-08-09/AUDIT-rule16-promotion-round2.md)
+ *
+ * Both are rule 17's own round-2 and round-3 findings, ported here one round
+ * later each time because the round-1 fix copied rule 17's round-2 fix
+ * rather than the final, post-round-5 registry form. This is that form.
+ *
+ * WHY THE TESTS BELOW DO NOT FIXTURE-TEST "A GENUINE HATCH PASSES", following
+ * rule 17's own round-6 reasoning exactly (AUDIT-17 round 6, on deleting the
+ * marker apparatus's tests for the identical reason): `PORT_COMPOSITION_HATCHES`
+ * is declared once at module scope and read by every file the linter walks in
+ * one pass. A test-only row added to make a fixture "hatched" would be a
+ * REAL, PERMANENT exemption for whatever `(file, line)` it names — a standing
+ * hole, deliberately added to test the mechanism that closes standing holes.
+ * That property (and the stale-row and hatch-scoped-to-its-own-site
+ * properties) is instead verified by hand-applied red-proof against a
+ * throwaway fixture, recorded in the landing commit rather than left as a
+ * permanent registry row nobody can safely remove.
+ *
+ * Both fixtures below are BOTH ROUNDS' bypass shapes, both now REJECTED
+ * regardless of marker text — because no text is read at all, the round-1
+ * (plain string) and round-2 (comment-shaped string) classes collapse into
+ * the same outcome rather than needing two different checks to close two
+ * different string shapes.
+ */
+test("rule 16, round 1's bypass shape: a plain-string marker on the construction line no longer hatches anything", () => {
+  // red-proof: this is AUDIT-16 round 1's exact fixture. Reverting `hatched()`
+  // to any text-based check (this file's own git history) makes this fixture
+  // pass again; the registry never reads it at all, so no marker text of any
+  // shape can hatch without a corresponding PORT_COMPOSITION_HATCHES row.
   withPortFixture(
     [
       'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',
@@ -137,10 +153,29 @@ test("rule 16's hatch marker must be in a COMMENT, not a string literal on the s
   );
 });
 
-test("rule 16's marker-in-string check is not vacuous: the same shape with no marker still fires", () => {
-  // Isolates the hatch fix from the detector itself (mirrors AUDIT-16's own
-  // control) — without this, "the fixture above fires" could mean the fence
-  // rejects the construction outright regardless of the marker.
+test("rule 16, round 2's bypass shape: a comment-shaped string marker no longer hatches anything either", () => {
+  // AUDIT-16 round 2's exact fixture (data/run-2026-08-09/AUDIT-rule16-promotion-round2.md):
+  // `/* ... */`-shaped text INSIDE a string value, which `withoutComments()`
+  // blanked identically to a real comment under the round-1 fix. The registry
+  // has no comment-detection step to fool — this fires for the same reason
+  // the plain-string case above does, not because of a second, separate check.
+  withPortFixture(
+    [
+      'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',
+      'export const rogue: ApplicationReadPorts = { banner: "/* port-composition-ok(fake, this is a string not a comment) */",',
+      "  x: 1 } as unknown as ApplicationReadPorts;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("second composition of registered port `ApplicationReadPorts`");
+    },
+  );
+});
+
+test("rule 16's second-composition detection is not vacuous: the same shape with no marker text at all still fires", () => {
+  // Isolates the registry migration from the detector itself. Without this,
+  // "the two fixtures above fire" could mean the checker rejects every
+  // second composition unconditionally, registry or not.
   withPortFixture(
     [
       'import type { ApplicationReadPorts } from "../core/retrieve/application-read";',

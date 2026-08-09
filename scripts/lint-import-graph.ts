@@ -112,9 +112,55 @@ const files = (directory: string): string[] => readdirSync(directory, { withFile
  * all; it is an assertion, and it lives in
  * `apps/service/composition/cross-door-identity.test.ts`.
  *
- * ESCAPE HATCH, mirroring the repo's `// domain-pending(<ID>)` and
- * `// storage-provenance-ok(<reason>)` idioms:
- * `// port-composition-ok(<reason>)` on the binding line or the line above.
+ * ESCAPE HATCH: a row in `PORT_COMPOSITION_HATCHES` below, keyed by (file,
+ * LINE). There is no marker, no comment, and no text to parse.
+ *
+ * IT USED TO BE A COMMENT MARKER (`// port-composition-ok(<reason>)`), and it
+ * carried the identical bug class rule 17's own comment-marker hatch did —
+ * they are the same primitive, `withoutComments()`-derived, answering the
+ * same question ("is this marker really inside a comment?") badly in the same
+ * two ways in sequence:
+ *
+ *   AUDIT-16 round 1  a bare substring search over RAW text, so
+ *                      `bannerNotAComment: "port-composition-ok(fake)"` on the
+ *                      construction line hatched it — no pre-existing hatch
+ *                      needed (`data/run-2026-08-09/AUDIT-rule16-promotion-round1.md`)
+ *   AUDIT-16 round 2  the round-1 fix made "is this a comment" mean "does
+ *                      `withoutComments()` blank this line", which is
+ *                      string-blind: `banner: "/* port-composition-ok(fake) *​/"`
+ *                      as a STRING VALUE satisfied "present raw, absent
+ *                      stripped" (`data/run-2026-08-09/AUDIT-rule16-promotion-round2.md`)
+ *
+ * Both are rule 17's own round-2 and round-3 findings, ported here one round
+ * later each time because the round-1 fix copied rule 17's round-2 fix
+ * (`b9e0c9a915`) rather than its final, post-round-5 form. Rule 17 eventually
+ * spent FOUR rounds converging toward a real lexer (`commentMask`, which
+ * round 4 then found its OWN bypass in — an unmatched backtick desyncing
+ * template-depth tracking) before round 5 concluded there is no bound short
+ * of a real lexer that is not arbitrary, and replaced the entire marker
+ * apparatus with this registry instead of shrinking the hole further. Rule 16
+ * goes straight to that end state rather than re-walking rounds 2 through 4
+ * a third time.
+ *
+ * KEYED BY LINE, NOT BY FILE, same reasoning as `WIRE_PATH_HATCHES`: a
+ * file-keyed table would silently reopen round 1 (rule 17's round 1, the
+ * SAME class as AUDIT-16 round 1 above), because rule 16's subject is a
+ * specific composition SITE and one file may legitimately hold several
+ * unrelated ports.
+ *
+ * KNOWN, NAMED, DATED RESIDUAL LIMIT (2026-08-09), carried over rather than
+ * chased this round: rule 17's own round-6 audit found that line-keying
+ * conflates "this line is exempt" with "this construction is exempt" — two
+ * independent constructions sharing one physical line share one hatch key,
+ * because `serverSites`/`portConstructionSites` below records EXISTENCE per
+ * line via `.some(...)`, not a count. Rule 17 closed this for itself in a
+ * later round (the two-constructions-on-one-line ambiguity check); rule 16
+ * inherits the identical structural gap and does not close it here — doing
+ * so was not what this round's finding asked for, and inventing it
+ * unreviewed would be exactly the scope creep the coordinator's "pick one, do
+ * not invent a third" instruction warns against. No file in the tree today
+ * writes two port constructions on one physical line (checked); this is a
+ * gap for a future round, not a theoretical shrug.
  */
 interface PortRegistryRow {
   readonly portType: string;
@@ -147,6 +193,26 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "served under two different public ids with every assertion green.",
   },
 ];
+/**
+ * Port-composition sites exempted from rule 16. Keyed by (file, 1-indexed
+ * line), exactly `WIRE_PATH_HATCHES`'s shape. A stale row — one whose line no
+ * longer holds a registered-port construction — is itself a failure,
+ * symmetric with a stale `composedIn` path: a registry row that has quietly
+ * stopped describing reality disables a fence silently.
+ *
+ * Empty today: no file in the tree carries a legitimate second composition
+ * (checked, `data/run-2026-08-09/AUDIT-rule16-promotion-round2.md`'s blast-
+ * radius note) — this migration changes nothing about existing behavior, only
+ * what a rogue construction can hide behind.
+ */
+interface PortCompositionHatchRow {
+  /** Path relative to the platform root, exactly as the checker reports it. */
+  readonly file: string;
+  /** 1-indexed line of the port construction being exempted. */
+  readonly line: number;
+  readonly reason: string;
+}
+const PORT_COMPOSITION_HATCHES: readonly PortCompositionHatchRow[] = [];
 /**
  * ── RULE 17: THE WIRE-PATH FENCE ─────────────────────────────────────────────
  *
@@ -361,7 +427,6 @@ const socketBindPatterns: readonly RegExp[] = [
   /\bcreateServer\s*\(/,
 ];
 
-const portCompositionAllowMarker = "port-composition-ok(";
 const portConstructionPatterns = (portType: string): readonly RegExp[] => [
   new RegExp(`:\\s*${portType}\\s*=\\s*\\{`),
   new RegExp(`\\)\\s*:\\s*${portType}\\s*=>`),
@@ -401,53 +466,45 @@ for (const file of files(root)) {
 
   // ── Rule 16: a registered port has exactly one composition ────────────────
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
-    const rawLines = text.split("\n");
     const codeLines = withoutComments(text).split("\n");
-    /**
-     * A line whose comment-stripped form is blank while its raw form is not is
-     * comment TEXT — the SAME predicate rule 17 derived for the identical
-     * problem (`b9e0c9a915`, "the hatch marker must be in a comment, not a
-     * string literal"). Reused rather than re-invented so the two fences'
-     * notion of "is this line a comment" cannot drift apart.
-     */
-    const isCommentText = (index: number): boolean =>
-      (codeLines[index] ?? "").trim() === "" && (rawLines[index] ?? "").trim() !== "";
-    /**
-     * AUDIT-16 round 1 (`data/run-2026-08-09/AUDIT-rule16-promotion-round1.md`):
-     * this was a bare substring search over RAW, unstripped text, so the marker
-     * could be smuggled in as an ordinary string VALUE on the construction line
-     * itself — no pre-existing hatch needed, any file self-exempts on first
-     * write. Ported fix, same shape as rule 17's:
-     *   - construction line: marker present in raw, ABSENT after stripping —
-     *     i.e. it lives in a trailing `//`/`/* *​/` comment, not inside a string
-     *     literal value the construction happens to carry.
-     *   - line above: must be comment TEXT in its own right (the whole line
-     *     blanks under `withoutComments`), and carry the marker in its raw
-     *     form. A marker sitting inside a string on an otherwise-blank-looking
-     *     line still can't happen here, because a bare string statement is not
-     *     comment text either.
-     */
-    const hatched = (index: number): boolean => {
-      const raw = rawLines[index] ?? "";
-      const stripped = codeLines[index] ?? "";
-      if (raw.includes(portCompositionAllowMarker) && !stripped.includes(portCompositionAllowMarker)) return true;
-      return isCommentText(index - 1) && (rawLines[index - 1] ?? "").includes(portCompositionAllowMarker);
-    };
+    // No text is consulted. A site is exempt iff this file declares it, by
+    // line — see the registry's own header for AUDIT-16 rounds 1 and 2, the
+    // two comment-marker bypasses this replaces rather than patches further.
+    const hatched = (index: number): boolean =>
+      PORT_COMPOSITION_HATCHES.some((row) => row.file === shown && row.line === index + 1);
+
+    /** Every line in THIS file where a registered port's construction pattern matched, across all rows. */
+    const matchedIndices = new Set<number>();
     for (const row of PORT_REGISTRY) {
       const patterns = portConstructionPatterns(row.portType);
       codeLines.forEach((line, index) => {
         if (!patterns.some((pattern) => pattern.test(line))) return;
         portConstructionSites.get(row.portType)!.push(shown);
+        matchedIndices.add(index);
         if (row.composedIn.includes(shown) || hatched(index)) return;
         failures.push(
           `${shown}:${index + 1}: second composition of registered port \`${row.portType}\`. `
           + `A registered port has exactly ONE composition (rule 16); this one lives in `
           + `${row.composedIn.join(", ")}. ${row.reason} `
           + `Call the registered composition instead of building a parallel one. If this `
-          + `genuinely is not a second implementation, justify it with `
-          + `// ${portCompositionAllowMarker}<reason>) on this line.`,
+          + `genuinely is not a second implementation, add a row to PORT_COMPOSITION_HATCHES `
+          + `in scripts/lint-import-graph.ts keyed by (file, line).`,
         );
       });
+    }
+
+    // A hatch row that no longer names a port construction has silently
+    // stopped exempting anything — or worse, is exempting a line that moved.
+    // Symmetric with a stale `composedIn` path: a registry row that has
+    // quietly stopped describing reality disables a fence silently.
+    for (const row of PORT_COMPOSITION_HATCHES) {
+      if (row.file !== shown) continue;
+      if (matchedIndices.has(row.line - 1)) continue;
+      failures.push(
+        `${shown}:${row.line}: stale PORT_COMPOSITION_HATCHES row — no registered port composition `
+        + `is constructed here. A hatch that has stopped describing reality disables a fence `
+        + `silently. Move the row to the construction's current line, or delete it.`,
+      );
     }
   }
   // ── Rule 17: a settled wire path is served by exactly one route module ────
