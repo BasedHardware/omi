@@ -591,6 +591,46 @@ void broadcast_battery_level(struct k_work *work_item)
 // Connection Callbacks
 //
 
+/* Ask the central to raise the link to BT_SECURITY_L2 (LE Secure Connections,
+ * Just Works -- Omi is NoInputNoOutput so Level 3/4 is unreachable). The
+ * encrypted attribute permissions would also make the phone pair lazily on the
+ * first ATT insufficient-encryption error, but that leaks a failed read per
+ * characteristic and depends on central behaviour; requesting up front makes
+ * the promise in CONFIG_OMI_REQUIRE_BLE_ENCRYPTION explicit.
+ */
+static void request_link_encryption(struct bt_conn *conn)
+{
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    int err = bt_conn_set_security(conn, BT_SECURITY_L2);
+    if (err == -EBUSY) {
+        /* SMP already running for this link; the result arrives via
+         * security_changed. */
+        return;
+    }
+    if (err) {
+        LOG_WRN("bt_conn_set_security(L2) failed (err %d); relying on the "
+                "central to pair on the first encrypted attribute access",
+                err);
+    }
+#else
+    ARG_UNUSED(conn);
+#endif
+}
+
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+static void _transport_security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err sec_err)
+{
+    ARG_UNUSED(conn);
+
+    if (sec_err) {
+        LOG_WRN("BLE security procedure failed (level %d, err %d)", (int) level, (int) sec_err);
+        return;
+    }
+
+    LOG_INF("BLE link security level %d", (int) level);
+}
+#endif
+
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
@@ -627,6 +667,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
             supervision_timeout);
     LOG_INF("Initial MTU: %u", mtu);
     mtu_recheck_attempts = 0;
+
+    request_link_encryption(current_connection);
 
     // Request aggressive connection params for higher BLE sync throughput.
     update_conn_params(current_connection);
@@ -774,6 +816,9 @@ static struct bt_conn_cb _callback_references = {
     .le_param_updated = _le_param_updated,
     .le_phy_updated = _le_phy_updated,
     .le_data_len_updated = _le_data_length_updated,
+#if defined(CONFIG_OMI_REQUIRE_BLE_ENCRYPTION)
+    .security_changed = _transport_security_changed,
+#endif
 };
 
 // --- Update Request Functions ---
