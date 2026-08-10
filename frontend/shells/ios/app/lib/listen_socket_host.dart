@@ -8,13 +8,26 @@ import 'bridge_http_host.dart';
 
 /// One shell-owned authority composes both privileged transports.
 class ShellTransportAuthority {
-  ShellTransportAuthority({required this.baseUrl, required String? token, String? runId})
+  ShellTransportAuthority({required this.baseUrl, required String? token, required String runId})
     : custody = ShellCredentialCustody(token),
-      clientIdentity = runId == null || runId.isEmpty ? null : '$runId::ios';
+      clientIdentity = _clientIdentity(runId);
+
+  static final RegExp _safeRunId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');
+
+  static String _clientIdentity(String runId) {
+    if (!_safeRunId.hasMatch(runId) ||
+        runId == 'anonymous' ||
+        runId == 'overflow' ||
+        runId.startsWith('__') ||
+        runId.endsWith('::ios')) {
+      throw ArgumentError.value(runId, 'runId', 'must be a raw bounded producer-evidence id');
+    }
+    return '$runId::ios';
+  }
 
   final Uri baseUrl;
   final ShellCredentialCustody custody;
-  final String? clientIdentity;
+  final String clientIdentity;
 
   BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
 
