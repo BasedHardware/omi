@@ -2877,6 +2877,10 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
+export interface RejectAppRequest {
+  reason?: string | null;
+}
+
 export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
@@ -4406,6 +4410,7 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "RejectAppRequest": RejectAppRequest;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -9944,7 +9949,7 @@ export async function refresh_app_manifest_v1_apps__app_id__refresh_manifest_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, init?: OmiApiClientInit): Promise<AppMutationResponse> {
+export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, body: RejectAppRequest, init?: OmiApiClientInit): Promise<AppMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}/reject`;
   const _params = query ? Object.entries(query)
@@ -9954,10 +9959,12 @@ export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: st
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "secret-key": String(header.secret_key),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
