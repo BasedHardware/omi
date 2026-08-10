@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
+from llm_gateway.gateway import config_loader
+from llm_gateway.gateway.config_loader import (
+    SERVING_LANE_DROP_CONFIRM_ENV_VAR,
+    ConfigValidationError,
+    ServingLaneAllowlistError,
+    feature_lane_id,
+    load_gateway_config,
+)
 from llm_gateway.gateway.lane_catalog import ProviderSupportStatus, load_catalog
 from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
 from utils.llm.model_config import get_all_configured_features, get_model, get_provider
@@ -317,3 +324,111 @@ def route_artifact(route_artifact_id: str, *, model: str = 'gpt-4.1-mini') -> di
 def write_yaml(path: Path, payload: dict) -> None:
     with path.open('w', encoding='utf-8') as handle:
         yaml.safe_dump(payload, handle, sort_keys=False)
+
+
+# --- Serving lane set: default breadth + opt-in narrowing -------------------
+#
+# Regression guard. A prior revision gated serving on `prod_ready` catalog
+# entries, which on the merged tree cut the served set from every generated
+# feature lane down to the two hand-authored ones — 40 production lanes
+# silently disabled. These tests fail loudly if that recurs, and pin the opt-in
+# narrowing mechanism to refusing rather than silently dropping.
+
+HAND_AUTHORED_SERVING_LANES = {
+    'omi:auto:chat-structured',
+    'omi:auto:public-shared-conversation-chat',
+}
+
+
+def every_generated_lane_id() -> set[str]:
+    return {feature_lane_id(feature) for feature in get_all_configured_features()}
+
+
+def test_default_config_serves_every_generated_lane():
+    config = load_gateway_config(prod_mode=True)
+
+    expected_generated = every_generated_lane_id()
+    assert set(config.generated_lane_ids) == expected_generated
+    # Numeric floor: catches a collapse even if `model_config` itself shrinks.
+    assert len(expected_generated) >= 40
+    assert set(config.lanes) == expected_generated | HAND_AUTHORED_SERVING_LANES
+    for lane_id, lane in config.lanes.items():
+        assert lane.active_route in config.route_artifacts
+
+
+def test_default_config_ignores_an_empty_serving_allowlist():
+    baseline = load_gateway_config(prod_mode=True)
+    explicit_empty = load_gateway_config(prod_mode=True, serving_lane_allowlist='')
+
+    assert set(explicit_empty.lanes) == set(baseline.lanes)
+    assert set(explicit_empty.generated_lane_ids) == set(baseline.generated_lane_ids)
+
+
+def test_serving_allowlist_refuses_to_silently_drop_lanes():
+    with pytest.raises(ServingLaneAllowlistError) as excinfo:
+        load_gateway_config(prod_mode=True, serving_lane_allowlist='omi:auto:chat-structured')
+
+    message = str(excinfo.value)
+    assert 'refusing to start' in message
+    assert SERVING_LANE_DROP_CONFIRM_ENV_VAR in message
+
+
+def test_serving_allowlist_requires_the_exact_drop_set_to_be_confirmed():
+    baseline = load_gateway_config(prod_mode=True)
+    keep = sorted(HAND_AUTHORED_SERVING_LANES)
+    dropped = sorted(set(baseline.lanes) - set(keep))
+
+    with pytest.raises(ServingLaneAllowlistError):
+        load_gateway_config(
+            prod_mode=True,
+            serving_lane_allowlist=keep,
+            serving_lane_drop_confirm=dropped[:1],
+        )
+
+
+def test_serving_allowlist_rejects_lane_ids_the_config_does_not_generate():
+    with pytest.raises(ServingLaneAllowlistError) as excinfo:
+        load_gateway_config(prod_mode=True, serving_lane_allowlist='omi:auto:not-a-real-lane')
+
+    assert 'does not generate' in str(excinfo.value)
+
+
+def test_serving_allowlist_naming_every_lane_changes_nothing():
+    baseline = load_gateway_config(prod_mode=True)
+    restricted = load_gateway_config(prod_mode=True, serving_lane_allowlist=sorted(baseline.lanes))
+
+    assert set(restricted.lanes) == set(baseline.lanes)
+    assert set(restricted.route_artifacts) == set(baseline.route_artifacts)
+    assert set(restricted.feature_bundles) == set(baseline.feature_bundles)
+
+
+def test_confirmed_serving_allowlist_narrows_and_records_a_fallback(monkeypatch):
+    baseline = load_gateway_config(prod_mode=True)
+    keep = sorted(HAND_AUTHORED_SERVING_LANES)
+    dropped = sorted(set(baseline.lanes) - set(keep))
+    assert dropped, 'expected the generated lanes to be droppable'
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(config_loader, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+
+    restricted = load_gateway_config(
+        prod_mode=True,
+        serving_lane_allowlist=keep,
+        serving_lane_drop_confirm=dropped,
+    )
+
+    assert set(restricted.lanes) == set(keep)
+    assert restricted.generated_lane_ids == frozenset()
+    assert all(art.lane_id in set(keep) for art in restricted.route_artifacts.values())
+    assert all(bundle.lane_id in set(keep) for bundle in restricted.feature_bundles.values())
+    assert len(recorded) == 1
+    assert recorded[0]['component'] == 'llm_gateway'
+    assert recorded[0]['outcome'] == 'degraded'
+    assert recorded[0]['reason'] == 'policy'
+
+
+def test_serving_allowlist_reads_the_environment_when_no_argument_is_passed(monkeypatch):
+    monkeypatch.setenv(config_loader.SERVING_LANE_ALLOWLIST_ENV_VAR, 'omi:auto:chat-structured')
+
+    with pytest.raises(ServingLaneAllowlistError):
+        load_gateway_config(prod_mode=True)
