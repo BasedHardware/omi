@@ -1504,7 +1504,8 @@ private struct PageContentView: View {
         ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoryDestinationRawValue: $memoryDestinationRawValue
+          memoryDestinationRawValue: $memoryDestinationRawValue,
+          onOpenRewind: { selectedTabIndex = SidebarNavItem.rewind.rawValue }
         )
       case 3:
         // Same rule as the hub's Memories destination: the readable-width

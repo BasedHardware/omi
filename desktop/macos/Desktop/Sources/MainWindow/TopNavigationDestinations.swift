@@ -206,10 +206,10 @@ enum TopNavigationRoutes {
   static let primaryItems = [
     TopNavigationItem(
       index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "magnifyingglass",
-      tooltip: "Home — search everything you've seen and heard"),
+      tooltip: "Home — chat with Omi about everything you've seen and heard"),
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Library", icon: "books.vertical",
-      tooltip: "Everything Omi has kept — conversations, memories, brain map"),
+      index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "books.vertical",
+      tooltip: "Everything Omi has kept — activity, conversations, memories, brain map"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),

@@ -34,6 +34,9 @@ struct MemoryHubPage: View {
   /// How this shell applies a hub selection. The modern shell only has to write the persisted
   /// destination; the chat-first shell also moves its own typed route, so it passes its own.
   var onSelectDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Rewind lives on the shell rail, not in this hub, so the Activity spine's way into it has to be
+  /// supplied by the host that owns the rail index. Hosts without one leave the card inert.
+  var onOpenRewind: (() -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -76,6 +79,19 @@ struct MemoryHubPage: View {
   @ViewBuilder
   private var hubContent: some View {
     switch destination {
+    case .activity:
+      ActivityHubTab(
+        appState: appState,
+        memoriesViewModel: memoriesViewModel,
+        onOpenConversation: { id in
+          ConversationDetailAutomationState.shared.requestOpen(
+            conversationId: id, showTranscript: false)
+          select(.conversations)
+        },
+        onOpenBrainMap: { select(.brainMap) },
+        onOpenRewind: { onOpenRewind?() }
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .memories:
       adaptiveContent(
         MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
