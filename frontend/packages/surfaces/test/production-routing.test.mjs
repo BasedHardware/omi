@@ -128,11 +128,17 @@ test("what actually rendered is observable from outside the bundle", async () =>
     'markRendered("home", "legacy")',
     'markRendered("tasks", "legacy")',
     'markRendered("conversations", "legacy")',
-    'markRendered("listen", "legacy")',
+    'markRendered("listen", "platform")',
     'markRendered("memories-legacy", "legacy")',
   ]) {
     assert.ok(main.includes(marker), `bootstrap does not record ${marker}`);
   }
+  assert.match(main, /createProductionListenHostSocketFactory/);
+  assert.doesNotMatch(
+    main,
+    /createPlatformListenBrowserSocketFactory\([\s\S]*?location\.origin/,
+    "production Listen never targets the UI render origin",
+  );
   // red-proof: deleting any markRendered call leaves `rendered: null` for that route, so a
   // launcher asserting on it cannot tell a legacy render from a crash.
 });
