@@ -6,10 +6,8 @@ import { realEnv } from "@omi-core/kernel";
 import { openOnDiskFallbackSink } from "@omi-core/sync";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
 import {
-  createPlatformListenBrowserSocketFactory,
   createPlatformListenCaptureClient,
   type PlatformListenSocketFactory,
-  type PlatformListenWebSocketConstructor,
 } from "@omi-core/adapters-platform";
 import type { SchemaDocument } from "@omi-core/wire-listen";
 import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
@@ -25,6 +23,7 @@ import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFi
 import { ChatProduction } from "./ChatProduction.js";
 import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
+import { createProductionListenHostSocketFactory } from "./listen-host-socket.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
@@ -324,10 +323,7 @@ if (query.get("lab") === "1") {
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "listen") {
           const openSocket = hostConfig.listenSocketFactory
-            ?? createPlatformListenBrowserSocketFactory(
-              location.origin,
-              WebSocket as unknown as PlatformListenWebSocketConstructor,
-            );
+            ?? createProductionListenHostSocketFactory();
           const schema = JSON.parse(__OMI_LISTEN_PROTOCOL_SCHEMA__) as SchemaDocument;
           const client = createPlatformListenCaptureClient({
             env,
@@ -337,7 +333,7 @@ if (query.get("lab") === "1") {
             handshake: { language: locale, source: listenSource },
           });
           const store = createPlatformProductionListenStore(client, env);
-          markRendered("listen", "legacy");
+          markRendered("listen", "platform");
           root.render(<StrictMode><ListenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-listen")} /></StrictMode>);
         } else {
           const store = await stores.openMemories();
