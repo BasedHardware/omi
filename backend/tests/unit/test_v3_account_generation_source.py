@@ -18,9 +18,9 @@ from utils.memory.v3.projection_reader_contract import (
 )
 
 
-from tests.unit.fake_firestore import FakeDocumentReference as _FakeDocumentRef
-from tests.unit.fake_firestore import FakeFirestore as _FakeDb
-from tests.unit.fake_firestore import FakeSnapshot as _FakeSnapshot
+from tests.unit.simple_firestore_fakes import FakeDocumentReference as _FakeDocumentRef
+from tests.unit.simple_firestore_fakes import FakeFirestore as _FakeDb
+from tests.unit.simple_firestore_fakes import FakeSnapshot as _FakeSnapshot
 
 
 def _head_doc(**overrides):
