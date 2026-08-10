@@ -74,6 +74,26 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryComposerPlacement.of(QueryShellMode.homeDefault), .panelFooter)
   }
 
+  /// **Every `homeStage*` notification the bridge posts has an observer on the modern surface.**
+  /// The `home_close_panel` action posts `.homeStageClose` and reports success to the caller, so an
+  /// unobserved notification is a bridge action that silently does nothing — the defect the home
+  /// automation entry points exist to avoid (it shipped once: the modern surface dropped its
+  /// `.homeStageClose` handler while the registry kept answering "ok").
+  func testEveryBridgeHomeStageNotificationIsObservedByTheModernSurface() throws {
+    // omi-test-quality: source-inspection -- static contract: SwiftUI @State/onReceive wiring cannot be driven hermetically without mounting the view; pins the registration sites for the bridge's four homeStage notifications.
+    let source = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()  // Tests/
+        .deletingLastPathComponent()  // Desktop/
+        .appendingPathComponent("Sources/MainWindow/QueryShell/QueryShellHome.swift"),
+      encoding: .utf8)
+    for name in ["homeStageOpenChat", "homeStageClose", "homeStageAsk", "homeStageAttach"] {
+      XCTAssertTrue(
+        source.contains("publisher(for: .\(name))"),
+        "QueryShellHome no longer observes .\(name); its bridge action now succeeds while doing nothing")
+    }
+  }
+
   // MARK: - Where the composer stands
 
   /// **A chat you have opened is not searching.** The field belongs above the rows it filters and

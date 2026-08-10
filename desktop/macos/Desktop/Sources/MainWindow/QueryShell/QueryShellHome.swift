@@ -217,6 +217,14 @@ struct QueryShellHome: View {
       guard !usesLegacyPresentation else { return }
       claimCaret()
     }
+    // `home_close_panel` collapses Home to its resting chat state — the same thing Escape does.
+    // The bridge action posts this and reports success, so an unobserved notification here would
+    // be the "bridge answered ok and nothing happened" defect this file's actions exist to avoid.
+    .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
+      guard !usesLegacyPresentation else { return }
+      searchText = ""
+      claimCaret()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
       chatProvider.draftText = query
