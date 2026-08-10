@@ -111,6 +111,26 @@ class BridgeHttpReplyGate {
   }
 }
 
+/// One mutable in-process bearer authority shared by every privileged host for
+/// a shell origin. The immutable environment may seed a later process again;
+/// this object is the current process's authorization truth.
+class ShellCredentialCustody {
+  ShellCredentialCustody(String? token) : _token = (token == null || token.isEmpty) ? null : token;
+
+  String? _token;
+
+  String? get currentToken => _token;
+  bool get hasCredential => _token != null;
+
+  /// Exact success only. Transport failures never call this response seam, and
+  /// every method/path/status near miss deliberately retains custody.
+  void observeResponse({required String method, required String path, required int status}) {
+    if (method == 'DELETE' && path == '/v1/session/current' && status == 204) {
+      _token = null;
+    }
+  }
+}
+
 /// Pure request/response policy used by the live handler and the generated
 /// host-conformance test. The runner therefore exercises the same path as
 /// `_handle` without a socket or a WebView.
@@ -193,16 +213,15 @@ class BridgeHttpHostPolicy {
 }
 
 class BridgeHttpHost {
-  BridgeHttpHost({required this.baseUrl, required String? token})
-    : _token = (token == null || token.isEmpty) ? null : token,
-      _client = HttpClient()
+  BridgeHttpHost({required this.baseUrl, required this.custody})
+    : _client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 10)
         // The shell owns cookies: never persist or send them for API calls.
         ..userAgent = null;
 
   /// Shell-held origin. Never sent to the webview.
   final Uri baseUrl;
-  String? _token;
+  final ShellCredentialCustody custody;
   final HttpClient _client;
   final BridgeHttpReplyGate _replyGate = BridgeHttpReplyGate();
 
@@ -210,7 +229,7 @@ class BridgeHttpHost {
   int servedCount = 0;
 
   /// Whether a usable credential exists. Logged at boot without revealing it.
-  bool get hasCredential => _token != null;
+  bool get hasCredential => custody.hasCredential;
 
   BridgeHttpPolicyResult prepareUsingCurrentCustodyForConformance(String id) => BridgeHttpHostPolicy.prepare(
     id: id,
@@ -219,7 +238,7 @@ class BridgeHttpHost {
     headers: const <String, String>{},
     body: null,
     baseUrl: baseUrl,
-    token: _token,
+    token: custody.currentToken,
   );
 
   void observeResponseForConformance({required String method, required String path, required int status}) {
@@ -308,7 +327,7 @@ class BridgeHttpHost {
         headers: headers,
         body: body,
         baseUrl: baseUrl,
-        token: _token,
+        token: custody.currentToken,
       );
       if (decision.request == null) {
         return _fail(controller, id, decision.failureReason!, decision.detail!);
@@ -359,9 +378,7 @@ class BridgeHttpHost {
   }
 
   void _observeResponse({required String method, required String path, required int status}) {
-    if (method == 'DELETE' && path == '/v1/session/current' && status == 204) {
-      _token = null;
-    }
+    custody.observeResponse(method: method, path: path, status: status);
   }
 
   Future<void> _fail(WebViewController controller, String id, BridgeHttpFailureReason reason, String detail) {

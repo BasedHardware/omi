@@ -14,29 +14,30 @@ enum ListenSocketPolicyDecision {
 /// One shell-owned authority composes both privileged transports.
 struct ShellTransportAuthority {
   let baseURL: URL
-  let token: String?
+  let custody: ShellCredentialCustody
+
+  init(
+    baseURL: URL,
+    token: String?,
+    onSuccessfulSignOut: @escaping () -> Void = {}
+  ) {
+    self.baseURL = baseURL
+    self.custody = ShellCredentialCustody(
+      token: token, onSuccessfulSignOut: onSuccessfulSignOut)
+  }
 
   @MainActor
   func makeHTTPHandler(clientId: String?) -> BridgeHttpHandler {
-    BridgeHttpHandler(baseURL: baseURL, token: token, clientId: clientId)
-  }
-
-  @MainActor
-  func makeHTTPHandler(
-    clientId: String?,
-    onSuccessfulSignOut: @escaping () -> Void
-  ) -> BridgeHttpHandler {
-    BridgeHttpHandler(
-      baseURL: baseURL, token: token, clientId: clientId,
-      onSuccessfulSignOut: onSuccessfulSignOut)
+    BridgeHttpHandler(baseURL: baseURL, custody: custody, clientId: clientId)
   }
 
   func makeListenHandler() -> ListenSocketHandler {
-    ListenSocketHandler(baseURL: baseURL, token: token)
+    ListenSocketHandler(baseURL: baseURL, custody: custody)
   }
 
   func prepareListen(id: String, path: String) -> ListenSocketPolicyDecision {
-    ListenSocketPolicy.prepare(id: id, path: path, baseURL: baseURL, token: token)
+    ListenSocketPolicy.prepare(
+      id: id, path: path, baseURL: baseURL, token: custody.currentToken())
   }
 }
 
@@ -89,7 +90,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   static let channel = "omiListenSocket"
 
   private let baseURL: URL
-  private let token: String?
+  private let custody: ShellCredentialCustody
   private var tasksById: [String: URLSessionWebSocketTask] = [:]
   private var idsByTask: [Int: String] = [:]
   private var webViewsById: [String: WKWebView] = [:]
@@ -100,10 +101,17 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     return URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
   }()
 
-  init(baseURL: URL, token: String?) {
+  init(baseURL: URL, custody: ShellCredentialCustody) {
     self.baseURL = baseURL
-    self.token = token
+    self.custody = custody
     super.init()
+  }
+
+  func prepareUsingCurrentCustodyForConformance(
+    id: String, path: String
+  ) -> ListenSocketPolicyDecision {
+    ListenSocketPolicy.prepare(
+      id: id, path: path, baseURL: baseURL, token: custody.currentToken())
   }
 
   func userContentController(
@@ -124,7 +132,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       return
     }
     guard command.action == "open", let path = command.path else { return }
-    switch ListenSocketPolicy.prepare(id: command.id, path: path, baseURL: baseURL, token: token) {
+    switch prepareUsingCurrentCustodyForConformance(id: command.id, path: path) {
     case .failure:
       emit(id: command.id, payload: ["type": "error"], webView: webView)
       emit(id: command.id, payload: ["type": "close", "code": 1008], webView: webView)
