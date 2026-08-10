@@ -28,8 +28,13 @@ import type {
   ChatMessagesStore,
   WritableChatMessageType,
 } from "../stores/chat-messages-store";
+import type {
+  ChatGenerationEvent,
+  ChatGenerationEventsStore,
+} from "../stores/chat-generation-events-store";
 
 export const CHAT_MESSAGES_PATH = "/v1/chat-messages";
+export const CHAT_GENERATIONS_PATH = "/v1/chat-generations";
 export const CHAT_CAPABILITIES = Object.freeze({
   maxAttachmentsPerMessage: 0,
   maxAttachmentBytes: 0,
@@ -49,6 +54,7 @@ export interface ChatMessagesRouteDependencies {
   readonly messages: ChatMessagesStore;
   readonly admission: ChatAdmission;
   readonly supervisor: ChatGenerationSupervisor;
+  readonly events: ChatGenerationEventsStore;
   readonly cursor: ChatHistoryCursorCodec;
   readonly counter: ServedCounter;
   readonly nowEpochMilliseconds: () => number;
@@ -101,6 +107,14 @@ const unavailable = (): Response => response(
   errorBody("service_unavailable", "retry", true),
   503,
   { "retry-after": String(SERVICE_UNAVAILABLE_RETRY_AFTER_SECONDS) },
+);
+const generationNotFound = (): Response => response(
+  JSON.stringify({ error: { code: "not_found", retryable: false } }),
+  404,
+);
+const generationReplayExpired = (): Response => response(
+  errorBody("generation_replay_expired", "refresh_history"),
+  410,
 );
 
 const bearerPrincipal = (
@@ -246,6 +260,101 @@ const parseHistoryQuery = (request: Request): {
   return { limit: rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit), olderCursor };
 };
 
+const TERMINAL_KINDS = new Set(["done", "failed", "cancelled"]);
+const isTerminal = (event: ChatGenerationEvent): boolean => TERMINAL_KINDS.has(event.frame.kind);
+
+const encodeSse = (event: ChatGenerationEvent): Uint8Array => new TextEncoder().encode(
+  `event: ${event.frame.kind}\nid: ${event.id}\ndata: ${JSON.stringify(event.frame)}\n\n`,
+);
+
+const streamEvents = (input: {
+  readonly accountId: string;
+  readonly generationId: string;
+  readonly events: ChatGenerationEventsStore;
+  readonly initial: readonly ChatGenerationEvent[];
+  readonly afterEventId: string | null;
+  readonly signal: AbortSignal;
+}): Response => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let cursor = input.afterEventId;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller): void {
+      const close = (): void => {
+        if (stopped) return;
+        stopped = true;
+        if (timer !== null) clearTimeout(timer);
+        controller.close();
+      };
+      const emit = (events: readonly ChatGenerationEvent[]): boolean => {
+        for (const event of events) {
+          controller.enqueue(encodeSse(event));
+          cursor = event.id;
+          if (isTerminal(event)) {
+            close();
+            return true;
+          }
+        }
+        return false;
+      };
+      if (emit(input.initial)) return;
+      const poll = (): void => {
+        if (stopped) return;
+        if (input.signal.aborted) {
+          close();
+          return;
+        }
+        let events: readonly ChatGenerationEvent[] | null;
+        try {
+          events = input.events.listAfter(input.accountId, input.generationId, cursor);
+        } catch {
+          close();
+          return;
+        }
+        if (events === null) {
+          close();
+          return;
+        }
+        if (emit(events)) return;
+        timer = setTimeout(poll, 5);
+      };
+      poll();
+    },
+    cancel(): void {
+      stopped = true;
+      if (timer !== null) clearTimeout(timer);
+    },
+  });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "text/event-stream",
+      "x-accel-buffering": "no",
+    },
+  });
+};
+
+const currentSnapshot = (
+  generationId: string,
+  events: readonly ChatGenerationEvent[],
+): ChatGenerationEvent | null => {
+  const latest = events.at(-1);
+  if (latest === undefined) return null;
+  let text = "";
+  for (const event of events) {
+    if (event.frame.kind === "snapshot") text = event.frame.text;
+    if (event.frame.kind === "delta") text += event.frame.text;
+  }
+  return Object.freeze({
+    id: latest.id,
+    generationId,
+    sequence: latest.sequence,
+    createdAt: latest.createdAt,
+    frame: { kind: "snapshot", text },
+  });
+};
+
 export const registerChatMessagesRoutes = (
   app: Hono,
   deps: ChatMessagesRouteDependencies,
@@ -364,13 +473,113 @@ export const registerChatMessagesRoutes = (
           acceptedEvent: admission.acceptedEvent,
         });
       }
-      return response({
-        kind: "accepted",
-        message: admission.stored.message,
-        generation: { id: admission.stored.generationId ?? generationId },
-      }, admission.kind === "created" ? 201 : 200);
+      const admittedGenerationId = admission.stored.generationId ?? generationId;
+      const stream = streamEvents({
+        accountId: principal.uid,
+        generationId: admittedGenerationId,
+        events: deps.events,
+        initial: Object.freeze([]),
+        afterEventId: null,
+        signal: context.req.raw.signal,
+      });
+      return new Response(stream.body, {
+        status: admission.kind === "created" ? 201 : 200,
+        headers: stream.headers,
+      });
     } catch {
       return unavailable();
     }
+  });
+
+  app.get(`${CHAT_GENERATIONS_PATH}/:generationId/events`, (context) => {
+    const principal = bearerPrincipal(
+      context.req.header("authorization"),
+      deps.resolvePrincipal,
+    );
+    if (principal === null) return unauthorized();
+    recordContractVersion(context.req.header(APP_CONTRACT_VERSION_HEADER));
+    const generationId = context.req.param("generationId");
+    const lifecycle = deps.events.readLifecycle(principal.uid, generationId);
+    if (lifecycle === null) return generationNotFound();
+    const all = deps.events.listAfter(principal.uid, generationId, null);
+    if (all === null) return generationNotFound();
+    const lastEventId = context.req.header("last-event-id") ?? null;
+    if (lastEventId === "") return badRequest();
+
+    if (lastEventId !== null) {
+      const replay = deps.events.listAfter(principal.uid, generationId, lastEventId);
+      if (replay === null) {
+        const terminal = all.findLast(isTerminal);
+        if (terminal === undefined) return generationReplayExpired();
+        return streamEvents({
+          accountId: principal.uid,
+          generationId,
+          events: deps.events,
+          initial: [terminal],
+          afterEventId: terminal.id,
+          signal: context.req.raw.signal,
+        });
+      }
+      if (replay.length === 0 && lifecycle.state === "terminal") {
+        const terminal = all.findLast(isTerminal);
+        if (terminal === undefined) return generationReplayExpired();
+        return streamEvents({
+          accountId: principal.uid,
+          generationId,
+          events: deps.events,
+          initial: [terminal],
+          afterEventId: terminal.id,
+          signal: context.req.raw.signal,
+        });
+      }
+      return streamEvents({
+        accountId: principal.uid,
+        generationId,
+        events: deps.events,
+        initial: replay,
+        afterEventId: replay.at(-1)?.id ?? lastEventId,
+        signal: context.req.raw.signal,
+      });
+    }
+
+    const terminal = all.findLast(isTerminal);
+    if (terminal !== undefined) {
+      return streamEvents({
+        accountId: principal.uid,
+        generationId,
+        events: deps.events,
+        initial: [terminal],
+        afterEventId: terminal.id,
+        signal: context.req.raw.signal,
+      });
+    }
+    const snapshot = currentSnapshot(generationId, all);
+    if (snapshot === null) return generationReplayExpired();
+    return streamEvents({
+      accountId: principal.uid,
+      generationId,
+      events: deps.events,
+      initial: [snapshot],
+      afterEventId: snapshot.id,
+      signal: context.req.raw.signal,
+    });
+  });
+
+  app.delete(`${CHAT_GENERATIONS_PATH}/:generationId`, (context) => {
+    const principal = bearerPrincipal(
+      context.req.header("authorization"),
+      deps.resolvePrincipal,
+    );
+    if (principal === null) return unauthorized();
+    recordContractVersion(context.req.header(APP_CONTRACT_VERSION_HEADER));
+    const generationId = context.req.param("generationId");
+    const outcome = deps.events.requestCancellation(principal.uid, generationId);
+    if (outcome.kind === "not_found") return generationNotFound();
+    if (outcome.kind === "already_terminal") return new Response(null, {
+      status: 204,
+      headers: { "cache-control": "no-store" },
+    });
+    if (outcome.kind === "accepted") deps.supervisor.cancel(principal.uid, generationId);
+    return response({ cancellation: { state: "accepted" } }, 202);
   });
 };

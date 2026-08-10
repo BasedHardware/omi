@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import type { ChatMessageRecord } from "../../../apps/service/stores/chat-messages-store";
 import { createSqliteChatAdmission } from "./chat-admission";
+import { createSqliteChatGenerationFinalization } from "./chat-generation-finalization";
 import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 import { SqliteChatMessagesStore } from "./chat-messages-store";
 import { SqliteSettingsProjectionStore } from "./settings-projection";
@@ -128,6 +129,52 @@ test("SQLite preserves monotonic journal revision and the cancelled-partial even
   }).kind).toBe("appended");
   const event = events.listAfter("account", "generation-1", null)?.[0];
   expect(event?.frame).toEqual({ kind: "cancelled", message: partial });
+  db.close();
+});
+
+test("SQLite rolls canonical assistant persistence back when terminal append crashes", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  const events = new SqliteChatGenerationEventsStore(db);
+  const settings = new SqliteSettingsProjectionStore(db);
+  expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+    accountId: "account",
+    message: message(),
+    generationId: "generation-1",
+    acceptedEventId: "event-accepted",
+    admittedAt: 200,
+  }).kind).toBe("created");
+  const assistant = message({
+    id: "assistant-1",
+    sender: "ai",
+    text: "canonical answer",
+    payloadHash: "sha256:assistant",
+  });
+  const crashing = createSqliteChatGenerationFinalization(db, {
+    beforeTerminalAppend: () => { throw new Error("injected terminal crash"); },
+  });
+
+  expect(() => crashing.finalize({
+    accountId: "account",
+    generationId: "generation-1",
+    eventId: "event-done",
+    createdAt: 300,
+    frame: { kind: "done", message: assistant },
+  })).toThrow("injected terminal crash");
+  expect(messages.readMessage("account", "assistant-1")).toBeNull();
+  expect(events.readLifecycle("account", "generation-1")?.state).toBe("active");
+  expect(events.listAfter("account", "generation-1", null)?.map((event) => event.frame.kind))
+    .toEqual(["accepted"]);
+
+  expect(createSqliteChatGenerationFinalization(db).finalize({
+    accountId: "account",
+    generationId: "generation-1",
+    eventId: "event-done",
+    createdAt: 300,
+    frame: { kind: "done", message: assistant },
+  }).frame).toEqual({ kind: "done", message: assistant });
+  expect(messages.readMessage("account", "assistant-1")?.message).toEqual(assistant);
+  expect(events.readLifecycle("account", "generation-1")?.state).toBe("terminal");
   db.close();
 });
 

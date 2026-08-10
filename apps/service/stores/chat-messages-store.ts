@@ -71,6 +71,7 @@ export type CanonicalChatMessageWriteOutcome =
 
 export interface ChatMessagesStore {
   readMessage(accountId: string, messageId: string): StoredChatMessage | null;
+  readHumanByGeneration(accountId: string, generationId: string): StoredChatMessage | null;
   /** The insertion snapshot used to keep a whole cursor chain stable. */
   readSnapshotSequence(accountId: string): number;
   listHistory(accountId: string, query: ChatHistoryQuery): ChatHistoryStorePage;
@@ -225,6 +226,13 @@ export const createInMemoryChatMessagesStore = (
   return Object.freeze({
     readMessage(accountId: string, messageId: string): StoredChatMessage | null {
       const row = accounts.get(accountId)?.get(messageId);
+      return row === undefined ? null : detachStored(row);
+    },
+
+    readHumanByGeneration(accountId: string, generationId: string): StoredChatMessage | null {
+      const row = [...(accounts.get(accountId)?.values() ?? [])]
+        .find((candidate) => candidate.generationId === generationId
+          && candidate.message.sender === "human");
       return row === undefined ? null : detachStored(row);
     },
 

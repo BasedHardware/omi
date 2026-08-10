@@ -59,6 +59,27 @@ const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): P
     body: JSON.stringify(body),
   }));
 
+const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
+  onAdmitted: (): void => {},
+  cancel: (): void => {},
+  recoverInterrupted: (): void => {},
+});
+
+const firstSseFrame = async (response: Response): Promise<unknown> => {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  while (!text.includes("\n\n")) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    text += decoder.decode(chunk.value, { stream: true });
+  }
+  await reader.cancel();
+  const data = text.split("\n").find((line) => line.startsWith("data: "));
+  if (data === undefined) throw new TypeError("missing SSE data frame");
+  return JSON.parse(data.slice("data: ".length)) as unknown;
+};
+
 const bootInMemory = (
   stores: LocalServiceStores = createInMemoryLocalServiceStores(),
   chatSupervisor?: ChatGenerationSupervisor,
@@ -71,7 +92,7 @@ const bootInMemory = (
     memoryCount: 0,
     accountTimezone: "UTC",
     devSecretLabel: "chat-route-proof",
-    chatSupervisor,
+    chatSupervisor: chatSupervisor ?? inertSupervisor(),
   });
   return { db, local, stores };
 };
@@ -90,6 +111,8 @@ describe("ratified /v1/chat-messages route", () => {
     let supervisorAdmissions = 0;
     const { db, local } = bootInMemory(stores, {
       onAdmitted: () => { supervisorAdmissions += 1; },
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
     });
     const request = payload("client-01", 1_786_352_400_000);
 
@@ -99,7 +122,7 @@ describe("ratified /v1/chat-messages route", () => {
 
     expect(first.status).toBe(201);
     expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual(await first.json());
+    expect(await firstSseFrame(replay)).toEqual(await firstSseFrame(first));
     expect(mutated.status).toBe(409);
     expect(await mutated.json()).toEqual({
       error: {
@@ -130,6 +153,7 @@ describe("ratified /v1/chat-messages route", () => {
         memoryCount: 0,
         accountTimezone: "UTC",
         devSecretLabel: "chat-sqlite-keyset-proof",
+        chatSupervisor: inertSupervisor(),
       });
       for (const [id, at] of [["m1", 1_000], ["m2", 2_000], ["m3", 3_000], ["m4", 4_000]] as const) {
         expect((await post(local, payload(id, at))).status).toBe(201);
@@ -290,7 +314,7 @@ describe("ratified /v1/chat-messages route", () => {
     }];
     const admitted = await post(local, payload("with-metadata", 500, { attachments }));
     expect(admitted.status).toBe(201);
-    expect((await admitted.json() as { message: ChatMessageRecord }).message.attachments)
+    expect((await firstSseFrame(admitted) as { message: ChatMessageRecord }).message.attachments)
       .toEqual(attachments);
 
     const history = await local.app.request("/v1/chat-messages", {

@@ -14,6 +14,8 @@ import {
 import { createScriptedTranscriptionSource } from "../listen/transcription-source";
 import type { TranscriptionSource } from "../listen/transcription-source";
 import { createDeterministicListenConversationProcessor } from "../listen/conversation-processor";
+import { createScriptedChatGenerationSource } from "../chat/generation-source";
+import { createEmptyChatGenerationContextSource } from "../chat/generation-context";
 import {
   createSqliteListenSegmentUnitOfWork,
   createSqliteLocalServiceStores,
@@ -65,6 +67,8 @@ const boot = (options: {
       consumedSeconds: options.consumedSeconds ?? 1,
     }]),
     conversationProcessorFactory: createDeterministicListenConversationProcessor,
+    generationSource: createScriptedChatGenerationSource(),
+    generationContext: createEmptyChatGenerationContextSource(),
     listenCredentialLeaseMilliseconds: options.credentialLeaseMilliseconds,
   });
   const server = Bun.serve({
@@ -248,6 +252,8 @@ describe("GET /v4/listen WebSocket", () => {
         { delayMs: 0, text: "retry accepted", start: 1, end: 2, consumedSeconds: 1 },
       ]),
       conversationProcessorFactory: createDeterministicListenConversationProcessor,
+      generationSource: createScriptedChatGenerationSource(),
+      generationContext: createEmptyChatGenerationContextSource(),
     });
     const server = Bun.serve({
       hostname: "127.0.0.1",

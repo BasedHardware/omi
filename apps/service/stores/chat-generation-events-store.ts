@@ -21,6 +21,22 @@ export interface ChatGenerationEvent {
   readonly frame: ChatGenerationFrame;
 }
 
+export type ChatGenerationTerminalFrame = Extract<
+  ChatGenerationFrame,
+  { readonly kind: "done" | "failed" | "cancelled" }
+>;
+
+export interface ChatGenerationLifecycle {
+  readonly accountId: string;
+  readonly generationId: string;
+  readonly state: "active" | "cancellation_requested" | "terminal";
+}
+
+export type ChatCancellationRequestOutcome =
+  | { readonly kind: "accepted" }
+  | { readonly kind: "already_requested" | "already_terminal" }
+  | { readonly kind: "not_found" };
+
 export type AppendChatGenerationEventOutcome =
   | { readonly kind: "appended"; readonly event: ChatGenerationEvent }
   | { readonly kind: "replay"; readonly event: ChatGenerationEvent }
@@ -39,12 +55,18 @@ export interface ChatGenerationEventsStore {
     generationId: string,
     afterEventId: string | null,
   ): readonly ChatGenerationEvent[] | null;
+  readLifecycle(accountId: string, generationId: string): ChatGenerationLifecycle | null;
+  listUnterminated(): readonly ChatGenerationLifecycle[];
+  requestCancellation(accountId: string, generationId: string): ChatCancellationRequestOutcome;
   reset(): void;
 }
 
 interface AccountGenerationLog {
+  readonly accountId: string;
+  readonly generationId: string;
   readonly events: ChatGenerationEvent[];
   readonly byId: Map<string, ChatGenerationEvent>;
+  state: ChatGenerationLifecycle["state"];
 }
 
 const stableFrame = (frame: ChatGenerationFrame): string => JSON.stringify(frame);
@@ -70,7 +92,13 @@ export const createInMemoryChatGenerationEventsStore = (): ChatGenerationEventsS
         throw new TypeError("invalid chat generation event");
       }
       const key = keyOf(input.accountId, input.generationId);
-      const log = logs.get(key) ?? { events: [], byId: new Map<string, ChatGenerationEvent>() };
+      const log = logs.get(key) ?? {
+        accountId: input.accountId,
+        generationId: input.generationId,
+        events: [],
+        byId: new Map<string, ChatGenerationEvent>(),
+        state: "active" as const,
+      };
       logs.set(key, log);
       const existing = log.byId.get(input.eventId);
       if (existing !== undefined) {
@@ -89,6 +117,7 @@ export const createInMemoryChatGenerationEventsStore = (): ChatGenerationEventsS
       });
       log.events.push(event);
       log.byId.set(event.id, event);
+      if (["done", "failed", "cancelled"].includes(event.frame.kind)) log.state = "terminal";
       return { kind: "appended", event: detachEvent(event) };
     },
 
@@ -106,6 +135,35 @@ export const createInMemoryChatGenerationEventsStore = (): ChatGenerationEventsS
         index = found + 1;
       }
       return Object.freeze(log.events.slice(index).map(detachEvent));
+    },
+
+    readLifecycle(accountId: string, generationId: string): ChatGenerationLifecycle | null {
+      const log = logs.get(keyOf(accountId, generationId));
+      return log === undefined ? null : Object.freeze({ accountId, generationId, state: log.state });
+    },
+
+    listUnterminated(): readonly ChatGenerationLifecycle[] {
+      const generations: ChatGenerationLifecycle[] = [];
+      for (const log of logs.values()) {
+        if (log.state === "terminal") continue;
+        const accepted = log.events.find((event) => event.frame.kind === "accepted");
+        if (accepted === undefined || accepted.frame.kind !== "accepted") continue;
+        generations.push(Object.freeze({
+          accountId: log.accountId,
+          generationId: log.generationId,
+          state: log.state,
+        }));
+      }
+      return Object.freeze(generations);
+    },
+
+    requestCancellation(accountId: string, generationId: string): ChatCancellationRequestOutcome {
+      const log = logs.get(keyOf(accountId, generationId));
+      if (log === undefined) return { kind: "not_found" };
+      if (log.state === "terminal") return { kind: "already_terminal" };
+      if (log.state === "cancellation_requested") return { kind: "already_requested" };
+      log.state = "cancellation_requested";
+      return { kind: "accepted" };
     },
 
     reset(): void {

@@ -52,9 +52,17 @@ import {
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import {
-  createStubChatGenerationSupervisor,
+  createChatGenerationSupervisor,
   type ChatGenerationSupervisor,
 } from "./chat/generation-supervisor";
+import {
+  createEmptyChatGenerationContextSource,
+  type ChatGenerationContextSource,
+} from "./chat/generation-context";
+import {
+  createScriptedChatGenerationSource,
+  type ChatGenerationSource,
+} from "./chat/generation-source";
 import { createChatHistoryCursorCodec } from "./chat/history-cursor";
 import { registerChatMessagesRoutes } from "./routes/chat-messages";
 import { registerConversationRoutes } from "./routes/conversations";
@@ -96,6 +104,10 @@ import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
 import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
 import { createInMemoryChatAdmission, type ChatAdmission } from "./stores/chat-admission";
+import {
+  createInMemoryChatGenerationFinalization,
+  type ChatGenerationFinalization,
+} from "./stores/chat-generation-finalization";
 import {
   createInMemoryChatGenerationEventsStore,
   type ChatGenerationEventsStore,
@@ -149,7 +161,11 @@ export interface LocalServiceOptions {
   readonly conversationProcessorFactory: ListenConversationProcessorFactory;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
   readonly listenDefaultUnmetered?: boolean;
-  /** The C1 default emits no generation frames; the next lane injects the real supervisor. */
+  /** Required provider seam; production LLM integration is a later adapter. */
+  readonly generationSource: ChatGenerationSource;
+  /** Required consultation seam; memory implementation is owned outside Chat. */
+  readonly generationContext: ChatGenerationContextSource;
+  /** Test-only complete supervisor override. */
   readonly chatSupervisor?: ChatGenerationSupervisor;
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
   readonly listenCredentialLeaseMilliseconds?: number;
@@ -174,6 +190,7 @@ export interface LocalServiceStores {
   readonly chatMessages: ChatMessagesStore;
   readonly chatEvents: ChatGenerationEventsStore;
   readonly chatAdmission: ChatAdmission;
+  readonly chatFinalization: ChatGenerationFinalization;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -267,6 +284,7 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     chatMessages,
     chatEvents,
     chatAdmission: createInMemoryChatAdmission(chatMessages, chatEvents, settings),
+    chatFinalization: createInMemoryChatGenerationFinalization(chatMessages, chatEvents),
   });
 };
 
@@ -309,11 +327,16 @@ export interface LocalService {
 
 export type LocalDevServiceOptions = Omit<
   LocalServiceOptions,
-  "conversationProcessorFactory" | "transcriptionSource"
+  | "conversationProcessorFactory"
+  | "transcriptionSource"
+  | "generationSource"
+  | "generationContext"
 > & {
   /** Explicit dev/test override; omission selects the named scripted adapter. */
   readonly transcriptionSource?: TranscriptionSource;
   readonly conversationProcessorFactory?: ListenConversationProcessorFactory;
+  readonly generationSource?: ChatGenerationSource;
+  readonly generationContext?: ChatGenerationContextSource;
 };
 
 export const createLocalDevService = (options: LocalDevServiceOptions): LocalService =>
@@ -322,6 +345,8 @@ export const createLocalDevService = (options: LocalDevServiceOptions): LocalSer
     transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource(),
     conversationProcessorFactory: options.conversationProcessorFactory
       ?? createDeterministicListenConversationProcessor,
+    generationSource: options.generationSource ?? createScriptedChatGenerationSource(),
+    generationContext: options.generationContext ?? createEmptyChatGenerationContextSource(),
   });
 
 export const createLocalService = (options: LocalServiceOptions): LocalService => {
@@ -330,6 +355,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   }
   if (options.conversationProcessorFactory === undefined) {
     throw new TypeError("conversationProcessorFactory is required");
+  }
+  if (options.generationSource === undefined) {
+    throw new TypeError("generationSource is required");
+  }
+  if (options.generationContext === undefined) {
+    throw new TypeError("generationContext is required");
   }
   const ownsStores = options.stores === undefined;
   const stores = options.stores ?? createInMemoryLocalServiceStores();
@@ -422,6 +453,21 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     `${kind}_${createHash("sha256")
       .update(`${options.devSecretLabel}:chat:${kind}\0${parts.join("\0")}`, "utf8")
       .digest("hex")}`;
+  const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
+    source: options.generationSource,
+    context: options.generationContext,
+    messages: stores.chatMessages,
+    events: stores.chatEvents,
+    finalization: stores.chatFinalization,
+    nowEpochMilliseconds: () => anchorEpochSeconds * 1_000,
+    assistantMessageId: (accountId, generationId) =>
+      opaqueChatId("assistant", accountId, generationId),
+    eventId: (accountId, generationId, kind, sequence) =>
+      opaqueChatId("event", accountId, generationId, kind, String(sequence)),
+    revision: (accountId, messageId, payloadHash) =>
+      opaqueChatId("revision", accountId, messageId, payloadHash),
+  });
+  chatSupervisor.recoverInterrupted();
 
   const prepareRead = async (principal: DevPrincipal) => {
     const loader = createSqliteQaRecallLoader({
@@ -598,7 +644,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     messages: stores.chatMessages,
     admission: stores.chatAdmission,
-    supervisor: options.chatSupervisor ?? createStubChatGenerationSupervisor(),
+    supervisor: chatSupervisor,
+    events: stores.chatEvents,
     cursor: chatCursor,
     counter,
     nowEpochMilliseconds: () => anchorEpochSeconds * 1_000,
@@ -664,6 +711,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       chatMessages: stores.chatMessages,
       chatEvents: stores.chatEvents,
       chatAdmission: stores.chatAdmission,
+      chatFinalization: stores.chatFinalization,
     }),
   });
 };

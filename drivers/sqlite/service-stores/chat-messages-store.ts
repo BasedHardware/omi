@@ -123,6 +123,17 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
     return row === null ? null : storedFromRow(row);
   }
 
+  readHumanByGeneration(accountId: string, generationId: string): StoredChatMessage | null {
+    const row = this.db.query(`
+      SELECT ${SELECT_FIELDS}
+      FROM service_chat_messages
+      WHERE account_id = ? AND generation_id = ? AND sender = 'human'
+      ORDER BY sequence ASC
+      LIMIT 1
+    `).get(accountId, generationId) as StoredRow | null;
+    return row === null ? null : storedFromRow(row);
+  }
+
   readSnapshotSequence(accountId: string): number {
     const row = this.db.query(`
       SELECT COALESCE(MAX(sequence), 0) AS sequence

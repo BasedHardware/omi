@@ -72,6 +72,10 @@ Example passing output:
 | `PATCH` | `/v1/conversations/{id}/visibility` | Bearer | Set visibility from `?value=public\|private\|shared` |
 | `PATCH` | `/v1/conversations/{id}/folder` | Bearer | Set or clear folder with JSON `{folder_id}` |
 | `DELETE` | `/v1/conversations/{id}` | Bearer | Delete only with explicit `?cascade=false` |
+| `GET` | `/v1/chat-messages` | Bearer | Canonical Chat history and capabilities |
+| `POST` | `/v1/chat-messages` | Bearer | Idempotent send admission plus SSE generation |
+| `GET` | `/v1/chat-generations/{generationId}/events` | Bearer | SSE reconnect from `Last-Event-ID` or a current snapshot |
+| `DELETE` | `/v1/chat-generations/{generationId}` | Bearer | Durable, idempotent generation cancellation |
 | `GET` | `/v1/qa/status` | none | Served-traffic counters and seed identity |
 | `POST` | `/v1/qa/reset` | Bearer (dev token) | Total deterministic reseed |
 
@@ -136,6 +140,18 @@ The dev-server terminal also prints `[served] domain-reads=N ...` whenever `doma
 ```
 
 Seeded memories are placed one per local calendar day, stepping backward from the fixed anchor `2026-08-07T12:00:00.000Z`, so day-grouping in the client matches regardless of host clock.
+
+## Chat generation lifecycle
+
+The initiating Chat POST and reconnect GET both use the ratified SSE frame grammar. Advisory snapshots and deltas are durable only in the generation event log; `done` always carries the complete canonical assistant message also returned by history. A socket disconnect only stops that consumer and never cancels model work.
+
+Cancellation is a durable lifecycle transition. The supervisor stops its generation source, persists any non-empty partial assistant text as a canonical message, and emits `cancelled` with that same complete message. Cancelling a terminal generation returns `204` without adding another terminal.
+
+Generation quota is reserved once, in the same admission transaction as the canonical human message and `accepted` event, through the shared Settings `readEntitlement` projection. Replaying the same client message id reuses that reservation and generation; terminal success or cancellation never decrements quota again.
+
+On service construction, the supervisor scans durable non-terminal generations. A generation whose process disappeared without a cancellation request becomes `failed` with `generation_interrupted` and `retryable: true`; it is never resumed against a potentially non-deterministic provider and never remains `generating` indefinitely. A durable cancellation request discovered during recovery instead completes as `cancelled`, retaining its logged partial. Canonical assistant persistence and terminal event append share one SQLite transaction.
+
+The local adapter emits a deterministic scripted answer with real timer delays. Deployed LLM integration belongs behind `ChatGenerationSource`. Future memory/context consultation belongs behind `ChatGenerationContextSource`; the current adapter intentionally returns no context and does not implement memory behavior here.
 
 ## Environment variables
 
@@ -220,6 +236,7 @@ If any non-loopback IPv4 address on the host can reach `/health`, `lanProbe.stat
 ## Known limitations
 
 - **No deployed Postgres adapter in this local binary.** The conversations application port is durable through SQLite locally; a production composition still owes its Postgres adapter and deployment credentials.
+- **No production Chat model adapter.** Local Chat generation uses the deterministic timed script; the production LLM remains a later source adapter.
 - **Provisional served-memory selection.** The composition serves temporal **leaf** nodes (one synthesized memory per local day). That aligns with a timeline UI and the seeded fixture layout, but it is a QA composition choice, not a ratified product rule (`composition/memory-read.ts` documents this).
 - **No field negotiation** for optional response fields such as citations or provenance — clients receive the full ratified wire shape.
 - **Dev auth is a seam, not an auth system.** A fixed, committed signing label issues bearer tokens for loopback testing. A real deployment replaces this entire mechanism.

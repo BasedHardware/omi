@@ -17,6 +17,7 @@ import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
 import { SqliteChatMessagesStore } from "./chat-messages-store";
 import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 import { createSqliteChatAdmission } from "./chat-admission";
+import { createSqliteChatGenerationFinalization } from "./chat-generation-finalization";
 
 export { SqliteAccountLifecycleStore } from "./account-lifecycle";
 export { SqliteCurrentSessionPort } from "./current-session";
@@ -35,6 +36,7 @@ export { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
 export { SqliteChatMessagesStore } from "./chat-messages-store";
 export { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 export { createSqliteChatAdmission } from "./chat-admission";
+export { createSqliteChatGenerationFinalization } from "./chat-generation-finalization";
 
 /** Builds all service stores and the tasks unit of work over one SQLite connection. */
 export const createSqliteLocalServiceStores = (
@@ -66,5 +68,6 @@ export const createSqliteLocalServiceStores = (
     chatMessages,
     chatEvents,
     chatAdmission: createSqliteChatAdmission(db, chatMessages, chatEvents, settings),
+    chatFinalization: createSqliteChatGenerationFinalization(db),
   });
 };
