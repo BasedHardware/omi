@@ -50,6 +50,7 @@ function present(phase, hasSavedData, rowCount, filtering = false) {
 }
 
 test("home search reads loaded projections without claiming backend completeness", async () => {
+  // RETAINED-SOURCE-ASSERTION: forbidden backend-search calls and projection-only reads are port-boundary facts.
   const source = await read("src/production/HomeProduction.tsx");
   assert.match(source, /type SearchProjection<T>/);
   assert.match(source, /list\(\): Promise<T\[\]>/);
@@ -65,6 +66,7 @@ test("home search reads loaded projections without claiming backend completeness
 });
 
 test("home search source stays a memory-and-conversation chronological projection", async () => {
+  // RETAINED-SOURCE-ASSERTION: the allowed result union and sort implementation are structural projection constraints.
   const source = await read("src/production/HomeProduction.tsx");
   const styles = await read("src/production/home.css");
   assert.match(source, /kind: "memory"/);
@@ -82,6 +84,7 @@ test("home search source stays a memory-and-conversation chronological projectio
 });
 
 test("home does not fabricate ask, chat, send, or mutation affordances", async () => {
+  // RETAINED-SOURCE-ASSERTION: capability absence is an API and dependency boundary, not one fixture's rendered state.
   const source = await read("src/production/HomeProduction.tsx");
   assert.doesNotMatch(source, /store\.create|store\.patch|store\.delete|\b(?:ask|chat|send)\b/i);
   assert.match(source, /href=\{conversationHref\(row\.value\.id\)\}/);
