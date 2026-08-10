@@ -107,7 +107,7 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, run_blocking
+from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -2044,6 +2044,67 @@ def update_ai_profile(
         profile_text=request.profile_text,
         generated_at=request.generated_at,
         data_sources_used=request.data_sources_used,
+    )
+
+
+class SynthesizeAIUserProfileRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str] = Field(default_factory=list, max_length=500)
+    tasks: List[str] = Field(default_factory=list, max_length=500)
+    goals: List[str] = Field(default_factory=list, max_length=500)
+    conversations: List[str] = Field(default_factory=list, max_length=500)
+    messages: List[str] = Field(default_factory=list, max_length=500)
+    past_profiles: List[str] = Field(default_factory=list, max_length=5)
+
+
+class SynthesizeAIUserProfileResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    profile_text: str
+    data_sources_used: List[str]
+    item_count: int
+
+
+@router.post(
+    '/v1/users/ai-profile/synthesize',
+    tags=['users'],
+    response_model=SynthesizeAIUserProfileResponse,
+)
+async def synthesize_ai_profile(
+    body: SynthesizeAIUserProfileRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_synthesize")),
+):
+    """Return-only two-stage AI user profile synthesis through the managed memories feature.
+
+    Does not write Firestore. Desktop clients send their formatted source lines plus up to
+    five past profiles (oldest first) instead of carrying the prompts and calling Anthropic
+    Haiku themselves, then persist through PATCH /v1/users/ai-profile.
+    """
+    from utils.llm import ai_user_profile as ai_user_profile_llm
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    synthesis = await run_blocking(
+        llm_executor,
+        lambda: ai_user_profile_llm.synthesize_ai_user_profile(
+            uid,
+            ai_user_profile_llm.ProfileSources(
+                memories=body.memories,
+                tasks=body.tasks,
+                goals=body.goals,
+                conversations=body.conversations,
+                messages=body.messages,
+            ),
+            past_profiles=body.past_profiles,
+        ),
+    )
+    if synthesis is None:
+        raise HTTPException(status_code=502, detail="ai_profile_synthesis_failed")
+    return SynthesizeAIUserProfileResponse(
+        profile_text=synthesis.profile_text,
+        data_sources_used=list(synthesis.data_sources_used),
+        item_count=synthesis.item_count,
     )
 
 

@@ -9,10 +9,6 @@ final class DevEnv implements EnvFields {
   DevEnv();
 
   @override
-  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
-  final String? openAIAPIKey = _DevEnv.openAIAPIKey;
-
-  @override
   @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
   final String? posthogApiKey = _DevEnv.posthogApiKey;
 
