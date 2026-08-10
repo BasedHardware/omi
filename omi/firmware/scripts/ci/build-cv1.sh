@@ -19,8 +19,16 @@ FW=/omi/firmware
 NCS_VERSION=v2.9.0
 BOARD=omi/nrf5340/cpuapp
 : "${MCUBOOT_SIGNING_KEY_FILE:?MCUBOOT_SIGNING_KEY_FILE must point to an injected signing key}"
-test -f "$MCUBOOT_SIGNING_KEY_FILE"
-test ! -f "$FW/bootloader/mcuboot/root-rsa-2048.pem"
+test -f "$MCUBOOT_SIGNING_KEY_FILE" || {
+  echo "ERROR: MCUBOOT_SIGNING_KEY_FILE=$MCUBOOT_SIGNING_KEY_FILE is not a readable file" >&2
+  exit 1
+}
+for retired_key in root-rsa-2048.pem enc-rsa2048-priv.pem; do
+  if [ -f "$FW/bootloader/mcuboot/$retired_key" ]; then
+    echo "ERROR: retired in-repo signing key $retired_key is present; the release key must come from the secret boundary" >&2
+    exit 1
+  fi
+done
 
 # west/git operate on the bind-mounted tree owned by the host user; the
 # container runs as root, so tell git the checkout is trusted.
