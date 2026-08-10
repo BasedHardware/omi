@@ -251,6 +251,14 @@ enum SessionBootstrap {
     return "\(defaultAccount)@\(scheme)://\(host)\(port)"
   }
 
+  /** Delete the Keychain item scoped to this exact backend origin. */
+  static func deleteCredential<Store: CredentialStore>(
+    for baseURL: URL,
+    from store: Store
+  ) throws {
+    try store.delete(account: account(for: baseURL))
+  }
+
   /// Synchronous launch-path bootstrap. See file header for the concurrency choice.
   ///
   /// PRECEDENCE — explicit configuration beats cached custody. An operator who
