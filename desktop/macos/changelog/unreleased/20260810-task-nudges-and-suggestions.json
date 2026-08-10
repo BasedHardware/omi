@@ -1,0 +1,3 @@
+{
+  "change": "Focus nudges now name your due-today tasks when you're drifting, AI-captured tasks wait in a collapsed Suggestions section until you accept them, and two capture bugs that silently disabled all proactive notifications (phantom Mission Control, phantom idle) are fixed"
+}
