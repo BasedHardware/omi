@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("memory presentation stays contract-bounded", async () => {
+  // RETAINED-SOURCE-ASSERTION: raw-field and invented-state absence is a contract-shape restriction across all fixtures.
   const source = await read("src/production/MemoriesProduction.tsx");
   const presentation = await read("src/production/memory-presentation.ts");
   assert.match(presentation, /\[a-z0-9_-\]\{1,80\}/);
@@ -18,6 +19,7 @@ test("memory presentation stays contract-bounded", async () => {
 });
 
 test("memory mutations stay within the ratified store contract", async () => {
+  // RETAINED-SOURCE-ASSERTION: the allowed mutation vocabulary and forbidden review workflow are port-boundary facts.
   const source = await read("src/production/MemoriesProduction.tsx");
   assert.match(source, /confirm\(t\(locale, "memories\.deleteConfirm"\)\)/);
   assert.doesNotMatch(source, /store\.(search|setScope|open)/);
@@ -26,6 +28,7 @@ test("memory mutations stay within the ratified store contract", async () => {
 });
 
 test("shared chrome uses host-selected CSS", async () => {
+  // RETAINED-SOURCE-ASSERTION: jsdom cannot observe host-selected CSS branches or prove viewport-query absence.
   const styles = await read("src/production/styles.css");
   assert.match(styles, /html\[data-platform="desktop"\].*production-nav:first-child/);
   assert.match(styles, /html\[data-platform="mobile"\].*production-nav:last-child/);

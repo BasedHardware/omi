@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("task fixtures cover the truthful lifecycle and queue matrix", async () => {
+  // RETAINED-SOURCE-ASSERTION: fixture catalog completeness and injected-clock wiring are structural QA inventory.
   const source = await read("src/production/task-fixtures.ts");
   for (const state of ["loading", "empty", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "normal", "long", "operation-failed"]) {
     assert.match(source, new RegExp('"' + state + '"'));
@@ -24,6 +25,7 @@ test("task fixtures cover the truthful lifecycle and queue matrix", async () => 
 });
 
 test("tasks derive UTC calendar groups and preserve no-due tasks in Later", async () => {
+  // RETAINED-SOURCE-ASSERTION: calendar injection and the closed group union are structural grouping constraints.
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /calendarDay\?:/);
   assert.match(source, /groupFor\(task, now, dayFormatter\)/);
@@ -37,6 +39,7 @@ test("tasks derive UTC calendar groups and preserve no-due tasks in Later", asyn
 });
 
 test("task discovery filters the loaded snapshot without claiming backend search", async () => {
+  // RETAINED-SOURCE-ASSERTION: forbidden backend-search capabilities and loaded-snapshot filtering are port boundaries.
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /<ProductionSearchField/);
   assert.match(source, /tasks\.filterSavedPlaceholder/);
@@ -47,6 +50,7 @@ test("task discovery filters the loaded snapshot without claiming backend search
 });
 
 test("task actions stay within the task contract", async () => {
+  // RETAINED-SOURCE-ASSERTION: allowed store calls and forbidden legacy fields define the task contract boundary.
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /store\.create\(description, dueAt\)/);
   assert.match(source, /const patch: TaskPatch = \{\}/);
@@ -62,6 +66,7 @@ test("task actions stay within the task contract", async () => {
 });
 
 test("source and provenance are localized or suppressed, never leaked", async () => {
+  // RETAINED-SOURCE-ASSERTION: raw backend-field absence must hold over every branch, not only rendered fixtures.
   const source = await read("src/production/TasksProduction.tsx");
   assert.doesNotMatch(source, /\{task\.source\}/);
   assert.doesNotMatch(source, /\{task\.provenance\}/);
@@ -71,6 +76,7 @@ test("source and provenance are localized or suppressed, never leaked", async ()
 });
 
 test("mutation failures stay localized and dead letters remain discardable", async () => {
+  // RETAINED-SOURCE-ASSERTION: backend-detail absence and discard-only wiring are cross-branch structural constraints.
   const source = await read("src/production/TasksProduction.tsx");
   const fixtures = await read("src/production/task-fixtures.ts");
   assert.match(source, /setOperationError\(translate\("lifecycle\.error"\)\)/);
@@ -90,6 +96,7 @@ test("mutation failures stay localized and dead letters remain discardable", asy
 });
 
 test("tasks keep stable boot and date parsing internals", async () => {
+  // RETAINED-SOURCE-ASSERTION: one-shot readiness and the ban on Date.parse are implementation-boundary rules.
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /import "\.\/tasks\.css"/);
   assert.match(source, /readyRef\.current/);
@@ -101,6 +108,7 @@ test("tasks keep stable boot and date parsing internals", async () => {
 });
 
 test("all task UI copy is translator-backed and desktop/mobile affordances exist", async () => {
+  // RETAINED-SOURCE-ASSERTION: translator keys and host-selected CSS branches are static localization/layout inventory.
   const source = await read("src/production/TasksProduction.tsx");
   const styles = await read("src/production/tasks.css");
   assert.match(source, /translate: Translate/);
@@ -119,6 +127,7 @@ test("all task UI copy is translator-backed and desktop/mobile affordances exist
 });
 
 test("task polish keeps rows scannable and create, edit, and focus flows accessible", async () => {
+  // RETAINED-SOURCE-ASSERTION: CSS density rules remain structural; their interactive counterparts render separately.
   const styles = await read("src/production/tasks.css");
   assert.match(styles, /tasks-create\.is-open/);
   assert.match(styles, /task-check\[aria-pressed="true"\]/);
