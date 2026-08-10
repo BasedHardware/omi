@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 487-489,1080-1081
+desktop/macos/Desktop/Sources/FloatingControlBar/ARCHITECTURE.md
+  s_8815d69cdccdc7::t_3b333b102d9988 41-45
+desktop/macos/Desktop/Tests/FloatingGlassChromeTests.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 222-224
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 752-798,802-803,820-821,823-825
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchGlassChrome.swift
+  s_8815d69cdccdc7::t_8f464fb6b228d3 194-197,224-225
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_8815d69cdccdc7::t_a186cf8871cfb0 324,327,330-333,335-341,355,802,841,874,930-931,985-987,998,1269,1761-1763,1777,1853,1862-1891,2047,4831
+  s_8815d69cdccdc7::t_3b333b102d9988 164-167,1055
+  s_8815d69cdccdc7::t_ce01741bcc1a13 1892,1973,2113,2127,2136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0476f81a20e90f93796721d00f672a0a562a5449",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
