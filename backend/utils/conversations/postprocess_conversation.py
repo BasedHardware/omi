@@ -109,7 +109,9 @@ def postprocess_conversation(
         )  # Store transcript segments at least if smth fails later
         if prerecorded_failed:
             fail_reason = (
-                'STT empty segments' if not prerecorded_segments else f'STT transcript too short ({new_count} vs {count})'
+                'STT empty segments'
+                if not prerecorded_segments
+                else f'STT transcript too short ({new_count} vs {count})'
             )
             conversations_db.set_postprocessing_status(
                 uid, conversation.id, PostProcessingStatus.failed, fail_reason=fail_reason

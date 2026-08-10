@@ -1593,7 +1593,9 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
             sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
         ),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
-        'prerecorded': list(sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))),
+        'prerecorded': list(
+            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
     }
 
 

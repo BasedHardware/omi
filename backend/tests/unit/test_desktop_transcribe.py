@@ -199,7 +199,6 @@ def _desktop_transcribe_isolation():
         _deepgram.LiveTranscriptionEvents = MagicMock()
         sys.modules.setdefault('deepgram', _deepgram)
 
-
         def _parse_options_header(value):
             if value is None:
                 return b'', {}

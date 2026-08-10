@@ -97,4 +97,3 @@ langdetect==1.0.9
 
 # Speaker embedding (via speaker_identification -> speaker_embedding -> scipy)
 scipy==1.14.0
-

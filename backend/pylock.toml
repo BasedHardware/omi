@@ -299,10 +299,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/0a/ed/86ed74d8829c3bc56
 wheels = [{ url = "https://files.pythonhosted.org/packages/fd/4d/e6e40f93031adbf654d34e542bd396e9f3bc1c6209b40c920d58c9e1317a/fakeredis-2.36.2-py3-none-any.whl", upload-time = 2026-06-17T13:25:36Z, size = 141039, hashes = { sha256 = "84cbb9c74ca8946c0d2499daadf3a5d0bfe3cfbac71e3398316d1a1eab3421c4" } }]
 
 [[packages]]
-name = "fal-client"
-version = "0.4.1"
-
-[[packages]]
 name = "fastapi"
 version = "0.121.0"
 sdist = { url = "https://files.pythonhosted.org/packages/8c/e3/77a2df0946703973b9905fd0cde6172c15e0781984320123b4f5079e7113/fastapi-0.121.0.tar.gz", upload-time = 2025-11-03T10:25:54Z, size = 342412, hashes = { sha256 = "06663356a0b1ee93e875bbf05a31fb22314f5bed455afaaad2b2dad7f26e98fa" } }

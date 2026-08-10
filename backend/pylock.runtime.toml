@@ -281,10 +281,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/08/41/85d2d28466fca9373
 wheels = [{ url = "https://files.pythonhosted.org/packages/80/03/6ea8b1b2a5ab40a7a60dc464d3daa7aa546e0a74d74a9f8ff551ea7905db/executing-2.0.1-py2.py3-none-any.whl", upload-time = 2023-10-29T10:17:10Z, size = 24922, hashes = { sha256 = "eac49ca94516ccc753f9fb5ce82603156e590b27525a8bc32cce8ae302eb61bc" } }]
 
 [[packages]]
-name = "fal-client"
-version = "0.4.1"
-
-[[packages]]
 name = "fastapi"
 version = "0.121.0"
 sdist = { url = "https://files.pythonhosted.org/packages/8c/e3/77a2df0946703973b9905fd0cde6172c15e0781984320123b4f5079e7113/fastapi-0.121.0.tar.gz", upload-time = 2025-11-03T10:25:54Z, size = 342412, hashes = { sha256 = "06663356a0b1ee93e875bbf05a31fb22314f5bed455afaaad2b2dad7f26e98fa" } }
