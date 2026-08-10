@@ -1192,8 +1192,8 @@ def _merge_segments(
         same_prev_speaker = word['speaker'] == segments[-1]['speaker'] if segments else False
         seconds_from_prev = word['start'] - segments[-1]['end'] if segments else 0
 
-        # TODO: consider having a max segment size too
-        if segments and same_prev_speaker and seconds_from_prev < 30:
+        within_max_duration = word['end'] - segments[-1]['start'] < 30 if segments else False
+        if segments and same_prev_speaker and seconds_from_prev < 30 and within_max_duration:
             segments[-1]['end'] = word['end']
             segments[-1]['text'] += ' ' + word['text']
         else:
