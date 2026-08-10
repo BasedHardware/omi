@@ -10,7 +10,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type {
+  ChatAcceptedFrame,
   ChatAttachment,
+  ChatCompletedAssistantMessage,
+  ChatHistoryPageWire,
+  ChatHumanMessage,
   ChatMessage,
   ChatMessageOp,
   ChatTerminalFrame,
@@ -32,15 +36,26 @@ import { ScriptedHttp } from "../fakes.js";
 
 function canonicalMessage(
   id: string,
+  sender: "human",
+  text: string,
+  attachments?: readonly ChatAttachment[],
+): ChatHumanMessage;
+function canonicalMessage(
+  id: string,
+  sender: "ai",
+  text: string,
+  attachments?: readonly ChatAttachment[],
+): ChatCompletedAssistantMessage;
+function canonicalMessage(
+  id: string,
   sender: "human" | "ai",
   text: string,
   attachments: readonly ChatAttachment[] = [],
 ): ChatMessage {
-  return {
+  const fields = {
     id: id as RecordId,
     text,
-    sender,
-    type: "text",
+    type: "text" as const,
     createdAt: 1_786_352_400_000,
     updatedAt: 1_786_352_400_000,
     chatSessionId: null,
@@ -50,10 +65,12 @@ function canonicalMessage(
     messageSource: "desktop_chat",
     rating: null,
     reported: false,
-    generationOutcome: sender === "ai" ? "completed" : null,
     revision: `revision-${id}`,
     attachments,
   };
+  return sender === "human"
+    ? { ...fields, sender, generationOutcome: null }
+    : { ...fields, sender, generationOutcome: "completed" };
 }
 
 test("attachment metadata survives absent content and round-trips", () => {
@@ -129,9 +146,38 @@ test("cancelled and completed terminals are distinct and cancellation retains th
     generationOutcome: "cancelled" as const,
   };
   const cancelled: ChatTerminalFrame = { kind: "cancelled", message: partial };
-  const completed: ChatTerminalFrame = { kind: "done", message: partial };
+  const completed: ChatTerminalFrame = {
+    kind: "done",
+    message: canonicalMessage("assistant-complete-01", "ai", "The complete answer"),
+  };
   assert.notEqual(cancelled.kind, completed.kind);
   assert.equal(cancelled.message.text, "The retained partial");
+});
+
+test("exported chat types exclude illegal message, terminal, and page states", () => {
+  const human = canonicalMessage("human-contract-state", "human", "Question");
+  const completed = canonicalMessage("assistant-contract-state", "ai", "Answer");
+
+  const acceptedAi: ChatAcceptedFrame = {
+    kind: "accepted",
+    // @ts-expect-error accepted frames carry a canonical human message only
+    message: completed,
+    generation: { id: "generation-01" },
+  };
+  // @ts-expect-error done frames carry a completed canonical assistant message only
+  const doneHuman: ChatTerminalFrame = { kind: "done", message: human };
+  // @ts-expect-error cancelled frames require generationOutcome=cancelled
+  const cancelledCompleted: ChatTerminalFrame = { kind: "cancelled", message: completed };
+  // @ts-expect-error an AI message cannot carry the human-only null outcome
+  const aiWithoutTerminalOutcome: ChatMessage = { ...completed, generationOutcome: null };
+  // @ts-expect-error hasOlder=true requires an opaque older cursor
+  const missingOlderCursor: ChatHistoryPageWire = { hasOlder: true, olderCursor: null };
+
+  assert.equal(acceptedAi.message.sender, "ai");
+  assert.equal(doneHuman.kind, "done");
+  assert.equal(cancelledCompleted.kind, "cancelled");
+  assert.equal(aiWithoutTerminalOutcome.generationOutcome, null);
+  assert.equal(missingOlderCursor.olderCursor, null);
 });
 
 test("idempotent send payload hash covers the ordered attachment id list", () => {
