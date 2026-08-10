@@ -141,9 +141,15 @@ def _control_write_ready(db_client: Any, uid: str) -> tuple[bool, str]:
     return False, str(decision.reason)
 
 
-def _ensure_user_control_only(db_client: Any, *, uid: str) -> list[str]:
-    """Merge only the per-user control doc; never touch global read/write gates."""
+def _ensure_user_control_only(*, uid: str) -> list[str]:
+    """Merge only the per-user control doc; never touch global read/write gates.
+
+    Writes through the configured document store (``get_document_store``, ADR-0004) — the same seam
+    ``canonical_write_decision``/``read_v3_control`` read from — so ``--ensure-user-control`` actually
+    makes a Mongo-backed user write-ready instead of writing to Firestore while the recheck reads Mongo.
+    """
     from database.memory_collections import MemoryCollections
+    from database.store import get_document_store
     from scripts.enroll_canonical_memory_user import build_user_control_state
     from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -153,7 +159,7 @@ def _ensure_user_control_only(db_client: Any, *, uid: str) -> list[str]:
     generation = int(trusted.account_generation)
     path = MemoryCollections(uid=uid).memory_control_state
     payload = build_user_control_state(uid=uid, stage="write", account_generation=generation)
-    db_client.document(path).set(payload, merge=True)
+    get_document_store().set(path, payload, merge=True)
     return [path]
 
 
@@ -348,7 +354,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
     if not ready:
         if args.ensure_user_control:
             try:
-                written = _ensure_user_control_only(db_client, uid=args.uid)
+                written = _ensure_user_control_only(uid=args.uid)
                 notes.append(f"ensured_user_control={written[0]}")
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"ensure_user_control:{_safe_error(exc)}")
