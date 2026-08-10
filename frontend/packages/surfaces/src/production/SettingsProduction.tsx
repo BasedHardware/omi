@@ -137,7 +137,10 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const account = accountPresentation(phase, snapshot);
   const planNotice = entitlementNotice(entitlement, canRouteUpgrade);
   const usage = usageLabelArgs(entitlement);
-  const showAppearance = account !== "unavailable";
+  // Appearance is snapshot-backed and must not render under an unproven account
+  // presentation (loading) or a blackout — either would claim a selected value
+  // before the surface is ready to stand behind it.
+  const showAppearance = snapshot !== null && (account === "signed-in" || account === "signed-out");
   const showPlan = account === "signed-in";
 
   const changeAppearance = async (selection: AppearanceSelection): Promise<void> => {
@@ -247,7 +250,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
             </div>
           )}
         </section>
-        {showAppearance && (
+        {showAppearance && snapshot && (
           <section
             className="settings-section settings-appearance-section"
             aria-labelledby="settings-appearance-heading"
@@ -259,8 +262,8 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
               <span>{t(locale, "appearance.title")}</span>
               <select
                 aria-label={t(locale, "appearance.title")}
-                value={snapshot?.appearance ?? "default"}
-                disabled={!snapshot || savePhase === "saving" || account === "loading"}
+                value={snapshot.appearance}
+                disabled={savePhase === "saving"}
                 onChange={(event) => void changeAppearance(event.target.value as AppearanceSelection)}
               >
                 {APPEARANCE_OPTIONS.map((option) => (
