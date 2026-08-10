@@ -88,18 +88,22 @@ test("clientId and shared custody are injected into both native transport hosts"
   );
   assert.match(
     listenSocket,
-    /func makeListenHandler\(\)[\s\S]*ListenSocketHandler\(baseURL: baseURL, custody: custody\)/,
+    /func makeListenHandler\(clientId: String\? = nil\)[\s\S]*ListenSocketHandler\(baseURL: baseURL, custody: custody, clientId: clientId\)/,
   );
+  assert.match(listenSocket, /forHTTPHeaderField: "x-omi-client-id"/);
   assert.doesNotMatch(listenSocket, /private let token: String\?/);
   assert.match(
     main,
     /ShellTransportAuthority\(\s*baseURL: base, token: session\.token,\s*onSuccessfulSignOut:/,
   );
   assert.match(main, /authority\.makeHTTPHandler\(clientId: runClientId\)/);
+  assert.match(main, /authority\.makeListenHandler\(clientId: runClientId\)/);
+  assert.match(main, /listen\?\.cancelAll\(\)/);
   // red-proof: deleting the `clientId` parameter from BridgeHttpHandler.init
   // and reading `ProcessInfo.processInfo.environment["OMI_RUN_CLIENT_ID"]`
   // directly inside BridgeHttpPolicy.prepare, or retaining a private token in
-  // ListenSocketHandler, reddens a named assertion above.
+  // ListenSocketHandler, or dropping exact run/shell attribution from Listen,
+  // reddens a named assertion above.
 });
 
 // This suite needs an actual build to have run (it reads bundle files under
