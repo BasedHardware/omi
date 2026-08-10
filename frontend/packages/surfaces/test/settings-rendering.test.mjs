@@ -236,38 +236,46 @@ test("sign-out announces completion in a polite live region without error tone",
   }
 });
 
-test("sign-out replay stays quiet: second revoke does not surface an operation error", async () => {
-  const rendered = await renderSettings("signed-in");
+test("sign-out replay through the mounted store stays quiet", async () => {
+  // Render-layer proof: the same store the surface subscribed to is revoked
+  // again after the UI already reached signed-out. Replay must not surface an
+  // operation error on the live tree.
+  const SettingsProduction = await loadProductionExport("SettingsProduction.tsx", "SettingsProduction");
+  const fixtureSettingsStore = await loadProductionExport("settings-fixtures.ts", "fixtureSettingsStore");
+  const store = fixtureSettingsStore("signed-in");
+  const rendered = await renderComponent(SettingsProduction, {
+    store,
+    fixture: "signed-in",
+    locale: "en",
+  });
   try {
     const signOut = rendered.container.querySelector('button.settings-sign-out[aria-label="' + EN_MESSAGES["settings.signOut"] + '"]');
     assert.ok(signOut);
     await rendered.act(async () => {
       signOut.click();
       await Promise.resolve();
+      await Promise.resolve();
     });
-    assert.ok(rendered.container.querySelector('[data-settings-account="signed-out"]'));
-    const again = rendered.container.querySelector('button.settings-sign-in');
-    assert.ok(again || rendered.container.querySelector('[data-settings-account="signed-out"]'));
-    // Replay revoke through the store after identity is already null.
-    const SettingsProduction = await loadProductionExport("SettingsProduction.tsx", "SettingsProduction");
-    void SettingsProduction;
-    const fixtureSettingsStore = await loadProductionExport("settings-fixtures.ts", "fixtureSettingsStore");
-    const store = fixtureSettingsStore("signed-out");
-    await store.signOut();
-    await store.signOut();
-    const replayed = await renderComponent(
-      await loadProductionExport("SettingsProduction.tsx", "SettingsProduction"),
-      { store, fixture: "signed-out", locale: "en" },
-    );
-    try {
-      assert.equal(replayed.container.querySelector(".operation-error"), null);
-      assert.ok(replayed.container.querySelector('[data-settings-account="signed-out"]'));
-    } finally {
-      await replayed.cleanup();
-    }
+    assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]') != null, true);
+    await rendered.act(async () => {
+      await store.signOut();
+      await Promise.resolve();
+    });
+    assert.equal(rendered.container.querySelector(".operation-error"), null);
+    assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]') != null, true);
   } finally {
     await rendered.cleanup();
   }
+});
+
+test("fixture store sign-out replay is a quiet success by contract", async () => {
+  // Store-contract altitude: revoke twice with no surface mounted. The render
+  // suite covers the mounted interaction separately.
+  const fixtureSettingsStore = await loadProductionExport("settings-fixtures.ts", "fixtureSettingsStore");
+  const store = fixtureSettingsStore("signed-out");
+  await store.signOut();
+  await store.signOut();
+  assert.equal((await store.snapshot()).identity, null);
 });
 
 test("appearance stays visibly shell-local, not an accidental server omission", async () => {
