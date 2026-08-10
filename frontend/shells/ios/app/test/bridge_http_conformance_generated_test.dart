@@ -2,7 +2,7 @@
 // The test calls BridgeHttpHost's policy seam, the same seam _handle uses.
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/bridge_http_host.dart';
+import 'package:omi_webview_proto/bridge_http_host.dart';
 
 const _rows = <Map<String, dynamic>>[
   {
