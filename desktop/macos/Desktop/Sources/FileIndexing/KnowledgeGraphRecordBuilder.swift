@@ -95,9 +95,19 @@ enum KnowledgeGraphRecordBuilder {
         ))
     }
 
+    let acceptedNodeIds = Set(nodeRecords.map(\.nodeId))
+
     for edge in edges {
-      let remappedSource = idRemap[edge.sourceId] ?? edge.sourceId
-      let remappedTarget = idRemap[edge.targetId] ?? edge.targetId
+      // An edge endpoint is only usable if it remaps onto a node this same call
+      // accepted. Model output is untrusted, so an endpoint that names a node
+      // that was dropped, disallowed, truncated away, or never emitted must not
+      // become a dangling `local_kg_edges` row referencing a node that does not
+      // exist.
+      guard let remappedSource = idRemap[edge.sourceId],
+        let remappedTarget = idRemap[edge.targetId],
+        acceptedNodeIds.contains(remappedSource),
+        acceptedNodeIds.contains(remappedTarget)
+      else { continue }
       guard remappedSource != remappedTarget else { continue }
 
       let edgeId =
