@@ -137,53 +137,63 @@ export const createChatGenerationSupervisor = (
 
   const finalize = (
     state: ActiveGeneration,
-    kind: "done" | "cancelled",
+    kind: "done" | "cancelled" | "failed",
     text: string,
-  ): void => {
-    if (state.terminal) return;
+  ): boolean => {
+    if (state.terminal) return true;
     state.terminal = true;
     cancelRun(state);
-    const message = text.length === 0 ? null : assistantMessage(state, text);
-    const prior = deps.events.listAfter(state.accountId, state.generationId, null);
-    if (prior === null) throw new TypeError("chat generation event log disappeared");
     try {
+      const message = text.length === 0 ? null : assistantMessage(state, text);
+      const prior = deps.events.listAfter(state.accountId, state.generationId, null);
+      if (prior === null) throw new TypeError("chat generation event log disappeared");
       deps.finalization.finalize({
         accountId: state.accountId,
         generationId: state.generationId,
         eventId: deps.eventId(state.accountId, state.generationId, kind, prior.length + 1),
         createdAt: deps.nowEpochMilliseconds(),
-        frame: kind === "done"
-          ? { kind: "done", message: message ?? assistantMessage(state, FALLBACK_TEXT) }
-          : { kind: "cancelled", message },
+        frame: kind === "failed"
+          ? {
+              kind: "failed",
+              error: { code: "generation_interrupted", retryable: true },
+            }
+          : kind === "done"
+            ? { kind: "done", message: message ?? assistantMessage(state, FALLBACK_TEXT) }
+            : { kind: "cancelled", message },
       });
-    } catch (error) {
+    } catch {
       state.terminal = false;
-      throw error;
+      return false;
     }
     active.delete(keyOf(state.accountId, state.generationId));
+    return true;
   };
 
-  const failInterrupted = (accountId: string, generationId: string): void => {
-    const prior = deps.events.listAfter(accountId, generationId, null);
-    if (prior === null) return;
-    deps.finalization.finalize({
-      accountId,
-      generationId,
-      eventId: deps.eventId(accountId, generationId, "failed", prior.length + 1),
-      createdAt: deps.nowEpochMilliseconds(),
-      frame: {
-        kind: "failed",
-        error: { code: "generation_interrupted", retryable: true },
-      },
-    });
+  const failInterrupted = (accountId: string, generationId: string): boolean => {
+    try {
+      const prior = deps.events.listAfter(accountId, generationId, null);
+      if (prior === null) return false;
+      deps.finalization.finalize({
+        accountId,
+        generationId,
+        eventId: deps.eventId(accountId, generationId, "failed", prior.length + 1),
+        createdAt: deps.nowEpochMilliseconds(),
+        frame: {
+          kind: "failed",
+          error: { code: "generation_interrupted", retryable: true },
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
-  const cancelFromDurableState = (accountId: string, generationId: string): void => {
+  const cancelFromDurableState = (accountId: string, generationId: string): boolean => {
     const admitted = deps.messages.readHumanByGeneration(accountId, generationId);
     const events = deps.events.listAfter(accountId, generationId, null);
     if (admitted === null || events === null) {
-      failInterrupted(accountId, generationId);
-      return;
+      return failInterrupted(accountId, generationId);
     }
     const state: ActiveGeneration = {
       accountId,
@@ -194,7 +204,7 @@ export const createChatGenerationSupervisor = (
       runCancelled: false,
       terminal: false,
     };
-    finalize(state, "cancelled", state.text);
+    return finalize(state, "cancelled", state.text);
   };
 
   const supervisor: ChatGenerationSupervisor = Object.freeze({
@@ -207,7 +217,7 @@ export const createChatGenerationSupervisor = (
       }
       if (lifecycle.state === "terminal") return;
       if (lifecycle.state === "cancellation_requested") {
-        cancelFromDurableState(input.accountId, generationId);
+        void cancelFromDurableState(input.accountId, generationId);
         return;
       }
       if (active.has(key)) return;
@@ -235,35 +245,46 @@ export const createChatGenerationSupervisor = (
             prompt: input.stored.message.text,
             context,
             onDelta(text): void {
-              if (state.terminal || text.length === 0) return;
-              state.text += text;
-              append(state, { kind: "delta", text });
+              try {
+                if (state.terminal || text.length === 0) return;
+                append(state, { kind: "delta", text });
+                state.text += text;
+              } catch {
+                void finalize(state, "failed", "");
+              }
             },
             onComplete(): void {
-              finalize(state, "done", state.text);
+              void finalize(state, "done", state.text);
             },
             onError(): void {
-              finalize(state, "done", FALLBACK_TEXT);
+              void finalize(state, "done", FALLBACK_TEXT);
             },
           });
         })
-        .catch(() => finalize(state, "done", FALLBACK_TEXT));
+        .catch(() => { void finalize(state, "done", FALLBACK_TEXT); });
     },
 
     cancel(accountId: string, generationId: string): void {
       const state = active.get(keyOf(accountId, generationId));
       queueMicrotask(() => {
-        if (state !== undefined) finalize(state, "cancelled", state.text);
-        else cancelFromDurableState(accountId, generationId);
+        if (state !== undefined) void finalize(state, "cancelled", state.text);
+        else void cancelFromDurableState(accountId, generationId);
       });
     },
 
     recoverInterrupted(): void {
       for (const lifecycle of deps.events.listUnterminated()) {
-        if (lifecycle.state === "cancellation_requested") {
-          cancelFromDurableState(lifecycle.accountId, lifecycle.generationId);
-        } else {
-          failInterrupted(lifecycle.accountId, lifecycle.generationId);
+        const recovered = lifecycle.state === "cancellation_requested"
+          ? cancelFromDurableState(lifecycle.accountId, lifecycle.generationId)
+          : failInterrupted(lifecycle.accountId, lifecycle.generationId);
+        if (recovered) {
+          const key = keyOf(lifecycle.accountId, lifecycle.generationId);
+          const state = active.get(key);
+          if (state !== undefined) {
+            state.terminal = true;
+            cancelRun(state);
+            active.delete(key);
+          }
         }
       }
     },

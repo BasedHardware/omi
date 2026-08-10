@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   createInMemoryLocalServiceStores,
   createLocalDevService,
+  type LocalServiceStores,
 } from "../app-facing";
 import {
   createChatGenerationSupervisor,
@@ -27,6 +28,8 @@ import {
   type ChatGenerationSource,
 } from "../chat/generation-source";
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
+import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
+import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
 
@@ -137,6 +140,19 @@ const readOutcomeWithin = async (
   ]);
   if (timer !== null) clearTimeout(timer);
   return outcome;
+};
+
+const waitForTerminalLifecycle = async (
+  events: ChatGenerationEventsStore,
+  generationId: string,
+  milliseconds: number,
+): Promise<"terminal" | "timeout"> => {
+  const deadline = Date.now() + milliseconds;
+  while (Date.now() < deadline) {
+    if (events.readLifecycle(ACCOUNT, generationId)?.state === "terminal") return "terminal";
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return "timeout";
 };
 
 const history = async (local: ReturnType<typeof createLocalDevService>): Promise<ChatMessageRecord[]> => {
@@ -371,6 +387,153 @@ describe("ratified chat generation wire red proofs", () => {
     expect(frames.at(-1)?.event).toBe("cancelled");
     expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
       .toBe("terminal");
+    db.close();
+  });
+
+  test("a provider callback storage exception becomes one failed terminal without escaping", async () => {
+    const base = createInMemoryLocalServiceStores();
+    let injected = true;
+    const throwingEvents: ChatGenerationEventsStore = Object.freeze({
+      append(input) {
+        if (input.frame.kind === "delta" && injected) {
+          injected = false;
+          throw new Error("injected delta append failure");
+        }
+        return base.chatEvents.append(input);
+      },
+      listAfter: base.chatEvents.listAfter,
+      readLifecycle: base.chatEvents.readLifecycle,
+      listUnterminated: base.chatEvents.listUnterminated,
+      requestCancellation: base.chatEvents.requestCancellation,
+      reset: base.chatEvents.reset,
+    });
+    const stores: LocalServiceStores = Object.freeze({ ...base, chatEvents: throwingEvents });
+    let callbackError: string | null = null;
+    let cancelCalls = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => {
+          try {
+            input.onDelta("must not remain active");
+            input.onComplete();
+            input.onError(new Error("late provider error"));
+          } catch (error) {
+            callbackError = error instanceof Error ? error.message : String(error);
+          }
+        });
+        return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+      },
+    });
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-callback-storage-proof",
+      generationSource: source,
+    });
+    const admitted = await post(local, create("callback-storage-failure"));
+    const reader = admitted.body!.getReader();
+    const initial = await readUntil(reader, "snapshot");
+    const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const lifecycle = await waitForTerminalLifecycle(
+      throwingEvents,
+      accepted.data.generation.id,
+      100,
+    );
+    if (lifecycle === "timeout") await reader.cancel();
+
+    expect(lifecycle).toBe("terminal");
+    expect(callbackError).toBeNull();
+    const events = base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)!;
+    expect(events.map((event) => event.frame.kind)).toEqual(["accepted", "snapshot", "failed"]);
+    expect(events.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind)))
+      .toHaveLength(1);
+    expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+    expect(cancelCalls).toBe(1);
+    if (lifecycle === "terminal") {
+      const completed = parseSse(await readRemaining(reader, initial));
+      expect(completed.at(-1)?.data).toEqual({
+        kind: "failed",
+        error: { code: "generation_interrupted", retryable: true },
+      });
+    }
+    db.close();
+  });
+
+  test("a durable terminalization failure stays active until recovery can append failed", async () => {
+    const base = createInMemoryLocalServiceStores();
+    let allowTerminal = false;
+    const finalization: ChatGenerationFinalization = Object.freeze({
+      finalize(input) {
+        if (!allowTerminal) throw new Error("injected durable terminal failure");
+        return base.chatFinalization.finalize(input);
+      },
+    });
+    let cancelCalls = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => {
+          input.onDelta("visible before terminal failure");
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+      },
+    });
+    const supervisor = createChatGenerationSupervisor({
+      source,
+      context: createEmptyChatGenerationContextSource(),
+      messages: base.chatMessages,
+      events: base.chatEvents,
+      finalization,
+      nowEpochMilliseconds: () => 1_786_352_400_100,
+      assistantMessageId: (_accountId, generationId) => `assistant-${generationId}`,
+      eventId: (_accountId, generationId, kind, sequence) =>
+        `event-${generationId}-${kind}-${sequence}`,
+      revision: (_accountId, messageId, payloadHash) => `revision-${messageId}-${payloadHash}`,
+    });
+    const stores: LocalServiceStores = Object.freeze({
+      ...base,
+      chatFinalization: finalization,
+    });
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-terminal-recovery-proof",
+      generationSource: source,
+      chatSupervisor: supervisor,
+    });
+    const admitted = await post(local, create("terminal-recovery"));
+    const reader = admitted.body!.getReader();
+    const initial = await readUntil(reader, "delta");
+    const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(base.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      .toBe("active");
+    expect(base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)?.map(
+      (event) => event.frame.kind,
+    )).toEqual(["accepted", "snapshot", "delta"]);
+    expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+    expect(cancelCalls).toBe(1);
+
+    allowTerminal = true;
+    supervisor.recoverInterrupted();
+    expect(await waitForTerminalLifecycle(base.chatEvents, accepted.data.generation.id, 100))
+      .toBe("terminal");
+    const completed = parseSse(await readRemaining(reader, initial));
+    expect(completed.at(-1)?.event).toBe("failed");
+    expect(completed.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event)))
+      .toHaveLength(1);
+    expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
     db.close();
   });
 
