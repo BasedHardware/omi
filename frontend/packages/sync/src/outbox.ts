@@ -126,9 +126,10 @@ export class Outbox {
   /** Fired after every state transition and terminal outcome — stores use it
    * to re-render. Not a public event bus; one owner (the store) subscribes. */
   public onChange: (() => void) | null = null;
-  /** Fired once per terminal outcome, with the op that reached it. Stores use
-   * confirmed creates/patches/deletes to fold optimistic state into the
-   * durable projection without waiting for a refresh. */
+  /** Fired once per terminal outcome, after its tombstone and any dead letter
+   * are durable. Stores use confirmed creates/patches/deletes to fold
+   * optimistic state into the durable projection without waiting for a
+   * refresh. */
   public onOutcome:
     | ((op: PendingOp, outcome: import("@omi-core/contracts").OperationOutcome) => void | Promise<void>)
     | null = null;
@@ -279,7 +280,6 @@ export class Outbox {
         await this.log.append(
           JSON.stringify({ t: "tombstone", opId: eff.opId, outcome: eff.outcome } satisfies JournalEntry),
         );
-        await this.onOutcome?.(eff.op, eff.outcome);
         if (eff.outcome.state === "dead") {
           const op = eff.op;
           const letters = await this.deadLetters();
@@ -298,6 +298,7 @@ export class Outbox {
           });
           await this.kv.set(DEAD_LETTERS_KEY, JSON.stringify(letters));
         }
+        await this.onOutcome?.(eff.op, eff.outcome);
         return;
       }
       case "telemetry": {
