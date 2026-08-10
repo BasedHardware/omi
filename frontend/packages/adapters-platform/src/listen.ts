@@ -79,6 +79,7 @@ export interface PlatformListenTransportSnapshot {
   readonly phase: PlatformListenTransportPhase;
   readonly captureRequested: boolean;
   readonly startedAt: number | null;
+  readonly stoppedAt: number | null;
   readonly disconnectedAt: number | null;
   readonly failureRetryable: boolean | null;
 }
@@ -159,6 +160,7 @@ export function createPlatformListenCaptureClient(
   let captureRequested = false;
   let phase: PlatformListenTransportPhase = "idle";
   let startedAt: number | null = null;
+  let stoppedAt: number | null = null;
   let disconnectedAt: number | null = null;
   let failureRetryable: boolean | null = null;
   let clientConversationId: string | null = null;
@@ -214,17 +216,18 @@ export function createPlatformListenCaptureClient(
     opened.addEventListener("open", () => {
       if (currentGeneration !== socketGeneration || socket !== opened || !captureRequested) return;
       if (handle.port.getConnectionState().status === "closed") handle.ingest.acceptReconnect();
-      phase = "active";
       failureRetryable = null;
-      disconnectedAt = null;
       notify();
     });
     opened.addEventListener("message", (event) => {
       if (currentGeneration !== socketGeneration || socket !== opened || !captureRequested) return;
       if (typeof event.data !== "string") return;
       handle.ingest.acceptTextFrame(event.data);
-      phase = "active";
-      failureRetryable = null;
+      if (handle.port.getConnectionState().status === "open") {
+        phase = "active";
+        failureRetryable = null;
+        disconnectedAt = null;
+      }
       const entitlement = handle.port.getEntitlementState();
       if (
         entitlement !== null
@@ -232,6 +235,7 @@ export function createPlatformListenCaptureClient(
         && (entitlement.status === "limit_reached" || entitlement.status === "upgrade_required")
       ) {
         terminalCeiling = true;
+        stoppedAt = options.env.now();
         phase = "failed";
         failureRetryable = false;
         socketGeneration += 1;
@@ -242,8 +246,13 @@ export function createPlatformListenCaptureClient(
     });
     opened.addEventListener("error", () => {
       if (currentGeneration !== socketGeneration || socket !== opened || !captureRequested) return;
+      socketGeneration += 1;
+      socket = null;
+      disconnectedAt = options.env.now();
+      handle.ingest.acceptClose(1006);
       failureRetryable = true;
-      notify();
+      opened.close();
+      scheduleReconnect();
     });
     opened.addEventListener("close", (event) => {
       if (currentGeneration !== socketGeneration || socket !== opened) return;
@@ -260,6 +269,7 @@ export function createPlatformListenCaptureClient(
       const advice = handle.port.getListenCaptureCloseAdvice();
       if (advice?.entitlementExhaustion) {
         terminalCeiling = true;
+        stoppedAt = disconnectedAt;
         phase = "failed";
         failureRetryable = false;
         notify();
@@ -271,6 +281,7 @@ export function createPlatformListenCaptureClient(
         return;
       }
       phase = "failed";
+      stoppedAt = disconnectedAt;
       failureRetryable = false;
       notify();
     });
@@ -281,6 +292,7 @@ export function createPlatformListenCaptureClient(
       phase,
       captureRequested,
       startedAt,
+      stoppedAt,
       disconnectedAt,
       failureRetryable,
     }),
@@ -290,7 +302,13 @@ export function createPlatformListenCaptureClient(
       return () => void listeners.delete(listener);
     },
     async refresh() {
-      if (captureRequested && !terminalCeiling && socket === null && cancelReconnect === null) connect(true);
+      if (
+        captureRequested
+        && !terminalCeiling
+        && failureRetryable !== false
+        && socket === null
+        && cancelReconnect === null
+      ) connect(true);
       notify();
     },
     async start() {
@@ -305,6 +323,7 @@ export function createPlatformListenCaptureClient(
       observeHandle();
       captureRequested = true;
       startedAt = options.env.now();
+      stoppedAt = null;
       disconnectedAt = null;
       failureRetryable = null;
       terminalCeiling = false;
@@ -321,6 +340,7 @@ export function createPlatformListenCaptureClient(
       socket = null;
       phase = "idle";
       startedAt = null;
+      stoppedAt = null;
       disconnectedAt = null;
       failureRetryable = null;
       terminalCeiling = false;

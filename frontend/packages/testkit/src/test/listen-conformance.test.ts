@@ -438,6 +438,7 @@ test("listen capture stream port surfaces transcript, connection, and entitlemen
   assert.deepEqual(port.getConnectionState(), { status: "idle" });
   assert.equal(port.getEntitlementState(), null);
 
+  ingest.acceptTextFrame(JSON.stringify({ type: "service_status", status: "ready" }));
   ingest.acceptTextFrame(
     JSON.stringify([
       { id: "seg-port-1", text: "hello port", is_user: true, start: 0, end: 1 },
