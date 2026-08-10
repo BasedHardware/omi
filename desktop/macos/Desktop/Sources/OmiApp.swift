@@ -1086,7 +1086,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       openMainAppWindow()
       return .summon
     }
-    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow())
+    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow(), presentation: ShellSummon.presentation())
     switch action {
     case .summon:
       openMainAppWindow()

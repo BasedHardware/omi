@@ -438,17 +438,17 @@ struct FloatingControlBarView: View {
         }
         return
       }
-      // Fixed window, animated content: in notch mode the NSPanel frame
-      // never moves for hover expand/collapse — this value carries the
-      // ENTIRE visible morph (black surface height/width, row reveal,
-      // dot fan-out). A gentle spring on open, a bounce-free settle on
-      // close, both Reduce Motion-gated.
+      // SwiftUI carries the visible morph. The panel expands before the content
+      // and collapses only when this animation reports that it has settled.
       let morphAnim: Animation =
         visible
         ? FloatingControlBarWindow.notchHoverMenuExpandAnimation
         : FloatingControlBarWindow.notchHoverMenuCollapseAnimation
-      OmiMotion.withGated(morphAnim) {
+      withAnimation(OmiMotion.gated(morphAnim), completionCriteria: .logicallyComplete) {
         notchSwitcherProgress = visible ? 1 : 0
+      } completion: {
+        guard !visible, !state.isNotchHoverMenuVisible else { return }
+        (window as? FloatingControlBarWindow)?.settleNotchAgentSwitcherCollapse()
       }
     }
     .onChange(of: state.isVoicePresentationActive) { _, active in
@@ -483,13 +483,7 @@ struct FloatingControlBarView: View {
   }
 
   /// Size of the visible black surface behind the floating content.
-  ///
-  /// Notch idle ↔ hover lifecycle: the NSPanel frame is FIXED at the maximum
-  /// hover surface, so the visible surface must derive from the content
-  /// morph (`notchSwitcherProgress`), not from the window geometry — the
-  /// spring on that progress IS the expand/collapse animation. Other states
-  /// (chat, voice, notification, PTT hint) still resize the panel and keep
-  /// the geometry-driven surface.
+  /// Notch hover follows the content morph while AppKit snaps at its boundaries.
   private func floatingSurfaceSize(geometry: GeometryProxy) -> CGSize {
     let notchHoverLifecycle = NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
       usesNotchIsland: state.usesNotchIsland,
@@ -1102,10 +1096,14 @@ struct FloatingControlBarView: View {
     if effectiveHover {
       didExpand = (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true) ?? false
     }
-    OmiMotion.withGated(.easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)) {
+    let hoverAnimation = Animation.easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)
+    withAnimation(OmiMotion.gated(hoverAnimation), completionCriteria: .logicallyComplete) {
       isHovering = effectiveHover && didExpand
+    } completion: {
+      guard state.usesNotchIsland, !effectiveHover, !state.isHoveringBar else { return }
+      (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
     }
-    if !effectiveHover {
+    if !effectiveHover, !state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
     }
   }
@@ -1113,11 +1111,7 @@ struct FloatingControlBarView: View {
   private func isWithinActivationZoneForCurrentMode() -> Bool {
     guard state.usesNotchIsland else { return true }
     guard let window else { return false }
-    // The notch window frame is fixed at the maximum hover surface, so the
-    // activation zone must be derived from the VISIBLE content (collapsed
-    // chrome when idle, the current-agent-count menu when open), never
-    // from the window frame — otherwise hover triggers far below/beside
-    // the visible island.
+    // Exclude the transparent glow margin from hover activation.
     let hitHeight =
       state.isAgentSwitcherExpanded
       ? max(notchChromeHeight, notchChromeHeight + notchHoverMenuHeight)

@@ -37,6 +37,18 @@ final class ShellSummonTests: XCTestCase {
   }
 
   @MainActor
+  func testGlobalLaunchShortcutNeverDismissesAnchoredSignInOrOnboarding() {
+    let window = makeShellWindow()
+    NonintrusiveTestWindow.orderIn(window)
+    defer { window.orderOut(nil) }
+
+    XCTAssertEqual(
+      ShellSummon.toggleAction(for: window, presentation: .anchored),
+      .summon,
+      "Command-O must focus the only setup surface rather than hide it")
+  }
+
+  @MainActor
   func testPermissionSuspensionRestoresTheVisibleShellWithoutRepositioningIt() {
     let window = makeShellWindow()
     window.title = OMIApp.currentWindowTitle
@@ -164,6 +176,54 @@ final class ShellSummonTests: XCTestCase {
       ShellSummonPlacement.shouldReposition(isVisible: true, windowDisplayKey: "1", cursorDisplayKey: nil))
   }
 
+  /// The click-away round trip composes the AppKit presentation with the shortcut toggle policy.
+  /// AppKit orders a `hidesOnDeactivate` window out, and a hidden shell must be summoned—not dismissed—
+  /// by the next Command-O.
+  @MainActor
+  func testClickAwayLeavesTheShellReadyForTheNextCommandOToSummon() {
+    let window = makeShellWindow()
+
+    ShellWindowChrome.dress(window, as: .summoned)
+
+    XCTAssertTrue(window.hidesOnDeactivate)
+    window.orderOut(nil)
+    XCTAssertEqual(ShellSummon.toggleAction(for: window), .summon)
+  }
+
+  func testClickAwayReturnRecordsAndConsumesTheExactFrameOnceOnTheSameDisplay() {
+    let placed = NSRect(x: 180, y: 95, width: 980, height: 720)
+    var clickAwayReturn = ShellClickAwayReturn()
+    clickAwayReturn.record(frame: placed, displayKey: "1")
+
+    let restored = clickAwayReturn.consume(
+      landingDisplayKey: "1",
+      landingVisibleFrame: laptop)
+
+    XCTAssertEqual(restored, placed)
+    XCTAssertNil(clickAwayReturn.consume(landingDisplayKey: "1", landingVisibleFrame: laptop))
+  }
+
+  func testClickAwayReturnConsumesWithoutDraggingTheShellAcrossDisplays() {
+    let placed = NSRect(x: 180, y: 95, width: 980, height: 720)
+    var clickAwayReturn = ShellClickAwayReturn()
+    clickAwayReturn.record(frame: placed, displayKey: "1")
+
+    let restored = clickAwayReturn.consume(
+      landingDisplayKey: "2",
+      landingVisibleFrame: studio)
+
+    XCTAssertNil(restored, "a Command-O from another display must land the shell under the user")
+  }
+
+  func testExplicitDismissalClearsThePendingClickAwayReturn() {
+    let placed = NSRect(x: 180, y: 95, width: 980, height: 720)
+    var clickAwayReturn = ShellClickAwayReturn()
+    clickAwayReturn.record(frame: placed, displayKey: "1")
+
+    clickAwayReturn.clear()
+
+    XCTAssertNil(clickAwayReturn.consume(landingDisplayKey: "1", landingVisibleFrame: laptop))
+  }
   // MARK: - Memory
 
   /// Two displays, two placements, neither overwriting the other. A single remembered frame is the

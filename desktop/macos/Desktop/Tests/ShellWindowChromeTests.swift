@@ -137,19 +137,34 @@ final class ShellWindowChromeTests: XCTestCase {
   // MARK: - Summoned vs anchored
 
   /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and
-  /// clicking off it puts it back. `hidesOnDeactivate` is the whole click-outside dismissal — there is
-  /// no click monitor anywhere, deliberately, because AppKit already owns this.
-  func testASummonedShellFloatsOverOtherAppsAndPutsItselfAwayWhenYouClickOff() {
+  /// clicking outside puts it away. `hidesOnDeactivate` is the native AppKit ownership boundary for
+  /// that behavior, so no global mouse monitor or Accessibility permission is involved.
+  func testASummonedShellFloatsOverOtherAppsAndPutsItselfAwayWhenYouClickOutside() {
     let window = makeWindow()
 
     ShellWindowChrome.dress(window, as: .summoned)
 
     XCTAssertEqual(window.level, .floating, "a summoned surface that sinks behind the app you called it over")
-    XCTAssertTrue(window.hidesOnDeactivate, "clicking away is the only dismissal that needs no affordance")
+    XCTAssertTrue(window.hidesOnDeactivate, "clicking outside must dismiss the summoned shell")
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
     XCTAssertTrue(window.collectionBehavior.contains(.moveToActiveSpace))
   }
 
+  /// `dress` runs repeatedly as auth/onboarding changes presentation. It must write both directions:
+  /// a signed-in shell dismisses on click-away, while sign-in and onboarding survive browser and
+  /// System Settings trips.
+  func testDressingReconcilesClickAwayBehaviorForEachPresentation() {
+    let window = makeWindow()
+
+    ShellWindowChrome.dress(window, as: .summoned)
+    XCTAssertTrue(window.hidesOnDeactivate)
+
+    ShellWindowChrome.dress(window, as: .anchored)
+    XCTAssertFalse(window.hidesOnDeactivate)
+
+    ShellWindowChrome.dress(window, as: .summoned)
+    XCTAssertTrue(window.hidesOnDeactivate)
+  }
   /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
   /// recording and accessibility, and every trip deactivates this app. A shell that auto-hid would
   /// vanish on the way out to grant the thing it just asked for, so before there is an account and a

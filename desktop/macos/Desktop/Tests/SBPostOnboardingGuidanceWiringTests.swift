@@ -210,16 +210,9 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
 
   // MARK: - The orientation cue describes the window the user actually has
 
-  /// This cue has been wrong twice, in opposite directions, which is why it is asserted on substance
-  /// rather than left to review. It first read "I live in your menu bar. Closing this window doesn't
-  /// stop me" — and the window has no close button, `ShellWindowChrome` hides all three traffic
-  /// lights. It was then rewritten to "click another app and I'll step out of the way", which was true
-  /// only while `.summoned` meant `hidesOnDeactivate = true`; the shell now stays in front of your work
-  /// until you ask it to leave, so that sentence promises a disappearance that no longer happens.
-  ///
-  /// What has to hold in either direction: name no control the window does not have, describe the
-  /// behaviour it actually has, and always name the way back.
-  func testTheMenuBarCueDescribesAShellThatStaysUntilYouPutItAway() throws {
+  /// The orientation cue must describe the signed-in shell's actual click-away behavior and name the
+  /// persistent way back after AppKit hides it.
+  func testTheMenuBarCueDescribesClickAwayDismissalAndTheWayBack() throws {
     let cues = SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: ["⌃", "⌘", "O"], talkShortcutTokens: [], setup: SBSetupSnapshot())
     let menubar = try XCTUnwrap(cues.first { $0.id == "menubar" })
@@ -228,12 +221,9 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertFalse(
       title.contains("clos"),
       "there is no close button on this window, and describing one is how the first cue went stale")
-    XCTAssertFalse(
-      title.contains("step out of the way") || title.contains("get out of your way"),
-      "the shell no longer hides itself when another app takes focus; promising it does is the second")
     XCTAssertTrue(
-      title.contains("escape"),
-      "a window that stays in front of everything has to say how to put it away")
+      title.contains("click the desktop") && title.contains("another app"),
+      "the cue must explain that app deactivation dismisses the summoned shell")
     XCTAssertTrue(
       title.contains("menu bar"),
       "the always-available way back must be named — the chord cue is conditional, this one is not")

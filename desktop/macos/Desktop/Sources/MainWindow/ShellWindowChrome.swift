@@ -38,16 +38,23 @@
 //
 //  ## The two presentations, and why there are two
 //
-//  A surface with no ground and no chrome is not a managed application window any more; it is a thing
-//  you summon. `.summoned` says so to AppKit — floating level so it comes up over whatever you were
-//  reading, and `hidesOnDeactivate` so clicking away puts it back. `ShellSummon` owns where it lands.
+//  A surface with no visible chrome is not a conventional managed application window any more; it is a
+//  thing you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you
+//  were reading until focus moves elsewhere. `ShellSummon` owns where it lands.
 //
-//  `.anchored` is the same window before the user has an account and a completed setup. It is not a
-//  style choice: a first run sends people to System Settings for microphone, screen recording and
-//  accessibility, and every one of those trips deactivates this app. A `hidesOnDeactivate` window
-//  vanishes on the way out, and a half-finished setup that disappears when you go to grant the thing
-//  it just asked for is a first run nobody completes. So the shell only becomes summonable once
-//  `ShellSummon` can see a signed-in, onboarded user — and `dress` is idempotent so the switch is a
+//  ## Click-away dismissal
+//
+//  A signed-in shell is a transient summoned surface: press the Open Omi chord, work in it, then click
+//  the desktop or another app to put it away. AppKit already owns that contract through
+//  `hidesOnDeactivate`; using the native property avoids a global mouse monitor or an Accessibility
+//  permission dependency.
+//
+//  `.anchored` is the same window before the user has an account and a completed setup, and what
+//  separates it is still behavioural rather than cosmetic. A first run sends people to System Settings
+//  for microphone, screen recording and accessibility; a `.floating` window sits on top of the Settings
+//  pane and covers the control the user was just told to click. So onboarding stays at `.normal` and
+//  takes a Space of its own (`.fullScreenPrimary`), and the shell only becomes summonable once
+//  `ShellSummon` can see a signed-in, onboarded user — with `dress` idempotent so the switch is a
 //  re-dress, not a rebuild.
 //
 //  Brand: nothing here picks a colour at all (INV-UI-1).
@@ -65,7 +72,7 @@ enum ShellWindowChrome {
   /// Behavioural, not cosmetic — the two differ only in the AppKit properties that decide whether the
   /// window survives losing focus. See this file's header for why a first run needs the second.
   enum Presentation: Equatable, CaseIterable, Sendable {
-    /// Steady state: floats over other apps, and hides itself the moment you click away.
+    /// Steady state: floats over other apps and hides when another app or the desktop takes focus.
     case summoned
     /// Onboarding, sign-in and permission-granting: an ordinary window that stays put.
     case anchored
@@ -140,6 +147,8 @@ enum ShellWindowChrome {
     // ordinary clicks into window drags. `ShellWindowDragSurface` keeps that ownership in SwiftUI.
     window.isMovableByWindowBackground = false
     window.level = presentation == .summoned ? .floating : .normal
+    // Onboarding and sign-in must survive trips to a browser or System Settings. Once the shell is a
+    // summoned surface, AppKit owns click-away dismissal without an event monitor.
     window.hidesOnDeactivate = presentation == .summoned
     window.collectionBehavior = collectionBehavior(for: presentation, current: window.collectionBehavior)
   }
