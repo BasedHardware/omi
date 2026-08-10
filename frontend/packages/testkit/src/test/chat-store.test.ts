@@ -267,7 +267,44 @@ test("POST admission drains the durable outbox while generation remains hanging"
     clientMessageId,
     text: "Live answer",
     lastEventId: "event-delta-2",
+    observationState: "streaming",
+    failure: null,
   }]);
+});
+
+test("observer failure durably leaves a non-streaming failed generation state", async () => {
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const streams = new StoreTestStreamPort([{
+    chunks: [sseEvent("event-delta", "delta", { kind: "delta", text: "unsafe" })],
+  }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
+
+  await store.send("keep observer failure honest");
+  const clientMessageId = (await store.list())[0]!.id;
+  http.respond(...successfulSend(clientMessageId, "keep observer failure honest"));
+  await env.advance(10);
+  await drainMicrotasks();
+
+  assert.deepEqual(store.activeGenerations(), [{
+    generationId: `generation-${clientMessageId}`,
+    clientMessageId,
+    text: "",
+    lastEventId: null,
+    observationState: "failed",
+    failure: "observation-failed",
+  }]);
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("u"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    reopened.activeGenerations(),
+    store.activeGenerations(),
+    "observer failure remains terminal-looking after restart instead of resuming as streaming",
+  );
 });
 
 test("an admitted human send and a failed assistant generation remain two visible store facts", async () => {

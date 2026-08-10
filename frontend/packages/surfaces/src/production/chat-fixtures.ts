@@ -6,6 +6,7 @@ import type {
   ChatMessage,
 } from "./chat-reconcile.js";
 import type { ProductionChatStore } from "./ProductionChatStore.js";
+import type { RetainedChatSend } from "./ProductionChatStore.js";
 
 /** Fixed instant for deterministic chat fixtures (UTC). */
 export const CHAT_FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
@@ -122,15 +123,7 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
   }
   if (state === "send-failed") {
     return {
-      messages: [
-        ...baseMessages(),
-        {
-          role: "user",
-          text: "Retry the delivery when the queue clears.",
-          delivery: { kind: "failed", clientMessageId: "fixture-cid-failed", retryable: true },
-          attachments: [],
-        },
-      ],
+      messages: baseMessages(),
       hasOlder: false,
       olderCursor: null,
     };
@@ -182,6 +175,13 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
   };
   let olderLoaded = false;
   let sentSequence = 0;
+  let retained: RetainedChatSend[] = state === "send-failed"
+    ? [{
+        opId: "fixture-dead-send",
+        text: "Reconstruct this message without replaying its old envelope.",
+        attachmentIds: ["fixture-staged-one", "fixture-staged-two"],
+      }]
+    : [];
 
   return {
     status() {
@@ -236,12 +236,12 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     async stageAttachment() {
       throw new Error("fixture staging requires an explicitly supplied typed port");
     },
-    async retry(clientMessageId) {
-      const failed = historyPage.messages.find(
-        (message) => message.delivery.kind === "failed" && message.delivery.clientMessageId === clientMessageId,
-      );
-      if (!failed) return;
-      await this.send({ text: failed.text, attachmentIds: [] });
+    async deadLetters() {
+      return retained;
+    },
+    async discardDeadLetter(opId) {
+      retained = retained.filter((letter) => letter.opId !== opId);
+      notify();
     },
     async cancel(generationId) {
       const streamingMessage = historyPage.messages.find(

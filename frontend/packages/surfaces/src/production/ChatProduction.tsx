@@ -5,6 +5,7 @@ import type {
   ProductionChatStore,
   ChatMessage,
   ChatCapabilities,
+  RetainedChatSend,
   StagedChatAttachment,
 } from "./ProductionChatStore.js";
 import {
@@ -54,6 +55,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<StagedChatAttachment[]>([]);
+  const [deadLetters, setDeadLetters] = useState<readonly RetainedChatSend[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
@@ -71,7 +73,8 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
 
   const reload = useCallback(async (): Promise<void> => {
     try {
-      const page = await store.history();
+      const [page, retained] = await Promise.all([store.history(), store.deadLetters()]);
+      setDeadLetters(retained);
       setMessages((current) => {
         const next = reconcileMessages(current, page.messages);
         setHasOlder(page.hasOlder);
@@ -200,10 +203,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     setAttachments((current) => current.filter((item) => item.id !== id));
   };
 
-  const retryFailed = (clientMessageId: string): void => {
-    void run(() => store.retry(clientMessageId));
-  };
-
   const cancelGeneration = (generationId: string): void => {
     void run(() => store.cancel(generationId));
   };
@@ -266,9 +265,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
               {messages.map((message) => {
                 const statusLabel = deliveryLabel(message, locale);
                 const busy = message.delivery.kind === "streaming";
-                const failedClientMessageId = message.delivery.kind === "failed" && message.delivery.retryable
-                  ? message.delivery.clientMessageId
-                  : null;
                 const streamingGenerationId = message.delivery.kind === "streaming"
                   ? message.delivery.generationId
                   : null;
@@ -285,12 +281,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                       <span className="chat-role">{roleLabel(message.role, locale)}</span>
                       {statusLabel && <span className="chat-delivery-label">{statusLabel}</span>}
                     </div>
-                    <p className="chat-message-text">{message.text}</p>
-                    {failedClientMessageId && (
-                      <button type="button" onClick={() => retryFailed(failedClientMessageId)} aria-label={t(locale, "chat.retrySend")}>
-                        {t(locale, "chat.retrySend")}
-                      </button>
-                    )}
+                    <p className="chat-message-text">
+                      {message.text || (message.delivery.kind === "failed"
+                        ? t(locale, "chat.responseUnavailable")
+                        : "")}
+                    </p>
                     {streamingGenerationId && (
                       <button type="button" onClick={() => cancelGeneration(streamingGenerationId)} aria-label={t(locale, "chat.stop")}>
                         {t(locale, "chat.stop")}
@@ -300,6 +295,29 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                 );
               })}
             </ol>
+          </section>
+        )}
+        {deadLetters.length > 0 && (
+          <section className="dead-letter-panel chat-dead-letters" aria-label={t(locale, "dead.title")}>
+            <h2>{t(locale, "dead.title")}</h2>
+            {deadLetters.map((letter) => (
+              <div className="dead-letter" key={letter.opId}>
+                <p>{t(locale, "dead.body")}</p>
+                {letter.text !== null && (
+                  <pre className="dead-letter-payload" aria-label={t(locale, "chat.composerLabel")}>
+                    {letter.text}
+                  </pre>
+                )}
+                {letter.attachmentIds !== null && letter.attachmentIds.length > 0 && (
+                  <ol className="chat-dead-attachment-ids" aria-label={t(locale, "chat.attachments")}>
+                    {letter.attachmentIds.map((id) => <li key={id}><code>{id}</code></li>)}
+                  </ol>
+                )}
+                <button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>
+                  {t(locale, "dead.remove")}
+                </button>
+              </div>
+            ))}
           </section>
         )}
         <form

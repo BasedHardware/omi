@@ -5,6 +5,7 @@ import type {
   StagedChatAttachment,
   StorageBridge,
 } from "@omi-core/contracts";
+import { deadLetterPayload } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
 import { ChatMessagesStore, type StoreStatus } from "@omi-core/domain";
 import type {
@@ -24,6 +25,12 @@ export type {
 };
 export type { StagedChatAttachment } from "@omi-core/contracts";
 
+export interface RetainedChatSend {
+  readonly opId: string;
+  readonly text: string | null;
+  readonly attachmentIds: readonly string[] | null;
+}
+
 /** Production Chat surface port. Fixtures and the live adapter share it. */
 export type ProductionChatStore = {
   status(): StoreStatus;
@@ -38,7 +45,8 @@ export type ProductionChatStore = {
   capabilities(): ChatCapabilities;
   stagingAvailable(): boolean;
   stageAttachment(): Promise<StagedChatAttachment | null>;
-  retry(clientMessageId: string): Promise<void>;
+  deadLetters(): Promise<readonly RetainedChatSend[]>;
+  discardDeadLetter(opId: string): Promise<void>;
   cancel(generationId: string): Promise<void>;
 };
 
@@ -82,6 +90,11 @@ function capabilities(store: ChatMessagesStore): ChatCapabilities {
 
 async function projectedHistory(store: ChatMessagesStore): Promise<readonly ChatMessage[]> {
   const pendingIds = new Set(store.pendingMessageIds());
+  const failedByClient = new Map(
+    (await store.generationDeliveries())
+      .filter((delivery) => delivery.terminal.kind === "failed")
+      .map((delivery) => [delivery.clientMessageId, delivery]),
+  );
   const activeByClient = new Map(
     store.activeGenerations().map((generation) => [generation.clientMessageId, generation]),
   );
@@ -94,21 +107,73 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
       projected.push({
         role: "assistant",
         text: active.text,
-        delivery: { kind: "streaming", generationId: active.generationId },
+        delivery: active.observationState === "streaming"
+          ? { kind: "streaming", generationId: active.generationId }
+          : {
+              kind: "failed",
+              generationId: active.generationId,
+              source: "observer",
+              retryable: false,
+            },
         attachments: [],
       });
       activeByClient.delete(message.id);
+    } else if (message.sender === "human") {
+      const failure = failedByClient.get(message.id);
+      if (failure?.terminal.kind === "failed") {
+        projected.push({
+          role: "assistant",
+          text: "",
+          delivery: {
+            kind: "failed",
+            generationId: failure.generationId,
+            source: "provider",
+            retryable: failure.terminal.error.retryable,
+          },
+          attachments: [],
+        });
+        failedByClient.delete(message.id);
+      }
     }
   }
   for (const active of activeByClient.values()) {
     projected.push({
       role: "assistant",
       text: active.text,
-      delivery: { kind: "streaming", generationId: active.generationId },
+      delivery: active.observationState === "streaming"
+        ? { kind: "streaming", generationId: active.generationId }
+        : {
+            kind: "failed",
+            generationId: active.generationId,
+            source: "observer",
+            retryable: false,
+          },
       attachments: [],
     });
   }
   return projected;
+}
+
+function retainedChatSend(letter: import("@omi-core/contracts").DeadLetter): RetainedChatSend {
+  const payload = deadLetterPayload(letter);
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return { opId: letter.opId, text: null, attachmentIds: null };
+  }
+  const op = payload as Record<string, unknown>;
+  if (
+    op["op"] !== "create" ||
+    typeof op["text"] !== "string" ||
+    !Array.isArray(op["attachmentIds"]) ||
+    !op["attachmentIds"].every((id) =>
+      typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(id))
+  ) {
+    return { opId: letter.opId, text: null, attachmentIds: null };
+  }
+  return {
+    opId: letter.opId,
+    text: op["text"],
+    attachmentIds: [...op["attachmentIds"]] as string[],
+  };
 }
 
 /** Adapt the real domain mirror plus observer to the rendered Chat port. */
@@ -149,9 +214,10 @@ export function createProductionChatStore(
       }
       return attachmentStaging.pickAndStage();
     },
-    async retry() {
-      throw new Error("Chat replay requires the retained authored outbox operation");
+    async deadLetters() {
+      return (await store.deadLetters()).map(retainedChatSend);
     },
+    discardDeadLetter: (opId) => store.discardDeadLetter(opId),
     cancel: (generationId) => store.cancelGeneration(generationId),
   };
 }
