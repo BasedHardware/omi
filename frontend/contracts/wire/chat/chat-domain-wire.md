@@ -1,8 +1,10 @@
-# Chat domain wire proposal
+# Chat domain wire contract
 
-Status: **proposal for ratification; not a contract and not an implementation**.
+Status: **ratified contract**. The send/stream split is settled by
+`FABLE-wire-ratification.md` C2: POST returns plain JSON admission and every
+generation stream, initial or resumed, uses the authenticated GET events resource.
 
-This document designs a fresh Chat wire from
+This document defines the Chat wire from
 `core/contracts/src/domain/chat.ts:60-115`. It does not adopt, alias, or reserve
 the provisional `/v1/chat/messages` and `/v1/chat/messages/reconcile` paths in
 `adapters-platform/src/chat.ts`.
@@ -22,10 +24,10 @@ domain contract: `sender` is `domain-pending(DIV-CHAT-SENDER-001)`, `type` is
 `domain-pending(DIV-CHAT-SESSION-001)`, `journalRevision` is
 `domain-pending(DIV-CHAT-REV-001)`, `payloadHash` is
 `domain-pending(DIV-CHAT-HASH-001)`, and `messageSource` is
-`domain-pending(DIV-CHAT-SOURCE-001)`. The proposal uses those legacy names so a
+`domain-pending(DIV-CHAT-SOURCE-001)`. The contract uses those legacy names so a
 later ratification can rename them mechanically.
 
-## Ratified inputs this proposal does not reopen
+## Ratified inputs this contract does not reopen
 
 - The backend is the canonical Chat record; local state is a durable mirror.
 - `ChatMessage` is the source record. The smaller production surface row is an
@@ -36,7 +38,7 @@ later ratification can rename them mechanically.
   never the last delta.
 - History pagination is concurrent-insert-safe, keyset based, and duplicate-free.
 - The server owns quota enforcement, attachment count, size, and MIME policy.
-- This proposal does not use the existing provisional paths as a shortcut.
+- This contract does not use the existing provisional paths as a shortcut.
 
 ## Shape the client already assumes
 
@@ -69,7 +71,7 @@ from this particular surface projection, and report degraded refresh evidence;
 it must not coerce unknown to user or assistant. Extending the surface role is a
 separate contract event.
 
-## What apps/service would owe
+## Apps/service obligations
 
 - Authenticated, scope-bound history reads whose pages do not overlap or skip
   under concurrent insertion.
@@ -83,15 +85,15 @@ separate contract event.
 - A capabilities payload that carries the enforced attachment cap and policy.
 - No hidden truncation of attachment ids or model context.
 
-## Recommended route family
+## Settled route family
 
-The proposed resource name follows the source record directly:
+The resource name follows the source record directly:
 
 | Route | Verb | Success | Purpose |
 | --- | --- | --- | --- |
 | `/v1/chat-messages` | `GET` | `200` JSON | Newest or older canonical page plus capabilities. |
-| `/v1/chat-messages` | `POST` | `201` or `200` SSE | Admit one human message and stream its generation. |
-| `/v1/chat-generations/{generationId}/events` | `GET` | `200` SSE | Reconnect to an admitted generation. |
+| `/v1/chat-messages` | `POST` | `201` or `200` JSON | Admit one human message and return its canonical admission. |
+| `/v1/chat-generations/{generationId}/events` | `GET` | `200` SSE | Initial or resumed stream for one admitted generation. |
 | `/v1/chat-generations/{generationId}` | `DELETE` | `202` or `204` JSON/empty | Request cancellation; idempotent by generation id. |
 | `/v1/chat-attachments` | `POST` | `201` JSON | Stage an upload and receive an opaque attachment id. |
 
@@ -104,8 +106,8 @@ existing app-facing convention. No request accepts an account id.
 platform implementation, and an alias would turn a provisional spelling into a
 permanent compatibility obligation.
 
-Except where a successful SSE response has already begun, Chat failures use the
-same fixed envelope as send failures:
+Request/response failures and generation GET failures before SSE begins use the
+same fixed envelope:
 
 ```json
 {
@@ -142,7 +144,7 @@ The current surface has no selector, so absence of both `appId` and
 `chatSessionId` selects the main Chat scope (`null`/`null`). If non-main scopes
 are exposed later, they should be explicit single-valued query parameters and
 must be cryptographically bound into the cursor. They are not added by this
-proposal merely because the domain record can represent them.
+contract merely because the domain record can represent them.
 
 ### Success envelope
 
@@ -259,21 +261,24 @@ the one acknowledged domain-contract gap:
 - Quota usage and generation billing are keyed so replay of the same `id` is not
   counted twice.
 
-The first SSE event is the terminal outcome of **send admission**:
+The POST response is one plain-JSON admission envelope. It is never SSE:
 
-```text
-event: accepted
-id: <opaque-event-cursor>
-data: {"kind":"accepted","message":{...complete canonical human ChatMessage...},"generation":{"id":"generation-opaque-01"}}
+```json
+{
+  "message": { "id": "client-message-01", "sender": "human" },
+  "generation": { "id": "generation-opaque-01" }
+}
 ```
 
-The canonical `message.id` echoes the request `id`; the surface adapter uses it
-as both `serverId` and `clientMessageId` for the human row. Generation frames
-that follow belong to the assistant turn, not to send admission.
+`message` is the complete canonical human `ChatMessage`, not the abbreviated
+example above. Its `id` echoes the request `id`; the surface adapter uses it as
+both `serverId` and `clientMessageId` for the human row. `generation.id` is
+opaque. First admission is `201`; exact replay is `200` with the same message
+and generation identities. No `accepted` SSE frame exists.
 
 ### Send failures
 
-Failures before SSE begins use one fixed envelope:
+POST admission failures use one fixed envelope:
 
 ```json
 {
@@ -307,30 +312,30 @@ row containing only display text is insufficient replay state.
 
 ## Streaming and generation
 
-### Transport recommendation
+### Settled transport
 
-The initiating `POST` returns `text/event-stream` after admission. This preserves
-the existing “stream over the initiating connection” behavior. Because a POST
-stream cannot rely on browser `EventSource` auto-reconnect, the accepted event
-also supplies a generation id for the authenticated reconnect `GET`.
+The initiating `POST` returns only the JSON admission envelope. It never carries
+generation bytes. After every successful first admission or exact replay, the
+client opens the authenticated generation events GET. Reconnect opens that same
+GET resource again with the last observed opaque event id.
 
 The server maintains one ordered event log per generation. Every event has an
 opaque SSE `id`. Heartbeats are SSE comments and never enter the frame grammar.
 
-### Recommended frame grammar
+### Frame grammar
 
 ```ts
 type ChatGenerationFrame =
-  | { kind: "accepted"; message: ChatMessage; generation: { id: string } }
   | { kind: "snapshot"; text: string }
   | { kind: "delta"; text: string }
-  | { kind: "done"; message: ChatMessage }
+  | { kind: "done"; message: ChatCompletedAssistantMessage }
   | { kind: "failed"; error: { code: string; retryable: boolean } }
-  | { kind: "cancelled"; message: ChatMessage | null };
+  | { kind: "cancelled"; message: ChatCancelledAssistantMessage };
 ```
 
 - `snapshot` is a replacement of the advisory assistant text accumulated so
-  far. It is the first generation frame on every reconnect.
+  far. It is the first non-terminal generation frame on every initial connect
+  and reconnect.
 - `delta` appends advisory text after the latest snapshot. Duplicate event ids
   are ignored. Deltas are never persisted or treated as a canonical record.
 - `done` is the successful terminal frame already fixed by
@@ -338,22 +343,24 @@ type ChatGenerationFrame =
 - A model/tool failure normally persists the ratified degraded fallback and
   terminates with `done`. `failed` exists for the case where no canonical reply
   can be persisted; it is terminal and explicitly retryable/permanent.
-- `cancelled` is terminal for cancellation. If partial assistant text was
-  intentionally retained, `message` is its complete canonical record; otherwise
-  it is `null`. This retention choice is open below and cannot be inferred from
-  the current `ChatMessage` type.
+- `cancelled` is terminal for cancellation and carries the complete canonical
+  retained assistant record.
 - Exactly one of `done`, `failed`, or `cancelled` terminates a generation.
 
-### Reconnect
+### Initial connect and reconnect
 
 ```text
+GET /v1/chat-generations/generation-opaque-01/events
+
 GET /v1/chat-generations/generation-opaque-01/events
 Last-Event-ID: <opaque-event-cursor>
 ```
 
 - The credential must resolve to the same account and scope as the send.
-- The server replays events strictly after `Last-Event-ID`. With no cursor it
-  sends a current `snapshot` and then live events.
+- The first GET has no `Last-Event-ID`. It sends a current `snapshot` and then
+  live events, unless the generation is already terminal.
+- A reconnect supplies the exact last observed event id and replays events
+  strictly after it. Duplicate event ids are ignored by the client.
 - If already complete, reconnect returns `done` and closes.
 - If the replay cursor expired but canonical completion exists, the server sends
   `done` from history and closes.
@@ -378,10 +385,9 @@ DELETE /v1/chat-generations/generation-opaque-01
 - The supervisor, not the socket, stops model/tool work. It then emits exactly
   one terminal `cancelled` frame (or `done` if completion won the race).
 
-Whether cancellation retains partial AI text is a data-lifecycle choice. This
-proposal recommends retaining a non-empty partial as a complete canonical
-message and returning `null` when no assistant content exists, but that choice
-requires David's explicit data-disposition ratification before implementation.
+Cancellation retains its partial assistant output as the complete canonical
+cancelled message carried by the terminal frame; the adapter never fabricates a
+success from advisory text.
 
 ## Capabilities and attachments
 
@@ -428,7 +434,7 @@ an admitted human message. Send verifies that every id is staged, owned by the
 same account, in the same scope, and not already bound incompatibly.
 
 After admission, attachment records follow the owning Chat message's retention
-and deletion policy; this proposal does not invent that policy. Unbound staged
+and deletion policy; this contract does not invent that policy. Unbound staged
 upload expiry and cleanup are destructive data-disposition choices. A bounded
 expiry is the recommended operational model, but its duration, user warning,
 and recovery behavior require David's explicit ratification. No delete route is
@@ -464,15 +470,15 @@ adopting a deliberately provisional path or inheriting legacy `/v2/messages`
 stream semantics. Choosing B would be a SPEC DIVERGENCE from the instruction to
 design fresh and is not proposed here.
 
-### 2. Send/stream transport
+### 2. Send/stream transport — settled
 
-- **A — POST SSE for the initiating connection plus authenticated GET replay.**
-- B — POST JSON followed by GET-only SSE.
+- A — POST SSE for the initiating connection plus authenticated GET replay.
+- **B — POST JSON followed by GET-only SSE.**
 - C — one WebSocket carrying send, stream, reconnect, and cancellation.
 
-**Recommendation: A.** It preserves immediate streaming while giving reconnect
-an explicit resource. B is simpler but adds a round trip; C adds full-duplex
-state where only server-to-client streaming is required.
+**Ratified: B.** Admission is a bounded JSON response, and one authenticated GET
+resource owns all initial and resumed generation streaming. The rejected POST-SSE
+shape is not retained as an alias and `accepted` is not part of the SSE grammar.
 
 ### 3. Advisory frames
 
@@ -506,16 +512,15 @@ unbound-upload disposal still needs owner ratification.
 whether or not the failed request reached the server. C duplicates a logical
 message; B invents a second operation model.
 
-### 6. Cancellation retention
+### 6. Cancellation retention — settled
 
 - **A — retain non-empty partial AI text as a complete canonical record; retain
   nothing when no content exists.**
 - B — always discard partial AI text.
 - C — always persist a synthetic cancellation message.
 
-**Recommendation: A, pending David.** It avoids losing visible generated content
-and avoids manufacturing copy when nothing was produced. This is explicitly a
-data-disposition decision and cannot be bound by a stand-in ratifier.
+**Ratified: A.** The terminal carries the complete canonical cancelled assistant
+message; advisory text is never promoted locally into a canonical record.
 
 ### 7. Capabilities delivery
 
@@ -544,8 +549,6 @@ available. The schema must bind the unit; a bare `number` is not a wire contract
 - The complete attachment record, encryption, scanning, download, retention,
   unbound-expiry, and deletion lifecycle. `ChatMessage` explicitly identifies
   attachments as a foundation gap.
-- Whether a cancelled generation's partial AI output is user data to retain.
-  The recommendation above is not authority to implement a disposition.
 - The retention window for generation event replay and opaque event cursors.
 - The timestamp unit; the recommendation above is not stated by the current
   domain type.

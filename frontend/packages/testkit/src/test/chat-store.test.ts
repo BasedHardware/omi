@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ChatMessage, RecordId } from "@omi-core/contracts";
+import type { ChatMessage, HttpResponse, RecordId } from "@omi-core/contracts";
 import {
   ChatMessagesStore,
   chatMessagePayloadHash,
@@ -72,43 +72,59 @@ function historyEnvelope(
   };
 }
 
-function successfulSend(id: string, text: string): { status: number; json: null; text: string } {
+function successfulSend(id: string, text: string): readonly [HttpResponse, HttpResponse] {
   const human = wireMessage(id, text);
   const assistant = wireMessage(`assistant-${id}`, "Canonical answer", { sender: "ai" });
-  return {
-    status: 201,
-    json: null,
-    text: [
-      "event: accepted",
-      "id: event-accepted",
-      `data: ${JSON.stringify({ kind: "accepted", message: human, generation: { id: `generation-${id}` } })}`,
-      "",
-      "event: done",
-      "id: event-done",
-      `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-      "",
-      "",
-    ].join("\n"),
-  };
+  return [
+    {
+      status: 201,
+      json: { message: human, generation: { id: `generation-${id}` } },
+    },
+    {
+      status: 200,
+      json: null,
+      text: [
+        "event: snapshot",
+        "id: event-snapshot",
+        `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
+        "",
+        "event: done",
+        "id: event-done",
+        `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
+        "",
+        "event: done",
+        "id: event-done",
+        `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
+        "",
+        "",
+      ].join("\n"),
+    },
+  ];
 }
 
-function failedGenerationSend(id: string, text: string): { status: number; json: null; text: string } {
+function failedGenerationSend(id: string, text: string): readonly [HttpResponse, HttpResponse] {
   const human = wireMessage(id, text);
-  return {
-    status: 201,
-    json: null,
-    text: [
-      "event: accepted",
-      "id: event-accepted",
-      `data: ${JSON.stringify({ kind: "accepted", message: human, generation: { id: `generation-${id}` } })}`,
-      "",
-      "event: failed",
-      "id: event-failed",
-      `data: ${JSON.stringify({ kind: "failed", error: { code: "provider_down", retryable: true } })}`,
-      "",
-      "",
-    ].join("\n"),
-  };
+  return [
+    {
+      status: 201,
+      json: { message: human, generation: { id: `generation-${id}` } },
+    },
+    {
+      status: 200,
+      json: null,
+      text: [
+        "event: snapshot",
+        "id: event-snapshot",
+        `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
+        "",
+        "event: failed",
+        "id: event-failed",
+        `data: ${JSON.stringify({ kind: "failed", error: { code: "provider_down", retryable: true } })}`,
+        "",
+        "",
+      ].join("\n"),
+    },
+  ];
 }
 
 test("409 identity conflict dead-letters and is never retried", async () => {
@@ -171,7 +187,7 @@ test("an admitted human send and a failed assistant generation remain two visibl
 
   await store.send("answer even during an outage");
   const clientMessageId = (await store.list())[0]!.id;
-  http.respond(failedGenerationSend(clientMessageId, "answer even during an outage"));
+  http.respond(...failedGenerationSend(clientMessageId, "answer even during an outage"));
   await env.advance(10);
 
   assert.equal(store.pendingCount(), 0, "the admitted human operation is honestly confirmed");
@@ -224,7 +240,7 @@ test("the same op replayed produces the same payload hash and does not duplicate
   const localId = (await store.list())[0]!.id;
   // First attempt fails retryably so the SAME pending op is resent.
   http.respond({ status: 503, json: null });
-  http.respond(successfulSend(localId, "hello once"));
+  http.respond(...successfulSend(localId, "hello once"));
   await env.advance(10_000); // first send (503) + backoff + retry (200)
 
   const posts = http.calls.filter((c) => c.method === "POST");
@@ -313,7 +329,7 @@ test("reconcile never deletes a local row against a complete:false snapshot", as
 
   await store.send("local only survivor");
   const localId = (await store.list())[0]!.id;
-  http.respond(successfulSend(localId, "local only survivor"));
+  http.respond(...successfulSend(localId, "local only survivor"));
   await env.advance(10);
 
   // Server page omits our message — complete:false must not delete it.
@@ -346,7 +362,7 @@ test("junk or non-200 reconcile body yields null snapshot — never an empty com
 
   await store.send("must survive junk snapshot");
   const localId = (await store.list())[0]!.id;
-  http.respond(successfulSend(localId, "must survive junk snapshot"));
+  http.respond(...successfulSend(localId, "must survive junk snapshot"));
   await env.advance(10);
 
   http.respond({ status: 200, json: { unexpected: true } }); // rows fetch junk → null
@@ -373,7 +389,7 @@ test("ratified create envelope carries the full authored operation", async () =>
 
   await store.send("wire contract", ["attachment-1"]);
   const localId = (await store.list())[0]!.id;
-  http.respond(successfulSend(localId, "wire contract"));
+  http.respond(...successfulSend(localId, "wire contract"));
   await env.advance(10);
 
   const body = http.calls.find((c) => c.method === "POST")!.body as Record<string, unknown>;

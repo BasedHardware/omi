@@ -8,7 +8,7 @@
  */
 
 import type {
-  ChatAcceptedFrame,
+  ChatAdmissionEnvelope,
   ChatAttachment,
   ChatCapabilitiesWire,
   ChatGenerationFrame,
@@ -39,14 +39,14 @@ export function platformChatGenerationPath(generationId: string): string {
 export type ChatSendResult =
   | {
       ok: true;
-      accepted: ChatAcceptedFrame;
+      admission: ChatAdmissionEnvelope;
       terminal: ChatTerminalFrame;
       serverRevision?: string;
     }
   | { ok: false; failure: WriteFailure };
 
 export interface ChatGenerationTerminalDelivery {
-  readonly accepted: ChatAcceptedFrame;
+  readonly admission: ChatAdmissionEnvelope;
   readonly terminal: ChatTerminalFrame;
 }
 
@@ -312,20 +312,6 @@ export async function fetchChatMessages(
 export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | null {
   if (!isRecord(raw) || typeof raw["kind"] !== "string") return null;
   switch (raw["kind"]) {
-    case "accepted": {
-      const message = wireToChatMessage(raw["message"]);
-      const generation = raw["generation"];
-      if (
-        message === null ||
-        message.sender !== "human" ||
-        !isRecord(generation) ||
-        typeof generation["id"] !== "string" ||
-        generation["id"] === ""
-      ) {
-        return null;
-      }
-      return { kind: "accepted", message, generation: { id: generation["id"] } };
-    }
     case "snapshot":
     case "delta":
       return typeof raw["text"] === "string" ? { kind: raw["kind"], text: raw["text"] } : null;
@@ -361,6 +347,23 @@ export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | n
     default:
       return null;
   }
+}
+
+/** Validate the complete plain-JSON admission returned by the send POST. */
+export function wireToChatAdmissionEnvelope(raw: unknown): ChatAdmissionEnvelope | null {
+  if (!isRecord(raw)) return null;
+  const message = wireToChatMessage(raw["message"]);
+  const generation = raw["generation"];
+  if (
+    message === null ||
+    message.sender !== "human" ||
+    !isRecord(generation) ||
+    typeof generation["id"] !== "string" ||
+    generation["id"] === ""
+  ) {
+    return null;
+  }
+  return { message, generation: { id: generation["id"] } };
 }
 
 /**
@@ -431,7 +434,16 @@ function malformedSuccess(detail: string): ChatSendResult {
   };
 }
 
-/** Admit a send and consume its complete ratified SSE transcript. */
+function isChatTerminalFrame(frame: ChatGenerationFrame): frame is ChatTerminalFrame {
+  return frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled";
+}
+
+function hasValidGenerationStart(frames: readonly ChatGenerationFrame[]): boolean {
+  const first = frames[0];
+  return first === undefined || first.kind === "snapshot" || isChatTerminalFrame(first);
+}
+
+/** Admit a send as JSON, then consume its generation only from the GET resource. */
 export async function sendChatMessageOp(
   http: HttpClient,
   op: ChatMessageOp,
@@ -468,30 +480,38 @@ export async function sendChatMessageOp(
     const detail = `create chat message ${op.id}${code === null ? "" : `: ${code}`}`;
     return { ok: false, failure: classifyChatSendStatus(response, detail) };
   }
-  if (response.text === undefined) {
-    return malformedSuccess(`create chat message ${op.id}: successful response omitted SSE bytes`);
+  const admission = wireToChatAdmissionEnvelope(response.json);
+  if (admission === null) {
+    return malformedSuccess(`create chat message ${op.id}: malformed JSON admission`);
   }
-  const initialEvents = parseChatGenerationEvents(response.text);
-  let events = initialEvents === null ? null : [...initialEvents];
-  let frames = events?.map((event) => event.frame) ?? null;
-  if (
-    frames === null ||
-    frames.length < 1 ||
-    frames[0]?.kind !== "accepted" ||
-    frames.slice(1).some((frame) => frame.kind === "accepted")
-  ) {
-    return malformedSuccess(`create chat message ${op.id}: malformed or incomplete SSE transcript`);
-  }
-  const accepted = frames[0];
-  if (accepted.message.id !== op.id) {
+  if (admission.message.id !== op.id) {
     return {
       ok: false,
       failure: {
         kind: "permanent",
         reason: "conflict",
-        detail: `create chat message ${op.id}: accepted record id was ${accepted.message.id}`,
+        detail: `create chat message ${op.id}: admitted record id was ${admission.message.id}`,
       },
     };
+  }
+  const eventsPath = platformChatGenerationEventsPath(admission.generation.id);
+  const initial = await http.request("GET", eventsPath);
+  if (initial.status !== 200) {
+    const code = parseChatErrorCode(initial.json);
+    const detail = `stream chat generation ${admission.generation.id}${code === null ? "" : `: ${code}`}`;
+    return { ok: false, failure: classifyChatSendStatus(initial, detail) };
+  }
+  if (initial.text === undefined) {
+    return malformedSuccess(`create chat message ${op.id}: generation GET omitted SSE bytes`);
+  }
+  const initialEvents = parseChatGenerationEvents(initial.text);
+  let events = initialEvents === null ? null : [...initialEvents];
+  let frames = events?.map((event) => event.frame) ?? null;
+  if (frames === null) {
+    return malformedSuccess(`create chat message ${op.id}: malformed generation SSE transcript`);
+  }
+  if (!hasValidGenerationStart(frames)) {
+    return malformedSuccess(`create chat message ${op.id}: generation GET omitted its leading snapshot`);
   }
   let terminal = frames.at(-1);
   let terminalCount = frames.filter(
@@ -505,13 +525,16 @@ export async function sendChatMessageOp(
   ) {
     const resumed = await reconnect.request({
       method: "GET",
-      path: platformChatGenerationEventsPath(accepted.generation.id),
+      path: eventsPath,
       headers: { "Last-Event-ID": events.at(-1)!.id },
     });
-    if (resumed.status !== 200 || resumed.text === undefined) {
-      return malformedSuccess(
-        `create chat message ${op.id}: generation reconnect did not return SSE bytes`,
-      );
+    if (resumed.status !== 200) {
+      const code = parseChatErrorCode(resumed.json);
+      const detail = `reconnect chat generation ${admission.generation.id}${code === null ? "" : `: ${code}`}`;
+      return { ok: false, failure: classifyChatSendStatus(resumed, detail) };
+    }
+    if (resumed.text === undefined) {
+      return malformedSuccess(`create chat message ${op.id}: generation reconnect omitted SSE bytes`);
     }
     const resumedEvents = parseChatGenerationEvents(resumed.text);
     if (resumedEvents === null) {
@@ -519,7 +542,7 @@ export async function sendChatMessageOp(
     }
     const observedIds = new Set(events.map((event) => event.id));
     const freshEvents = resumedEvents.filter((event) => !observedIds.has(event.id));
-    if (freshEvents[0]?.frame.kind !== "snapshot") {
+    if (!hasValidGenerationStart(freshEvents.map((event) => event.frame))) {
       return malformedSuccess(
         `create chat message ${op.id}: generation reconnect omitted its leading snapshot`,
       );
@@ -536,12 +559,14 @@ export async function sendChatMessageOp(
     terminalCount !== 1 ||
     (terminal.kind !== "done" && terminal.kind !== "failed" && terminal.kind !== "cancelled")
   ) {
-    return malformedSuccess(`create chat message ${op.id}: stream ended without a terminal frame`);
+    return malformedSuccess(
+      `create chat message ${op.id}: stream must end with exactly one terminal frame`,
+    );
   }
-  const serverRevision = accepted.message.revision;
+  const serverRevision = admission.message.revision;
   return {
     ok: true,
-    accepted,
+    admission,
     terminal,
     ...(serverRevision === null ? {} : { serverRevision }),
   };
@@ -603,7 +628,7 @@ export function chatMessagesTransport(
       // Admission belongs to the outbox; assistant generation delivery belongs
       // to the Chat store. Requiring this callback prevents a successful
       // admission from structurally discarding a failed terminal frame.
-      await onGenerationTerminal({ accepted: result.accepted, terminal: result.terminal });
+      await onGenerationTerminal({ admission: result.admission, terminal: result.terminal });
       return result.serverRevision === undefined
         ? { ok: true }
         : { ok: true, serverRevision: result.serverRevision };
