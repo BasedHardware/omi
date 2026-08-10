@@ -21,24 +21,12 @@ class GeneratedGoalMetric {
 
   factory GeneratedGoalMetric.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalMetric(
-      current: _required(
-          _readFieldValue<double>(_readField(json, const ["current"]), "current", _readDouble,
-              requiredField: true, nullable: false),
-          "current"),
-      max: _readFieldValue<double>(_readField(json, const ["max"]), "max", _readDouble,
-          requiredField: false, nullable: true),
-      min: _readFieldValue<double>(_readField(json, const ["min"]), "min", _readDouble,
-          requiredField: false, nullable: true),
-      target: _required(
-          _readFieldValue<double>(_readField(json, const ["target"]), "target", _readDouble,
-              requiredField: true, nullable: false),
-          "target"),
-      type: _required(
-          _readFieldValue<String>(_readField(json, const ["type"]), "type", _readString,
-              requiredField: true, nullable: false),
-          "type"),
-      unit: _readFieldValue<String>(_readField(json, const ["unit"]), "unit", _readString,
-          requiredField: false, nullable: true),
+      current: _required(_readFieldValue<double>(_readField(json, const ["current"]), "current", _readDouble, requiredField: true, nullable: false), "current"),
+      max: _readFieldValue<double>(_readField(json, const ["max"]), "max", _readDouble, requiredField: false, nullable: true),
+      min: _readFieldValue<double>(_readField(json, const ["min"]), "min", _readDouble, requiredField: false, nullable: true),
+      target: _required(_readFieldValue<double>(_readField(json, const ["target"]), "target", _readDouble, requiredField: true, nullable: false), "target"),
+      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      unit: _readFieldValue<String>(_readField(json, const ["unit"]), "unit", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -107,85 +95,29 @@ class GeneratedGoalResponse {
 
   factory GeneratedGoalResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalResponse(
-      advice: _readFieldValue<String>(_readField(json, const ["advice"]), "advice", _readString,
-          requiredField: false, nullable: true),
-      createdAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "created_at"),
-      currentValue: _required(
-          _readFieldValue<double>(_readField(json, const ["current_value"]), "current_value", _readDouble,
-              requiredField: true, nullable: false),
-          "current_value"),
-      desiredOutcome: _required(
-          _readFieldValue<String>(_readField(json, const ["desired_outcome"]), "desired_outcome", _readString,
-              requiredField: true, nullable: false),
-          "desired_outcome"),
-      endedAt: _readFieldValue<DateTime>(_readField(json, const ["ended_at"]), "ended_at", _readDateTime,
-          requiredField: false, nullable: true),
-      focusRank: _readFieldValue<int>(_readField(json, const ["focus_rank"]), "focus_rank", _readInt,
-          requiredField: false, nullable: true),
-      goalId: _required(
-          _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString,
-              requiredField: true, nullable: false),
-          "goal_id"),
-      goalType: _required(
-          _readFieldValue<String>(_readField(json, const ["goal_type"]), "goal_type", _readString,
-              requiredField: true, nullable: false),
-          "goal_type"),
-      horizonAt: _readFieldValue<DateTime>(_readField(json, const ["horizon_at"]), "horizon_at", _readDateTime,
-          requiredField: false, nullable: true),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      isActive: _required(
-          _readFieldValue<bool>(_readField(json, const ["is_active"]), "is_active", _readBool,
-              requiredField: true, nullable: false),
-          "is_active"),
-      latestProgressSequence: _required(
-          _readFieldValue<int>(
-              _readField(json, const ["latest_progress_sequence"]), "latest_progress_sequence", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "latest_progress_sequence"),
-      maxValue: _required(
-          _readFieldValue<double>(_readField(json, const ["max_value"]), "max_value", _readDouble,
-              requiredField: true, nullable: false),
-          "max_value"),
-      metric: _readFieldValue<GeneratedGoalMetric>(
-          _readField(json, const ["metric"]), "metric", (value) => _readObject(value, GeneratedGoalMetric.fromJson),
-          requiredField: false, nullable: true),
-      minValue: _required(
-          _readFieldValue<double>(_readField(json, const ["min_value"]), "min_value", _readDouble,
-              requiredField: true, nullable: false),
-          "min_value"),
-      source: _required(
-          _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString,
-              requiredField: true, nullable: false),
-          "source"),
-      status: _required(
-          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
-              requiredField: true, nullable: false),
-          "status"),
-      successCriteria: _readFieldValue<List<String>>(
-          _readField(json, const ["success_criteria"]), "success_criteria", _readStringList,
-          requiredField: false, nullable: true),
-      targetValue: _required(
-          _readFieldValue<double>(_readField(json, const ["target_value"]), "target_value", _readDouble,
-              requiredField: true, nullable: false),
-          "target_value"),
-      title: _required(
-          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
-              requiredField: true, nullable: false),
-          "title"),
-      unit: _readFieldValue<String>(_readField(json, const ["unit"]), "unit", _readString,
-          requiredField: false, nullable: true),
-      updatedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "updated_at"),
-      whyItMatters: _readFieldValue<String>(_readField(json, const ["why_it_matters"]), "why_it_matters", _readString,
-          requiredField: false, nullable: true),
+      advice: _readFieldValue<String>(_readField(json, const ["advice"]), "advice", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      currentValue: _required(_readFieldValue<double>(_readField(json, const ["current_value"]), "current_value", _readDouble, requiredField: true, nullable: false), "current_value"),
+      desiredOutcome: _required(_readFieldValue<String>(_readField(json, const ["desired_outcome"]), "desired_outcome", _readString, requiredField: true, nullable: false), "desired_outcome"),
+      endedAt: _readFieldValue<DateTime>(_readField(json, const ["ended_at"]), "ended_at", _readDateTime, requiredField: false, nullable: true),
+      focusRank: _readFieldValue<int>(_readField(json, const ["focus_rank"]), "focus_rank", _readInt, requiredField: false, nullable: true),
+      goalId: _required(_readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: true, nullable: false), "goal_id"),
+      goalType: _required(_readFieldValue<String>(_readField(json, const ["goal_type"]), "goal_type", _readString, requiredField: true, nullable: false), "goal_type"),
+      horizonAt: _readFieldValue<DateTime>(_readField(json, const ["horizon_at"]), "horizon_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      isActive: _required(_readFieldValue<bool>(_readField(json, const ["is_active"]), "is_active", _readBool, requiredField: true, nullable: false), "is_active"),
+      latestProgressSequence: _required(_readFieldValue<int>(_readField(json, const ["latest_progress_sequence"]), "latest_progress_sequence", _readInt, requiredField: false, nullable: false, defaultValue: 0), "latest_progress_sequence"),
+      maxValue: _required(_readFieldValue<double>(_readField(json, const ["max_value"]), "max_value", _readDouble, requiredField: true, nullable: false), "max_value"),
+      metric: _readFieldValue<GeneratedGoalMetric>(_readField(json, const ["metric"]), "metric", (value) => _readObject(value, GeneratedGoalMetric.fromJson), requiredField: false, nullable: true),
+      minValue: _required(_readFieldValue<double>(_readField(json, const ["min_value"]), "min_value", _readDouble, requiredField: true, nullable: false), "min_value"),
+      source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: true, nullable: false), "source"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      successCriteria: _readFieldValue<List<String>>(_readField(json, const ["success_criteria"]), "success_criteria", _readStringList, requiredField: false, nullable: true),
+      targetValue: _required(_readFieldValue<double>(_readField(json, const ["target_value"]), "target_value", _readDouble, requiredField: true, nullable: false), "target_value"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      unit: _readFieldValue<String>(_readField(json, const ["unit"]), "unit", _readString, requiredField: false, nullable: true),
+      updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
+      whyItMatters: _readFieldValue<String>(_readField(json, const ["why_it_matters"]), "why_it_matters", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -237,30 +169,12 @@ class GeneratedGoalSuggestionResponse {
 
   factory GeneratedGoalSuggestionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalSuggestionResponse(
-      reasoning: _required(
-          _readFieldValue<String>(_readField(json, const ["reasoning"]), "reasoning", _readString,
-              requiredField: true, nullable: false),
-          "reasoning"),
-      suggestedMax: _required(
-          _readFieldValue<double>(_readField(json, const ["suggested_max"]), "suggested_max", _readDouble,
-              requiredField: false, nullable: false, defaultValue: 10),
-          "suggested_max"),
-      suggestedMin: _required(
-          _readFieldValue<double>(_readField(json, const ["suggested_min"]), "suggested_min", _readDouble,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "suggested_min"),
-      suggestedTarget: _required(
-          _readFieldValue<double>(_readField(json, const ["suggested_target"]), "suggested_target", _readDouble,
-              requiredField: true, nullable: false),
-          "suggested_target"),
-      suggestedTitle: _required(
-          _readFieldValue<String>(_readField(json, const ["suggested_title"]), "suggested_title", _readString,
-              requiredField: true, nullable: false),
-          "suggested_title"),
-      suggestedType: _required(
-          _readFieldValue<String>(_readField(json, const ["suggested_type"]), "suggested_type", _readString,
-              requiredField: true, nullable: false),
-          "suggested_type"),
+      reasoning: _required(_readFieldValue<String>(_readField(json, const ["reasoning"]), "reasoning", _readString, requiredField: true, nullable: false), "reasoning"),
+      suggestedMax: _required(_readFieldValue<double>(_readField(json, const ["suggested_max"]), "suggested_max", _readDouble, requiredField: false, nullable: false, defaultValue: 10), "suggested_max"),
+      suggestedMin: _required(_readFieldValue<double>(_readField(json, const ["suggested_min"]), "suggested_min", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "suggested_min"),
+      suggestedTarget: _required(_readFieldValue<double>(_readField(json, const ["suggested_target"]), "suggested_target", _readDouble, requiredField: true, nullable: false), "suggested_target"),
+      suggestedTitle: _required(_readFieldValue<String>(_readField(json, const ["suggested_title"]), "suggested_title", _readString, requiredField: true, nullable: false), "suggested_title"),
+      suggestedType: _required(_readFieldValue<String>(_readField(json, const ["suggested_type"]), "suggested_type", _readString, requiredField: true, nullable: false), "suggested_type"),
     );
   }
 
@@ -285,10 +199,7 @@ class GeneratedAdviceResponse {
 
   factory GeneratedAdviceResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAdviceResponse(
-      advice: _required(
-          _readFieldValue<String>(_readField(json, const ["advice"]), "advice", _readString,
-              requiredField: true, nullable: false),
-          "advice"),
+      advice: _required(_readFieldValue<String>(_readField(json, const ["advice"]), "advice", _readString, requiredField: true, nullable: false), "advice"),
     );
   }
 
@@ -312,18 +223,9 @@ class GeneratedGoalHistoryEntryResponse {
 
   factory GeneratedGoalHistoryEntryResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalHistoryEntryResponse(
-      date: _required(
-          _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString,
-              requiredField: true, nullable: false),
-          "date"),
-      recordedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["recorded_at"]), "recorded_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "recorded_at"),
-      value: _required(
-          _readFieldValue<double>(_readField(json, const ["value"]), "value", _readDouble,
-              requiredField: true, nullable: false),
-          "value"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      recordedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["recorded_at"]), "recorded_at", _readDateTime, requiredField: true, nullable: false), "recorded_at"),
+      value: _required(_readFieldValue<double>(_readField(json, const ["value"]), "value", _readDouble, requiredField: true, nullable: false), "value"),
     );
   }
 
@@ -347,14 +249,8 @@ class GeneratedGoalDeleteResponse {
 
   factory GeneratedGoalDeleteResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGoalDeleteResponse(
-      deletedId: _required(
-          _readFieldValue<String>(_readField(json, const ["deleted_id"]), "deleted_id", _readString,
-              requiredField: true, nullable: false),
-          "deleted_id"),
-      success: _required(
-          _readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool,
-              requiredField: true, nullable: false),
-          "success"),
+      deletedId: _required(_readFieldValue<String>(_readField(json, const ["deleted_id"]), "deleted_id", _readString, requiredField: true, nullable: false), "deleted_id"),
+      success: _required(_readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool, requiredField: true, nullable: false), "success"),
     );
   }
 
@@ -439,7 +335,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -455,27 +353,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -252,11 +252,7 @@ class AuthService {
 
   Future<void> signOut() async {
     _invalidateRefreshes();
-    try {
-      await _clearCachedIdentityAndAuth();
-    } catch (e) {
-      Logger.debug('signOut: local auth persistence failed: ${e.runtimeType}');
-    }
+    _clearCachedIdentityAndAuth();
     await _tokenGateway.signOut();
   }
 
@@ -277,12 +273,14 @@ class AuthService {
     _invalidateRefreshes();
   }
 
-  Future<void> _clearCachedAuth() async {
-    await SharedPreferencesUtil().persistAuthToken('');
+  void _clearCachedAuth() {
+    SharedPreferencesUtil().authToken = '';
     SharedPreferencesUtil().tokenExpirationTime = 0;
   }
 
-  Future<void> _clearCachedIdentityAndAuth() => SharedPreferencesUtil().clearUserDisplayCache();
+  void _clearCachedIdentityAndAuth() {
+    SharedPreferencesUtil().clearUserDisplayCache();
+  }
 
   /// Compatibility for sign-in/onboarding callers that only need the token.
   /// Authenticated HTTP must use [refreshIdToken] so failure classes are kept.
@@ -339,7 +337,7 @@ class AuthService {
     if (generation != _sessionGeneration) return const AuthTokenMissingUser();
     if (expectedUid == null || _tokenGateway.currentUser?.uid != expectedUid) {
       Logger.debug('refreshIdToken: currentUser is null');
-      await _clearCachedAuth();
+      _clearCachedAuth();
       return const AuthTokenMissingUser();
     }
 
@@ -380,14 +378,13 @@ class AuthService {
 
       final user = _tokenGateway.currentUser;
       if (user == null || user.uid != expectedUid) {
-        await _clearCachedAuth();
+        _clearCachedAuth();
         return const AuthTokenMissingUser();
       }
 
       SharedPreferencesUtil().uid = user.uid;
       SharedPreferencesUtil().tokenExpirationTime = refreshed?.expirationTime?.millisecondsSinceEpoch ?? 0;
-      final persisted = await SharedPreferencesUtil().persistAuthToken(token);
-      if (!persisted) Logger.debug('refreshIdToken: authToken persistence failed; using in-memory token');
+      SharedPreferencesUtil().authToken = token;
       if (SharedPreferencesUtil().email.isEmpty) {
         SharedPreferencesUtil().email = user.email ?? '';
       }
@@ -402,7 +399,7 @@ class AuthService {
       if (generation != _sessionGeneration) return const AuthTokenMissingUser();
       Logger.debug('refreshIdToken: FirebaseAuthException: ${e.code}');
       if (_terminalTokenErrorCodes.contains(e.code)) {
-        await _clearCachedAuth();
+        _clearCachedAuth();
         return AuthTokenTerminalFailure(code: e.code);
       }
       return AuthTokenTransientFailure(failureClass: 'firebase_transient', code: e.code);
@@ -435,19 +432,14 @@ class AuthService {
 
     _sessionExpired = true;
     _invalidateRefreshes();
-    final clearCachedIdentityAndAuth = _clearCachedIdentityAndAuth();
+    _clearCachedIdentityAndAuth();
     _sessionExpiredController.add(event);
-    final expiration = _runSessionExpiration(clearCachedIdentityAndAuth);
+    final expiration = _runSessionExpiration();
     _expireSessionInFlight = expiration;
     return expiration;
   }
 
-  Future<void> _runSessionExpiration(Future<void> clearCachedIdentityAndAuth) async {
-    try {
-      await clearCachedIdentityAndAuth;
-    } catch (e) {
-      Logger.debug('expireSession: local auth persistence failed: ${e.runtimeType}');
-    }
+  Future<void> _runSessionExpiration() async {
     try {
       await _tokenGateway.signOut();
     } catch (e) {
