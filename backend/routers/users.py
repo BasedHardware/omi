@@ -69,6 +69,7 @@ from models.users import (
     ChatUsageQuota,
     ChatQuotaUnit,
     WebhookType,
+    webhook_url_from_setting,
     UserSubscriptionResponse,
     Subscription,
     SubscriptionPlan,
@@ -210,7 +211,6 @@ class OnboardingStateResponse(BaseModel):
 
 class UserLanguageResponse(BaseModel):
     language: Optional[str] = None
-
 
 
 class UserLanguageUpdateResponse(UserStatusResponse):
@@ -483,7 +483,7 @@ def set_user_webhook_endpoint(
 ):
     url = data.url
     set_user_webhook_db(uid, wtype, url)
-    if url == '' or url == ',':
+    if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
     else:
         enable_user_webhook_db(uid, wtype)
