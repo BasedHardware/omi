@@ -90,7 +90,7 @@ export class ChatMessagesStore {
       if (outcome.state !== "confirmed") return;
       const domainOp = JSON.parse(op.payload) as ChatMessageOp;
       // The required terminal-delivery callback persisted the canonical
-      // accepted human row before the transport reported admission success.
+      // admitted human row before the transport reported admission success.
       if (domainOp.op === "create") return;
       const current = (await projection.read([])).find((r) => r.id === op.recordId) ?? null;
       const next = chatMessagesCodec.applyOp(op.payload, current);
@@ -221,11 +221,11 @@ export class ChatMessagesStore {
   private async recordGenerationTerminal(
     delivery: ChatGenerationTerminalDelivery,
   ): Promise<void> {
-    const generationId = delivery.accepted.generation.id;
+    const generationId = delivery.admission.generation.id;
     const existing = await this.generationDeliveries();
     const next: StoredChatGenerationDelivery = {
       generationId,
-      clientMessageId: delivery.accepted.message.id,
+      clientMessageId: delivery.admission.message.id,
       terminal: delivery.terminal,
     };
     await this.generationKv.set(
@@ -233,8 +233,8 @@ export class ChatMessagesStore {
       JSON.stringify([...existing.filter((item) => item.generationId !== generationId), next]),
     );
     const canonicalRows = delivery.terminal.kind === "failed"
-      ? [delivery.accepted.message]
-      : [delivery.accepted.message, delivery.terminal.message];
+      ? [delivery.admission.message]
+      : [delivery.admission.message, delivery.terminal.message];
     await this.projection.upsertServerRows(canonicalRows);
     this.notify();
   }
