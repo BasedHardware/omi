@@ -652,6 +652,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   registerChatMessagesRoutes(app, {
     resolvePrincipal,
     messages: stores.chatMessages,
+    control: controlStore,
     admission: stores.chatAdmission,
     supervisor: chatSupervisor,
     events: stores.chatEvents,

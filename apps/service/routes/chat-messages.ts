@@ -14,6 +14,7 @@ import {
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import type { DevPrincipal } from "../auth/dev-token";
+import type { AccountControlProjectionStore } from "../control/projection-store";
 import type { ChatGenerationSupervisor } from "../chat/generation-supervisor";
 import {
   ExpiredChatHistoryCursorError,
@@ -52,6 +53,7 @@ const JSON_HEADERS = Object.freeze({
 export interface ChatMessagesRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly messages: ChatMessagesStore;
+  readonly control: AccountControlProjectionStore;
   readonly admission: ChatAdmission;
   readonly supervisor: ChatGenerationSupervisor;
   readonly events: ChatGenerationEventsStore;
@@ -375,8 +377,10 @@ export const registerChatMessagesRoutes = (
       return badRequest();
     }
     try {
+      const accountEpoch = deps.control.read(principal.uid)?.account_epoch ?? null;
       const cursor = query.olderCursor === null ? null : deps.cursor.verify(query.olderCursor, {
         accountId: principal.uid,
+        accountEpoch,
         nowEpochSeconds: deps.nowEpochSeconds(),
       });
       const snapshotSequence = cursor?.snapshotSequence
@@ -391,6 +395,7 @@ export const registerChatMessagesRoutes = (
       const olderCursor = page.hasOlder && oldest !== undefined
         ? deps.cursor.issue({
             accountId: principal.uid,
+            accountEpoch,
             snapshotSequence,
             olderThan: { createdAt: oldest.createdAt, id: oldest.id },
             issuedAtEpochSeconds: cursorIssuedAt,

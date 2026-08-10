@@ -275,6 +275,76 @@ describe("ratified /v1/chat-messages route", () => {
     }
   });
 
+  test("history cursor minted before an account epoch advance is refused", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    const { db, local } = bootInMemory(stores);
+    for (const [id, at] of [["epoch-1", 1_000], ["epoch-2", 2_000], ["epoch-3", 3_000]] as const) {
+      const admitted = await post(local, payload(id, at));
+      expect(admitted.status).toBe(201);
+      await admitted.body?.cancel();
+    }
+    expect(stores.control.observe({
+      account_id: ACCOUNT,
+      control_revision: 1,
+      account_generation: "legacy",
+      account_epoch: null,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+    }).accepted).toBe(true);
+    expect(stores.control.observe({
+      account_id: ACCOUNT,
+      control_revision: 2,
+      account_generation: "migrating",
+      account_epoch: null,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+    }).accepted).toBe(true);
+    expect(stores.control.observe({
+      account_id: ACCOUNT,
+      control_revision: 3,
+      account_generation: "new",
+      account_epoch: 7,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+    }).accepted).toBe(true);
+    expect(stores.control.activate(ACCOUNT, { epoch: 7, at_control_revision: 3 }).activated)
+      .toBe(true);
+
+    const first = await local.app.request("/v1/chat-messages?limit=1", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+    expect(first.status).toBe(200);
+    const firstPage = await first.json() as {
+      page: { olderCursor: string; hasOlder: boolean };
+    };
+    expect(firstPage.page.hasOlder).toBe(true);
+    const cursorUrl =
+      `/v1/chat-messages?limit=1&olderCursor=${encodeURIComponent(firstPage.page.olderCursor)}`;
+    expect((await local.app.request(cursorUrl, {
+      headers: AUTHORIZATION(local.devToken),
+    })).status).toBe(200);
+
+    expect(stores.control.observe({
+      account_id: ACCOUNT,
+      control_revision: 4,
+      account_generation: "new",
+      account_epoch: 8,
+      lifecycle_state: "active",
+      deletion_epoch: null,
+    }).accepted).toBe(true);
+    expect(stores.control.activate(ACCOUNT, { epoch: 8, at_control_revision: 4 }).activated)
+      .toBe(true);
+    const stale = await local.app.request(cursorUrl, {
+      headers: AUTHORIZATION(local.devToken),
+    });
+
+    expect(stale.status).toBe(400);
+    expect(await stale.json()).toEqual({
+      error: { code: "bad_request", retryable: false, action: "refresh_history" },
+    });
+    db.close();
+  });
+
   test("unknown sender/type are refused on write and retained on tolerant history read", async () => {
     const base = createInMemoryLocalServiceStores();
     const messages = createInMemoryChatMessagesStore([{
