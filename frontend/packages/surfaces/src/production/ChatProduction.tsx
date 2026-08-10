@@ -382,7 +382,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                               sizeBytes: attachment.sizeBytes,
                             })}</span>
                             {attachment.contentReference === null && (
-                              <span>{t(locale, "chat.attachmentExpired")}</span>
+                              <span>{t(locale, "chat.attachmentContentUnavailable")}</span>
                             )}
                           </li>
                         ))}
@@ -434,7 +434,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
             <ul className="chat-attachments" aria-label={t(locale, "chat.attachments")}>
               {attachments.map((attachment) => (
                 <li key={attachment.id}>
-                  <span>{t(locale, "chat.stagedAttachment", {
+                  <span>{t(locale, "chat.attachmentReady", {
                     mimeType: attachment.mimeType,
                     sizeBytes: attachment.sizeBytes,
                   })}</span>

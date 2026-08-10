@@ -222,7 +222,7 @@ test("staged safe metadata renders generically while only ordered opaque ids rea
     await click(rendered, attach);
     assert.deepEqual(
       [...rendered.container.querySelectorAll(".chat-attachments li span")].map((item) => item.textContent),
-      ["Staged application/pdf, 100 bytes", "Staged application/pdf, 200 bytes"],
+      ["Attached application/pdf, 100 bytes", "Attached application/pdf, 200 bytes"],
       "staging cannot claim a durable server name that P7 did not return",
     );
 
@@ -403,7 +403,7 @@ test("canonical and expired attachment metadata render in newest and older messa
     assert.ok(lists[0].textContent.includes("normalized-old.txt"));
     assert.ok(lists[0].textContent.includes("text/plain"));
     assert.ok(lists[0].textContent.includes("654"));
-    assert.ok(lists[0].textContent.includes(EN_MESSAGES["chat.attachmentExpired"]));
+    assert.ok(lists[0].textContent.includes(EN_MESSAGES["chat.attachmentContentUnavailable"]));
     assert.equal(lists[0].querySelector("a"), null);
     assert.equal(lists[0].querySelector("button"), null);
   } finally {
