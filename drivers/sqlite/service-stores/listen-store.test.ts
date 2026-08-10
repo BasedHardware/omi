@@ -151,6 +151,17 @@ test("listen sessions, transcript ids, delivery state, and shared usage survive 
     second.listen.markDelivered(accountId, sessionId, [segment.id]);
     expect(second.listen.pendingSegments(accountId, sessionId)).toEqual([]);
     expect(second.listen.listSegments(accountId, sessionId)).toEqual([segment]);
+    expect(second.listen.openOrResume({
+      accountId,
+      id: sessionId,
+      conversationId: sessionId,
+      clientConversationId: sessionId,
+      at: "2026-08-10T12:02:00.000Z",
+      source: "desktop",
+      codec: "opus",
+      sampleRate: 16_000,
+      channels: 1,
+    }).pendingSegments).toEqual([segment]);
     secondDb.close();
   } finally {
     rmSync(directory, { recursive: true, force: true });

@@ -157,8 +157,20 @@ const eventsForRejectedFormat = (): WSEvents => ({
 
 const eventsForExhaustedEntitlement = (
   projection: SettingsEntitlementProjection,
+  session: ListenSessionRecord | null = null,
+  replaySegments: readonly ListenTranscriptSegment[] = Object.freeze([]),
 ): WSEvents => ({
   onOpen(_event, socket) {
+    if (session !== null && replaySegments.length > 0) {
+      sendJson(socket, serviceStatus("initiating"));
+      sendJson(socket, Object.freeze({
+        type: "conversation_session",
+        conversation_id: session.conversationId,
+        recording_session_id: session.id,
+      }));
+      sendJson(socket, serviceStatus("ready"));
+      sendJson(socket, transcriptBatch(replaySegments));
+    }
     sendJson(socket, createEntitlementFrame(projection));
     socket.close(LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION, "entitlement_exhausted");
   },
@@ -211,7 +223,6 @@ const eventsForSession = (
     const activeSocket = socket;
     if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
       sendJson(activeSocket, transcriptBatch([appended.segment]));
-      deps.store.markDelivered(principal.uid, session.id, [appended.segment.id]);
     }
 
     if (projection?.limitReached === true) {
@@ -253,11 +264,6 @@ const eventsForSession = (
       sendJson(openedSocket, serviceStatus("ready"));
       if (pendingSegments.length > 0) {
         sendJson(openedSocket, transcriptBatch(pendingSegments));
-        deps.store.markDelivered(
-          principal.uid,
-          session.id,
-          pendingSegments.map((segment) => segment.id),
-        );
       }
     },
 
@@ -303,12 +309,17 @@ export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): 
       return upgradeWebSocket(context, eventsForRejectedFormat());
     }
 
+    const id = handshake.clientConversationId ?? (deps.createId ?? randomUUID)();
     const entitlement = deps.entitlement.readEntitlement(principal.uid);
     if (entitlement?.limitReached === true) {
-      return upgradeWebSocket(context, eventsForExhaustedEntitlement(entitlement));
+      const existing = deps.store.readSession(principal.uid, id);
+      return upgradeWebSocket(context, eventsForExhaustedEntitlement(
+        entitlement,
+        existing,
+        existing === null ? Object.freeze([]) : deps.store.listSegments(principal.uid, id),
+      ));
     }
 
-    const id = handshake.clientConversationId ?? (deps.createId ?? randomUUID)();
     const opened = deps.store.openOrResume({
       accountId: principal.uid,
       id,

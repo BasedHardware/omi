@@ -354,15 +354,15 @@ describe("GET /v4/listen WebSocket", () => {
     })).toBeFalse();
   });
 
-  test("reconnect redelivers an uncertain segment with its original id", async () => {
+  test("a drop after send still redelivers the durable segment with its original id", async () => {
     const { service, stores, baseUrl } = boot({ delayMs: 0 });
     const first = await observedSocket(service, baseUrl);
     await first.waitFor(isReady);
     first.socket.send(new Uint8Array([1, 2, 3, 4]));
+    const firstDelivery = await first.waitFor(isTranscript) as readonly { readonly id: string }[];
+    const originalId = firstDelivery[0]!.id;
     first.socket.close(4000, "simulated_drop");
     await first.closed;
-    await waitUntil(() => stores.listen.pendingSegments(ACCOUNT, SESSION).length === 1);
-    const originalId = stores.listen.pendingSegments(ACCOUNT, SESSION)[0]!.id;
 
     const reconnected = await observedSocket(service, baseUrl);
     const redelivered = await reconnected.waitFor(isTranscript) as readonly { readonly id: string }[];
@@ -372,5 +372,25 @@ describe("GET /v4/listen WebSocket", () => {
     ]);
     reconnected.socket.close(1000, "done");
     await reconnected.closed;
+  });
+
+  test("exhaustion after send cannot suppress redelivery on reconnect", async () => {
+    const { service, stores, baseUrl } = boot({
+      used: 0.5,
+      limit: 1,
+      delayMs: 0,
+      consumedSeconds: 0.75,
+    });
+    const first = await observedSocket(service, baseUrl);
+    await first.waitFor(isReady);
+    first.socket.send(new Uint8Array([1, 2, 3, 4]));
+    const original = await first.waitFor(isTranscript) as readonly { readonly id: string }[];
+    expect((await first.closed).code).toBe(4020);
+    expect(stores.settings.readEntitlement(ACCOUNT)?.limitReached).toBeTrue();
+
+    const resumed = await observedSocket(service, baseUrl);
+    const replay = await resumed.waitFor(isTranscript) as readonly { readonly id: string }[];
+    expect(replay.map((segment) => segment.id)).toEqual(original.map((segment) => segment.id));
+    expect((await resumed.closed).code).toBe(4020);
   });
 });

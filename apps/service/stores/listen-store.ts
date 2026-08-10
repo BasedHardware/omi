@@ -4,9 +4,9 @@
  * Durable service-side state for the legacy /listen capture vocabulary.
  *
  * A recording session is bound to one conversation id before the first
- * transcript segment is accepted. Delivery is tracked independently from
- * persistence so an interrupted socket can replay uncertain segments with the
- * same ids rather than asking a transcription adapter to mint replacements.
+ * transcript segment is accepted. Because the ratified wire has no client ack
+ * or delivery cursor, every durable segment is replayed on resume with the same
+ * id. The client contract deduplicates those deliberate at-least-once repeats.
  */
 
 export type ListenSessionStatus =
@@ -139,7 +139,7 @@ export const createInMemoryListenStore = (): ListenStore => {
         return Object.freeze({
           session: resumed,
           resumed: true,
-          pendingSegments: this.pendingSegments(input.accountId, input.id),
+          pendingSegments: this.listSegments(input.accountId, input.id),
         });
       }
       const session = freezeSession({

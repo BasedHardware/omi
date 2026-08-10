@@ -134,7 +134,7 @@ export class SqliteListenStore implements ListenStore {
         return Object.freeze({
           session: this.readSession(input.accountId, input.id)!,
           resumed: true,
-          pendingSegments: this.pendingSegments(input.accountId, input.id),
+          pendingSegments: this.listSegments(input.accountId, input.id),
         });
       }
       this.db.query(`
