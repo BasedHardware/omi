@@ -8,7 +8,6 @@ import { test } from "node:test";
 
 import {
   CONSUMER_EVIDENCE_SCHEMA,
-  DETERMINISTIC_LISTEN_AUDIO_SHA256,
   DOMAINS,
   MATRIX_SIZE,
   PRODUCER_EVIDENCE_SCHEMA,
@@ -24,7 +23,6 @@ import {
 const RUN = "run-evidence-test";
 const TREE = "1".repeat(40);
 const SURFACE = "2".repeat(40);
-const STORE = `sqlite:${RUN}`;
 
 function healthyConsumer() {
   return {
@@ -52,23 +50,19 @@ function healthyProducer() {
   return {
     schema: PRODUCER_EVIDENCE_SCHEMA,
     runId: RUN,
-    storeSetId: STORE,
     rows: SHELLS.flatMap((shell) => DOMAINS.map((domain) => ({
       runId: RUN,
       shell,
       domain,
       evidence: "served-outcome",
-      storeSetId: STORE,
       ...(domain === "listen" ? {
         listen: {
           protocolReady: 1,
-          acceptedBinaryFrames: 1,
+          acceptedBinary: 1,
           acceptedBinaryBytes: deterministicListenAudio().byteLength,
-          audioSha256: DETERMINISTIC_LISTEN_AUDIO_SHA256,
-          transcript: "deterministic audio accepted",
         },
       } : { http: { successful: 1 } }),
-      ...(domain === "chat" ? { chat: { durableAccepted: 1 } } : {}),
+      ...(domain === "chat" ? { chat: { acceptedAdmission: 1 } } : {}),
     }))),
   };
 }
@@ -80,7 +74,6 @@ function verdict({ consumer = healthyConsumer(), producer = healthyProducer() } 
     producer,
     expectedShellTreeHash: TREE,
     expectedSurfaceTreeHash: SURFACE,
-    expectedStoreSetId: STORE,
   });
 }
 
@@ -160,33 +153,91 @@ test("RED-PROOF successful HTTP served counts are per coordinate", () => {
   mustFail(verdict({ producer }), /ios\/folders.*positive successful served count/);
 });
 
-test("RED-PROOF a second SQLite store set cannot contribute a producer row", () => {
+test("RED-PROOF invented store metadata is outside P7 readiness and producer schemas", () => {
+  const databasePath = "/tmp/run/service.sqlite";
+  const readiness = {
+    schema: SERVICE_READINESS_SCHEMA,
+    runId: RUN,
+    executable: SERVICE_EXECUTABLE,
+    baseUrl: SERVICE_BASE_URL,
+    databasePath,
+    pid: 123,
+    evidencePath: "/v1/qa/evidence",
+    devToken: "local-only-token",
+    ownerAccountId: "local-fixture-owner",
+    storeSetId: `sqlite:${RUN}`,
+    storeCount: 1,
+  };
+  const readinessResult = validateServiceReadiness(readiness, { runId: RUN, databasePath, pid: 123 });
+  assert.equal(readinessResult.ok, false);
+  assert.match(readinessResult.failures.join("\n"), /non-schema field.*storeSetId.*storeCount/);
+
   const producer = healthyProducer();
-  producer.rows[0].storeSetId = "sqlite:other-run";
-  mustFail(verdict({ producer }), /different SQLite store set/);
+  producer.storeSetId = `sqlite:${RUN}`;
+  producer.rows[0].storeSetId = `sqlite:${RUN}`;
+  mustFail(verdict({ producer }), /non-schema field.*storeSetId/);
 });
 
-test("RED-PROOF Chat needs durable accepted admission, not request dispatch", () => {
+test("RED-PROOF Chat requires the exact chat.acceptedAdmission count", () => {
   const producer = healthyProducer();
-  producer.rows.find((row) => row.shell === "macos" && row.domain === "chat").chat.durableAccepted = 0;
-  mustFail(verdict({ producer }), /durable accepted chat admission/);
+  const chat = producer.rows.find((row) => row.shell === "macos" && row.domain === "chat").chat;
+  chat.durableAccepted = chat.acceptedAdmission;
+  delete chat.acceptedAdmission;
+  mustFail(verdict({ producer }), /chat\.acceptedAdmission|non-schema field.*durableAccepted/);
 });
 
 test("RED-PROOF Listen ready without accepted nontrivial binary traffic fails", () => {
   const producer = healthyProducer();
   const listen = producer.rows.find((row) => row.shell === "ios" && row.domain === "listen").listen;
   listen.protocolReady = 1;
-  listen.acceptedBinaryFrames = 0;
+  listen.acceptedBinary = 0;
   listen.acceptedBinaryBytes = 0;
   mustFail(verdict({ producer }), /ready without accepted binary traffic|trivial or absent/);
 });
 
-test("RED-PROOF Listen rejects a different payload and an unrendered transcript", () => {
+test("RED-PROOF the exact Listen count is acceptedBinary, never acceptedBinaryFrames", () => {
   const producer = healthyProducer();
   const listen = producer.rows.find((row) => row.shell === "macos" && row.domain === "listen").listen;
-  listen.audioSha256 = "f".repeat(64);
-  listen.transcript = "producer-only transcript";
-  mustFail(verdict({ producer }), /wrong deterministic audio payload|rendered transcript does not contain/);
+  listen.acceptedBinaryFrames = listen.acceptedBinary;
+  delete listen.acceptedBinary;
+  mustFail(verdict({ producer }), /ready without accepted binary traffic|non-schema field.*acceptedBinaryFrames/);
+});
+
+test("RED-PROOF producer evidence is counts-only and never exposes content", () => {
+  const injections = [
+    ["transcript", "fixture transcript"],
+    ["audioSha256", "f".repeat(64)],
+    ["devToken", "local-secret"],
+    ["ownerAccountId", "local-owner"],
+    ["prompt", "user prompt"],
+    ["attachment", { name: "private.txt" }],
+    ["fixture", "normal"],
+    ["userContent", "arbitrary content"],
+  ];
+  for (const [field, value] of injections) {
+    for (const location of ["document", "row", "http", "chat", "listen"]) {
+      const producer = healthyProducer();
+      const targets = {
+        document: producer,
+        row: producer.rows.find((row) => row.shell === "ios" && row.domain === "memories"),
+        http: producer.rows.find((row) => row.shell === "ios" && row.domain === "memories").http,
+        chat: producer.rows.find((row) => row.shell === "ios" && row.domain === "chat").chat,
+        listen: producer.rows.find((row) => row.shell === "ios" && row.domain === "listen").listen,
+      };
+      targets[location][field] = value;
+      const result = verdict({ producer });
+      mustFail(result, new RegExp(`non-schema field.*${field}`));
+      const serializedProducers = JSON.stringify(result.rows.map((row) => row.producer));
+      assert.doesNotMatch(serializedProducers, new RegExp(field));
+      assert.doesNotMatch(serializedProducers, /fixture transcript|local-secret|local-owner|user prompt|private\.txt|arbitrary content/);
+    }
+  }
+});
+
+test("RED-PROOF consumer Listen still requires a rendered non-empty transcript", () => {
+  const consumer = healthyConsumer();
+  consumer.rows.find((row) => row.shell === "ios" && row.domain === "listen").observation.transcript = "";
+  mustFail(verdict({ consumer }), /ios\/listen rendered transcript must be non-empty text/);
 });
 
 test("RED-PROOF unknown service launcher executable cannot satisfy readiness", () => {
@@ -197,8 +248,6 @@ test("RED-PROOF unknown service launcher executable cannot satisfy readiness", (
     executable: SERVICE_EXECUTABLE,
     baseUrl: SERVICE_BASE_URL,
     databasePath,
-    storeSetId: STORE,
-    storeCount: 1,
     pid: 123,
     evidencePath: "/v1/qa/evidence",
     devToken: "local-only-token",
@@ -221,8 +270,6 @@ test("RED-PROOF a foreign readiness PID cannot stand in for the launched service
     executable: SERVICE_EXECUTABLE,
     baseUrl: SERVICE_BASE_URL,
     databasePath,
-    storeSetId: STORE,
-    storeCount: 1,
     pid: 999,
     evidencePath: "/v1/qa/evidence",
     devToken: "local-only-token",

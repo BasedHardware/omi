@@ -5,8 +5,6 @@
 // host-owned run + shell + domain key. A shell saying it rendered and a service
 // saying it served are both necessary; neither may stand in for the other.
 
-import { createHash } from "node:crypto";
-
 export const CONSUMER_EVIDENCE_SCHEMA = "omi.consumer-evidence.v1";
 export const PRODUCER_EVIDENCE_SCHEMA = "omi.producer-evidence.v1";
 export const SERVICE_READINESS_SCHEMA = "omi.dev-service-readiness.v1";
@@ -32,11 +30,20 @@ const keyOf = (shell, domain) => `${shell}/${domain}`;
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 
+function requireExactKeys(value, allowed, label, failures) {
+  if (!isObject(value)) return;
+  const unexpected = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unexpected.length > 0) {
+    failures.push(`${label} has non-schema field(s): ${unexpected.join(", ")}`);
+  }
+}
+
 export function deterministicListenAudio() {
   // 100 ms of signed PCM16 mono at 16 kHz. It is deliberately non-silent and
   // deterministic, while remaining synthetic and far too short to contain user
-  // data. The service evidence must attest to these exact bytes, not merely to a
-  // WebSocket upgrade or ready frame.
+  // data. The native driver sends these bytes after protocol readiness; the
+  // producer boundary reports counts only and never reflects their digest or
+  // resulting transcript.
   const bytes = new Uint8Array(3_200);
   for (let sample = 0; sample < 1_600; sample += 1) {
     const value = ((sample * 257) % 24_001) - 12_000;
@@ -45,10 +52,6 @@ export function deterministicListenAudio() {
   }
   return bytes;
 }
-
-export const DETERMINISTIC_LISTEN_AUDIO_SHA256 = createHash("sha256")
-  .update(deterministicListenAudio())
-  .digest("hex");
 
 export function expectedCoordinates() {
   return SHELLS.flatMap((shell) => DOMAINS.map((domain) => ({ shell, domain })));
@@ -93,6 +96,28 @@ function requireExactMatrix(rows, expectedRunId, label, failures) {
   return byKey;
 }
 
+function countOnlyProducerRow(row, domain) {
+  const normalized = {
+    runId: row.runId,
+    shell: row.shell,
+    domain: row.domain,
+    evidence: row.evidence,
+  };
+  if (domain === "listen") {
+    normalized.listen = {
+      protocolReady: row.listen?.protocolReady,
+      acceptedBinary: row.listen?.acceptedBinary,
+      acceptedBinaryBytes: row.listen?.acceptedBinaryBytes,
+    };
+  } else {
+    normalized.http = { successful: row.http?.successful };
+    if (domain === "chat") {
+      normalized.chat = { acceptedAdmission: row.chat?.acceptedAdmission };
+    }
+  }
+  return Object.freeze(normalized);
+}
+
 export function validateServiceReadiness(record, {
   runId,
   databasePath,
@@ -102,13 +127,22 @@ export function validateServiceReadiness(record, {
 } = {}) {
   const failures = [];
   if (!isObject(record)) return { ok: false, failures: ["service readiness record must be an object"] };
+  requireExactKeys(record, [
+    "schema",
+    "runId",
+    "executable",
+    "baseUrl",
+    "databasePath",
+    "pid",
+    "evidencePath",
+    "devToken",
+    "ownerAccountId",
+  ], "service readiness", failures);
   if (record.schema !== SERVICE_READINESS_SCHEMA) failures.push(`service readiness schema must be ${SERVICE_READINESS_SCHEMA}`);
   if (record.runId !== runId) failures.push(`service readiness has wrong runId ${JSON.stringify(record.runId)}`);
   if (record.executable !== executable) failures.push(`unknown launcher executable ${JSON.stringify(record.executable)}; expected ${executable}`);
   if (record.baseUrl !== baseUrl) failures.push(`service readiness baseUrl must be ${baseUrl}`);
   if (record.databasePath !== databasePath) failures.push("service readiness names a different SQLite path");
-  if (record.storeSetId !== `sqlite:${runId}`) failures.push(`service readiness storeSetId must be sqlite:${runId}`);
-  if (record.storeCount !== 1) failures.push("service readiness must attest to exactly one SQLite store set");
   if (!Number.isSafeInteger(pid) || pid <= 0) failures.push("expected service pid must be a positive integer");
   if (record.pid !== pid) failures.push(`service readiness pid ${JSON.stringify(record.pid)} does not match launched pid ${JSON.stringify(pid)}`);
   if (record.evidencePath !== PRODUCER_EVIDENCE_PATH) failures.push(`service readiness evidencePath must be ${PRODUCER_EVIDENCE_PATH}`);
@@ -123,13 +157,11 @@ export function arbitrateEvidence({
   producer,
   expectedShellTreeHash,
   expectedSurfaceTreeHash,
-  expectedStoreSetId,
 } = {}) {
   const failures = [];
   requireText(runId, "runId", failures);
   if (!HASH.test(expectedShellTreeHash ?? "")) failures.push("expectedShellTreeHash must be a 40-character git tree hash");
   if (!HASH.test(expectedSurfaceTreeHash ?? "")) failures.push("expectedSurfaceTreeHash must be a 40-character git tree hash");
-  requireText(expectedStoreSetId, "expectedStoreSetId", failures);
 
   if (!isObject(consumer)) failures.push("consumer evidence must be an object");
   else {
@@ -138,9 +170,9 @@ export function arbitrateEvidence({
   }
   if (!isObject(producer)) failures.push("producer evidence must be an object");
   else {
+    requireExactKeys(producer, ["schema", "runId", "rows"], "producer evidence", failures);
     if (producer.schema !== PRODUCER_EVIDENCE_SCHEMA) failures.push(`producer schema must be ${PRODUCER_EVIDENCE_SCHEMA}`);
     if (producer.runId !== runId) failures.push(`producer evidence has wrong runId ${JSON.stringify(producer.runId)}`);
-    if (producer.storeSetId !== expectedStoreSetId) failures.push("producer evidence names a different SQLite store set");
   }
 
   const consumers = requireExactMatrix(consumer?.rows, runId, "consumer", failures);
@@ -165,34 +197,51 @@ export function arbitrateEvidence({
       if (c.surfaceTreeHash !== expectedSurfaceTreeHash) failures.push(`${key} has stale or mismatched surface tree hash`);
     }
     if (p) {
-      if (p.storeSetId !== expectedStoreSetId) failures.push(`${key} producer row names a different SQLite store set`);
+      const allowedRowKeys = domain === "listen"
+        ? ["runId", "shell", "domain", "evidence", "listen"]
+        : domain === "chat"
+          ? ["runId", "shell", "domain", "evidence", "http", "chat"]
+          : ["runId", "shell", "domain", "evidence", "http"];
+      requireExactKeys(p, allowedRowKeys, `${key} producer row`, failures);
       if (p.evidence !== "served-outcome") failures.push(`${key} producer evidence is dispatch-only or readiness-only`);
       if (domain !== "listen") {
         if (!isObject(p.http) || !integer(p.http.successful) || p.http.successful <= 0) {
           failures.push(`${key} producer evidence requires a positive successful served count`);
+        } else {
+          requireExactKeys(p.http, ["successful"], `${key} HTTP counts`, failures);
         }
       }
       if (domain === "chat") {
-        if (!isObject(p.chat) || !integer(p.chat.durableAccepted) || p.chat.durableAccepted <= 0) {
-          failures.push(`${key} producer evidence requires durable accepted chat admission`);
+        if (!isObject(p.chat) || !integer(p.chat.acceptedAdmission) || p.chat.acceptedAdmission <= 0) {
+          failures.push(`${key} producer evidence requires positive chat.acceptedAdmission`);
+        } else {
+          requireExactKeys(p.chat, ["acceptedAdmission"], `${key} Chat counts`, failures);
         }
       }
       if (domain === "listen") {
         const listen = p.listen;
         if (!isObject(listen)) failures.push(`${key} producer evidence is missing Listen acceptance`);
         else {
+          requireExactKeys(
+            listen,
+            ["protocolReady", "acceptedBinary", "acceptedBinaryBytes"],
+            `${key} Listen counts`,
+            failures,
+          );
           if (!integer(listen.protocolReady) || listen.protocolReady <= 0) failures.push(`${key} Listen never became protocol-ready`);
-          if (!integer(listen.acceptedBinaryFrames) || listen.acceptedBinaryFrames <= 0) failures.push(`${key} Listen ready without accepted binary traffic`);
+          if (!integer(listen.acceptedBinary) || listen.acceptedBinary <= 0) failures.push(`${key} Listen ready without accepted binary traffic`);
           if (!integer(listen.acceptedBinaryBytes) || listen.acceptedBinaryBytes < deterministicListenAudio().byteLength) failures.push(`${key} Listen accepted binary payload is trivial or absent`);
-          if (listen.audioSha256 !== DETERMINISTIC_LISTEN_AUDIO_SHA256) failures.push(`${key} Listen accepted the wrong deterministic audio payload`);
-          requireText(listen.transcript, `${key} producer transcript`, failures);
-          if (c?.observation?.transcript && typeof listen.transcript === "string" && !c.observation.transcript.includes(listen.transcript)) {
-            failures.push(`${key} rendered transcript does not contain the producer-accepted transcript`);
-          }
         }
       }
     }
-    if (c && p) matrix.push(Object.freeze({ shell, domain, consumer: c, producer: p }));
+    if (c && p) {
+      matrix.push(Object.freeze({
+        shell,
+        domain,
+        consumer: c,
+        producer: countOnlyProducerRow(p, domain),
+      }));
+    }
   }
 
   return Object.freeze({

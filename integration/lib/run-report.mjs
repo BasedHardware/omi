@@ -42,7 +42,6 @@ export function buildReport(facts) {
     producer: facts.producer,
     expectedShellTreeHash: facts.expectedShellTreeHash,
     expectedSurfaceTreeHash: facts.expectedSurfaceTreeHash,
-    expectedStoreSetId: facts.service?.readiness?.storeSetId,
   });
   const shellFailures = ["macos", "ios"].flatMap((shell) => {
     const result = facts.shells?.[shell];
@@ -105,7 +104,6 @@ export function buildReport(facts) {
       databasePath: facts.service?.databasePath ?? null,
       pid: facts.service?.readiness?.pid ?? null,
       readinessSchema: facts.service?.readiness?.schema ?? null,
-      storeSetId: facts.service?.readiness?.storeSetId ?? null,
       reachableAfter: backendAlive,
     },
     shells: {
