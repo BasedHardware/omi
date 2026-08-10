@@ -243,6 +243,7 @@ final class ShellGlassChromeTests: XCTestCase {
     "MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift",
     "MainWindow/Pages/ChatErrorCard.swift",
     "MainWindow/Components/ChatBubble.swift",
+    "MainWindow/Components/StreamingAssistantText.swift",
     "MainWindow/Components/ChatMessagesView.swift",
     "MainWindow/Components/ChatSessionsSidebar.swift",
     "MainWindow/Components/ConversationRowView.swift",
