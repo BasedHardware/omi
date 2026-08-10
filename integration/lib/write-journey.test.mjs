@@ -80,7 +80,7 @@ test("the journey writes every bag-backed field in the signed task vocabulary", 
 });
 
 test("the launcher binds one registered composition for memories, task ops, and task reads", async (t) => {
-  // red-proof: replace the launcher import of `createLocalService` with the old
+  // red-proof: replace the launcher import of `createLocalDevService` with the old
   // memories-only integration server and /v1/tasks/ops returns the unknown-route
   // 404 before this test can create or read the task.
   const launcher = new URL("./write-journey-door.mjs", import.meta.url);
