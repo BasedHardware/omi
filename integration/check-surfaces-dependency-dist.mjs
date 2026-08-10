@@ -3,29 +3,16 @@
 // through. Runtime JS and declarations must exactly match a fresh in-memory
 // TypeScript emit; build-mode metadata is checked independently with tsc --dry.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { listSurfaceDependencyRows } from "../core/packages/surfaces/test/dependency-dist-state.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const coreRoot = resolve(here, "..", "core");
 const surfacesName = "@omi-core/surfaces";
-
-function listDependencyRows(prepareBuild) {
-  const listArgs = prepareBuild
-    ? ["-r", "list", "--depth", "-1", "--json"]
-    : ["--filter", `${surfacesName}^...`, "list", "--depth", "-1", "--json"];
-  return JSON.parse(
-    execFileSync(
-      "pnpm",
-      listArgs,
-      { cwd: coreRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    ),
-  );
-}
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -60,52 +47,6 @@ function withoutTerminalLineFeed(content) {
   // `tsc -b`'s filesystem host appends one LF that Program.emit's callback
   // omits. It is runtime-neutral; all other emitted bytes must match.
   return content.endsWith("\n") ? content.slice(0, -1) : content;
-}
-
-function hashTree(hash, root, include) {
-  if (!existsSync(root)) {
-    hash.update(`missing\0${root}\0`);
-    return;
-  }
-  for (const entry of readdirSync(root, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) hashTree(hash, path, include);
-    else if (entry.isFile() && include(path)) {
-      hash.update(`${path}\0${statSync(path).size}\0`);
-      hash.update(readFileSync(path));
-      hash.update("\0");
-    }
-  }
-}
-
-/** Exact-byte snapshot used by the render harness to avoid recompiling an
- * unchanged dependency graph while still rechecking before every import. */
-export function dependencyDistFingerprint() {
-  const hash = createHash("sha256");
-  const rows = listDependencyRows(false);
-  const fixedFiles = [
-    join(coreRoot, "package.json"),
-    join(coreRoot, "pnpm-lock.yaml"),
-    join(coreRoot, "pnpm-workspace.yaml"),
-    join(coreRoot, "tsconfig.base.json"),
-    join(coreRoot, "packages", "surfaces", "package.json"),
-  ];
-  for (const path of fixedFiles) {
-    hash.update(`${path}\0`);
-    hash.update(existsSync(path) ? readFileSync(path) : "missing");
-    hash.update("\0");
-  }
-  for (const row of rows.sort((left, right) => left.path.localeCompare(right.path))) {
-    for (const name of ["package.json", "tsconfig.json", "tsconfig.base.json", "tsconfig.tsbuildinfo"]) {
-      const path = join(row.path, name);
-      hash.update(`${path}\0`);
-      hash.update(existsSync(path) ? readFileSync(path) : "missing");
-      hash.update("\0");
-    }
-    hashTree(hash, join(row.path, "src"), () => true);
-    hashTree(hash, join(row.path, "dist"), isComparedEmit);
-  }
-  return hash.digest("hex");
 }
 
 /**
@@ -171,7 +112,7 @@ export function runDependencyDistCheck({ prepareBuild = false } = {}) {
 
   let dependencyRows;
   try {
-    dependencyRows = listDependencyRows(prepareBuild);
+    dependencyRows = listSurfaceDependencyRows(prepareBuild);
   } catch (error) {
     fail(
       prepareBuild

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createServer } from "vite";
-import { dependencyDistFingerprint } from "../../../../integration/check-surfaces-dependency-dist.mjs";
+import { dependencyDistFingerprint } from "./dependency-dist-state.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../../..");
