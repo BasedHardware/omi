@@ -92,6 +92,25 @@ function successfulSend(id: string, text: string): { status: number; json: null;
   };
 }
 
+function failedGenerationSend(id: string, text: string): { status: number; json: null; text: string } {
+  const human = wireMessage(id, text);
+  return {
+    status: 201,
+    json: null,
+    text: [
+      "event: accepted",
+      "id: event-accepted",
+      `data: ${JSON.stringify({ kind: "accepted", message: human, generation: { id: `generation-${id}` } })}`,
+      "",
+      "event: failed",
+      "id: event-failed",
+      `data: ${JSON.stringify({ kind: "failed", error: { code: "provider_down", retryable: true } })}`,
+      "",
+      "",
+    ].join("\n"),
+  };
+}
+
 test("409 identity conflict dead-letters and is never retried", async () => {
   // red-proof: in packages/adapters-platform/src/chat.ts create branch, replace
   // the `res.status === 409` foldIdentityConflict return with
@@ -141,6 +160,58 @@ test("403 forbidden is a permanent chat send outcome, never an auth pause", asyn
   assert.equal(dead[0]?.failure.kind, "permanent");
 });
 
+test("an admitted human send and a failed assistant generation remain two visible store facts", async () => {
+  // red-proof: omit generation-terminal delivery from chatMessagesTransport.
+  // The outbox still confirms the human row and drains, but the store has no
+  // generationDeliveries surface on which to expose provider_down/retryable.
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
+
+  await store.send("answer even during an outage");
+  const clientMessageId = (await store.list())[0]!.id;
+  http.respond(failedGenerationSend(clientMessageId, "answer even during an outage"));
+  await env.advance(10);
+
+  assert.equal(store.pendingCount(), 0, "the admitted human operation is honestly confirmed");
+  assert.deepEqual(
+    (await store.list()).map((message) => ({ sender: message.sender, text: message.text })),
+    [{ sender: "human", text: "answer even during an outage" }],
+    "the confirmed human message remains in the thread",
+  );
+
+  const observed = store as unknown as {
+    generationDeliveries?: () => Promise<readonly {
+      generationId: string;
+      clientMessageId: string;
+      terminal: { kind: string; error?: { code: string; retryable: boolean } };
+    }[]>;
+  };
+  assert.equal(
+    typeof observed.generationDeliveries,
+    "function",
+    "the store must expose the assistant generation outcome separately from admission",
+  );
+  const expectedDeliveries = [{
+    generationId: `generation-${clientMessageId}`,
+    clientMessageId,
+    terminal: { kind: "failed", error: { code: "provider_down", retryable: true } },
+  }];
+  assert.deepEqual(await observed.generationDeliveries!(), expectedDeliveries);
+
+  const reopened = await ChatMessagesStore.open(
+    disk.openBridge("u"),
+    new ManualEnv(),
+    new ScriptedHttp(),
+  );
+  assert.deepEqual(
+    await reopened.generationDeliveries(),
+    expectedDeliveries,
+    "the failed assistant outcome remains visible after app restart",
+  );
+});
+
 test("the same op replayed produces the same payload hash and does not duplicate a message", async () => {
   // red-proof: rebuild attachmentIds instead of replaying the journaled op.
   // The whole-body equality and derived hash equality below both fail.
@@ -188,10 +259,16 @@ test("the same op replayed produces the same payload hash and does not duplicate
 
   assert.equal(body1.journalRevision, body2.journalRevision, "journal revision is durable");
 
-  // Content, not row count: one local identity, one text — replay must not mint a second row.
+  // Content, not row count: one human identity and one canonical assistant —
+  // replay must not mint a second copy of either side of the turn.
   const rows = await store.list();
-  assert.equal(rows.map((r) => r.id).join(","), localId);
-  assert.equal(rows.map((r) => r.text).join(","), "hello once");
+  assert.deepEqual(
+    rows.map((row) => ({ id: row.id, sender: row.sender, text: row.text })),
+    [
+      { id: localId, sender: "human", text: "hello once" },
+      { id: `assistant-${localId}`, sender: "ai", text: "Canonical answer" },
+    ],
+  );
 });
 
 test("the adapter never invents an unratified rating route", async () => {
@@ -277,8 +354,13 @@ test("junk or non-200 reconcile body yields null snapshot — never an empty com
   await store.refresh();
 
   const rows = await store.list();
-  assert.equal(rows.map((r) => r.id).join(","), localId);
-  assert.equal(rows[0]!.text, "must survive junk snapshot");
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  assert.equal(byId.get(localId)?.text, "must survive junk snapshot");
+  assert.equal(
+    byId.get(`assistant-${localId}` as RecordId)?.text,
+    "Canonical answer",
+    "the terminal assistant delivery survives an unrelated malformed refresh",
+  );
 });
 
 test("ratified create envelope carries the full authored operation", async () => {

@@ -12,7 +12,7 @@
  * there is no alias protocol or server-assigned-id compatibility path.
  */
 
-import type { ChatMessage, DeadLetter, RecordId } from "@omi-core/contracts";
+import type { ChatMessage, ChatMessageOp, ChatTerminalFrame, DeadLetter, DurableKv, RecordId } from "@omi-core/contracts";
 import type { HttpClient, StorageBridge } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
 import { Outbox, Projection } from "@omi-core/sync";
@@ -20,6 +20,10 @@ import {
   chatMessagesTransport,
   fetchChatMessageIdSnapshot,
   fetchChatMessages,
+} from "@omi-core/adapters-platform";
+import type {
+  ChatGenerationReconnectTransport,
+  ChatGenerationTerminalDelivery,
 } from "@omi-core/adapters-platform";
 import {
   buildCreateChatMessage,
@@ -31,6 +35,14 @@ import {
 } from "./chat-codec.js";
 import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
+const GENERATION_DELIVERIES_KEY = "generation-deliveries";
+
+export interface StoredChatGenerationDelivery {
+  readonly generationId: string;
+  readonly clientMessageId: RecordId;
+  readonly terminal: ChatTerminalFrame;
+}
+
 export class ChatMessagesStore {
   private listeners = new Set<() => void>();
   private readonly refreshTracker: RefreshTracker;
@@ -40,29 +52,46 @@ export class ChatMessagesStore {
     private readonly http: HttpClient,
     private readonly outbox: Outbox,
     private readonly projection: Projection<ChatMessage>,
+    private readonly generationKv: DurableKv,
     hasSavedData: boolean,
   ) {
     this.refreshTracker = new RefreshTracker(hasSavedData);
   }
 
-  static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<ChatMessagesStore> {
+  static async open(
+    bridge: StorageBridge,
+    env: Env,
+    http: HttpClient,
+    reconnect?: ChatGenerationReconnectTransport,
+  ): Promise<ChatMessagesStore> {
     const projection = await Projection.open(
       await bridge.openKv("chat-projection"),
       chatMessagesCodec,
     );
+    const generationKv = await bridge.openKv("chat-generation-deliveries");
 
-    const transport = chatMessagesTransport(http);
+    let store: ChatMessagesStore;
+    const transport = chatMessagesTransport(
+      http,
+      async (delivery) => store.recordGenerationTerminal(delivery),
+      reconnect,
+    );
     const outbox = await Outbox.open(bridge, env, transport, "chat");
-    const store = new ChatMessagesStore(
+    store = new ChatMessagesStore(
       env,
       http,
       outbox,
       projection,
+      generationKv,
       (await projection.read([])).length > 0,
     );
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
       if (outcome.state !== "confirmed") return;
+      const domainOp = JSON.parse(op.payload) as ChatMessageOp;
+      // The required terminal-delivery callback persisted the canonical
+      // accepted human row before the transport reported admission success.
+      if (domainOp.op === "create") return;
       const current = (await projection.read([])).find((r) => r.id === op.recordId) ?? null;
       const next = chatMessagesCodec.applyOp(op.payload, current);
       if (next === null) await projection.removeServerRow(op.recordId);
@@ -94,6 +123,18 @@ export class ChatMessagesStore {
 
   deadLetters(): Promise<DeadLetter[]> {
     return this.outbox.deadLetters();
+  }
+
+  /** Durable assistant outcomes, separate from confirmed human admissions. */
+  async generationDeliveries(): Promise<readonly StoredChatGenerationDelivery[]> {
+    const raw = await this.generationKv.get(GENERATION_DELIVERIES_KEY);
+    if (raw === null) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed as StoredChatGenerationDelivery[] : [];
+    } catch {
+      return [];
+    }
   }
 
   discardDeadLetter(opId: string): Promise<void> {
@@ -175,5 +216,26 @@ export class ChatMessagesStore {
 
   private notify(): void {
     for (const fn of this.listeners) fn();
+  }
+
+  private async recordGenerationTerminal(
+    delivery: ChatGenerationTerminalDelivery,
+  ): Promise<void> {
+    const generationId = delivery.accepted.generation.id;
+    const existing = await this.generationDeliveries();
+    const next: StoredChatGenerationDelivery = {
+      generationId,
+      clientMessageId: delivery.accepted.message.id,
+      terminal: delivery.terminal,
+    };
+    await this.generationKv.set(
+      GENERATION_DELIVERIES_KEY,
+      JSON.stringify([...existing.filter((item) => item.generationId !== generationId), next]),
+    );
+    const canonicalRows = delivery.terminal.kind === "failed"
+      ? [delivery.accepted.message]
+      : [delivery.accepted.message, delivery.terminal.message];
+    await this.projection.upsertServerRows(canonicalRows);
+    this.notify();
   }
 }
