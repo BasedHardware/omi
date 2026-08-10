@@ -40,6 +40,12 @@ empty app when the backend is unreachable or no credential is available. That re
 deliberate: a shell that launches into an empty list is indistinguishable from a UI bug,
 and that ambiguity is exactly how a dead data path once passed for a working one.
 
+Listen uses the same shell-held API authority and bearer credential as privileged HTTP.
+The page sends only an origin-relative `/v4/listen?...` path over the
+`omiListenSocket` host channel; macOS and iOS resolve it to `ws(s)` and attach
+`Authorization` natively. The socket never targets the fixed render origin, and neither
+the API base URL nor the credential is exposed to page state.
+
 ## LIVE vs FIXTURE — read this before believing a screenshot
 
 `--fixture <name>` maps to a `qa=` surface route, which selects an in-page fixture store.
@@ -83,6 +89,12 @@ mirrors of the security-bearing bridge constants, and a 20-row HTTP host-conform
 generated for both hosts. Host enforcement policy exists twice (~180 lines of Swift and of
 Dart) and a real bug was once exactly a porting divergence between them, so prefer growing
 the generated conformance table over hand-porting a third copy.
+
+The Listen socket authority policy is verified through each production implementation:
+`shells/macos/tests/listen-socket-composition.test.mjs` compiles and runs the Swift policy,
+and `shells/ios/app/test/listen_socket_host_test.dart` runs the Dart policy with Flutter
+3.44.5. Both assert API-base resolution plus bearer attachment; surface tests assert that
+only the relative path crosses the page boundary.
 
 Native verification is **screenshot + socket, not tests**. Name the evidence class:
 `WKWebView.takeSnapshot` proves the surface rendered; desktop `screencapture` proves a

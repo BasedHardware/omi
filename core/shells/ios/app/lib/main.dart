@@ -10,6 +10,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'bridge_http_host.dart';
 import 'gen/bridge.g.dart';
 import 'gen/bridge_http_contract.g.dart';
+import 'listen_socket_host.dart';
 import 'loop_server.dart';
 import 'scheme_host.dart';
 
@@ -72,6 +73,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   late final WebViewController _controller;
   late final OmiShellBridge _bridge;
   BridgeHttpHost? _http;
+  ListenSocketHost? _listen;
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
@@ -147,7 +149,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // its first script evaluation and picks bridge mode rather than DEV.
     final apiBase = Uri.tryParse(_apiBaseUrl);
     if (_apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
-      _http = BridgeHttpHost(baseUrl: apiBase, token: _apiToken);
+      final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken);
+      _http = authority.makeHttpHost();
+      _listen = authority.makeListenHost();
       debugPrint(
         '[bridge-http] enabled for ${apiBase.scheme}://${apiBase.host} '
         '(token ${_http!.hasCredential ? "present" : "absent"})',
@@ -224,6 +228,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // detection runs on its first script evaluation, so a channel added after
     // navigation would leave it in DEV mode for the life of the page.
     await _http?.register(_controller);
+    await _listen?.register(_controller);
     switch (_mode) {
       case SurfaceMode.dev:
         await _controller.loadRequest(Uri.parse('http://$_devHost/'));

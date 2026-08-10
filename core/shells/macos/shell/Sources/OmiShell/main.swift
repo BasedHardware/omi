@@ -194,11 +194,16 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private var ticker: Timer?
   private let loadURL: URL
   private let http: BridgeHttpHandler?
+  private let listen: ListenSocketHandler?
   var onCommittedURL: ((URL) -> Void)?
 
-  init(handlers: NativeHandlers, frame: NSRect, loadURL: URL, http: BridgeHttpHandler?) {
+  init(
+    handlers: NativeHandlers, frame: NSRect, loadURL: URL,
+    http: BridgeHttpHandler?, listen: ListenSocketHandler?
+  ) {
     self.loadURL = loadURL
     self.http = http
+    self.listen = listen
     let config = WKWebViewConfiguration()
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     let webView = TransparentWKWebView(frame: frame, configuration: config)
@@ -217,6 +222,9 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     if let http {
       config.userContentController.addScriptMessageHandler(
         http, contentWorld: .page, name: BridgeHttpHandler.channel)
+    }
+    if let listen {
+      config.userContentController.add(listen, name: ListenSocketHandler.channel)
     }
     webView.navigationDelegate = self
     if #available(macOS 13.3, *) { webView.isInspectable = true }
@@ -281,6 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var loopback: LoopbackServer?
   /// Retained so the reply-capable message handler outlives registration.
   var httpHandler: BridgeHttpHandler?
+  var listenSocketHandler: ListenSocketHandler?
   private let env = ProcessInfo.processInfo.environment
   private var acceptanceEmitted = false
   private var acceptancePassed = true
@@ -386,8 +395,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "session-bootstrap: path=\(session.path.rawValue) store=\(session.storeLogDescription) token=\(session.tokenPresent ? "present" : "absent")\n"
           .utf8))
     var httpHandler: BridgeHttpHandler?
+    var listenSocketHandler: ListenSocketHandler?
     if let base = session.baseURL {
-      httpHandler = BridgeHttpHandler(baseURL: base, token: session.token, clientId: runClientId)
+      let authority = ShellTransportAuthority(baseURL: base, token: session.token)
+      httpHandler = authority.makeHTTPHandler(clientId: runClientId)
+      listenSocketHandler = authority.makeListenHandler()
       FileHandle.standardError.write(
         Data(
           "bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(session.tokenPresent ? "present" : "absent"))\n"
@@ -397,8 +409,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Data("bridge-http: disabled (set OMI_API_BASE_URL to enable privileged HTTP)\n".utf8))
     }
     self.httpHandler = httpHandler
+    self.listenSocketHandler = listenSocketHandler
     controller = WebViewController(
-      handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url, http: httpHandler)
+      handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
+      http: httpHandler, listen: listenSocketHandler)
     window = NSWindow(
       contentRect: contentRect,
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
