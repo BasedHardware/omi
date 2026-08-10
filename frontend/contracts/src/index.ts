@@ -4,6 +4,7 @@ export * from "./errors.js";
 export * from "./http.js";
 export * from "./ids.js";
 export * from "./snapshot.js";
+export * from "./bridge/chat-attachment-staging.js";
 export * from "./bridge/durable-log.js";
 export * from "./bridge/http.js";
 export * from "./bridge/stream.js";
