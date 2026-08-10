@@ -27,9 +27,10 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CORE_REPO="$(cd "$HERE/.." && pwd)"
-WORKSPACE="$(cd "$CORE_REPO/.." && pwd)"
-PLATFORM_REPO="$WORKSPACE/platform"
+paths="$(node "$HERE/lib/provenance.mjs" --paths 2>/dev/null || true)"
+read -r CORE_REPO PLATFORM_REPO WORKSPACE <<<"$(printf '%s' "$paths" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(`${j["core-foundation"]} ${j.platform} ${j.workspace}`)}catch{console.log("")}})')"
+[[ -n "${CORE_REPO:-}" && -n "${PLATFORM_REPO:-}" ]] || { echo "BROKEN: repo paths could not be resolved" >&2; exit 1; }
 SURFACES_DIST="$CORE_REPO/core/packages/surfaces/dist"
 
 JSON=0
@@ -64,7 +65,7 @@ check() {
 [[ $JSON -eq 0 ]] && printf '%s\n' "${B}omi doctor${Z} — $WORKSPACE"
 
 # ── tools ───────────────────────────────────────────────────────────────────
-for tool in node pnpm bun git lsof; do
+for tool in node corepack bun git lsof xcrun; do
   if command -v "$tool" >/dev/null 2>&1; then
     check ok "tool:$tool" "$(command -v "$tool")"
   else
@@ -92,16 +93,15 @@ fi
 # ── repos and branches ──────────────────────────────────────────────────────
 branch_of() { git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
 cf_branch="$(branch_of "$CORE_REPO")"
-if [[ "$cf_branch" == "core/foundation" ]]; then check ok "branch:core-foundation" "$cf_branch"
-else check broken "branch:core-foundation" "on '$cf_branch', expected core/foundation" \
-  "git -C $CORE_REPO checkout core/foundation   (see BRANCHES.md — it, not git history, is the authority on which branch counts)"; fi
+if [[ -n "$cf_branch" ]]; then check ok "branch:core-foundation" "$cf_branch"
+else check broken "branch:core-foundation" "not a git checkout" "use a core-foundation linked worktree"; fi
 
 pf_branch="$(branch_of "$PLATFORM_REPO")"
 if [[ "$pf_branch" == "codex/track3-backend-integration" ]]; then check ok "branch:platform" "$pf_branch"
 else check broken "branch:platform" "on '$pf_branch', expected codex/track3-backend-integration" \
   "git -C $PLATFORM_REPO checkout codex/track3-backend-integration"; fi
 
-if [[ -f "$PLATFORM_REPO/integration/server/serve.ts" ]]; then check ok "backend:entrypoint" "integration/server/serve.ts present"
+if [[ -f "$PLATFORM_REPO/apps/service/bin/dev-server.ts" ]]; then check ok "backend:entrypoint" "apps/service/bin/dev-server.ts present"
 else check broken "backend:entrypoint" "missing" "wrong branch in $PLATFORM_REPO — see above"; fi
 
 # ── dependencies ────────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ if [[ -x "$CORE_REPO/core/packages/surfaces/node_modules/.bin/tsc" ]]; then
   check ok "deps:core" "workspace members installed (surfaces can resolve tsc)"
 else
   check broken "deps:core" "core/node_modules is missing or incomplete — the build will die with 'tsc: command not found'" \
-    "cd $CORE_REPO/core && pnpm install --config.confirmModulesPurge=false   (the flag is NOT optional: without it a new workspace member makes install exit 0 WITHOUT installing)"
+    "cd $CORE_REPO/core && corepack pnpm install --config.confirmModulesPurge=false"
 fi
 if [[ -d "$PLATFORM_REPO/node_modules" ]]; then check ok "deps:platform" "node_modules present"
 else check broken "deps:platform" "missing" "cd $PLATFORM_REPO && bun install"; fi
@@ -132,36 +132,37 @@ stamp_report="$(node "$HERE/lib/provenance.mjs" >/dev/null 2>&1 && node -e '
   console.log(JSON.stringify({agree: v.agree, reason: v.reason}));
 ' --input-type=module 2>/dev/null || echo '')"
 if [[ -z "$stamp_report" ]]; then
-  check warn "dist:surfaces" "could not evaluate the build stamp" "cd $CORE_REPO/core && pnpm --filter @omi-core/surfaces build"
+  check warn "dist:surfaces" "could not evaluate the build stamp" "cd $CORE_REPO/core && corepack pnpm --filter @omi-core/surfaces build"
 elif [[ "$stamp_report" == *'"agree":true'* ]]; then
   check ok "dist:surfaces" "built from the current working tree"
 else
   reason="$(printf '%s' "$stamp_report" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).reason)}catch{console.log("unknown")}})')"
   check broken "dist:surfaces" "STALE — $reason" \
-    "cd $CORE_REPO/core && pnpm --filter @omi-core/surfaces build   (a stale dist makes every downstream green a claim about old code)"
+    "cd $CORE_REPO/core && corepack pnpm --filter @omi-core/surfaces build"
 fi
 
 if [[ -f "$CORE_REPO/core/packages/adapters-platform/dist/index.js" ]]; then
   src_newest="$(find "$CORE_REPO/core/packages/adapters-platform/src" -type f -newer "$CORE_REPO/core/packages/adapters-platform/dist/index.js" 2>/dev/null | head -1)"
   if [[ -n "$src_newest" ]]; then
     check broken "dist:adapters-platform" "source is newer than dist (e.g. ${src_newest#"$CORE_REPO/"})" \
-      "cd $CORE_REPO/core && pnpm -r build   (integration/cross-side/wire-agreement.test.mjs imports this dist — stale means it tests yesterday's client)"
+      "cd $CORE_REPO/core && corepack pnpm -r build"
   else
     check ok "dist:adapters-platform" "newer than its sources"
   fi
 else
-  check broken "dist:adapters-platform" "not built" "cd $CORE_REPO/core && pnpm -r build"
+  check broken "dist:adapters-platform" "not built" "cd $CORE_REPO/core && corepack pnpm -r build"
 fi
 
 # ── ports ───────────────────────────────────────────────────────────────────
-for spec in "4851:new backend" "4852:surfaces" "4747:legacy wire" "5290:macOS shell"; do
+for spec in "4851:single platform service" "5290:fixed macOS surface origin"; do
   port="${spec%%:*}"; label="${spec#*:}"
   holder="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1)"
   if [[ -z "$holder" ]]; then
     check ok "port:$port" "free ($label)"
   else
     cmd="$(ps -o comm= -p "$holder" 2>/dev/null | sed 's#.*/##')"
-    check ok "port:$port" "in use by ${cmd:-pid $holder} ($label)"
+    detail="$(ps -o command= -p "$holder" 2>/dev/null || true)"
+    check broken "port:$port" "occupied by pid $holder: ${detail:-$cmd} ($label)" "stop that exact listener; the harness never kills it or chooses another port"
   fi
 done
 

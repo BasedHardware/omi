@@ -42,7 +42,8 @@
 // CI lane worth registering. When it does, these rows move over as-is.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -172,7 +173,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/write-journey.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/lib/evidence-matrix.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/single-service-structure.test.mjs" },
     ],
   },
   L3: {
@@ -182,7 +183,7 @@ export const LANES = {
     steps: [
       {
         cwd: CORE_REPO,
-        command: "integration/dev-stack.sh --no-ios --generation platform --up --assert",
+        command: "integration/dev-stack.sh --assert",
       },
     ],
   },
@@ -289,6 +290,7 @@ function runLane(laneId, { json = false } = {}) {
   const started = Date.now();
   const results = [];
   let ok = true;
+  const l3RunDir = laneId === "L3" ? mkdtempSync(join(tmpdir(), "omi-l3-direct-")) : null;
 
   if (lane.preflight) {
     const pre = lane.preflight();
@@ -332,7 +334,12 @@ function runLane(laneId, { json = false } = {}) {
     let status = 0;
     let output = "";
     try {
-      output = execSync(step.command, { cwd: step.cwd, encoding: "utf8", stdio: json ? "pipe" : "inherit" }) ?? "";
+      output = execSync(step.command, {
+        cwd: step.cwd,
+        encoding: "utf8",
+        stdio: json ? "pipe" : "inherit",
+        env: l3RunDir === null ? process.env : { ...process.env, OMI_DEV_STACK_RUNDIR: l3RunDir },
+      }) ?? "";
     } catch (error) {
       status = error.status ?? 1;
       output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
@@ -350,21 +357,19 @@ function runLane(laneId, { json = false } = {}) {
   const durationMs = Date.now() - started;
   const receipt = { lane: laneId, result: ok ? "pass" : "fail", durationMs, steps: results };
 
-  // Arbiter counters. L3's registry row REQUIRES them, and requiring them is the
+  // Arbiter evidence. L3's registry row REQUIRES it, and requiring it is the
   // point: a receipt that says only "the runner exited 0" is the false-green
-  // shape restated in bookkeeping form. L3's arbiters come from the backend's
-  // own counters via the run report, not from the launcher's opinion of itself.
+  // shape restated in bookkeeping form. L3's matrix joins the service's
+  // producer evidence with both shells' rendered consumer evidence.
   const arbiters = { steps: results.map((r) => ({ command: r.command, status: r.status, durationMs: r.durationMs })) };
   if (laneId === "L3") {
     try {
-      const report = JSON.parse(readFileSync(join(process.env["OMI_DEV_STACK_RUNDIR"] ?? "/tmp/omi-dev-stack", "last-run.json"), "utf8"));
-      arbiters.totalRequests = report.backend?.status?.served?.totalRequests ?? null;
-      arbiters.domainReadsServed = report.backend?.status?.served?.domainReadsServed ?? null;
-      arbiters.readsByThisRun = report.backend?.readsByThisRun ?? null;
+      const report = JSON.parse(readFileSync(join(l3RunDir, "last-run.json"), "utf8"));
       arbiters.runId = report.run?.id ?? null;
+      arbiters.evidenceMatrix = report.evidence ?? null;
       arbiters.assertions = (report.assertions ?? []).map((a) => ({ name: a.name, result: a.result }));
     } catch {
-      // Absent counters must not be silently replaced by zeros: writeReceipt
+      // Absent evidence must not be silently replaced by zeros: writeReceipt
       // refuses a `pass` whose required arbiters are missing, which is exactly
       // the behaviour we want. Leave them absent and let it refuse.
       ok = false;
@@ -388,8 +393,11 @@ function runLane(laneId, { json = false } = {}) {
       receiptFile = receiptsModule.receiptPath(laneId);
     }
   } catch (error) {
+    receipt.result = "fail";
     if (!json) process.stderr.write(`  ! receipt not written: ${error.message}\n`);
   }
+
+  if (l3RunDir !== null) rmSync(l3RunDir, { recursive: true, force: true });
 
   if (json) process.stdout.write(`${JSON.stringify({ ...receipt, arbiters, receiptPath: receiptFile }, null, 2)}\n`);
   else process.stdout.write(`  ${receipt.result.toUpperCase()} in ${durationMs}ms${receiptFile ? ` — receipt ${receiptFile}` : ""}\n`);

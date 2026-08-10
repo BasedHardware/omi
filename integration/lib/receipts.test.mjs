@@ -25,6 +25,23 @@ import { checkLaneClaims } from "../check-lane-claims.mjs";
 // faked its own tree hash would prove nothing). Nothing here mutates the real
 // repo; staleness is always simulated by hand-editing the receipt's stamp.
 let workspaceRoot;
+const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
+function l3Arbiters() {
+  return {
+    runId: "run-receipt-test",
+    evidenceMatrix: {
+      schema: "omi.shell-domain-matrix.v1",
+      result: "pass",
+      rowCount: 14,
+      rows: ["macos", "ios"].flatMap((shell) => L3_DOMAINS.map((domain) => ({
+        shell,
+        domain,
+        consumer: { runId: "run-receipt-test", shell, domain },
+        producer: { runId: "run-receipt-test", shell, domain },
+      }))),
+    },
+  };
+}
 beforeEach(() => {
   workspaceRoot = mkdtempSync(join(tmpdir(), "omi-receipts-test-"));
 });
@@ -32,7 +49,7 @@ afterEach(() => {
   rmSync(workspaceRoot, { recursive: true, force: true });
 });
 
-describe("a required arbiter must be OBSERVED, not merely present", () => {
+describe("the exact L3 evidence matrix is required, not merely an aggregate", () => {
   // The guard's own comment says it stops a caller "laundering a bare exit code
   // into what looks like cross-checked evidence". Until this test existed it did
   // not: it asked `key in arbiters`, and that is true of an explicit null.
@@ -47,10 +64,10 @@ describe("a required arbiter must be OBSERVED, not merely present", () => {
         lane: "L3",
         result: "pass",
         durationMs: 1000,
-        arbiters: { totalRequests: null, domainReadsServed: null, readsByThisRun: null },
+        arbiters: { runId: null, evidenceMatrix: null },
         workspaceRoot,
       }),
-      /requires OBSERVED arbiter counter\(s\) \[totalRequests, domainReadsServed, readsByThisRun\]/,
+      /requires OBSERVED arbiter counter\(s\) \[runId, evidenceMatrix\]/,
     );
     // red-proof: restore `!(key in arbiters)` as the filter — null counters
     // satisfy it and nothing throws. APPLIED, OBSERVED RED, REVERTED: it
@@ -61,27 +78,28 @@ describe("a required arbiter must be OBSERVED, not merely present", () => {
     assert.throws(
       () => writeReceipt({
         lane: "L3", result: "pass", durationMs: 1000,
-        arbiters: { totalRequests: 12, domainReadsServed: 4, readsByThisRun: null }, workspaceRoot,
+        arbiters: { runId: "run", evidenceMatrix: null }, workspaceRoot,
       }),
-      /\[readsByThisRun\]/,
+      /\[evidenceMatrix\]/,
     );
   });
 
-  it("ZERO is a real observation and must remain recordable", () => {
-    // "domainReadsServed: 0 means nothing is talking to it, no matter how good the UI
-    // looks" is this program's signature false-green. A guard that refused zero
-    // would make the lane unable to state it, which is worse than the hole it
-    // closes — so zero passes the guard and the LANE decides what it means.
+  it("a complete exact producer/consumer matrix is recordable", () => {
     const receipt = writeReceipt({
       lane: "L3", result: "pass", durationMs: 1000,
-      arbiters: { totalRequests: 0, domainReadsServed: 0, readsByThisRun: 0 }, workspaceRoot,
+      arbiters: l3Arbiters(), workspaceRoot,
     });
-    assert.equal(receipt.arbiters.domainReadsServed, 0);
-    // red-proof: change the filter to `!arbiters[key]` — zero is falsy, this
-    // throws, and the lane loses the ability to record a served-nothing run.
-    // APPLIED, OBSERVED RED, REVERTED (this test only). The two mutations
-    // redden disjoint tests, which is what shows the guard is a band and not a
-    // one-sided check.
+    assert.equal(receipt.arbiters.evidenceMatrix.rows.length, 14);
+  });
+
+  it("RED-PROOF an aggregate count cannot replace one missing coordinate", () => {
+    const arbiters = l3Arbiters();
+    arbiters.evidenceMatrix.rows.pop();
+    arbiters.evidenceMatrix.total = 14;
+    assert.throws(
+      () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters, workspaceRoot }),
+      /exact 14-row producer\/consumer evidenceMatrix/,
+    );
   });
 
   it("a FAIL receipt may record whatever it managed to observe, including nothing", () => {
@@ -90,10 +108,10 @@ describe("a required arbiter must be OBSERVED, not merely present", () => {
     // says so, or the failure has no durable record at all.
     const receipt = writeReceipt({
       lane: "L3", result: "fail", durationMs: 10,
-      arbiters: { totalRequests: null, domainReadsServed: null, readsByThisRun: null }, workspaceRoot,
+      arbiters: { runId: null, evidenceMatrix: null }, workspaceRoot,
     });
     assert.equal(receipt.result, "fail");
-    assert.equal(receipt.arbiters.totalRequests, null);
+    assert.equal(receipt.arbiters.evidenceMatrix, null);
   });
 
   it("lanes with no required arbiters are unaffected", () => {
@@ -262,7 +280,7 @@ describe("writeReceipt: required arbiters are a registry-driven gate", () => {
     // property.
     assert.throws(
       () => writeReceipt({ lane: "L3", result: "pass", durationMs: 90000, arbiters: {}, workspaceRoot }),
-      /lane L3 requires .*\[totalRequests, domainReadsServed, readsByThisRun\]/,
+      /lane L3 requires .*\[runId, evidenceMatrix\]/,
     );
   });
 

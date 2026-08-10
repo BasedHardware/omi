@@ -25,13 +25,11 @@
 // REGISTRY-DRIVEN, LIKE THE WIRE-CONFORMANCE SEAM REGISTRY
 // (core/scripts/check-wire-conformance.mjs). Adding a lane is a new row in
 // LANE_REGISTRY, not a new branch of logic: which repos its tree hash must
-// cover, and which arbiter counters a passing receipt is expected to carry.
+// cover, and which independent arbiter evidence a passing receipt must carry.
 // L0/L1 are static/unit — no external system to disagree with, so no
-// arbiters. L3 drives the real backend, and the backend's own served-read
-// counters are the arbiter (see integration/dev-stack.sh's `domainReadsServed`
-// cross-check) — the same lesson as that script's big comment: "the shell's
-// own PASS line" is not proof, "did the backend's independent counter move"
-// is.
+// arbiters. L3 drives the real service and joins its producer observations to
+// exact rendered observations from both shells. The shell's own PASS line and
+// the service's readiness line are inputs, never the final proof.
 
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -167,11 +165,9 @@ export const LANE_REGISTRY = Object.freeze({
     name: "real integration",
     budgetMs: 90000,
     repos: Object.freeze(["core-foundation", "platform"]),
-    // Named after the consolidated door's real arbiters: aggregate counters from
-    // `/v1/qa/status`, plus the exact-run join from
-    // `/v1/qa/control/stats?run=<client id>`. A shell-reported PASS with these
-    // absent is exactly the false-green shape dev-stack.sh's comments describe.
-    requiredArbiters: Object.freeze(["totalRequests", "domainReadsServed", "readsByThisRun"]),
+    // Receipt schema stays immutable; the L3 arbiter payload becomes exact.
+    // One aggregate number cannot stand in for a shell/domain coordinate.
+    requiredArbiters: Object.freeze(["runId", "evidenceMatrix"]),
     description: "the full stack via integration/dev-stack.sh.",
   }),
 });
@@ -349,9 +345,8 @@ export function writeReceipt({
   //
   // This filter used to be `!(key in arbiters)`, and `"totalRequests" in
   // { totalRequests: null }` is TRUE — so a receipt recording
-  // `totalRequests: null` satisfied a guard whose own comment says it exists
-  // to stop a caller "laundering a bare exit code into what looks like
-  // cross-checked evidence". A null counter is exactly that.
+  // A null arbiter once satisfied a guard whose own comment says it exists to
+  // stop a caller laundering a bare exit code into cross-checked evidence.
   //
   // Reachable, not hypothetical. `lanes.mjs`'s L3 arbiter read is
   // `report.backend?.status?.served?.totalRequests ?? null` over a JSON report from a
@@ -362,11 +357,8 @@ export function writeReceipt({
   // fabricated report); this is the half that lives in this file, and it is
   // the half that decides whether such a report can become a green receipt.
   //
-  // `null` and `undefined` are refused; `0` is NOT. Zero is a real observation
-  // — "domainReadsServed: 0 means nothing is talking to it, no matter how good the
-  // UI looks" is this program's signature false-green — and it must stay
-  // recordable so a lane can fail on it honestly rather than be unable to say
-  // it.
+  // `null` and `undefined` are refused. The L3-specific validator below then
+  // requires a complete 14-coordinate producer/consumer matrix.
   const unobservedArbiters = row.requiredArbiters.filter(
     (key) => !(key in arbiters) || arbiters[key] === null || arbiters[key] === undefined,
   );
@@ -376,6 +368,28 @@ export function writeReceipt({
         `on a pass — each must be present AND non-null. A null counter means the lane did not ` +
         `read one, which is not a pass: supply the real values, or write result: "fail".`,
     );
+  }
+  if (result === "pass" && lane === "L3") {
+    const matrix = arbiters.evidenceMatrix;
+    const rows = matrix?.rows;
+    const coordinates = Array.isArray(rows)
+      ? new Set(rows.map((entry) => `${entry?.shell}/${entry?.domain}`))
+      : new Set();
+    if (
+      matrix?.schema !== "omi.shell-domain-matrix.v1"
+      || matrix?.result !== "pass"
+      || matrix?.rowCount !== 14
+      || !Array.isArray(rows)
+      || rows.length !== 14
+      || coordinates.size !== 14
+      || rows.some((entry) => entry?.consumer === null || typeof entry?.consumer !== "object"
+        || entry?.producer === null || typeof entry?.producer !== "object")
+    ) {
+      throw new Error(
+        "writeReceipt: lane L3 requires the passing exact 14-row producer/consumer evidenceMatrix; "
+        + "ios:null or an aggregate counter is not a coordinate.",
+      );
+    }
   }
 
   const stamps = stampDeclaredRepos(row);
