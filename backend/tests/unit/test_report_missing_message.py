@@ -103,6 +103,6 @@ def test_report_missing_message_returns_404_not_500(chat_router):
     # 404, not crash trying to unpack None into (message, doc_id).
     with patch.object(chat_router.chat_db, "get_message", return_value=None):
         with pytest.raises(HTTPException) as exc:
-            chat_router.report_message(message_id="does-not-exist", uid="u1")
+            chat_router.report_message_v1(message_id="does-not-exist", uid="u1")
 
     assert exc.value.status_code == 404
