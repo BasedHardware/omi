@@ -432,6 +432,9 @@ export const registerChatMessagesRoutes = (
     }
     const create = parseCreate(value);
     if (create === null) return validation();
+    if (create.attachmentIds.length > CHAT_CAPABILITIES.maxAttachmentsPerMessage) {
+      return validation();
+    }
     try {
       const payloadHash = chatMessagePayloadHash(create);
       const generationId = deps.generationId(principal.uid, create.id);

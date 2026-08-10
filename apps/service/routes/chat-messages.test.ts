@@ -387,4 +387,40 @@ describe("ratified /v1/chat-messages route", () => {
     });
     db.close();
   });
+
+  test("capability zero rejects attachment ids before message, event, or quota writes", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    stores.settings.putEntitlement(ACCOUNT, {
+      planLabel: "Metered",
+      limitKey: "chat_messages",
+      used: 0,
+      limit: 3,
+      limitReached: false,
+      upgradeAvailable: true,
+    });
+    const { db, local } = bootInMemory(stores);
+
+    const rejected = await post(local, payload("opaque-attachment", 600, {
+      attachmentIds: ["opaque-attachment"],
+    }));
+
+    expect(rejected.status).toBe(422);
+    expect(await rejected.json()).toEqual({
+      error: { code: "validation", retryable: false, action: "edit_request" },
+    });
+    expect(stores.chatMessages.readSnapshotSequence(ACCOUNT)).toBe(0);
+    expect(stores.chatEvents.listUnterminated()).toEqual([]);
+    expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(0);
+
+    const empty = await post(local, payload("empty-attachments", 700));
+    const absentBody = { ...payload("absent-attachments", 800) };
+    delete (absentBody as { attachmentIds?: unknown }).attachmentIds;
+    const absent = await post(local, absentBody);
+    expect([empty.status, absent.status]).toEqual([201, 201]);
+    expect(stores.chatMessages.readSnapshotSequence(ACCOUNT)).toBe(2);
+    expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(2);
+    await empty.body?.cancel();
+    await absent.body?.cancel();
+    db.close();
+  });
 });
