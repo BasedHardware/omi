@@ -8,7 +8,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ChatMessage, HttpResponse, RecordId } from "@omi-core/contracts";
+import type {
+  BridgePayloadStream,
+  BridgeStreamOpenRequest,
+  BridgeStreamPort,
+  ChatMessage,
+  HttpResponse,
+  RecordId,
+} from "@omi-core/contracts";
 import {
   ChatMessagesStore,
   chatMessagePayloadHash,
@@ -72,59 +79,98 @@ function historyEnvelope(
   };
 }
 
-function successfulSend(id: string, text: string): readonly [HttpResponse, HttpResponse] {
+function successfulSend(id: string, text: string): readonly [HttpResponse] {
   const human = wireMessage(id, text);
-  const assistant = wireMessage(`assistant-${id}`, "Canonical answer", { sender: "ai" });
   return [
     {
       status: 201,
       json: { message: human, generation: { id: `generation-${id}` } },
-    },
-    {
-      status: 200,
-      json: null,
-      text: [
-        "event: snapshot",
-        "id: event-snapshot",
-        `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
-        "",
-        "event: done",
-        "id: event-done",
-        `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-        "",
-        "event: done",
-        "id: event-done",
-        `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-        "",
-        "",
-      ].join("\n"),
     },
   ];
 }
 
-function failedGenerationSend(id: string, text: string): readonly [HttpResponse, HttpResponse] {
+function failedGenerationSend(id: string, text: string): readonly [HttpResponse] {
   const human = wireMessage(id, text);
   return [
     {
       status: 201,
       json: { message: human, generation: { id: `generation-${id}` } },
     },
-    {
-      status: 200,
-      json: null,
-      text: [
-        "event: snapshot",
-        "id: event-snapshot",
-        `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
-        "",
-        "event: failed",
-        "id: event-failed",
-        `data: ${JSON.stringify({ kind: "failed", error: { code: "provider_down", retryable: true } })}`,
-        "",
-        "",
-      ].join("\n"),
-    },
   ];
+}
+
+function sseEvent(id: string, kind: string, value: unknown): string {
+  return `event: ${kind}\nid: ${id}\ndata: ${JSON.stringify(value)}\n\n`;
+}
+
+function successfulGeneration(id: string): string {
+  return (
+    sseEvent("event-snapshot", "snapshot", { kind: "snapshot", text: "" }) +
+    sseEvent("event-done", "done", {
+      kind: "done",
+      message: wireMessage(`assistant-${id}`, "Canonical answer", { sender: "ai" }),
+    })
+  );
+}
+
+function failedGeneration(): string {
+  return (
+    sseEvent("event-snapshot", "snapshot", { kind: "snapshot", text: "" }) +
+    sseEvent("event-failed", "failed", {
+      kind: "failed",
+      error: { code: "provider_down", retryable: true },
+    })
+  );
+}
+
+class StoreTestStream implements BridgePayloadStream {
+  cancelled = false;
+
+  constructor(
+    readonly id: string,
+    readonly channel: string,
+    private readonly chunks: readonly string[],
+    private readonly hangs: boolean,
+  ) {}
+
+  async *[Symbol.asyncIterator](): AsyncIterator<string> {
+    for (const chunk of this.chunks) {
+      if (this.cancelled) return;
+      yield chunk;
+    }
+    if (this.hangs && !this.cancelled) await new Promise<void>(() => undefined);
+  }
+
+  cancel(): void {
+    this.cancelled = true;
+  }
+}
+
+class StoreTestStreamPort implements BridgeStreamPort {
+  readonly opens: BridgeStreamOpenRequest[] = [];
+  readonly streams: StoreTestStream[] = [];
+
+  constructor(
+    private readonly scripts: readonly { chunks: readonly string[]; hangs?: boolean }[],
+  ) {}
+
+  open(request: BridgeStreamOpenRequest): BridgePayloadStream {
+    const script = this.scripts[this.opens.length];
+    if (script === undefined) throw new Error("unexpected stream open");
+    this.opens.push(request);
+    const stream = new StoreTestStream(
+      `store-stream-${this.opens.length}`,
+      request.channel,
+      script.chunks,
+      script.hangs ?? false,
+    );
+    this.streams.push(stream);
+    return stream;
+  }
+}
+
+async function drainMicrotasks(): Promise<void> {
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
 }
 
 test("409 identity conflict dead-letters and is never retried", async () => {
@@ -176,6 +222,54 @@ test("403 forbidden is a permanent chat send outcome, never an auth pause", asyn
   assert.equal(dead[0]?.failure.kind, "permanent");
 });
 
+test("POST admission drains the durable outbox while generation remains hanging", async () => {
+  // red-proof: await observeChatGeneration from chatMessagesTransport before
+  // returning admission. pendingCount stays 1 instead of reaching 0 while the
+  // scripted generation remains open after two live deltas.
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const streamPort = new StoreTestStreamPort([{
+    chunks: [
+      sseEvent("event-snapshot", "snapshot", { kind: "snapshot", text: "" }) +
+      sseEvent("event-delta-1", "delta", { kind: "delta", text: "Live" }) +
+      sseEvent("event-delta-2", "delta", { kind: "delta", text: " answer" }),
+    ],
+    hangs: true,
+  }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streamPort);
+
+  await store.send("show this immediately");
+  const clientMessageId = (await store.list())[0]!.id;
+  http.respond({
+    status: 201,
+    json: {
+      message: wireMessage(clientMessageId, "show this immediately"),
+      generation: { id: "generation-hanging" },
+    },
+  });
+  await env.advance(10);
+  await drainMicrotasks();
+
+  assert.equal(store.pendingCount(), 0, "durable POST is acknowledged before generation terminal");
+  assert.deepEqual(
+    http.calls.map((call) => ({ method: call.method, path: call.path })),
+    [{ method: "POST", path: "/v1/chat-messages" }],
+    "observation neither replays POST nor asks bounded HttpClient for SSE",
+  );
+  assert.deepEqual(
+    (await store.list()).map((message) => ({ id: message.id, sender: message.sender, text: message.text })),
+    [{ id: clientMessageId, sender: "human", text: "show this immediately" }],
+    "canonical admitted human row is durable while assistant remains advisory",
+  );
+  assert.deepEqual(store.activeGenerations(), [{
+    generationId: "generation-hanging",
+    clientMessageId,
+    text: "Live answer",
+    lastEventId: "event-delta-2",
+  }]);
+});
+
 test("an admitted human send and a failed assistant generation remain two visible store facts", async () => {
   // red-proof: omit generation-terminal delivery from chatMessagesTransport.
   // The outbox still confirms the human row and drains, but the store has no
@@ -183,12 +277,14 @@ test("an admitted human send and a failed assistant generation remain two visibl
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
-  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
+  const streams = new StoreTestStreamPort([{ chunks: [failedGeneration()] }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
 
   await store.send("answer even during an outage");
   const clientMessageId = (await store.list())[0]!.id;
   http.respond(...failedGenerationSend(clientMessageId, "answer even during an outage"));
   await env.advance(10);
+  await drainMicrotasks();
 
   assert.equal(store.pendingCount(), 0, "the admitted human operation is honestly confirmed");
   assert.deepEqual(
@@ -234,7 +330,8 @@ test("the same op replayed produces the same payload hash and does not duplicate
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
-  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
+  const streams = new StoreTestStreamPort([{ chunks: [successfulGeneration("amber-planet-cedar")] }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
 
   await store.send("hello once", ["attachment-1"]);
   const localId = (await store.list())[0]!.id;
@@ -242,6 +339,7 @@ test("the same op replayed produces the same payload hash and does not duplicate
   http.respond({ status: 503, json: null });
   http.respond(...successfulSend(localId, "hello once"));
   await env.advance(10_000); // first send (503) + backoff + retry (200)
+  await drainMicrotasks();
 
   const posts = http.calls.filter((c) => c.method === "POST");
   assert.equal(posts.length, 2, "retryable failure causes a second send of the same op");
@@ -358,12 +456,14 @@ test("junk or non-200 reconcile body yields null snapshot — never an empty com
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
-  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
+  const streams = new StoreTestStreamPort([{ chunks: [successfulGeneration("amber-planet-cedar")] }]);
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http, streams);
 
   await store.send("must survive junk snapshot");
   const localId = (await store.list())[0]!.id;
   http.respond(...successfulSend(localId, "must survive junk snapshot"));
   await env.advance(10);
+  await drainMicrotasks();
 
   http.respond({ status: 200, json: { unexpected: true } }); // rows fetch junk → null
   http.respond({ status: 200, json: null }); // snapshot path junk → null

@@ -36,34 +36,17 @@ export function platformChatGenerationPath(generationId: string): string {
   return `/v1/chat-generations/${encodeURIComponent(generationId)}`;
 }
 
-export type ChatSendResult =
+export type ChatAdmitResult =
   | {
       ok: true;
       admission: ChatAdmissionEnvelope;
-      terminal: ChatTerminalFrame;
       serverRevision?: string;
     }
   | { ok: false; failure: WriteFailure };
 
-export interface ChatGenerationTerminalDelivery {
-  readonly admission: ChatAdmissionEnvelope;
-  readonly terminal: ChatTerminalFrame;
-}
-
 export type ChatAdmissionResult =
   | { ok: true; serverRevision?: string }
   | { ok: false; failure: WriteFailure };
-
-export interface ChatGenerationReconnectRequest {
-  readonly method: "GET";
-  readonly path: string;
-  readonly headers: { readonly "Last-Event-ID": string };
-}
-
-/** Auth/base URL stay host-owned; this seam makes the SSE cursor non-optional. */
-export interface ChatGenerationReconnectTransport {
-  request(request: ChatGenerationReconnectRequest): Promise<import("@omi-core/contracts").HttpResponse>;
-}
 
 /** Structural stand-in for sync PendingOp — avoids an adapters-platform→sync dep. */
 export interface ChatTransportOp {
@@ -427,28 +410,22 @@ function classifyChatSendStatus(response: Parameters<typeof classifyStatus>[0], 
   return classifyStatus(response, detail);
 }
 
-function malformedSuccess(detail: string): ChatSendResult {
+function malformedAdmission(detail: string): ChatAdmitResult {
   return {
     ok: false,
     failure: { kind: "retryable", unclassified: true, detail },
   };
 }
 
-function isChatTerminalFrame(frame: ChatGenerationFrame): frame is ChatTerminalFrame {
-  return frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled";
-}
-
-function hasValidGenerationStart(frames: readonly ChatGenerationFrame[]): boolean {
-  const first = frames[0];
-  return first === undefined || first.kind === "snapshot" || isChatTerminalFrame(first);
-}
-
-/** Admit a send as JSON, then consume its generation only from the GET resource. */
-export async function sendChatMessageOp(
+/**
+ * Finite JSON POST admission. Generation bytes are deliberately impossible on
+ * this path: `HttpClient` remains bounded request/response and the bridge
+ * stream observer opens the GET resource separately.
+ */
+export async function admitChatMessageOp(
   http: HttpClient,
   op: ChatMessageOp,
-  reconnect?: ChatGenerationReconnectTransport,
-): Promise<ChatSendResult> {
+): Promise<ChatAdmitResult> {
   if (op.op !== "create") {
     return {
       ok: false,
@@ -482,7 +459,7 @@ export async function sendChatMessageOp(
   }
   const admission = wireToChatAdmissionEnvelope(response.json);
   if (admission === null) {
-    return malformedSuccess(`create chat message ${op.id}: malformed JSON admission`);
+    return malformedAdmission(`create chat message ${op.id}: malformed JSON admission`);
   }
   if (admission.message.id !== op.id) {
     return {
@@ -494,80 +471,10 @@ export async function sendChatMessageOp(
       },
     };
   }
-  const eventsPath = platformChatGenerationEventsPath(admission.generation.id);
-  const initial = await http.request("GET", eventsPath);
-  if (initial.status !== 200) {
-    const code = parseChatErrorCode(initial.json);
-    const detail = `stream chat generation ${admission.generation.id}${code === null ? "" : `: ${code}`}`;
-    return { ok: false, failure: classifyChatSendStatus(initial, detail) };
-  }
-  if (initial.text === undefined) {
-    return malformedSuccess(`create chat message ${op.id}: generation GET omitted SSE bytes`);
-  }
-  const initialEvents = parseChatGenerationEvents(initial.text);
-  let events = initialEvents === null ? null : [...initialEvents];
-  let frames = events?.map((event) => event.frame) ?? null;
-  if (frames === null) {
-    return malformedSuccess(`create chat message ${op.id}: malformed generation SSE transcript`);
-  }
-  if (!hasValidGenerationStart(frames)) {
-    return malformedSuccess(`create chat message ${op.id}: generation GET omitted its leading snapshot`);
-  }
-  let terminal = frames.at(-1);
-  let terminalCount = frames.filter(
-    (frame) => frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled",
-  ).length;
-  if (
-    terminalCount === 0 &&
-    reconnect !== undefined &&
-    events !== null &&
-    events.length > 0
-  ) {
-    const resumed = await reconnect.request({
-      method: "GET",
-      path: eventsPath,
-      headers: { "Last-Event-ID": events.at(-1)!.id },
-    });
-    if (resumed.status !== 200) {
-      const code = parseChatErrorCode(resumed.json);
-      const detail = `reconnect chat generation ${admission.generation.id}${code === null ? "" : `: ${code}`}`;
-      return { ok: false, failure: classifyChatSendStatus(resumed, detail) };
-    }
-    if (resumed.text === undefined) {
-      return malformedSuccess(`create chat message ${op.id}: generation reconnect omitted SSE bytes`);
-    }
-    const resumedEvents = parseChatGenerationEvents(resumed.text);
-    if (resumedEvents === null) {
-      return malformedSuccess(`create chat message ${op.id}: malformed generation reconnect`);
-    }
-    const observedIds = new Set(events.map((event) => event.id));
-    const freshEvents = resumedEvents.filter((event) => !observedIds.has(event.id));
-    if (!hasValidGenerationStart(freshEvents.map((event) => event.frame))) {
-      return malformedSuccess(
-        `create chat message ${op.id}: generation reconnect omitted its leading snapshot`,
-      );
-    }
-    events = [...events, ...freshEvents];
-    frames = events.map((event) => event.frame);
-    terminal = frames.at(-1);
-    terminalCount = frames.filter(
-      (frame) => frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled",
-    ).length;
-  }
-  if (
-    terminal === undefined ||
-    terminalCount !== 1 ||
-    (terminal.kind !== "done" && terminal.kind !== "failed" && terminal.kind !== "cancelled")
-  ) {
-    return malformedSuccess(
-      `create chat message ${op.id}: stream must end with exactly one terminal frame`,
-    );
-  }
   const serverRevision = admission.message.revision;
   return {
     ok: true,
     admission,
-    terminal,
     ...(serverRevision === null ? {} : { serverRevision }),
   };
 }
@@ -617,18 +524,16 @@ function contentHash(ids: readonly string[]): string {
 /** Bind the ratified create/replay operation to the sync Transport interface. */
 export function chatMessagesTransport(
   http: HttpClient,
-  onGenerationTerminal: (delivery: ChatGenerationTerminalDelivery) => void | Promise<void>,
-  reconnect?: ChatGenerationReconnectTransport,
+  onAdmission: (admission: ChatAdmissionEnvelope) => void | Promise<void>,
 ): { send(op: ChatTransportOp): Promise<ChatAdmissionResult> } {
   return {
     async send(op: ChatTransportOp): Promise<ChatAdmissionResult> {
       const domainOp = JSON.parse(op.payload) as ChatMessageOp;
-      const result = await sendChatMessageOp(http, domainOp, reconnect);
+      const result = await admitChatMessageOp(http, domainOp);
       if (!result.ok) return result;
-      // Admission belongs to the outbox; assistant generation delivery belongs
-      // to the Chat store. Requiring this callback prevents a successful
-      // admission from structurally discarding a failed terminal frame.
-      await onGenerationTerminal({ admission: result.admission, terminal: result.terminal });
+      // Persist the canonical human admission before the outbox tombstone. The
+      // callback may START observation but must never await generation.
+      await onAdmission(result.admission);
       return result.serverRevision === undefined
         ? { ok: true }
         : { ok: true, serverRevision: result.serverRevision };

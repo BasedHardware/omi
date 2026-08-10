@@ -24,10 +24,10 @@ import type {
 import {
   PLATFORM_CHAT_ATTACHMENTS_PATH,
   PLATFORM_CHAT_MESSAGES_PATH,
+  admitChatMessageOp,
   cancelChatGeneration,
   fetchChatMessageReconcilePage,
   parseChatGenerationEventStream,
-  sendChatMessageOp,
   platformChatGenerationEventsPath,
   platformChatGenerationPath,
   wireToChatHistoryEnvelope,
@@ -210,7 +210,7 @@ test("idempotent send payload hash covers the ordered attachment id list", () =>
   assert.notEqual(replay.hash, mutated.hash);
 });
 
-test("JSON admission opens one GET-only generation stream and returns its canonical terminal", async () => {
+test("JSON admission is finite and never opens or consumes generation SSE", async () => {
   // red-proof: restore either provisional /v1/chat/messages path, translate
   // the create body to legacy snake_case, use cursor=, or treat the final delta
   // as done. The path/body/cursor/terminal assertions below fail respectively.
@@ -228,33 +228,11 @@ test("JSON admission opens one GET-only generation stream and returns its canoni
   );
 
   const human = canonicalMessage("client-message-01", "human", "Read this");
-  const assistant = canonicalMessage("assistant-message-01", "ai", "Complete canonical answer");
   const http = new ScriptedHttp();
-  http.respond(
-    {
-      status: 201,
-      json: { message: human, generation: { id: "generation-01" } },
-    },
-    {
-      status: 200,
-      json: null,
-      text: [
-      "event: snapshot",
-      "id: event-01",
-      `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
-      "",
-      "event: delta",
-      "id: event-02",
-      `data: ${JSON.stringify({ kind: "delta", text: "Complete canonical" })}`,
-      "",
-      "event: done",
-      "id: event-03",
-      `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-      "",
-      "",
-    ].join("\n"),
-    },
-  );
+  http.respond({
+    status: 201,
+    json: { message: human, generation: { id: "generation-01" } },
+  });
 
   const op: Extract<ChatMessageOp, { op: "create" }> = {
     op: "create",
@@ -271,17 +249,13 @@ test("JSON admission opens one GET-only generation stream and returns its canoni
     metadata: null,
     attachmentIds: ["attachment-opaque-01"],
   };
-  const sent = await sendChatMessageOp(http, op);
+  const sent = await admitChatMessageOp(http, op);
   assert.equal(sent.ok, true);
   if (!sent.ok) return;
-  assert.equal(sent.terminal.kind, "done");
-  if (sent.terminal.kind !== "done") return;
-  assert.equal(sent.terminal.message.text, "Complete canonical answer");
+  assert.equal(sent.admission.message.id, human.id);
+  assert.equal(sent.admission.generation.id, "generation-01");
   assert.deepEqual(http.calls[0], { method: "POST", path: "/v1/chat-messages", body: op });
-  assert.deepEqual(http.calls[1], {
-    method: "GET",
-    path: "/v1/chat-generations/generation-01/events",
-  });
+  assert.equal(http.calls.length, 1, "POST admission cannot consume or wait on SSE");
 
   http.respond({
     status: 200,
@@ -302,7 +276,7 @@ test("JSON admission opens one GET-only generation stream and returns its canoni
   assert.equal(page?.nextCursor, "older-opaque-02");
   assert.equal(page?.hasMore, true);
   assert.equal(
-    http.calls[2]?.path,
+    http.calls[1]?.path,
     "/v1/chat-messages?limit=2&olderCursor=older-opaque-01",
   );
 
@@ -314,105 +288,10 @@ test("JSON admission opens one GET-only generation stream and returns its canoni
     ok: true,
     state: "accepted",
   });
-  assert.deepEqual(http.calls[3], {
+  assert.deepEqual(http.calls[2], {
     method: "DELETE",
     path: "/v1/chat-generations/generation%2F01",
   });
-});
-
-test("a disconnected GET stream reconnects with the exact last id and deduplicates replay", async () => {
-  // red-proof: remove the reconnect branch from sendChatMessageOp. The call
-  // either cannot accept the reconnect transport or returns malformed success
-  // without issuing the ratified GET carrying the last observed event cursor.
-  const human = canonicalMessage("client-message-reconnect", "human", "Keep going");
-  const assistant = canonicalMessage("assistant-message-reconnect", "ai", "Recovered answer");
-  const http = new ScriptedHttp();
-  http.respond(
-    {
-      status: 201,
-      json: { message: human, generation: { id: "generation-reconnect" } },
-    },
-    {
-      status: 200,
-      json: null,
-      text: [
-      "event: snapshot",
-      "id: event-snapshot-initial",
-      `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
-      "",
-      "event: delta",
-      "id: event-delta",
-      `data: ${JSON.stringify({ kind: "delta", text: "Recovered" })}`,
-      "",
-      "",
-    ].join("\n"),
-    },
-  );
-  const requests: Array<{
-    method: "GET";
-    path: string;
-    headers: { "Last-Event-ID": string };
-  }> = [];
-  const reconnect = {
-    async request(request: (typeof requests)[number]) {
-      requests.push(request);
-      return {
-        status: 200,
-        json: null,
-        text: [
-          "event: delta",
-          "id: event-delta",
-          `data: ${JSON.stringify({ kind: "delta", text: "must not repeat" })}`,
-          "",
-          "event: snapshot",
-          "id: event-snapshot",
-          `data: ${JSON.stringify({ kind: "snapshot", text: "Recovered" })}`,
-          "",
-          "event: delta",
-          "id: event-delta-2",
-          `data: ${JSON.stringify({ kind: "delta", text: " answer" })}`,
-          "",
-          "event: delta",
-          "id: event-delta-2",
-          `data: ${JSON.stringify({ kind: "delta", text: " duplicated" })}`,
-          "",
-          "event: done",
-          "id: event-done",
-          `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-          "",
-          "event: done",
-          "id: event-done",
-          `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-          "",
-          "",
-        ].join("\n"),
-      };
-    },
-  };
-  const op: Extract<ChatMessageOp, { op: "create" }> = {
-    op: "create",
-    opId: "outbox-op-reconnect",
-    id: "client-message-reconnect" as RecordId,
-    at: 1_786_352_400_000,
-    text: "Keep going",
-    sender: "human",
-    journalRevision: 1,
-    attachmentIds: [],
-  };
-
-  const sent = await sendChatMessageOp(http, op, reconnect);
-  assert.equal(sent.ok, true);
-  if (!sent.ok) return;
-  assert.equal(sent.terminal.kind, "done");
-  assert.deepEqual(http.calls.slice(0, 2).map((call) => ({ method: call.method, path: call.path })), [
-    { method: "POST", path: "/v1/chat-messages" },
-    { method: "GET", path: "/v1/chat-generations/generation-reconnect/events" },
-  ]);
-  assert.deepEqual(requests, [{
-    method: "GET",
-    path: "/v1/chat-generations/generation-reconnect/events",
-    headers: { "Last-Event-ID": "event-delta" },
-  }]);
 });
 
 test("accepted is rejected from generation SSE while duplicate ids apply each frame once", () => {
@@ -468,27 +347,13 @@ test("accepted is rejected from generation SSE while duplicate ids apply each fr
   );
 });
 
-test("an exact replay admission reuses identities and still opens only the GET stream", async () => {
+test("an exact replay admission reuses identities without coupling POST to observation", async () => {
   const human = canonicalMessage("client-message-replay", "human", "Same send");
-  const assistant = canonicalMessage("assistant-message-replay", "ai", "Same answer");
   const http = new ScriptedHttp();
-  http.respond(
-    {
-      status: 200,
-      json: { message: human, generation: { id: "generation-replay" } },
-    },
-    {
-      status: 200,
-      json: null,
-      text: [
-        "event: done",
-        "id: event-done",
-        `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-        "",
-        "",
-      ].join("\n"),
-    },
-  );
+  http.respond({
+    status: 200,
+    json: { message: human, generation: { id: "generation-replay" } },
+  });
   const op: Extract<ChatMessageOp, { op: "create" }> = {
     op: "create",
     opId: "outbox-op-replay",
@@ -500,20 +365,18 @@ test("an exact replay admission reuses identities and still opens only the GET s
     attachmentIds: [],
   };
 
-  const result = await sendChatMessageOp(http, op);
+  const result = await admitChatMessageOp(http, op);
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.admission.message.id, human.id);
   assert.equal(result.admission.generation.id, "generation-replay");
   assert.deepEqual(http.calls.map((call) => ({ method: call.method, path: call.path })), [
     { method: "POST", path: "/v1/chat-messages" },
-    { method: "GET", path: "/v1/chat-generations/generation-replay/events" },
   ]);
 });
 
-test("missing or duplicate generation terminals fail and GET 403 stays permanent", async () => {
+test("malformed or forbidden admission fails before any observer can open", async () => {
   const human = canonicalMessage("client-message-terminal-guard", "human", "Question");
-  const assistant = canonicalMessage("assistant-message-terminal-guard", "ai", "Answer");
   const op: Extract<ChatMessageOp, { op: "create" }> = {
     op: "create",
     opId: "outbox-op-terminal-guard",
@@ -524,49 +387,18 @@ test("missing or duplicate generation terminals fail and GET 403 stays permanent
     journalRevision: human.journalRevision,
     attachmentIds: [],
   };
-  const admission = {
-    status: 201,
-    json: { message: human, generation: { id: "generation-terminal-guard" } },
-  } as const;
-  const sse = (...blocks: readonly string[]) => ({
-    status: 200,
-    json: null,
-    text: [...blocks, ""].join("\n\n"),
-  });
-  const snapshot = [
-    "event: snapshot",
-    "id: event-snapshot",
-    `data: ${JSON.stringify({ kind: "snapshot", text: "" })}`,
-  ].join("\n");
-  const done = [
-    "event: done",
-    "id: event-done",
-    `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
-  ].join("\n");
-  const failed = [
-    "event: failed",
-    "id: event-failed",
-    `data: ${JSON.stringify({ kind: "failed", error: { code: "late_failure", retryable: false } })}`,
-  ].join("\n");
-
-  const missingHttp = new ScriptedHttp();
-  missingHttp.respond(admission, sse(snapshot));
-  const missing = await sendChatMessageOp(missingHttp, op);
-  assert.equal(missing.ok, false);
-  if (!missing.ok) assert.match(missing.failure.detail, /exactly one terminal frame/);
-
-  const duplicateHttp = new ScriptedHttp();
-  duplicateHttp.respond(admission, sse(snapshot, done, failed));
-  const duplicate = await sendChatMessageOp(duplicateHttp, op);
-  assert.equal(duplicate.ok, false);
-  if (!duplicate.ok) assert.match(duplicate.failure.detail, /exactly one terminal frame/);
+  const malformedHttp = new ScriptedHttp();
+  malformedHttp.respond({ status: 201, json: { generation: { id: "missing-human" } } });
+  const malformed = await admitChatMessageOp(malformedHttp, op);
+  assert.equal(malformed.ok, false);
+  if (!malformed.ok) assert.match(malformed.failure.detail, /malformed JSON admission/);
 
   const forbiddenHttp = new ScriptedHttp();
-  forbiddenHttp.respond(admission, {
+  forbiddenHttp.respond({
     status: 403,
     json: { error: { code: "forbidden", retryable: false } },
   });
-  const forbidden = await sendChatMessageOp(forbiddenHttp, op);
+  const forbidden = await admitChatMessageOp(forbiddenHttp, op);
   assert.equal(forbidden.ok, false);
   if (!forbidden.ok) assert.equal(forbidden.failure.kind, "permanent");
 });
