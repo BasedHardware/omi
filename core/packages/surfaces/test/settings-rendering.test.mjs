@@ -141,6 +141,10 @@ test("loading never claims signed-out, empty, or unavailable copy", async () => 
     assert.equal(textOf(rendered).includes(EN_MESSAGES["lifecycle.empty"]), false);
     assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]'), null);
     assert.equal(rendered.container.querySelector('[data-settings-plan="absent"]'), null);
+    // Appearance must not claim a selected value while snapshot data is unproven.
+    // Compare booleans — assert.equal on a live Element hangs serializing the DOM on failure.
+    assert.equal(rendered.container.querySelector(".settings-appearance-section") == null, true);
+    assert.equal(textOf(rendered).includes(EN_MESSAGES["settings.appearanceLocalNote"]), false);
   } finally {
     await rendered.cleanup();
   }
