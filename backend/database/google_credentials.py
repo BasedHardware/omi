@@ -57,7 +57,7 @@ def customer_data_service_account() -> tuple[Any, str] | None:
     # a caller actually needs customer-data credentials.
     from google.oauth2 import service_account
 
-    credentials = service_account.Credentials.from_service_account_info(service_account_info)
+    credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
     return credentials, project_id.strip()
 
 
