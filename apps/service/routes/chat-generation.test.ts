@@ -285,6 +285,80 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("duplicate DELETE has one provider-cancellation owner and one canonical terminal", async () => {
+    let cancelCalls = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onDelta("retained"));
+        return Object.freeze({
+          cancel(): void {
+            cancelCalls += 1;
+          },
+        });
+      },
+    });
+    const { db, local, stores } = boot(createInMemoryLocalServiceStores(), source);
+    const admitted = await post(local, create("duplicate-cancel"));
+    const reader = admitted.body!.getReader();
+    const throughDelta = await readUntil(reader, "delta");
+    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const path = `/v1/chat-generations/${accepted.data.generation.id}`;
+
+    const firstDelete = local.app.request(path, { method: "DELETE", headers: auth(local.devToken) });
+    const secondDelete = local.app.request(path, { method: "DELETE", headers: auth(local.devToken) });
+    const deletes = await Promise.all([firstDelete, secondDelete]);
+    const completed = parseSse(await readRemaining(reader, throughDelta));
+    const terminalKinds = completed
+      .map((frame) => frame.event)
+      .filter((kind) => ["done", "failed", "cancelled"].includes(kind));
+
+    expect(deletes.map((response) => response.status)).toEqual([202, 202]);
+    expect(cancelCalls).toBe(1);
+    expect(terminalKinds).toEqual(["cancelled"]);
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      .toBe("terminal");
+    expect((await history(local)).map((entry) => [entry.sender, entry.text])).toEqual([
+      ["human", "Tell me something useful"],
+      ["ai", "retained"],
+    ]);
+    db.close();
+  });
+
+  test("provider cancellation exceptions are contained and the stream still terminalizes", async () => {
+    let cancelCalls = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onDelta("before rejection"));
+        return Object.freeze({
+          cancel(): void {
+            cancelCalls += 1;
+            throw new Error("provider rejects cancellation");
+          },
+        });
+      },
+    });
+    const { db, local, stores } = boot(createInMemoryLocalServiceStores(), source);
+    const admitted = await post(local, create("cancel-rejection"));
+    const reader = admitted.body!.getReader();
+    const throughDelta = await readUntil(reader, "delta");
+    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+
+    const cancelled = await local.app.request(
+      `/v1/chat-generations/${accepted.data.generation.id}`,
+      { method: "DELETE", headers: auth(local.devToken) },
+    );
+    const frames = parseSse(await readRemaining(reader, throughDelta));
+
+    expect(cancelled.status).toBe(202);
+    expect(cancelCalls).toBe(1);
+    expect(frames.at(-1)?.event).toBe("cancelled");
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      .toBe("terminal");
+    db.close();
+  });
+
   test("reconnect starts with a current snapshot and Last-Event-ID replays strictly after", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start(input) {
@@ -373,6 +447,76 @@ describe("ratified chat generation wire red proofs", () => {
           error: { code: "generation_interrupted", retryable: true },
         }]);
         expect((await history(local)).map((message) => message.sender)).toEqual(["human"]);
+        db.close();
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("restart owns a durable cancellation request without starting or double-cancelling a provider", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "omi-chat-cancellation-restart-"));
+    const path = join(directory, "service.sqlite");
+    try {
+      {
+        const db = new Database(path);
+        const stores = createSqliteLocalServiceStores(db);
+        const admitted = stores.chatAdmission.admit({
+          accountId: ACCOUNT,
+          message: {
+            id: "restart-cancel-human",
+            text: "cancel after restart",
+            sender: "human",
+            type: "text",
+            createdAt: 100,
+            updatedAt: 100,
+            chatSessionId: null,
+            appId: null,
+            journalRevision: 1,
+            payloadHash: "sha256:restart-cancel",
+            messageSource: "desktop_chat",
+            rating: null,
+            reported: false,
+            revision: "revision-restart-cancel",
+          },
+          generationId: "generation-restart-cancel",
+          acceptedEventId: "event-restart-cancel-accepted",
+          admittedAt: 100,
+        });
+        expect(admitted.kind).toBe("created");
+        expect(stores.chatEvents.requestCancellation(ACCOUNT, "generation-restart-cancel").kind)
+          .toBe("accepted");
+        db.close();
+      }
+      {
+        let starts = 0;
+        const db = new Database(path);
+        const local = createLocalDevService({
+          db,
+          stores: createSqliteLocalServiceStores(db),
+          ownerAccountId: ACCOUNT,
+          memoryCount: 0,
+          accountTimezone: "UTC",
+          devSecretLabel: "chat-cancellation-restart-proof",
+          generationSource: {
+            start() {
+              starts += 1;
+              return Object.freeze({ cancel: (): void => {} });
+            },
+          },
+        });
+        const replay = await local.app.request(
+          "/v1/chat-generations/generation-restart-cancel/events",
+          { headers: auth(local.devToken) },
+        );
+        const frames = parseSse(await replay.text());
+        expect(frames.map((frame) => frame.event)).toEqual(["cancelled"]);
+        expect(starts).toBe(0);
+        expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+        expect((await local.app.request("/v1/chat-generations/generation-restart-cancel", {
+          method: "DELETE",
+          headers: auth(local.devToken),
+        })).status).toBe(204);
         db.close();
       }
     } finally {

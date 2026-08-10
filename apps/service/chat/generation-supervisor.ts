@@ -49,6 +49,7 @@ interface ActiveGeneration {
   readonly admitted: StoredChatMessage;
   text: string;
   run: ChatGenerationSourceRun | null;
+  runCancelled: boolean;
   terminal: boolean;
 }
 
@@ -124,6 +125,16 @@ export const createChatGenerationSupervisor = (
     });
   };
 
+  const cancelRun = (state: ActiveGeneration): void => {
+    if (state.run === null || state.runCancelled) return;
+    state.runCancelled = true;
+    try {
+      state.run.cancel();
+    } catch {
+      // Provider cancellation is best effort. Durable finalization remains the authority.
+    }
+  };
+
   const finalize = (
     state: ActiveGeneration,
     kind: "done" | "cancelled",
@@ -131,7 +142,7 @@ export const createChatGenerationSupervisor = (
   ): void => {
     if (state.terminal) return;
     state.terminal = true;
-    state.run?.cancel();
+    cancelRun(state);
     const message = text.length === 0 ? null : assistantMessage(state, text);
     const prior = deps.events.listAfter(state.accountId, state.generationId, null);
     if (prior === null) throw new TypeError("chat generation event log disappeared");
@@ -180,6 +191,7 @@ export const createChatGenerationSupervisor = (
       admitted,
       text: accumulatedText(events),
       run: null,
+      runCancelled: false,
       terminal: false,
     };
     finalize(state, "cancelled", state.text);
@@ -205,6 +217,7 @@ export const createChatGenerationSupervisor = (
         admitted: input.stored,
         text: "",
         run: null,
+        runCancelled: false,
         terminal: false,
       };
       active.set(key, state);
@@ -239,7 +252,6 @@ export const createChatGenerationSupervisor = (
 
     cancel(accountId: string, generationId: string): void {
       const state = active.get(keyOf(accountId, generationId));
-      state?.run?.cancel();
       queueMicrotask(() => {
         if (state !== undefined) finalize(state, "cancelled", state.text);
         else cancelFromDurableState(accountId, generationId);
