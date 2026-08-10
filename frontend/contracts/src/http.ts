@@ -17,6 +17,8 @@
  * live here (nothing in `contracts/` executes). It lives in `@omi-core/kernel`.
  */
 
+import type { BridgeHttpFailureReason } from "./bridge/http.js";
+
 export interface HttpResponse {
   status: number;
   /** Parsed JSON body, or null when the body was empty/unparseable. */
@@ -47,6 +49,15 @@ export interface HttpResponse {
   text?: string;
   /** Retry-After in milliseconds when the server sent one. */
   retryAfterMs?: number;
+  /**
+   * A typed failure reported by a privileged bridge host before any server
+   * response existed. Optional and additive; real HTTP responses never set it.
+   *
+   * This carries no detail, URL, header, or credential. It exists so an
+   * optional-auth reader can distinguish "the shell holds no credential" from
+   * a real server 401 without inferring transport facts from a status code.
+   */
+  transportFailureReason?: BridgeHttpFailureReason;
 }
 
 export interface HttpClient {

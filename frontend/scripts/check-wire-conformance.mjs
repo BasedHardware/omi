@@ -204,6 +204,23 @@ const WIRE_SEAMS = [
     // which is a stronger consumption than a path this script could check.
     consumptionEvidence: ["readRatifiedCorpus", "readRatifiedTasksReadShape"],
   },
+  {
+    name: "settings-identity-entitlement",
+    schemaOfRecord: "contracts/wire/settings/settings-wire-shape.json",
+    corpus: "contracts/wire/settings/settings-wire-conformance.json",
+    declaredFrames(schema) {
+      return [...(schema.cases ?? []), ...(schema.refusalLaws ?? [])].map((row) => ({
+        defName: row.case,
+        type: row.case,
+        emitted: true,
+      }));
+    },
+    corpusFrames(corpus) {
+      return new Set((corpus ?? []).map((row) => row?.wireCase).filter((value) => typeof value === "string"));
+    },
+    consumers: ["packages/testkit/src/test/settings-wire.test.ts"],
+    consumptionEvidence: ["SETTINGS_WIRE_CORPUS", "settings-wire-conformance.json"],
+  },
 ];
 
 for (const seam of WIRE_SEAMS) {

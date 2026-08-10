@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "cases": [
+    { "case": "read-signed-out" },
+    { "case": "read-entitlement-absent" },
+    { "case": "read-metered" },
+    { "case": "read-unmetered" },
+    { "case": "delete-success" }
+  ],
+  "refusalLaws": [
+    { "case": "missing-envelope-field" },
+    { "case": "extra-envelope-field" },
+    { "case": "signed-out-with-entitlement" },
+    { "case": "unmetered-limit-reached" }
+  ]
+}

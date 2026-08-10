@@ -1,32 +1,15 @@
-export type AppearanceSelection = "default" | "system" | "light" | "dark";
+import type {
+  SettingsAppearanceSelection,
+  SettingsEntitlement,
+  SettingsIdentity,
+  SettingsPatch,
+  SettingsSnapshot,
+} from "@omi-core/contracts";
 
-/** null means "not signed in". Absent fields are absent, not empty strings. */
-export type AccountIdentity = {
-  readonly displayName: string;
-  readonly email: string;
-} | null;
-
-/** One structured server payload. The client renders it; it does not derive plan logic. */
-export type EntitlementState = {
-  readonly planLabel: string;
-  readonly limitKey: string;
-  readonly used: number;
-  /** null = unmetered. */
-  readonly limit: number | null;
-  readonly limitReached: boolean;
-  readonly upgradeAvailable: boolean;
-};
-
-export type SettingsSnapshot = {
-  readonly identity: AccountIdentity;
-  readonly appearance: AppearanceSelection;
-  readonly entitlement: EntitlementState | null;
-};
-
-/** Keyed patch. An absent key means UNCHANGED. There is no full-overwrite write. */
-export type SettingsPatch = {
-  readonly appearance?: AppearanceSelection;
-};
+export type AppearanceSelection = SettingsAppearanceSelection;
+export type AccountIdentity = SettingsIdentity | null;
+export type EntitlementState = SettingsEntitlement;
+export type { SettingsPatch, SettingsSnapshot };
 
 /**
  * Merge a keyed settings patch into the current snapshot.
@@ -37,11 +20,9 @@ export function mergeSettingsPatch(current: SettingsSnapshot, patch: SettingsPat
   const appearance = Object.hasOwn(patch, "appearance") && patch.appearance !== undefined
     ? patch.appearance
     : current.appearance;
-  return {
-    identity: current.identity,
-    appearance,
-    entitlement: current.entitlement,
-  };
+  return current.identity === null
+    ? { identity: null, appearance, entitlement: null }
+    : { identity: current.identity, appearance, entitlement: current.entitlement };
 }
 
 export function entitlementNotice(
