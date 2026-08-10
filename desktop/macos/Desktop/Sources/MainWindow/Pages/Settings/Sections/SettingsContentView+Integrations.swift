@@ -256,6 +256,7 @@ extension SettingsContentView {
       GmailAccountPickerView(
         accounts: gmailAccounts,
         selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+        hasMadeChoice: GmailSelectionStore.hasMadeChoice,
         onSelect: { cookiePath, label in
           selectGmailAccount(cookiePath, label: label)
         },
@@ -276,17 +277,33 @@ extension SettingsContentView {
     guard !isProbingGmailAccounts else { return }
     isProbingGmailAccounts = true
     defer { isProbingGmailAccounts = false }
-    guard let accounts = try? await GmailAccountProbe.availableAccounts(), !accounts.isEmpty else {
-      return
+    do {
+      let accounts = try await GmailAccountProbe.availableAccounts()
+      guard !accounts.isEmpty else {
+        gmailReadError = "No readable Gmail accounts found."
+        return
+      }
+      gmailAccounts = accounts
+      showingGmailAccountPicker = true
+    } catch {
+      // Surface the failure instead of silently treating every probe error as
+      // an empty success: this is the sole Settings entry point for changing
+      // the account.
+      gmailReadError = UserFacingErrorPresentation.message(
+        for: error, while: .integration("Gmail"))
     }
-    gmailAccounts = accounts
-    showingGmailAccountPicker = true
   }
 
   func selectGmailAccount(_ cookiePath: String?, label: String) {
     GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
     showingGmailAccountPicker = false
     gmailReadGeneration += 1
+    // The previous account's read results no longer describe the newly
+    // selected profile; reset them so the page cannot label one account while
+    // showing another's emails.
+    gmailEmails = []
+    gmailLastFetched = nil
+    gmailMemoriesSaved = 0
   }
 
   var googleOAuthSummary: String {

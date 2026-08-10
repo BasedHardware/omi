@@ -76,6 +76,7 @@ struct OnboardingDataSourcesStepView: View {
         GmailAccountPickerView(
           accounts: coordinator.gmailAccounts,
           selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+          hasMadeChoice: GmailSelectionStore.hasMadeChoice,
           onSelect: { cookiePath, label in
             coordinator.selectGmailAccount(cookiePath, label: label)
           },
@@ -122,6 +123,7 @@ struct OnboardingDataSourcesStepView: View {
         action: {
           Task {
             await coordinator.loadGmailAccounts()
+            guard !coordinator.gmailAccounts.isEmpty else { return }
             coordinator.showingGmailAccountPicker = true
           }
         }

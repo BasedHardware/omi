@@ -4,6 +4,7 @@ import SwiftUI
 struct GmailAccountPickerView: View {
   let accounts: [GmailAccountOption]
   let selectedCookiePath: String?
+  let hasMadeChoice: Bool
   let onSelect: (String?, String) -> Void
   let onCancel: () -> Void
 
@@ -11,13 +12,11 @@ struct GmailAccountPickerView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack {
         Text("Gmail account")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.primary)
+          .inkStyle(InkType.firstTitle, color: Ink.primary)
         Spacer()
         Button("Cancel", action: onCancel)
           .buttonStyle(.plain)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(Ink.secondary)
+          .inkStyle(InkType.buttonLabel, color: Ink.secondary)
       }
 
       Button {
@@ -26,16 +25,18 @@ struct GmailAccountPickerView: View {
         HStack {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text("Automatic")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.primary)
+              .inkStyle(InkType.rowCopy, color: Ink.primary)
             Text("First readable browser account")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.tertiary)
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
           }
           Spacer()
-          if selectedCookiePath == nil {
+          // Only an explicit choice may show the checkmark: before any
+          // selection, selectedCookiePath is nil but the user has not chosen
+          // Automatic, and showing it as pre-selected invites a dismiss that
+          // would strand the onboarding wait.
+          if hasMadeChoice && selectedCookiePath == nil {
             Image(systemName: "checkmark")
-              .foregroundColor(Ink.accent)
+              .foregroundStyle(Ink.accent)
           }
         }
       }
@@ -43,28 +44,29 @@ struct GmailAccountPickerView: View {
 
       Divider()
 
-      ForEach(accounts) { account in
-        Button {
-          onSelect(account.id, accountLabel(account))
-        } label: {
-          HStack {
-            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-              Text(account.browserName)
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(Ink.primary)
-              Text(account.email ?? "Unknown account")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.tertiary)
-            }
-            Spacer()
-            if selectedCookiePath == account.id {
-              Image(systemName: "checkmark")
-                .foregroundColor(Ink.accent)
+      ScrollView {
+        ForEach(accounts) { account in
+          Button {
+            onSelect(account.id, accountLabel(account))
+          } label: {
+            HStack {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(account.browserName)
+                  .inkStyle(InkType.rowCopy, color: Ink.primary)
+                Text(account.email ?? "Unknown account")
+                  .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              }
+              Spacer()
+              if selectedCookiePath == account.id {
+                Image(systemName: "checkmark")
+                  .foregroundStyle(Ink.accent)
+              }
             }
           }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
+      .frame(maxHeight: 280)
     }
     .padding(OmiSpacing.lg)
     .frame(width: 400)

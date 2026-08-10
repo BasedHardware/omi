@@ -37,10 +37,24 @@ enum GmailSelectionStore {
     filter(configs, selectedCookiePath: selectedCookiePath)
   }
 
+  /// Filter with an explicit snapshot of the selected profile. Callers that
+  /// run several fetches for one logical read pass the snapshot captured at
+  /// read entry, so a picker change mid-read cannot mix two accounts' mail.
   static func filter(_ configs: [[String: String]], selectedCookiePath: String?) -> [[String: String]] {
     guard let selected = selectedCookiePath, !selected.isEmpty else { return configs }
     let narrowed = configs.filter { $0["db_path"] == selected }
-    return narrowed
+    guard narrowed.isEmpty else { return narrowed }
+    // The stored selection no longer matches any configured profile (cookies
+    // deleted, profile removed, path changed). Widening back to every profile
+    // silently changes which inbox is read while Settings still shows the old
+    // label — record the fail-open so it is not invisible.
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "gmail_account_selection",
+      from: "selected_account",
+      to: "first_readable_profile",
+      reason: "selected_profile_missing",
+      outcome: .recovered)
+    return configs
   }
 }
 
@@ -60,16 +74,16 @@ enum GmailAccountProbe {
     let pythonScript = """
       \(BrowserGoogleSession.chromiumCookiePythonSupport)
       import re
-      from concurrent.futures import ThreadPoolExecutor
       from urllib.request import Request, build_opener, HTTPCookieProcessor
 
       browsers = json.loads(sys.stdin.read())
-      def probe(browser):
+      accounts = []
+      for browser in browsers:
           cookies, err = decrypt_google_cookies(browser['db_path'], browser['password'], include_gmail_hosts=True)
           if err or not cookies:
-              return None
+              continue
           if not [c for c in cookies if c['name'] in GOOGLE_AUTH_COOKIE_NAMES]:
-              return None
+              continue
           jar = make_cookie_jar(cookies)
           email = None
           for url in ('https://accounts.google.com/AccountInfo', 'https://www.google.com/accounts/AccountInfo'):
@@ -85,15 +99,7 @@ enum GmailAccountProbe {
                       break
               except Exception:
                   continue
-          if email:
-              return {'name': browser['name'], 'db_path': browser['db_path'], 'email': email}
-          return None
-
-      accounts = []
-      with ThreadPoolExecutor(max_workers=min(4, max(1, len(browsers)))) as executor:
-          for account in executor.map(probe, browsers):
-              if account:
-                  accounts.append(account)
+          accounts.append({'name': browser['name'], 'db_path': browser['db_path'], 'email': email})
       write_json_result('omi_gmail_accounts_', {'ok': True, 'accounts': accounts})
       """
 
@@ -102,7 +108,10 @@ enum GmailAccountProbe {
         script: pythonScript,
         arguments: [],
         stdinData: Data(configJSON.utf8),
-        timeoutSeconds: 45
+        // Two sequential AccountInfo probes per profile with a 15s request
+        // timeout; give the process budget for every configured profile so a
+        // slow Google endpoint cannot zero out all discovered accounts.
+        timeoutSeconds: 45 + 30 * max(configs.count, 1)
       )
       let outputPath =
         String(data: result.stdout, encoding: .utf8)?
@@ -116,8 +125,6 @@ enum GmailAccountProbe {
         throw GmailAccountProbeError.invalidOutput
       }
       return Self.parseAccounts(json)
-    } catch {
-      throw error
     }
   }
 
@@ -143,7 +150,7 @@ enum GmailAccountProbe {
     }
     return raw.compactMap { dict in
       guard let path = dict["db_path"] as? String, !path.isEmpty else { return nil }
-      guard let email = dict["email"] as? String, !email.isEmpty else { return nil }
+      let email = (dict["email"] as? String).flatMap { $0.isEmpty ? nil : $0 }
       return GmailAccountOption(
         id: path,
         browserName: dict["name"] as? String ?? "Browser",

@@ -877,15 +877,26 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   }
 
   private func awaitGmailAccountSelectionIfNeeded() async {
+    // An OAuth grant already names the account to read; the cookie-profile
+    // picker has nothing left to disambiguate.
     guard !GoogleOAuthConnectionManager.shared.hasGrants() else { return }
     let accounts: [GmailAccountOption]
     do {
       accounts = try await GmailAccountProbe.availableAccounts()
     } catch {
-      gmailAccountSelectionFailed = true
+      // Probe failure is not "zero or one account": a transient failure would
+      // otherwise silently fall back to the first readable profile — the
+      // exact junk-account behavior this feature exists to prevent. Fall back
+      // to the automatic default but record the fail-open.
       log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      gmailAccountSelectionFailed = true
       return
     }
+    // Re-checked after the probe: the user may have picked an account from the
+    // manual picker while the probe was still running, before this waiter
+    // exists. Installing a continuation after a choice is already persisted
+    // would suspend the gmail task forever. A stored selection whose profile
+    // is gone is not a usable choice, so that case falls through to the picker.
     if let selectedPath = GmailSelectionStore.selectedCookiePath {
       if accounts.contains(where: { $0.id == selectedPath }) { return }
       if accounts.count == 1, let account = accounts.first {

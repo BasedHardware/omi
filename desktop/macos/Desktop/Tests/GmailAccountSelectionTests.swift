@@ -30,14 +30,14 @@ final class GmailAccountSelectionTests: XCTestCase {
     )
   }
 
-  func testFilterReturnsNoConfigsWhenSelectedProfileIsGone() {
+  func testFilterFallsBackToAllConfigsWhenSelectedProfileIsGone() {
     let configs = [
       config("Chrome (Default)", "/a/Default/Network/Cookies"),
       config("Chrome (Work)", "/a/Profile 1/Network/Cookies"),
     ]
     GmailSelectionStore.persist(cookiePath: "/gone/Profile 9/Network/Cookies", label: "old@corp.com")
 
-    XCTAssertEqual(GmailSelectionStore.filter(configs), [])
+    XCTAssertEqual(GmailSelectionStore.filter(configs), configs)
   }
 
   func testFilterReturnsAllWhenNoSelectionMade() {
@@ -48,6 +48,33 @@ final class GmailAccountSelectionTests: XCTestCase {
 
     XCTAssertEqual(GmailSelectionStore.filter(configs), configs)
     XCTAssertFalse(GmailSelectionStore.hasMadeChoice)
+  }
+
+  func testSnapshotFilterUsesProvidedPathNotCurrentSelection() {
+    let configs = [
+      config("Chrome (Default)", "/a/Default/Network/Cookies"),
+      config("Chrome (Work)", "/a/Profile 1/Network/Cookies"),
+    ]
+    // A snapshot taken before the selection changed must still resolve against
+    // the snapshot's profile, not the freshly persisted one.
+    let snapshot = GmailSelectionStore.selectedCookiePath
+    GmailSelectionStore.persist(cookiePath: "/a/Profile 1/Network/Cookies", label: "work@corp.com")
+
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: snapshot),
+      configs)
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: "/a/Profile 1/Network/Cookies"),
+      [config("Chrome (Work)", "/a/Profile 1/Network/Cookies")])
+  }
+
+  func testSnapshotFilterFallsBackWhenSnapshotProfileIsGone() {
+    let configs = [
+      config("Chrome (Default)", "/a/Default/Network/Cookies")
+    ]
+    XCTAssertEqual(
+      GmailSelectionStore.filter(configs, selectedCookiePath: "/gone/Profile 9/Network/Cookies"),
+      configs)
   }
 
   func testHasMadeChoiceAfterPersist() {
@@ -69,21 +96,21 @@ final class GmailAccountSelectionTests: XCTestCase {
 
     let accounts = GmailAccountProbe.parseAccounts(json)
 
-    // Rows without a non-empty email are filtered out; remaining rows are
-    // sorted by browser name.
-    XCTAssertEqual(accounts.count, 2)
-    XCTAssertEqual(accounts[0].browserName, "Chrome (Default)")
-    XCTAssertEqual(accounts[0].email, "junk@gmail.com")
-    XCTAssertEqual(accounts[1].browserName, "Chrome (Work)")
-    XCTAssertEqual(accounts[1].id, "/a/Profile 1/Network/Cookies")
+    XCTAssertEqual(accounts.count, 3)
+    XCTAssertEqual(accounts[0].browserName, "Arc")
+    XCTAssertNil(accounts[0].email)
+    XCTAssertEqual(accounts[1].browserName, "Chrome (Default)")
+    XCTAssertEqual(accounts[1].email, "junk@gmail.com")
+    XCTAssertEqual(accounts[2].browserName, "Chrome (Work)")
+    XCTAssertEqual(accounts[2].id, "/a/Profile 1/Network/Cookies")
   }
 
-  func testParseAccountsSkipsRowsWithoutPath() {
+  func testParseAccountsSkipsRowsWithoutPathButKeepsUnknownAccounts() {
     let json: [String: Any] = [
       "ok": true,
       "accounts": [
         ["name": "No Path", "email": "x@y.com"],
-        ["name": "Arc", "db_path": "/b/Default/Network/Cookies", "email": "arc@example.com"],
+        ["name": "Arc", "db_path": "/b/Default/Network/Cookies", "email": NSNull()],
       ],
     ]
 
@@ -91,5 +118,6 @@ final class GmailAccountSelectionTests: XCTestCase {
 
     XCTAssertEqual(accounts.count, 1)
     XCTAssertEqual(accounts[0].browserName, "Arc")
+    XCTAssertNil(accounts[0].email)
   }
 }
