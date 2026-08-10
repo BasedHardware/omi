@@ -365,6 +365,18 @@ function parseChatErrorCode(raw: unknown): string | null {
   return typeof raw["error"]["code"] === "string" ? raw["error"]["code"] : null;
 }
 
+function classifyChatSendStatus(response: Parameters<typeof classifyStatus>[0], detail: string): WriteFailure {
+  if (response.status === 403) {
+    // Chat's ratified wire makes forbidden permanent for this authorization
+    // context. The shared taxonomy stays wrong-but-untouched here because its
+    // 403=auth-invalid behavior is already consumed by tasks, memories,
+    // folders, and conversations; changing that shared meaning requires a
+    // separate blast-radius audit of contracts those domains do not share.
+    return { kind: "permanent", reason: "validation", detail };
+  }
+  return classifyStatus(response, detail);
+}
+
 function malformedSuccess(detail: string): ChatSendResult {
   return {
     ok: false,
@@ -406,7 +418,7 @@ export async function sendChatMessageOp(
   if (response.status !== 200 && response.status !== 201) {
     const code = parseChatErrorCode(response.json);
     const detail = `create chat message ${op.id}${code === null ? "" : `: ${code}`}`;
-    return { ok: false, failure: classifyStatus(response, detail) };
+    return { ok: false, failure: classifyChatSendStatus(response, detail) };
   }
   if (response.text === undefined) {
     return malformedSuccess(`create chat message ${op.id}: successful response omitted SSE bytes`);
