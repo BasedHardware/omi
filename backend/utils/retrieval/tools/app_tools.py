@@ -28,7 +28,7 @@ from database.webhook_health import (
 )
 from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
-from utils.http_client import get_webhook_circuit_breaker
+from utils.http_client import get_webhook_circuit_breaker, safe_request_target, UnsafeWebhookURLError
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
 import logging
@@ -315,6 +315,11 @@ async def _call_tool_endpoint(
     if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
 
+    try:
+        pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, app_tool.endpoint)
+    except UnsafeWebhookURLError:
+        return f"Error: The {app_tool.name} tool endpoint is invalid or unavailable."
+
     cb = get_webhook_circuit_breaker(app_tool.endpoint)
     if not cb.allow_request():
         return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
@@ -322,8 +327,12 @@ async def _call_tool_endpoint(
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
+            request_headers = dict(headers)
+            request_headers.update(pin_kwargs['headers'])
             request_kwargs: Dict[str, Any] = {
-                'headers': headers,
+                'headers': request_headers,
+                'extensions': pin_kwargs['extensions'],
+                'follow_redirects': False,
             }
 
             if method in ['POST', 'PUT', 'PATCH']:
@@ -331,7 +340,7 @@ async def _call_tool_endpoint(
             elif method == 'GET':
                 request_kwargs['params'] = payload
 
-            response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
+            response = await client.request(method=method, url=pinned_url, **request_kwargs)
 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()

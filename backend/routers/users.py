@@ -123,6 +123,7 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
+from utils.http_client import assert_public_http_url, UnsafeWebhookURLError
 from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
@@ -482,6 +483,13 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    if url != '' and url != ',':
+        # audio_bytes stores "url,seconds"; validate only the URL portion.
+        url_to_check = url.split(',', 1)[0] if wtype == WebhookType.audio_bytes else url
+        try:
+            assert_public_http_url(url_to_check)
+        except UnsafeWebhookURLError:
+            raise HTTPException(status_code=400, detail='Webhook URL must be a public http(s) URL')
     set_user_webhook_db(uid, wtype, url)
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)

@@ -8,13 +8,20 @@ None.upper() raised AttributeError, aborting manifest tool validation. method no
 to 'POST' for a null or empty value.
 """
 
+import pytest
+
 from utils.apps import _validate_tool_definition
 
 
 def _tool(**overrides):
-    t = {'name': 't', 'description': 'd', 'endpoint': 'https://e'}
+    t = {'name': 't', 'description': 'd', 'endpoint': 'https://e.example.com/tool'}
     t.update(overrides)
     return t
+
+
+@pytest.fixture(autouse=True)
+def _allow_public_endpoint(monkeypatch):
+    monkeypatch.setattr('utils.apps.assert_public_http_url', lambda url: '8.8.8.8')
 
 
 def test_null_method_defaults_to_post():

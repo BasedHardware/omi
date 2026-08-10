@@ -30,6 +30,11 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "set_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        webhooks_module,
+        "safe_request_target",
+        lambda url: (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}}),
+    )
 
 
 class TestRealtimeTranscriptWebhook:
