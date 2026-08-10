@@ -455,20 +455,19 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                 }
 
                 emitDisplayState("attaching")
-                let capability: MWDATDisplay.Display
                 do {
-                    capability = try session.addDisplay()
+                    let capability = try session.addDisplay()
+                    display = capability
+                    displayStateToken = capability.statePublisher.listen { [weak self] state in
+                        self?.emitDisplayState(Self.normalizeDisplayState(state))
+                    }
+                    capability.start()
                 } catch {
+                    displayStateToken = nil
+                    display = nil
                     emitDisplayState("error")
                     throw error
                 }
-                display = capability
-
-                displayStateToken = capability.statePublisher.listen { [weak self] state in
-                    self?.emitDisplayState(Self.normalizeDisplayState(state))
-                }
-
-                capability.start()
             #else
                 throw PigeonError(code: "display_unavailable", message: "MWDATDisplay not linked", details: nil)
             #endif
