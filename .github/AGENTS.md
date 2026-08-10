@@ -32,15 +32,4 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
 - Before any pusher Helm mutation, verify `${ENV}-omi-backend-config` exists so a missing shared runtime ConfigMap cannot replace the healthy replica.
 - Backend deploy workflows may only run Firestore index readiness with `--check-only` against `RUNTIME_GCP_PROJECT_ID`; run it in an isolated job from the approved commit with `GCP_FIRESTORE_READONLY_CREDENTIALS`, and bind manual deploys to the exact checked candidate SHA. This intentionally read-only credential must be set separately in both `development` and `prod` GitHub Environments. A failed gate may upload only a locally revalidated, bounded, redacted schema proposal artifact; Firestore index writes use the manual, main-scoped `gcp_firestore_indexes.yml` workflow and share the backend-stack lock.
 - When editing workflows, keep `actionlint` coverage in CI so YAML and GitHub expression mistakes fail before merge.
-- Mutable third-party action refs (`@latest`, channel/branch pins such as
-  `dtolnay/rust-toolchain@stable` or `pypa/gh-action-pypi-publish@release/v1`),
-  nested component-local GitHub workflow directories outside the repo-root
-  `.github/workflows/` tree, and flutter-buildrunner cache keys that embed
-  `github.run_id` are rejected by `.github/scripts/check_actions_hygiene.py`
-  (manifest check `github-actions-hygiene`). Pin third-party actions to a full
-  commit SHA.
-- A workflow that checks out an operator-selected `github.event.inputs.*` ref must
-  derive image tags and other provenance from the checked-out tree
-  (`git rev-parse --short=7 HEAD`), never from `GITHUB_SHA`/`github.sha` — the run
-  ref and the deployed commit diverge on `workflow_dispatch`. Enforced by the same
-  `github-actions-hygiene` check.
+- Manifest check `github-actions-hygiene` (`.github/scripts/check_actions_hygiene.py`) rejects mutable third-party action refs (`@latest`, `dtolnay/rust-toolchain@stable`, `pypa/gh-action-pypi-publish@release/v1`), nested component-local workflow dirs outside repo-root `.github/workflows/`, flutter-buildrunner cache keys embedding `github.run_id`, and `GITHUB_SHA`/`github.sha` provenance in workflows that check out an operator-selected `github.event.inputs.*` ref. Pin third-party actions to a full commit SHA; tag deploy images from the checked-out tree (`git rev-parse --short=7 HEAD`), which on `workflow_dispatch` is not the run ref.
