@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 Memory _mem(String id, {String content = 'text'}) {
   return Memory(
@@ -37,6 +38,7 @@ void main() {
     // SharedPreferences-backed getters (pendingMemories, uid, device-scope
     // prefs) are used in loadMemories(), so mock the backing store.
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   tearDown(() {

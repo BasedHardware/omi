@@ -6,6 +6,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Regression coverage for the bug: with auto-sync turned OFF the Auto Sync page
 // showed no device recordings at all, because offline files were only ever
@@ -59,6 +60,7 @@ void main() {
 
   test('discoverDeviceWals enumerates the device then surfaces its recordings', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
@@ -82,6 +84,7 @@ void main() {
 
   test('discovery lists recordings even when auto-sync is disabled', () async {
     SharedPreferences.setMockInitialValues({'autoSyncOfflineRecordings': false});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
     expect(SharedPreferencesUtil().autoSyncOfflineRecordings, isFalse);

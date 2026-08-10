@@ -8,12 +8,14 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('provider startup reconciles and clears persisted fair-use restriction', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final limiter = SyncRateLimiter.instance;
     limiter.clear();
@@ -40,6 +42,7 @@ void main() {
 
   test('provider waits for persisted WAL readiness before attaching startup recovery', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final readiness = Completer<void>();
     final limiter = SyncRateLimiter.instance..clear();

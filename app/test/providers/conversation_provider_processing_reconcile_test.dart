@@ -5,10 +5,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 

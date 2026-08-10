@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   final env = _TestEnvFields();
@@ -16,6 +17,7 @@ void main() {
   setUpAll(() async {
     Env.init(env);
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
       appName: 'Omi Test',

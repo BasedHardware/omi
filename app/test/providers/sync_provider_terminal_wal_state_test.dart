@@ -14,6 +14,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -89,6 +90,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 

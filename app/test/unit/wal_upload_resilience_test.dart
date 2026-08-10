@@ -13,6 +13,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Covers WAL upload failure scenarios that cause recordings to become stuck.
 ///
@@ -70,6 +71,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
     tempDir = await Directory.systemTemp.createTemp('wal_resilience_');

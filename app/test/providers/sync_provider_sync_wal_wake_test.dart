@@ -9,6 +9,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Fake syncs object returned by [_FakeWalService.getSyncs]. SyncProvider treats
 /// getSyncs() as dynamic, so only the members it actually calls are needed here.
@@ -70,6 +71,7 @@ void main() {
 
   test('syncWal 202 wakes the transfer coordinator for reconciliation', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
@@ -104,6 +106,7 @@ void main() {
     // Regression #4587: leave/background aborts paint as localUploadFailures;
     // schema says those WALs stay miss and must soft-retry, not red-error.
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
@@ -142,6 +145,7 @@ void main() {
 
   test('permanent localUploadFailures still surface SyncStatus.error', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
@@ -176,6 +180,7 @@ void main() {
 
   test('syncWal during an in-flight sync wakes the coordinator instead of racing', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
@@ -213,6 +218,7 @@ void main() {
 
   test('an upload cooldown does not block pulling audio off the device', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
     // syncWal dispatches the whole transfer, including the device-download

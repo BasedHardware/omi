@@ -5,12 +5,14 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'memory-delete-test-user'});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 

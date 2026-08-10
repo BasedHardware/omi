@@ -5,10 +5,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   test('shares the Home preload with the Tasks page initial load', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
     final firstResponse = Completer<ActionItemsResponse>();
@@ -33,6 +35,7 @@ void main() {
 
   test('retries the initial load after the preload fails', () async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
     final firstResponse = Completer<ActionItemsResponse?>();

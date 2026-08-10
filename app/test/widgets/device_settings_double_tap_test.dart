@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
@@ -47,6 +48,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({'doubleTapAction': 1});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 

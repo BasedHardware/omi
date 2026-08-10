@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Regression coverage for #10980: call sites that look a conversation up by day
 /// derived the key from the timestamp's raw UTC `year/month/day` instead of
@@ -38,6 +39,7 @@ ConversationProvider _providerWith(List<ServerConversation> conversations) {
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 

@@ -11,6 +11,7 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -54,6 +55,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
     // Create a temp directory and mock path_provider so WalFileManager

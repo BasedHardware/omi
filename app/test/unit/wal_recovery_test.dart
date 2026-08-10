@@ -11,6 +11,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class _FakeListener implements IWalSyncListener {
   int walUpdatedCount = 0;
@@ -74,6 +75,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_stamp_test_');
@@ -269,6 +271,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_finalize_test_');
@@ -382,6 +385,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_stamp_boundary_');
@@ -454,6 +458,7 @@ void main() {
     test('completes after start is called', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       final tempDir = await Directory.systemTemp.createTemp('wal_ready_test_');

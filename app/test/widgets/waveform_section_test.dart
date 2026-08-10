@@ -8,6 +8,7 @@ import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/widgets/waveform_section.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Mock SyncProvider for testing
 class MockSyncProvider extends SyncProvider {
@@ -30,6 +31,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     try {
       await ServiceManager.init();
     } catch (_) {

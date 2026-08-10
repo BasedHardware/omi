@@ -19,6 +19,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// A recording the server permanently refused for being older than the
 /// automatic-recovery window must say so on its row, and must not offer a
@@ -96,6 +97,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 

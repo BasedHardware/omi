@@ -17,6 +17,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
@@ -46,6 +47,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     try {
       await ServiceManager.init();

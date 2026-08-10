@@ -9,6 +9,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -24,6 +25,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
     try {
@@ -66,6 +68,7 @@ void main() {
 
   test('Device Paired is deduped by user and device while connections recur', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-a'});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);
@@ -99,6 +102,7 @@ void main() {
 
   test('non-null to null transition emits one truthful Device Session Ended', () async {
     SharedPreferences.setMockInitialValues({'uid': 'session-user'});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);

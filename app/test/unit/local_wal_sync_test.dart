@@ -13,6 +13,7 @@ import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -37,6 +38,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),

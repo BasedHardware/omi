@@ -21,6 +21,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Fake external actions that tracks people-refresh calls.
 class MockCaptureExternalActions extends NoopCaptureExternalActions {
@@ -111,6 +112,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
@@ -807,6 +809,7 @@ void main() {
   group('setBackgroundModeEnabled', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       SharedPreferencesUtil().batchModeEnabled = false;
       SharedPreferencesUtil().backgroundModeEnabled = false;

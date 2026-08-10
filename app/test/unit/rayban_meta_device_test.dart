@@ -12,6 +12,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const _rayBanMetaHostApiPrefix = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI';
 
@@ -22,6 +23,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 

@@ -10,11 +10,13 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
 
@@ -25,6 +27,7 @@ void main() {
       values['cachedPeople'] = cachedPeople.map((p) => jsonEncode(p)).toList();
     }
     SharedPreferences.setMockInitialValues(values);
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   }
 

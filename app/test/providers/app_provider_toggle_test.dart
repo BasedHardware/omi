@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -11,6 +12,7 @@ void main() {
   group('AppProvider.toggleApp', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
     });
 

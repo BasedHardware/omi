@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Mic double that reproduces [ArbitratedMic]'s contention contract: starting a
 /// chat voice memo while a conversation holds the mic throws a [StateError].
@@ -65,6 +66,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     tempDir = Directory.systemTemp.createTempSync('voice_recorder_contention_');
 

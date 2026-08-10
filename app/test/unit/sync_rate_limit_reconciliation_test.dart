@@ -3,10 +3,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
   });

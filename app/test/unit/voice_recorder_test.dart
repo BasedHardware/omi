@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   group('WavBytes.asBytes bulk copy', () {
@@ -423,6 +424,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       tempDir = Directory.systemTemp.createTempSync('voice_pending_test_');
     });

@@ -12,6 +12,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 Future<String> simulateGetAuthHeader({required bool isSignedIn, required String token}) async {
   if (token.isEmpty && isSignedIn) {
@@ -34,6 +35,7 @@ void main() {
   setUpAll(() async {
     Env.init(env);
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
       appName: 'Omi Test',

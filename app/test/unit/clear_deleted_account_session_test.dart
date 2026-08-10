@@ -7,12 +7,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/auth/clear_deleted_account_session.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('account deletion invalidates late refresh and clears provider state before storage', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-1', 'authToken': 'old-token'});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final pendingRefresh = Completer<RefreshedAuthToken?>();
     final gateway = _DeletionGateway(pendingRefresh);
@@ -42,6 +44,7 @@ void main() {
 
   test('account deletion clears WAL and preferences when Firebase sign-out fails', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-1', 'authToken': 'old-token'});
+    FlutterSecureStorage.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), failSignOut: true);
     final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
