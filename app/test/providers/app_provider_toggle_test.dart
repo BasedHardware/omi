@@ -12,7 +12,7 @@ void main() {
   group('AppProvider.toggleApp', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
     });
 

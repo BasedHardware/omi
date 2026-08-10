@@ -809,7 +809,7 @@ void main() {
   group('setBackgroundModeEnabled', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       SharedPreferencesUtil().batchModeEnabled = false;
       SharedPreferencesUtil().backgroundModeEnabled = false;

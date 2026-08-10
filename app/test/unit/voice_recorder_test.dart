@@ -424,7 +424,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       tempDir = Directory.systemTemp.createTempSync('voice_pending_test_');
     });

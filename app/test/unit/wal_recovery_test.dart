@@ -75,7 +75,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_stamp_test_');
@@ -271,7 +271,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_finalize_test_');
@@ -385,7 +385,7 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       tempDir = await Directory.systemTemp.createTemp('wal_stamp_boundary_');
@@ -458,7 +458,7 @@ void main() {
     test('completes after start is called', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
       final tempDir = await Directory.systemTemp.createTemp('wal_ready_test_');

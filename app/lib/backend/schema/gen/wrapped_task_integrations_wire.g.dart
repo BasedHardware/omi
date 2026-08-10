@@ -19,11 +19,20 @@ class GeneratedWrappedStatusResponse {
 
   factory GeneratedWrappedStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedWrappedStatusResponse(
-      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
-      progress: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["progress"]), "progress", _readMap, requiredField: false, nullable: true),
-      result: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["result"]), "result", _readMap, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      year: _required(_readFieldValue<int>(_readField(json, const ["year"]), "year", _readInt, requiredField: false, nullable: false, defaultValue: 2025), "year"),
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString,
+          requiredField: false, nullable: true),
+      progress: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["progress"]), "progress", _readMap,
+          requiredField: false, nullable: true),
+      result: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["result"]), "result", _readMap,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
+      year: _required(
+          _readFieldValue<int>(_readField(json, const ["year"]), "year", _readInt,
+              requiredField: false, nullable: false, defaultValue: 2025),
+          "year"),
     );
   }
 
@@ -49,8 +58,14 @@ class GeneratedGenerateWrappedResponse {
 
   factory GeneratedGenerateWrappedResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedGenerateWrappedResponse(
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _required(
+          _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+              requiredField: true, nullable: false),
+          "message"),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -73,8 +88,12 @@ class GeneratedTaskIntegrationsResponse {
 
   factory GeneratedTaskIntegrationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskIntegrationsResponse(
-      defaultApp: _readFieldValue<String>(_readField(json, const ["default_app"]), "default_app", _readString, requiredField: true, nullable: true),
-      integrations: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["integrations"]), "integrations", _readMap, requiredField: true, nullable: false), "integrations"),
+      defaultApp: _readFieldValue<String>(_readField(json, const ["default_app"]), "default_app", _readString,
+          requiredField: true, nullable: true),
+      integrations: _required(
+          _readFieldValue<Map<String, dynamic>>(_readField(json, const ["integrations"]), "integrations", _readMap,
+              requiredField: true, nullable: false),
+          "integrations"),
     );
   }
 
@@ -95,7 +114,10 @@ class GeneratedOAuthUrlResponse {
 
   factory GeneratedOAuthUrlResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedOAuthUrlResponse(
-      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+      authUrl: _required(
+          _readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString,
+              requiredField: true, nullable: false),
+          "auth_url"),
     );
   }
 
@@ -119,9 +141,15 @@ class GeneratedCreateTaskResponse {
 
   factory GeneratedCreateTaskResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCreateTaskResponse(
-      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
-      externalTaskId: _readFieldValue<String>(_readField(json, const ["external_task_id"]), "external_task_id", _readString, requiredField: false, nullable: true),
-      success: _required(_readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool, requiredField: true, nullable: false), "success"),
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString,
+          requiredField: false, nullable: true),
+      externalTaskId: _readFieldValue<String>(
+          _readField(json, const ["external_task_id"]), "external_task_id", _readString,
+          requiredField: false, nullable: true),
+      success: _required(
+          _readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool,
+              requiredField: true, nullable: false),
+          "success"),
     );
   }
 
@@ -143,7 +171,8 @@ class GeneratedDefaultTaskIntegrationResponse {
 
   factory GeneratedDefaultTaskIntegrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDefaultTaskIntegrationResponse(
-      defaultApp: _readFieldValue<String>(_readField(json, const ["default_app"]), "default_app", _readString, requiredField: true, nullable: true),
+      defaultApp: _readFieldValue<String>(_readField(json, const ["default_app"]), "default_app", _readString,
+          requiredField: true, nullable: true),
     );
   }
 
@@ -163,7 +192,9 @@ class GeneratedAsanaWorkspacesResponse {
 
   factory GeneratedAsanaWorkspacesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAsanaWorkspacesResponse(
-      workspaces: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["workspaces"]), "workspaces", _readMapList, requiredField: false, nullable: true),
+      workspaces: _readFieldValue<List<Map<String, dynamic>>>(
+          _readField(json, const ["workspaces"]), "workspaces", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -183,7 +214,9 @@ class GeneratedAsanaProjectsResponse {
 
   factory GeneratedAsanaProjectsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAsanaProjectsResponse(
-      projects: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["projects"]), "projects", _readMapList, requiredField: false, nullable: true),
+      projects: _readFieldValue<List<Map<String, dynamic>>>(
+          _readField(json, const ["projects"]), "projects", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -203,7 +236,8 @@ class GeneratedClickUpTeamsResponse {
 
   factory GeneratedClickUpTeamsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedClickUpTeamsResponse(
-      teams: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["teams"]), "teams", _readMapList, requiredField: false, nullable: true),
+      teams: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["teams"]), "teams", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -223,7 +257,8 @@ class GeneratedClickUpSpacesResponse {
 
   factory GeneratedClickUpSpacesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedClickUpSpacesResponse(
-      spaces: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["spaces"]), "spaces", _readMapList, requiredField: false, nullable: true),
+      spaces: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["spaces"]), "spaces", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -243,7 +278,8 @@ class GeneratedClickUpListsResponse {
 
   factory GeneratedClickUpListsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedClickUpListsResponse(
-      lists: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["lists"]), "lists", _readMapList, requiredField: false, nullable: true),
+      lists: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["lists"]), "lists", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -327,9 +363,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -345,37 +379,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

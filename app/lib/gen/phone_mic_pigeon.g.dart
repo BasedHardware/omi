@@ -46,7 +46,6 @@ enum PhoneMicCaptureMode {
   batch,
 }
 
-
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -54,10 +53,10 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is PhoneMicCaptureState) {
+    } else if (value is PhoneMicCaptureState) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is PhoneMicCaptureMode) {
+    } else if (value is PhoneMicCaptureMode) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
     } else {
@@ -114,15 +113,15 @@ class PhoneMicHostApi {
   final String pigeonVar_messageChannelSuffix;
 
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.start$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.start$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[mode, sessionId]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -137,15 +136,15 @@ class PhoneMicHostApi {
   }
 
   Future<void> stop() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.stop$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.stop$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -160,15 +159,15 @@ class PhoneMicHostApi {
   }
 
   Future<bool> isRecording() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.isRecording$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.isRecording$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -210,7 +209,11 @@ abstract class PhoneMicFlutterApi {
   /// event keeps arriving.
   void onBatchProgress(double capturedSeconds, int sessionId);
 
-  static void setUp(PhoneMicFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
+  static void setUp(
+    PhoneMicFlutterApi? api, {
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -221,7 +224,7 @@ abstract class PhoneMicFlutterApi {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame was null.');
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_pcm16leMono16k = (args[0] as Uint8List?);
           assert(arg_pcm16leMono16k != null,
@@ -234,7 +237,7 @@ abstract class PhoneMicFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
+          } catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -249,7 +252,7 @@ abstract class PhoneMicFlutterApi {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged was null.');
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final PhoneMicCaptureState? arg_state = (args[0] as PhoneMicCaptureState?);
           assert(arg_state != null,
@@ -262,7 +265,7 @@ abstract class PhoneMicFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
+          } catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -277,7 +280,7 @@ abstract class PhoneMicFlutterApi {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError was null.');
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_code = (args[0] as String?);
           assert(arg_code != null,
@@ -293,7 +296,7 @@ abstract class PhoneMicFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
+          } catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -301,14 +304,15 @@ abstract class PhoneMicFlutterApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null.');
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final double? arg_capturedSeconds = (args[0] as double?);
           assert(arg_capturedSeconds != null,
@@ -321,7 +325,7 @@ abstract class PhoneMicFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
+          } catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
