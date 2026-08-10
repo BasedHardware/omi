@@ -1,0 +1,19 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_8815d69cdccdc7::t_c3aafd7cf5fc45 4-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "74cb2dcfc4b7f70ad51e912788fedd467388d040",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
