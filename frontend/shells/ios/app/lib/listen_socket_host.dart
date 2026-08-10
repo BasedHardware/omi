@@ -13,18 +13,12 @@ class ShellTransportAuthority {
   final Uri baseUrl;
   final String? token;
 
-  BridgeHttpHost makeHttpHost() =>
-      BridgeHttpHost(baseUrl: baseUrl, token: token);
+  BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, token: token);
 
-  ListenSocketHost makeListenHost() =>
-      ListenSocketHost(baseUrl: baseUrl, token: token);
+  ListenSocketHost makeListenHost() => ListenSocketHost(baseUrl: baseUrl, token: token);
 
   ListenSocketPolicyResult prepareListen(String path) =>
-      ListenSocketHostPolicy.prepare(
-        path: path,
-        baseUrl: baseUrl,
-        token: token,
-      );
+      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: token);
 }
 
 class ListenSocketPreparedRequest {
@@ -44,27 +38,15 @@ class ListenSocketPolicyResult {
 
 /// Pure authority/auth policy shared by the live host and composition test.
 class ListenSocketHostPolicy {
-  static ListenSocketPolicyResult prepare({
-    required String path,
-    required Uri baseUrl,
-    required String? token,
-  }) {
-    if (!path.startsWith('/') ||
-        path.startsWith('//') ||
-        path.contains('://')) {
-      return const ListenSocketPolicyResult.failure(
-        'path is not origin-relative',
-      );
+  static ListenSocketPolicyResult prepare({required String path, required Uri baseUrl, required String? token}) {
+    if (!path.startsWith('/') || path.startsWith('//') || path.contains('://')) {
+      return const ListenSocketPolicyResult.failure('path is not origin-relative');
     }
     if (token == null || token.isEmpty) {
-      return const ListenSocketPolicyResult.failure(
-        'shell holds no credential',
-      );
+      return const ListenSocketPolicyResult.failure('shell holds no credential');
     }
     if (baseUrl.scheme != 'http' && baseUrl.scheme != 'https') {
-      return const ListenSocketPolicyResult.failure(
-        'API base must use http(s)',
-      );
+      return const ListenSocketPolicyResult.failure('API base must use http(s)');
     }
     final socketBase = baseUrl.replace(
       scheme: baseUrl.scheme == 'https' ? 'wss' : 'ws',
@@ -74,16 +56,12 @@ class ListenSocketHostPolicy {
     );
     final url = socketBase.resolve(path);
     if (url.host != socketBase.host || url.port != socketBase.port) {
-      return const ListenSocketPolicyResult.failure(
-        'could not resolve Listen socket URL',
-      );
+      return const ListenSocketPolicyResult.failure('could not resolve Listen socket URL');
     }
     return ListenSocketPolicyResult.dispatch(
       ListenSocketPreparedRequest(
         url: url,
-        headers: <String, String>{
-          HttpHeaders.authorizationHeader: 'Bearer $token',
-        },
+        headers: <String, String>{HttpHeaders.authorizationHeader: 'Bearer $token'},
       ),
     );
   }
@@ -114,85 +92,48 @@ class ListenSocketHost {
     final action = decoded['action'];
     if (id is! String || action is! String) return;
     if (action == 'close') {
-      final code = decoded['code'] is int
-          ? decoded['code'] as int
-          : WebSocketStatus.normalClosure;
-      final reason = decoded['reason'] is String
-          ? decoded['reason'] as String
-          : null;
+      final code = decoded['code'] is int ? decoded['code'] as int : WebSocketStatus.normalClosure;
+      final reason = decoded['reason'] is String ? decoded['reason'] as String : null;
       await _sockets.remove(id)?.close(code, reason);
       return;
     }
     final path = decoded['path'];
     if (action != 'open' || path is! String) return;
-    final decision = ListenSocketHostPolicy.prepare(
-      path: path,
-      baseUrl: baseUrl,
-      token: token,
-    );
+    final decision = ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: token);
     final prepared = decision.request;
     if (prepared == null) {
       await _emit(controller, id, const <String, Object>{'type': 'error'});
-      await _emit(controller, id, const <String, Object>{
-        'type': 'close',
-        'code': 1008,
-      });
+      await _emit(controller, id, const <String, Object>{'type': 'close', 'code': 1008});
       return;
     }
     try {
-      final socket = await WebSocket.connect(
-        prepared.url.toString(),
-        headers: prepared.headers,
-      );
+      final socket = await WebSocket.connect(prepared.url.toString(), headers: prepared.headers);
       _sockets[id] = socket;
       await _emit(controller, id, const <String, Object>{'type': 'open'});
       socket.listen(
         (dynamic data) {
           if (data is String) {
-            unawaited(
-              _emit(controller, id, <String, Object>{
-                'type': 'message',
-                'data': data,
-              }),
-            );
+            unawaited(_emit(controller, id, <String, Object>{'type': 'message', 'data': data}));
           } else {
-            unawaited(
-              _emit(controller, id, const <String, Object>{'type': 'error'}),
-            );
+            unawaited(_emit(controller, id, const <String, Object>{'type': 'error'}));
           }
         },
         onError: (Object _) {
-          unawaited(
-            _emit(controller, id, const <String, Object>{'type': 'error'}),
-          );
+          unawaited(_emit(controller, id, const <String, Object>{'type': 'error'}));
         },
         onDone: () {
           _sockets.remove(id);
-          unawaited(
-            _emit(controller, id, <String, Object>{
-              'type': 'close',
-              'code': socket.closeCode ?? 1006,
-            }),
-          );
+          unawaited(_emit(controller, id, <String, Object>{'type': 'close', 'code': socket.closeCode ?? 1006}));
         },
         cancelOnError: false,
       );
     } catch (_) {
       await _emit(controller, id, const <String, Object>{'type': 'error'});
-      await _emit(controller, id, const <String, Object>{
-        'type': 'close',
-        'code': 1006,
-      });
+      await _emit(controller, id, const <String, Object>{'type': 'close', 'code': 1006});
     }
   }
 
-  Future<void> _emit(
-    WebViewController controller,
-    String id,
-    Map<String, Object> payload,
-  ) {
-    return controller.runJavaScript(
-      'window.__omiListenSocketEvent?.(${jsonEncode(id)}, ${jsonEncode(payload)})',
-    );
+  Future<void> _emit(WebViewController controller, String id, Map<String, Object> payload) {
+    return controller.runJavaScript('window.__omiListenSocketEvent?.(${jsonEncode(id)}, ${jsonEncode(payload)})');
   }
 }
