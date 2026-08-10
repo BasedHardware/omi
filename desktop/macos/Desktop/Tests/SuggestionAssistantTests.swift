@@ -325,3 +325,21 @@ final class SuggestionGroundingTests: XCTestCase {
     XCTAssertTrue(rendered.contains("RELATED THINGS THE USER SAW RECENTLY"))
   }
 }
+
+/// The default prompt is shipped data: the daily-task nudge (distracted screen + tasks
+/// due today → name the task) is a product behavior that lives entirely in this text.
+/// This is a data-contract tripwire, not behavioral coverage of the model — it pins the
+/// prompt's contract to the grounding section header the assistant actually renders, so
+/// a prompt edit cannot silently retire the nudge or orphan it from its data source.
+final class SuggestionPromptContractTests: XCTestCase {
+  @MainActor
+  func testDefaultPromptCarriesTheDailyTaskNudgeContract() {
+    let prompt = SuggestionAssistantSettings.defaultAnalysisPrompt
+    XCTAssertTrue(prompt.contains("daily-task nudge"))
+    // The nudge is keyed to the exact section name promptSections() emits.
+    XCTAssertTrue(prompt.contains("OPEN COMMITMENTS"))
+    var grounding = SuggestionGrounding()
+    grounding.openCommitments = ["Send that email to Bob"]
+    XCTAssertTrue(grounding.promptSections().contains("OPEN COMMITMENTS"))
+  }
+}
