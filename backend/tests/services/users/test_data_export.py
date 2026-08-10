@@ -6,6 +6,8 @@ import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, call
 
+import pytest
+
 
 class _AutoMockModule(types.ModuleType):
     __path__ = []
@@ -132,7 +134,6 @@ def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):
 
 
 def test_json_default_raises_type_error_for_unsupported_types():
-    import pytest
     with pytest.raises(TypeError, match="Type <class 'set'> not serializable"):
         data_export._json_default(set())
 
