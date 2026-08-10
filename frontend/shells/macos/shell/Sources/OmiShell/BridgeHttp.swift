@@ -25,6 +25,7 @@ import WebKit
 struct BridgeHttpPreparedRequest {
   let id: String
   let method: String
+  let path: String
   let url: URL
   let headers: [String: String]
   let body: String?
@@ -162,7 +163,9 @@ enum BridgeHttpPolicy {
       outbound[clientIdHeader] = clientId
     }
     outbound["authorization"] = "Bearer \(token)"
-    return .dispatch(BridgeHttpPreparedRequest(id: id, method: method, url: url, headers: outbound, body: body))
+    return .dispatch(
+      BridgeHttpPreparedRequest(
+        id: id, method: method, path: path, url: url, headers: outbound, body: body))
   }
 
   static func transportFailure(id: String, name: String) -> BridgeHttpTransportFailure {
@@ -198,6 +201,45 @@ enum BridgeHttpPolicy {
   }
 }
 
+/// Mutable in-process bearer custody for the privileged HTTP host.
+///
+/// The environment remains immutable, so an explicit environment token may be
+/// loaded again after restart. Clearing this object still guarantees the
+/// current process cannot present a token whose exact session DELETE already
+/// succeeded. Persistent macOS deletion is injected and runs at the same gate.
+final class BridgeHttpCredentialCustody {
+  private(set) var token: String?
+  private let onSuccessfulSignOut: () -> Void
+
+  init(token: String?, onSuccessfulSignOut: @escaping () -> Void = {}) {
+    self.token = (token?.isEmpty ?? true) ? nil : token
+    self.onSuccessfulSignOut = onSuccessfulSignOut
+  }
+
+  func prepare(
+    id: String,
+    method: String,
+    path: String,
+    headers: [String: String],
+    body: String?,
+    baseURL: URL,
+    clientId: String?
+  ) -> BridgeHttpPolicyDecision {
+    BridgeHttpPolicy.prepare(
+      id: id, method: method, path: path, headers: headers, body: body,
+      baseURL: baseURL, token: token, clientId: clientId)
+  }
+
+  /// Exact success only. Every near miss deliberately retains custody.
+  func observe(method: String, path: String, status: Int) {
+    guard method == "DELETE", path == "/v1/session/current", status == 204,
+      token != nil
+    else { return }
+    token = nil
+    onSuccessfulSignOut()
+  }
+}
+
 private final class BridgeHttpURLSessionDelegate: NSObject, URLSessionTaskDelegate {
   func urlSession(
     _ session: URLSession,
@@ -219,7 +261,7 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
   static let channel = BridgeHttpContract.channel
 
   private let baseURL: URL
-  private let token: String?
+  private let custody: BridgeHttpCredentialCustody
   /// Per-run client identity (`OMI_RUN_CLIENT_ID`), threaded in at init so
   /// `BridgeHttpPolicy.prepare` stays a pure function the generated
   /// host-conformance runner can call without reading the environment itself.
@@ -254,9 +296,19 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
     return out
   }
 
-  init(baseURL: URL, token: String?, clientId: String? = nil) {
+  convenience init(baseURL: URL, token: String?, clientId: String? = nil) {
+    self.init(baseURL: baseURL, token: token, clientId: clientId, onSuccessfulSignOut: {})
+  }
+
+  init(
+    baseURL: URL,
+    token: String?,
+    clientId: String? = nil,
+    onSuccessfulSignOut: @escaping () -> Void
+  ) {
     self.baseURL = baseURL
-    self.token = (token?.isEmpty ?? true) ? nil : token
+    self.custody = BridgeHttpCredentialCustody(
+      token: token, onSuccessfulSignOut: onSuccessfulSignOut)
     self.clientId = (clientId?.isEmpty ?? true) ? nil : clientId
     let cfg = BridgeHttpPolicy.sessionConfiguration()
     let sessionDelegate = BridgeHttpURLSessionDelegate()
@@ -291,9 +343,9 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
     }
     let headers = body["headers"] as? [String: String] ?? [:]
     let bodyString = body["body"] as? String
-    let decision = BridgeHttpPolicy.prepare(
+    let decision = custody.prepare(
       id: id, method: method, path: path, headers: headers, body: bodyString,
-      baseURL: baseURL, token: token, clientId: clientId)
+      baseURL: baseURL, clientId: clientId)
     guard case let .dispatch(prepared) = decision else {
       if case let .failure(reason, detail) = decision {
         replyHandler(failure(id, reason, detail), nil)
@@ -310,6 +362,11 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
           replyHandler(self.failure(id, .shellError, "non-HTTP response"), nil)
           return
         }
+        // Clear live and persistent custody before the success reply can reach
+        // the page. A later optional-auth read in this process therefore emits
+        // typed not-authenticated instead of re-presenting the revoked token.
+        self.custody.observe(
+          method: prepared.method, path: prepared.path, status: http.statusCode)
         if (200..<300).contains(http.statusCode) {
           self.succeededCount += 1
         } else {

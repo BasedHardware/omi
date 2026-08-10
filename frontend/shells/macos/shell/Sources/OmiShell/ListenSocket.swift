@@ -21,6 +21,16 @@ struct ShellTransportAuthority {
     BridgeHttpHandler(baseURL: baseURL, token: token, clientId: clientId)
   }
 
+  @MainActor
+  func makeHTTPHandler(
+    clientId: String?,
+    onSuccessfulSignOut: @escaping () -> Void
+  ) -> BridgeHttpHandler {
+    BridgeHttpHandler(
+      baseURL: baseURL, token: token, clientId: clientId,
+      onSuccessfulSignOut: onSuccessfulSignOut)
+  }
+
   func makeListenHandler() -> ListenSocketHandler {
     ListenSocketHandler(baseURL: baseURL, token: token)
   }
