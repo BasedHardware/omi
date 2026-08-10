@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260810-kg-tool-reliability.json
+  s_8815d69cdccdc7::t_5a1e0208196d2e 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5f212686e1c4cbd867e0bcd54da72e76beac285f",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
