@@ -178,6 +178,27 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   color: var(--content-secondary);
 }
 
+.chat-message-attachments {
+  display: grid;
+  gap: var(--space-xs);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+.chat-message-attachments li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.chat-message-attachment-name {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
 .chat-attachment-hint {
   margin: 0;
   color: var(--content-secondary);
