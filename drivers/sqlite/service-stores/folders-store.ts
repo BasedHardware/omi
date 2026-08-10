@@ -1,10 +1,8 @@
 import type { Database } from "bun:sqlite";
 
-import type { ConversationFolderReassignment } from "../../../apps/service/stores/conversations-store";
 import type {
   FolderCreateInput,
   FolderCreateOutcome,
-  FolderDeleteOutcome,
   FolderPatch,
   FolderPatchOutcome,
   FolderRecord,
@@ -48,10 +46,7 @@ const SELECT_FIELDS = `
 
 /** SQLite persistence adapter for the FoldersStore port. */
 export class SqliteFoldersStore implements FoldersStore {
-  constructor(
-    private readonly db: Database,
-    private readonly conversations: ConversationFolderReassignment,
-  ) {
+  constructor(private readonly db: Database) {
     configureServiceStoreConnection(db);
     db.exec(`
       CREATE TABLE IF NOT EXISTS service_folder_records (
@@ -158,33 +153,6 @@ export class SqliteFoldersStore implements FoldersStore {
         updated_at: updatedAt,
       });
       return { updated: true, record };
-    });
-    return write.immediate();
-  }
-
-  deleteFolder(
-    accountId: string,
-    folderId: string,
-    requestedTarget: string | null,
-  ): FolderDeleteOutcome {
-    const write = this.db.transaction((): FolderDeleteOutcome => {
-      const current = this.readFolder(accountId, folderId);
-      if (current === null) return { deleted: false, reason: "not_found" };
-      if (current.is_system) return { deleted: false, reason: "system_folder" };
-      if (requestedTarget === folderId) return { deleted: false, reason: "self_move" };
-      if (requestedTarget !== null && !this.hasFolder(accountId, requestedTarget)) {
-        return { deleted: false, reason: "target_not_found" };
-      }
-      const target = requestedTarget
-        ?? this.listFolders(accountId).find((folder) => folder.is_default)?.id
-        ?? null;
-      if (target !== null) {
-        this.conversations.reassignFolderReferences(accountId, folderId, target);
-      }
-      this.db.query(`
-        DELETE FROM service_folder_records WHERE account_id = ? AND id = ?
-      `).run(accountId, folderId);
-      return { deleted: true, moved_to_folder_id: target };
     });
     return write.immediate();
   }

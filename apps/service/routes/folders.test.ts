@@ -2,8 +2,12 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
 import { createInMemoryLocalServiceStores, createLocalService } from "../app-facing";
-import type { ConversationRecord } from "../stores/conversations-store";
-import type { FolderRecord } from "../stores/folders-store";
+import {
+  createInMemoryConversationsStore,
+  type ConversationRecord,
+} from "../stores/conversations-store";
+import { createInMemoryFolderDeletionUnitOfWork } from "../stores/folder-deletion-unit-of-work";
+import { createInMemoryFoldersStore, type FolderRecord } from "../stores/folders-store";
 
 const OWNER = "acct-folders-route";
 const CREATED = "2026-08-03T12:00:00.000Z";
@@ -202,6 +206,59 @@ describe("PATCH /v1/folders/:id", () => {
 });
 
 describe("DELETE /v1/folders/:id", () => {
+  test("rolls back both writes when deletion fails after reassignment", async () => {
+    const base = createInMemoryLocalServiceStores();
+    const folders = createInMemoryFoldersStore();
+    const conversations = createInMemoryConversationsStore({
+      hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
+    });
+    const folderDeletion = createInMemoryFolderDeletionUnitOfWork(
+      folders,
+      conversations,
+      {
+        afterConversationReassignment() {
+          throw new Error("injected failure after conversation reassignment");
+        },
+      },
+    );
+    const db = new Database(":memory:");
+    const service = createLocalService({
+      db,
+      ownerAccountId: OWNER,
+      memoryCount: 1,
+      accountTimezone: "UTC",
+      devSecretLabel: "folder-delete-rollback-test",
+      stores: Object.freeze({ ...base, conversations, folders, folderDeletion }),
+    });
+    const request = (path: string, init: RequestInit = {}) => service.app.request(path, {
+      ...init,
+      headers: { authorization: `Bearer ${service.devToken}`, ...(init.headers ?? {}) },
+    });
+
+    try {
+      folders.upsert(OWNER, folder("target"));
+      folders.upsert(OWNER, folder("source", { order: 1 }));
+      expect(conversations.upsert(OWNER, conversation("source")).stored).toBe(true);
+
+      const failed = await request(
+        "/v1/folders/source?move_to_folder_id=target",
+        { method: "DELETE" },
+      );
+      expect(failed.status).toBe(500);
+      expect(await body(failed)).toEqual({ error: "qa_server_error" });
+
+      const listedFolders = await body(await request("/v1/folders")) as FolderRecord[];
+      expect(listedFolders.map((record) => record.id)).toEqual(["target", "source"]);
+      const listedConversations = await body(
+        await request("/v1/conversations"),
+      ) as ConversationRecord[];
+      expect(listedConversations[0]?.folder_id).toBe("source");
+      expect(conversations.readStateRevision(OWNER)).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   test("pins system, self, empty, unknown, and explicit-target outcomes", async () => {
     const { db, request } = boot();
     try {

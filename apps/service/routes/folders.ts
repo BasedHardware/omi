@@ -2,6 +2,10 @@ import type { Hono } from "hono";
 
 import type { DevPrincipal } from "../auth/dev-token";
 import type { ServedCounter } from "../observability/served-count";
+import type {
+  FolderDeletionOutcome,
+  FolderDeletionUnitOfWork,
+} from "../stores/folder-deletion-unit-of-work";
 import type { FolderPatch, FoldersStore } from "../stores/folders-store";
 
 const JSON_HEADERS = Object.freeze({
@@ -15,6 +19,7 @@ const FOLDER_PREFIX = `${FOLDERS_PATH}/`;
 export interface FolderRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly store: FoldersStore;
+  readonly deletion: FolderDeletionUnitOfWork;
   readonly counter: ServedCounter;
   readonly now: () => string;
   readonly createId: () => string;
@@ -65,7 +70,7 @@ const readJsonLikePrototype = async (request: Request): Promise<unknown> => {
 };
 
 const deleteError = (reason: Exclude<
-  ReturnType<FoldersStore["deleteFolder"]>,
+  FolderDeletionOutcome,
   { readonly deleted: true }
 >["reason"]): Response => {
   if (reason === "system_folder" || reason === "self_move") {
@@ -164,7 +169,7 @@ export const registerFolderRoutes = (
     }
   });
 
-  app.delete(`${FOLDERS_PATH}/*`, (context) => {
+  app.delete(`${FOLDERS_PATH}/*`, async (context) => {
     const principal = authenticate(context.req.header("authorization"), deps.resolvePrincipal);
     if (principal === null) return errorResponse(401, "unauthorized");
     const url = requestUrl(context.req.raw);
@@ -172,14 +177,15 @@ export const registerFolderRoutes = (
     const id = decodeId(url.pathname.slice(FOLDER_PREFIX.length));
     if (id === null) return errorResponse(404, "not_found");
     try {
-      // The store preserves the prototype's check order: system before self or
-      // target validation, and an empty query value is an explicit missing target.
-      const outcome = deps.store.deleteFolder(
-        principal.uid,
-        id,
-        url.searchParams.get("move_to_folder_id"),
-      );
-      if (!outcome.deleted) return deleteError(outcome.reason);
+      // The semantic unit preserves the prototype's check order: system before
+      // self or target validation, and an empty query value is an explicit
+      // missing target. It owns reassignment and deletion as one commit.
+      const outcome = await deps.deletion.execute({
+        accountId: principal.uid,
+        folderId: id,
+        requestedTarget: url.searchParams.get("move_to_folder_id"),
+      });
+      if (outcome.deleted === false) return deleteError(outcome.reason);
       // With no explicit target the prototype falls back to the default folder.
       // With no default it deletes anyway and leaves conversation.folder_id
       // dangling. Preserve that visible wart; the store reports a null target.

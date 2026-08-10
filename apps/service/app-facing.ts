@@ -40,6 +40,10 @@ import {
   type FolderRecord,
   type FoldersStore,
 } from "./stores/folders-store";
+import {
+  createInMemoryFolderDeletionUnitOfWork,
+  type FolderDeletionUnitOfWork,
+} from "./stores/folder-deletion-unit-of-work";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
@@ -89,6 +93,7 @@ export interface LocalServiceOptions {
 export interface LocalServiceStores {
   readonly conversations: ConversationsStore;
   readonly folders: FoldersStore;
+  readonly folderDeletion: FolderDeletionUnitOfWork;
   readonly tasks: TasksStore;
   readonly registry: WriteIdRegistry;
   readonly unitOfWork: WriteUnitOfWork;
@@ -145,14 +150,14 @@ const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
 export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
   const tasks = createInMemoryTasksStore();
   const registry = createInMemoryWriteIdRegistry();
-  let folders: FoldersStore | undefined;
+  const folders = createInMemoryFoldersStore();
   const conversations = createInMemoryConversationsStore({
-    hasFolder: (accountId, folderId) => folders?.hasFolder(accountId, folderId) ?? false,
+    hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
-  folders = createInMemoryFoldersStore(conversations);
   return Object.freeze({
     conversations,
     folders,
+    folderDeletion: createInMemoryFolderDeletionUnitOfWork(folders, conversations),
     tasks,
     registry,
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
@@ -179,6 +184,7 @@ export interface LocalService {
   readonly writePath: {
     readonly conversations: ConversationsStore;
     readonly folders: FoldersStore;
+    readonly folderDeletion: FolderDeletionUnitOfWork;
     readonly tasks: TasksStore;
     readonly tasksRead: TasksReadStore;
     readonly registry: WriteIdRegistry;
@@ -195,6 +201,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const conversations = stores.conversations;
   const folders = stores.folders;
+  const folderDeletion = stores.folderDeletion;
   let nextFolderId = 1;
   const reseed = (): void => {
     nextFolderId = 1;
@@ -367,6 +374,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   registerFolderRoutes(app, {
     resolvePrincipal,
     store: folders,
+    deletion: folderDeletion,
     counter,
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
     createId: () => `qa-folder-created-${String(nextFolderId++).padStart(3, "0")}`,
@@ -420,6 +428,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     writePath: Object.freeze({
       conversations,
       folders,
+      folderDeletion,
       tasks,
       tasksRead: tasks,
       registry: writeIdRegistry,

@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import type { LocalServiceStores } from "../../../apps/service/app-facing";
 import { SqliteConversationsStore } from "./conversations-store";
+import { SqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
 import { SqliteFoldersStore } from "./folders-store";
 import { SqliteAccountControlProjectionStore } from "./projection-store";
 import { SqliteStragglerTable } from "./straggler-table";
@@ -11,6 +12,7 @@ import { SqliteWriteUnitOfWork } from "./write-unit-of-work";
 
 export { SqliteAccountControlProjectionStore } from "./projection-store";
 export { SqliteConversationsStore } from "./conversations-store";
+export { SqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
 export { SqliteFoldersStore } from "./folders-store";
 export { SqliteStragglerTable } from "./straggler-table";
 export { SqliteTasksStore } from "./tasks-store";
@@ -23,14 +25,14 @@ export const createSqliteLocalServiceStores = (
 ): LocalServiceStores => {
   const tasks = new SqliteTasksStore(db);
   const registry = new SqliteWriteIdRegistry(db);
-  let folders: SqliteFoldersStore | undefined;
+  const folders = new SqliteFoldersStore(db);
   const conversations = new SqliteConversationsStore(db, {
-    hasFolder: (accountId, folderId) => folders?.hasFolder(accountId, folderId) ?? false,
+    hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
-  folders = new SqliteFoldersStore(db, conversations);
   return Object.freeze({
     conversations,
     folders,
+    folderDeletion: new SqliteFolderDeletionUnitOfWork(db),
     tasks,
     registry,
     unitOfWork: new SqliteWriteUnitOfWork(db, tasks, registry),

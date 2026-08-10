@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { createInMemoryConversationsStore, type ConversationRecord } from "./conversations-store";
+import { createInMemoryFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
 import { createInMemoryFoldersStore, type FolderRecord } from "./folders-store";
 
 const ACCOUNT = "acct-folders";
@@ -38,12 +39,15 @@ const conversation = (id: string, folderId: string): ConversationRecord => ({
 });
 
 const stores = () => {
-  let folders = createInMemoryFoldersStore();
+  const folders = createInMemoryFoldersStore();
   const conversations = createInMemoryConversationsStore({
     hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
-  folders = createInMemoryFoldersStore(conversations);
-  return { folders, conversations };
+  return {
+    folders,
+    conversations,
+    folderDeletion: createInMemoryFolderDeletionUnitOfWork(folders, conversations),
+  };
 };
 
 describe("in-memory folders store", () => {
@@ -72,15 +76,21 @@ describe("in-memory folders store", () => {
       .toMatchObject({ updated: true, record: { name: null, order: "last", updated_at: UPDATED } });
   });
 
-  test("delete validates system, self, and unknown targets before mutation", () => {
-    const { folders } = stores();
+  test("delete validates system, self, and unknown targets before mutation", async () => {
+    const { folders, folderDeletion } = stores();
     folders.upsert(ACCOUNT, folder("system", { is_system: true }));
     folders.upsert(ACCOUNT, folder("work"));
-    expect(folders.deleteFolder(ACCOUNT, "system", null))
+    expect(await folderDeletion.execute({
+      accountId: ACCOUNT, folderId: "system", requestedTarget: null,
+    }))
       .toEqual({ deleted: false, reason: "system_folder" });
-    expect(folders.deleteFolder(ACCOUNT, "work", "work"))
+    expect(await folderDeletion.execute({
+      accountId: ACCOUNT, folderId: "work", requestedTarget: "work",
+    }))
       .toEqual({ deleted: false, reason: "self_move" });
-    expect(folders.deleteFolder(ACCOUNT, "work", "missing"))
+    expect(await folderDeletion.execute({
+      accountId: ACCOUNT, folderId: "work", requestedTarget: "missing",
+    }))
       .toEqual({ deleted: false, reason: "target_not_found" });
     expect(folders.hasFolder(ACCOUNT, "work")).toBe(true);
   });

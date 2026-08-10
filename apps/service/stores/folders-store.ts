@@ -1,7 +1,4 @@
-import type {
-  ConversationFolderReferenceLookup,
-  ConversationFolderReassignment,
-} from "./conversations-store";
+import type { ConversationFolderReferenceLookup } from "./conversations-store";
 
 /**
  * The adopted folder row. Patchable values are deliberately `unknown`: the QA
@@ -46,13 +43,6 @@ export type FolderPatchOutcome =
   | { readonly updated: true; readonly record: FolderRecord }
   | { readonly updated: false; readonly reason: "not_found" };
 
-export type FolderDeleteOutcome =
-  | { readonly deleted: true; readonly moved_to_folder_id: string | null }
-  | {
-      readonly deleted: false;
-      readonly reason: "not_found" | "system_folder" | "self_move" | "target_not_found";
-    };
-
 export interface FoldersStore extends ConversationFolderReferenceLookup {
   listFolders(accountId: string): readonly FolderRecord[];
   readFolder(accountId: string, folderId: string): FolderRecord | null;
@@ -65,23 +55,23 @@ export interface FoldersStore extends ConversationFolderReferenceLookup {
     patch: FolderPatch,
     updatedAt: string,
   ): FolderPatchOutcome;
-  deleteFolder(
-    accountId: string,
-    folderId: string,
-    requestedTarget: string | null,
-  ): FolderDeleteOutcome;
   reset(): void;
 }
 
 const freezeRecord = (record: FolderRecord): FolderRecord => Object.freeze({ ...record });
 
-const noConversationReassignment: ConversationFolderReassignment = Object.freeze({
-  reassignFolderReferences: () => ({ reassigned: 0, state_revision: null }),
-});
+export interface InMemoryFoldersAccountSnapshot {
+  readonly records: readonly FolderRecord[] | null;
+}
 
-export const createInMemoryFoldersStore = (
-  conversations: ConversationFolderReassignment = noConversationReassignment,
-): FoldersStore => {
+/** Adapter-private capabilities owned by the in-memory folder deletion unit. */
+export interface InMemoryFoldersStore extends FoldersStore {
+  deleteFolderRecord(accountId: string, folderId: string): boolean;
+  snapshotAccount(accountId: string): InMemoryFoldersAccountSnapshot;
+  restoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void;
+}
+
+export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
   const accounts = new Map<string, Map<string, FolderRecord>>();
 
   const foldersOf = (accountId: string): Map<string, FolderRecord> => {
@@ -135,23 +125,23 @@ export const createInMemoryFoldersStore = (
       return { updated: true, record };
     },
 
-    deleteFolder(accountId, folderId, requestedTarget): FolderDeleteOutcome {
-      const folders = accounts.get(accountId);
-      const current = folders?.get(folderId);
-      if (folders === undefined || current === undefined) {
-        return { deleted: false, reason: "not_found" };
+    deleteFolderRecord(accountId: string, folderId: string): boolean {
+      return accounts.get(accountId)?.delete(folderId) ?? false;
+    },
+
+    snapshotAccount(accountId: string): InMemoryFoldersAccountSnapshot {
+      const records = accounts.get(accountId);
+      return Object.freeze({
+        records: records === undefined ? null : Object.freeze([...records.values()]),
+      });
+    },
+
+    restoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void {
+      if (snapshot.records === null) {
+        accounts.delete(accountId);
+      } else {
+        accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
       }
-      if (current.is_system) return { deleted: false, reason: "system_folder" };
-      if (requestedTarget === folderId) return { deleted: false, reason: "self_move" };
-      if (requestedTarget !== null && !folders.has(requestedTarget)) {
-        return { deleted: false, reason: "target_not_found" };
-      }
-      const target = requestedTarget
-        ?? [...folders.values()].find((folder) => folder.is_default)?.id
-        ?? null;
-      if (target !== null) conversations.reassignFolderReferences(accountId, folderId, target);
-      folders.delete(folderId);
-      return { deleted: true, moved_to_folder_id: target };
     },
 
     reset(): void {

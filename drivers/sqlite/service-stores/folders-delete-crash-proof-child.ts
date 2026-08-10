@@ -6,8 +6,7 @@ import type { FolderRecord } from "../../../apps/service/stores/folders-store";
 import type { LocalServiceStores } from "../../../apps/service/app-facing";
 import {
   createSqliteLocalServiceStores,
-  SqliteConversationsStore,
-  SqliteFoldersStore,
+  SqliteFolderDeletionUnitOfWork,
 } from "./index";
 
 const ACCOUNT = "acct-folder-atomicity";
@@ -54,29 +53,23 @@ const db = new Database(databasePath, { create: true });
 try {
   let stores: LocalServiceStores;
   if (phase === "crash") {
-    let folders: SqliteFoldersStore | undefined;
-    const conversations = new SqliteConversationsStore(db, {
-      hasFolder: (accountId, folderId) => folders?.hasFolder(accountId, folderId) ?? false,
-    });
-    folders = new SqliteFoldersStore(db, {
-      reassignFolderReferences(accountId, fromFolderId, toFolderId) {
-        const outcome = conversations.reassignFolderReferences(
-          accountId,
-          fromFolderId,
-          toFolderId,
-        );
+    const regular = createSqliteLocalServiceStores(db);
+    const folderDeletion = new SqliteFolderDeletionUnitOfWork(db, {
+      afterConversationReassignment() {
         writeFileSync(markerPath, "conversation-reassigned-folder-not-deleted\n", "utf8");
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
-        return outcome;
       },
     });
-    const regular = createSqliteLocalServiceStores(db);
-    stores = Object.freeze({ ...regular, conversations, folders });
+    stores = Object.freeze({ ...regular, folderDeletion });
     stores.folders.upsert(ACCOUNT, folder(TARGET));
     stores.folders.upsert(ACCOUNT, folder(SOURCE));
     const saved = stores.conversations.upsert(ACCOUNT, conversation);
     if (!saved.stored) throw new Error("conversation seed refused");
-    stores.folders.deleteFolder(ACCOUNT, SOURCE, TARGET);
+    await stores.folderDeletion.execute({
+      accountId: ACCOUNT,
+      folderId: SOURCE,
+      requestedTarget: TARGET,
+    });
     throw new Error("delete unexpectedly escaped crash barrier");
   }
 

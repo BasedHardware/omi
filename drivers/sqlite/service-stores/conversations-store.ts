@@ -5,7 +5,6 @@ import type { Database } from "bun:sqlite";
 import type {
   ConversationDeleteOutcome,
   ConversationFolderReferenceLookup,
-  ConversationFolderReassignmentOutcome,
   ConversationPatchOutcome,
   ConversationRecord,
   ConversationsStore,
@@ -241,25 +240,6 @@ export class SqliteConversationsStore implements ConversationsStore {
       `).run(accountId, recordId);
       if (removed.changes === 0) return { deleted: false, reason: "not_found" };
       return { deleted: true, state_revision: this.bumpRevision(accountId) };
-    });
-    return write.immediate();
-  }
-
-  reassignFolderReferences(
-    accountId: string,
-    fromFolderId: string,
-    toFolderId: string,
-  ): ConversationFolderReassignmentOutcome {
-    const write = this.db.transaction((): ConversationFolderReassignmentOutcome => {
-      const result = this.db.query(`
-        UPDATE service_conversation_records
-        SET folder_id = ?
-        WHERE account_id = ? AND folder_id = ?
-      `).run(toFolderId, accountId, fromFolderId);
-      return {
-        reassigned: result.changes,
-        state_revision: result.changes === 0 ? null : this.bumpRevision(accountId),
-      };
     });
     return write.immediate();
   }

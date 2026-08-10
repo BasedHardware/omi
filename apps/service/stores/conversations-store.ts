@@ -12,8 +12,8 @@
  *
  * Folder ownership remains outside this port. The injected lookup is the narrow
  * read dependency needed to enforce the existing folder reference atomically
- * with a conversation mutation. The folders backend can replace that lookup
- * without changing this store or its wire.
+ * with a conversation mutation. Folder deletion is deliberately absent: its
+ * cross-store writes belong to FolderDeletionUnitOfWork, not either store port.
  *
  * Conversation routes carry no write id. Their mutations therefore do not use
  * the tasks write-id registry or WriteUnitOfWork; every adapter must instead
@@ -73,16 +73,7 @@ export interface ConversationFolderReassignmentOutcome {
   readonly state_revision: number | null;
 }
 
-/** Narrow write seam used by a folder deletion's enclosing unit of work. */
-export interface ConversationFolderReassignment {
-  reassignFolderReferences(
-    accountId: string,
-    fromFolderId: string,
-    toFolderId: string,
-  ): ConversationFolderReassignmentOutcome;
-}
-
-export interface ConversationsStore extends ConversationFolderReassignment {
+export interface ConversationsStore {
   /** Stable insertion order, matching the legacy collection's array order. */
   listRecords(accountId: string): readonly ConversationRecord[];
   readRecord(accountId: string, recordId: string): ConversationRecord | null;
@@ -118,6 +109,22 @@ export interface ConversationsStore extends ConversationFolderReassignment {
   reset(): void;
 }
 
+export interface InMemoryConversationsAccountSnapshot {
+  readonly records: readonly ConversationRecord[] | null;
+  readonly revision: number | null;
+}
+
+/** Adapter-private capabilities owned by the in-memory folder deletion unit. */
+export interface InMemoryConversationsStore extends ConversationsStore {
+  reassignFolderReferences(
+    accountId: string,
+    fromFolderId: string,
+    toFolderId: string,
+  ): ConversationFolderReassignmentOutcome;
+  snapshotAccount(accountId: string): InMemoryConversationsAccountSnapshot;
+  restoreAccount(accountId: string, snapshot: InMemoryConversationsAccountSnapshot): void;
+}
+
 const freezeRecord = (record: ConversationRecord): ConversationRecord => Object.freeze({
   ...record,
   structured: Object.freeze({ ...record.structured }),
@@ -125,7 +132,7 @@ const freezeRecord = (record: ConversationRecord): ConversationRecord => Object.
 
 export const createInMemoryConversationsStore = (
   folders: ConversationFolderReferenceLookup = denyAllConversationFolderReferences,
-): ConversationsStore => {
+): InMemoryConversationsStore => {
   const accounts = new Map<string, Map<string, ConversationRecord>>();
   const revisions = new Map<string, number>();
 
@@ -231,6 +238,27 @@ export const createInMemoryConversationsStore = (
         reassigned,
         state_revision: reassigned === 0 ? null : bumpRevision(accountId),
       };
+    },
+
+    snapshotAccount(accountId: string): InMemoryConversationsAccountSnapshot {
+      const records = accounts.get(accountId);
+      return Object.freeze({
+        records: records === undefined ? null : Object.freeze([...records.values()]),
+        revision: revisions.get(accountId) ?? null,
+      });
+    },
+
+    restoreAccount(
+      accountId: string,
+      snapshot: InMemoryConversationsAccountSnapshot,
+    ): void {
+      if (snapshot.records === null) {
+        accounts.delete(accountId);
+      } else {
+        accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
+      }
+      if (snapshot.revision === null) revisions.delete(accountId);
+      else revisions.set(accountId, snapshot.revision);
     },
 
     readStateRevision(accountId: string): number {
