@@ -340,6 +340,7 @@ export class ChatMessagesStore {
     const observation = observeChatGeneration(
       this.streamPort,
       state.generationId,
+      this.env,
       state.lastEventId ?? undefined,
     );
     this.observations.set(state.generationId, observation);
