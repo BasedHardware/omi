@@ -107,24 +107,40 @@ export async function renderComponent(Component, props) {
   const restoreGlobals = installDomGlobals(dom.window);
   const container = dom.window.document.querySelector("#root");
   assert.ok(container);
-  const { createRoot } = await import("react-dom/client");
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(createElement(Component, props));
-  });
+  let root;
+  try {
+    const { createRoot } = await import("react-dom/client");
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(Component, props));
+    });
 
-  return {
-    container,
-    window: dom.window,
-    async act(callback) {
-      await act(callback);
-    },
-    async cleanup() {
-      await act(async () => root.unmount());
+    return {
+      container,
+      window: dom.window,
+      async act(callback) {
+        await act(callback);
+      },
+      async cleanup() {
+        try {
+          await act(async () => root.unmount());
+        } finally {
+          dom.window.close();
+          restoreGlobals();
+        }
+      },
+    };
+  } catch (error) {
+    try {
+      if (root) await act(async () => root.unmount());
+    } catch {
+      // Preserve the render/import error; cleanup must not replace it.
+    } finally {
       dom.window.close();
       restoreGlobals();
-    },
-  };
+    }
+    throw error;
+  }
 }
 
 export async function closeRenderHarness() {
