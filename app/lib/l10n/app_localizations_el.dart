@@ -751,11 +751,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Το πρόγραμμά σας ανανεώνεται στις $date.';
-  }
-
-  @override
   String get basicPlan => 'Δωρεάν Πρόγραμμα';
 
   @override
@@ -2144,16 +2139,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get editMemory => '✏️ Επεξεργασία μνήμης';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Καρφίτσωμα ως βάση';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Ξεκαρφίτσωμα από τη βάση';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Μνήμη βάσης';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Πάντα στο πλαίσιο';
 
   @override
   String get memoryContentHint => 'Μου αρέσει να τρώω παγωτό...';
@@ -9843,4 +9838,75 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';
+
+  @override
+  String get planSheetChooseYourPlan => 'Επίλεξε το πρόγραμμά σου για να ξεκλειδώσεις το Omi χωρίς όρια.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Διαθέσιμο σε Mac, κινητό και web';
+
+  @override
+  String get popularBadge => 'ΔΗΜΟΦΙΛΕΣ';
+
+  @override
+  String get worksOnDesktop => 'Λειτουργεί σε υπολογιστή';
+
+  @override
+  String get noDesktopAccess => 'Δεν λειτουργεί σε υπολογιστή';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months μήνες / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count μήνες δωρεάν',
+      one: '1 μήνας δωρεάν',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Το Omi είναι δωρεάν, αλλά η δωρεάν έκδοση έχει περιορισμούς που επηρεάζουν την εμπειρία σου:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Καθυστέρηση 5-7 δευτερολέπτων (όχι σε πραγματικό χρόνο)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Υποβάθμιση σε δωρεάν έκδοση';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Απόκτησε δωρεάν απεριόριστη πρόσβαση';
+
+  @override
+  String get shareDataForTraining => 'Κοινή χρήση δεδομένων για εκπαίδευση';
+
+  @override
+  String get yourRequestUnderReview => 'Το αίτημά σου εξετάζεται';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Απαιτείται ενημέρωση';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Εγκαταστήστε την πιο πρόσφατη εφαρμογή Omi για να συνεχίσετε μετά τη μετεγκατάσταση λογαριασμού.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Η μετεγκατάσταση είναι σε εξέλιξη';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.';
+
+  @override
+  String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 }

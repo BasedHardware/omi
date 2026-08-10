@@ -6,7 +6,7 @@ LIFECYCLE: permanent
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Callable, Dict, Generic, List, Optional, Sequence, TypeVar
 
 ControlT = TypeVar("ControlT")
 ResultT = TypeVar("ResultT")
@@ -79,9 +79,19 @@ def fetch_active_legacy_rows(
     return sorted(rows, key=lambda row: str(row.get("id") or ""))
 
 
+def rows_missing_canonical_destinations(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    has_destination: Callable[[Dict[str, Any]], bool],
+) -> List[Dict[str, Any]]:
+    """Select source rows that still need idempotent canonical reconciliation."""
+    return [row for row in rows if not has_destination(row)]
+
+
 __all__ = [
     "LegacyBackfillInventoryReport",
     "RefreshedApplyAttempt",
     "apply_with_control_refresh",
     "fetch_active_legacy_rows",
+    "rows_missing_canonical_destinations",
 ]

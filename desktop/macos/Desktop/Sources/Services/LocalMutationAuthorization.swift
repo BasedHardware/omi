@@ -19,6 +19,7 @@ actor EffectiveOwnerTransitionFence {
   static let shared = EffectiveOwnerTransitionFence()
 
   private var activeMutationLeaseIDs: Set<UUID> = []
+  private var leaseIDsSupersededByTransition: Set<UUID> = []
   private var transitionActive = false
   private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
   private var mutationWaiters: [CheckedContinuation<Void, Never>] = []
@@ -43,9 +44,15 @@ actor EffectiveOwnerTransitionFence {
     return lease
   }
 
-  func releaseMutationLease(_ lease: MutationLease) {
-    guard activeMutationLeaseIDs.remove(lease.id) != nil else { return }
+  /// Returns whether an effective-owner transition queued behind this lease
+  /// while it was held. Such a commit is durable for the previous owner, but the
+  /// next owner is already decided, so its result must not publish into them.
+  @discardableResult
+  func releaseMutationLease(_ lease: MutationLease) -> Bool {
+    guard activeMutationLeaseIDs.remove(lease.id) != nil else { return false }
+    let superseded = leaseIDsSupersededByTransition.remove(lease.id) != nil
     admitNextTransitionIfPossible()
+    return superseded
   }
 
   /// Perform an effective-owner mutation and deliver its cache-invalidation
@@ -140,6 +147,9 @@ actor EffectiveOwnerTransitionFence {
       return
     }
 
+    // The next owner is decided from here on. Leases that are already mid-commit
+    // may still finish, but they belong to the previous owner.
+    leaseIDsSupersededByTransition.formUnion(activeMutationLeaseIDs)
     await withCheckedContinuation { continuation in
       transitionWaiters.append(continuation)
       let observers = pendingTransitionObservers
@@ -193,12 +203,37 @@ struct LocalMutationAuthorization: Sendable {
   func withCommitLease<T: Sendable>(
     _ operation: @escaping @Sendable () async throws -> T
   ) async throws -> T {
+    try await withCommitLeaseReportingOwnerTransition(operation).value
+  }
+
+  /// `withCommitLease` for callers that publish the operation's result back into
+  /// the session. The commit itself stays durable for the owner that made it, but
+  /// if an effective-owner transition queued behind the lease, the next owner is
+  /// already decided even though the current owner may still read as the previous
+  /// one — releasing the lease only admits the transition, it does not wait for it
+  /// to publish. Such a result must not reach the incoming owner, so it surfaces
+  /// as `LocalMutationAuthorizationError.revoked` for the caller's existing
+  /// owner-changed path.
+  func withCommitLeaseSuppressingSupersededResult<T: Sendable>(
+    _ operation: @escaping @Sendable () async throws -> T
+  ) async throws -> T {
+    let (value, ownerTransitionQueued) = try await withCommitLeaseReportingOwnerTransition(
+      operation)
+    guard !ownerTransitionQueued else { throw LocalMutationAuthorizationError.revoked }
+    return value
+  }
+
+  /// `withCommitLease` plus the fence's verdict on whether an effective-owner
+  /// transition queued behind the lease while it was held.
+  func withCommitLeaseReportingOwnerTransition<T: Sendable>(
+    _ operation: @escaping @Sendable () async throws -> T
+  ) async throws -> (value: T, ownerTransitionQueued: Bool) {
     let fence = EffectiveOwnerTransitionFence.shared
     let lease = try await fence.acquireMutationLease(validating: validator)
     do {
       let result = try await operation()
-      await fence.releaseMutationLease(lease)
-      return result
+      let ownerTransitionQueued = await fence.releaseMutationLease(lease)
+      return (result, ownerTransitionQueued)
     } catch {
       await fence.releaseMutationLease(lease)
       throw error

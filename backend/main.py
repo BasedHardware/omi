@@ -42,6 +42,7 @@ from routers import (
     oauth,
     auth,
     action_items,
+    account_cutover,
     candidates,
     chat_first,
     chat_first_e2e,
@@ -112,7 +113,7 @@ validate_stripe_price_ids()
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
 if _auth_emulator_host:
-    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
         os.environ.pop(_adc_key, None)
     _firebase_project_id = (
         os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
@@ -150,6 +151,7 @@ app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
+app.include_router(account_cutover.router)
 app.include_router(candidates.router)
 app.include_router(chat_first.router)
 if is_chat_first_e2e_harness_runtime():

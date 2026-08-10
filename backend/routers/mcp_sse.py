@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
@@ -69,6 +70,7 @@ from utils.mcp_data import (
     end_of_day_utc,
     parse_date_only_utc,
 )
+from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -84,7 +86,18 @@ from utils.mcp_memories import (
     search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_analytics import (
+    authorization_outcome_for_code,
+    error_category_for_code,
+    result_count_for_tool_result,
+    schedule_mcp_tool_call,
+)
 from utils.observability.api_keys import record_api_key_repairs
+from utils.other.endpoints import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_deletion_http_access,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -100,6 +113,23 @@ OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+
+
+def _enforce_mcp_cutover_access(uid: str) -> None:
+    """Fence MCP product principals when cutover enforcement is enabled.
+
+    MCP auth helpers are Request-free; evaluate as a mutating product path so
+    positive-generation and migrating/new rules apply fail-closed.
+    """
+    if not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method='POST',
+        path='/v1/mcp/sse',
+        headers={},
+    )
+
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -170,6 +200,8 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
+    enforce_account_deletion_http_access(user_data["user_id"])
+    _enforce_mcp_cutover_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -188,6 +220,8 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
+        enforce_account_deletion_http_access(user_data["user_id"])
+        _enforce_mcp_cutover_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -200,6 +234,8 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
         return None
+    enforce_account_deletion_http_access(oauth_context["uid"])
+    _enforce_mcp_cutover_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",
@@ -743,10 +779,16 @@ def openai_apps_challenge():
 class ToolExecutionError(Exception):
     """Exception raised when a tool execution fails."""
 
-    def __init__(self, message: str, code: int = -32000):
+    def __init__(self, message: str, code: int = -32000, *, analytics_authorization_denied: bool = False):
         self.message = message
         self.code = code
+        self.analytics_authorization_denied = analytics_authorization_denied
         super().__init__(self.message)
+
+
+def _authorization_denied_error(message: str) -> ToolExecutionError:
+    """Preserve a product-authorization denial separately from its MCP code."""
+    return ToolExecutionError(message, code=-32009, analytics_authorization_denied=True)
 
 
 def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
@@ -754,7 +796,9 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
         raise ToolExecutionError("Memory not found", code=-32001) from exc
     if exc.status_code == 402:
         raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
-    if exc.status_code in {403, 409, 503}:
+    if exc.status_code == 403:
+        raise _authorization_denied_error(str(exc.detail)) from exc
+    if exc.status_code in {409, 503}:
         raise ToolExecutionError(str(exc.detail), code=-32009) from exc
     raise ToolExecutionError(str(exc.detail)) from exc
 
@@ -837,10 +881,10 @@ def execute_tool(
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             filtered = collect_filtered_memories(
@@ -881,7 +925,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(memory_list_results):
             denied = mcp_denied_read_payload(memory_list_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -911,10 +955,10 @@ def execute_tool(
             raise ToolExecutionError("Content is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
         try:
             write_context = resolve_external_memory_write_context(
                 user_id,
@@ -963,10 +1007,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         try:
             MemoryService(db_client=db).delete_external_memory(
@@ -988,10 +1032,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id and content are required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         if not content.strip():
             raise ToolExecutionError("content must not be empty", code=-32602)
@@ -1088,10 +1132,10 @@ def execute_tool(
         fetch_limit = min(limit * 3, 60)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db)
@@ -1110,7 +1154,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(vector_search_results):
             denied = mcp_denied_read_payload(vector_search_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
@@ -1415,12 +1459,7 @@ def handle_mcp_message(
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
-                    "instructions": (
-                        "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
-                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
-                        "task-specific evidence."
-                    ),
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             ),
             None,
@@ -1438,15 +1477,40 @@ def handle_mcp_message(
         raw_arguments: object = params.get("arguments", {})
         arguments: Dict[str, Any] = cast(Dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
 
-        if not tool_name:
+        if not isinstance(tool_name, str) or not tool_name:
+            schedule_mcp_tool_call(
+                uid=auth_context.uid,
+                tool_name=tool_name,
+                auth_type=auth_context.auth_type,
+                client_id=auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="validation",
+                duration_ms=0,
+                result_count=0,
+            )
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
+        started_at = time.monotonic()
         try:
             mcp_auth_context = auth_context
             _require_tool_scope(mcp_auth_context, tool_name)
             auth_context = mcp_auth_context.memory_context
             result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome=authorization_outcome_for_code(
+                    e.code, authorization_denied=e.analytics_authorization_denied
+                ),
+                error_category=error_category_for_code(e.code, authorization_denied=e.analytics_authorization_denied),
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
                 required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
@@ -1459,6 +1523,31 @@ def handle_mcp_message(
                     }
                 }
             return error, None
+        except Exception:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="internal",
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
+            raise
+
+        schedule_mcp_tool_call(
+            uid=mcp_auth_context.uid,
+            tool_name=tool_name,
+            auth_type=mcp_auth_context.auth_type,
+            client_id=mcp_auth_context.client_id,
+            outcome="success",
+            authorization_outcome="allowed",
+            error_category="none",
+            duration_ms=(time.monotonic() - started_at) * 1_000,
+            result_count=result_count_for_tool_result(tool_name, result),
+        )
 
         return (
             create_mcp_response(
@@ -1612,7 +1701,7 @@ def mcp_authorize(
 
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
-def mcp_authorize_consent(
+async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -1624,10 +1713,20 @@ def mcp_authorize_consent(
     code_challenge_method: Optional[str] = Form(None),
 ):
     try:
-        _, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        _, scopes = await run_blocking(
+            db_executor,
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
-        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        decoded_token: Dict[str, Any] = await run_blocking(
+            critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
+        )  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
@@ -1636,10 +1735,20 @@ def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
-    code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, cast(str, code_challenge)
-    )
+    try:
+        _, code = await run_blocking(
+            db_executor,
+            mcp_oauth_db.create_grant_and_authorization_code_if_allowed,
+            uid,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            cast(str, code_challenge),
+        )
+    except mcp_oauth_db.AccountDeletionAccessBlocked as exc:
+        detail = {"code": "account_deletion_in_progress", "status": str(exc), "retryable": False}
+        raise HTTPException(status_code=403, detail=detail) from exc
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 

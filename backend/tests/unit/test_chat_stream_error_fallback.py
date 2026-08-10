@@ -321,3 +321,172 @@ def test_build_stream_error_reply_persists_ai_message():
         assert persisted['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
     finally:
         _cleanup(saved)
+
+
+def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
+    """A typed ``error:`` frame plus persisted answer must not also emit the canned sorry."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        router_module.execute_chat_stream = timeout_stream
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == 'The response took too long. Please try again.'
+        assert chat_utils.CHAT_STREAM_ERROR_TEXT not in response.text
+        # Typed timeout still records the shared fallback + failure journey, but keeps
+        # the staged timeout copy instead of appending a second generic canned sorry.
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
+    """Persona-style ``error:`` without ``answer`` must still emit a ``done:`` frame."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def persona_error_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'stream_failure'
+            kwargs['callback_data']['route'] = 'persona'
+            yield 'error: Unable to complete the response. Please try again.'
+            # No answer staged and no None sentinel — router must still finalize.
+
+        router_module.execute_chat_stream = persona_error_stream
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert 'error: Unable to complete the response. Please try again.' in response.text
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
+        chat_utils.record_fallback.assert_called_once()
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_keeps_typed_answer_when_persistence_fails():
+    """Typed timeout answer must still emit done: if Firestore persistence fails."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        router_module.execute_chat_stream = timeout_stream
+
+        def add_message(uid, message_data):
+            if message_data.get('sender') == 'ai':
+                raise RuntimeError('firestore down')
+            return message_data
+
+        chat_db.add_message.side_effect = add_message
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == 'The response took too long. Please try again.'
+        assert chat_utils.CHAT_STREAM_ERROR_TEXT not in response.text
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'exhausted'
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_stream_finalizes_staged_failure_before_error_frame():
+    """Voice clients disconnect on error: and overwrite done: with plain-text error.
+
+    Persist the staged failure as done: and suppress the error frame so UI/history
+    keep the typed terminal reply.
+    """
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        chat_utils.execute_graph_chat_stream = timeout_stream
+
+        frames = _collect_voice_frames(chat_utils)
+        assert any(frame.startswith('done: ') for frame in frames)
+        assert not any(frame.startswith('error: ') for frame in frames)
+        payload = _decode_done_frame(''.join(frames))
+        assert payload['text'] == 'The response took too long. Please try again.'
+        ai_writes = [c.args[1] for c in chat_db.add_message.call_args_list if c.args[1].get('sender') == 'ai']
+        assert ai_writes
+        assert ai_writes[0]['text'] == 'The response took too long. Please try again.'
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_keeps_persisted_id_when_app_usage_recording_fails():
+    """Post-persist analytics failure must not mint a second message id for the client."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        router_module.execute_chat_stream = timeout_stream
+        router_module.record_app_usage.side_effect = RuntimeError('analytics down')
+        # Keep app resolution empty so Message.app_id stays a real Optional[str]; the
+        # query-param app_id still drives process_message's record_app_usage call.
+        router_module.get_available_app_by_id = MagicMock(return_value=None)
+
+        response = client.post(
+            '/v2/messages',
+            params={'app_id': 'app-1'},
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == 'The response took too long. Please try again.'
+        ai_writes = [c.args[1] for c in chat_db.add_message.call_args_list if c.args[1].get('sender') == 'ai']
+        assert len(ai_writes) == 1
+        assert payload['id'] == ai_writes[0]['id']
+        router_module.record_app_usage.assert_called()
+    finally:
+        _cleanup(saved)

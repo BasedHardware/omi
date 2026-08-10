@@ -154,6 +154,7 @@ public enum OmiAPI {
     public let description_: String
     public let dueAt: String?
     public let ownershipConfidence: Double?
+    public let sourceSegmentIds: [String]?
     public let targetTaskId: String?
     public let updatedAt: String?
 
@@ -170,6 +171,7 @@ public enum OmiAPI {
       case description_ = "description"
       case dueAt = "due_at"
       case ownershipConfidence = "ownership_confidence"
+      case sourceSegmentIds = "source_segment_ids"
       case targetTaskId = "target_task_id"
       case updatedAt = "updated_at"
     }
@@ -188,11 +190,12 @@ public enum OmiAPI {
       description_ = try c.decode(String.self, forKey: .description_)
       dueAt = try c.decodeIfPresent(String.self, forKey: .dueAt)
       ownershipConfidence = try c.decodeIfPresent(Double.self, forKey: .ownershipConfidence)
+      sourceSegmentIds = try c.decodeIfPresent([String].self, forKey: .sourceSegmentIds)
       targetTaskId = try c.decodeIfPresent(String.self, forKey: .targetTaskId)
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 
-    public init(candidateAction: String? = nil, captureConfidence: Double? = nil, captureKind: String? = nil, captureOwner: String? = nil, completed: Bool? = nil, completedAt: String? = nil, concreteDeliverable: Bool? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, ownershipConfidence: Double? = nil, targetTaskId: String? = nil, updatedAt: String? = nil) {
+    public init(candidateAction: String? = nil, captureConfidence: Double? = nil, captureKind: String? = nil, captureOwner: String? = nil, completed: Bool? = nil, completedAt: String? = nil, concreteDeliverable: Bool? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, ownershipConfidence: Double? = nil, sourceSegmentIds: [String]? = nil, targetTaskId: String? = nil, updatedAt: String? = nil) {
       self.candidateAction = candidateAction
       self.captureConfidence = captureConfidence
       self.captureKind = captureKind
@@ -205,6 +208,7 @@ public enum OmiAPI {
       self.description_ = description_
       self.dueAt = dueAt
       self.ownershipConfidence = ownershipConfidence
+      self.sourceSegmentIds = sourceSegmentIds
       self.targetTaskId = targetTaskId
       self.updatedAt = updatedAt
     }
@@ -1893,37 +1897,49 @@ public enum OmiAPI {
 
   public struct EvidenceRef: Codable {
     public let deviceId: String?
+    public let endSeconds: Double?
     public let excerptHash: String?
     public let id: String
     public let kind: EvidenceKind
     public let scope: EvidenceScope
+    public let startSeconds: Double?
+    public let transcriptSegmentIds: [String]?
     public let version: String?
 
     private enum CodingKeys: String, CodingKey {
       case deviceId = "device_id"
+      case endSeconds = "end_seconds"
       case excerptHash = "excerpt_hash"
       case id
       case kind
       case scope
+      case startSeconds = "start_seconds"
+      case transcriptSegmentIds = "transcript_segment_ids"
       case version
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       deviceId = try c.decodeIfPresent(String.self, forKey: .deviceId)
+      endSeconds = try c.decodeIfPresent(Double.self, forKey: .endSeconds)
       excerptHash = try c.decodeIfPresent(String.self, forKey: .excerptHash)
       id = try c.decode(String.self, forKey: .id)
       kind = try c.decode(EvidenceKind.self, forKey: .kind)
       scope = try c.decode(EvidenceScope.self, forKey: .scope)
+      startSeconds = try c.decodeIfPresent(Double.self, forKey: .startSeconds)
+      transcriptSegmentIds = try c.decodeIfPresent([String].self, forKey: .transcriptSegmentIds)
       version = try c.decodeIfPresent(String.self, forKey: .version)
     }
 
-    public init(deviceId: String? = nil, excerptHash: String? = nil, id: String, kind: EvidenceKind, scope: EvidenceScope, version: String? = nil) {
+    public init(deviceId: String? = nil, endSeconds: Double? = nil, excerptHash: String? = nil, id: String, kind: EvidenceKind, scope: EvidenceScope, startSeconds: Double? = nil, transcriptSegmentIds: [String]? = nil, version: String? = nil) {
       self.deviceId = deviceId
+      self.endSeconds = endSeconds
       self.excerptHash = excerptHash
       self.id = id
       self.kind = kind
       self.scope = scope
+      self.startSeconds = startSeconds
+      self.transcriptSegmentIds = transcriptSegmentIds
       self.version = version
     }
   }
@@ -4425,6 +4441,31 @@ public enum OmiAPI {
   public enum OmiApiError: Error {
     case invalidURL
     case httpError(status: Int, data: Data)
+  }
+
+  public static func getAccountCutoverControlV1AccountCutoverControlGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppBuild: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/account/cutover/control"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xAppBuild { req.setValue(String(xAppBuild), forHTTPHeaderField: "X-App-Build") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
   public static func getActionItemsV1ActionItemsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, completed: Bool? = nil, conversationId: String? = nil, startDate: String? = nil, endDate: String? = nil, dueStartDate: String? = nil, dueEndDate: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ActionItemsResponse {
@@ -14268,11 +14309,16 @@ public enum OmiAPI {
     return try JSONDecoder().decode(MemoryDB.self, from: data)
   }
 
-  public static func deleteMemoriesV3MemoriesDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func deleteMemoriesV3MemoriesDelete(client: OmiApiClient, scope: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories"
-    guard let components = URLComponents(string: client.baseURL + _path) else {
+    guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
+    var queryItems: [URLQueryItem] = []
+    if let scope {
+      queryItems.append(URLQueryItem(name: "scope", value: String(scope)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "DELETE"
@@ -14698,5 +14744,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 396 Swift client methods generated.
+  // Total: 397 Swift client methods generated.
 }

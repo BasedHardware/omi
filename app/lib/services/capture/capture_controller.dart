@@ -254,6 +254,17 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  /// Foreground return hook for phone-mic capture (#4706).
+  ///
+  /// Native `appBecameActive` owns dead-engine rebuild. Dart only soft-rearms
+  /// the stall clock so suspended timers don't false-trigger stop→start (which
+  /// would race native recovery and restart a healthy session).
+  void onAppResumed() {
+    if (_activeSource is! PhoneMicSource && !_phoneMicBatchActive) return;
+    if (_micInterrupted || _phoneMicRestartInFlight) return;
+    ServiceManager.instance().phoneMic.probeStallAfterForeground();
+  }
+
   void updateExternalActions(CaptureExternalActions? actions) {
     externalActions = actions ?? const NoopCaptureExternalActions();
     notifyListeners();

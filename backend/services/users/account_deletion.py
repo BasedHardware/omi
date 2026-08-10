@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-
 import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
 from database import vector_db
+from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
+from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
+from database.mcp_oauth import delete_user_oauth_credentials
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
@@ -27,6 +29,7 @@ from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_d
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
+from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,15 @@ class PurgeResult(TypedDict):
 
 ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
+
+
+def delete_account_credentials(uid: str) -> None:
+    """Revoke UID-bearing credentials that live outside users/{uid}."""
+    for key in get_dev_keys_for_user(uid):
+        delete_dev_key(uid, key.id)
+    for key in get_mcp_keys_for_user(uid):
+        delete_mcp_key(uid, key.id)
+    delete_user_oauth_credentials(uid)
 
 
 def purge_derived_user_data(uid: str) -> PurgeResult:
@@ -225,6 +237,10 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
         _cancel_subscription_for_account_deletion(uid)
+        current_operation = 'agent_vm'
+        delete_agent_vm_for_account(uid)
+        current_operation = 'api_credentials'
+        delete_account_credentials(uid)
         current_operation = 'firebase_auth'
         try:
             auth.delete_account(uid)
@@ -272,9 +288,12 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         return False
     else:
         try:
-            users_db.mark_user_deletion_wipe_completed(uid)
+            if users_db.mark_user_deletion_wipe_completed(uid) is False:
+                logger.warning('delete_account completion deferred for outstanding provider cleanup')
+                return False
         except Exception as e:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
+            return False
         required_failures, best_effort_failures = _purge_failures(purge_result)
         purge_result_dict = purge_result
         _emit_deletion_telemetry(
@@ -346,7 +365,14 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             return
         canceled = stripe_utils.cancel_subscription(subscription_id)
         if not canceled:
-            raise RuntimeError('stripe cancel returned no subscription')
+            # The billing step owns a goal state — the subscription no longer bills — not a
+            # particular API call. Stripe rejects `cancel_at_period_end` on an already-canceled
+            # subscription, so without this the wipe fails forever and the account is never
+            # deleted even though billing is already where it must be. Asking Stripe for the
+            # status keeps this closed: anything but a terminal status is still a real failure.
+            if not stripe_utils.is_subscription_terminal(subscription_id):
+                raise RuntimeError('stripe cancel returned no subscription')
+            logger.info('delete_account billing cancellation satisfied by an already-canceled subscription')
     except Exception as e:
         raw_error = str(e)
         sanitized_error = sanitize(raw_error)
@@ -365,12 +391,6 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
-    if reason or reason_details:
-        try:
-            users_db.set_user_deletion_feedback(uid, reason, reason_details)
-        except Exception as e:
-            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
-
     # Persist the authoritative, actionable intent before dispatch. This state
     # is enough for reconciliation to recover a failed queue handoff, while the
     # Cloud Tasks handler claim fences all destructive work. If either write or
@@ -384,25 +404,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     wipe_job_id = wipe_intent.get('wipe_job_id') if isinstance(wipe_intent, dict) else None
     if not isinstance(wipe_job_id, str) or not wipe_job_id:
         raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
+    if reason or reason_details:
+        try:
+            users_db.set_user_deletion_feedback(uid, reason, reason_details)
+        except Exception as e:
+            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
     dispatch_claimed = wipe_intent.get('dispatch_claimed') is True if isinstance(wipe_intent, dict) else False
     if not dispatch_claimed:
         logger.info('delete_account joined existing durable deletion intent')
-        return {'status': 'ok', 'message': 'Account deletion started'}
-
-    # The pending marker is persisted before enqueue. A failed enqueue is
-    # recorded as failed and is therefore independently recoverable by the
-    # reconciler; queue delivery accelerates the wipe but is not its only
-    # durability boundary.
-    pending_transitioned = _retry_firestore_write(
-        lambda: users_db.mark_user_deletion_wipe_started(uid, wipe_job_id),
-        uid=uid,
-        fail_msg='delete_account marker transition to pending failed',
-        on_failure='raise',
-    )
-    if pending_transitioned is not True:
-        # Another execution owns the durable authority. Do not move its marker
-        # backwards or dispatch a duplicate task.
-        logger.info('delete_account queue transition already owned by another request')
         return {'status': 'ok', 'message': 'Account deletion started'}
 
     try:
@@ -418,26 +427,6 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     return {'status': 'ok', 'message': 'Account deletion started'}
 
 
-def _is_auth_user_gone(uid: str) -> bool:
-    """Check whether the Firebase auth user for ``uid`` no longer exists.
-
-    Returns ``True`` if the user was already deleted (``USER_NOT_FOUND`` or
-    equivalent). Returns ``False`` on any other error — fail safe so a transient
-    Firebase outage does not trigger a data wipe for a user whose auth account
-    may still exist.
-    """
-    try:
-        auth.get_user(uid)
-        return False
-    except Exception as e:
-        err = str(e).upper()
-        if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
-            return True
-        # Indeterminate — do NOT treat as gone.
-        logger.warning(f'delete_account auth-user-gone check indeterminate for {uid}: {sanitize(str(e))}')
-        return False
-
-
 def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     """Re-enqueue account-deletion wipes that were cancelled or failed.
 
@@ -445,12 +434,9 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     the ``wipe_status in ('pending', 'failed', 'retrying')`` backlog left behind
     when a durable task enqueue or worker execution failed.
 
-    Also recovers stale ``'deleting_auth'`` records — markers where the deletion
-    intent was written but never transitioned to ``'pending'`` (usually a crash
-    or deploy after ``auth.delete_account()`` succeeded). For these records, the
-    Firebase auth user is verified gone *before* claiming and re-enqueueing, so a
-    transient Firebase outage or a record left by an in-progress deletion cannot
-    trigger a premature data wipe for a user whose auth account still exists.
+    Also recovers stale legacy ``'deleting_auth'`` records. The worker owns
+    Firebase Auth deletion, so the durable intent itself is sufficient recovery
+    authority; new admissions atomically create ``pending`` instead.
 
     Each wipe is atomically claimed via a Firestore transaction before
     re-enqueueing, so concurrent workers or overlapping scheduler runs cannot
@@ -474,17 +460,12 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if not uid:
             skipped += 1
             continue
-        # P1 recovery: a 'deleting_auth' record means the intent was written but
-        # the marker was never transitioned to 'pending'. Verify the Firebase
-        # auth user is actually gone before claiming it, so we never wipe data
-        # for a user whose auth account may still exist.
+        # ``deleting_auth`` is a legacy durable intent from the former
+        # two-transaction admission path. The worker now owns Firebase Auth
+        # deletion, so a stale legacy intent is safe to claim even when the
+        # Auth user still exists.
         if record.get('wipe_status') == 'deleting_auth':
-            if not _is_auth_user_gone(uid):
-                skipped += 1
-                logger.info(
-                    f'delete_account reconciliation skipping deleting_auth record for {uid} — auth user still exists'
-                )
-                continue
+            logger.info(f'delete_account reconciliation recovering legacy deleting_auth intent for {uid}')
         # Atomically claim the wipe to prevent concurrent re-enqueueing by
         # multiple workers. If the claim fails, another worker owns it.
         try:

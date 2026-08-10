@@ -76,6 +76,15 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path():
     assert db.document_reads == ["users/u1/memory_state/head"]
 
 
+def test_trusted_account_generation_can_join_the_callers_firestore_transaction():
+    db = _FakeDb({"users/u1/memory_state/head": _head_doc(account_generation=8)})
+    transaction = object()
+
+    result = read_memory_v3_trusted_account_generation(uid="u1", db_client=db, transaction=transaction)
+
+    assert result.account_generation == 8
+
+
 @pytest.mark.parametrize(
     "docs, reason",
     [

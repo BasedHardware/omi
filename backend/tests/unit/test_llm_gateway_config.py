@@ -44,7 +44,7 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
     assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {
         'extra_body': {'prompt_cache_retention': '24h'},
-        'reasoning_effort': 'medium',
+        'reasoning_effort': 'none',
     }
     chat_agent_lane = config.lanes['omi:auto:chat-agent']
     assert chat_agent_lane.surface == Surface.OPENAI_CHAT_COMPLETIONS

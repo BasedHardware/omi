@@ -231,12 +231,12 @@ def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
     addition (e.g. the notification callback canary) that skips the beta
     invocation would otherwise fail-close the first dual-identity release."""
     codemagic = (Path(__file__).resolve().parents[2] / "codemagic.yaml").read_text(encoding="utf-8")
-    smoke_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
-    smoke_step = smoke_step.split("- name: ", 1)[0]
-    production_branch = smoke_step.split("else", 1)[1]
-    invocations = production_branch.split("scripts/smoke-signed-desktop-artifact.sh")
-    assert len(invocations) >= 3, "expected stable and beta smoke invocations in the production branch"
-    stable_invocation, beta_invocation = invocations[1], invocations[2]
+    stable_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
+    stable_step = stable_step.split("- name: ", 1)[0]
+    beta_step = codemagic.split("- name: Smoke signed desktop beta artifact", 1)[1]
+    beta_step = beta_step.split("- name: ", 1)[0]
+    stable_invocation = stable_step.split("scripts/smoke-signed-desktop-artifact.sh")[-1]
+    beta_invocation = beta_step.split("scripts/smoke-signed-desktop-artifact.sh")[-1]
 
     evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--source-sha", "--tag"]
     for flag in evidence_flags:
@@ -246,6 +246,8 @@ def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
             "evidence it produces — the first dual-identity release would fail qualification"
         )
     assert "--expected-bundle-id" in beta_invocation, "beta smoke must assert the beta bundle id"
+    assert "--timeout 90" in stable_invocation, "stable signed smoke must tolerate slow clean-runner callbacks"
+    assert "--timeout 90" in beta_invocation, "beta signed smoke must tolerate slow clean-runner callbacks"
     assert "--expected-python-api-url \"https://api.omiapi.com/\"" in beta_invocation, (
         "beta smoke must assert the fixed development Python authority"
     )

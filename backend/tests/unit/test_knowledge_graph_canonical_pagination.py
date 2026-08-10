@@ -315,6 +315,65 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
 
 
+def test_canonical_graph_returns_every_canonical_memory_as_a_catalog_record(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    linked_item, linked_assertion = _assertion_and_item("linked", 1, updated_at=NOW.replace(minute=1))
+    linked_item._payload["content"] = "A durable canonical memory with a verified relationship."
+    unlinked_updated_at = NOW.replace(minute=2)
+    unlinked_item, _unlinked_assertion = _assertion_and_item("unlinked", 2, updated_at=unlinked_updated_at)
+    unlinked_item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
+    db = _FakeDB([linked_item, unlinked_item], {"linked": linked_assertion})
+
+    page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert page.nodes
+    assert _page_memory_ids(page) == {"linked"}
+    assert all(not node["id"].startswith("memory:") for node in page.nodes)
+    assert page.catalog_nodes == [
+        {
+            "id": "memory:unlinked",
+            "label": "A durable canonical memory that has no inferred relationship yet.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["unlinked"],
+            "created_at": unlinked_updated_at,
+            "updated_at": unlinked_updated_at,
+        },
+        {
+            "id": "memory:linked",
+            "label": "A durable canonical memory with a verified relationship.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["linked"],
+            "created_at": NOW.replace(minute=1),
+            "updated_at": NOW.replace(minute=1),
+        },
+    ]
+
+
+def test_blank_canonical_content_remains_a_neutral_catalog_record(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    blank_updated_at = NOW.replace(minute=3)
+    blank_item, _blank_assertion = _assertion_and_item("blank", 1, updated_at=blank_updated_at)
+    blank_item._payload["content"] = " \n\t "
+    db = _FakeDB([blank_item], {})
+
+    page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert page.nodes == []
+    assert page.catalog_nodes == [
+        {
+            "id": "memory:blank",
+            "label": "Untitled canonical memory",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["blank"],
+            "created_at": blank_updated_at,
+            "updated_at": blank_updated_at,
+        }
+    ]
+
+
 def test_assertion_loader_rechecks_account_generation_before_fetch():
     stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
     db = _fake_db_for([(stale_item, stale_assertion)])
@@ -397,6 +456,7 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
     canonical_payload = {
         "nodes": [{"id": "canonical-node"}],
         "edges": [],
+        "catalog_nodes": [{"id": "memory:catalog-only"}],
         "has_more": True,
         "next_cursor": "v3.opaque.signed",
     }

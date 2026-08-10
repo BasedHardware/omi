@@ -27,9 +27,9 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
-SAFE_STREAMING_ROUTE = 'modulate-velma-2,parakeet'
-# Batch queues, so the bounded self-hosted GPU is preferred there; the streaming
-# surface must stay Velma-first because a Parakeet admission cap fails users live.
+SAFE_STREAMING_ROUTE = 'modulate-velma-2,dg-nova-3,parakeet'
+# Live streaming prefers Velma, then Deepgram; the separately deployed bounded
+# Parakeet service remains last in this route. Batch transcription has its own order.
 SAFE_PRERECORDED_ROUTE = 'parakeet,modulate-velma-2'
 
 
@@ -105,7 +105,26 @@ def test_backend_listen_helm_template_requires_image_tag():
     assert "image.tag is required" in result.stderr
 
 
-def test_prod_values_make_modulate_the_explicit_live_stt_primary():
+def test_dev_parity_pack_emptydir_is_writable_by_the_non_root_backend_image():
+    """The capture root is an emptyDir, so its pod group must match the image group."""
+    values = _load_values(ENV_IDENTITY_DEFAULTS["dev"]["values_file"])
+    dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    deployment_template = (CHART_DIR / "templates" / "deployment.yaml").read_text(encoding="utf-8")
+    assert "groupadd --system --gid 10001 omi" in dockerfile
+    assert "USER omi" in dockerfile
+    assert "with .Values.podSecurityContext" in deployment_template
+    assert values["podSecurityContext"] == {
+        "fsGroup": 10001,
+        "fsGroupChangePolicy": "OnRootMismatch",
+    }
+    assert {volume["name"] for volume in values["volumes"]} >= {"parity-pack"}
+    assert {(mount["name"], mount["mountPath"]) for mount in values["volumeMounts"]} >= {
+        ("parity-pack", "/var/omi-parity-pack")
+    }
+    assert _env_value(values, "OMI_PARITY_PACK_ROOT") == "/var/omi-parity-pack"
+
+
+def test_prod_values_make_velma_the_explicit_live_stt_primary():
     values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
 
     assert _env_value(values, 'STT_SERVICE_MODELS') == SAFE_STREAMING_ROUTE

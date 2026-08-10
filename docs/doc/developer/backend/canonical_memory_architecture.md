@@ -93,8 +93,14 @@ Primary seams:
 
 ## 2. Maintenance: normalize, enforce TTL, route once
 
-The enabled `memory-maintenance-job` runs
-`run_canonical_short_term_maintenance` once per canonical cohort user:
+The enabled `memory-maintenance-job` first reconciles code-whitelisted users
+into its exact inert control state, advances only that scheduler-owned state to
+the guarded write stage, and resumes one bounded legacy-backfill page. It never
+opens a global read gate, grants default memory access, or marks a projection
+ready. Only after a user's terminal backfill checkpoint does it reconcile the
+write control to the trusted state-head generation and allow that user's graph
+enrichment. It then runs `run_canonical_short_term_maintenance` once per canonical
+cohort user:
 
 1. `memory_outbox_worker.py` drains already-committed work before any
    Short-term row is parsed.

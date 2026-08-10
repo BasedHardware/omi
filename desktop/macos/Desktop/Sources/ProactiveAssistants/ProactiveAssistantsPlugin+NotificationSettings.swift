@@ -128,6 +128,13 @@ final class ProactiveTestNotificationObserver: NSObject, @unchecked Sendable {
 enum UserNotificationCallbackBridge {
   static let signedSmokeResultPathEnvironmentKey = "OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH"
 
+  static func isSignedSmokeRequested(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> Bool {
+    guard let path = environment[signedSmokeResultPathEnvironmentKey] else { return false }
+    return !path.isEmpty
+  }
+
   typealias SettingsQuery = @Sendable (@escaping @Sendable (UserNotificationSettingsSnapshot) -> Void) -> Void
 
   nonisolated static func notificationSettings(
@@ -194,7 +201,9 @@ enum UserNotificationCallbackBridge {
   static func runSignedSmokeIfRequested(
     environment: [String: String] = ProcessInfo.processInfo.environment
   ) -> Bool {
-    guard let path = environment[signedSmokeResultPathEnvironmentKey], !path.isEmpty else { return false }
+    guard isSignedSmokeRequested(environment: environment),
+      let path = environment[signedSmokeResultPathEnvironmentKey]
+    else { return false }
     let resultURL = URL(fileURLWithPath: path)
     authorizationStatus { status in
       let succeeded = Thread.isMainThread
