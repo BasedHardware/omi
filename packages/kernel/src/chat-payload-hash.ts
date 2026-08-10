@@ -12,11 +12,10 @@
  * different implementation is a caller able to silently break idempotency at
  * precisely the moment a retry matters. There is one definition, and this is it.
  *
- * Byte-compatible with `backend/database/chat.py::_message_idempotency_payload_hash`:
- * `json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)`
- * then SHA-256, prefixed `sha256:`. Verified against that function directly and
- * against `node:crypto` at the message-padding block boundaries; the
- * cross-check lives in `packages/testkit/src/test/chat-codec.test.ts`.
+ * Canonical JSON uses sorted object keys, compact separators, UTF-8, then
+ * SHA-256 prefixed with `sha256:`. The ratified wire adds the authored ordered
+ * attachment id list to that identity payload. The cross-check against
+ * `node:crypto` lives in `packages/testkit/src/test/chat-codec.test.ts`.
  *
  * SHA-256 is implemented here rather than taken from `node:crypto` because this
  * package is also bundled for the browser, where `node:crypto` does not exist
@@ -33,6 +32,8 @@ export interface ChatMessageHashPayload {
   sessionId: string | null;
   metadata: string | null;
   messageSource: string;
+  /** Authored order is identity-bearing; it is never sorted or truncated. */
+  attachmentIds: readonly string[];
 }
 
 
@@ -41,7 +42,8 @@ export interface ChatMessageHashPayload {
  * `sha256:` + hex of canonical JSON with sorted keys, no ASCII escapes.
  */
 export function chatMessagePayloadHash(payload: ChatMessageHashPayload): string {
-  const wire: Record<string, string | null> = {
+  const wire: Record<string, string | readonly string[] | null> = {
+    attachment_ids: payload.attachmentIds,
     app_id: payload.appId,
     message_source: payload.messageSource,
     metadata: payload.metadata,
