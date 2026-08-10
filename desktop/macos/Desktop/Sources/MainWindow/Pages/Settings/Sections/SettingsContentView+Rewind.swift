@@ -113,15 +113,23 @@ extension SettingsContentView {
               .toggleStyle(OmiToggleStyle())
               .onChange(of: rewindSettings.screenKnowledgeGraphExtractionEnabled) { _, enabled in
                 if !enabled {
+                  // Turning extraction off also revokes the separate consent to
+                  // read screen history, so re-enabling never silently resumes a
+                  // historical sweep the user opted into once.
+                  rewindSettings.screenKnowledgeGraphHistoricalBackfillEnabled = false
                   Task { await ScreenKnowledgeGraphExtractor.shared.reset() }
-                } else {
-                  Task { await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded() }
                 }
               }
           }
 
           Text(
             "OCR text stays on this Mac when on-device extraction is available. Screenshots are never uploaded. If you allow cloud fallback, OCR text may be sent to Omi's Gemini proxy."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+
+          Text(
+            "Graph entries are stored on this Mac and are kept independently of your screen history: deleting a screenshot, or letting it age out of your retention window, does not remove what was already extracted from it. Turning this off stops all further extraction but keeps existing entries — remove them from the knowledge graph to delete them."
           )
           .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textTertiary)
@@ -143,6 +151,31 @@ extension SettingsContentView {
                   Task { await ScreenKnowledgeGraphExtractor.shared.reset() }
                 }
               }
+          }
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            HStack {
+              Text("Include screen history from before you turned this on")
+                .scaledFont(size: OmiType.body, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+
+              Spacer()
+
+              Toggle("", isOn: $rewindSettings.screenKnowledgeGraphHistoricalBackfillEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .disabled(!rewindSettings.screenKnowledgeGraphExtractionEnabled)
+                .onChange(of: rewindSettings.screenKnowledgeGraphHistoricalBackfillEnabled) { _, enabled in
+                  if enabled && rewindSettings.screenKnowledgeGraphExtractionEnabled {
+                    Task { await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded() }
+                  }
+                }
+            }
+
+            Text(
+              "Off by default. Extraction otherwise only reads screen captures taken after you turned it on; this reaches back through screen history you recorded before then."
+            )
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
           }
         }
       }

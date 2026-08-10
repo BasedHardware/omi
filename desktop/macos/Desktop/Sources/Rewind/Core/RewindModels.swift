@@ -427,6 +427,17 @@ class RewindSettings: ObservableObject {
     }
   }
 
+  /// Whether extraction may reach back into screen history captured before the
+  /// user turned extraction on. Off by default and independent of the extraction
+  /// toggle, so opting in never retroactively processes history in one click.
+  @Published var screenKnowledgeGraphHistoricalBackfillEnabled: Bool {
+    didSet {
+      defaults.set(
+        screenKnowledgeGraphHistoricalBackfillEnabled,
+        forKey: .screenKnowledgeGraphHistoricalBackfillEnabled)
+    }
+  }
+
   /// Whether capture is kept forever.
   var keepsEverything: Bool { Self.isUnlimited(retentionDays: retentionDays) }
 
@@ -476,6 +487,8 @@ class RewindSettings: ObservableObject {
     self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
     self.screenKnowledgeGraphExtractionEnabled = defaults.bool(forKey: .screenKnowledgeGraphExtractionEnabled)
     self.screenKnowledgeGraphCloudFallbackEnabled = defaults.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
+    self.screenKnowledgeGraphHistoricalBackfillEnabled = defaults.bool(
+      forKey: .screenKnowledgeGraphHistoricalBackfillEnabled)
     self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
     self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 

@@ -54,6 +54,7 @@ actor ScreenKnowledgeGraphExtractor {
   private let mergeGraphImpl: GraphMerger
   private let ownerMatches: OwnerMatchChecker
   private let extractionEnabled: ExtractionGate
+  private let historicalBackfillEnabled: ExtractionGate
   private let backendAvailable: ExtractionGate
 
   private init() {
@@ -83,6 +84,9 @@ actor ScreenKnowledgeGraphExtractor {
     self.extractionEnabled = {
       UserDefaults.standard.bool(forKey: .screenKnowledgeGraphExtractionEnabled)
     }
+    self.historicalBackfillEnabled = {
+      UserDefaults.standard.bool(forKey: .screenKnowledgeGraphHistoricalBackfillEnabled)
+    }
     self.backendAvailable = {
       let allowCloudFallback = UserDefaults.standard.bool(forKey: .screenKnowledgeGraphCloudFallbackEnabled)
       return ScreenKGExtractionBackendSelector.preferredBackend(allowCloudFallback: allowCloudFallback) != nil
@@ -97,6 +101,7 @@ actor ScreenKnowledgeGraphExtractor {
     mergeGraphForTesting: GraphMerger? = nil,
     ownerMatchesForTesting: OwnerMatchChecker? = nil,
     extractionEnabledForTesting: @escaping ExtractionGate = { true },
+    historicalBackfillEnabledForTesting: @escaping ExtractionGate = { true },
     backendAvailableForTesting: @escaping ExtractionGate = { true }
   ) {
     self.extractEntities = extractEntitiesForTesting
@@ -118,6 +123,7 @@ actor ScreenKnowledgeGraphExtractor {
           && !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
       }
     self.extractionEnabled = extractionEnabledForTesting
+    self.historicalBackfillEnabled = historicalBackfillEnabledForTesting
     self.backendAvailable = backendAvailableForTesting
   }
 
@@ -193,8 +199,13 @@ actor ScreenKnowledgeGraphExtractor {
   }
 
   /// Backfill screenshots captured before the extractor shipped (capped per launch).
+  ///
+  /// Gated separately from ``extractionEnabled``. Turning extraction on consents
+  /// to processing screen captures from that point forward; reading back through
+  /// history the user recorded before opting in is a distinct disclosure, so it
+  /// stays off until the historical-backfill consent is granted on its own.
   func scheduleBackfillIfNeeded() async {
-    guard extractionEnabled() else { return }
+    guard extractionEnabled(), historicalBackfillEnabled() else { return }
     guard backendAvailable() else {
       backfillScheduled = false
       return
