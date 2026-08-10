@@ -1,0 +1,9 @@
+{
+  "artifact": "listen-protocol.schema.json",
+  "source_repo": "BasedHardware/omi (core-foundation checkout)",
+  "source_path": "core/contracts/wire/listen/listen-protocol.schema.json",
+  "source_commit": "28d02612bc6e1c5608aeca63e34868733dc1a925",
+  "sha256": "2d7da7f4a112153068bfa84edf0d09d76a9b933e1f7669c153f1e0396e1660c4",
+  "vendored": "2026-08-10",
+  "rule": "Read-only. The schema is ratified; changing it here is a wire change and escalation-class. Re-vendor from source with updated provenance instead of editing."
+}

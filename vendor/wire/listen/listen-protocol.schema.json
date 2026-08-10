@@ -1,0 +1,1435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.me/schema/listen-realtime-protocol/0.3.0.json",
+  "title": "Omi /listen Realtime WebSocket Protocol",
+  "description": "Hand-written schema-of-record for the /listen WebSocket wire format. Ported into core/ from prototypes/listen-schema (attribution: overnight spike 2026-08-06) with entitlement frame + reserved close code added per WS-003 / backend-handoff-requirements. JSON Schema describes individual frame payloads; everything JSON Schema cannot express (handshakes, close codes, frame-level non-envelope shapes, sequence invariants) lives under x-omi-* annotation keys.",
+  "x-omi-protocol": {
+    "spec": "listen-realtime-protocol",
+    "baseline": "e0893286f94ecc75aacb4cbc441f653f347e382b",
+    "schema_version": "0.3.0",
+    "transport": "websocket",
+    "version_knob": {
+      "present": false,
+      "finding": "No version field, header, or query param exists in either handshake or any frame at baseline (UNK-LISTEN-007 requirement 6).",
+      "proposed": {
+        "mechanism": "query-param",
+        "name": "protocol_version",
+        "type": "integer",
+        "default_when_absent": 1,
+        "rationale": "A query param is observable at admission, before any frame is exchanged, so the server can reject or downgrade before spending an STT connection. A first-frame field would require accepting the socket first, which is already the source of the two-handshake problem."
+      }
+    },
+    "handshakes": [
+      {
+        "id": "native",
+        "path": "/v4/listen",
+        "auth": {
+          "mechanism": "dependency",
+          "detail": "uid derived server-side from the Authorization header on the WS upgrade (get_current_user_uid_ws_listen). No client-supplied uid param in the canonical model.",
+          "locator": "omi:backend/routers/transcribe.py:121-160"
+        },
+        "params": [
+          "language",
+          "sample_rate",
+          "codec",
+          "channels",
+          "include_speech_profile",
+          "stt_service",
+          "conversation_timeout",
+          "source",
+          "custom_stt",
+          "onboarding",
+          "speaker_auto_assign",
+          "create_speakers",
+          "vad_gate",
+          "call_id",
+          "client_conversation_id"
+        ]
+      },
+      {
+        "id": "web",
+        "path": "/v4/web/listen",
+        "auth": {
+          "mechanism": "first-frame",
+          "detail": "Socket is accepted unconditionally, then the server waits up to 5s for a text frame {\"type\":\"auth\",\"token\":...} and replies {\"type\":\"auth_response\",\"success\":bool}. Timeout or failure closes 1008.",
+          "timeout_seconds": 5,
+          "request_ref": "#/$defs/ClientAuthMessage",
+          "response_ref": "#/$defs/AuthResponseFrame",
+          "locator": "omi:backend/routers/transcribe.py:161-200"
+        },
+        "params": [
+          "language",
+          "sample_rate",
+          "codec",
+          "channels",
+          "include_speech_profile",
+          "conversation_timeout",
+          "source",
+          "custom_stt",
+          "onboarding",
+          "call_id",
+          "client_conversation_id"
+        ],
+        "params_absent_vs_native": [
+          "stt_service",
+          "speaker_auto_assign",
+          "create_speakers",
+          "vad_gate"
+        ]
+      }
+    ],
+    "params_canonical_ref": "#/$defs/HandshakeParams",
+    "params_duplication_finding": "Defaults are declared twice: once per route signature (omi:backend/routers/transcribe.py:121-200) and again on ListenRequest (omi:backend/routers/listen/contracts.py:24-44). #/$defs/HandshakeParams is the proposed single home both call sites should derive from.",
+    "audio_upload": {
+      "frame_kind": "binary",
+      "codecs": [
+        "pcm8",
+        "pcm16",
+        "linear16",
+        "opus",
+        "aac",
+        "lc3"
+      ],
+      "noop_max_bytes": 2,
+      "noop_note": "Binary frames of length <= 2 are dropped as heartbeat padding (omi:backend/routers/listen/receiver.py:483-485).",
+      "multi_channel": {
+        "trigger": "channels >= 2",
+        "framing": "first byte of each binary frame is a channel-id tag; remainder is that channel's codec payload"
+      }
+    },
+    "bootstrap_sequence": [
+      {
+        "event": "service_status",
+        "status": "initiating",
+        "required": true
+      },
+      {
+        "event": "last_memory",
+        "required": false
+      },
+      {
+        "event": "service_status",
+        "status": "in_progress_conversations_processing",
+        "required": true
+      },
+      {
+        "event": "conversation_session",
+        "required": false
+      },
+      {
+        "event": "service_status",
+        "status": "stt_initiating",
+        "required": true
+      },
+      {
+        "event": "service_status",
+        "status": "ready",
+        "required": true
+      }
+    ],
+    "close_codes": [
+      {
+        "code": 1000,
+        "name": "normal",
+        "emitted_by_listen": true,
+        "meaning": "Client-initiated close, or the server echoing the ASGI disconnect frame's own code verbatim. Drives clean desktop finalization.",
+        "locator": "omi:backend/routers/listen/receiver.py:481",
+        "client_should_retry": true
+      },
+      {
+        "code": 1001,
+        "name": "going_away",
+        "emitted_by_listen": true,
+        "meaning": "Default close code. Heartbeat-detected staleness (no inbound activity for 90s), or the fallback at teardown when nothing overrode it (including after the 300s ws_receive_timeout silently breaks the receive loop).",
+        "locator": "omi:backend/routers/listen/runtime.py:314,518,604; omi:backend/routers/listen/contracts.py:48",
+        "client_should_retry": true
+      },
+      {
+        "code": 1003,
+        "name": "unsupported_audio_format",
+        "emitted_by_listen": true,
+        "meaning": "Bad codec/sample_rate combination, rejected at admission after accept.",
+        "locator": "omi:backend/routers/listen/runtime.py:222",
+        "client_should_retry": false,
+        "client_action": "fix handshake params; retrying unchanged will fail identically"
+      },
+      {
+        "code": 1008,
+        "name": "policy_violation",
+        "emitted_by_listen": true,
+        "meaning": "Missing uid, trial expired/paywalled, unknown user, unsupported language, malformed image_chunk payload, or web-path auth timeout/failure.",
+        "locator": "omi:backend/routers/listen/runtime.py:210,218,230,244; omi:backend/routers/listen/receiver.py:422; omi:backend/routers/transcribe.py:185,192,196,201",
+        "client_should_retry": false,
+        "client_action": "reason string is the only discriminator; treat as terminal until user state changes"
+      },
+      {
+        "code": 1011,
+        "name": "internal_error",
+        "emitted_by_listen": true,
+        "meaning": "STT provider init failure, detected upstream STT death (~1s poll), or an unhandled exception in the receive loop. Always preceded by service_status{status:\"stt_failed\"} (INV-LISTEN-003).",
+        "locator": "omi:backend/routers/listen/receiver.py:526; omi:backend/utils/stt/live_failure.py",
+        "client_should_retry": true,
+        "preceded_by_event": {
+          "type": "service_status",
+          "status": "stt_failed"
+        }
+      },
+      {
+        "code": 4001,
+        "name": "refresh_token",
+        "emitted_by_listen": false,
+        "meaning": "Documented in spec section 2.5 as an auth-refinement code, but NOT emitted anywhere in /listen at baseline (UNK-LISTEN-007 requirement 4). Retained here as reserved so no future code reuses the number.",
+        "client_should_retry": false
+      },
+      {
+        "code": 4004,
+        "name": "force_relogin",
+        "emitted_by_listen": false,
+        "meaning": "As 4001 \u2014 reserved, not emitted by /listen at baseline.",
+        "client_should_retry": false
+      },
+      {
+        "code": 4020,
+        "name": "entitlement_upgrade_required",
+        "emitted_by_listen": false,
+        "meaning": "RESERVED (WS-005 / entitlements contract): WebSocket closed for entitlement exhaustion / upgrade-required. DISTINCT from the mid-session entitlement frame with state=transcription_paused_capture_continuing (transcription paused, capture continuing \u2014 socket stays open). A preceding entitlement event carries upgrade advice. Number 4020 avoids collision with reserved-but-dead 4001/4004. Server emit is not implemented at baseline.",
+        "client_should_retry": false,
+        "client_action": "route to existing plan-upgrade flow; do not reconnect until entitlement changes",
+        "x-omi-reserved": true
+      }
+    ],
+    "invariants": [
+      {
+        "id": "INV-LISTEN-001",
+        "title": "At-least-once, not exactly-once, transcript delivery",
+        "checkable": true,
+        "rule": "segment-id-dedupe",
+        "detail": "The same segment id may be delivered more than once as batches are re-combined. A conforming client must key by segment id and upsert, never append blindly."
+      },
+      {
+        "id": "INV-LISTEN-002",
+        "title": "service_status:ready is the only safe content-start signal",
+        "checkable": true,
+        "rule": "no-transcript-before-ready",
+        "detail": "No transcript batch should be treated as session content before service_status{status:\"ready\"}."
+      },
+      {
+        "id": "INV-LISTEN-003",
+        "title": "stt_failed always precedes a 1011 close",
+        "checkable": true,
+        "rule": "stt-failed-precedes-1011",
+        "detail": "A 1011 close must be immediately preceded by service_status{status:\"stt_failed\"}; a 1011 without it is a protocol violation the client should report as an unexplained failure."
+      },
+      {
+        "id": "INV-LISTEN-004",
+        "title": "client_conversation_id is the resume idempotency key",
+        "checkable": true,
+        "rule": "resume-key-required",
+        "detail": "client_conversation_id is optional at baseline, but a conforming client MUST send the same value on every reconnect of a logical capture session; omitting it fragments the conversation. Modeled as required-for-conformance (x-omi-required-for-conformance) rather than schema-required so the schema still validates baseline traffic."
+      },
+      {
+        "id": "INV-LISTEN-005",
+        "title": "Speaker-label suggestions are best-effort and revisable",
+        "checkable": false,
+        "detail": "speaker_label_suggestion may be superseded for the same segment_id; last write wins. Not mechanically checkable from a frame corpus."
+      },
+      {
+        "id": "INV-LISTEN-006",
+        "title": "Every fallback path emits telemetry",
+        "checkable": true,
+        "rule": "unknown-frame-degraded",
+        "detail": "Decode-time fail-open for unknown frame kinds MUST construct Degraded via @omi-core/kernel degrade() \u2014 never a silent skip. Program invariant; S2-5 ruling extends it to decode-time fail-open."
+      }
+    ],
+    "ordering": {
+      "strict": [
+        "bootstrap_sequence",
+        "stt_failed -> close(1011)"
+      ],
+      "causal_only": [
+        "transcript_batch",
+        "speaker_label_suggestion",
+        "translating",
+        "segments_deleted"
+      ],
+      "note": "segments_deleted referencing an id implies that id was previously delivered in a transcript batch."
+    },
+    "producers": [
+      {
+        "id": "message_event_defaults",
+        "locator": "omi:backend/models/message_event.py",
+        "event_count": 10
+      },
+      {
+        "id": "conversation_event_caller_supplied",
+        "locator": "omi:backend/routers/listen/conversations.py:88",
+        "event_count": 2
+      },
+      {
+        "id": "onboarding_raw_dicts",
+        "locator": "omi:backend/utils/onboarding.py:231-233",
+        "event_count": 4
+      },
+      {
+        "id": "web_handshake_raw_dict",
+        "locator": "omi:backend/routers/transcribe.py:195,204",
+        "event_count": 1,
+        "note": "FOURTH producer, not listed in the UNK-LISTEN-007 requirements note's 3-producer enumeration. Emits auth_response. See REPORT.md open question 2."
+      },
+      {
+        "id": "reserved_entitlement_ws005",
+        "locator": "docs/backend-handoff-requirements.md#entitlements",
+        "event_count": 1,
+        "note": "FIFTH logical producer, not yet implemented. Reserves the entitlement frame. Field shapes closed in schema 0.3.0 (state/reason enums, usage+limit split, opaque upgrade_target); server emit still pending WS-005."
+      }
+    ],
+    "unemitted_model_classes": [
+      "NewConversationCreated",
+      "NewProcessingConversationCreated",
+      "ProcessingConversationStatusChanged",
+      "MemoryBackwardSycnedEvent",
+      "PingEvent"
+    ],
+    "non_envelope_frames": [
+      {
+        "id": "transcript_batch",
+        "direction": "server->client",
+        "shape": "bare JSON array of segment objects",
+        "ref": "#/$defs/TranscriptBatchFrame",
+        "locator": "omi:backend/routers/listen/transcripts.py:315",
+        "discriminator": "Array.isArray(json)",
+        "disposition": "permanent exception at baseline; migration to {\"type\":\"transcript\",\"segments\":[...]} is a coordinated client+server change"
+      },
+      {
+        "id": "heartbeat",
+        "direction": "server->client",
+        "shape": "literal text frame \"ping\" (not JSON)",
+        "ref": "#/$defs/HeartbeatFrame",
+        "locator": "omi:backend/routers/listen/runtime.py:312",
+        "interval_seconds": 10,
+        "pong_expected": false,
+        "discriminator": "raw === \"ping\"",
+        "disposition": "collides with the declared-but-unemitted PingEvent {\"type\":\"ping\"}; converging on the envelope would let the schema drop this exception entirely"
+      }
+    ],
+    "contract_of_record": "omi:core/contracts/wire/listen/listen-protocol.schema.json",
+    "ported_from": "omi-frontend-unification-and-microapps-project-tracker/prototypes/listen-schema"
+  },
+  "$defs": {
+    "Translation": {
+      "type": "object",
+      "x-omi-role": "model",
+      "required": [
+        "lang",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "TranscriptSegment": {
+      "type": "object",
+      "x-omi-role": "model",
+      "x-omi-locator": "omi:backend/models/transcript_segment.py:26",
+      "required": [
+        "text",
+        "is_user",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Server-generated uuid4 when absent on input. Dedupe key for INV-LISTEN-001."
+        },
+        "text": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "SPEAKER_00"
+        },
+        "speaker_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Derived server-side from the numeric suffix of speaker; 0 when unparseable."
+        },
+        "is_user": {
+          "type": "boolean"
+        },
+        "person_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "translations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Translation"
+          }
+        },
+        "speech_profile_processed": {
+          "type": "boolean",
+          "default": true
+        },
+        "stt_provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Conversation": {
+      "type": "object",
+      "x-omi-role": "model",
+      "x-omi-opaque": true,
+      "description": "Full conversation object. Deliberately opaque in this prototype: it is already covered by the REST OpenAPI contract (docs/api-reference/app-client-openapi.json). A production schema should $ref the REST component instead of restating it.",
+      "additionalProperties": true
+    },
+    "ChatMessage": {
+      "type": "object",
+      "x-omi-role": "model",
+      "x-omi-opaque": true,
+      "description": "As Conversation: owned by the REST contract.",
+      "additionalProperties": true
+    },
+    "TranscriptBatchFrame": {
+      "x-omi-role": "frame",
+      "x-omi-frame-id": "transcript_batch",
+      "x-omi-envelope": false,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TranscriptSegment"
+      },
+      "description": "The core transcript stream. Sent whenever a batch of segments is combined/finalized (poll cadence ~0.6s while segments exist). Has no type field."
+    },
+    "HeartbeatFrame": {
+      "x-omi-role": "frame",
+      "x-omi-frame-id": "heartbeat",
+      "x-omi-envelope": false,
+      "x-omi-raw-text": "ping",
+      "const": "ping",
+      "description": "One-way liveness push every ~10s. Not JSON. No pong tracked."
+    },
+    "AuthResponseFrame": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "auth_response",
+      "x-omi-producer": "web_handshake_raw_dict",
+      "x-omi-locator": "omi:backend/routers/transcribe.py:195,204",
+      "x-omi-handshake-only": "web",
+      "x-omi-in-canonical-16": false,
+      "type": "object",
+      "required": [
+        "type",
+        "success"
+      ],
+      "properties": {
+        "type": {
+          "const": "auth_response"
+        },
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ServiceStatusEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "service_status",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:92",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "status"
+      ],
+      "properties": {
+        "type": {
+          "const": "service_status"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "initiating",
+            "in_progress_conversations_processing",
+            "stt_initiating",
+            "ready",
+            "stt_failed"
+          ],
+          "x-omi-open-enum": true
+        },
+        "status_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retryable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "Lifecycle status pushes during bootstrap plus the terminal stt_failed status immediately before an STT-triggered 1011 close. Serialized with exclude_none, so absent optional keys are normal, not a schema violation."
+    },
+    "ConversationSessionEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "conversation_session",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:110",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "conversation_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "conversation_session"
+        },
+        "conversation_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "in_progress"
+        },
+        "recording_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lifecycle_phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_sequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "PingEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "ping",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:125",
+      "x-omi-emitted": false,
+      "x-omi-status": "reserved-unemitted",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "ping"
+        }
+      },
+      "description": "Declared by PingEvent but never sent: the real heartbeat is the bare text frame \"ping\". Kept in the canonical enum so the string stays claimed; see REPORT.md open question 1 for the requirements-note tension (counted among the 16, also listed among the 5 unemitted classes to exclude)."
+    },
+    "LastConversationEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "last_memory",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:136",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "memory_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "last_memory"
+        },
+        "memory_id": {
+          "type": "string"
+        }
+      }
+    },
+    "TranslationEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "translating",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:147",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "segments"
+      ],
+      "properties": {
+        "type": {
+          "const": "translating"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptSegment"
+          },
+          "description": "Single-element list in practice: the one segment whose async translation completed."
+        }
+      }
+    },
+    "PhotoProcessingEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "photo_processing",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:158",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "temp_id",
+        "photo_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "photo_processing"
+        },
+        "temp_id": {
+          "type": "string"
+        },
+        "photo_id": {
+          "type": "string"
+        }
+      }
+    },
+    "PhotoDescribedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "photo_described",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:170",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "photo_id",
+        "description",
+        "discarded"
+      ],
+      "properties": {
+        "type": {
+          "const": "photo_described"
+        },
+        "photo_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "discarded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SpeakerLabelSuggestionEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "speaker_label_suggestion",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:183",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "speaker_id",
+        "person_id",
+        "person_name",
+        "segment_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "speaker_label_suggestion"
+        },
+        "speaker_id": {
+          "type": "integer"
+        },
+        "person_id": {
+          "type": "string",
+          "description": "The session owner's person id is normalized to the literal string \"user\"."
+        },
+        "person_name": {
+          "type": "string"
+        },
+        "segment_id": {
+          "type": "string"
+        }
+      }
+    },
+    "FreemiumThresholdReachedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "freemium_threshold_reached",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:197",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "remaining_seconds",
+        "action"
+      ],
+      "properties": {
+        "type": {
+          "const": "freemium_threshold_reached"
+        },
+        "remaining_seconds": {
+          "type": "integer"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "setup_on_device_stt",
+            "none"
+          ],
+          "x-omi-open-enum": true
+        }
+      },
+      "description": "Latched: sent at most once per session, when remaining credit drops to/below 180s, or pre-emptively at connect when already exhausted/paywalled (remaining_seconds 0, immediately before a 1008 trial_expired close)."
+    },
+    "SegmentsDeletedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "segments_deleted",
+      "x-omi-producer": "message_event_defaults",
+      "x-omi-locator": "omi:backend/models/message_event.py:209",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "segment_ids"
+      ],
+      "properties": {
+        "type": {
+          "const": "segments_deleted"
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ConversationCreatedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "memory_created",
+      "x-omi-producer": "conversation_event_caller_supplied",
+      "x-omi-locator": "omi:backend/routers/listen/conversations.py:88",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "memory"
+      ],
+      "properties": {
+        "type": {
+          "const": "memory_created"
+        },
+        "memory": {
+          "$ref": "#/$defs/Conversation"
+        },
+        "messages": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          }
+        },
+        "recording_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lifecycle_phase": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "const": "completed"
+        },
+        "lifecycle_sequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "description": "Finalization completed. event_type is caller-supplied on ConversationEvent, so the string exists only at the call site, not on any model class."
+    },
+    "ConversationProcessingStartedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "memory_processing_started",
+      "x-omi-producer": "conversation_event_caller_supplied",
+      "x-omi-locator": "omi:backend/routers/listen/conversations.py:88",
+      "x-omi-emitted": true,
+      "type": "object",
+      "required": [
+        "type",
+        "memory"
+      ],
+      "properties": {
+        "type": {
+          "const": "memory_processing_started"
+        },
+        "memory": {
+          "$ref": "#/$defs/Conversation"
+        },
+        "messages": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          }
+        },
+        "recording_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lifecycle_version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lifecycle_phase": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "const": "processing"
+        },
+        "lifecycle_sequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "OnboardingQuestionEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "onboarding_question",
+      "x-omi-producer": "onboarding_raw_dicts",
+      "x-omi-locator": "omi:backend/utils/onboarding.py:246",
+      "x-omi-emitted": true,
+      "x-omi-conditional": "onboarding=enabled",
+      "type": "object",
+      "required": [
+        "type",
+        "question",
+        "question_index",
+        "total_questions"
+      ],
+      "properties": {
+        "type": {
+          "const": "onboarding_question"
+        },
+        "question": {
+          "type": "string"
+        },
+        "question_index": {
+          "type": "integer"
+        },
+        "total_questions": {
+          "type": "integer"
+        },
+        "question_segment_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "OnboardingQuestionAnsweredEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "question_answered",
+      "x-omi-producer": "onboarding_raw_dicts",
+      "x-omi-locator": "omi:backend/utils/onboarding.py:194",
+      "x-omi-emitted": true,
+      "x-omi-conditional": "onboarding=enabled",
+      "type": "object",
+      "required": [
+        "type",
+        "question_index",
+        "answered"
+      ],
+      "properties": {
+        "type": {
+          "const": "question_answered"
+        },
+        "question_index": {
+          "type": "integer"
+        },
+        "answered": {
+          "type": "boolean"
+        }
+      }
+    },
+    "OnboardingQuestionSkippedEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "question_skipped",
+      "x-omi-producer": "onboarding_raw_dicts",
+      "x-omi-locator": "omi:backend/utils/onboarding.py:149",
+      "x-omi-emitted": true,
+      "x-omi-conditional": "onboarding=enabled",
+      "x-omi-client-gap": "omi:app/lib/backend/schema/message_event.dart:9-40 has no case for this type; it falls through to UnknownEvent.",
+      "type": "object",
+      "required": [
+        "type",
+        "question_index"
+      ],
+      "properties": {
+        "type": {
+          "const": "question_skipped"
+        },
+        "question_index": {
+          "type": "integer"
+        }
+      }
+    },
+    "OnboardingCompleteEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "onboarding_complete",
+      "x-omi-producer": "onboarding_raw_dicts",
+      "x-omi-locator": "omi:backend/utils/onboarding.py:266",
+      "x-omi-emitted": true,
+      "x-omi-conditional": "onboarding=enabled",
+      "type": "object",
+      "required": [
+        "type",
+        "answers_count"
+      ],
+      "properties": {
+        "type": {
+          "const": "onboarding_complete"
+        },
+        "answers_count": {
+          "type": "integer"
+        }
+      }
+    },
+    "ClientAuthMessage": {
+      "x-omi-role": "client-message",
+      "x-omi-message-type": "auth",
+      "x-omi-handshake-only": "web",
+      "x-omi-in-canonical-4": false,
+      "x-omi-locator": "omi:backend/routers/transcribe.py:190",
+      "type": "object",
+      "required": [
+        "type",
+        "token"
+      ],
+      "properties": {
+        "type": {
+          "const": "auth"
+        },
+        "token": {
+          "type": "string",
+          "description": "Firebase ID token."
+        }
+      },
+      "description": "Handled by the route before the session starts, so it is NOT one of the 4 session-scoped client message types. On the native path any such frame is ignored."
+    },
+    "ClientImageChunkMessage": {
+      "x-omi-role": "client-message",
+      "x-omi-message-type": "image_chunk",
+      "x-omi-locator": "omi:backend/routers/listen/receiver.py:418",
+      "x-omi-in-canonical-4": true,
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "index",
+        "total",
+        "data"
+      ],
+      "properties": {
+        "type": {
+          "const": "image_chunk"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "data": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      },
+      "description": "Chunked base64 image upload, reassembled server-side and fed to an image describer. A malformed payload closes the socket with 1008."
+    },
+    "ClientSkipQuestionMessage": {
+      "x-omi-role": "client-message",
+      "x-omi-message-type": "skip_question",
+      "x-omi-locator": "omi:backend/routers/listen/receiver.py:424",
+      "x-omi-in-canonical-4": true,
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "skip_question"
+        }
+      },
+      "description": "Onboarding flow control. Ignored unless an onboarding handler exists and is incomplete."
+    },
+    "ClientSuggestedTranscriptMessage": {
+      "x-omi-role": "client-message",
+      "x-omi-message-type": "suggested_transcript",
+      "x-omi-locator": "omi:backend/routers/listen/receiver.py:426",
+      "x-omi-in-canonical-4": true,
+      "type": "object",
+      "required": [
+        "type",
+        "segments"
+      ],
+      "properties": {
+        "type": {
+          "const": "suggested_transcript"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptSegment"
+          }
+        },
+        "stt_provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Stamped onto every segment server-side when present."
+        }
+      },
+      "description": "Custom-STT clients push their own segments; the server incorporates them instead of producing its own. Ignored unless custom_stt=enabled."
+    },
+    "ClientSpeakerAssignedMessage": {
+      "x-omi-role": "client-message",
+      "x-omi-message-type": "speaker_assigned",
+      "x-omi-locator": "omi:backend/routers/listen/receiver.py:432",
+      "x-omi-in-canonical-4": true,
+      "type": "object",
+      "required": [
+        "type",
+        "speaker_id",
+        "person_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "speaker_assigned"
+        },
+        "speaker_id": {
+          "type": "integer"
+        },
+        "person_id": {
+          "type": "string"
+        },
+        "person_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "HandshakeParams": {
+      "x-omi-role": "handshake-params",
+      "description": "The proposed single canonical home for connection settings and their defaults, replacing the duplicated declarations in the two route signatures and ListenRequest. x-omi-handshakes marks which variants accept each param.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "type": "string",
+          "default": "en",
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ],
+          "description": "\"auto\" is normalized to \"multi\" server-side. An unsupported language closes 1008."
+        },
+        "sample_rate": {
+          "type": "integer",
+          "default": 8000,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "codec": {
+          "type": "string",
+          "default": "pcm8",
+          "enum": [
+            "pcm8",
+            "pcm16",
+            "linear16",
+            "opus",
+            "aac",
+            "lc3"
+          ],
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "channels": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ],
+          "description": ">= 2 enables multi-channel mode (channel-tagged frames, forced timeout ceiling, always-finalize teardown)."
+        },
+        "include_speech_profile": {
+          "type": "boolean",
+          "default": true,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "stt_service": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "x-omi-handshakes": [
+            "native"
+          ]
+        },
+        "conversation_timeout": {
+          "type": "integer",
+          "default": 120,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ],
+          "description": "Seconds; clamped server-side to a 120s floor and a 4h ceiling. -1 or multi-channel forces the ceiling. This is conversation splitting, not connection idle timeout."
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ],
+          "description": "e.g. \"desktop\"; participates in clean-close finalization."
+        },
+        "custom_stt": {
+          "type": "string",
+          "default": "disabled",
+          "enum": [
+            "enabled",
+            "disabled"
+          ],
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "onboarding": {
+          "type": "string",
+          "default": "disabled",
+          "enum": [
+            "enabled",
+            "disabled"
+          ],
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "speaker_auto_assign": {
+          "type": "string",
+          "default": "disabled",
+          "enum": [
+            "enabled",
+            "disabled"
+          ],
+          "x-omi-handshakes": [
+            "native"
+          ]
+        },
+        "create_speakers": {
+          "type": "boolean",
+          "default": true,
+          "x-omi-handshakes": [
+            "native"
+          ]
+        },
+        "vad_gate": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "enabled",
+            "disabled"
+          ],
+          "x-omi-handshakes": [
+            "native"
+          ],
+          "description": "Any value outside enabled/disabled is treated as no override."
+        },
+        "call_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ]
+        },
+        "client_conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "format": "uuid",
+          "x-omi-handshakes": [
+            "native",
+            "web"
+          ],
+          "x-omi-required-for-conformance": true,
+          "x-omi-invariant": "INV-LISTEN-004",
+          "description": "Client-chosen UUID pinning the server-side recording_session_id across reconnects. Optional on the wire at baseline; REQUIRED for a conforming client, which must resend the same value on every reconnect of one logical capture session."
+        }
+      }
+    },
+    "EntitlementUsage": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "unit"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "const": "seconds"
+        }
+      },
+      "description": "Consumed quantity for the entitlement decision. Always a real non-negative amount \u2014 never overloaded to encode 'unlimited'."
+    },
+    "EntitlementMeteredLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "amount",
+        "unit"
+      ],
+      "properties": {
+        "kind": {
+          "const": "metered"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "const": "seconds"
+        }
+      }
+    },
+    "EntitlementUnmeteredLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unmetered"
+        }
+      },
+      "description": "Paid / unlimited plans. Explicit kind \u2014 NEVER encode unlimited as amount=-1 or 0."
+    },
+    "EntitlementUnknownLimit": {
+      "x-omi-role": "model",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unknown"
+        }
+      },
+      "description": "Server could not determine a numeric ceiling (partial entitlement data). Distinct from unmetered."
+    },
+    "EntitlementLimit": {
+      "x-omi-role": "model",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EntitlementMeteredLimit"
+        },
+        {
+          "$ref": "#/$defs/EntitlementUnmeteredLimit"
+        },
+        {
+          "$ref": "#/$defs/EntitlementUnknownLimit"
+        }
+      ],
+      "description": "Closed tagged union for the ceiling opposite usage.amount. Sentinel numbers are forbidden."
+    },
+    "EntitlementEvent": {
+      "x-omi-role": "server-event",
+      "x-omi-event-type": "entitlement",
+      "x-omi-producer": "reserved_entitlement_ws005",
+      "x-omi-locator": "docs/backend-handoff-requirements.md#entitlements",
+      "x-omi-emitted": false,
+      "x-omi-status": "reserved-pending-ws005",
+      "x-omi-in-canonical-16": false,
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "state",
+        "reason",
+        "usage",
+        "limit",
+        "upgrade_target"
+      ],
+      "properties": {
+        "type": {
+          "const": "entitlement"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "transcription_paused_capture_continuing",
+            "limit_reached",
+            "upgrade_required"
+          ],
+          "description": "Closed union. transcription_paused_capture_continuing keeps the socket open (capture continues into local WAL) \u2014 folds the former capture_continues boolean into state so the two cannot contradict. upgrade_required may pair with reserved close 4020."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "free_tier_transcription_limit",
+            "free_tier_chat_limit",
+            "trial_expired",
+            "paywalled"
+          ],
+          "description": "Closed machine-branchable reason. No free-text companion on the listen frame (presentational copy is a client concern keyed by this enum)."
+        },
+        "usage": {
+          "$ref": "#/$defs/EntitlementUsage"
+        },
+        "limit": {
+          "$ref": "#/$defs/EntitlementLimit"
+        },
+        "upgrade_target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque plan-upgrade flow identifier the shell hands back to an existing upsell surface. NEVER a URL the client constructs (FEAT-APPS-031)."
+        }
+      },
+      "description": "Unified entitlement payload on the /listen wire (WS-003 gate / WS-005). Reserved, not emitted at baseline. Distinguishes deferred-transcription (state=transcription_paused_capture_continuing) from entitlement-forced session close (code 4020)."
+    }
+  }
+}
