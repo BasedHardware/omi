@@ -36,6 +36,7 @@ class BridgeHttpPreparedRequest {
   BridgeHttpPreparedRequest({
     required this.id,
     required this.method,
+    required this.path,
     required this.url,
     required this.headers,
     required this.body,
@@ -44,6 +45,7 @@ class BridgeHttpPreparedRequest {
 
   final String id;
   final String method;
+  final String path;
   final Uri url;
   final Map<String, String> headers;
   final String? body;
@@ -146,6 +148,7 @@ class BridgeHttpHostPolicy {
       BridgeHttpPreparedRequest(
         id: id,
         method: method,
+        path: path,
         url: resolved,
         headers: outbound,
         body: body,
@@ -199,7 +202,7 @@ class BridgeHttpHost {
 
   /// Shell-held origin. Never sent to the webview.
   final Uri baseUrl;
-  final String? _token;
+  String? _token;
   final HttpClient _client;
   final BridgeHttpReplyGate _replyGate = BridgeHttpReplyGate();
 
@@ -208,6 +211,22 @@ class BridgeHttpHost {
 
   /// Whether a usable credential exists. Logged at boot without revealing it.
   bool get hasCredential => _token != null;
+
+  BridgeHttpPolicyResult prepareUsingCurrentCustodyForConformance(String id) => BridgeHttpHostPolicy.prepare(
+    id: id,
+    method: 'GET',
+    path: '/v1/settings',
+    headers: const <String, String>{},
+    body: null,
+    baseUrl: baseUrl,
+    token: _token,
+  );
+
+  void observeResponseForConformance({required String method, required String path, required int status}) {
+    _observeResponse(method: method, path: path, status: status);
+  }
+
+  void closeForTest() => _client.close(force: true);
 
   /// Public only for the generated fixture runner; the live message handler
   /// calls this exact policy before opening a socket.
@@ -322,6 +341,10 @@ class BridgeHttpHost {
       );
       final out = BridgeHttpHostPolicy.responsePayload(normalized);
 
+      // Clear current-process custody before the 204 reply reaches the page.
+      // An environment token can be loaded again only by a later process.
+      _observeResponse(method: prepared.method, path: prepared.path, status: response.statusCode);
+
       await _reply(controller, id, <String, dynamic>{'ok': true, 'response': out});
     } on TimeoutException {
       await _fail(controller, id, BridgeHttpFailureReason.timeout, 'request timed out');
@@ -332,6 +355,12 @@ class BridgeHttpHost {
       await _fail(controller, id, BridgeHttpFailureReason.offline, 'http exception');
     } catch (_) {
       await _fail(controller, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
+    }
+  }
+
+  void _observeResponse({required String method, required String path, required int status}) {
+    if (method == 'DELETE' && path == '/v1/session/current' && status == 204) {
+      _token = null;
     }
   }
 

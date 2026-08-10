@@ -84,7 +84,10 @@ test("clientId is threaded through BridgeHttpHandler's init, not read from Proce
     /func makeHTTPHandler\(clientId: String\?\)[\s\S]*BridgeHttpHandler\(baseURL: baseURL, token: token, clientId: clientId\)/,
   );
   assert.match(main, /ShellTransportAuthority\(baseURL: base, token: session\.token\)/);
-  assert.match(main, /authority\.makeHTTPHandler\(clientId: runClientId\)/);
+  assert.match(
+    main,
+    /authority\.makeHTTPHandler\(\s*clientId: runClientId,\s*onSuccessfulSignOut:/,
+  );
   // red-proof: deleting the `clientId` parameter from BridgeHttpHandler.init
   // and reading `ProcessInfo.processInfo.environment["OMI_RUN_CLIENT_ID"]`
   // directly inside BridgeHttpPolicy.prepare instead reddens the
