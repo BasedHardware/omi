@@ -206,3 +206,12 @@ class UserSubscriptionResponse(BaseModel):
         if value.plan in {PlanType.plus, PlanType.unlimited_v2}:
             raise ValueError("mobile plan IDs require a versioned app-client subscription contract")
         return value
+
+
+class AvailableLanguage(BaseModel):
+    code: str
+    name: str
+
+
+class AvailableLanguagesResponse(BaseModel):
+    languages: List[AvailableLanguage]
