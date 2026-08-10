@@ -117,10 +117,7 @@ export class ChatMessagesStore {
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
       if (outcome.state === "dead") {
-        // Outbox writes the retained payload immediately after this callback.
-        // Notify on the injected next turn so the dead-letter surface reads the
-        // durable letter, not the state transition just before it.
-        env.delay(0, () => store.notify());
+        store.notify();
         return;
       }
       if (outcome.state !== "confirmed") return;

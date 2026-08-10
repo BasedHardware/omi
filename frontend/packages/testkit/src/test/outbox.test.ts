@@ -63,6 +63,32 @@ test("permanent rejection dead-letters, never retries (FC-permanent-write-reject
   assert.equal(env.fallbackSink.records[0]!.path, "sync.outbox.dead-letter");
 });
 
+test("terminal callback synchronously observes its durable dead letter", async () => {
+  const store = new MemoryStore();
+  const env = new ManualEnv();
+  const transport = new ScriptedTransport();
+  transport.respondWith({
+    ok: false,
+    failure: { kind: "permanent", reason: "validation", detail: "not allowed" },
+  });
+  const box = await Outbox.open(store.openBridge("user-a"), env, transport, "tasks");
+  let observed: readonly string[] | null = null;
+  box.onOutcome = async (_op, outcome) => {
+    if (outcome.state === "dead") {
+      observed = (await box.deadLetters()).map((letter) => letter.opId);
+    }
+  };
+
+  await box.enqueue(op("op-visible-in-callback"));
+  await env.advance(1);
+
+  assert.deepEqual(
+    observed,
+    ["op-visible-in-callback"],
+    "onOutcome runs only after the terminal dead letter is durable",
+  );
+});
+
 test("auth-invalid pause reaches the bound sink (COORD-degradation-is-unobservable)", async () => {
   const store = new MemoryStore();
   const env = new ManualEnv();
