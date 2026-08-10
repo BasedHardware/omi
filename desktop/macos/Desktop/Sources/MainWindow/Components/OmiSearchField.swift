@@ -67,6 +67,9 @@ struct OmiSearchField: View {
   let placeholder: String
   @Binding var text: String
   var isLoading = false
+  /// Optional focus projection for surfaces that already own a FocusState.
+  /// Existing list-page callers do not need to opt into focus management.
+  var focus: FocusState<Bool>.Binding? = nil
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
@@ -82,10 +85,7 @@ struct OmiSearchField: View {
       .frame(width: 16, height: 16)
       .foregroundStyle(OmiColors.textTertiary)
 
-      TextField(placeholder, text: $text)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundStyle(OmiColors.textPrimary)
+      searchTextField
 
       if !text.isEmpty {
         Button {
@@ -108,5 +108,21 @@ struct OmiSearchField: View {
       stroke: OmiColors.border.opacity(0.18)
     )
     .accessibilityElement(children: .contain)
+  }
+
+  @ViewBuilder
+  private var searchTextField: some View {
+    if let focus {
+      TextField(placeholder, text: $text)
+        .textFieldStyle(.plain)
+        .scaledFont(size: OmiType.body)
+        .foregroundStyle(OmiColors.textPrimary)
+        .focused(focus)
+    } else {
+      TextField(placeholder, text: $text)
+        .textFieldStyle(.plain)
+        .scaledFont(size: OmiType.body)
+        .foregroundStyle(OmiColors.textPrimary)
+    }
   }
 }

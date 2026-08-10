@@ -30,18 +30,6 @@ enum ScreenCaptureHealth: String, Equatable {
     }
   }
 
-  var rewindToggleHelp: String {
-    switch self {
-    case .active:
-      return "Rewind is capturing - click to stop"
-    case .temporarilyUnavailable:
-      return "Rewind is on, but the current window cannot be captured"
-    case .recovering:
-      return "Rewind is recovering screen capture"
-    case .stopped:
-      return "Rewind is off - click to start capturing"
-    }
-  }
 }
 
 struct ScreenCaptureFailureTracker {
