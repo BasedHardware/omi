@@ -140,3 +140,31 @@ test("shell error is the sole terminal and cannot contaminate a sibling", async 
   wire.emit({ t: "data", id: sibling.id, channel: "b", payload: "still live" });
   assert.equal((await sibling[Symbol.asyncIterator]().next()).value, "still live");
 });
+
+test("two bridge stream ports share collision-proof realm routing", async () => {
+  const wire = installHost();
+  const first = bridgeStreamPort().open({ channel: "first", params: "{}", initialCredit: 1 });
+  const second = bridgeStreamPort().open({ channel: "second", params: "{}", initialCredit: 1 });
+
+  assert.notEqual(first.id, second.id, "realm stream ids must never reset per port");
+  wire.emit({ t: "data", id: first.id, channel: first.channel, payload: "for-first" });
+  wire.emit({ t: "data", id: second.id, channel: second.channel, payload: "for-second" });
+  assert.equal((await first[Symbol.asyncIterator]().next()).value, "for-first");
+  assert.equal((await second[Symbol.asyncIterator]().next()).value, "for-second");
+});
+
+test("an unrouteable malformed global frame fails every live session closed", async () => {
+  const wire = installHost();
+  const port = bridgeStreamPort();
+  const first = port.open({ channel: "first", params: "{}", initialCredit: 1 });
+  const second = port.open({ channel: "second", params: "{}", initialCredit: 1 });
+
+  wire.emit("{not-json");
+  assert.equal(
+    wire.sent.filter((frame) => frame.t === "cancel" && frame.reason === "malformed-frame").length,
+    2,
+    "an id-less malformed global frame cannot leave an affected session hanging",
+  );
+  await assert.rejects(first[Symbol.asyncIterator]().next(), /malformed-frame/);
+  await assert.rejects(second[Symbol.asyncIterator]().next(), /malformed-frame/);
+});
