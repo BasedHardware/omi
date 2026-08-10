@@ -1,6 +1,6 @@
-"""Regression: shared Levenshtein helper used by pipeline + verify_output."""
+"""Regression: shared Levenshtein helper (ids.edit_distance) used by pipeline + verify_output."""
 
-from utils.memory_ingestion.text import edit_distance
+from utils.memory_ingestion.ids import edit_distance
 from utils.memory_ingestion.pipeline import _edit_distance as pipeline_edit_distance
 from utils.memory_ingestion.stages.verify_output import _edit_distance as verify_edit_distance
 
