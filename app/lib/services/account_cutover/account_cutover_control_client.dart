@@ -28,7 +28,7 @@ class AccountCutoverFetchResult {
   const AccountCutoverFetchResult._(this.kind, {this.control});
 
   const AccountCutoverFetchResult.success(AccountCutoverControl control)
-    : this._(AccountCutoverFetchKind.success, control: control);
+      : this._(AccountCutoverFetchKind.success, control: control);
 
   const AccountCutoverFetchResult.unavailable() : this._(AccountCutoverFetchKind.unavailable);
 
@@ -39,7 +39,9 @@ class AccountCutoverFetchResult {
 }
 
 class AccountCutoverControlClient {
-  AccountCutoverControlClient({Future<AccountCutoverFetchResult> Function()? fetch}) : _fetch = fetch;
+  AccountCutoverControlClient({
+    Future<AccountCutoverFetchResult> Function()? fetch,
+  }) : _fetch = fetch;
 
   final Future<AccountCutoverFetchResult> Function()? _fetch;
 

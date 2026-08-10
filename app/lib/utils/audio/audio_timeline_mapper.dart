@@ -34,7 +34,7 @@ class AudioTimelineMapper {
   final List<ConversationAudioSpan> spans;
 
   AudioTimelineMapper(List<ConversationAudioSpan> spans)
-    : spans = List.of(spans)..sort((a, b) => a.wallOffset.compareTo(b.wallOffset));
+      : spans = List.of(spans)..sort((a, b) => a.wallOffset.compareTo(b.wallOffset));
 
   bool get isEmpty => spans.isEmpty;
 

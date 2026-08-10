@@ -70,10 +70,7 @@ void main() {
       for (final formatter in phoneFieldInputFormatters) {
         value = formatter.formatEditUpdate(
           TextEditingValue.empty,
-          TextEditingValue(
-            text: typed,
-            selection: TextSelection.collapsed(offset: typed.length),
-          ),
+          TextEditingValue(text: typed, selection: TextSelection.collapsed(offset: typed.length)),
         );
       }
       return value.text;
@@ -100,17 +97,15 @@ void main() {
 
     testWidgets('the real field accepts a pasted + number', (tester) async {
       final controller = TextEditingController();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: TextField(
-              controller: controller,
-              keyboardType: TextInputType.phone,
-              inputFormatters: phoneFieldInputFormatters,
-            ),
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TextField(
+            controller: controller,
+            keyboardType: TextInputType.phone,
+            inputFormatters: phoneFieldInputFormatters,
           ),
         ),
-      );
+      ));
       await tester.enterText(find.byType(TextField), '+442071838750');
       await tester.pump();
       expect(controller.text, '+442071838750');

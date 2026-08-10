@@ -58,21 +58,20 @@ List<String> _rawKeys(File arb) =>
     RegExp(r'^    "([^"]+)":', multiLine: true).allMatches(arb.readAsStringSync()).map((m) => m.group(1)!).toList();
 
 List<Map<String, dynamic>> _tier({required int monthly, required int yearly}) => [
-  {'interval': 'month', 'unit_amount': monthly},
-  {'interval': 'year', 'unit_amount': yearly},
-];
+      {'interval': 'month', 'unit_amount': monthly},
+      {'interval': 'year', 'unit_amount': yearly},
+    ];
 
 void main() {
   group('every locale carries the plans-sheet copy', () {
-    final locales =
-        Directory('lib/l10n')
-            .listSync()
-            .whereType<File>()
-            .map((f) => f.path.split('/').last)
-            .where((n) => n.startsWith('app_') && n.endsWith('.arb'))
-            .map((n) => n.substring(4, n.length - 4))
-            .toList()
-          ..sort();
+    final locales = Directory('lib/l10n')
+        .listSync()
+        .whereType<File>()
+        .map((f) => f.path.split('/').last)
+        .where((n) => n.startsWith('app_') && n.endsWith('.arb'))
+        .map((n) => n.substring(4, n.length - 4))
+        .toList()
+      ..sort();
 
     test('the template defines all of them', () {
       final en = _arb('en');

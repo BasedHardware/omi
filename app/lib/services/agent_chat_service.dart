@@ -75,12 +75,12 @@ class AgentChatEvent {
       message['text'] as String? ?? message['content'] as String? ?? message['message'] as String? ?? '';
 
   static AgentChatEvent fromMessage(AgentChatEventType type, Map<String, dynamic> message) => AgentChatEvent(
-    type,
-    textFrom(message),
-    code: message['code'] as String?,
-    state: message['state'] as String?,
-    retryable: message['retryable'] as bool?,
-  );
+        type,
+        textFrom(message),
+        code: message['code'] as String?,
+        state: message['state'] as String?,
+        retryable: message['retryable'] as bool?,
+      );
 }
 
 class AgentChatService {

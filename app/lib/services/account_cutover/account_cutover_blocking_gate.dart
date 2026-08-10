@@ -14,8 +14,11 @@ import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AccountCutoverBlockingGate extends StatelessWidget {
-  const AccountCutoverBlockingGate({super.key, this.productBuilder, this.child})
-    : assert(productBuilder != null || child != null, 'productBuilder or child is required');
+  const AccountCutoverBlockingGate({
+    super.key,
+    this.productBuilder,
+    this.child,
+  }) : assert(productBuilder != null || child != null, 'productBuilder or child is required');
 
   /// Preferred: built only while product traffic is allowed.
   final WidgetBuilder? productBuilder;
@@ -70,8 +73,8 @@ class AccountCutoverBlockingView extends StatelessWidget {
     final message = forceUpgrade
         ? l10n.accountCutoverUpdateRequiredMessage
         : (strandedNewData
-              ? l10n.accountCutoverMigrationRollbackMessage
-              : l10n.accountCutoverMigrationInProgressMessage);
+            ? l10n.accountCutoverMigrationRollbackMessage
+            : l10n.accountCutoverMigrationInProgressMessage);
 
     return Semantics(
       container: true,
@@ -88,12 +91,20 @@ class AccountCutoverBlockingView extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(forceUpgrade ? Icons.system_update : Icons.hourglass_top, color: Colors.white, size: 36),
+                    Icon(
+                      forceUpgrade ? Icons.system_update : Icons.hourglass_top,
+                      color: Colors.white,
+                      size: 36,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(

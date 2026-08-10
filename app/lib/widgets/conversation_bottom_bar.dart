@@ -781,7 +781,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Future<void> _seekToCombinedPosition(Duration targetPosition, {bool invalidateSegmentStop = true}) async {
+  Future<void> _seekToCombinedPosition(
+    Duration targetPosition, {
+    bool invalidateSegmentStop = true,
+  }) async {
     if (_audioPlayer == null) return;
 
     // Scrubber seeks invalidate any in-flight segment end-handler.

@@ -15,8 +15,11 @@ void main() {
         navigatorKey: navigatorKey,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        builder: (context, child) =>
-            BluetoothGuidanceListener(readiness: readiness, navigatorKey: navigatorKey, child: child!),
+        builder: (context, child) => BluetoothGuidanceListener(
+          readiness: readiness,
+          navigatorKey: navigatorKey,
+          child: child!,
+        ),
         home: const Scaffold(body: SizedBox()),
       ),
     );
@@ -26,10 +29,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enable Bluetooth'), findsOneWidget);
-    expect(
-      find.text('Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.'),
-      findsOneWidget,
-    );
+    expect(find.text('Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.'),
+        findsOneWidget);
 
     await tester.tap(find.text('Ok'));
     await tester.pumpAndSettle();
@@ -84,10 +85,7 @@ void main() {
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: BluetoothGuidanceListener(
-          readiness: readiness,
-          child: const Scaffold(body: SizedBox()),
-        ),
+        home: BluetoothGuidanceListener(readiness: readiness, child: const Scaffold(body: SizedBox())),
       ),
     );
 

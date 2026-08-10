@@ -37,8 +37,10 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
     super.dispose();
   }
 
-  PhoneNumberInput get _parsed =>
-      parsePhoneNumberInput(raw: _phoneController.text, isoCode: _selectedCountry.codeAlpha2);
+  PhoneNumberInput get _parsed => parsePhoneNumberInput(
+        raw: _phoneController.text,
+        isoCode: _selectedCountry.codeAlpha2,
+      );
 
   bool get _isValid => _parsed.isValid;
 

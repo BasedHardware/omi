@@ -31,7 +31,11 @@ void main() {
 
   test('agent chat events preserve structured proxy error messages', () {
     expect(
-      AgentChatEvent.textFrom({'type': 'error', 'code': 'unavailable', 'message': 'Please try again.'}),
+      AgentChatEvent.textFrom({
+        'type': 'error',
+        'code': 'unavailable',
+        'message': 'Please try again.',
+      }),
       'Please try again.',
     );
   });

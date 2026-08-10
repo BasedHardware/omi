@@ -7,7 +7,9 @@ import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 /// user supplied their own country code" and lets it override the picker, and
 /// a formatter that strips `+` makes that branch unreachable from the UI. Lives
 /// beside the parser so the two cannot drift apart.
-final phoneFieldInputFormatters = <TextInputFormatter>[FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s\-\(\)]'))];
+final phoneFieldInputFormatters = <TextInputFormatter>[
+  FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s\-\(\)]')),
+];
 
 /// What the user typed on the phone-setup screen, interpreted for one country.
 ///
@@ -40,9 +42,8 @@ PhoneNumberInput parsePhoneNumberInput({required String raw, required String iso
   // Only a leading + carries meaning; any other one is a typo, and leaving it
   // in makes the whole string unparseable rather than just ignoring it.
   final cleaned = raw.trim();
-  final trimmed = cleaned.startsWith('+')
-      ? '+${cleaned.substring(1).replaceAll('+', '')}'
-      : cleaned.replaceAll('+', '');
+  final trimmed =
+      cleaned.startsWith('+') ? '+${cleaned.substring(1).replaceAll('+', '')}' : cleaned.replaceAll('+', '');
   if (trimmed.isEmpty) return PhoneNumberInput.empty;
 
   final iso = _isoOrNull(isoCode);

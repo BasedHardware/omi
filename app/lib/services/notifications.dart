@@ -115,7 +115,9 @@ class NotificationUtil {
       return;
     }
 
-    navigator.pushReplacement(MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)));
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
+    );
   }
 
   static Future<void> triggerFallNotification() async {

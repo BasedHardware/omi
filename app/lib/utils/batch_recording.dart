@@ -40,7 +40,8 @@ bool canAutoUploadPhoneRecordings({
   required bool useCustomStt,
   required bool autoSyncOfflineRecordings,
   required bool isUploading,
-}) => !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+}) =>
+    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
 
 /// The next offline-fallback recording to auto-upload from [fileNames], or null
 /// when none is eligible. Only auto-marker files qualify (explicit Transcribe
@@ -148,8 +149,8 @@ class BatchRecordingInfo {
     final bytesPerSec = codec == BleAudioCodec.pcm16
         ? 32200
         : codec == BleAudioCodec.pcm8
-        ? 16100
-        : 2400;
+            ? 16100
+            : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
   }
 }

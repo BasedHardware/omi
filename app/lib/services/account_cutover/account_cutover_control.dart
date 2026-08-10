@@ -18,9 +18,17 @@ enum AccountCutoverState {
   rolledBackStranded,
 }
 
-enum AccountCutoverClientAction { none, forceUpgrade, migrationMaintenance }
+enum AccountCutoverClientAction {
+  none,
+  forceUpgrade,
+  migrationMaintenance,
+}
 
-enum OfflineQueueInstruction { none, drain, quarantine }
+enum OfflineQueueInstruction {
+  none,
+  drain,
+  quarantine,
+}
 
 AccountCutoverState parseAccountCutoverState(String? raw) {
   switch (raw) {
@@ -103,17 +111,17 @@ class AccountCutoverControl {
   final bool authBootstrapReachable;
 
   factory AccountCutoverControl.legacyDefault() => const AccountCutoverControl(
-    state: AccountCutoverState.legacy,
-    accountGeneration: 0,
-    uiGeneration: 0,
-    apiGeneration: 0,
-    clientAction: AccountCutoverClientAction.none,
-    offlineQueueInstruction: OfflineQueueInstruction.none,
-    strandedNewData: false,
-    legacyWritesAllowed: true,
-    productTrafficAllowed: true,
-    authBootstrapReachable: true,
-  );
+        state: AccountCutoverState.legacy,
+        accountGeneration: 0,
+        uiGeneration: 0,
+        apiGeneration: 0,
+        clientAction: AccountCutoverClientAction.none,
+        offlineQueueInstruction: OfflineQueueInstruction.none,
+        strandedNewData: false,
+        legacyWritesAllowed: true,
+        productTrafficAllowed: true,
+        authBootstrapReachable: true,
+      );
 
   /// Fail-closed maintenance projection used when control is unavailable,
   /// malformed, or a refresh fails after an authoritative projection was seen.

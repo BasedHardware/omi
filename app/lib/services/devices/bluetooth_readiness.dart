@@ -45,9 +45,9 @@ class BluetoothReadiness extends ChangeNotifier {
     Future<bool> Function()? requestEnable,
     Future<BluetoothAdapterState?> Function(BluetoothUse use)? permissionState,
     bool observeBridge = true,
-  }) : _readState = readState ?? (() => BleHostApi().getBluetoothState()),
-       _requestEnable = requestEnable ?? (() => BleHostApi().enableBluetooth()),
-       _permissionState = permissionState {
+  })  : _readState = readState ?? (() => BleHostApi().getBluetoothState()),
+        _requestEnable = requestEnable ?? (() => BleHostApi().enableBluetooth()),
+        _permissionState = permissionState {
     if (observeBridge) {
       _removeBridgeListener = BleBridge.instance.addBluetoothStateListener(_onNativeStateChanged);
     }
@@ -69,13 +69,13 @@ class BluetoothReadiness extends ChangeNotifier {
   BluetoothGuidance? get guidance => _guidance;
 
   static BluetoothAdapterState parse(String value) => switch (value) {
-    'on' => BluetoothAdapterState.on,
-    'off' => BluetoothAdapterState.off,
-    'unauthorized' => BluetoothAdapterState.unauthorized,
-    'unsupported' => BluetoothAdapterState.unsupported,
-    'resetting' => BluetoothAdapterState.resetting,
-    _ => BluetoothAdapterState.unknown,
-  };
+        'on' => BluetoothAdapterState.on,
+        'off' => BluetoothAdapterState.off,
+        'unauthorized' => BluetoothAdapterState.unauthorized,
+        'unsupported' => BluetoothAdapterState.unsupported,
+        'resetting' => BluetoothAdapterState.resetting,
+        _ => BluetoothAdapterState.unknown,
+      };
 
   /// Returns false and publishes one deduplicated guidance event when BLE is
   /// unavailable. Call this directly before beginning a BLE operation.

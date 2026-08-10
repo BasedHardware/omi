@@ -27,9 +27,9 @@ class BluetoothGuidanceListener extends StatefulWidget {
     GlobalKey<NavigatorState>? navigatorKey,
     bool? isAndroid,
     this.retryBlockedOperation,
-  }) : readiness = readiness ?? BluetoothReadiness.instance,
-       navigatorKey = navigatorKey ?? globalNavigatorKey,
-       isAndroid = isAndroid ?? Platform.isAndroid;
+  })  : readiness = readiness ?? BluetoothReadiness.instance,
+        navigatorKey = navigatorKey ?? globalNavigatorKey,
+        isAndroid = isAndroid ?? Platform.isAndroid;
 
   @override
   State<BluetoothGuidanceListener> createState() => _BluetoothGuidanceListenerState();
@@ -117,8 +117,8 @@ class _BluetoothGuidanceListenerState extends State<BluetoothGuidanceListener> {
         okButtonText: needsPermission
             ? dialogContext.l10n.openSettings
             : widget.isAndroid && guidance.state == BluetoothAdapterState.off
-            ? dialogContext.l10n.enableBluetooth
-            : null,
+                ? dialogContext.l10n.enableBluetooth
+                : null,
       ),
     );
     if (!requestedEnable && readiness == widget.readiness && readiness.guidance?.id == guidance.id) {

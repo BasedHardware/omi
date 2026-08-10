@@ -9,13 +9,12 @@ import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/mutex.dart';
 
-typedef SyncFilesUploader =
-    Future<UploadFilesResult> Function(
-      List<File> files, {
-      UploadProgressCallback? onUploadProgress,
-      String? conversationId,
-      bool claimLiveCapture,
-    });
+typedef SyncFilesUploader = Future<UploadFilesResult> Function(
+  List<File> files, {
+  UploadProgressCallback? onUploadProgress,
+  String? conversationId,
+  bool claimLiveCapture,
+});
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 
 /// Account-global admission gate for every `/v2/sync-local-files` upload.
@@ -29,9 +28,9 @@ class SyncUploadGate {
     required SyncRateLimiter limiter,
     required SyncFilesUploader uploader,
     required FairUseStatusLoader fairUseStatusLoader,
-  }) : _limiter = limiter,
-       _uploader = uploader,
-       _fairUseStatusLoader = fairUseStatusLoader;
+  })  : _limiter = limiter,
+        _uploader = uploader,
+        _fairUseStatusLoader = fairUseStatusLoader;
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,

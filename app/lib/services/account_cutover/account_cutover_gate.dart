@@ -5,7 +5,11 @@ library;
 
 import 'package:omi/services/account_cutover/account_cutover_control.dart';
 
-enum AccountCutoverGateDecision { allowProductTraffic, forceUpgrade, migrationMaintenance }
+enum AccountCutoverGateDecision {
+  allowProductTraffic,
+  forceUpgrade,
+  migrationMaintenance,
+}
 
 class AccountCutoverGate {
   const AccountCutoverGate();

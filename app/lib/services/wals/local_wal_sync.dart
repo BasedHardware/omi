@@ -549,9 +549,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals = _wals
-        .where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow)
-        .toList();
+    final corruptedWals =
+        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -640,8 +639,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture =
-          !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
