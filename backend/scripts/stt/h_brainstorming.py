@@ -1,6 +1,4 @@
-import base64
 import json
-import mimetypes
 import os
 from typing import Any, Dict, List, cast
 
@@ -10,7 +8,6 @@ from openai import OpenAI
 from utils.other.endpoints import timeit
 
 os.environ['GROQ_API_KEY'] = ''
-os.environ['FAL_KEY'] = ''
 
 # filename = '../audioSamples/empty.wav'
 
@@ -84,22 +81,6 @@ def diarization(content: str):
     return response.choices[0].message.content
 
 
-def file_to_base64_url(file_path: str) -> str:
-    # Determine the MIME type of the file
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type:
-        mime_type = 'application/octet-stream'
-
-    # Read the file and encode it in base64
-    with open(file_path, 'rb') as file:
-        file_content = file.read()
-        encoded_string = base64.b64encode(file_content).decode('utf-8')
-
-    # Format as data URL
-    base64_url = f"data:{mime_type};base64,{encoded_string}"
-    return base64_url
-
-
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 
 # torch ships without type stubs; alias as Any to avoid cascading unknown-member warnings.
@@ -133,7 +114,6 @@ if __name__ == '__main__':
     for path in os.listdir('../audioSamples'):
         filename = f'../audioSamples/{path}'
         transcription = execute_groq()
-        # transcription = fal()
         print(diarization(cast(str, transcription)))
     # has_audio()
     # print(retrieve_proper_segment_points(filename))
