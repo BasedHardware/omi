@@ -33,10 +33,17 @@ function appearanceLabel(selection: AppearanceSelection, locale: Locale): string
   }
 }
 
-function accountPresentation(phase: StoreStatus["refresh"]["phase"], identity: SettingsSnapshot["identity"]): AccountPresentation {
+function accountPresentation(
+  phase: StoreStatus["refresh"]["phase"],
+  snapshot: SettingsSnapshot | null,
+): AccountPresentation {
   if (phase === "initial-loading") return "loading";
   if (phase === "unavailable") return "unavailable";
-  return identity ? "signed-in" : "signed-out";
+  // Snapshot readiness is separate from refresh phase: a ready store may still
+  // be awaiting its first snapshot. Signed-out is only proven once that read
+  // has landed with a null identity — never as the missing-data fallback.
+  if (snapshot === null) return "loading";
+  return snapshot.identity ? "signed-in" : "signed-out";
 }
 
 function planPresentation(entitlement: EntitlementState): PlanPresentation {
@@ -127,7 +134,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const phase = status.refresh.phase;
   const identity = snapshot?.identity ?? null;
   const entitlement = snapshot?.entitlement ?? null;
-  const account = accountPresentation(phase, identity);
+  const account = accountPresentation(phase, snapshot);
   const planNotice = entitlementNotice(entitlement, canRouteUpgrade);
   const usage = usageLabelArgs(entitlement);
   const showAppearance = account !== "unavailable";
@@ -200,33 +207,43 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
                 {t(locale, "common.retry")}
               </button>
             </div>
-          ) : account === "signed-in" && identity ? (
-            <div className="settings-account-panel" data-settings-account="signed-in">
-              <p className="settings-signed-in">{t(locale, "settings.signedInAs", { name: identity.displayName })}</p>
-              <dl className="settings-identity-details">
-                <div>
-                  <dt>{t(locale, "settings.emailLabel")}</dt>
-                  <dd>{identity.email}</dd>
-                </div>
-              </dl>
-              <button
-                type="button"
-                className="settings-sign-out"
-                disabled={signingOut}
-                aria-busy={signingOut || undefined}
-                onClick={() => void signOut()}
-                aria-label={signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
-              >
-                {signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
-              </button>
-            </div>
-          ) : (
+          ) : account === "signed-in" ? (
+            identity ? (
+              <div className="settings-account-panel" data-settings-account="signed-in">
+                <p className="settings-signed-in">{t(locale, "settings.signedInAs", { name: identity.displayName })}</p>
+                <dl className="settings-identity-details">
+                  <div>
+                    <dt>{t(locale, "settings.emailLabel")}</dt>
+                    <dd>{identity.email}</dd>
+                  </div>
+                </dl>
+                <button
+                  type="button"
+                  className="settings-sign-out"
+                  disabled={signingOut}
+                  aria-busy={signingOut || undefined}
+                  onClick={() => void signOut()}
+                  aria-label={signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
+                >
+                  {signingOut ? t(locale, "settings.signingOut") : t(locale, "settings.signOut")}
+                </button>
+              </div>
+            ) : (
+              <div className="settings-account-panel is-loading" data-settings-account="loading" role="status" aria-busy={true}>
+                <p className="settings-state-copy">{t(locale, "common.loading")}</p>
+              </div>
+            )
+          ) : account === "signed-out" ? (
             <div className="settings-account-panel is-signed-out" data-settings-account="signed-out">
               <p className="settings-state-title">{t(locale, "settings.notSignedIn")}</p>
               <p className="settings-state-copy">{t(locale, "settings.signedOutHint")}</p>
               <button type="button" className="settings-sign-in" disabled aria-label={t(locale, "settings.signIn")}>
                 {t(locale, "settings.signIn")}
               </button>
+            </div>
+          ) : (
+            <div className="settings-account-panel is-loading" data-settings-account="loading" role="status" aria-busy={true}>
+              <p className="settings-state-copy">{t(locale, "common.loading")}</p>
             </div>
           )}
         </section>
