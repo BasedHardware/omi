@@ -30,6 +30,7 @@ import {
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
+import { createInMemoryChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
 
@@ -536,6 +537,66 @@ describe("ratified chat generation wire red proofs", () => {
     expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
     db.close();
   });
+
+  for (const faultPoint of ["before", "after"] as const) {
+    test(`in-memory finalization rolls back a ${faultPoint}-terminal-append failure`, async () => {
+      const base = createInMemoryLocalServiceStores();
+      base.settings.putEntitlement(ACCOUNT, {
+        planLabel: "Metered",
+        limitKey: "chat_messages",
+        used: 0,
+        limit: 2,
+        limitReached: false,
+        upgradeAvailable: true,
+      });
+      const crash = (): never => { throw new Error(`injected ${faultPoint} terminal crash`); };
+      const finalization = createInMemoryChatGenerationFinalization(
+        base.chatMessages,
+        base.chatEvents,
+        faultPoint === "before"
+          ? { beforeTerminalAppend: crash }
+          : { afterTerminalAppend: crash },
+      );
+      const stores: LocalServiceStores = Object.freeze({
+        ...base,
+        chatFinalization: finalization,
+      });
+      let cancelCalls = 0;
+      const source: ChatGenerationSource = Object.freeze({
+        start(input) {
+          queueMicrotask(() => input.onComplete());
+          return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+        },
+      });
+      const db = new Database(":memory:");
+      const local = createLocalDevService({
+        db,
+        stores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: `chat-in-memory-${faultPoint}-terminal-proof`,
+        generationSource: source,
+      });
+      const admitted = await post(local, create(`in-memory-${faultPoint}-terminal`));
+      const reader = admitted.body!.getReader();
+      const initial = await readUntil(reader, "snapshot");
+      const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
+      if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const lifecycle = base.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state;
+      if (lifecycle !== "terminal") await reader.cancel();
+
+      expect(lifecycle).toBe("active");
+      expect(base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)?.map(
+        (event) => event.frame.kind,
+      )).toEqual(["accepted", "snapshot"]);
+      expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+      expect(base.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
+      expect(cancelCalls).toBe(1);
+      db.close();
+    });
+  }
 
   test("reconnect starts with a current snapshot and Last-Event-ID replays strictly after", async () => {
     const hanging: ChatGenerationSource = Object.freeze({

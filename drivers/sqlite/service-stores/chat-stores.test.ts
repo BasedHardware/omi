@@ -225,6 +225,43 @@ test("SQLite rolls canonical assistant persistence back when terminal append cra
   db.close();
 });
 
+test("SQLite rolls both finalization writes back when the transaction crashes after append", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  const events = new SqliteChatGenerationEventsStore(db);
+  const settings = new SqliteSettingsProjectionStore(db);
+  expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+    accountId: "account",
+    message: message(),
+    generationId: "generation-after-append",
+    acceptedEventId: "event-after-append-accepted",
+    admittedAt: 200,
+  }).kind).toBe("created");
+  const assistant = message({
+    id: "assistant-after-append",
+    sender: "ai",
+    text: "must roll back",
+    payloadHash: "sha256:assistant-after-append",
+  });
+  const crashing = createSqliteChatGenerationFinalization(db, {
+    afterTerminalAppend: () => { throw new Error("injected post-append crash"); },
+  });
+
+  expect(() => crashing.finalize({
+    accountId: "account",
+    generationId: "generation-after-append",
+    eventId: "event-after-append-done",
+    createdAt: 300,
+    frame: { kind: "done", message: assistant },
+  })).toThrow("injected post-append crash");
+  expect(messages.readMessage("account", "assistant-after-append")).toBeNull();
+  expect(events.readLifecycle("account", "generation-after-append")?.state).toBe("active");
+  expect(events.listAfter("account", "generation-after-append", null)?.map(
+    (event) => event.frame.kind,
+  )).toEqual(["accepted"]);
+  db.close();
+});
+
 test("SQLite chat message, quota, and event records survive adapter restart", () => {
   const directory = mkdtempSync(join(tmpdir(), "omi-chat-restart-"));
   const path = join(directory, "service.sqlite");

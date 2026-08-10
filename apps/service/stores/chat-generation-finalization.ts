@@ -2,8 +2,9 @@ import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
   ChatGenerationTerminalFrame,
+  InMemoryChatGenerationEventsStore,
 } from "./chat-generation-events-store";
-import type { ChatMessagesStore } from "./chat-messages-store";
+import type { ChatMessagesStore, InMemoryChatMessagesStore } from "./chat-messages-store";
 
 export interface ChatGenerationFinalizationInput {
   readonly accountId: string;
@@ -18,7 +19,7 @@ export interface ChatGenerationFinalization {
 }
 
 export interface ChatGenerationFinalizationTransaction {
-  execute<Result>(operation: () => Result): Result;
+  execute<Result>(accountId: string, operation: () => Result): Result;
 }
 
 /** Canonical assistant persistence and its terminal frame share one commit. */
@@ -27,9 +28,10 @@ export const defineChatGenerationFinalization = (
   messages: ChatMessagesStore,
   events: ChatGenerationEventsStore,
   beforeTerminalAppend: () => void = () => {},
+  afterTerminalAppend: () => void = () => {},
 ): ChatGenerationFinalization => Object.freeze({
   finalize(input): ChatGenerationEvent {
-    return transaction.execute(() => {
+    return transaction.execute(input.accountId, () => {
       const terminal = events.listAfter(input.accountId, input.generationId, null)
         ?.find((event) => ["done", "failed", "cancelled"].includes(event.frame.kind));
       if (terminal !== undefined) return terminal;
@@ -51,16 +53,35 @@ export const defineChatGenerationFinalization = (
       if (appended.kind === "conflict") {
         throw new TypeError("chat generation terminal event identity conflict");
       }
+      afterTerminalAppend();
       return appended.event;
     });
   },
 });
 
 export const createInMemoryChatGenerationFinalization = (
-  messages: ChatMessagesStore,
-  events: ChatGenerationEventsStore,
+  messages: InMemoryChatMessagesStore,
+  events: InMemoryChatGenerationEventsStore,
+  faults: {
+    readonly beforeTerminalAppend?: () => void;
+    readonly afterTerminalAppend?: () => void;
+  } = {},
 ): ChatGenerationFinalization => defineChatGenerationFinalization(
-  { execute: <Result>(operation: () => Result): Result => operation() },
+  {
+    execute<Result>(accountId: string, operation: () => Result): Result {
+      const messagesBefore = messages.snapshotAccount(accountId);
+      const eventsBefore = events.snapshotAccount(accountId);
+      try {
+        return operation();
+      } catch (error) {
+        events.restoreAccount(accountId, eventsBefore);
+        messages.restoreAccount(accountId, messagesBefore);
+        throw error;
+      }
+    },
+  },
   messages,
   events,
+  faults.beforeTerminalAppend,
+  faults.afterTerminalAppend,
 );

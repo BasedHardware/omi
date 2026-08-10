@@ -11,6 +11,8 @@ import { SqliteChatMessagesStore } from "./chat-messages-store";
 export interface SqliteChatGenerationFinalizationFaults {
   /** Crash-proof seam after canonical persistence and before terminal append. */
   readonly beforeTerminalAppend?: () => void;
+  /** Crash-proof seam after terminal append and before transaction commit. */
+  readonly afterTerminalAppend?: () => void;
 }
 
 export const createSqliteChatGenerationFinalization = (
@@ -21,8 +23,8 @@ export const createSqliteChatGenerationFinalization = (
   const messages = new SqliteChatMessagesStore(db);
   const events = new SqliteChatGenerationEventsStore(db);
   return defineChatGenerationFinalization({
-    execute<Result>(operation: () => Result): Result {
+    execute<Result>(_accountId: string, operation: () => Result): Result {
       return db.transaction(operation).immediate();
     },
-  }, messages, events, faults.beforeTerminalAppend);
+  }, messages, events, faults.beforeTerminalAppend, faults.afterTerminalAppend);
 };
