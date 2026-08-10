@@ -80,6 +80,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   late final OmiShellBridge _bridge;
   BridgeHttpHost? _http;
   ListenSocketHost? _listen;
+  ChatBridgeJavaScriptSink? _chatSink;
   ChatStreamHost? _chatStream;
   ChatAttachmentStagingHost? _chatStaging;
   Timer? _transcriptTimer;
@@ -160,7 +161,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
       _http = authority.makeHttpHost();
       _listen = authority.makeListenHost();
-      final sink = ChatBridgeJavaScriptSink((source) => _controller.runJavaScript(source));
+      final sink = ChatBridgeJavaScriptSink(
+        (source) => _controller.runJavaScript(source),
+        documentInitiallyActive: false,
+      );
+      _chatSink = sink;
       _chatStream = ChatStreamHost(
         baseUrl: authority.baseUrl,
         custody: authority.custody,
@@ -208,19 +213,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
           },
           onPageFinished: (url) {
             _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
-            if (const bool.fromEnvironment('AUTODRIVE')) {
-              unawaited(_autodrive());
-            } else {
-              if (_acceptance || _acceptanceExit) {
-                // Surface store refresh is asynchronous; page-finished alone is
-                // not evidence of bridge traffic. The marker above wins, while
-                // this bounded fallback keeps a hung surface fail-capable.
-                _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
-                  _acceptanceFallback = null;
-                  unawaited(_emitAcceptance('ready-timeout'));
-                });
-              }
-            }
+            unawaited(_finishPageLoad());
           },
           onWebResourceError: (e) {
             _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
@@ -229,6 +222,21 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       );
     _bridge = OmiShellBridge(_controller, this);
     _boot();
+  }
+
+  Future<void> _finishPageLoad() async {
+    await _chatSink?.activateDocument();
+    if (const bool.fromEnvironment('AUTODRIVE')) {
+      await _autodrive();
+    } else if (_acceptance || _acceptanceExit) {
+      // Surface store refresh is asynchronous; page-finished alone is not
+      // evidence of bridge traffic. The marker above wins, while this bounded
+      // fallback keeps a hung surface fail-capable.
+      _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
+        _acceptanceFallback = null;
+        unawaited(_emitAcceptance('ready-timeout'));
+      });
+    }
   }
 
   // Lifecycle probes for the suspension-resilience question: log every

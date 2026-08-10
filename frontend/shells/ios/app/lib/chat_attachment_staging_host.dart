@@ -13,6 +13,7 @@ import 'gen/bridge_http_contract.g.dart';
 
 const int _maxSafeInteger = 9007199254740991;
 const int _maxResponseBytes = 16 * 1024;
+const int maxChatAttachmentBytes = 50 * 1024 * 1024;
 final RegExp _safeOpaque = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$');
 final RegExp _safeMime = RegExp(
   r"^[!#\$%&'*+.^_`|~0-9A-Za-z-]+/[!#\$%&'*+.^_`|~0-9A-Za-z-]+$",
@@ -136,6 +137,7 @@ class ChatAttachmentStagingHost {
         id,
         ChatAttachmentStagingFailureReason.shellError,
         _documentEpoch,
+        sink.generation,
       );
       return;
     }
@@ -144,6 +146,7 @@ class ChatAttachmentStagingHost {
         id,
         ChatAttachmentStagingFailureReason.unavailable,
         _documentEpoch,
+        sink.generation,
       );
       return;
     }
@@ -152,6 +155,7 @@ class ChatAttachmentStagingHost {
         id,
         ChatAttachmentStagingFailureReason.unavailable,
         _documentEpoch,
+        sink.generation,
       );
       return;
     }
@@ -159,6 +163,7 @@ class ChatAttachmentStagingHost {
       host: this,
       id: id,
       epoch: _documentEpoch,
+      documentGeneration: sink.generation,
     );
     _operation = operation;
     unawaited(operation.start());
@@ -177,29 +182,32 @@ class ChatAttachmentStagingHost {
     String id,
     ChatAttachmentStagingFailureReason reason,
     int epoch,
+    int documentGeneration,
   ) async {
     if (_closed || epoch != _documentEpoch) return;
     await sink.stagingReply(id, <String, Object>{
       'ok': false,
       'id': id,
       'reason': reason.wire,
-    });
+    }, generation: documentGeneration);
   }
 
   Future<void> _replySuccess(
     String id,
     Map<String, Object> attachment,
     int epoch,
+    int documentGeneration,
   ) async {
     if (_closed || epoch != _documentEpoch) return;
     await sink.stagingReply(id, <String, Object>{
       'ok': true,
       'id': id,
       'attachment': attachment,
-    });
+    }, generation: documentGeneration);
   }
 
   Future<void> resetForNavigation() async {
+    sink.resetForNavigation();
     _documentEpoch += 1;
     final operation = _operation;
     _operation = null;
@@ -209,6 +217,7 @@ class ChatAttachmentStagingHost {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    sink.close();
     _documentEpoch += 1;
     final operation = _operation;
     _operation = null;
@@ -222,14 +231,14 @@ class _StagingOperation {
     required this.host,
     required this.id,
     required this.epoch,
+    required this.documentGeneration,
   });
 
   final ChatAttachmentStagingHost host;
   final String id;
   final int epoch;
+  final int documentGeneration;
   ChatNativeHttpRequest? _request;
-  StreamSubscription<List<int>>? _fileSubscription;
-  Completer<void>? _pump;
   bool _cancelled = false;
   bool _settled = false;
 
@@ -242,7 +251,7 @@ class _StagingOperation {
         return;
       }
       if (picked.sizeBytes <= 0 ||
-          picked.sizeBytes > _maxSafeInteger ||
+          picked.sizeBytes > maxChatAttachmentBytes ||
           !await picked.isRegularFile()) {
         await _fail(ChatAttachmentStagingFailureReason.shellError);
         return;
@@ -259,8 +268,7 @@ class _StagingOperation {
       }
       final prefix = utf8.encode(
         '--$boundary\r\n'
-        'Content-Disposition: form-data; name="file"; filename="upload"\r\n'
-        'Content-Type: application/octet-stream\r\n\r\n',
+        'Content-Disposition: form-data; name="file"; filename="upload"\r\n\r\n',
       );
       final suffix = utf8.encode('\r\n--$boundary--\r\n');
       final request = await host._httpClient.openUrl(
@@ -290,7 +298,7 @@ class _StagingOperation {
         );
       }
       request.add(prefix);
-      await _pumpFile(picked, request);
+      await request.addStream(_validatedFileBytes(picked));
       if (!host._isCurrent(this) || _cancelled) return;
       request.add(suffix);
       final response = await request.close().timeout(
@@ -305,6 +313,11 @@ class _StagingOperation {
         await _fail(ChatAttachmentStagingFailureReason.shellError);
         return;
       }
+      if (!responseHasMediaType(response.contentType, 'application/json')) {
+        await response.bytes.listen(null).cancel();
+        await _fail(ChatAttachmentStagingFailureReason.shellError);
+        return;
+      }
       final body = await _readBounded(response.bytes);
       final descriptor = _parseDescriptor(body, picked.sizeBytes);
       if (descriptor == null) {
@@ -313,7 +326,7 @@ class _StagingOperation {
       }
       _settled = true;
       host._retire(this);
-      await host._replySuccess(id, descriptor, epoch);
+      await host._replySuccess(id, descriptor, epoch, documentGeneration);
     } on TimeoutException {
       await _fail(ChatAttachmentStagingFailureReason.shellError);
     } on FileSystemException {
@@ -327,48 +340,21 @@ class _StagingOperation {
     }
   }
 
-  Future<void> _pumpFile(
-    PickedChatAttachment picked,
-    ChatNativeHttpRequest request,
-  ) async {
-    final pump = Completer<void>();
-    _pump = pump;
+  Stream<List<int>> _validatedFileBytes(PickedChatAttachment picked) async* {
     var byteCount = 0;
-    late final StreamSubscription<List<int>> subscription;
-    subscription = picked.openRead().listen(
-      (chunk) {
-        byteCount += chunk.length;
-        if (byteCount > picked.sizeBytes) {
-          if (!pump.isCompleted) {
-            pump.completeError(
-              const FileSystemException('file grew during upload'),
-            );
-          }
-          unawaited(subscription.cancel());
-          return;
-        }
-        request.add(chunk);
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!pump.isCompleted) pump.completeError(error, stack);
-      },
-      onDone: () {
-        if (pump.isCompleted) return;
-        if (byteCount != picked.sizeBytes) {
-          pump.completeError(
-            const FileSystemException('file size changed during upload'),
-          );
-        } else {
-          pump.complete();
-        }
-      },
-      cancelOnError: true,
-    );
-    _fileSubscription = subscription;
-    await pump.future;
-    await subscription.cancel();
-    _fileSubscription = null;
-    _pump = null;
+    await for (final chunk in picked.openRead()) {
+      if (_cancelled || !host._isCurrent(this)) {
+        throw const FileSystemException('upload cancelled');
+      }
+      byteCount += chunk.length;
+      if (byteCount > picked.sizeBytes) {
+        throw const FileSystemException('file grew during upload');
+      }
+      yield chunk;
+    }
+    if (byteCount != picked.sizeBytes) {
+      throw const FileSystemException('file size changed during upload');
+    }
   }
 
   Future<String> _readBounded(Stream<List<int>> source) async {
@@ -446,18 +432,12 @@ class _StagingOperation {
     _settled = true;
     host._retire(this);
     _request?.abort();
-    await _fileSubscription?.cancel();
-    await host._replyFailure(id, reason, epoch);
+    await host._replyFailure(id, reason, epoch, documentGeneration);
   }
 
   Future<void> cancel() async {
     if (_cancelled) return;
     _cancelled = true;
     _request?.abort();
-    await _fileSubscription?.cancel();
-    final pump = _pump;
-    if (pump != null && !pump.isCompleted) {
-      pump.completeError(const FileSystemException('upload cancelled'));
-    }
   }
 }

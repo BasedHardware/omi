@@ -36,6 +36,7 @@ void main() {
         ..responses.add(
           FakeChatNativeHttpResponse(
             statusCode: 200,
+            contentType: 'Text/Event-Stream; Charset=UTF-8',
             bytes: responseBytes.stream,
           ),
         );
@@ -116,6 +117,7 @@ void main() {
         ..responses.add(
           FakeChatNativeHttpResponse(
             statusCode: 200,
+            contentType: 'text/event-stream',
             bytes: responseBytes.stream,
           ),
         );
@@ -198,11 +200,16 @@ void main() {
       final secondBytes = StreamController<List<int>>();
       final client = FakeChatNativeHttpClient()
         ..responses.add(
-          FakeChatNativeHttpResponse(statusCode: 200, bytes: firstBytes.stream),
+          FakeChatNativeHttpResponse(
+            statusCode: 200,
+            contentType: 'text/event-stream',
+            bytes: firstBytes.stream,
+          ),
         )
         ..responses.add(
           FakeChatNativeHttpResponse(
             statusCode: 200,
+            contentType: 'text/event-stream',
             bytes: secondBytes.stream,
           ),
         );
@@ -307,6 +314,127 @@ void main() {
     },
   );
 
+  test('sign-out near misses retain authority for a new Chat open', () async {
+    final custody = ShellCredentialCustody('token');
+    custody.observeResponse(
+      method: 'DELETE',
+      path: '/v1/session/current',
+      status: 503,
+    );
+    final responseBytes = StreamController<List<int>>();
+    final client = FakeChatNativeHttpClient()
+      ..responses.add(
+        FakeChatNativeHttpResponse(
+          statusCode: 200,
+          contentType: 'text/event-stream',
+          bytes: responseBytes.stream,
+        ),
+      );
+    final scripts = <String>[];
+    final host = makeHost(client, scripts, custody);
+    await host.handleMessage(
+      frame(<String, Object>{
+        't': 'open',
+        'id': 's-near-miss',
+        'channel': 'chat-generation-events',
+        'params': '{"generationId":"generation-near-miss"}',
+        'credit': 1,
+      }),
+    );
+    await waitFor(() => client.requests.length == 1);
+    expect(client.requests.single.headers['authorization'], 'Bearer token');
+    await host.close();
+    await responseBytes.close();
+  });
+
+  test(
+    'an already opened Chat lease may finish after exact sign-out',
+    () async {
+      final custody = ShellCredentialCustody('token');
+      final responseBytes = StreamController<List<int>>();
+      final client = FakeChatNativeHttpClient()
+        ..responses.add(
+          FakeChatNativeHttpResponse(
+            statusCode: 200,
+            contentType: 'text/event-stream',
+            bytes: responseBytes.stream,
+          ),
+        );
+      final scripts = <String>[];
+      final host = makeHost(client, scripts, custody);
+      await host.handleMessage(
+        frame(<String, Object>{
+          't': 'open',
+          'id': 's-leased',
+          'channel': 'chat-generation-events',
+          'params': '{"generationId":"generation-leased"}',
+          'credit': 2,
+        }),
+      );
+      await waitFor(() => client.requests.length == 1);
+      custody.observeResponse(
+        method: 'DELETE',
+        path: '/v1/session/current',
+        status: 204,
+      );
+      responseBytes.add(utf8.encode('leased-data'));
+      await responseBytes.close();
+      await waitFor(
+        () => scripts
+            .map(parseSingleArgumentFrame)
+            .any((frame) => frame['t'] == 'end'),
+      );
+      expect(scripts.join(), contains('leased-data'));
+
+      await host.handleMessage(
+        frame(<String, Object>{
+          't': 'open',
+          'id': 's-after-signout',
+          'channel': 'chat-generation-events',
+          'params': '{"generationId":"generation-after"}',
+          'credit': 1,
+        }),
+      );
+      expect(client.requests, hasLength(1));
+      expect(scripts.join(), contains('not-authenticated'));
+      await host.close();
+    },
+  );
+
+  test(
+    'generation stream refuses missing or wrong response media type',
+    () async {
+      for (final contentType in <String?>[null, 'application/json']) {
+        final marker = 'body-must-not-reach-js';
+        final client = FakeChatNativeHttpClient()
+          ..responses.add(
+            FakeChatNativeHttpResponse(
+              statusCode: 200,
+              contentType: contentType,
+              bytes: Stream<List<int>>.value(utf8.encode(marker)),
+            ),
+          );
+        final scripts = <String>[];
+        final host = makeHost(client, scripts, ShellCredentialCustody('token'));
+        await host.handleMessage(
+          frame(<String, Object>{
+            't': 'open',
+            'id': 's-mime-${contentType ?? 'missing'}',
+            'channel': 'chat-generation-events',
+            'params': '{"generationId":"generation-mime"}',
+            'credit': 1,
+          }),
+        );
+        await waitFor(() => scripts.isNotEmpty, reason: 'MIME failure');
+        final reply = parseSingleArgumentFrame(scripts.single);
+        expect(reply['t'], 'error');
+        expect(reply['failure'], 'transport-error');
+        expect(scripts.join(), isNot(contains(marker)));
+        await host.close();
+      }
+    },
+  );
+
   test(
     'navigation aborts observation and drops buffered response callbacks',
     () async {
@@ -315,6 +443,7 @@ void main() {
         ..responses.add(
           FakeChatNativeHttpResponse(
             statusCode: 200,
+            contentType: 'text/event-stream',
             bytes: responseBytes.stream,
           ),
         );

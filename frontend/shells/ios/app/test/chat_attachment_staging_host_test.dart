@@ -90,6 +90,7 @@ void main() {
       );
       final response = FakeChatNativeHttpResponse(
         statusCode: 201,
+        contentType: 'application/json; charset=utf-8',
         bytes: Stream<List<int>>.value(utf8.encode(p7Response(size: fileSize))),
       );
       final client = FakeChatNativeHttpClient()..responses.add(response);
@@ -130,6 +131,7 @@ void main() {
       );
       expect(request.prefixText, isNot(contains('displayName')));
       expect(request.prefixText, isNot(contains('.pdf')));
+      expect(request.prefixText, isNot(contains('Content-Type:')));
       expect(scripts.join(), isNot(contains('native-upload-secret')));
       expect(scripts.join(), isNot(contains('service.example.test')));
       await host.close();
@@ -228,6 +230,7 @@ void main() {
           ..responses.add(
             FakeChatNativeHttpResponse(
               statusCode: item.status,
+              contentType: 'application/json',
               isRedirect: item.redirect,
               bytes: Stream<List<int>>.value(utf8.encode(raw)),
             ),
@@ -287,6 +290,88 @@ void main() {
     },
   );
 
+  test('sign-out near misses retain authority for a new upload', () async {
+    final custody = ShellCredentialCustody('token');
+    custody.observeResponse(
+      method: 'DELETE',
+      path: '/v1/session/other',
+      status: 204,
+    );
+    final client = FakeChatNativeHttpClient()
+      ..responses.add(
+        FakeChatNativeHttpResponse(
+          statusCode: 201,
+          contentType: 'application/json',
+          bytes: Stream<List<int>>.value(utf8.encode(p7Response())),
+        ),
+      );
+    final scripts = <String>[];
+    final host = makeHost(
+      client: client,
+      picker: FakeChatAttachmentPicker(
+        FakePickedChatAttachment(
+          sizeBytes: 3,
+          stream: Stream<List<int>>.value(<int>[1, 2, 3]),
+        ),
+      ),
+      scripts: scripts,
+      custody: custody,
+    );
+    final reply = await stageAndReply(host, scripts);
+    expect(reply['ok'], isTrue);
+    expect(client.requests.single.headers['authorization'], 'Bearer token');
+    await host.close();
+  });
+
+  test(
+    'an already opened upload lease may finish after exact sign-out',
+    () async {
+      final custody = ShellCredentialCustody('token');
+      final client = FakeChatNativeHttpClient()
+        ..demandGatedRequests = true
+        ..responses.add(
+          FakeChatNativeHttpResponse(
+            statusCode: 201,
+            contentType: 'application/json',
+            bytes: Stream<List<int>>.value(utf8.encode(p7Response(size: 2))),
+          ),
+        );
+      final scripts = <String>[];
+      final host = makeHost(
+        client: client,
+        picker: FakeChatAttachmentPicker(
+          FakePickedChatAttachment(
+            sizeBytes: 2,
+            stream: Stream<List<int>>.fromIterable(<List<int>>[
+              <int>[1],
+              <int>[2],
+            ]),
+          ),
+        ),
+        scripts: scripts,
+        custody: custody,
+      );
+      await host.handleMessage('{"t":"pick-and-stage","id":"a-leased"}');
+      await waitFor(() => client.requests.singleOrNull?.streamedChunks == 1);
+      custody.observeResponse(
+        method: 'DELETE',
+        path: '/v1/session/current',
+        status: 204,
+      );
+      client.requests.single.releaseDemand();
+      await waitFor(() => client.requests.single.streamedChunks == 2);
+      client.requests.single.releaseDemand();
+      await waitFor(() => scripts.isNotEmpty, reason: 'leased upload reply');
+      expect(parseStagingReply(scripts.single)['ok'], isTrue);
+
+      await host.handleMessage('{"t":"pick-and-stage","id":"a-after"}');
+      await waitFor(() => scripts.length == 2);
+      expect(parseStagingReply(scripts.last)['reason'], 'unavailable');
+      expect(client.requests, hasLength(1));
+      await host.close();
+    },
+  );
+
   test(
     'navigation cancels the request and file stream and drops every late callback',
     () async {
@@ -299,6 +384,7 @@ void main() {
         ..responses.add(
           FakeChatNativeHttpResponse(
             statusCode: 201,
+            contentType: 'application/json',
             bytes: Stream<List<int>>.value(utf8.encode(p7Response())),
           ),
         );
@@ -323,4 +409,185 @@ void main() {
       await host.close();
     },
   );
+
+  test(
+    'multipart omits per-part MIME for PDF PNG and text byte signatures',
+    () async {
+      // red-proof: restore the application/octet-stream part header; every case
+      // fails before the platform-compatible body can be accepted.
+      final bodies = <List<int>>[
+        utf8.encode('%PDF-1.7\n'),
+        <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        utf8.encode('plain text\n'),
+      ];
+      for (final body in bodies) {
+        final client = FakeChatNativeHttpClient()
+          ..responses.add(
+            FakeChatNativeHttpResponse(
+              statusCode: 201,
+              contentType: 'Application/JSON; Charset=UTF-8',
+              bytes: Stream<List<int>>.value(
+                utf8.encode(p7Response(size: body.length)),
+              ),
+            ),
+          );
+        final scripts = <String>[];
+        final host = makeHost(
+          client: client,
+          picker: FakeChatAttachmentPicker(
+            FakePickedChatAttachment(
+              sizeBytes: body.length,
+              stream: Stream<List<int>>.value(body),
+            ),
+          ),
+          scripts: scripts,
+          custody: ShellCredentialCustody('token'),
+        );
+        final reply = await stageAndReply(host, scripts);
+        expect(reply['ok'], isTrue);
+        final request = client.requests.single;
+        expect(request.prefixText, contains('name="file"; filename="upload"'));
+        expect(request.prefixText, isNot(contains('Content-Type:')));
+        expect(request.declaredContentLength, request.bodyByteCount);
+        await host.close();
+      }
+    },
+  );
+
+  test(
+    'addStream demand gates file production and cancellation interrupts it',
+    () async {
+      // red-proof: replace awaited request.addStream with synchronous add;
+      // produced races to 3 while transport demand is held at one.
+      var produced = 0;
+      Stream<List<int>> source() async* {
+        for (var value = 1; value <= 3; value += 1) {
+          produced += 1;
+          yield <int>[value];
+        }
+      }
+
+      final client = FakeChatNativeHttpClient()
+        ..demandGatedRequests = true
+        ..responses.add(
+          FakeChatNativeHttpResponse(
+            statusCode: 201,
+            contentType: 'application/json',
+            bytes: Stream<List<int>>.value(utf8.encode(p7Response())),
+          ),
+        );
+      final scripts = <String>[];
+      final host = makeHost(
+        client: client,
+        picker: FakeChatAttachmentPicker(
+          FakePickedChatAttachment(sizeBytes: 3, stream: source()),
+        ),
+        scripts: scripts,
+        custody: ShellCredentialCustody('token'),
+      );
+      await host.handleMessage('{"t":"pick-and-stage","id":"a-demand"}');
+      await waitFor(
+        () => client.requests.singleOrNull?.streamedChunks == 1,
+        reason: 'first demanded file chunk',
+      );
+      expect(produced, 1);
+      client.requests.single.releaseDemand();
+      await waitFor(
+        () => client.requests.single.streamedChunks == 2,
+        reason: 'second demanded file chunk',
+      );
+      expect(produced, 2);
+      await host.resetForNavigation();
+      expect(client.requests.single.aborted, isTrue);
+      client.requests.single.releaseDemand();
+      await Future<void>.delayed(Duration.zero);
+      expect(produced, 2);
+      expect(scripts, isEmpty);
+      await host.close();
+    },
+  );
+
+  test(
+    'file shrink and growth are rejected by the streamed byte counter',
+    () async {
+      for (final item in <({int declared, List<int> body})>[
+        (declared: 3, body: <int>[1, 2]),
+        (declared: 3, body: <int>[1, 2, 3, 4]),
+      ]) {
+        final client = FakeChatNativeHttpClient()
+          ..responses.add(
+            FakeChatNativeHttpResponse(
+              statusCode: 201,
+              contentType: 'application/json',
+            ),
+          );
+        final scripts = <String>[];
+        final host = makeHost(
+          client: client,
+          picker: FakeChatAttachmentPicker(
+            FakePickedChatAttachment(
+              sizeBytes: item.declared,
+              stream: Stream<List<int>>.value(item.body),
+            ),
+          ),
+          scripts: scripts,
+          custody: ShellCredentialCustody('token'),
+        );
+        final reply = await stageAndReply(host, scripts);
+        expect(reply['reason'], 'shell-error');
+        expect(client.requests.single.aborted, isTrue);
+        await host.close();
+      }
+    },
+  );
+
+  test('50 MiB plus one is refused before openUrl', () async {
+    final picked = FakePickedChatAttachment(
+      sizeBytes: maxChatAttachmentBytes + 1,
+      stream: const Stream<List<int>>.empty(),
+    );
+    final client = FakeChatNativeHttpClient();
+    final scripts = <String>[];
+    final host = makeHost(
+      client: client,
+      picker: FakeChatAttachmentPicker(picked),
+      scripts: scripts,
+      custody: ShellCredentialCustody('token'),
+    );
+    final reply = await stageAndReply(host, scripts);
+    expect(reply['reason'], 'shell-error');
+    expect(client.requests, isEmpty);
+    expect(picked.openReadCalls, 0);
+    await host.close();
+  });
+
+  test('staging refuses a missing or wrong response media type', () async {
+    for (final contentType in <String?>[null, 'text/plain']) {
+      final marker = 'server-body-must-not-cross';
+      final client = FakeChatNativeHttpClient()
+        ..responses.add(
+          FakeChatNativeHttpResponse(
+            statusCode: 201,
+            contentType: contentType,
+            bytes: Stream<List<int>>.value(utf8.encode(marker)),
+          ),
+        );
+      final scripts = <String>[];
+      final host = makeHost(
+        client: client,
+        picker: FakeChatAttachmentPicker(
+          FakePickedChatAttachment(
+            sizeBytes: 3,
+            stream: Stream<List<int>>.value(<int>[1, 2, 3]),
+          ),
+        ),
+        scripts: scripts,
+        custody: ShellCredentialCustody('token'),
+      );
+      final reply = await stageAndReply(host, scripts);
+      expect(reply['reason'], 'shell-error');
+      expect(scripts.join(), isNot(contains(marker)));
+      await host.close();
+    }
+  });
 }
