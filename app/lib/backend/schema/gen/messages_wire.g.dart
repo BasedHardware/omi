@@ -204,7 +204,6 @@ class GeneratedMessage {
   final List<String> memoriesId;
   final String? messageSource;
   final String? metadata;
-  final String? pluginId;
   final String? promptCommit;
   final String? promptName;
   final int? rating;
@@ -233,7 +232,6 @@ class GeneratedMessage {
     this.memoriesId = const [],
     this.messageSource,
     this.metadata,
-    this.pluginId,
     this.promptCommit,
     this.promptName,
     this.rating,
@@ -264,7 +262,6 @@ class GeneratedMessage {
       memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
       messageSource: _readFieldValue<String>(_readField(json, const ["message_source"]), "message_source", _readString, requiredField: false, nullable: true),
       metadata: _readFieldValue<String>(_readField(json, const ["metadata"]), "metadata", _readString, requiredField: false, nullable: true),
-      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
       promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
       promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
       rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
@@ -296,7 +293,6 @@ class GeneratedMessage {
       'memories_id': memoriesId,
       'message_source': messageSource,
       'metadata': metadata,
-      'plugin_id': pluginId,
       'prompt_commit': promptCommit,
       'prompt_name': promptName,
       'rating': rating,
@@ -329,7 +325,6 @@ class GeneratedResponseMessage {
   final List<String> memoriesId;
   final String? messageSource;
   final String? metadata;
-  final String? pluginId;
   final String? promptCommit;
   final String? promptName;
   final int? rating;
@@ -359,7 +354,6 @@ class GeneratedResponseMessage {
     this.memoriesId = const [],
     this.messageSource,
     this.metadata,
-    this.pluginId,
     this.promptCommit,
     this.promptName,
     this.rating,
@@ -391,7 +385,6 @@ class GeneratedResponseMessage {
       memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
       messageSource: _readFieldValue<String>(_readField(json, const ["message_source"]), "message_source", _readString, requiredField: false, nullable: true),
       metadata: _readFieldValue<String>(_readField(json, const ["metadata"]), "metadata", _readString, requiredField: false, nullable: true),
-      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
       promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
       promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
       rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
@@ -424,7 +417,6 @@ class GeneratedResponseMessage {
       'memories_id': memoriesId,
       'message_source': messageSource,
       'metadata': metadata,
-      'plugin_id': pluginId,
       'prompt_commit': promptCommit,
       'prompt_name': promptName,
       'rating': rating,
