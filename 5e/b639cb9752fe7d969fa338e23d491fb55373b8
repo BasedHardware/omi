@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
+  s_8815d69cdccdc7::t_92041fadff85ba 4-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5eb639cb9752fe7d969fa338e23d491fb55373b8",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
