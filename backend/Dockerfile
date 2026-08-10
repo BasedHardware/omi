@@ -67,8 +67,9 @@ COPY .github/scripts/desktop_qualification_admission.py /app/desktop_qualificati
 COPY .github/scripts/desktop_qualification_evidence.py /app/desktop_qualification_evidence_contract.py
 COPY backend/ .
 
-# Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. The chat token-budget
-# step (utils/retrieval/safety.py) loads cl100k_base / o200k_base; without a baked cache tiktoken
+# Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. Production loads
+# cl100k_base (utils/llm/clients.py encoding_for_model('gpt-4')) and o200k_base
+# (utils/llm/conversation_processing.py get_encoding('o200k_base')); without a baked cache tiktoken
 # fetches them from openaipublic.blob.core.windows.net on first use, which fails on the no-egress
 # on-prem network (build-time egress is allowed, like the helm/model pre-fetches). TIKTOKEN_CACHE_DIR
 # points the runtime at the baked cache. (D32 — on-prem chat.)
