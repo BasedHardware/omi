@@ -20,9 +20,17 @@
 }
 
 .settings-header p,
-.settings-empty-copy {
+.settings-empty-copy,
+.settings-state-copy,
+.settings-local-note {
   margin: var(--space-xs) 0;
   color: var(--content-secondary);
+}
+
+.settings-state-title {
+  margin: 0;
+  color: var(--content-primary);
+  font-weight: 600;
 }
 
 .settings-eyebrow {
@@ -73,6 +81,20 @@
   gap: var(--space-sm);
 }
 
+.settings-account-panel.is-signed-out,
+.settings-account-panel.is-loading,
+.settings-plan-absent {
+  color: var(--content-secondary);
+}
+
+.settings-account-panel.is-unavailable {
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
 .settings-signed-in {
   margin: 0;
   color: var(--content-primary);
@@ -96,6 +118,7 @@
 .settings-sign-out,
 .settings-sign-in,
 .settings-upgrade,
+.settings-retry,
 .settings-appearance-control select {
   min-height: var(--min-tap-target);
   padding: var(--space-sm) var(--space-md);
@@ -107,13 +130,22 @@
 }
 
 .settings-sign-out,
-.settings-upgrade {
+.settings-upgrade,
+.settings-retry {
   width: fit-content;
 }
 
-.settings-sign-in:disabled {
+.settings-sign-in:disabled,
+.settings-sign-out:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.settings-appearance-section .settings-local-note {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
 }
 
 .settings-appearance-control {
@@ -134,6 +166,10 @@
   border: 1px solid var(--warning);
   border-radius: var(--radius-control);
   background: var(--surface-elevated);
+}
+
+.settings-limit-notice.is-reached-no-upgrade {
+  border-color: var(--border);
 }
 
 .settings-limit-title {
@@ -159,6 +195,7 @@ html[data-platform="mobile"] .settings-section {
 html[data-platform="mobile"] .settings-sign-out,
 html[data-platform="mobile"] .settings-sign-in,
 html[data-platform="mobile"] .settings-upgrade,
+html[data-platform="mobile"] .settings-retry,
 html[data-platform="mobile"] .settings-appearance-control select {
   width: 100%;
 }
