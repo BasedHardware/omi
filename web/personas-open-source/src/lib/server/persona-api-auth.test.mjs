@@ -22,7 +22,10 @@ test('assertPersonaUidMatch rejects uid mismatch', () => {
 });
 
 test('assertPersonaUidMatch rejects missing requested uid', () => {
-  assert.throws(() => assertPersonaUidMatch({ uid: 'user-1' }, ''), PersonaAuthenticationError);
+  assert.throws(
+    () => assertPersonaUidMatch({ uid: 'user-1' }, ''),
+    PersonaAuthenticationError,
+  );
   assert.throws(
     () => assertPersonaUidMatch({ uid: 'user-1' }, undefined),
     PersonaAuthenticationError,
