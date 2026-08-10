@@ -247,3 +247,8 @@ builds-snapshot.md
 .hermes/
 backend/.venv
 backend/.harness/
+
+# Swarm run records live in the workspace repo, never here. A lane agent
+# published two of them to this public remote after a brief named a path that
+# only exists one level up; this makes the next occurrence a no-op.
+/data/
