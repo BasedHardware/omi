@@ -17,5 +17,5 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "files": ["contract-tests/unit-of-work-context.ts"]
+  "files": ["unit-of-work-context.ts"]
 }

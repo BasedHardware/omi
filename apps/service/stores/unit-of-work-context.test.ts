@@ -46,7 +46,7 @@ test("unit-of-work adapters share one compile-time connection context", () => {
     cmd: [
       `${root}/node_modules/.bin/tsc`,
       "-p",
-      `${root}/tsconfig.unit-of-work.json`,
+      `${root}/apps/service/stores/type-tests/tsconfig.json`,
       "--noEmit",
     ],
     cwd: root,

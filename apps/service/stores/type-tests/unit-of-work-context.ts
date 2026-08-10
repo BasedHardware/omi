@@ -2,16 +2,16 @@ import {
   defineFolderDeletionUnitOfWork,
   type FolderDeletionOperations,
   type FolderDeletionTransaction,
-} from "../apps/service/stores/folder-deletion-unit-of-work.ts";
+} from "../folder-deletion-unit-of-work.ts";
 import {
   defineWriteUnitOfWork,
   type WriteUnitOfWorkOperations,
   type WriteUnitOfWorkTransaction,
-} from "../apps/service/stores/write-unit-of-work.ts";
+} from "../write-unit-of-work.ts";
 import {
   createUnitOfWorkContext,
   type UnitOfWorkContext,
-} from "../apps/service/stores/unit-of-work-context.ts";
+} from "../unit-of-work-context.ts";
 
 declare const FIRST_CONNECTION: unique symbol;
 declare const SECOND_CONNECTION: unique symbol;
