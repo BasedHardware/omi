@@ -68,7 +68,7 @@ jobs:
 
       - name: Set immutable image tag
         id: image
-        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "tag=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Docker image
         run: |
