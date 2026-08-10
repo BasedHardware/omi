@@ -148,11 +148,16 @@ def main():
     # uid at a time on a single thread we fan the lookups out with bounded concurrency, mirroring
     # the usage-calculation step above.
     def _resolve_email(uid: str) -> tuple[str, str]:
+        # NOTE: the neutral auth port's get_user_from_uid fails closed — it swallows provider errors
+        # and returns None (logging them at ERROR), the same as a genuinely-absent user. So the batch
+        # path's old 'Not Found' vs 'Error fetching email' distinction cannot be recovered here: a None
+        # is reported as 'Not Found' and any transient lookup error is visible only in the auth logs.
+        # The outer except stays for a provider that does raise; it is not the common failure path.
         try:
             user = auth_db.get_user_from_uid(uid)
             if user:
                 return uid, (user.get('email') or 'N/A')
-            logger.warning(f"Warning: User with UID {uid} not found in the auth provider.")
+            logger.warning(f"Warning: User with UID {uid} not found (or auth lookup failed) for uid {uid}.")
             return uid, 'Not Found'
         except Exception as e:
             logger.error(f"Error fetching user {uid}: {e}")
