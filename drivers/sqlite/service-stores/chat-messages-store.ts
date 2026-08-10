@@ -10,6 +10,7 @@ import type { Database } from "bun:sqlite";
 import {
   compareChatHistoryKeys,
   detachChatMessage,
+  hasWritableChatMessageVocabulary,
   type CanonicalChatMessageWriteOutcome,
   type ChatAttachmentMetadata,
   type ChatHistoryQuery,
@@ -17,8 +18,6 @@ import {
   type ChatMessageAdmissionOutcome,
   type ChatMessageRecord,
   type ChatMessagesStore,
-  type ChatMessageSender,
-  type ChatMessageType,
   type StoredChatMessage,
 } from "../../../apps/service/stores/chat-messages-store";
 import { configureServiceStoreConnection } from "./connection";
@@ -26,8 +25,8 @@ import { configureServiceStoreConnection } from "./connection";
 interface StoredRow {
   readonly id: string;
   readonly text: string;
-  readonly sender: ChatMessageSender;
-  readonly message_type: ChatMessageType;
+  readonly sender: string;
+  readonly message_type: string;
   readonly created_at: number;
   readonly updated_at: number;
   readonly chat_session_id: string | null;
@@ -81,18 +80,52 @@ const storedFromRow = (row: StoredRow): StoredChatMessage => Object.freeze({
 const attachmentsJson = (message: ChatMessageRecord): string | null =>
   message.attachments === undefined ? null : JSON.stringify(message.attachments);
 
-/** SQLite adapter for canonical Chat records and insertion-snapshot history. */
-export class SqliteChatMessagesStore implements ChatMessagesStore {
-  constructor(private readonly db: Database) {
-    configureServiceStoreConnection(db);
+const CREATE_CHAT_MESSAGES_TABLE = `
+  CREATE TABLE IF NOT EXISTS service_chat_messages (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    message_type TEXT NOT NULL,
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+    chat_session_id TEXT,
+    app_id TEXT,
+    journal_revision INTEGER NOT NULL CHECK (journal_revision >= 0),
+    payload_hash TEXT NOT NULL,
+    message_source TEXT NOT NULL,
+    rating REAL,
+    reported INTEGER NOT NULL CHECK (reported IN (0, 1)),
+    server_revision TEXT,
+    attachments_json TEXT,
+    generation_id TEXT,
+    UNIQUE (account_id, id)
+  );
+`;
+
+const CREATE_CHAT_MESSAGES_HISTORY_INDEX = `
+  CREATE INDEX IF NOT EXISTS service_chat_messages_history
+    ON service_chat_messages (
+      account_id, app_id, chat_session_id, created_at DESC, id DESC, sequence
+    );
+`;
+
+const migrateClosedVocabularyConstraints = (db: Database): void => {
+  const row = db.query(`
+    SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'service_chat_messages'
+  `).get() as { readonly sql: string } | null;
+  if (row === null || !/CHECK\s*\(\s*(?:sender|message_type)\s+IN\s*\(/i.test(row.sql)) return;
+  const migrate = db.transaction(() => {
     db.exec(`
-      CREATE TABLE IF NOT EXISTS service_chat_messages (
+      DROP INDEX IF EXISTS service_chat_messages_history;
+      CREATE TABLE service_chat_messages_open_vocabulary (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         account_id TEXT NOT NULL,
         id TEXT NOT NULL,
         text TEXT NOT NULL,
-        sender TEXT NOT NULL CHECK (sender IN ('human', 'ai', 'unknown')),
-        message_type TEXT NOT NULL CHECK (message_type IN ('text', 'day_summary', 'unknown')),
+        sender TEXT NOT NULL,
+        message_type TEXT NOT NULL,
         created_at INTEGER NOT NULL CHECK (created_at >= 0),
         updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
         chat_session_id TEXT,
@@ -107,11 +140,30 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
         generation_id TEXT,
         UNIQUE (account_id, id)
       );
-      CREATE INDEX IF NOT EXISTS service_chat_messages_history
-        ON service_chat_messages (
-          account_id, app_id, chat_session_id, created_at DESC, id DESC, sequence
-        );
+      INSERT INTO service_chat_messages_open_vocabulary (
+        sequence, account_id, id, text, sender, message_type, created_at, updated_at,
+        chat_session_id, app_id, journal_revision, payload_hash, message_source,
+        rating, reported, server_revision, attachments_json, generation_id
+      ) SELECT
+        sequence, account_id, id, text, sender, message_type, created_at, updated_at,
+        chat_session_id, app_id, journal_revision, payload_hash, message_source,
+        rating, reported, server_revision, attachments_json, generation_id
+      FROM service_chat_messages;
+      DROP TABLE service_chat_messages;
+      ALTER TABLE service_chat_messages_open_vocabulary RENAME TO service_chat_messages;
+      ${CREATE_CHAT_MESSAGES_HISTORY_INDEX}
     `);
+  });
+  migrate.immediate();
+};
+
+/** SQLite adapter for canonical Chat records and insertion-snapshot history. */
+export class SqliteChatMessagesStore implements ChatMessagesStore {
+  constructor(private readonly db: Database) {
+    configureServiceStoreConnection(db);
+    db.exec(CREATE_CHAT_MESSAGES_TABLE);
+    migrateClosedVocabularyConstraints(db);
+    db.exec(CREATE_CHAT_MESSAGES_HISTORY_INDEX);
   }
 
   readMessage(accountId: string, messageId: string): StoredChatMessage | null {
@@ -216,7 +268,7 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
     generationId: string | null,
   ): CanonicalChatMessageWriteOutcome {
     const detached = detachChatMessage(message);
-    if (detached.sender === "unknown" || detached.type === "unknown") {
+    if (!hasWritableChatMessageVocabulary(detached)) {
       return { kind: "invalid_vocabulary" };
     }
     const inserted = this.db.query(`

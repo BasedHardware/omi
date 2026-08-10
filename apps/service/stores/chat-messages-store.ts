@@ -5,10 +5,11 @@
 // domain-pending(DIV-CHAT-HASH-001)
 // domain-pending(DIV-CHAT-SOURCE-001)
 
-export type ChatMessageSender = "human" | "ai" | "unknown";
-export type ChatMessageType = "text" | "day_summary" | "unknown";
-export type WritableChatMessageSender = Exclude<ChatMessageSender, "unknown">;
-export type WritableChatMessageType = Exclude<ChatMessageType, "unknown">;
+/** Read vocabulary is open so future durable spellings remain losslessly readable. */
+export type ChatMessageSender = string;
+export type ChatMessageType = string;
+export type WritableChatMessageSender = "human" | "ai";
+export type WritableChatMessageType = "text" | "day_summary";
 
 /** Metadata survives admission even while attachment content support is disabled. */
 export interface ChatAttachmentMetadata {
@@ -133,8 +134,8 @@ const detachAttachments = (
 export const detachChatMessage = (message: ChatMessageRecord): ChatMessageRecord => {
   if (typeof message.id !== "string" || message.id.length === 0
     || typeof message.text !== "string"
-    || !["human", "ai", "unknown"].includes(message.sender)
-    || !["text", "day_summary", "unknown"].includes(message.type)
+    || typeof message.sender !== "string" || message.sender.length === 0
+    || typeof message.type !== "string" || message.type.length === 0
     || !isNonNegativeSafeInteger(message.createdAt)
     || !isNonNegativeSafeInteger(message.updatedAt)
     || !(message.chatSessionId === null || typeof message.chatSessionId === "string")
@@ -177,14 +178,15 @@ export const compareChatHistoryKeys = (left: ChatHistoryKey, right: ChatHistoryK
     : left.createdAt > right.createdAt ? 1
       : left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 
-const isWritableVocabulary = (message: ChatMessageRecord): boolean =>
-  message.sender !== "unknown" && message.type !== "unknown";
+export const hasWritableChatMessageVocabulary = (message: ChatMessageRecord): boolean =>
+  (message.sender === "human" || message.sender === "ai")
+  && (message.type === "text" || message.type === "day_summary");
 
 interface InMemoryRow extends StoredChatMessage {
   readonly sequence: number;
 }
 
-/** Process-local adapter. Restored rows deliberately accept the read-tolerance sentinels. */
+/** Process-local adapter. Restored rows deliberately accept open read vocabulary. */
 export const createInMemoryChatMessagesStore = (
   restored: readonly RestoredChatMessage[] = [],
 ): InMemoryChatMessagesStore => {
@@ -214,7 +216,7 @@ export const createInMemoryChatMessagesStore = (
     generationId: string | null,
   ): CanonicalChatMessageWriteOutcome => {
     const detached = detachChatMessage(message);
-    if (!isWritableVocabulary(detached)) return { kind: "invalid_vocabulary" };
+    if (!hasWritableChatMessageVocabulary(detached)) return { kind: "invalid_vocabulary" };
     const rows = rowsOf(accountId);
     const current = rows.get(detached.id);
     if (current !== undefined) {

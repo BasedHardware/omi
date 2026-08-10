@@ -324,6 +324,88 @@ describe("ratified /v1/chat-messages route", () => {
     db.close();
   });
 
+  test("SQLite migrates closed vocabulary and serves future sender/type spellings intact", async () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE service_chat_messages (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        sender TEXT NOT NULL CHECK (sender IN ('human', 'ai', 'unknown')),
+        message_type TEXT NOT NULL CHECK (message_type IN ('text', 'day_summary', 'unknown')),
+        created_at INTEGER NOT NULL CHECK (created_at >= 0),
+        updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+        chat_session_id TEXT,
+        app_id TEXT,
+        journal_revision INTEGER NOT NULL CHECK (journal_revision >= 0),
+        payload_hash TEXT NOT NULL,
+        message_source TEXT NOT NULL,
+        rating REAL,
+        reported INTEGER NOT NULL CHECK (reported IN (0, 1)),
+        server_revision TEXT,
+        attachments_json TEXT,
+        generation_id TEXT,
+        UNIQUE (account_id, id)
+      );
+      CREATE INDEX service_chat_messages_history
+        ON service_chat_messages (
+          account_id, app_id, chat_session_id, created_at DESC, id DESC, sequence
+        );
+    `);
+    const stores = createSqliteLocalServiceStores(db);
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-sqlite-future-vocabulary-proof",
+      chatSupervisor: inertSupervisor(),
+    });
+    db.exec("PRAGMA ignore_check_constraints = ON;");
+    db.query(`
+      INSERT INTO service_chat_messages (
+        account_id, id, text, sender, message_type, created_at, updated_at,
+        chat_session_id, app_id, journal_revision, payload_hash, message_source,
+        rating, reported, server_revision, attachments_json, generation_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      ACCOUNT, "future-sqlite", "future vocabulary", "future_model", "future_kind", 10, 10,
+      null, null, 1, "sha256:future", "restore", null, 0, "revision-future", null, null,
+    );
+    db.exec("PRAGMA ignore_check_constraints = OFF;");
+
+    const history = await local.app.request("/v1/chat-messages", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+
+    expect(history.status).toBe(200);
+    const body = await history.json() as { messages: ChatMessageRecord[] };
+    expect(body.messages[0]).toMatchObject({
+      id: "future-sqlite",
+      sender: "future_model",
+      type: "future_kind",
+    });
+    const schema = db.query(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'service_chat_messages'
+    `).get() as { readonly sql: string };
+    expect(schema.sql).not.toContain("sender IN");
+    expect(schema.sql).not.toContain("message_type IN");
+    expect(stores.chatMessages.writeCanonical(ACCOUNT, {
+      ...body.messages[0]!,
+      id: "future-write",
+      payloadHash: "sha256:future-write",
+    }, null).kind).toBe("invalid_vocabulary");
+    expect((await post(local, payload("future-sender-write", 20, {
+      sender: "future_model",
+    }))).status).toBe(422);
+    expect((await post(local, payload("future-type-write", 30, {
+      type: "future_kind",
+    }))).status).toBe(422);
+    db.close();
+  });
+
   test("the shared Settings entitlement projection moves chat admission", async () => {
     const stores = createInMemoryLocalServiceStores();
     stores.settings.putEntitlement(ACCOUNT, {
