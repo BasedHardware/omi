@@ -6,14 +6,18 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import { createServer } from "vite";
+import { dependencyDistFingerprint } from "../../../../integration/check-surfaces-dependency-dist.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../../..");
 const dependencyDistCheck = resolve(repoRoot, "integration/check-surfaces-dependency-dist.mjs");
 
 let viteServer;
+let verifiedDependencyFingerprint;
 
 function assertDependencyDistIsCurrent() {
+  const before = dependencyDistFingerprint();
+  if (before === verifiedDependencyFingerprint) return;
   const result = spawnSync(process.execPath, [dependencyDistCheck], {
     cwd: repoRoot,
     encoding: "utf8",
@@ -24,11 +28,13 @@ function assertDependencyDistIsCurrent() {
     0,
     `render harness refuses missing or stale workspace dependency dist:\n${result.stdout}${result.stderr}`,
   );
+  const after = dependencyDistFingerprint();
+  assert.equal(after, before, "workspace dependency bytes changed while dist freshness was being verified");
+  verifiedDependencyFingerprint = after;
 }
 
 async function server() {
   if (viteServer) return viteServer;
-  assertDependencyDistIsCurrent();
   viteServer = await createServer({
     root: packageRoot,
     configFile: resolve(packageRoot, "vite.config.ts"),
@@ -40,10 +46,18 @@ async function server() {
   return viteServer;
 }
 
-export async function loadProductionExport(moduleName, exportName) {
-  const module = await (await server()).ssrLoadModule(`/src/production/${moduleName}`);
+export async function loadCheckedExport(moduleName, exportName, { assertCurrent, loadModule }) {
+  assertCurrent();
+  const module = await loadModule(moduleName);
   assert.equal(typeof module[exportName], "function", `${moduleName} must export ${exportName}`);
   return module[exportName];
+}
+
+export async function loadProductionExport(moduleName, exportName) {
+  return loadCheckedExport(moduleName, exportName, {
+    assertCurrent: assertDependencyDistIsCurrent,
+    loadModule: async (name) => (await server()).ssrLoadModule(`/src/production/${name}`),
+  });
 }
 
 function installDomGlobals(window) {
