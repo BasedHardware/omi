@@ -23,7 +23,6 @@ distro==1.9.0
 dnspython==2.6.1
 docstring-parser==0.18.0
 email_validator==2.2.0
-fal_client==0.4.1
 fastapi==0.121.0
 fastapi-utilities==0.2.0
 fake-firestore==0.13.1

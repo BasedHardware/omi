@@ -4,7 +4,6 @@ import mimetypes
 import os
 from typing import Any, Dict, List, cast
 
-import fal_client
 from groq import Groq
 from openai import OpenAI
 
@@ -101,37 +100,12 @@ def file_to_base64_url(file_path: str) -> str:
 
 @timeit
 def fal():
-    handler = fal_client.submit("fal-ai/wizper", arguments={"audio_url": file_to_base64_url(filename)})
     result = handler.get()
     print(result.get('text', ''))
     return result.get('text', '')
 
 
 @timeit
-def fal_whisperx() -> List[Dict[str, Any]]:
-    if not has_audio():
-        return []
-    handler = fal_client.submit(
-        "fal-ai/whisper",
-        arguments={
-            "audio_url": file_to_base64_url(filename),
-            'task': 'transcribe',
-            'diarize': True,
-            'language': 'en',
-            'chunk_level': 'segment',
-            "num_speakers": None,
-            'version': '3',
-        },
-    )
-
-    result = handler.get()
-    chunks: List[Dict[str, Any]] = result.get('chunks', [])
-    for chunk in chunks:
-        chunk['start'] = chunk['timestamp'][0]
-        chunk['end'] = chunk['timestamp'][1]
-        del chunk['timestamp']
-        print(chunk)
-    return chunks
 
 
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
@@ -169,6 +143,5 @@ if __name__ == '__main__':
         transcription = execute_groq()
         # transcription = fal()
         print(diarization(cast(str, transcription)))
-    # fal_whisperx()
     # has_audio()
     # print(retrieve_proper_segment_points(filename))

@@ -120,9 +120,6 @@ def _build_fakes() -> dict:
     pydub.AudioSegment = MagicMock
     fakes['pydub'] = pydub
 
-    fal_client = ModuleType('fal_client')
-    fal_client.subscribe = MagicMock()
-    fakes['fal_client'] = fal_client
 
     fakes['stripe'] = ModuleType('stripe')
 

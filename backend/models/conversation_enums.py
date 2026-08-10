@@ -91,6 +91,8 @@ class ConversationStatus(str, Enum):
 
 class PostProcessingModel(str, Enum):
     fal_whisperx = 'fal_whisperx'
+    none = 'none'
+    prerecorded = 'prerecorded'
 
 
 class ExternalIntegrationConversationSource(str, Enum):

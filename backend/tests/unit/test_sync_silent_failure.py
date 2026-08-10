@@ -277,7 +277,6 @@ class TestDeepgramRetryBehavioral:
 
         stubs = [
             'deepgram',
-            'fal_client',
             'models',
             'models.transcript_segment',
             'utils.other.endpoints',
@@ -291,7 +290,6 @@ class TestDeepgramRetryBehavioral:
 
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['fal_client'].submit = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
@@ -1315,7 +1313,6 @@ class TestProcessSegmentReal:
 
 _CHAT_STUB_MODULES = [
     'deepgram',
-    'fal_client',
     'models',
     'models.chat',
     'models.conversation',
@@ -1366,7 +1363,6 @@ class TestVoiceMessageRuntimeErrorHandling:
 
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['fal_client'].submit = MagicMock()
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
