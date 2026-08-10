@@ -133,11 +133,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if message.app_id is not None and use_plugin_name_if_available:
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:
@@ -166,11 +164,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if message.app_id is not None and use_plugin_name_if_available:
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:
