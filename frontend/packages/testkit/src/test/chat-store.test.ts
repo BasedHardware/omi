@@ -119,6 +119,28 @@ test("409 identity conflict dead-letters and is never retried", async () => {
   assert.equal(store.pendingCount(), 0, "op left the pending queue");
 });
 
+test("403 forbidden is a permanent chat send outcome, never an auth pause", async () => {
+  // red-proof: delegate Chat 403 to the shared classifyStatus taxonomy. The
+  // outbox pauses with one pending op and creates no user-visible dead letter.
+  const disk = new MemoryStore();
+  const env = new ManualEnv();
+  const http = new ScriptedHttp();
+  const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
+
+  http.respond({
+    status: 403,
+    json: { error: { code: "forbidden", retryable: false } },
+  });
+  await store.send("not allowed in this authorization context");
+  await env.advance(10);
+
+  assert.equal(store.pendingCount(), 0, "forbidden send is terminal and leaves the queue");
+  assert.equal(store.status().queue.phase, "idle", "403 must not pause Chat for reauthentication");
+  const dead = await store.deadLetters();
+  assert.equal(dead.length, 1, "the permanent forbidden outcome remains user-visible");
+  assert.equal(dead[0]?.failure.kind, "permanent");
+});
+
 test("the same op replayed produces the same payload hash and does not duplicate a message", async () => {
   // red-proof: rebuild attachmentIds instead of replaying the journaled op.
   // The whole-body equality and derived hash equality below both fail.
