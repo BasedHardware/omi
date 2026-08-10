@@ -589,13 +589,45 @@ final class GoogleOAuthTests: XCTestCase {
     }
   }
 
-  func testGmailListRejectsMalformedSuccessfulResponse() async {
-    MockURLProtocol.handler = { _ in jsonResponse(["unexpected": []]) }
+  /// Gmail's users.messages.list omits `messages` when nothing matches the
+  /// query, so a quiet mailbox is a successful empty read. Treating it as a
+  /// malformed response failed connect()/verifyConnection() — both probe with
+  /// `newer_than:1d` — for accounts whose auth and scopes were fine.
+  func testGmailListTreatsMissingMessagesAsEmptyResult() async throws {
+    MockURLProtocol.handler = { _ in jsonResponse(["resultSizeEstimate": 0]) }
+    let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+      token: "token", session: mockSession())
+    XCTAssertTrue(emails.isEmpty)
+  }
+
+  func testGmailListTreatsEmptyMessagesArrayAsEmptyResult() async throws {
+    MockURLProtocol.handler = { _ in
+      jsonResponse(["messages": [] as [[String: Any]], "resultSizeEstimate": 0])
+    }
+    let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+      token: "token", session: mockSession())
+    XCTAssertTrue(emails.isEmpty)
+  }
+
+  /// Calendar omits `items` for a window with no events, the same successful
+  /// empty shape as Gmail's missing `messages`.
+  func testCalendarListTreatsMissingItemsAsEmptyResult() async throws {
+    MockURLProtocol.handler = { _ in jsonResponse(["kind": "calendar#events"]) }
+    let events = try await GoogleOAuthCalendarReader.readEvents(
+      token: "token", session: mockSession())
+    XCTAssertTrue(events.isEmpty)
+  }
+
+  /// The empty-result path must not swallow real auth failures: a 401 on the
+  /// same probe still has to surface as reconnect-required.
+  func testGmailEmptyResultDoesNotMaskAuthFailure() async {
+    MockURLProtocol.handler = { _ in jsonResponse(["error": "invalid_token"], status: 401) }
     do {
       _ = try await GoogleOAuthGmailReader.readRecentEmails(token: "token", session: mockSession())
-      XCTFail("expected malformed response")
+      XCTFail("expected reconnect")
     } catch let error as GoogleOAuthReaderError {
-      XCTAssertEqual(error.errorDescription, GoogleOAuthReaderError.invalidResponse.errorDescription)
+      XCTAssertEqual(
+        error.errorDescription, GoogleOAuthReaderError.reconnectRequired.errorDescription)
     } catch {
       XCTFail("unexpected error \(error)")
     }

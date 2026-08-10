@@ -52,9 +52,12 @@ enum GoogleOAuthGmailReader {
         throw GoogleOAuthReaderError.network("Could not construct the Gmail request.")
       }
       let body = try await get(url, token: token, session: session)
-      guard let messages = body["messages"] as? [[String: Any]] else {
-        throw GoogleOAuthReaderError.invalidResponse
-      }
+      // Gmail omits `messages` entirely when the query matches nothing. That
+      // is a successful empty result, not a malformed response: treating it as
+      // invalid failed connect() and verifyConnection() for any account whose
+      // inbox had no mail in the probe window, even though auth and scopes
+      // were fine.
+      let messages = body["messages"] as? [[String: Any]] ?? []
       ids.append(contentsOf: messages.compactMap { $0["id"] as? String })
       pageToken = body["nextPageToken"] as? String
     } while ids.count < maxResults && pageToken != nil
@@ -196,9 +199,10 @@ enum GoogleOAuthCalendarReader {
         throw GoogleOAuthReaderError.network("Could not construct the Calendar request.")
       }
       let body = try await GoogleOAuthGmailReader.get(url, token: token, session: session)
-      guard let items = body["items"] as? [[String: Any]] else {
-        throw GoogleOAuthReaderError.invalidResponse
-      }
+      // Calendar omits `items` for a window with no events — the same
+      // successful-empty shape as Gmail's missing `messages`. A quiet calendar
+      // is not a malformed response.
+      let items = body["items"] as? [[String: Any]] ?? []
       events.append(contentsOf: items.compactMap(parseEvent))
       pageToken = body["nextPageToken"] as? String
     } while events.count < maxResults && pageToken != nil
