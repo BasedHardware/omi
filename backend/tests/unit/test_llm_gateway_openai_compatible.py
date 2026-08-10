@@ -185,6 +185,61 @@ def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, 
         assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
 
 
+def test_openai_family_byok_on_an_openrouter_route_uses_the_forwarded_openai_key(monkeypatch):
+    """The backend forwards X-Omi-Byok-OpenAI-Key for OpenRouter-hosted OpenAI models.
+
+    Checking the route's literal openrouter provider would fail closed with
+    missing_byok_key on a key the user did supply, so the route follows the key to the
+    vendor and drops the openai/ prefix.
+    """
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-openai',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert provider.calls[0].provider == 'openai'
+    assert provider.calls[0].model == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+
+
+def test_byok_without_the_vendor_key_still_fails_closed(monkeypatch):
+    """The remap is key-driven: an unrelated vendor key must not admit the request."""
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-Anthropic-Key': 'sk-user-anthropic',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()['error']['failure_class'] == FailureClass.MISSING_BYOK_KEY.value
+    assert not provider.calls
+
+
 def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
