@@ -495,6 +495,17 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+LIMITLESS_IMPORTED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='limitless_imported_conversations_by_source',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('source', '==', 'source'),
+        FirestoreQueryFilter('imported', '==', 'imported'),
+    ),
+    index_fields=(_asc('source'), _asc('imported'), _asc('__name__')),
+)
+
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
     identifier='chat_first_deferrals_due',
     collection_group='chat_first_deferrals',
@@ -544,6 +555,7 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    LIMITLESS_IMPORTED_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
 )

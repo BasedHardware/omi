@@ -104,3 +104,15 @@ class TestDeleteImportJob:
             with pytest.raises(HTTPException) as ei:
                 imports_mod.delete_import_job("j1", uid=UID)
         assert ei.value.status_code == 403
+
+
+class TestDeleteLimitlessConversations:
+    def test_delete_limitless_conversations_uses_conversation_database(self):
+        with patch.object(imports_mod.conversations_db, "delete_conversations_by_source", return_value=2) as dele:
+            result = imports_mod.delete_limitless_conversations(uid=UID)
+
+        assert result == {
+            "deleted_count": 2,
+            "message": "Successfully deleted 2 Limitless conversations",
+        }
+        dele.assert_called_once_with(UID, "limitless")

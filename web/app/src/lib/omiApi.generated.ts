@@ -1082,6 +1082,7 @@ export interface Conversation {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
   photos?: Array<ConversationPhoto>;
@@ -3080,6 +3081,7 @@ export interface SharedConversationResponse {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
   people?: Array<Person>;
