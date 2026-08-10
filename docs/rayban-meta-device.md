@@ -80,6 +80,23 @@ both makes those names ambiguous (Meta documents this in the 0.7.0 notes).
 Display requires the DAT App Model — the `DAMEnabled` key already present in
 the `MWDAT` Info.plist dictionary.
 
+**Display state contract.** Dart sees five states (`unavailable`, `detached`,
+`attaching`, `ready`, `error`). `attachDisplay()` is atomic: it emits
+`attaching`, and either the whole sequence — `addDisplay()`, state-publisher
+subscription, `start()` — succeeds, or the capability handle and its
+subscription are rolled back and `error` is emitted. Dart is never left stuck
+at `attaching` by a partial attach.
+
+The toolkit's `DisplayState` is narrower than that, so it is normalized:
+`.starting` → `attaching`, `.started` → `ready`, and both `.stopping` and
+`.stopped` → `detached`. Collapsing `.stopping` is deliberate — nothing may be
+sent to a display that is tearing down, so a teardown-in-progress and a
+finished teardown are the same state to every Dart caller. `error` is emitted
+only by the bridge (attach failure); the toolkit never publishes it.
+Best-effort per-frame failures (`send`, `clearDisplay`) surface through
+`onError` as `display_send_failed` / `display_clear_failed` and do not change
+the display state — a dropped HUD refresh is not a detach.
+
 ### Audio path
 
 The Meta Wearables Device Access Toolkit (DAT 0.8) has **no microphone API**.
