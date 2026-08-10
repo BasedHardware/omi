@@ -384,7 +384,7 @@ def _create_byok_client(
     kwargs: Dict[str, Any] = _with_llm_callbacks(
         {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
     )
-    if supports_cache_retention(model):
+    if callback_provider == 'openai' and supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
         kwargs['streaming'] = True
@@ -403,7 +403,10 @@ def _create_byok_client(
             if 'temperature' in route_options:
                 kwargs['temperature'] = route_options['temperature']
             return _cached_openai_chat(model, byok_key, {**kwargs, 'base_url': GEMINI_OPENAI_BASE_URL})
-        return None  # Non-Gemini OpenRouter: no BYOK support
+        # OpenAI-family OpenRouter models reroute to OpenAI direct via BYOK
+        if model.startswith('gpt-') or model.startswith(('o1', 'o3', 'o4')):
+            return _cached_openai_chat(model, byok_key, kwargs)
+        return None  # Other OpenRouter models: no BYOK support
 
     return None
 
@@ -429,9 +432,11 @@ def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
 
 
 def _effective_byok_provider(model: str, provider: str) -> str:
-    """Map provider to the actual BYOK key type needed (Gemini-based OpenRouter → Gemini key)."""
+    """Map provider to the actual BYOK key type needed (OpenRouter gemini/gpt/o-series → vendor key)."""
     if provider == 'openrouter' and model.startswith('gemini'):
         return 'gemini'
+    if provider == 'openrouter' and (model.startswith('gpt-') or model.startswith(('o1', 'o3', 'o4'))):
+        return 'openai'
     return provider
 
 
@@ -617,10 +622,11 @@ if _so_gemini:
 
 
 # ---------------------------------------------------------------------------
-# Anthropic — model resolved from active QoS profile
+# Anthropic — direct/BYOK agent loop only. Managed chat_agent is OpenRouter Luna
+# via get_llm / omi:auto:chat-agent; these constants must stay Anthropic IDs.
 # ---------------------------------------------------------------------------
-ANTHROPIC_AGENT_MODEL = get_model('chat_agent')
-ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
+ANTHROPIC_AGENT_MODEL = 'claude-sonnet-4-6'
+ANTHROPIC_AGENT_COMPLEX_MODEL = 'claude-sonnet-4-6'
 
 
 # ---------------------------------------------------------------------------

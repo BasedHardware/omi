@@ -10,6 +10,7 @@ import pytest
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
 from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
+from utils.llm.openrouter_model_names import openrouter_provider_model_name
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = BACKEND_DIR / 'docs' / 'llm' / 'model_endpoint_inventory.yaml'
@@ -53,6 +54,10 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENROUTER_API_KEY'),
+    # Reads the OpenRouter /api/v1/models catalog for context and completion limits.
+    # Metadata only: no product text is generated here, so it does not belong on a lane.
+    DirectUse('utils/llm/openrouter_model_catalog.py', 'OPENROUTER_API_KEY'),
     DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
@@ -106,9 +111,7 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
         expected_options = get_route_options(feature, model, provider)
         if override is not None:
             expected_options.update(override.provider_options)
-        expected_provider_model = (
-            f'google/{model}' if provider == 'openrouter' and model.startswith('gemini') else model
-        )
+        expected_provider_model = openrouter_provider_model_name(provider, model)
         assert route.primary.model == expected_provider_model
         assert route.primary.provider == provider
         assert route.provider_options == expected_options
@@ -117,7 +120,7 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
 def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     overrides = load_generated_route_overrides()
 
-    assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
+    assert overrides['persona_chat'].primary.model == 'gpt-5.6-luna'
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
