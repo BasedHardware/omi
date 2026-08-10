@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { EN_MESSAGES } from "@omi-core/i18n";
 import {
@@ -10,11 +10,39 @@ import {
   homeSurfacePresentation,
 } from "../src/production/home-presentation.ts";
 import { refreshPhaseNoticeKey } from "../src/production/lifecycle-presentation.ts";
+import {
+  closeRenderHarness,
+  loadProductionExport,
+  renderComponent,
+} from "./render-harness.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 const refresh = (phase, hasSavedData) => ({ phase, hasSavedData });
+
+after(closeRenderHarness);
+
+function projection(initialPhase = "initial-loading") {
+  let rows = [];
+  let status = refresh(initialPhase, false);
+  const listeners = new Set();
+  return {
+    source: {
+      list: async () => rows,
+      status: () => ({ refresh: status, pendingWrites: 0, deadLetters: [] }),
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    ready(value = []) {
+      rows = value;
+      status = refresh("ready", value.length > 0);
+      for (const listener of listeners) listener();
+    },
+  };
+}
 
 function present(phase, hasSavedData, rowCount, filtering = false) {
   const status = refresh(phase, hasSavedData);
@@ -83,19 +111,36 @@ test("home empty kinds distinguish true-empty from filter-miss", () => {
   // filtering=false when rowCount is 0 collapses the two claims.
 });
 
-test("HomeProduction renders distinct data-empty-kind for each empty condition", async () => {
-  const source = await read("src/production/HomeProduction.tsx");
-  assert.match(source, /data-empty-kind="empty-projection"/);
-  assert.match(source, /data-empty-kind="filtered-out"/);
-  assert.match(source, /home\.startTyping/);
-  const trueEmpty = source.match(/data-empty-kind="empty-projection"[\s\S]{0,240}/)?.[0] ?? "";
-  assert.match(trueEmpty, /home\.startTyping/);
-  assert.doesNotMatch(trueEmpty, /common\.noResults/);
-  const filterMiss = source.match(/data-empty-kind="filtered-out"[\s\S]{0,240}/)?.[0] ?? "";
-  assert.match(filterMiss, /common\.noResults/);
-  assert.doesNotMatch(filterMiss, /home\.startTyping/);
-  // red-proof: dropping either data-empty-kind, or wiring both branches to
-  // common.noResults, fails the copy/kind assertions above.
+test("HomeProduction with zero rows makes no empty claim while loading, then renders true-empty once ready", async () => {
+  const memories = projection();
+  const conversations = projection();
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const rendered = await renderComponent(HomeProduction, {
+    sources: { memories: memories.source, conversations: conversations.source },
+  });
+
+  try {
+    assert.equal(
+      rendered.container.querySelector("[data-empty-kind]") === null,
+      true,
+      "initial-loading must not render an empty-state claim",
+    );
+    await rendered.act(async () => {
+      memories.ready();
+      conversations.ready();
+      await Promise.resolve();
+    });
+    const empty = rendered.container.querySelector('[data-empty-kind="empty-projection"]');
+    assert.ok(empty, "ready with zero rows must render the true-empty state");
+    assert.equal(empty.textContent?.trim(), EN_MESSAGES["home.startTyping"]);
+    assert.equal(rendered.container.querySelector('[data-empty-kind="filtered-out"]'), null);
+  } finally {
+    await rendered.cleanup();
+  }
+
+  // red-proof: current trunk at 8e2e1c52b2 returned emptyKind=null correctly,
+  // but HomeProduction's unconditional final else still rendered empty-projection;
+  // the initial-loading assertion failed against that real shipped behavior.
 });
 
 test("home renders each of the five refresh states distinguishably", async () => {
