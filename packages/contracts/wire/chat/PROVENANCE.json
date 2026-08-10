@@ -1,0 +1,9 @@
+{
+  "artifact": "chat-domain-wire.md",
+  "source_repo": "omi-platform (private backend repo)",
+  "source_path": "docs/wire-proposals/chat-domain-wire.md",
+  "source_commit": "1151e56905295cfaba31d0fb76e0bf02b5a2b2aa",
+  "sha256": "84f1ef02a734398e042bf24453323dba6e58304501c38cfb886e38ceb135cf21",
+  "vendored": "2026-08-10",
+  "rule": "Read-only ratified wire spec. Changing it here is a wire change and escalation-class. Re-vendor from source with updated provenance instead of editing."
+}
