@@ -104,7 +104,7 @@ def load_gateway_config(
         allowlist=serving_lane_allowlist,
         drop_confirm=serving_lane_drop_confirm,
     )
-    if served_lane_ids != set(lanes):
+    if served_lane_ids != frozenset(lanes):
         lanes = {lane_id: lane for lane_id, lane in lanes.items() if lane_id in served_lane_ids}
         route_artifacts = {art_id: art for art_id, art in route_artifacts.items() if art.lane_id in served_lane_ids}
         feature_bundles = {
