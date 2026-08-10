@@ -12,15 +12,18 @@ import database.redis_db as redis_db
 class _FakeRedis:
     def __init__(self) -> None:
         self._store: Dict[str, Any] = {}
+        self.set_calls: List[Dict[str, Any]] = []
+        self.expire_calls: List[tuple[str, int]] = []
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         self._store[key] = value
+        self.set_calls.append({'key': key, 'value': value, 'ex': ex})
 
     def get(self, key: str) -> Optional[Any]:
         return self._store.get(key)
 
     def expire(self, key: str, ttl: int) -> None:
-        return None
+        self.expire_calls.append((key, ttl))
 
     def mget(self, keys: List[str]) -> List[Optional[Any]]:
         return [self._store.get(key) for key in keys]
@@ -104,3 +107,29 @@ def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
         "app-b": {"uid-2": {"rating": 5}},
         "app-missing": {},
     }
+
+
+def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.set_generic_cache("apps:marketplace", {"ok": True}, ttl=120)
+    assert fake_redis.expire_calls == []
+    assert len(fake_redis.set_calls) == 1
+    assert fake_redis.set_calls[0]['ex'] == 120
+    assert redis_db.get_generic_cache("apps:marketplace") == {"ok": True}
+
+
+def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.set_generic_cache("apps:no-ttl", {"ok": True})
+    assert fake_redis.set_calls[0]['ex'] is None
+    assert fake_redis.expire_calls == []
+
+
+def test_cache_user_name_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.cache_user_name("uid-1", "Ada", ttl=3600)
+    assert fake_redis.expire_calls == []
+    assert fake_redis.set_calls == [{'key': 'users:uid-1:name', 'value': 'Ada', 'ex': 3600}]
+
+
+def test_cache_signed_url_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
+    redis_db.cache_signed_url("path/a.wav", "https://example.test/a", ttl=60)
+    assert fake_redis.expire_calls == []
+    assert fake_redis.set_calls == [{'key': 'urls:path/a.wav', 'value': 'https://example.test/a', 'ex': 59}]

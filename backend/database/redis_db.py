@@ -87,9 +87,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -328,13 +330,11 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    r.set(f'users:{uid}:name', name, ex=ttl)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -841,7 +841,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -854,7 +855,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -883,7 +885,8 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script("""
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -911,7 +914,8 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-""")
+"""
+)
 
 
 def _seconds_until_midnight_utc() -> int:
