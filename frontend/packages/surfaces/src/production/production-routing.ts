@@ -10,7 +10,16 @@
  * Self-contained by design (no relative imports) so `node --test` runs it directly.
  */
 
-export type ProductionRouteName = "home" | "memories" | "conversations" | "tasks" | "listen";
+export type ProductionRouteName =
+  | "home"
+  | "memories"
+  | "conversations"
+  | "folders"
+  | "tasks"
+  | "listen"
+  | "chat"
+  | "settings"
+  | "unsupported";
 export type MemoriesGeneration = "legacy" | "platform";
 
 export type ProductionRouteInput = {
@@ -36,20 +45,33 @@ export type ProductionRouteInput = {
 export function resolveProductionRoute(input: ProductionRouteInput): ProductionRouteName {
   const { requestedRoute, requestedQa, memoriesGeneration } = input;
 
-  if (requestedRoute === "tasks" || requestedQa === "tasks") return "tasks";
-  if (requestedRoute === "listen") return "listen";
+  if (requestedRoute !== null) {
+    switch (requestedRoute) {
+      case "home":
+      case "memories":
+      case "conversations":
+      case "folders":
+      case "tasks":
+      case "listen":
+      case "chat":
+      case "settings":
+        return requestedRoute;
+      default:
+        return "unsupported";
+    }
+  }
+
+  if (requestedQa === "tasks") return "tasks";
   if (
-    requestedRoute === "conversations"
-    || requestedQa === "conversations"
+    requestedQa === "conversations"
     || requestedQa === "conversation-detail"
   ) return "conversations";
   if (
-    requestedRoute === "memories"
-    || requestedQa === "memories"
+    requestedQa === "memories"
     || requestedQa === "memories-platform"
   ) return "memories";
 
-  const hostNamedSomething = requestedRoute !== null || requestedQa !== null;
+  const hostNamedSomething = requestedQa !== null;
   if (!hostNamedSomething && memoriesGeneration === "platform") return "memories";
   return "home";
 }

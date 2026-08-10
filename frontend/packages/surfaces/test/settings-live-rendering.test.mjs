@@ -60,6 +60,9 @@ test("real adapter-shaped Settings store renders loading then signed-in entitlem
     assert.ok(rendered.container.querySelector('[data-settings-account="signed-in"]'));
     assert.ok(rendered.container.querySelector('[data-settings-plan="absent"]'));
     assert.match(rendered.container.textContent ?? "", /Live Alex/);
+    const semantic = rendered.container.querySelector("main")?.getAttribute("data-consumer-semantic") ?? "";
+    assert.notEqual(semantic, "");
+    assert.doesNotMatch(semantic, /Live Alex|live@example\.com/);
   } finally {
     await rendered.cleanup();
   }
@@ -100,6 +103,8 @@ test("live Settings distinguishes host signed-out, invalid auth blackout, and un
       if (row.selector.includes("unavailable")) {
         assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]'), null);
       }
+      const semantic = rendered.container.querySelector("main")?.getAttribute("data-consumer-semantic") ?? "";
+      assert.doesNotMatch(semantic, /Omi Plus|live@example\.com/);
     } finally {
       await rendered.cleanup();
     }

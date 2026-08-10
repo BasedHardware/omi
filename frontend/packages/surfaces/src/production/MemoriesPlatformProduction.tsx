@@ -161,6 +161,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
       data-data-source={source.kind}
       data-surface-state={status.refresh.phase}
       data-qa-fixture={source.kind === "fixture" ? source.fixture : "none"}
+      data-consumer-semantic={`memories:visible:${visibleItems.length}:total:${items.length}`}
       data-completeness={completeness.kind}
     >
       <ProductionChrome locale={locale} active="memories" placement="top" />

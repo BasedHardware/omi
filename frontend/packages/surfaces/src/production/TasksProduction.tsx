@@ -348,7 +348,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   }, [run, selectedTask, store, translate]);
 
   return (
-    <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
+    <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`tasks:visible:${visibleCount}:total:${rows.length}`}>
       <ProductionChrome locale={locale} active="tasks" placement="top" />
       <section className="desktop-page-panel">
       <header className="tasks-header">

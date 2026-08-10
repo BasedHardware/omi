@@ -190,7 +190,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
   });
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
+    <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`memories:visible:${visibleRows.length}:total:${rows.length}`}>
       <ProductionChrome locale={locale} active="memories" placement="top" />
       <section className="desktop-page-panel">
       <ProductionLibrarySegment locale={locale} active="memories" />

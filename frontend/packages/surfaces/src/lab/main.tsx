@@ -109,7 +109,6 @@ function SurfaceLab(): React.JSX.Element {
           <h1>Omi Surface Lab</h1>
           <p>Every production surface and deterministic state, without a backend or native build.</p>
         </div>
-        <a className="surface-lab-dev-rig" href="?rig=dev">Open domain rig</a>
       </header>
 
       <section className="surface-lab-controls" aria-label="Preview controls">
