@@ -723,6 +723,11 @@ checks:
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: firmware-button-gesture-tests
+    command: ["bash", "omi/firmware/omi/tests/run_button_gesture_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/button_gesture.h", "omi/firmware/omi/src/lib/core/button.c", "omi/firmware/omi/tests/test_button_gesture.c", "omi/firmware/omi/tests/run_button_gesture_test.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the bond-clear gesture was armed on any button-down inside the double-tap window, so tap-then-hold wiped the BLE bond instead of powering off; only a completed double-tap may arm it"
 
 exempt:
   - path: ".github/scripts/guardrail_pulse.py"
