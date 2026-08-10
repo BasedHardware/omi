@@ -12,19 +12,28 @@
  * there is no alias protocol or server-assigned-id compatibility path.
  */
 
-import type { ChatMessage, ChatMessageOp, ChatTerminalFrame, DeadLetter, DurableKv, RecordId } from "@omi-core/contracts";
+import type {
+  BridgeStreamPort,
+  ChatAdmissionEnvelope,
+  ChatCapabilitiesWire,
+  ChatMessage,
+  ChatMessageOp,
+  ChatTerminalFrame,
+  DeadLetter,
+  DurableKv,
+  RecordId,
+} from "@omi-core/contracts";
 import type { HttpClient, StorageBridge } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
 import { Outbox, Projection } from "@omi-core/sync";
 import {
   chatMessagesTransport,
   fetchChatMessageIdSnapshot,
-  fetchChatMessages,
+  fetchChatMessageReconcilePage,
+  cancelChatGeneration,
+  observeChatGeneration,
 } from "@omi-core/adapters-platform";
-import type {
-  ChatGenerationReconnectTransport,
-  ChatGenerationTerminalDelivery,
-} from "@omi-core/adapters-platform";
+import type { ChatGenerationObservation } from "@omi-core/adapters-platform";
 import {
   buildCreateChatMessage,
   buildDeleteChatMessage,
@@ -36,6 +45,7 @@ import {
 import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
 const GENERATION_DELIVERIES_KEY = "generation-deliveries";
+const ACTIVE_GENERATIONS_KEY = "active-generations";
 
 export interface StoredChatGenerationDelivery {
   readonly generationId: string;
@@ -43,9 +53,25 @@ export interface StoredChatGenerationDelivery {
   readonly terminal: ChatTerminalFrame;
 }
 
+export interface ActiveChatGeneration {
+  readonly generationId: string;
+  readonly clientMessageId: RecordId;
+  readonly text: string;
+  readonly lastEventId: string | null;
+}
+
+export interface ChatHistoryWindow {
+  readonly hasOlder: boolean;
+  readonly olderCursor: string | null;
+}
+
 export class ChatMessagesStore {
   private listeners = new Set<() => void>();
   private readonly refreshTracker: RefreshTracker;
+  private readonly active = new Map<string, ActiveChatGeneration>();
+  private readonly observations = new Map<string, ChatGenerationObservation>();
+  private chatCapabilities: ChatCapabilitiesWire | null = null;
+  private historyWindow: ChatHistoryWindow = { hasOlder: false, olderCursor: null };
 
   private constructor(
     private readonly env: Env,
@@ -53,6 +79,7 @@ export class ChatMessagesStore {
     private readonly outbox: Outbox,
     private readonly projection: Projection<ChatMessage>,
     private readonly generationKv: DurableKv,
+    private readonly streamPort: BridgeStreamPort | null,
     hasSavedData: boolean,
   ) {
     this.refreshTracker = new RefreshTracker(hasSavedData);
@@ -62,7 +89,7 @@ export class ChatMessagesStore {
     bridge: StorageBridge,
     env: Env,
     http: HttpClient,
-    reconnect?: ChatGenerationReconnectTransport,
+    streamPort?: BridgeStreamPort,
   ): Promise<ChatMessagesStore> {
     const projection = await Projection.open(
       await bridge.openKv("chat-projection"),
@@ -73,8 +100,7 @@ export class ChatMessagesStore {
     let store: ChatMessagesStore;
     const transport = chatMessagesTransport(
       http,
-      async (delivery) => store.recordGenerationTerminal(delivery),
-      reconnect,
+      async (admission) => store.recordAdmission(admission),
     );
     const outbox = await Outbox.open(bridge, env, transport, "chat");
     store = new ChatMessagesStore(
@@ -83,6 +109,7 @@ export class ChatMessagesStore {
       outbox,
       projection,
       generationKv,
+      streamPort ?? null,
       (await projection.read([])).length > 0,
     );
     outbox.onChange = () => store.notify();
@@ -98,6 +125,7 @@ export class ChatMessagesStore {
       else await projection.upsertServerRows([next]);
       store.notify();
     };
+    await store.restoreActiveGenerations();
     return store;
   }
 
@@ -115,6 +143,32 @@ export class ChatMessagesStore {
 
   pendingCount(): number {
     return this.outbox.pendingOps().length;
+  }
+
+  pendingMessageIds(): readonly RecordId[] {
+    return this.outbox.pendingOps().map((op) => op.recordId as RecordId);
+  }
+
+  capabilities(): ChatCapabilitiesWire | null {
+    return this.chatCapabilities;
+  }
+
+  activeGenerations(): readonly ActiveChatGeneration[] {
+    return [...this.active.values()];
+  }
+
+  historyPage(): ChatHistoryWindow {
+    return this.historyWindow;
+  }
+
+  async loadOlder(olderCursor: string): Promise<readonly ChatMessage[]> {
+    const page = await fetchChatMessageReconcilePage(this.http, { cursor: olderCursor });
+    if (page === null) throw new Error("chat older-page read failed");
+    this.chatCapabilities = page.capabilities;
+    this.historyWindow = { hasOlder: page.hasMore, olderCursor: page.nextCursor };
+    await this.projection.upsertServerRows([...page.messages]);
+    this.notify();
+    return page.messages;
   }
 
   status(): StoreStatus {
@@ -142,11 +196,30 @@ export class ChatMessagesStore {
   }
 
   /** Queue a human send. Local journal mirrors; server is authority. */
-  async send(text: string, attachmentIds: readonly string[] = []): Promise<void> {
+  async send(text: string, attachmentIds: readonly string[] = []): Promise<RecordId> {
+    const op = buildCreateChatMessage(this.env, text, { attachmentIds });
     await this.outbox.enqueue(
-      chatMessageToPendingOp(buildCreateChatMessage(this.env, text, { attachmentIds })),
+      chatMessageToPendingOp(op),
     );
     this.notify();
+    return op.id;
+  }
+
+  /** Cancel the old stream immediately, then target the ratified resource. */
+  async cancelGeneration(generationId: string): Promise<void> {
+    const current = this.active.get(generationId);
+    this.observations.get(generationId)?.cancel("user-cancelled-generation");
+    this.observations.delete(generationId);
+    try {
+      const result = await cancelChatGeneration(this.http, generationId);
+      if (!result.ok) throw new Error(result.failure.detail);
+    } finally {
+      // Cancellation is server state. Reopen after the exact cursor to receive
+      // the canonical cancelled/done terminal while the old stream stays dead.
+      if (current !== undefined && this.active.has(generationId)) {
+        this.startObservation(current);
+      }
+    }
   }
 
   /**
@@ -181,8 +254,11 @@ export class ChatMessagesStore {
     let failed = false;
     let thrown: unknown;
     try {
-      rows = await fetchChatMessages(this.http);
-      if (rows) {
+      const page = await fetchChatMessageReconcilePage(this.http);
+      rows = page === null ? null : [...page.messages];
+      if (page !== null) {
+        this.chatCapabilities = page.capabilities;
+        this.historyWindow = { hasOlder: page.hasMore, olderCursor: page.nextCursor };
         await this.refreshTracker.applyIfCurrent(token, () =>
           this.projection.upsertServerRows(rows!),
         );
@@ -218,24 +294,124 @@ export class ChatMessagesStore {
     for (const fn of this.listeners) fn();
   }
 
+  private async recordAdmission(admission: ChatAdmissionEnvelope): Promise<void> {
+    await this.projection.upsertServerRows([admission.message]);
+    const generationId = admission.generation.id;
+    const existing = this.active.get(generationId);
+    const state: ActiveChatGeneration = existing ?? {
+      generationId,
+      clientMessageId: admission.message.id,
+      text: "",
+      lastEventId: null,
+    };
+    this.active.set(generationId, state);
+    await this.persistActiveGenerations();
+    this.notify();
+    this.startObservation(state);
+  }
+
   private async recordGenerationTerminal(
-    delivery: ChatGenerationTerminalDelivery,
+    generationId: string,
+    clientMessageId: RecordId,
+    terminal: ChatTerminalFrame,
   ): Promise<void> {
-    const generationId = delivery.admission.generation.id;
     const existing = await this.generationDeliveries();
     const next: StoredChatGenerationDelivery = {
       generationId,
-      clientMessageId: delivery.admission.message.id,
-      terminal: delivery.terminal,
+      clientMessageId,
+      terminal,
     };
     await this.generationKv.set(
       GENERATION_DELIVERIES_KEY,
       JSON.stringify([...existing.filter((item) => item.generationId !== generationId), next]),
     );
-    const canonicalRows = delivery.terminal.kind === "failed"
-      ? [delivery.admission.message]
-      : [delivery.admission.message, delivery.terminal.message];
-    await this.projection.upsertServerRows(canonicalRows);
+    if (terminal.kind !== "failed") {
+      await this.projection.upsertServerRows([terminal.message]);
+    }
+    this.active.delete(generationId);
+    this.observations.delete(generationId);
+    await this.persistActiveGenerations();
     this.notify();
+  }
+
+  private startObservation(state: ActiveChatGeneration): void {
+    if (this.streamPort === null) return;
+    this.observations.get(state.generationId)?.cancel("generation-observation-replaced");
+    const observation = observeChatGeneration(
+      this.streamPort,
+      state.generationId,
+      state.lastEventId ?? undefined,
+    );
+    this.observations.set(state.generationId, observation);
+    void this.consumeObservation(state.generationId, observation);
+  }
+
+  private async consumeObservation(
+    generationId: string,
+    observation: ChatGenerationObservation,
+  ): Promise<void> {
+    try {
+      for await (const event of observation.events) {
+        if (this.observations.get(generationId) !== observation) return;
+        const current = this.active.get(generationId);
+        if (current === undefined) return;
+        if (event.kind === "snapshot" || event.kind === "delta") {
+          const next: ActiveChatGeneration = {
+            ...current,
+            text: event.kind === "snapshot" ? event.text : `${current.text}${event.text}`,
+            lastEventId: event.id,
+          };
+          this.active.set(generationId, next);
+          await this.persistActiveGenerations();
+          this.notify();
+        } else if (event.kind === "terminal") {
+          await this.recordGenerationTerminal(
+            generationId,
+            current.clientMessageId,
+            event.terminal,
+          );
+          return;
+        } else {
+          this.observations.delete(generationId);
+          this.notify();
+          return;
+        }
+      }
+    } catch {
+      if (this.observations.get(generationId) === observation) {
+        this.observations.delete(generationId);
+        this.notify();
+      }
+    }
+  }
+
+  private async restoreActiveGenerations(): Promise<void> {
+    const raw = await this.generationKv.get(ACTIVE_GENERATIONS_KEY);
+    if (raw === null) return;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return;
+      for (const value of parsed) {
+        if (
+          typeof value !== "object" || value === null ||
+          typeof (value as ActiveChatGeneration).generationId !== "string" ||
+          typeof (value as ActiveChatGeneration).clientMessageId !== "string" ||
+          typeof (value as ActiveChatGeneration).text !== "string" ||
+          !(
+            (value as ActiveChatGeneration).lastEventId === null ||
+            typeof (value as ActiveChatGeneration).lastEventId === "string"
+          )
+        ) continue;
+        const state = value as ActiveChatGeneration;
+        this.active.set(state.generationId, state);
+        this.startObservation(state);
+      }
+    } catch {
+      // Malformed advisory state never corrupts the canonical projection.
+    }
+  }
+
+  private persistActiveGenerations(): Promise<void> {
+    return this.generationKv.set(ACTIVE_GENERATIONS_KEY, JSON.stringify([...this.active.values()]));
   }
 }
