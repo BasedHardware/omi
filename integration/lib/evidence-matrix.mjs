@@ -118,6 +118,25 @@ function countOnlyProducerRow(row, domain) {
   return Object.freeze(normalized);
 }
 
+function renderedConsumerRow(row, domain) {
+  const observation = {
+    route: row.observation?.route,
+    state: row.observation?.state,
+    semantic: row.observation?.semantic,
+    ...(domain === "listen" ? { transcript: row.observation?.transcript } : {}),
+  };
+  return Object.freeze({
+    runId: row.runId,
+    shell: row.shell,
+    domain: row.domain,
+    fixture: row.fixture,
+    evidence: row.evidence,
+    observation: Object.freeze(observation),
+    shellTreeHash: row.shellTreeHash,
+    surfaceTreeHash: row.surfaceTreeHash,
+  });
+}
+
 export function validateServiceReadiness(record, {
   runId,
   databasePath,
@@ -165,6 +184,7 @@ export function arbitrateEvidence({
 
   if (!isObject(consumer)) failures.push("consumer evidence must be an object");
   else {
+    requireExactKeys(consumer, ["schema", "runId", "rows"], "consumer evidence", failures);
     if (consumer.schema !== CONSUMER_EVIDENCE_SCHEMA) failures.push(`consumer schema must be ${CONSUMER_EVIDENCE_SCHEMA}`);
     if (consumer.runId !== runId) failures.push(`consumer evidence has wrong runId ${JSON.stringify(consumer.runId)}`);
   }
@@ -184,10 +204,26 @@ export function arbitrateEvidence({
     const c = consumers.get(key);
     const p = producers.get(key);
     if (c) {
+      requireExactKeys(c, [
+        "runId",
+        "shell",
+        "domain",
+        "fixture",
+        "evidence",
+        "observation",
+        "shellTreeHash",
+        "surfaceTreeHash",
+      ], `${key} consumer row`, failures);
       if (c.fixture !== "none") failures.push(`${key} consumer evidence is fixture-backed`);
       if (c.evidence !== "rendered-semantic") failures.push(`${key} consumer evidence must be rendered-semantic, not ${JSON.stringify(c.evidence)}`);
       if (!isObject(c.observation)) failures.push(`${key} consumer observation must be an object`);
       else {
+        requireExactKeys(
+          c.observation,
+          domain === "listen" ? ["route", "state", "semantic", "transcript"] : ["route", "state", "semantic"],
+          `${key} observation`,
+          failures,
+        );
         if (c.observation.route !== domain) failures.push(`${key} rendered route ${JSON.stringify(c.observation.route)} does not match its domain`);
         if (c.observation.state !== "ready") failures.push(`${key} is readiness-only or not semantically ready`);
         requireText(c.observation.semantic, `${key} rendered semantic observation`, failures);
@@ -238,7 +274,7 @@ export function arbitrateEvidence({
       matrix.push(Object.freeze({
         shell,
         domain,
-        consumer: c,
+        consumer: renderedConsumerRow(c, domain),
         producer: countOnlyProducerRow(p, domain),
       }));
     }
