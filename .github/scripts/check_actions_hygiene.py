@@ -10,6 +10,8 @@ from pathlib import Path
 USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)")
 FLUTTER_CACHE_KEY_RE = re.compile(r"key:\s*.*flutter-buildrunner")
 SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
+OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*github\.event\.inputs\.")
+RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 
 # Mutable refs that have already caused (or clearly invite) supply-chain risk.
 FORBIDDEN_USES_SUBSTRINGS = (
@@ -53,7 +55,16 @@ def validate(root: Path) -> list[str]:
     for path in (*_workflow_paths(root), *_action_paths(root)):
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
+        operator_ref_checkout = bool(OPERATOR_REF_CHECKOUT_RE.search(text))
         for line_number, line in enumerate(text.splitlines(), start=1):
+            if operator_ref_checkout and RUN_SHA_RE.search(line) and not line.lstrip().startswith("#"):
+                errors.append(
+                    f"{rel}:{line_number}: workflow checks out an operator-selected "
+                    "ref, so the run SHA is not the checked-out commit; derive "
+                    "provenance from the checked-out tree "
+                    "(git rev-parse --short=7 HEAD) instead of GITHUB_SHA/github.sha"
+                )
+
             match = USES_RE.match(line)
             if match:
                 uses = match.group(1)

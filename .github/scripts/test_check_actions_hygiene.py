@@ -95,6 +95,40 @@ class ActionsHygieneTests(unittest.TestCase):
             errors = validate(root)
             self.assertTrue(any("backend/.github/workflows" in e for e in errors))
 
+    def test_rejects_run_sha_tag_with_operator_selected_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ github.event.inputs.branch }}\n"
+                "      - run: echo \"tag=${GITHUB_SHA::7}\" >> \"$GITHUB_OUTPUT\"\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_accepts_checked_out_head_tag_with_operator_selected_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ github.event.inputs.branch }}\n"
+                "      - run: echo \"tag=$(git rev-parse --short=7 HEAD)\" >> \"$GITHUB_OUTPUT\"\n",
+            )
+            self.assertEqual(validate(root), [])
+
     def test_rejects_third_party_master_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

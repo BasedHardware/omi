@@ -39,3 +39,8 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
   `github.run_id` are rejected by `.github/scripts/check_actions_hygiene.py`
   (manifest check `github-actions-hygiene`). Pin third-party actions to a full
   commit SHA.
+- A workflow that checks out an operator-selected `github.event.inputs.*` ref must
+  derive image tags and other provenance from the checked-out tree
+  (`git rev-parse --short=7 HEAD`), never from `GITHUB_SHA`/`github.sha` — the run
+  ref and the deployed commit diverge on `workflow_dispatch`. Enforced by the same
+  `github-actions-hygiene` check.
