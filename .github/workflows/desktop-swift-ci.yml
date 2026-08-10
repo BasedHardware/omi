@@ -115,7 +115,7 @@ jobs:
 
       - name: Install uv for manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        uses: astral-sh/setup-uv@v5
 
       - name: Run macOS-scoped manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}

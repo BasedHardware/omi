@@ -68,7 +68,7 @@ jobs:
           python-version-file: backend/.python-version
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
