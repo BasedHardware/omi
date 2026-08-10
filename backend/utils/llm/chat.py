@@ -1057,17 +1057,17 @@ class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
         examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation.',
+        description='Identify all the people names who were mentioned during the conversation. Use a maximum of 2 words per item.',
     )
     topics: List[str] = Field(
         default=[],
         examples=[['Artificial Intelligence', 'Machine Learning']],
-        description='List all the main topics and subtopics that were discussed.',
+        description='List all the main topics and subtopics that were discussed. Use a maximum of 2 words per item.',
     )
     entities: List[str] = Field(
         default=[],
         examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation.',
+        description='List any products, technologies, places, or other entities that are relevant to the conversation. Use a maximum of 2 words per item.',
     )
     dates: List[str] = Field(
         default=[],
@@ -1194,11 +1194,10 @@ def retrieve_metadata_fields_from_transcript(
     full_context = "\n\n".join(context_parts)
     today = date_in_tz(created_at, tz)
 
-    # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
-    Your task is to extract the most accurate information from the content in the output object indicated below.
+    Your task is to extract the most accurate information from the content in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
@@ -1288,7 +1287,7 @@ def retrieve_metadata_from_text(
     prompt = f'''
     You will be given the content of a text {source_context}.
 
-    Your task is to extract the most accurate information from the text in the output object indicated below.
+    Your task is to extract the most accurate information from the text in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the text (author, recipients, and anyone referenced)
