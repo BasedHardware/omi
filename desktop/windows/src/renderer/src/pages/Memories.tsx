@@ -202,7 +202,7 @@ export function Memories(): React.JSX.Element {
     if (!text || saving) return
     setSaving(true)
     try {
-      await createMemory(text)
+      await createMemory(text, { category: 'manual' })
       toast('Memory created', { tone: 'info' })
       closeCompose()
     } catch (e) {

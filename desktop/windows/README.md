@@ -25,9 +25,11 @@ keys to obtain.
 
 ## Authentication
 
-- **App sign-in:** each user signs in with **their own** Google/Omi account through
-  the built-in popup. The Firebase project is shared (Omi's `based-hardware`); accounts
-  are individual. Nothing to configure — it works out of the box from `.env.example`.
+- **App sign-in:** each user signs in with **their own** Google or Apple/Omi account
+  through the system browser. The Windows app uses the same backend-mediated OAuth
+  flow as the macOS app, so provider credentials stay server-side. The Firebase project
+  is shared (Omi's `based-hardware`); accounts are individual. Nothing to configure —
+  it works out of the box from `.env.example`.
 - **Google integration** (optional Gmail/Google connect — separate from sign-in): bring
   your own credentials. Create an OAuth **Desktop app** client in the
   [Google Cloud Console](https://console.cloud.google.com/apis/credentials), then in your

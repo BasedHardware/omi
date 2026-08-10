@@ -38,8 +38,8 @@ function fcSig(name: string, args: Record<string, unknown>, sig: string): unknow
 function ok(json: unknown): unknown {
   return { ok: true, json: async () => json }
 }
-function httpErr(status: number): unknown {
-  return { ok: false, status }
+function httpErr(status: number, retryable = false): unknown {
+  return { ok: false, status, headers: { get: () => (retryable ? 'true' : 'false') } }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,7 +117,9 @@ describe('geminiWire', () => {
 
   it('retries a transient (5xx) error, then succeeds', async () => {
     vi.useFakeTimers()
-    h.fetch.mockResolvedValueOnce(httpErr(500)).mockResolvedValueOnce(ok(fc('no_task_found', {})))
+    h.fetch
+      .mockResolvedValueOnce(httpErr(500, true))
+      .mockResolvedValueOnce(ok(fc('no_task_found', {})))
 
     let res: Awaited<ReturnType<typeof sendInitialTurn>> | undefined
     const p = sendInitialTurn(initial).then((r) => {
@@ -142,27 +144,21 @@ describe('geminiWire', () => {
     expect(h.fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('runs the fallback round after the primary exhausts its 3 attempts', async () => {
+  it('does not run a duplicate fallback-model round', async () => {
     vi.useFakeTimers()
     h.fetch
-      .mockResolvedValueOnce(httpErr(500)) // primary attempt 1
-      .mockResolvedValueOnce(httpErr(500)) // primary attempt 2
-      .mockResolvedValueOnce(httpErr(500)) // primary attempt 3 — exhausts the round
-      .mockResolvedValueOnce(ok(fc('no_task_found', {}))) // fallback round, attempt 1
+      .mockResolvedValueOnce(httpErr(500, true))
+      .mockResolvedValueOnce(httpErr(500, true))
+      .mockResolvedValueOnce(httpErr(500, true))
 
-    let res: Awaited<ReturnType<typeof sendInitialTurn>> | undefined
-    const p = sendInitialTurn(initial).then((r) => {
-      res = r
-    })
+    const p = sendInitialTurn(initial).catch(() => undefined)
     await vi.advanceTimersByTimeAsync(2_000 + 8_000) // the two in-round backoffs
     await p
 
-    expect(res?.turn.toolCalls[0].name).toBe('no_task_found')
-    // 4 calls proves the loop went past the primary's 3-attempt cap into the fallback.
-    expect(h.fetch).toHaveBeenCalledTimes(4)
+    expect(h.fetch).toHaveBeenCalledTimes(3)
   })
 
-  it('surfaces a per-call timeout (transient) after exhausting both rounds', async () => {
+  it('surfaces a per-call timeout without replaying either round', async () => {
     vi.useFakeTimers()
     // Never settles until its request is aborted — the way net.fetch behaves.
     h.fetch.mockImplementation(
@@ -182,12 +178,11 @@ describe('geminiWire', () => {
     const p = sendInitialTurn(initial).catch((e) => {
       err = e
     })
-    // 2 rounds × 3 attempts × 300s + the in-round backoffs — advance well past it.
-    await vi.advanceTimersByTimeAsync(2_100_000)
+    await vi.advanceTimersByTimeAsync(300_000)
     await p
 
     expect(err).toBeInstanceOf(DOMException)
     expect((err as DOMException).name).toBe('TimeoutError')
-    expect(h.fetch).toHaveBeenCalledTimes(6)
+    expect(h.fetch).toHaveBeenCalledTimes(1)
   })
 })

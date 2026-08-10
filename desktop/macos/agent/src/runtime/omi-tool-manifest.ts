@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isChatFirstMainChat } from "./chat-first-capability.js";
 
 import {
   agentControlCapabilityManifest,
@@ -12,6 +13,7 @@ export type OmiToolCondition =
   | "onboardingOnly"
   | "nonOnboarding"
   | "coordinatorOnly"
+  | "typedChatCoordinatorOnly"
   | "screenContext"
   | "screenContextOrOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
@@ -101,6 +103,9 @@ export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
   executionRole?: "coordinator" | "leaf";
+  surfaceKind?: string;
+  chatFirstUi?: boolean;
+  controlGeneration?: number | null;
 }
 
 export interface OmiToolAvailabilitySnapshot {
@@ -368,12 +373,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Search Conversations",
-      "Semantic search across the user's past conversations.",
-      ["Use for specific topics, decisions, or events discussed in conversations."],
+      "Search the user's past conversations by topic or exact canonical ID/share link.",
+      [
+        "Use for specific topics, decisions, or events discussed in conversations.",
+        "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      ],
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     },
   },
   get_memories: {
@@ -399,6 +407,18 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       realtimeDescription:
         "Search the user's memories / facts for a SPECIFIC thing ('what's my dog's name', 'where do I work', 'what's my partner's name'). Fast synchronous read. Speak the result.",
     },
+  },
+  create_memory: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Create Memory",
+      "Save one user-provided fact or preference to short-term memory.",
+      [
+        "Use only when the user explicitly and affirmatively asks you to remember or save the supplied content.",
+        "Do not infer memories from conversation context, and do not call for a negative request such as 'do not remember this'.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      ],
+    ),
   },
   get_action_items: {
     surfaces: ["desktop_chat", "realtime_voice"],
@@ -937,12 +957,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "search_conversations",
     label: "Search Conversations",
-    description: "Semantic search across conversations. Use for specific events or topics.",
-    promptSnippet: "search_conversations - Find conversations about a topic",
+    description: "Search conversations by topic or exact canonical ID/share link.",
+    promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
     latency: "fast network",
     inputSchema: schema(
       {
-        query: { type: "string", description: "Event or topic to search for" },
+        query: { type: "string", description: "Event/topic, canonical UUID, or https://h.omi.me/conversations/<uuid> link" },
         start_date: { type: "string" },
         end_date: { type: "string" },
         limit: { type: "number", description: "Default 5, max 20" },
@@ -995,6 +1015,36 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
+  },
+  {
+    name: "create_memory",
+    label: "Create Memory",
+    description:
+      "Save exactly one user-provided fact or preference to short-term memory. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Never infer a memory, and never call for a negative request such as 'do not remember this'.",
+    promptSnippet: "create_memory - Save one explicitly requested fact or preference to short-term memory",
+    promptGuidelines: [
+      "The current user message must explicitly and affirmatively ask Omi to remember or save the supplied content.",
+      "Pass only the content to remember; do not add inferred facts, categories, tags, or metadata.",
+      "Do not call when the user merely states a fact, asks a question, asks for a suggestion, or says not to remember/save something.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+      },
+      ["content"],
+    ),
+    annotations: { ...localWrite, idempotentHint: false },
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires the coordinator's typed desktop chat surface and authenticated backend access.",
+      "The Swift executor selects the new short-term-memory endpoint and legacy-memory fallback as supported by the installed app/backend.",
+    ],
+    adapters: piAndStdio("typedChatCoordinatorOnly"),
   },
   {
     name: "get_action_items",
@@ -1568,6 +1618,195 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
   ...swiftToolManifest.slice(4),
 ] satisfies OmiToolManifestEntry[];
 
+/**
+ * This is intentionally not part of `omiToolManifest`: capability-off callers
+ * must retain the historical order, digest, and raw tools/list bytes.
+ */
+export const chatFirstToolManifest: OmiToolManifestEntry[] = [
+  {
+    name: "create_canonical_goal",
+    label: "Create Canonical Goal",
+    description: "Create a canonical goal for this Chat-first user when they explicitly ask to turn an intention into a goal. Return the opaque goal ID and render it as a goalLink in the same response.",
+    promptSnippet: "create_canonical_goal - Create a canonical goal from the user's explicit intention",
+    promptGuidelines: [
+      "Use only after the user explicitly asks to create a goal or confirms the proposed goal.",
+      "After creation, render the returned goal as a goalLink in the same response.",
+      "Do not create a local or inferred substitute goal.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        title: { type: "string", description: "Concise goal title." },
+        desired_outcome: { type: "string", description: "Concrete outcome the user wants." },
+        why_it_matters: { type: "string", description: "Optional user-stated reason this goal matters." },
+        success_criteria: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional concrete criteria that define success.",
+        },
+      },
+      ["title", "desired_outcome"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Create Canonical Goal", "Create a user-confirmed canonical goal in Chat-first.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "get_canonical_goals",
+    label: "Get Canonical Goals",
+    description: "Retrieve canonical goals for this Chat-first user. For any question about the user's goals, goal progress, or focus, call this first. It returns opaque canonical goal IDs that must be rendered as goalLink blocks with render_chat_blocks. Do not use execute_sql, legacy local goals, memories, or inferred goals as a substitute.",
+    promptSnippet: "get_canonical_goals - Retrieve canonical goals with IDs for native goal links",
+    promptGuidelines: [
+      "For goal questions, call this before answering and use only returned canonical goals.",
+      "Render every returned goal the user should act on as a goalLink in the same response.",
+      "If it returns no goals, state that plainly; do not infer goals from memories or local SQL.",
+    ],
+    latency: "fast network",
+    inputSchema: schema({ include_ended: { type: "boolean", description: "Include completed or archived canonical goals." } }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Get Canonical Goals", "Read canonical goal records for a Chat-first response.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "render_chat_blocks",
+    label: "Render Chat Blocks",
+    description: "Render native, interactive Omi components on the producing main Chat turn. In Chat-first UI, call this in the same turn whenever you retrieve, create, or summarize tasks, goals, memories, or captured conversations; do not leave those entities as a Markdown table/list or ask whether the user wants cards. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
+    promptSnippet: "render_chat_blocks - Render native interactive Omi components in this main Chat response; use by default for entity results",
+    promptGuidelines: [
+      "After reading or mutating tasks, goals, memories, or captured conversations, render the relevant native components before finishing the same response.",
+      "Do not ask whether the user wants cards and do not substitute Markdown tables or lists for entities that have canonical IDs.",
+      "For task cards, obtain opaque canonical task IDs from get_action_items or create_action_item; execute_sql numeric row IDs are invalid.",
+      "Use only for a compact actionable question, task, goal, memory, or Omi-device capture reference.",
+      "Never invent entity identifiers or URLs; the server validates every requested reference.",
+    ],
+    latency: "fast network",
+    inputSchema: schema({
+      blocks: {
+        type: "array",
+        description: "1-8 declarative chat blocks validated by the Omi backend.",
+        items: { type: "object", additionalProperties: true },
+      },
+    }, ["blocks"]),
+    mcpInputSchema: schema({
+      blocks: {
+        type: "array",
+        description: "1-8 declarative chat blocks validated by the Omi backend.",
+        items: { type: "object", additionalProperties: true },
+      },
+    }, ["blocks"]),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Render Chat Blocks", "Add validated structured cards to the current main Chat response.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Every entity reference is revalidated by the backend before journal admission.",
+    ],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "show_rewind_evidence",
+    label: "Show Rewind Evidence",
+    description: "Attach one local Rewind screenshot to the producing main Chat turn as visual evidence.",
+    promptSnippet: "show_rewind_evidence - Show a Rewind screenshot as evidence in this Chat response",
+    promptGuidelines: [
+      "Use a screenshot_id returned by a local screen-history search; never invent an id.",
+      "Attach only evidence that materially supports the answer, and explain what it demonstrates.",
+      "This exposes raw screenshot pixels in Chat and requires the user's screenshot-sharing setting.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      screenshot_id: {
+        type: "number",
+        description: "Screenshot ID returned by search_screen_history or the local screenshots table.",
+      },
+    }, ["screenshot_id"]),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Show Rewind Evidence",
+      "Attach one local historical screenshot as evidence on the current main Chat response.",
+      ["Only available to the server-enabled chat-first main Chat cohort."],
+    ),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Requires a valid local Rewind screenshot and screenshot sharing enabled.",
+    ],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "search_chat_history",
+    label: "Search Chat History",
+    description: "Search a bounded window of the current main Chat journal for an older decision.",
+    promptSnippet: "search_chat_history - Search the current Chat's older journaled turns",
+    promptGuidelines: [
+      "Use only when an older Chat decision is outside the retained recent context.",
+      "Search terms and optional ISO date bounds are scoped to this one main Chat transcript.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      query: {
+        type: "string",
+        description: "Required keyword or phrase to search in this Chat's local journal.",
+      },
+      start_date: {
+        type: "string",
+        description: "Optional inclusive ISO timestamp lower bound.",
+      },
+      end_date: {
+        type: "string",
+        description: "Optional inclusive ISO timestamp upper bound.",
+      },
+      limit: {
+        type: "integer",
+        minimum: 1,
+        maximum: 20,
+        description: "Optional result count; defaults to 10 and is capped at 20.",
+      },
+    }, ["query"]),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "nodeTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Search Chat History", "Recover a bounded older decision from the current Chat transcript.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+      "The parent kernel searches only the caller-owned current journal generation.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Search is authorized by the parent kernel before it reads local journal state.",
+    ],
+    adapters: piAndStdio(),
+  },
+] satisfies OmiToolManifestEntry[];
+
+export const allOmiToolManifest: OmiToolManifestEntry[] = [
+  ...omiToolManifest,
+  ...chatFirstToolManifest,
+] satisfies OmiToolManifestEntry[];
+
 function canonicalManifestJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalManifestJson).join(",")}]`;
@@ -1584,6 +1823,10 @@ export const OMI_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
   .update(canonicalManifestJson(omiToolManifest))
   .digest("hex")}` as const;
 
+export const OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
+  .update(canonicalManifestJson(allOmiToolManifest))
+  .digest("hex")}` as const;
+
 export function isToolAvailableForContext(
   availability: OmiToolAdapterAvailability | undefined,
   context: OmiToolProjectionContext = {},
@@ -1592,6 +1835,10 @@ export function isToolAvailableForContext(
   if (availability.condition === "onboardingOnly") return context.onboarding === true;
   if (availability.condition === "nonOnboarding") return context.onboarding !== true;
   if (availability.condition === "coordinatorOnly") return context.executionRole !== "leaf";
+  if (availability.condition === "typedChatCoordinatorOnly") {
+    return (context.surfaceKind === "main_chat" || context.surfaceKind === "floating_chat")
+      && context.executionRole === "coordinator";
+  }
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   return true;
@@ -1601,7 +1848,12 @@ export function toolsForAdapter(
   adapterId: OmiToolAdapterId,
   context: OmiToolProjectionContext = {},
 ): OmiToolManifestEntry[] {
-  return omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  const base = omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  if (!isChatFirstMainChat(context)) return base;
+  return [
+    ...base,
+    ...chatFirstToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context)),
+  ];
 }
 
 export function toolNamesForAdapter(
@@ -1632,7 +1884,7 @@ export function mcpToolDefinitionsForAdapter(
 }
 
 export function toolManifestEntry(name: string): OmiToolManifestEntry | undefined {
-  return omiToolManifest.find((tool) => tool.name === name || tool.aliases?.includes(name));
+  return allOmiToolManifest.find((tool) => tool.name === name || tool.aliases?.includes(name));
 }
 
 export function normalizeOmiToolName(
@@ -1643,7 +1895,7 @@ export function normalizeOmiToolName(
   const dotMatch = /^omi-tools\.(.+)$/.exec(name);
   const unprefixed = mcpMatch?.[1] ?? dotMatch?.[1] ?? name;
 
-  for (const tool of omiToolManifest) {
+  for (const tool of allOmiToolManifest) {
     const availability = tool.adapters[adapterId];
     const adapterName = availability?.adapterName ?? tool.name;
     const aliases = new Set([...(tool.aliases ?? []), ...(availability?.aliases ?? [])]);
@@ -1664,8 +1916,10 @@ export function buildToolAvailabilitySnapshot(
   const advertised = toolsForAdapter(adapterId, context);
   const aliases: Record<string, string> = {};
   const disabled: Array<{ name: string; reason: string }> = [];
+  // Keep the legacy availability snapshot byte-for-byte stable while off.
+  const manifestForSnapshot = isChatFirstMainChat(context) ? allOmiToolManifest : omiToolManifest;
 
-  for (const tool of omiToolManifest) {
+  for (const tool of manifestForSnapshot) {
     const availability = tool.adapters[adapterId];
     if (isToolAvailableForContext(availability, context)) {
       for (const alias of [...(tool.aliases ?? []), ...(availability?.aliases ?? [])]) {
@@ -1684,7 +1938,9 @@ export function buildToolAvailabilitySnapshot(
 
   return {
     manifestVersion: OMI_TOOL_MANIFEST_VERSION,
-    manifestDigest: OMI_TOOL_MANIFEST_DIGEST,
+    manifestDigest: isChatFirstMainChat(context)
+      ? OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST
+      : OMI_TOOL_MANIFEST_DIGEST,
     adapterId,
     context,
     advertisedToolCount: advertised.length,

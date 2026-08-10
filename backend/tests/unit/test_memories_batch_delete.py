@@ -323,8 +323,8 @@ class TestBatchDeleteRouteOrdering:
 def _canonical_delete_stage(monkeypatch, *, read_cutover_done: bool):
     """Canonical owns writes; `read_cutover_done` picks the rollout stage.
 
-    False models MEMORY_MODE=write (canonical writes, legacy reads); True models
-    MEMORY_MODE=read, where both sides are canonical.
+    False models persisted write readiness before read cutover; True models
+    persisted read readiness, where both sides are canonical.
     """
     monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
     monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
@@ -336,10 +336,10 @@ def _canonical_delete_stage(monkeypatch, *, read_cutover_done: bool):
 
 
 def test_delete_during_dual_write_also_clears_the_store_the_user_reads(monkeypatch):
-    """#10446: at MEMORY_MODE=write canonical owns writes but GET /v3/memories still reads
-    legacy until MEMORY_MODE=read. A canonical-only delete is invisible in that window —
-    the client drops the row, the next refresh re-reads legacy where it still exists, and
-    the memory reappears seconds later. Deleting must mirror into legacy until cutover."""
+    """#10446: canonical write readiness may precede canonical read cutover. A
+    canonical-only delete is invisible in that window — the client drops the
+    row, the next refresh re-reads legacy where it still exists, and the memory
+    reappears seconds later. Deleting must mirror into legacy until cutover."""
     legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=False)
 
     assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
@@ -348,8 +348,8 @@ def test_delete_during_dual_write_also_clears_the_store_the_user_reads(monkeypat
 
 
 def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
-    """At MEMORY_MODE=read both sides are canonical, so the mirror must not fire; it exists
-    only to keep the pre-cutover read surface consistent."""
+    """After persisted read cutover both sides are canonical, so the mirror must
+    not fire; it exists only to keep the pre-cutover read surface consistent."""
     legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=True)
 
     assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
@@ -382,10 +382,50 @@ def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
     return purge
 
 
+def _canonical_delete_default_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes for the default-scope delete; pick the rollout stage."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    delete_default = MagicMock()
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_default=delete_default))
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+    return delete_default, purge
+
+
+def test_default_delete_uses_canonical_scope_and_mirrors_legacy_during_dual_read(monkeypatch):
+    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    delete_default.assert_called_once_with('u1')
+    purge.assert_called_once_with('u1')
+
+
+def test_default_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    delete_default.assert_called_once_with('u1')
+    purge.assert_not_called()
+
+
+def test_legacy_default_delete_still_purges(monkeypatch):
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')
+
+
 def test_delete_all_during_dual_write_also_wipes_the_store_the_user_reads(monkeypatch):
-    """#10446 follow-up: at MEMORY_MODE=write a canonical delete-all is invisible, because
-    GET /v3/memories still reads legacy. "Delete everything" would leave the user's whole
-    list intact on the next refresh, so the wipe must reach the store they read."""
+    """#10446 follow-up: before persisted read cutover a canonical delete-all is
+    invisible because GET /v3/memories still reads legacy. "Delete everything"
+    would leave the user's whole list intact on the next refresh, so the wipe
+    must reach the store they read."""
     purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=False)
 
     assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}

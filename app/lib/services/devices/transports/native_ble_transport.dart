@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -47,6 +48,10 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<void> connect() async {
     if (_state == DeviceTransportState.connected) return;
+
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.connection)) {
+      throw BluetoothAdapterUnavailableException(BluetoothReadiness.instance.state);
+    }
 
     _updateState(DeviceTransportState.connecting);
 

@@ -195,6 +195,9 @@ def _build_fakes() -> dict[str, ModuleType]:
         TRENDS="trends",
     )
 
+    gateway_error_contract = add("utils.llm.gateway_error_contract")
+    gateway_error_contract.conversation_processing_http_exception = lambda error: error
+
     utils_notifications = add("utils.notifications")
     for attr in ["send_notification", "send_important_conversation_message", "send_action_item_data_message"]:
         setattr(utils_notifications, attr, MagicMock())
@@ -251,6 +254,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     for name in [
         "utils.conversations.factory",
         "utils.conversations.transcript_chunks",
+        "utils.conversations.transcript_for_llm",
         "utils.conversations.memory_extraction_telemetry",
         "utils.memory.canonical_activation",
         "utils.memory.memory_service",

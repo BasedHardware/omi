@@ -88,9 +88,14 @@ def _activate_local_canonical_cohort(uid: str) -> None:
     # Production membership remains code-reviewed. This process-local seam is
     # guarded by the emulator identity above and exists only so synthetic users
     # can exercise the real selector and maintenance implementation.
+    from config import canonical_memory_cohort
     from utils.memory import memory_system
 
-    memory_system._canonical_cohort_uids = lambda: frozenset({uid})
+    # `resolve_memory_system` delegates to the code-defined selector directly.
+    # Replace only that selector's process-local data after proving this is the
+    # local emulator; environment flags remain unable to enroll a user.
+    canonical_memory_cohort.CANONICAL_MEMORY_USERS = frozenset({uid})
+    memory_system.CANONICAL_MEMORY_USERS = canonical_memory_cohort.CANONICAL_MEMORY_USERS
 
 
 def main(argv: list[str] | None = None) -> int:

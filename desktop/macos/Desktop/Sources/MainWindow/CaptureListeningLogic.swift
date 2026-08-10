@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Shared Capture/Listening control logic used by both the persistent status bar
-/// (`CaptureListeningControls`) and Home's column-aligned header
+/// Shared Capture/Listening control logic used by both the top bar's wordless status cluster
+/// (`ShellStatusIcons`) and the legacy Home's column-aligned header
 /// (`DashboardPage.homeHeader`). The two surfaces render different layouts but
 /// drive identical behavior, so the toggle actions and status derivations live
 /// here once. Each view keeps its own `@State`/`@AppStorage` (preserving SwiftUI
@@ -36,7 +36,7 @@ enum CaptureListeningLogic {
       let name = appState.recordingInputDeviceName
     {
       if AudioCaptureService.isMetaGlassesName(name) {
-        return "Ray-Ban Meta"
+        return name.localizedCaseInsensitiveContains("oakley") ? name : "Ray-Ban Meta"
       }
       let preferredUID =
         UserDefaults.standard.string(

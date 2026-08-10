@@ -204,7 +204,7 @@ def test_material_event_uses_minimized_adjudicator_summary_not_memory_content(en
     assert appended[0][1]['required_status'] == WorkstreamStatus.open
 
 
-def test_shadow_association_adjudicates_but_does_not_append(enabled, monkeypatch):
+def test_persisted_shadow_mode_cannot_suppress_canonical_association(enabled, monkeypatch):
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -230,11 +230,12 @@ def test_shadow_association_adjudicates_but_does_not_append(enabled, monkeypatch
             reason=AssociationReason.selected,
             event_summary='Revise the draft for the changed pricing assumption.',
         ),
-        append_event=lambda *args, **kwargs: appended.append('event'),
+        append_event=lambda *args, **kwargs: appended.append('event') or SimpleNamespace(event_id='event-1'),
     )
 
-    assert outcome.outcome == AssociationOutcomeKind.would_append
-    assert appended == []
+    assert outcome.outcome == AssociationOutcomeKind.appended
+    assert outcome.event_id == 'event-1'
+    assert appended == ['event']
 
 
 def test_verbatim_material_summary_fails_closed_without_append(enabled):
@@ -388,7 +389,7 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
     assert len(created) == 1
 
 
-def test_recurrence_shadow_evaluates_without_candidate_mutation(monkeypatch):
+def test_persisted_shadow_mode_cannot_suppress_canonical_recurrence_candidate(monkeypatch):
     monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
@@ -404,12 +405,14 @@ def test_recurrence_shadow_evaluates_without_candidate_mutation(monkeypatch):
         'uid-1',
         _recurrence_signal(distinct_days=3),
         account_generation=7,
-        create_candidate=lambda *args, **kwargs: calls.append('candidate'),
+        create_candidate=lambda *args, **kwargs: calls.append('candidate')
+        or SimpleNamespace(candidate_id='candidate-1'),
     )
 
-    assert result.outcome == RecurrenceOutcomeKind.would_create
+    assert result.outcome == RecurrenceOutcomeKind.candidate_created
+    assert result.candidate_id == 'candidate-1'
     assert result.idempotency_key
-    assert calls == []
+    assert calls == ['candidate']
 
 
 def test_durable_recurrence_inbox_retries_failures_and_continues(enabled, monkeypatch):

@@ -62,13 +62,16 @@ Gate 2 GO means **dev-cloud functional proof passed**. It does not approve produ
 
 ## Canonical memory selection and fallback boundary
 
-The canonical memory path is selected only when the server observes all of:
+The canonical memory path is selected only for a valid authenticated UID in
+the code-owned `CANONICAL_MEMORY_USERS` cohort. The request then reads the
+persisted control/head/grant/projection state and fails closed unless every
+read prerequisite is satisfied. `MEMORY_V3_GET_ENABLED`, `MEMORY_MODE`, and
+`MEMORY_ENABLED_USERS` are deploy-readiness declarations validated across
+surfaces; request routing does not read them and they cannot grant or revoke
+product entitlement.
 
-1. `MEMORY_V3_GET_ENABLED=true` exactly;
-2. `MEMORY_MODE=read` exactly;
-3. a valid authenticated UID present in the server-side allowlist.
-
-Failures before canonical memory selection retain the documented legacy/off behavior and must not invoke the canonical-memory Firestore adapter.
+A user outside the code-owned cohort retains the documented legacy behavior
+and must not invoke the canonical-memory Firestore adapter.
 
 After canonical memory selection, failure of any global gate, kill switch, user grant, write-convergence prerequisite, authoritative head, generation check, projection read, cursor validation, IAM read, or other rollout prerequisite must fail closed and must not invoke the legacy path.
 
@@ -87,7 +90,12 @@ Gate 3 is limited to production-specific deltas:
 - approved tiny canary;
 - production rollback execution and observation.
 
-A production deployment with `MEMORY_V3_GET_ENABLED` absent or false is a dark deployment only. It does not satisfy Gate 2 and must not be cited as functional proof. Production index deployment while the runtime remains default-off may occur only under separate approval and also does not satisfy Gate 2.
+A production deployment with the `MEMORY_V3_GET_ENABLED=false` readiness
+declaration is approved only as a dark deployment. The value is not a request
+gate and does not by itself prove darkness; the code cohort and persisted
+controls must also remain unactivated. Production index deployment while the
+runtime remains default-off may occur only under separate approval and does not
+satisfy Gate 2.
 
 ## Evidence validity
 
@@ -118,30 +126,27 @@ Candidate: `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 - **Production activation gate:** NO-GO by policy until dev-cloud GO and independent review.
 - Any prior clearance for default-off production code or index declaration is non-activation plumbing only and must not be treated as enabled-path proof.
 
-## First-user dev read proof lane
+## Human dogfood lane paused
 
-The first-user / dogfood lane uses runtime data/auth Firestore project `based-hardware` and deploy plane `based-hardware-dev`, with approved UIDs:
+No human UID is currently approved for the canonical-memory, Smart Tasks, or
+Chat-first cohort. Checked-in dev runtime config must remain fail-closed:
 
-- `vi7SA9ckQCe4ccobWNxlbdcNdC23` (david.d.zhang@gmail.com) — active in this PR
-- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` (kodjima33@gmail.com) — commented out for this PR; re-enable soon
-
-For this lane, checked-in dev runtime config may persist:
-
-- `MEMORY_MODE=read`;
-- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23`;
-- `MEMORY_V3_GET_ENABLED=true`;
-- request-path `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`
-  (maintenance lives only on `memory-maintenance-job`).
+- `MEMORY_MODE=off`;
+- `MEMORY_ENABLED_USERS=`;
+- `MEMORY_V3_GET_ENABLED=false`;
+- `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`;
+- parity capture disabled with an empty principal allowlist.
 
 Hourly canonical maintenance (required normalization → TTL audit → one terminal
 consolidation route per pending item) is hosted by `memory-maintenance-job` and
-must receive the same whitelist-scoped flags plus
-`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`; Cloud Scheduler owns cadence.
-Production must remain off with an empty cohort and
-`MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are
-satisfied. Gate 3 must flip `cloud_run.jobs.memory-maintenance-job` together
-with request-path `MEMORY_MODE=read`; `validate-backend-runtime-env.py` fails if
-request-path read mode is enabled while the job stays off.
+must remain disabled until a separately reviewed rollout restores a cohort;
+Cloud Scheduler owns cadence.
+Production declarations must remain off with an empty runtime inventory and
+`MEMORY_V3_GET_ENABLED=false`, while the production code cohort and persisted
+controls remain unactivated, until Gate 2 and Gate 3 requirements are
+satisfied. Gate 3 must update `cloud_run.jobs.memory-maintenance-job` together
+with request-path readiness declarations; `validate-backend-runtime-env.py`
+fails if request-path `MEMORY_MODE=read` is declared while the job stays off.
 
 First-user projection tooling may write only the compatibility projection state/items for the same UID after an explicit apply confirmation. Its dry-run and apply output must redact content and include a rollback manifest with exact touched doc paths. The first-user E2E proof is read-only and must report non-`/v3/memories` read surfaces as `not_checked` when they cannot be generically exercised.
 

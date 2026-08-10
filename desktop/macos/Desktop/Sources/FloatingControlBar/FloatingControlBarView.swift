@@ -170,6 +170,7 @@ struct FloatingControlBarView: View {
 
           if let notification = state.currentNotification, !state.showingAIConversation {
             barNotification(notification)
+              .floatingBackground(cornerRadius: 18)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.bottom, OmiSpacing.sm)
               .transition(.move(edge: .top).combined(with: .opacity))
@@ -1205,7 +1206,6 @@ struct FloatingControlBarView: View {
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
     }
-    .floatingBackground(cornerRadius: 18)
   }
 
   private var controlBarView: some View {
@@ -2050,6 +2050,9 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
+          // Rich controls are main-chat-only; floating/notch stays passive.
+          case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+            EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
           ):

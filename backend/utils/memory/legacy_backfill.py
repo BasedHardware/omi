@@ -33,6 +33,11 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id
+from utils.memory.legacy_backfill_bulk_support import (
+    apply_with_control_refresh,
+    fetch_active_legacy_rows,
+    rows_missing_canonical_destinations,
+)
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
@@ -113,6 +118,11 @@ def _row_str(row: LegacyRow, key: str, default: str = "") -> str:
 
 def _row_content(row: LegacyRow) -> str:
     return _row_str(row, "content").strip()
+
+
+def row_content(row: LegacyRow) -> str:
+    """Public content accessor for inventory/orchestrators (no new behavior)."""
+    return _row_content(row)
 
 
 def _legacy_source_attribution(
@@ -810,6 +820,15 @@ def _bucket_counts_and_samples(
     return counts, {bucket: sample_rows for bucket, sample_rows in samples.items() if sample_rows}
 
 
+def bucket_counts_and_samples(
+    rows: Sequence[LegacyRow],
+    *,
+    sample_size: int = 5,
+) -> tuple[Dict[str, int], BucketSampleMap]:
+    """Public inventory helper; wraps the internal classifier tally."""
+    return _bucket_counts_and_samples(rows, sample_size=sample_size)
+
+
 def _fetch_active_legacy_memories(
     uid: str,
     *,
@@ -817,33 +836,30 @@ def _fetch_active_legacy_memories(
     get_non_filtered_memories_fn: LegacyReader,
     scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
 ) -> List[LegacyRow]:
-    """Read-only scan of active legacy memories (never writes).
+    """Read-only raw-page scan; active filtering never mutates legacy rows."""
+    return fetch_active_legacy_rows(
+        uid,
+        db_client=db_client,
+        reader=get_non_filtered_memories_fn,
+        is_active=is_active_legacy_row,
+        scan_page_size=scan_page_size,
+    )
 
-    Paginates over the raw Firestore page from ``get_non_filtered_memories`` so
-    ``len(page) < page_size`` reliably signals end-of-data even when many rows in
-    a page are inactive and filtered out here.
-    """
-    all_rows: List[LegacyRow] = []
-    offset = 0
-    page_size = scan_page_size
-    while True:
-        try:
-            page: List[LegacyRow] = get_non_filtered_memories_fn(
-                uid, limit=page_size, offset=offset, firestore_client=db_client
-            )
-        except TypeError as exc:
-            if "firestore_client" not in str(exc):
-                raise
-            page = get_non_filtered_memories_fn(uid, limit=page_size, offset=offset)
-        if not page:
-            break
-        for row in page:
-            if is_active_legacy_row(row):
-                all_rows.append(row)
-        if len(page) < page_size:
-            break
-        offset += page_size
-    return sorted(all_rows, key=lambda row: _row_str(row, "id"))
+
+def fetch_active_legacy_memories(
+    uid: str,
+    *,
+    db_client: Any,
+    get_non_filtered_memories_fn: LegacyReader,
+    scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
+) -> List[LegacyRow]:
+    """Public read-only active legacy scan for inventory/orchestrators."""
+    return _fetch_active_legacy_memories(
+        uid,
+        db_client=db_client,
+        get_non_filtered_memories_fn=get_non_filtered_memories_fn,
+        scan_page_size=scan_page_size,
+    )
 
 
 def _read_control_state(uid: str, *, db_client: Any, create_if_missing: bool = True) -> MemoryControlState:
@@ -1249,46 +1265,6 @@ def _legacy_row_has_canonical_destination(
     return live_item is not None and _is_active_processed_canonical_item(live_item)
 
 
-def _legacy_row_has_any_canonical_destination(
-    *,
-    uid: str,
-    legacy_row: LegacyRow,
-    items_by_id: Dict[str, MemoryItem],
-) -> bool:
-    legacy_id = _row_str(legacy_row, "id")
-    content = _row_content(legacy_row)
-    if not content:
-        return False
-
-    backfill_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
-    backfill_item = items_by_id.get(backfill_id)
-    if backfill_item is not None and _is_active_backfill_destination(backfill_item):
-        return True
-
-    live_id = live_extraction_memory_id_for_legacy_row(uid=uid, legacy_row=legacy_row)
-    if live_id is None:
-        return False
-    live_item = items_by_id.get(live_id)
-    return live_item is not None and _is_active_processed_canonical_item(live_item)
-
-
-def _count_any_destination_backfill_items(
-    uid: str,
-    legacy_rows: Sequence[LegacyRow],
-    *,
-    db_client: Any,
-) -> int:
-    if not legacy_rows:
-        return 0
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
-    items_by_id = {item.memory_id: item for item in items}
-    return sum(
-        1
-        for row in legacy_rows
-        if _legacy_row_has_any_canonical_destination(uid=uid, legacy_row=row, items_by_id=items_by_id)
-    )
-
-
 def _count_destination_backfill_items(
     uid: str,
     legacy_rows: Sequence[LegacyRow],
@@ -1432,7 +1408,7 @@ def backfill_user_bucketed(
             skipped_bucket_not_writable=len(selected_rows),
         )
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=client)
+    destination_count = _count_destination_backfill_items(uid, selected_rows, db_client=client)
     if dry_run:
         return BackfillReport(
             uid=uid,
@@ -1505,7 +1481,7 @@ def backfill_user_bucketed(
             errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
             break
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=client)
+    destination_count = _count_destination_backfill_items(uid, selected_rows, db_client=client)
     verified = destination_count == len(selected_rows)
     return BackfillReport(
         uid=uid,
@@ -1538,6 +1514,9 @@ def backfill_user(
     dry_run: bool = False,
     batch_size: int = DEFAULT_BATCH_SIZE,
     resume: bool = True,
+    max_rows: Optional[int] = None,
+    continue_on_error: bool = False,
+    stop_requested: Optional[Callable[[], bool]] = None,
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
@@ -1580,7 +1559,10 @@ def backfill_user(
         start_index = 0
         if resume and control.legacy_backfill_source_fingerprint == fingerprint:
             start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
-        intended_count = max(0, len(admissible_rows) - start_index)
+        end_index = len(admissible_rows)
+        if max_rows is not None:
+            end_index = min(end_index, start_index + max(0, max_rows))
+        intended_count = max(0, end_index - start_index)
         _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
         return BackfillReport(
             uid=uid,
@@ -1603,18 +1585,51 @@ def backfill_user(
 
     control = _read_control_state(uid, db_client=client)
     start_index = 0
+    rows_to_process = admissible_rows
+    source_indexes = list(range(len(admissible_rows)))
+    recovering_changed_source = False
+    recovered_semantic_keys: set[str] = set()
     if resume and control.legacy_backfill_source_fingerprint == fingerprint:
         start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
     elif (
         resume and control.legacy_backfill_processed_count and control.legacy_backfill_source_fingerprint != fingerprint
     ):
         logger.warning(
-            "legacy backfill source set changed for %s (fingerprint mismatch); restarting from 0",
+            "legacy backfill source set changed for %s (fingerprint mismatch); reconciling pending destinations",
             uid,
         )
+        # A changed source invalidates positional progress. Reconcile against
+        # idempotent destinations instead, so newly inserted IDs cannot starve
+        # behind an outdated cursor.
+        items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+        items_by_id = {item.memory_id: item for item in items}
+        destination_rows = [
+            row
+            for row in admissible_rows
+            if _legacy_row_has_canonical_destination(uid=uid, legacy_row=row, items_by_id=items_by_id)
+        ]
+        rows_to_process = rows_missing_canonical_destinations(
+            admissible_rows,
+            has_destination=lambda row: _legacy_row_has_canonical_destination(
+                uid=uid,
+                legacy_row=row,
+                items_by_id=items_by_id,
+            ),
+        )
+        pending_ids = {id(row) for row in rows_to_process}
+        source_indexes = [index for index, row in enumerate(admissible_rows) if id(row) in pending_ids]
+        recovered_semantic_keys = {
+            key
+            for row in destination_rows
+            if (key := semantic_materialization_key(uid=uid, legacy_row=row)) is not None
+        }
         start_index = 0
+        recovering_changed_source = True
 
-    intended_count = max(0, len(admissible_rows) - start_index)
+    end_index = len(rows_to_process)
+    if max_rows is not None:
+        end_index = min(end_index, start_index + max(0, max_rows))
+    intended_count = max(0, end_index - start_index)
     written_count = 0
     skipped_already_present = 0
     skipped_both_store_duplicate = 0
@@ -1623,33 +1638,46 @@ def backfill_user(
     keyword_sync_failures = 0
     kg_extraction_failures = 0
     errors: List[str] = []
-    materialized_semantic_keys: set[str] = set()
+    materialized_semantic_keys = recovered_semantic_keys
 
     processed_index = start_index
-    while processed_index < len(admissible_rows):
-        legacy_row = admissible_rows[processed_index]
+    while processed_index < end_index:
+        if stop_requested is not None and stop_requested():
+            break
+        legacy_row = rows_to_process[processed_index]
+        source_index = source_indexes[processed_index]
         semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
         if semantic_key is not None and semantic_key in materialized_semantic_keys:
             skipped_semantic_duplicate += 1
             processed_index += 1
             control = control.model_copy(
                 update={
-                    "legacy_backfill_processed_count": processed_index,
-                    "legacy_backfill_source_fingerprint": fingerprint,
+                    "legacy_backfill_processed_count": (0 if recovering_changed_source else processed_index),
+                    "legacy_backfill_source_fingerprint": (
+                        control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
+                    ),
                     "updated_at": datetime.now(timezone.utc),
                 }
             )
             _persist_control_state(control, db_client=client)
             continue
-        try:
-            row_result = _apply_one_legacy_row(
+        attempt = apply_with_control_refresh(
+            control=control,
+            apply_fn=lambda latest: _apply_one_legacy_row(
                 uid=uid,
                 legacy_row=legacy_row,
-                index=processed_index,
-                control=control,
+                # Retain the stable source position: changing it on recovery
+                # would create a second fallback evidence id for the same row.
+                index=source_index,
+                control=latest,
                 run_id=effective_run_id,
                 db_client=client,
-            )
+            ),
+            refresh_control=lambda: _read_control_state(uid, db_client=client, create_if_missing=False),
+            retry_once=continue_on_error,
+        )
+        control, row_result, row_error = attempt.control, attempt.result, attempt.error
+        if row_result is not None:
             control = row_result.control
             if row_result.written:
                 written_count += 1
@@ -1665,27 +1693,36 @@ def backfill_user(
                 keyword_sync_failures += 1
             if row_result.kg_extraction_failed:
                 kg_extraction_failures += 1
-        except Exception as exc:
+        elif row_error is not None:
             safe_uid = sanitize_pii(uid)
             safe_legacy_id = sanitize_pii(_row_str(legacy_row, "id", "unknown"))
-            logger.exception("legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
-            errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
-            break
+            logger.error("legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
+            errors.append(f"{safe_legacy_id}: {sanitize(row_error)}")
+            if not continue_on_error:
+                break
 
         processed_index += 1
         control = control.model_copy(
             update={
-                "legacy_backfill_processed_count": processed_index,
-                "legacy_backfill_source_fingerprint": fingerprint,
+                "legacy_backfill_processed_count": (0 if recovering_changed_source else processed_index),
+                "legacy_backfill_source_fingerprint": (
+                    control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
+                ),
                 "updated_at": datetime.now(timezone.utc),
             }
         )
         _persist_control_state(control, db_client=client)
 
         if batch_size > 0 and (processed_index - start_index) % max(1, batch_size) == 0:
-            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(admissible_rows))
+            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(rows_to_process))
 
-    completed = processed_index >= len(admissible_rows) and not errors
+    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
+    # Semantic duplicate rows are intentionally handled as completed work even
+    # when they share another row's canonical destination, preserving the
+    # established single-source completion contract. The changed-source path
+    # still reaches this point only after every currently missing destination
+    # has been examined.
+    completed = processed_index >= len(rows_to_process) and not errors
     if completed:
         control = control.model_copy(
             update={
@@ -1696,8 +1733,6 @@ def backfill_user(
             }
         )
         _persist_control_state(control, db_client=client)
-
-    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
 
     return BackfillReport(
         uid=uid,

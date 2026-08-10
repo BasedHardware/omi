@@ -152,6 +152,8 @@ def _validate_qualification_run_member(run: dict[str, Any]) -> None:
     """Reject malformed run members while permitting documented nullable unrelated fields."""
     if not _is_exact_integer(run.get("id")) or run["id"] <= 0:
         _fail("candidate qualification run has no trusted identity")
+    if not _is_exact_integer(run.get("run_attempt")) or run["run_attempt"] <= 0:
+        _fail("candidate qualification run has no trusted attempt")
     for field in ("status", "conclusion", "event", "path", "head_sha"):
         _nonempty_string(run.get(field), "candidate qualification runs are invalid")
     for field in ("head_branch", "name"):
@@ -164,15 +166,23 @@ def _validate_qualification_run_member(run: dict[str, Any]) -> None:
     _timestamp(run.get("updated_at"))
 
 
-def _validate_selected_qualification_run(run: dict[str, Any]) -> tuple[int, datetime]:
+def _trusted_run_attempt(run: dict[str, Any]) -> int:
+    run_attempt = run.get("run_attempt")
+    if not _is_exact_integer(run_attempt) or run_attempt <= 0:
+        _fail("candidate qualification run has no trusted attempt")
+    return run_attempt
+
+
+def _validate_selected_qualification_run(run: dict[str, Any]) -> tuple[int, int, datetime]:
     """Apply exact identity and freshness requirements only after a run is trusted."""
     run_id = _trusted_run_id(run)
+    run_attempt = _trusted_run_attempt(run)
     for field in ("status", "conclusion", "event", "path", "head_branch", "head_sha", "name"):
         _nonempty_string(run.get(field), "candidate qualification runs are invalid")
     for field in ("repository", "head_repository"):
         repository = _github_object(run.get(field), "candidate qualification runs are invalid")
         _nonempty_string(repository.get("full_name"), "candidate qualification runs are invalid")
-    return run_id, _timestamp(run.get("updated_at"))
+    return run_id, run_attempt, _timestamp(run.get("updated_at"))
 
 
 def _qualification_runs(value: object) -> list[dict[str, Any]]:
@@ -243,9 +253,11 @@ def _trusted_run_id(run: dict[str, Any]) -> int:
     return run_id
 
 
-def _select_qualification_run(runs: object, tag: str, source_sha: str, now: datetime) -> tuple[dict[str, Any], int]:
+def _select_qualification_run(
+    runs: object, tag: str, source_sha: str, now: datetime
+) -> tuple[dict[str, Any], int, int]:
     """Choose the newest fully trusted retry without caller-selected run state."""
-    acceptable: list[tuple[datetime, int, dict[str, Any]]] = []
+    acceptable: list[tuple[datetime, int, int, dict[str, Any]]] = []
     for run in _qualification_runs(runs):
         try:
             validate_qualification_run(run, REPOSITORY, tag, source_sha)
@@ -253,19 +265,23 @@ def _select_qualification_run(runs: object, tag: str, source_sha: str, now: date
             raise
         except ValueError:
             continue
-        run_id, completed_at = _validate_selected_qualification_run(run)
+        run_id, run_attempt, completed_at = _validate_selected_qualification_run(run)
         if not _is_fresh(completed_at, now):
             continue
-        acceptable.append((completed_at, run_id, run))
+        acceptable.append((completed_at, run_id, run_attempt, run))
     if not acceptable:
         _fail("candidate has no fresh trusted qualification run")
-    _, run_id, run = max(acceptable, key=lambda item: (item[0], item[1]))
-    return run, run_id
+    _, run_id, run_attempt, run = max(acceptable, key=lambda item: (item[0], item[1], item[2]))
+    return run, run_id, run_attempt
 
 
-def _qualification_artifact_id(artifacts: object, tag: str) -> int:
-    expected_name = f"{QUALIFICATION_ARTIFACT_PREFIX}{tag}"
-    matches = [artifact for artifact in _qualification_artifacts(artifacts) if artifact.get("name") == expected_name]
+def _qualification_artifact_id(artifacts: object, tag: str, run_id: int, run_attempt: int) -> int:
+    expected_name = re.compile(rf"^{re.escape(QUALIFICATION_ARTIFACT_PREFIX + tag)}-m1-{run_id}-{run_attempt}$")
+    matches = [
+        artifact
+        for artifact in _qualification_artifacts(artifacts)
+        if isinstance(artifact.get("name"), str) and expected_name.fullmatch(artifact["name"])
+    ]
     if len(matches) != 1:
         _fail("candidate qualification artifact is missing or ambiguous")
     artifact = matches[0]
@@ -474,7 +490,10 @@ async def build_qualified_beta_manifest(
     }
     if names & RETIRED_ASSET_NAMES or disallowed_beta:
         _fail("candidate contains a retired desktop identity")
-    has_beta_identity = sanctioned_beta.issubset(names)
+    beta_present = names & sanctioned_beta
+    if beta_present and beta_present != sanctioned_beta:
+        _fail("candidate contains an incomplete Omi Beta artifact pair")
+    has_beta_identity = beta_present == sanctioned_beta
     zip_asset, dmg_asset = _asset(assets, "Omi.zip"), _asset(assets, "omi.dmg")
     source_sha = await _read_github(source, "tag_sha", tag)
     if not isinstance(source_sha, str):
@@ -483,12 +502,10 @@ async def build_qualified_beta_manifest(
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or merged_source is not True:
         _fail("candidate source is not a trusted merged source")
     evidence_asset, evidence_name = _qualification_evidence_asset(assets, source_sha=source_sha)
-    zip_url, dmg_url, evidence_url = (
-        _asset_url(zip_asset, tag, "Omi.zip"),
-        _asset_url(dmg_asset, tag, "omi.dmg"),
-        _asset_url(evidence_asset, tag, evidence_name),
-    )
-    expected_digests = {
+    zip_url = _asset_url(zip_asset, tag, "Omi.zip")
+    dmg_url = _asset_url(dmg_asset, tag, "omi.dmg")
+    _asset_url(evidence_asset, tag, evidence_name)
+    release_digests = {
         "Omi.zip": _asset_digest(zip_asset),
         "omi.dmg": _asset_digest(dmg_asset),
         evidence_name: _asset_digest(evidence_asset),
@@ -497,10 +514,16 @@ async def build_qualified_beta_manifest(
     if has_beta_identity:
         for beta_name in SANCTIONED_BETA_ASSET_NAMES:
             beta_asset = _asset(assets, beta_name)
+            # Validate the canonical release URL for each beta asset. Unlike the
+            # blob downloads removed by this change, this is a pure identity
+            # check (no bytes fetched) and must not be skipped for beta assets.
+            _asset_url(beta_asset, tag, beta_name)
             beta_assets[beta_name] = beta_asset
-            expected_digests[beta_name] = _asset_digest(beta_asset)
-    _, run_id = _select_qualification_run(await _read_github(source, "runs"), tag, source_sha, current_time)
-    artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag)
+            release_digests[beta_name] = _asset_digest(beta_asset)
+    _, run_id, run_attempt = _select_qualification_run(
+        await _read_github(source, "runs"), tag, source_sha, current_time
+    )
+    artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag, run_id, run_attempt)
     trusted_evidence_bytes = _evidence_from_artifact(await _read_github(source, "download_artifact", artifact_id))
     try:
         evidence: object = json.loads(trusted_evidence_bytes)
@@ -512,31 +535,25 @@ async def build_qualified_beta_manifest(
         _fail("candidate trusted qualification evidence does not bind its run")
     if not _is_exact_integer(evidence.get("schema_version")) or evidence.get("schema_version") != 1:
         _fail("candidate trusted qualification evidence is invalid")
-    download_targets = [("Omi.zip", zip_url), ("omi.dmg", dmg_url), (evidence_name, evidence_url)]
-    for beta_name in SANCTIONED_BETA_ASSET_NAMES:
-        if beta_name in beta_assets:
-            download_targets.append((beta_name, _asset_url(beta_assets[beta_name], tag, beta_name)))
-    downloaded: dict[str, bytes] = {}
-    for name, url in download_targets:
-        content = await _read_github(source, "download", url)
-        if not isinstance(content, bytes):
-            _fail("candidate GitHub asset is unavailable")
-        downloaded[name] = content
-    actual_digests = {name: "sha256:" + hashlib.sha256(content).hexdigest() for name, content in downloaded.items()}
-    if actual_digests != expected_digests:
-        _fail("candidate asset digest does not match GitHub release metadata")
-    if downloaded[evidence_name] != trusted_evidence_bytes:
+    # GitHub exposes an immutable SHA-256 digest for each release asset. The
+    # qualification evidence is content-addressed by that digest and is also
+    # retained in the trusted Actions artifact. Rehash that small artifact to
+    # bind it to the release, rather than downloading every large release
+    # binary through GitHub's temporary blob redirects during promotion.
+    trusted_evidence_digest = "sha256:" + hashlib.sha256(trusted_evidence_bytes).hexdigest()
+    if trusted_evidence_digest != release_digests[evidence_name]:
         _fail("candidate release qualification evidence differs from its trusted run artifact")
     contract_release = _release_for_contract(release, assets)
-    # verify_evidence requires the digest set to equal the evidence's artifact set;
-    # when the beta identity ships, its two assets are in the evidence too.
+    # verify_evidence requires the digest set to equal the evidence's artifact
+    # set; GitHub's immutable release digests are the authoritative values.
+    # When the beta identity ships, its two assets are in the evidence too.
     verify_digests = {
-        "Omi.zip": actual_digests["Omi.zip"].removeprefix("sha256:"),
-        "omi.dmg": actual_digests["omi.dmg"].removeprefix("sha256:"),
+        "Omi.zip": release_digests["Omi.zip"].removeprefix("sha256:"),
+        "omi.dmg": release_digests["omi.dmg"].removeprefix("sha256:"),
     }
     for beta_name in SANCTIONED_BETA_ASSET_NAMES:
         if beta_name in beta_assets:
-            verify_digests[beta_name] = actual_digests[beta_name].removeprefix("sha256:")
+            verify_digests[beta_name] = release_digests[beta_name].removeprefix("sha256:")
     try:
         verify_evidence(
             evidence,
@@ -559,12 +576,12 @@ async def build_qualified_beta_manifest(
         "build_number": int(match.group("build")),
         "app_source_sha": source_sha,
         "zip_url": zip_url,
-        "zip_sha256": actual_digests["Omi.zip"],
+        "zip_sha256": release_digests["Omi.zip"],
         "dmg_url": dmg_url,
-        "dmg_sha256": actual_digests["omi.dmg"],
+        "dmg_sha256": release_digests["omi.dmg"],
         "ed_signature": signature,
         "qualification_evidence_asset": evidence_name,
-        "qualification_evidence_sha256": actual_digests[evidence_name],
+        "qualification_evidence_sha256": release_digests[evidence_name],
         "qualification_tier": "T2",
         "qualification_passed": True,
         "backend_mode": "app_only",

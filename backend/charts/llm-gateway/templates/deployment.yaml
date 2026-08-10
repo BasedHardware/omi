@@ -43,6 +43,8 @@ spec:
           command: ["uvicorn"]
           args: ["llm_gateway.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.service.port }}", "--loop", "uvloop"]
           env:
+            - name: OMI_LLM_GATEWAY_BUILD_IDENTITY
+              value: {{ required "image.tag is required" .Values.image.tag | quote }}
             {{- toYaml .Values.env | nindent 12 }}
           ports:
             - name: http

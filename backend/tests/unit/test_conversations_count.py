@@ -40,9 +40,15 @@ def get_conversations_count(
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
+        if len(sources) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
     if folder_id:
@@ -73,7 +79,9 @@ class TestConversationsCount:
             source = f.read()
         assert 'def get_conversations_count(' in source
         assert "FieldFilter('discarded', '==', False)" in source
+        assert "FieldFilter('source', '==', sources[0])" in source
         assert "FieldFilter('source', 'in', sources)" in source
+        assert "FieldFilter('status', '==', statuses[0])" in source
         assert "FieldFilter('status', 'in', statuses)" in source
         assert "FieldFilter('folder_id', '==', folder_id)" in source
         assert "FieldFilter('starred', '==', starred)" in source
@@ -108,6 +116,22 @@ class TestConversationsCount:
         f1 = ref.where.call_args_list[1].kwargs['filter']
         assert f1.field_path == 'status'
         assert f1.value == ['processing', 'completed']
+
+    def test_count_composes_sources_and_statuses(self):
+        ref = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value = ref
+        ref.where.return_value = ref
+        ref.count.return_value.get.return_value = self._make_result(3)
+
+        result = get_conversations_count('uid1', statuses=['processing', 'completed'], sources=['omi'])
+
+        assert result == 3
+        filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
+        assert [(f.field_path, f.op_string, f.value) for f in filters] == [
+            ('discarded', '==', False),
+            ('source', '==', 'omi'),
+            ('status', 'in', ['processing', 'completed']),
+        ]
 
     def test_count_include_discarded_skips_filter(self):
         ref = MagicMock()
@@ -153,7 +177,7 @@ class TestConversationsCount:
         assert ref.where.call_count == 1
         f = ref.where.call_args.kwargs['filter']
         assert f.field_path == 'status'
-        assert f.value == ['processing']
+        assert (f.op_string, f.value) == ('==', 'processing')
 
     def test_count_applies_list_filter_parity(self):
         ref = MagicMock()
@@ -174,7 +198,7 @@ class TestConversationsCount:
         filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
         assert [(f.field_path, f.op_string, f.value) for f in filters] == [
             ('discarded', '==', False),
-            ('status', 'in', ['completed']),
+            ('status', '==', 'completed'),
             ('folder_id', '==', 'folder-a'),
             ('starred', '==', False),
             ('created_at', '>=', '2026-06-01T00:00:00Z'),
@@ -270,11 +294,11 @@ class TestConversationsCountRouteSource:
             source = f.read()
         assert 'sources=source_list' in source
 
-    def test_route_rejects_statuses_combined_with_sources(self):
+    def test_route_does_not_reject_statuses_combined_with_sources(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
         with open(source_path, encoding='utf-8') as f:
             source = f.read()
-        assert 'statuses and sources filters cannot be combined' in source
+        assert 'statuses and sources filters cannot be combined' not in source
 
     def test_route_echoes_sources_when_filtered(self):
         # Clients rely on the echo to distinguish a filtered count from an

@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from google.cloud import firestore
+
+from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
@@ -23,7 +25,7 @@ from models.goal import (
     GoalStatus,
     GoalType,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +86,14 @@ def _goal_control_ref(uid: str, *, firestore_client: Any):
     )
 
 
-def _validate_canonical_write(snapshot: Any, *, account_generation: int) -> None:
+def _validate_canonical_write(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise GoalConflictError('canonical task intelligence is not enabled')
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise GoalConflictError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise GoalConflictError('canonical goal writes are disabled')
 
 
 def _goal_mutation_receipt_ref(
@@ -124,7 +126,7 @@ def _begin_goal_mutation(
     firestore_client: Any,
 ) -> tuple[Any, Optional[dict[str, Any]], str]:
     control_snapshot = _goal_control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
-    _validate_canonical_write(control_snapshot, account_generation=account_generation)
+    _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
     receipt_ref = _goal_mutation_receipt_ref(
         uid,
         operation=operation,
@@ -500,7 +502,14 @@ def update_goal(
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
         patch['metric'] = metric.model_dump(mode='python') if metric is not None else None
-        patch.update(_metric_aliases(metric))
+        if metric is None:
+            # Dropping the metric must also clear the released numeric aliases:
+            # _metric_from_storage rebuilds a metric from stale goal_type/current_value
+            # etc., so leaving them resurrects the "cleared" metric on the next read.
+            for key in legacy_metric_keys:
+                patch[key] = None
+        else:
+            patch.update(_metric_aliases(metric))
     patch['updated_at'] = datetime.now(timezone.utc)
     ref.update(patch)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
@@ -745,7 +754,7 @@ def _append_goal_progress_event(
     def apply(write_transaction):
         if account_generation is not None:
             control_snapshot = _goal_control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-            _validate_canonical_write(control_snapshot, account_generation=account_generation)
+            _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
         goal_snapshot = goal_ref.get(transaction=write_transaction)
         if not goal_snapshot.exists:
             raise GoalNotFoundError(goal_id)

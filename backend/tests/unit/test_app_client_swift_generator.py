@@ -103,6 +103,8 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     # Refs render as the referenced type name; required ref is non-optional.
     assert 'public let nested: Nested' in widget_block
     assert 'public let tags: [String]?' in widget_block
+    # Newly optional fields must not break existing construction call sites.
+    assert 'tags: [String]? = nil' in widget_block
     # AdditionalProperties renders as a typed dictionary.
     assert '[String: Double]?' in widget_block
 
