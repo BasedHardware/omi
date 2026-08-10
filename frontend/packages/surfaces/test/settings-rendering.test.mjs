@@ -215,6 +215,27 @@ test("ready store with unresolved snapshot never claims signed-out", async () =>
   }
 });
 
+test("sign-out announces completion in a polite live region without error tone", async () => {
+  const rendered = await renderSettings("signed-in");
+  try {
+    const signOut = rendered.container.querySelector('button.settings-sign-out[aria-label="' + EN_MESSAGES["settings.signOut"] + '"]');
+    assert.ok(signOut);
+    await rendered.act(async () => {
+      signOut.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]') != null, true);
+    const notice = rendered.container.querySelector(".settings-sign-out-notice[role='status']");
+    assert.equal(notice != null, true, "successful sign-out must emit a polite status notice");
+    assert.equal(notice?.textContent, EN_MESSAGES["settings.signedOutNotice"]);
+    assert.equal(rendered.container.querySelector(".operation-error"), null);
+    assert.equal(notice?.getAttribute("role"), "status");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("sign-out replay stays quiet: second revoke does not surface an operation error", async () => {
   const rendered = await renderSettings("signed-in");
   try {
@@ -275,6 +296,7 @@ test("settings catalog keys used by the surface exist in the built i18n artifact
     "settings.upgrade",
     "settings.upgradeUnavailable",
     "settings.limitReachedTitle",
+    "settings.signedOutNotice",
   ]) {
     assert.match(catalogSource, new RegExp(`"${key.replace(/\./g, "\\.")}"`), `${key} must land in i18n dist`);
   }

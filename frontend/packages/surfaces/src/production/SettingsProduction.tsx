@@ -71,6 +71,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const [operationError, setOperationError] = useState<string | null>(null);
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
   const [signingOut, setSigningOut] = useState(false);
+  const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -153,8 +154,10 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const signOut = async (): Promise<void> => {
     if (signingOut) return;
     setSigningOut(true);
+    setSignedOutNotice(null);
     try {
-      await run(() => store.signOut());
+      const succeeded = await run(() => store.signOut());
+      if (succeeded) setSignedOutNotice(t(locale, "settings.signedOutNotice"));
     } finally {
       setSigningOut(false);
     }
@@ -189,6 +192,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
           {notice && account !== "unavailable" && <div className={"status-notice " + status.refresh.phase} role="status">{notice}</div>}
           {queueLabel && <div className={"queue-notice " + status.queue.phase} role="status">{queueLabel}</div>}
           {saveNotice && <div className="settings-save-notice" role="status">{saveNotice}</div>}
+          {signedOutNotice && <div className="settings-sign-out-notice" role="status">{signedOutNotice}</div>}
           {operationError && <div className="operation-error" role="alert">{operationError}</div>}
         </div>
         <section className="settings-section" aria-labelledby="settings-account-heading">
