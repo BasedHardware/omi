@@ -78,18 +78,77 @@ test("TasksProduction renders shared chrome, translated affordances, and accessi
       await Promise.resolve();
     });
     assert.equal(patches.at(-1)?.id, selectedId, "indent shortcut mutates only the selected task");
-    assert.match(String(patches.at(-1)?.patch.indentLevel), /^[0-3]$/);
+    assert.equal(patches.at(-1)?.patch.indentLevel, 1, "Command-] indents by one level");
+
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "]", ctrlKey: true, bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(patches.at(-1)?.patch.indentLevel, 2, "Control-] indents by one level");
+
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "[", ctrlKey: true, bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(patches.at(-1)?.patch.indentLevel, 1, "Control-[ outdents by one level");
+
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "[", metaKey: true, bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(patches.at(-1)?.patch.indentLevel, 0, "Command-[ outdents by one level");
+    const lowerClampPatchCount = patches.length;
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "[", metaKey: true, bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(patches.length, lowerClampPatchCount, "outdent clamps at level zero without a redundant patch");
+
+    for (const expectedLevel of [1, 2, 3]) {
+      await rendered.act(async () => {
+        rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "]", ctrlKey: true, bubbles: true }));
+        await Promise.resolve();
+      });
+      assert.equal(patches.at(-1)?.patch.indentLevel, expectedLevel, `Control-] reaches level ${expectedLevel}`);
+    }
+    const upperClampPatchCount = patches.length;
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "]", ctrlKey: true, bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(patches.length, upperClampPatchCount, "indent clamps at level three without a redundant patch");
+
+    const add = rendered.container.querySelector("button.tasks-add-trigger");
+    assert.ok(add);
+    for (const modifier of [{ ctrlKey: true, name: "Control" }, { metaKey: true, name: "Command" }]) {
+      await rendered.act(async () => {
+        rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", {
+          key: "n",
+          bubbles: true,
+          [modifier.ctrlKey ? "ctrlKey" : "metaKey"]: true,
+        }));
+        await new Promise((resolve) => rendered.window.requestAnimationFrame(resolve));
+      });
+      assert.equal(add.getAttribute("aria-expanded"), "true", `${modifier.name}-N opens task creation`);
+      assert.equal(
+        rendered.window.document.activeElement,
+        rendered.container.querySelector(`textarea[aria-label="${EN_MESSAGES["tasks.newTask"]}"]`),
+        `${modifier.name}-N focuses the task draft`,
+      );
+      await rendered.act(async () => { add.click(); });
+      assert.equal(add.getAttribute("aria-expanded"), "false");
+    }
 
     const search = rendered.container.querySelector('input[type="search"]');
     assert.ok(search);
     search.focus();
-    await rendered.act(async () => {
-      search.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "n", metaKey: true, bubbles: true }));
-    });
-    assert.equal(rendered.container.querySelector("button.tasks-add-trigger")?.getAttribute("aria-expanded"), "false", "shortcuts are ignored inside inputs");
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+      await rendered.act(async () => {
+        search.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "n", bubbles: true, ...modifier }));
+      });
+      assert.equal(add.getAttribute("aria-expanded"), "false", "Command/Control-N is ignored inside inputs");
+    }
 
-    const add = rendered.container.querySelector("button.tasks-add-trigger");
-    assert.ok(add);
     await rendered.act(async () => {
       add.click();
       await new Promise((resolve) => rendered.window.requestAnimationFrame(resolve));
@@ -116,6 +175,8 @@ test("TasksProduction renders shared chrome, translated affordances, and accessi
       if (previousConfirm) Object.defineProperty(globalThis, "confirm", previousConfirm);
       else Reflect.deleteProperty(globalThis, "confirm");
     }
+    // red-proof: removing Control modifiers, the `[` branch, either clamp, or
+    // the global Meta/Control-N branch fails the rendered shortcut assertions.
   } finally {
     await rendered.cleanup();
   }
