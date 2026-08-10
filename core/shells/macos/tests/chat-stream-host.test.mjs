@@ -139,7 +139,7 @@ StubProtocol.lock.unlock()
 check("fixed-generation-get", boundaryRequest?.httpMethod == "GET" && boundaryRequest?.url?.absoluteString == "https://service.example.test/v1/chat-generations/generation%2Freconnect/events")
 check("last-event-id-exact", boundaryRequest?.value(forHTTPHeaderField: "Last-Event-ID") == "event-delta-0")
 check("host-injected-auth", boundaryRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer secret-token")
-check("host-injected-contract", boundaryRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
+check("host-injected-contract", boundaryRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
 check("host-injected-run-shell", boundaryRequest?.value(forHTTPHeaderField: "x-omi-client-id") == "run-stream-proof::macos")
 
 let creditPath = "/v1/chat-generations/manual-credit/events"
