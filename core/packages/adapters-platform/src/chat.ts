@@ -45,6 +45,15 @@ export type ChatSendResult =
     }
   | { ok: false; failure: WriteFailure };
 
+export interface ChatGenerationTerminalDelivery {
+  readonly accepted: ChatAcceptedFrame;
+  readonly terminal: ChatTerminalFrame;
+}
+
+export type ChatAdmissionResult =
+  | { ok: true; serverRevision?: string }
+  | { ok: false; failure: WriteFailure };
+
 export interface ChatGenerationReconnectRequest {
   readonly method: "GET";
   readonly path: string;
@@ -583,12 +592,21 @@ function contentHash(ids: readonly string[]): string {
 /** Bind the ratified create/replay operation to the sync Transport interface. */
 export function chatMessagesTransport(
   http: HttpClient,
+  onGenerationTerminal: (delivery: ChatGenerationTerminalDelivery) => void | Promise<void>,
   reconnect?: ChatGenerationReconnectTransport,
-): { send(op: ChatTransportOp): Promise<ChatSendResult> } {
+): { send(op: ChatTransportOp): Promise<ChatAdmissionResult> } {
   return {
-    async send(op: ChatTransportOp): Promise<ChatSendResult> {
+    async send(op: ChatTransportOp): Promise<ChatAdmissionResult> {
       const domainOp = JSON.parse(op.payload) as ChatMessageOp;
-      return sendChatMessageOp(http, domainOp, reconnect);
+      const result = await sendChatMessageOp(http, domainOp, reconnect);
+      if (!result.ok) return result;
+      // Admission belongs to the outbox; assistant generation delivery belongs
+      // to the Chat store. Requiring this callback prevents a successful
+      // admission from structurally discarding a failed terminal frame.
+      await onGenerationTerminal({ accepted: result.accepted, terminal: result.terminal });
+      return result.serverRevision === undefined
+        ? { ok: true }
+        : { ok: true, serverRevision: result.serverRevision };
     },
   };
 }
