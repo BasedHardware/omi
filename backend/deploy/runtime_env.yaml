@@ -364,9 +364,6 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            MEMORY_V3_CURSOR_SECRET:
-              secret: MEMORY_V3_CURSOR_SECRET
-              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest
@@ -387,6 +384,9 @@ environments:
               version: latest
             SENDBLUE_WEBHOOK_PATH_TOKEN:
               secret: SENDBLUE_WEBHOOK_PATH_TOKEN
+              version: latest
+            MEMORY_V3_CURSOR_SECRET:
+              secret: MEMORY_V3_CURSOR_SECRET
               version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
