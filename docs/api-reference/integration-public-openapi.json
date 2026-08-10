@@ -1123,17 +1123,6 @@
             "title": "Manually Added",
             "type": "boolean"
           },
-          "memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Memory Id"
-          },
           "memory_tier": {
             "anyOf": [
               {
