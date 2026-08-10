@@ -1017,6 +1017,24 @@ export interface ColdStartSequenceTerminalReceipt {
   terminal_state: "completed" | "abandoned";
 }
 
+export interface ConnectorSynthesisRequest {
+  existing_memories?: Array<string>;
+  items: Array<string>;
+  source: "calendar" | "gmail" | "notes";
+}
+
+export interface ConnectorSynthesisResponse {
+  memories: Array<string>;
+  profile?: string;
+  tasks: Array<ConnectorSynthesisTask>;
+}
+
+export interface ConnectorSynthesisTask {
+  description: string;
+  due_at?: string;
+  priority?: string;
+}
+
 export type ContextMatchSignal = "app" | "person" | "document" | "meeting" | "free_time" | "dependency" | "agent";
 
 export interface ContinuationCheckpoint {
@@ -1178,6 +1196,15 @@ export interface ConversationSuggestedAppsResponse {
 
 export interface ConversationTestPromptResponse {
   summary: string;
+}
+
+export interface ConversationTopicRequest {
+  transcript: string;
+}
+
+export interface ConversationTopicResponse {
+  emoji?: string;
+  title?: string;
 }
 
 export type ConversationVisibility = "private" | "shared" | "public";
@@ -1713,6 +1740,28 @@ export interface ExternalIntegration {
 }
 
 export type ExternalIntegrationConversationSource = "audio_transcript" | "message" | "other_text";
+
+export interface ExtractKnowledgeGraphRequest {
+  include_existing?: boolean;
+  text: string;
+  user_name?: string | null;
+}
+
+export interface ExtractKnowledgeGraphResponse {
+  edges: Array<Record<string, unknown>>;
+  nodes: Array<Record<string, unknown>>;
+}
+
+export interface ExtractMemoryLogRequest {
+  existing_memories?: Array<string>;
+  text: string;
+  text_source?: string;
+}
+
+export interface ExtractMemoryLogResponse {
+  memories: Array<string>;
+  profile?: string;
+}
 
 export interface FairUseDailyGenerationsBudgetResponse {
   daily_limit_ms: number;
@@ -3274,6 +3323,21 @@ export interface SyncRequestValidationErrorResponse {
   detail: Array<Record<string, unknown>>;
 }
 
+export interface SynthesizeAIUserProfileRequest {
+  conversations?: Array<string>;
+  goals?: Array<string>;
+  memories?: Array<string>;
+  messages?: Array<string>;
+  past_profiles?: Array<string>;
+  tasks?: Array<string>;
+}
+
+export interface SynthesizeAIUserProfileResponse {
+  data_sources_used: Array<string>;
+  item_count: number;
+  profile_text: string;
+}
+
 export interface Targeting {
   app_version_max?: string | null;
   app_version_min?: string | null;
@@ -4061,6 +4125,9 @@ export interface OmiApiSchemas {
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
   "ColdStartSequence": ColdStartSequence;
   "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
+  "ConnectorSynthesisRequest": ConnectorSynthesisRequest;
+  "ConnectorSynthesisResponse": ConnectorSynthesisResponse;
+  "ConnectorSynthesisTask": ConnectorSynthesisTask;
   "ContextMatchSignal": ContextMatchSignal;
   "ContinuationCheckpoint": ContinuationCheckpoint;
   "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
@@ -4083,6 +4150,8 @@ export interface OmiApiSchemas {
   "ConversationStatusResponse": ConversationStatusResponse;
   "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
   "ConversationTestPromptResponse": ConversationTestPromptResponse;
+  "ConversationTopicRequest": ConversationTopicRequest;
+  "ConversationTopicResponse": ConversationTopicResponse;
   "ConversationVisibility": ConversationVisibility;
   "ConversationsCountResponse": ConversationsCountResponse;
   "CreateActionItemRequest": CreateActionItemRequest;
@@ -4153,6 +4222,10 @@ export interface OmiApiSchemas {
   "ExecuteToolResponse": ExecuteToolResponse;
   "ExternalIntegration": ExternalIntegration;
   "ExternalIntegrationConversationSource": ExternalIntegrationConversationSource;
+  "ExtractKnowledgeGraphRequest": ExtractKnowledgeGraphRequest;
+  "ExtractKnowledgeGraphResponse": ExtractKnowledgeGraphResponse;
+  "ExtractMemoryLogRequest": ExtractMemoryLogRequest;
+  "ExtractMemoryLogResponse": ExtractMemoryLogResponse;
   "FairUseDailyGenerationsBudgetResponse": FairUseDailyGenerationsBudgetResponse;
   "FairUseLimitsResponse": FairUseLimitsResponse;
   "FairUseStatusResponse": FairUseStatusResponse;
@@ -4371,6 +4444,8 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "SyncRequestValidationErrorResponse": SyncRequestValidationErrorResponse;
+  "SynthesizeAIUserProfileRequest": SynthesizeAIUserProfileRequest;
+  "SynthesizeAIUserProfileResponse": SynthesizeAIUserProfileResponse;
   "Targeting": Targeting;
   "TaskAssistantSettings": TaskAssistantSettings;
   "TaskCancelCandidate": TaskCancelCandidate;
@@ -5393,6 +5468,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/connectors/synthesize": {
+    post: {
+      operationId: "synthesize_connector_data_v1_connectors_synthesize_post";
+      responses: {
+        "200": ConnectorSynthesisResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations": {
     get: {
       operationId: "get_conversations_v1_conversations_get";
@@ -5446,6 +5531,16 @@ export interface OmiApiPaths {
       operationId: "search_conversations_endpoint_v1_conversations_search_post";
       responses: {
         "200": SearchConversationsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/topic": {
+    post: {
+      operationId: "generate_conversation_topic_endpoint_v1_conversations_topic_post";
+      responses: {
+        "200": ConversationTopicResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6481,6 +6576,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/knowledge-graph/extract": {
+    post: {
+      operationId: "extract_knowledge_graph_v1_knowledge_graph_extract_post";
+      responses: {
+        "200": ExtractKnowledgeGraphResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/knowledge-graph/rebuild": {
     post: {
       operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
@@ -6766,6 +6871,16 @@ export interface OmiApiPaths {
       responses: {
         "200": McpSseInfoResponse;
         "401": void;
+      };
+    };
+  };
+  "/v1/memories/extract": {
+    post: {
+      operationId: "extract_memory_log_v1_memories_extract_post";
+      responses: {
+        "200": ExtractMemoryLogResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -7254,6 +7369,16 @@ export interface OmiApiPaths {
       operationId: "update_ai_profile_v1_users_ai_profile_patch";
       responses: {
         "200": AIUserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/ai-profile/synthesize": {
+    post: {
+      operationId: "synthesize_ai_profile_v1_users_ai_profile_synthesize_post";
+      responses: {
+        "200": SynthesizeAIUserProfileResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10270,6 +10395,27 @@ export async function materialize_prompts_v1_chat_materialize_prompts_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function synthesize_connector_data_v1_connectors_synthesize_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConnectorSynthesisRequest, init?: OmiApiClientInit): Promise<ConnectorSynthesisResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/connectors/synthesize`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
@@ -10380,6 +10526,27 @@ export async function merge_conversations_v1_conversations_merge_post(header: { 
 export async function search_conversations_endpoint_v1_conversations_search_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SearchRequest, init?: OmiApiClientInit): Promise<SearchConversationsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/search`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function generate_conversation_topic_endpoint_v1_conversations_topic_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTopicRequest, init?: OmiApiClientInit): Promise<ConversationTopicResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/topic`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -12392,6 +12559,27 @@ export async function get_canonical_knowledge_graph_v1_knowledge_graph_canonical
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function extract_knowledge_graph_v1_knowledge_graph_extract_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ExtractKnowledgeGraphRequest, init?: OmiApiClientInit): Promise<ExtractKnowledgeGraphResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/knowledge-graph/extract`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function rebuild_graph_v1_knowledge_graph_rebuild_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RebuildResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/knowledge-graph/rebuild`;
@@ -12892,6 +13080,27 @@ export async function mcp_sse_info_v1_mcp_sse_info_get(init?: OmiApiClientInit):
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function extract_memory_log_v1_memories_extract_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ExtractMemoryLogRequest, init?: OmiApiClientInit): Promise<ExtractMemoryLogResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/memories/extract`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -13753,6 +13962,27 @@ export async function update_ai_profile_v1_users_ai_profile_patch(header: { auth
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function synthesize_ai_profile_v1_users_ai_profile_synthesize_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SynthesizeAIUserProfileRequest, init?: OmiApiClientInit): Promise<SynthesizeAIUserProfileResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile/synthesize`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
@@ -16175,4 +16405,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 393 client methods generated.
+// Total: 398 client methods generated.
