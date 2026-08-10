@@ -46,12 +46,22 @@ while (( $# )); do
 done
 
 case "$route" in
-  home|memories|conversations|tasks|chat|settings|listen) ;;
-  *) echo "ERROR: --route must be one of home|memories|conversations|tasks|chat|settings|listen." >&2; exit 2 ;;
+  home|memories|conversations|tasks|folders|chat|settings|listen) ;;
+  *) echo "ERROR: --route must be one of home|memories|conversations|tasks|folders|chat|settings|listen." >&2; exit 2 ;;
 esac
-case "$api_base" in
-  https://api.omi.me|https://api.omi.me/) echo "ERROR: production api.omi.me is forbidden in the iOS QA launcher." >&2; exit 2 ;;
-esac
+api_host="$(/usr/bin/python3 -c 'import sys, urllib.parse
+try:
+    parsed = urllib.parse.urlsplit(sys.argv[1])
+    print((parsed.hostname or "").rstrip(".").lower())
+except ValueError:
+    raise SystemExit(2)' "$api_base")" || {
+  echo "ERROR: --api must be a parseable URL." >&2
+  exit 2
+}
+if [[ "$api_host" == "api.omi.me" ]]; then
+  echo "ERROR: production api.omi.me is forbidden in the iOS QA launcher." >&2
+  exit 2
+fi
 
 flutter_bin="${FLUTTER_BIN:-$(command -v flutter || true)}"
 if [[ -z "$flutter_bin" ]]; then
