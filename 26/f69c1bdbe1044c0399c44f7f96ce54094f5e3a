@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Tests/MemoryGraphRevisitTests.swift
+  s_deed0049c38ffc::t_e8589ff6063ca4 40,46,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "26f69c1bdbe1044c0399c44f7f96ce54094f5e3a",
+  "prompts": {},
+  "sessions": {
+    "s_deed0049c38ffc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec71-d01e-72b0-9157-c2c4f4c67cd4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
