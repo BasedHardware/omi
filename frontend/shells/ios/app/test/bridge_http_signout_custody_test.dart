@@ -20,10 +20,7 @@ void main() {
       id: 'cancel-generation',
       method: 'DELETE',
       path: '/v1/chat-generations/generation-01',
-      headers: const <String, String>{
-        'X-Omi-Client-Id': 'forged::macos',
-        'X-Omi-Contract-Version': '0.0.0',
-      },
+      headers: const <String, String>{'X-Omi-Client-Id': 'forged::macos', 'X-Omi-Contract-Version': '0.0.0'},
       body: null,
       baseUrl: authority.baseUrl,
       token: authority.custody.currentToken,

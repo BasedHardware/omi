@@ -15,12 +15,8 @@ const int _maxSafeInteger = 9007199254740991;
 const int _maxResponseBytes = 16 * 1024;
 const int maxChatAttachmentBytes = 50 * 1024 * 1024;
 final RegExp _safeOpaque = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$');
-final RegExp _safeMime = RegExp(
-  r"^[!#\$%&'*+.^_`|~0-9A-Za-z-]+/[!#\$%&'*+.^_`|~0-9A-Za-z-]+$",
-);
-final RegExp _canonicalExpiry = RegExp(
-  r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$',
-);
+final RegExp _safeMime = RegExp(r"^[!#\$%&'*+.^_`|~0-9A-Za-z-]+/[!#\$%&'*+.^_`|~0-9A-Za-z-]+$");
+final RegExp _canonicalExpiry = RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$');
 
 abstract interface class ChatAttachmentPicker {
   Future<PickedChatAttachment?> pickOne();
@@ -37,21 +33,12 @@ class FilePickerChatAttachmentPicker implements ChatAttachmentPicker {
 
   @override
   Future<PickedChatAttachment?> pickOne() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      withData: false,
-      withReadStream: false,
-    );
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false, withData: false, withReadStream: false);
     if (result == null) return null;
     if (result.files.length != 1 || result.files.single.path == null) {
-      throw const FileSystemException(
-        'picker did not return exactly one local file',
-      );
+      throw const FileSystemException('picker did not return exactly one local file');
     }
-    return LocalPickedChatAttachment(
-      result.files.single.path!,
-      result.files.single.size,
-    );
+    return LocalPickedChatAttachment(result.files.single.path!, result.files.single.size);
   }
 }
 
@@ -64,8 +51,7 @@ class LocalPickedChatAttachment implements PickedChatAttachment {
   final int sizeBytes;
 
   @override
-  Future<bool> isRegularFile() async =>
-      (await _file.stat()).type == FileSystemEntityType.file;
+  Future<bool> isRegularFile() async => (await _file.stat()).type == FileSystemEntityType.file;
 
   @override
   Stream<List<int>> openRead() => _file.openRead();
@@ -99,10 +85,7 @@ class ChatAttachmentStagingHost {
 
   static String _randomBoundary() {
     final random = Random.secure();
-    final suffix = List<int>.generate(
-      24,
-      (_) => random.nextInt(16),
-    ).map((value) => value.toRadixString(16)).join();
+    final suffix = List<int>.generate(24, (_) => random.nextInt(16)).map((value) => value.toRadixString(16)).join();
     return 'omi-chat-$suffix';
   }
 
@@ -129,50 +112,26 @@ class ChatAttachmentStagingHost {
     final id = decoded['id'];
     if (id is! String || !_safeOpaque.hasMatch(id)) return;
     if (decoded.length != ChatAttachmentStagingContract.requestFields.length ||
-        !decoded.keys.every(
-          ChatAttachmentStagingContract.requestFields.contains,
-        ) ||
+        !decoded.keys.every(ChatAttachmentStagingContract.requestFields.contains) ||
         decoded['t'] != ChatAttachmentStagingContract.requestMessage) {
-      await _replyFailure(
-        id,
-        ChatAttachmentStagingFailureReason.shellError,
-        _documentEpoch,
-        sink.generation,
-      );
+      await _replyFailure(id, ChatAttachmentStagingFailureReason.shellError, _documentEpoch, sink.generation);
       return;
     }
     if (_operation != null) {
-      await _replyFailure(
-        id,
-        ChatAttachmentStagingFailureReason.unavailable,
-        _documentEpoch,
-        sink.generation,
-      );
+      await _replyFailure(id, ChatAttachmentStagingFailureReason.unavailable, _documentEpoch, sink.generation);
       return;
     }
     if (!custody.hasCredential) {
-      await _replyFailure(
-        id,
-        ChatAttachmentStagingFailureReason.unavailable,
-        _documentEpoch,
-        sink.generation,
-      );
+      await _replyFailure(id, ChatAttachmentStagingFailureReason.unavailable, _documentEpoch, sink.generation);
       return;
     }
-    final operation = _StagingOperation(
-      host: this,
-      id: id,
-      epoch: _documentEpoch,
-      documentGeneration: sink.generation,
-    );
+    final operation = _StagingOperation(host: this, id: id, epoch: _documentEpoch, documentGeneration: sink.generation);
     _operation = operation;
     unawaited(operation.start());
   }
 
   bool _isCurrent(_StagingOperation operation) =>
-      !_closed &&
-      operation.epoch == _documentEpoch &&
-      identical(_operation, operation);
+      !_closed && operation.epoch == _documentEpoch && identical(_operation, operation);
 
   void _retire(_StagingOperation operation) {
     if (identical(_operation, operation)) _operation = null;
@@ -192,12 +151,7 @@ class ChatAttachmentStagingHost {
     }, generation: documentGeneration);
   }
 
-  Future<void> _replySuccess(
-    String id,
-    Map<String, Object> attachment,
-    int epoch,
-    int documentGeneration,
-  ) async {
+  Future<void> _replySuccess(String id, Map<String, Object> attachment, int epoch, int documentGeneration) async {
     if (_closed || epoch != _documentEpoch) return;
     await sink.stagingReply(id, <String, Object>{
       'ok': true,
@@ -227,12 +181,7 @@ class ChatAttachmentStagingHost {
 }
 
 class _StagingOperation {
-  _StagingOperation({
-    required this.host,
-    required this.id,
-    required this.epoch,
-    required this.documentGeneration,
-  });
+  _StagingOperation({required this.host, required this.id, required this.epoch, required this.documentGeneration});
 
   final ChatAttachmentStagingHost host;
   final String id;
@@ -250,9 +199,7 @@ class _StagingOperation {
         await _fail(ChatAttachmentStagingFailureReason.cancelled);
         return;
       }
-      if (picked.sizeBytes <= 0 ||
-          picked.sizeBytes > maxChatAttachmentBytes ||
-          !await picked.isRegularFile()) {
+      if (picked.sizeBytes <= 0 || picked.sizeBytes > maxChatAttachmentBytes || !await picked.isRegularFile()) {
         await _fail(ChatAttachmentStagingFailureReason.shellError);
         return;
       }
@@ -271,10 +218,7 @@ class _StagingOperation {
         'Content-Disposition: form-data; name="file"; filename="upload"\r\n\r\n',
       );
       final suffix = utf8.encode('\r\n--$boundary--\r\n');
-      final request = await host._httpClient.openUrl(
-        'POST',
-        host.baseUrl.resolve('/v1/chat-attachments'),
-      );
+      final request = await host._httpClient.openUrl('POST', host.baseUrl.resolve('/v1/chat-attachments'));
       _request = request;
       if (!host._isCurrent(this) || _cancelled) {
         request.abort();
@@ -283,27 +227,16 @@ class _StagingOperation {
       request.followRedirects = false;
       request.contentLength = prefix.length + picked.sizeBytes + suffix.length;
       request.setHeader(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.setHeader(
-        AppRequestContract.versionHeader,
-        AppRequestContract.version,
-      );
-      request.setHeader(
-        HttpHeaders.contentTypeHeader,
-        'multipart/form-data; boundary=$boundary',
-      );
+      request.setHeader(AppRequestContract.versionHeader, AppRequestContract.version);
+      request.setHeader(HttpHeaders.contentTypeHeader, 'multipart/form-data; boundary=$boundary');
       if (host.clientIdentity != null) {
-        request.setHeader(
-          BridgeHttpHostPolicy.clientIdHeader,
-          host.clientIdentity!,
-        );
+        request.setHeader(BridgeHttpHostPolicy.clientIdHeader, host.clientIdentity!);
       }
       request.add(prefix);
       await request.addStream(_validatedFileBytes(picked));
       if (!host._isCurrent(this) || _cancelled) return;
       request.add(suffix);
-      final response = await request.close().timeout(
-        const Duration(seconds: 30),
-      );
+      final response = await request.close().timeout(const Duration(seconds: 30));
       if (!host._isCurrent(this) || _cancelled) {
         await response.bytes.listen(null).cancel();
         return;
@@ -375,18 +308,13 @@ class _StagingOperation {
     } on FormatException {
       return null;
     }
-    if (decoded is! Map<String, dynamic> ||
-        decoded.length != 1 ||
-        !decoded.containsKey('attachment')) {
+    if (decoded is! Map<String, dynamic> || decoded.length != 1 || !decoded.containsKey('attachment')) {
       return null;
     }
     final attachment = decoded['attachment'];
     if (attachment is! Map<String, dynamic> ||
-        attachment.length !=
-            ChatAttachmentStagingContract.descriptorFields.length ||
-        !attachment.keys.every(
-          ChatAttachmentStagingContract.descriptorFields.contains,
-        )) {
+        attachment.length != ChatAttachmentStagingContract.descriptorFields.length ||
+        !attachment.keys.every(ChatAttachmentStagingContract.descriptorFields.contains)) {
       return null;
     }
     final attachmentId = attachment['id'];
@@ -396,15 +324,10 @@ class _StagingOperation {
     if (attachmentId is! String || !_safeOpaque.hasMatch(attachmentId)) {
       return null;
     }
-    if (mimeType is! String ||
-        mimeType.length > 127 ||
-        !_safeMime.hasMatch(mimeType)) {
+    if (mimeType is! String || mimeType.length > 127 || !_safeMime.hasMatch(mimeType)) {
       return null;
     }
-    if (sizeBytes is! int ||
-        sizeBytes != expectedSize ||
-        sizeBytes <= 0 ||
-        sizeBytes > _maxSafeInteger) {
+    if (sizeBytes is! int || sizeBytes != expectedSize || sizeBytes <= 0 || sizeBytes > _maxSafeInteger) {
       return null;
     }
     if (attachment['state'] != ChatAttachmentStagingContract.stagedState) {
@@ -414,8 +337,7 @@ class _StagingOperation {
       return null;
     }
     final parsedExpiry = DateTime.tryParse(expiresAt);
-    if (parsedExpiry == null ||
-        parsedExpiry.toUtc().toIso8601String() != expiresAt) {
+    if (parsedExpiry == null || parsedExpiry.toUtc().toIso8601String() != expiresAt) {
       return null;
     }
     return <String, Object>{

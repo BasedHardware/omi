@@ -30,11 +30,7 @@ void main() {
 
     for (final raw in <String>['', 'unsafe value', 'already::ios', 'anonymous', 'overflow', '__reserved']) {
       expect(
-        () => ShellTransportAuthority(
-          baseUrl: Uri.parse('https://api.example'),
-          token: 'shell-token',
-          runId: raw,
-        ),
+        () => ShellTransportAuthority(baseUrl: Uri.parse('https://api.example'), token: 'shell-token', runId: raw),
         throwsArgumentError,
         reason: raw,
       );

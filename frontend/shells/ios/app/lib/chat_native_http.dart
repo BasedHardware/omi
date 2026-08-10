@@ -3,8 +3,7 @@ import 'dart:io';
 bool responseHasMediaType(String? raw, String expected) {
   if (raw == null) return false;
   try {
-    return ContentType.parse(raw).mimeType.toLowerCase() ==
-        expected.toLowerCase();
+    return ContentType.parse(raw).mimeType.toLowerCase() == expected.toLowerCase();
   } on FormatException {
     return false;
   }
@@ -62,15 +61,13 @@ class DartIoChatNativeHttpRequest implements ChatNativeHttpRequest {
   set contentLength(int value) => _request.contentLength = value;
 
   @override
-  void setHeader(String name, Object value) =>
-      _request.headers.set(name, value);
+  void setHeader(String name, Object value) => _request.headers.set(name, value);
 
   @override
   void add(List<int> bytes) => _request.add(bytes);
 
   @override
-  Future<void> addStream(Stream<List<int>> stream) =>
-      _request.addStream(stream);
+  Future<void> addStream(Stream<List<int>> stream) => _request.addStream(stream);
 
   @override
   Future<ChatNativeHttpResponse> close() async {
@@ -93,8 +90,7 @@ class DartIoChatNativeHttpResponse implements ChatNativeHttpResponse {
   bool get isRedirect => _response.isRedirect;
 
   @override
-  String? get contentType =>
-      _response.headers.value(HttpHeaders.contentTypeHeader);
+  String? get contentType => _response.headers.value(HttpHeaders.contentTypeHeader);
 
   @override
   String? header(String name) => _response.headers.value(name);

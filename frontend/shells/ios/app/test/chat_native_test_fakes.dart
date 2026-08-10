@@ -5,22 +5,15 @@ import 'package:omi_webview_proto/chat_attachment_staging_host.dart';
 import 'package:omi_webview_proto/chat_native_http.dart';
 
 class FakeChatNativeHttpClient implements ChatNativeHttpClient {
-  final List<FakeChatNativeHttpResponse> responses =
-      <FakeChatNativeHttpResponse>[];
-  final List<FakeChatNativeHttpRequest> requests =
-      <FakeChatNativeHttpRequest>[];
+  final List<FakeChatNativeHttpResponse> responses = <FakeChatNativeHttpResponse>[];
+  final List<FakeChatNativeHttpRequest> requests = <FakeChatNativeHttpRequest>[];
   bool closed = false;
   bool demandGatedRequests = false;
 
   @override
   Future<ChatNativeHttpRequest> openUrl(String method, Uri url) async {
     if (responses.isEmpty) throw StateError('no scripted response');
-    final request = FakeChatNativeHttpRequest(
-      method,
-      url,
-      responses.removeAt(0),
-      demandGated: demandGatedRequests,
-    );
+    final request = FakeChatNativeHttpRequest(method, url, responses.removeAt(0), demandGated: demandGatedRequests);
     requests.add(request);
     return request;
   }
@@ -32,12 +25,7 @@ class FakeChatNativeHttpClient implements ChatNativeHttpClient {
 }
 
 class FakeChatNativeHttpRequest implements ChatNativeHttpRequest {
-  FakeChatNativeHttpRequest(
-    this.method,
-    this.url,
-    this.response, {
-    this.demandGated = false,
-  });
+  FakeChatNativeHttpRequest(this.method, this.url, this.response, {this.demandGated = false});
 
   final String method;
   final Uri url;
@@ -63,8 +51,7 @@ class FakeChatNativeHttpRequest implements ChatNativeHttpRequest {
   set contentLength(int value) => declaredContentLength = value;
 
   @override
-  void setHeader(String name, Object value) =>
-      headers[name.toLowerCase()] = value.toString();
+  void setHeader(String name, Object value) => headers[name.toLowerCase()] = value.toString();
 
   @override
   void add(List<int> bytes) {
@@ -157,9 +144,7 @@ class FakeChatNativeHttpResponse implements ChatNativeHttpResponse {
     this.isRedirect = false,
     Map<String, String>? headers,
     Stream<List<int>>? bytes,
-  }) : _headers = <String, String>{
-         ...?headers?.map((key, value) => MapEntry(key.toLowerCase(), value)),
-       },
+  }) : _headers = <String, String>{...?headers?.map((key, value) => MapEntry(key.toLowerCase(), value))},
        bytes = bytes ?? const Stream<List<int>>.empty();
 
   @override
@@ -176,11 +161,7 @@ class FakeChatNativeHttpResponse implements ChatNativeHttpResponse {
 }
 
 class FakePickedChatAttachment implements PickedChatAttachment {
-  FakePickedChatAttachment({
-    required this.sizeBytes,
-    required this.stream,
-    this.regular = true,
-  });
+  FakePickedChatAttachment({required this.sizeBytes, required this.stream, this.regular = true});
 
   @override
   final int sizeBytes;
@@ -215,10 +196,7 @@ class FakeChatAttachmentPicker implements ChatAttachmentPicker {
   }
 }
 
-Future<void> waitFor(
-  bool Function() predicate, {
-  String reason = 'condition',
-}) async {
+Future<void> waitFor(bool Function() predicate, {String reason = 'condition'}) async {
   for (var attempt = 0; attempt < 200; attempt += 1) {
     if (predicate()) return;
     await Future<void>.delayed(Duration.zero);

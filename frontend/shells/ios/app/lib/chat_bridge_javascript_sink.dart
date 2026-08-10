@@ -6,10 +6,8 @@ import 'gen/bridge_http_contract.g.dart';
 typedef JavaScriptRunner = Future<void> Function(String source);
 
 class ChatBridgeJavaScriptSink {
-  ChatBridgeJavaScriptSink(
-    this._runJavaScript, {
-    bool documentInitiallyActive = true,
-  }) : _activation = Completer<void>() {
+  ChatBridgeJavaScriptSink(this._runJavaScript, {bool documentInitiallyActive = true})
+    : _activation = Completer<void>() {
     if (documentInitiallyActive) _activation.complete();
   }
 
@@ -43,22 +41,12 @@ class ChatBridgeJavaScriptSink {
     if (!_activation.isCompleted) _activation.complete();
   }
 
-  Future<void> streamFrame(
-    Map<String, Object> frame, {
-    required int generation,
-  }) {
+  Future<void> streamFrame(Map<String, Object> frame, {required int generation}) {
     final raw = jsonEncode(frame);
-    return _dispatch(
-      '${BridgeStreamContract.sinkFunction}(${jsonEncode(raw)});',
-      generation,
-    );
+    return _dispatch('${BridgeStreamContract.sinkFunction}(${jsonEncode(raw)});', generation);
   }
 
-  Future<void> stagingReply(
-    String id,
-    Map<String, Object> reply, {
-    required int generation,
-  }) {
+  Future<void> stagingReply(String id, Map<String, Object> reply, {required int generation}) {
     final raw = jsonEncode(reply);
     return _dispatch(
       '${ChatAttachmentStagingContract.replyFunction}(${jsonEncode(id)},${jsonEncode(raw)});',
@@ -70,13 +58,9 @@ class ChatBridgeJavaScriptSink {
     if (_closed || generation != _generation) return;
     final activation = _activation;
     await activation.future;
-    if (_closed ||
-        generation != _generation ||
-        !identical(activation, _activation)) {
+    if (_closed || generation != _generation || !identical(activation, _activation)) {
       return;
     }
-    await _runJavaScript(
-      'if(globalThis.$_generationSlot===$generation){$source}',
-    );
+    await _runJavaScript('if(globalThis.$_generationSlot===$generation){$source}');
   }
 }

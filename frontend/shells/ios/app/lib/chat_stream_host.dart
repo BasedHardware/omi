@@ -15,14 +15,10 @@ final RegExp _safeOpaque = RegExp(r'^[\x21-\x7e]{1,1024}$');
 bool _hasExactKeys(Map<String, dynamic> value, Set<String> expected) =>
     value.length == expected.length && value.keys.every(expected.contains);
 
-bool _hasOptionalKeys(
-  Map<String, dynamic> value,
-  Set<String> allowed,
-  Set<String> required,
-) => value.keys.every(allowed.contains) && required.every(value.containsKey);
+bool _hasOptionalKeys(Map<String, dynamic> value, Set<String> allowed, Set<String> required) =>
+    value.keys.every(allowed.contains) && required.every(value.containsKey);
 
-bool _isPositiveCredit(Object? value) =>
-    value is int && value > 0 && value <= _maxSafeInteger;
+bool _isPositiveCredit(Object? value) => value is int && value > 0 && value <= _maxSafeInteger;
 
 class ChatStreamHost {
   ChatStreamHost({
@@ -38,8 +34,7 @@ class ChatStreamHost {
   final String? clientIdentity;
   final ChatBridgeJavaScriptSink sink;
   final ChatNativeHttpClient _httpClient;
-  final Map<String, _ChatStreamSession> _sessions =
-      <String, _ChatStreamSession>{};
+  final Map<String, _ChatStreamSession> _sessions = <String, _ChatStreamSession>{};
 
   bool _registered = false;
   bool _closed = false;
@@ -70,10 +65,7 @@ class ChatStreamHost {
     final type = decoded['t'];
     final id = decoded['id'];
     final channel = decoded['channel'];
-    if (type is! String ||
-        id is! String ||
-        channel is! String ||
-        !_safeOpaque.hasMatch(id)) {
+    if (type is! String || id is! String || channel is! String || !_safeOpaque.hasMatch(id)) {
       return;
     }
 
@@ -82,28 +74,20 @@ class ChatStreamHost {
       return;
     }
     final session = _sessions[id];
-    if (session == null ||
-        channel != BridgeStreamContract.chatGenerationChannel) {
+    if (session == null || channel != BridgeStreamContract.chatGenerationChannel) {
       return;
     }
     if (type == BridgeStreamContract.grantMessage) {
-      final fields = BridgeStreamContract
-          .toShellFields[BridgeStreamContract.grantMessage]!;
-      if (!_hasExactKeys(decoded, fields) ||
-          !_isPositiveCredit(decoded['credit'])) {
+      final fields = BridgeStreamContract.toShellFields[BridgeStreamContract.grantMessage]!;
+      if (!_hasExactKeys(decoded, fields) || !_isPositiveCredit(decoded['credit'])) {
         return;
       }
       session.grant(decoded['credit'] as int);
       return;
     }
     if (type == BridgeStreamContract.cancelMessage) {
-      final fields = BridgeStreamContract
-          .toShellFields[BridgeStreamContract.cancelMessage]!;
-      if (!_hasOptionalKeys(
-        decoded,
-        fields,
-        fields.difference(const {'reason'}),
-      )) {
+      final fields = BridgeStreamContract.toShellFields[BridgeStreamContract.cancelMessage]!;
+      if (!_hasOptionalKeys(decoded, fields, fields.difference(const {'reason'}))) {
         return;
       }
       final reason = decoded['reason'];
@@ -112,21 +96,14 @@ class ChatStreamHost {
     }
   }
 
-  Future<void> _open(
-    Map<String, dynamic> frame,
-    String id,
-    String channel,
-  ) async {
+  Future<void> _open(Map<String, dynamic> frame, String id, String channel) async {
     if (_sessions.containsKey(id)) return;
     if (channel != BridgeStreamContract.chatGenerationChannel) {
       await _emitError(id, 'invalid-request', _documentEpoch, channel: channel);
       return;
     }
-    final fields =
-        BridgeStreamContract.toShellFields[BridgeStreamContract.openMessage]!;
-    if (!_hasExactKeys(frame, fields) ||
-        !_isPositiveCredit(frame['credit']) ||
-        frame['params'] is! String) {
+    final fields = BridgeStreamContract.toShellFields[BridgeStreamContract.openMessage]!;
+    if (!_hasExactKeys(frame, fields) || !_isPositiveCredit(frame['credit']) || frame['params'] is! String) {
       await _emitError(id, 'invalid-request', _documentEpoch);
       return;
     }
@@ -138,11 +115,7 @@ class ChatStreamHost {
       return;
     }
     if (decodedParams is! Map<String, dynamic> ||
-        !_hasOptionalKeys(
-          decodedParams,
-          BridgeStreamContract.chatGenerationParameterFields,
-          const {'generationId'},
-        )) {
+        !_hasOptionalKeys(decodedParams, BridgeStreamContract.chatGenerationParameterFields, const {'generationId'})) {
       await _emitError(id, 'invalid-request', _documentEpoch);
       return;
     }
@@ -150,8 +123,7 @@ class ChatStreamHost {
     final lastEventId = decodedParams['lastEventId'];
     if (generationId is! String ||
         !_safeOpaque.hasMatch(generationId) ||
-        (lastEventId != null &&
-            (lastEventId is! String || !_safeOpaque.hasMatch(lastEventId)))) {
+        (lastEventId != null && (lastEventId is! String || !_safeOpaque.hasMatch(lastEventId)))) {
       await _emitError(id, 'invalid-request', _documentEpoch);
       return;
     }
@@ -174,14 +146,11 @@ class ChatStreamHost {
     unawaited(session.start());
   }
 
-  Uri _eventsUrl(String generationId) => baseUrl.resolve(
-    '/v1/chat-generations/${Uri.encodeComponent(generationId)}/events',
-  );
+  Uri _eventsUrl(String generationId) =>
+      baseUrl.resolve('/v1/chat-generations/${Uri.encodeComponent(generationId)}/events');
 
   bool _isCurrent(_ChatStreamSession session) =>
-      !_closed &&
-      session.epoch == _documentEpoch &&
-      identical(_sessions[session.id], session);
+      !_closed && session.epoch == _documentEpoch && identical(_sessions[session.id], session);
 
   void _retire(_ChatStreamSession session) {
     if (identical(_sessions[session.id], session)) _sessions.remove(session.id);
@@ -206,13 +175,7 @@ class ChatStreamHost {
     }, generation: session.documentGeneration);
   }
 
-  Future<void> _emitError(
-    String id,
-    String failure,
-    int epoch, {
-    String? channel,
-    int? documentGeneration,
-  }) async {
+  Future<void> _emitError(String id, String failure, int epoch, {String? channel, int? documentGeneration}) async {
     if (_closed || epoch != _documentEpoch) return;
     await sink.streamFrame(<String, Object>{
       't': BridgeStreamContract.errorMessage,
@@ -270,10 +233,7 @@ class _ChatStreamSession {
 
   Future<void> start() async {
     try {
-      final request = await host._httpClient.openUrl(
-        'GET',
-        host._eventsUrl(generationId),
-      );
+      final request = await host._httpClient.openUrl('GET', host._eventsUrl(generationId));
       _request = request;
       if (!host._isCurrent(this)) {
         request.abort();
@@ -281,20 +241,12 @@ class _ChatStreamSession {
       }
       request.followRedirects = false;
       request.setHeader(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.setHeader(
-        AppRequestContract.versionHeader,
-        AppRequestContract.version,
-      );
+      request.setHeader(AppRequestContract.versionHeader, AppRequestContract.version);
       if (host.clientIdentity != null) {
-        request.setHeader(
-          BridgeHttpHostPolicy.clientIdHeader,
-          host.clientIdentity!,
-        );
+        request.setHeader(BridgeHttpHostPolicy.clientIdHeader, host.clientIdentity!);
       }
       if (lastEventId != null) request.setHeader('Last-Event-ID', lastEventId!);
-      final response = await request.close().timeout(
-        const Duration(seconds: 12),
-      );
+      final response = await request.close().timeout(const Duration(seconds: 12));
       if (!host._isCurrent(this)) {
         await response.bytes.listen(null).cancel();
         return;
@@ -375,12 +327,7 @@ class _ChatStreamSession {
     host._retire(this);
     _request?.abort();
     await _subscription?.cancel();
-    await host._emitError(
-      id,
-      failure,
-      epoch,
-      documentGeneration: documentGeneration,
-    );
+    await host._emitError(id, failure, epoch, documentGeneration: documentGeneration);
   }
 
   Future<void> cancel() async {
