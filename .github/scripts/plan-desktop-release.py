@@ -347,6 +347,41 @@ def github_candidate_release_published(repository: str, tag: str) -> tuple[bool 
     return release.get("isDraft") is False and isinstance(release.get("publishedAt"), str), None
 
 
+def candidate_publication_age_seconds(repository: str, tag: str) -> int | None:
+    """Age of the candidate's GitHub release, the hourly train's throttle clock.
+
+    Candidate tags are lightweight, so no local timestamp records when the tag
+    was CREATED — `git log --format=%ct <tag>` reads the tagged COMMIT's time,
+    and a tag pushed minutes ago onto an older commit would defeat the
+    throttle entirely. The release's createdAt is the authoritative
+    publication clock. No release yet means the candidate is still building
+    (the one-active-release fence owns that) or its build failed (the train
+    SHOULD cut a replacement), so the throttle deliberately stands aside.
+    """
+    result = subprocess.run(
+        ["gh", "release", "view", tag, "--repo", repository, "--json", "tagName,createdAt"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        release = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(release, dict) or release.get("tagName") != tag:
+        return None
+    created_at = release.get("createdAt")
+    if not isinstance(created_at, str):
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int(time.time() - created.timestamp()))
+
+
 def normal_candidate_lifecycle(repository: str, source_sha: str, tag: str) -> tuple[str, str]:
     """Return the tag-triggered candidate lifecycle without mutating it."""
     status, conclusion, error = codemagic_check_status(repository, source_sha)
@@ -497,21 +532,22 @@ def main() -> int:
         )
 
     latest_tag = latest_desktop_tag()
-    changes = releasable_desktop_changes_since(latest_tag)
     set_output("latest_tag", latest_tag or "")
 
     if args.min_tag_interval_seconds > 0 and latest_tag is not None:
-        latest_tag_age = tag_age_seconds(latest_tag)
-        if latest_tag_age is not None and latest_tag_age < args.min_tag_interval_seconds:
-            remaining = args.min_tag_interval_seconds - latest_tag_age
+        latest_candidate_age = candidate_publication_age_seconds(args.repository, latest_tag)
+        if latest_candidate_age is not None and latest_candidate_age < args.min_tag_interval_seconds:
+            remaining = args.min_tag_interval_seconds - latest_candidate_age
             set_output("source_sha", "")
             set_output("should_release", "false")
             set_output(
                 "reason",
-                f"Hourly release train: latest tag {latest_tag} is {latest_tag_age}s old; "
+                f"Hourly release train: candidate {latest_tag} published {latest_candidate_age}s ago; "
                 f"next candidate in {remaining}s.",
             )
             return 0
+
+    changes = releasable_desktop_changes_since(latest_tag)
 
     if not changes:
         set_output("source_sha", "")
