@@ -131,6 +131,8 @@ export interface InMemoryConversationsStore extends ConversationsStore {
   ): ConversationFolderReassignmentOutcome;
   snapshotAccount(accountId: string): InMemoryConversationsAccountSnapshot;
   restoreAccount(accountId: string, snapshot: InMemoryConversationsAccountSnapshot): void;
+  /** Emergency rollback path; this adapter-private map replacement must not throw. */
+  forceRestoreAccount(accountId: string, snapshot: InMemoryConversationsAccountSnapshot): void;
 }
 
 const freezeRecord = (record: ConversationRecord): ConversationRecord => Object.freeze({
@@ -143,6 +145,19 @@ export const createInMemoryConversationsStore = (
 ): InMemoryConversationsStore => {
   const accounts = new Map<string, Map<string, ConversationRecord>>();
   const revisions = new Map<string, number>();
+
+  const replaceAccount = (
+    accountId: string,
+    snapshot: InMemoryConversationsAccountSnapshot,
+  ): void => {
+    if (snapshot.records === null) {
+      accounts.delete(accountId);
+    } else {
+      accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
+    }
+    if (snapshot.revision === null) revisions.delete(accountId);
+    else revisions.set(accountId, snapshot.revision);
+  };
 
   const recordsOf = (accountId: string): Map<string, ConversationRecord> => {
     const existing = accounts.get(accountId);
@@ -260,13 +275,14 @@ export const createInMemoryConversationsStore = (
       accountId: string,
       snapshot: InMemoryConversationsAccountSnapshot,
     ): void {
-      if (snapshot.records === null) {
-        accounts.delete(accountId);
-      } else {
-        accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
-      }
-      if (snapshot.revision === null) revisions.delete(accountId);
-      else revisions.set(accountId, snapshot.revision);
+      replaceAccount(accountId, snapshot);
+    },
+
+    forceRestoreAccount(
+      accountId: string,
+      snapshot: InMemoryConversationsAccountSnapshot,
+    ): void {
+      replaceAccount(accountId, snapshot);
     },
 
     readStateRevision(accountId: string): number {

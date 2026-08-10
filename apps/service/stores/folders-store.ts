@@ -60,6 +60,9 @@ export interface FoldersStore extends ConversationFolderReferenceLookup {
 
 const freezeRecord = (record: FolderRecord): FolderRecord => Object.freeze({ ...record });
 
+const cloneSnapshotRecord = (record: FolderRecord): FolderRecord =>
+  freezeRecord(structuredClone(record));
+
 export interface InMemoryFoldersAccountSnapshot {
   readonly records: readonly FolderRecord[] | null;
 }
@@ -69,10 +72,23 @@ export interface InMemoryFoldersStore extends FoldersStore {
   deleteFolderRecord(accountId: string, folderId: string): boolean;
   snapshotAccount(accountId: string): InMemoryFoldersAccountSnapshot;
   restoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void;
+  /** Emergency rollback path; this adapter-private map replacement must not throw. */
+  forceRestoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void;
 }
 
 export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
   const accounts = new Map<string, Map<string, FolderRecord>>();
+
+  const replaceAccount = (
+    accountId: string,
+    snapshot: InMemoryFoldersAccountSnapshot,
+  ): void => {
+    if (snapshot.records === null) {
+      accounts.delete(accountId);
+    } else {
+      accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
+    }
+  };
 
   const foldersOf = (accountId: string): Map<string, FolderRecord> => {
     const existing = accounts.get(accountId);
@@ -132,16 +148,18 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
     snapshotAccount(accountId: string): InMemoryFoldersAccountSnapshot {
       const records = accounts.get(accountId);
       return Object.freeze({
-        records: records === undefined ? null : Object.freeze([...records.values()]),
+        records: records === undefined
+          ? null
+          : Object.freeze([...records.values()].map(cloneSnapshotRecord)),
       });
     },
 
     restoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void {
-      if (snapshot.records === null) {
-        accounts.delete(accountId);
-      } else {
-        accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
-      }
+      replaceAccount(accountId, snapshot);
+    },
+
+    forceRestoreAccount(accountId: string, snapshot: InMemoryFoldersAccountSnapshot): void {
+      replaceAccount(accountId, snapshot);
     },
 
     reset(): void {

@@ -5,6 +5,7 @@ import { createInMemoryLocalServiceStores, createLocalService } from "../app-fac
 import {
   createInMemoryConversationsStore,
   type ConversationRecord,
+  type InMemoryConversationsStore,
 } from "../stores/conversations-store";
 import { createInMemoryFolderDeletionUnitOfWork } from "../stores/folder-deletion-unit-of-work";
 import { createInMemoryFoldersStore, type FolderRecord } from "../stores/folders-store";
@@ -212,11 +213,13 @@ describe("DELETE /v1/folders/:id", () => {
     const conversations = createInMemoryConversationsStore({
       hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
     });
+    const nestedName = { label: "old" };
     const folderDeletion = createInMemoryFolderDeletionUnitOfWork(
       folders,
       conversations,
       {
         afterConversationReassignment() {
+          nestedName.label = "mutated";
           throw new Error("injected failure after conversation reassignment");
         },
       },
@@ -237,6 +240,74 @@ describe("DELETE /v1/folders/:id", () => {
 
     try {
       folders.upsert(OWNER, folder("target"));
+      folders.upsert(OWNER, folder("source", { name: nestedName, order: 1 }));
+      expect(conversations.upsert(OWNER, conversation("source")).stored).toBe(true);
+
+      const failed = await request(
+        "/v1/folders/source?move_to_folder_id=target",
+        { method: "DELETE" },
+      );
+      expect(failed.status).toBe(500);
+      expect(await body(failed)).toEqual({ error: "qa_server_error" });
+
+      const listedFolders = await body(await request("/v1/folders")) as FolderRecord[];
+      expect(listedFolders.map((record) => record.id)).toEqual(["target", "source"]);
+      expect(listedFolders.find((record) => record.id === "source")?.name)
+        .toEqual({ label: "old" });
+      const listedConversations = await body(
+        await request("/v1/conversations"),
+      ) as ConversationRecord[];
+      expect(listedConversations[0]?.folder_id).toBe("source");
+      expect(conversations.readStateRevision(OWNER)).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("restores neither store partially when the second restore throws", async () => {
+    const base = createInMemoryLocalServiceStores();
+    const folders = createInMemoryFoldersStore();
+    const conversations = createInMemoryConversationsStore({
+      hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
+    });
+    let restoreCalls = 0;
+    const failingConversations: InMemoryConversationsStore = Object.freeze({
+      ...conversations,
+      restoreAccount() {
+        restoreCalls += 1;
+        throw new Error("injected failure in second restore");
+      },
+    });
+    const folderDeletion = createInMemoryFolderDeletionUnitOfWork(
+      folders,
+      failingConversations,
+      {
+        afterConversationReassignment() {
+          throw new Error("injected operation failure");
+        },
+      },
+    );
+    const db = new Database(":memory:");
+    const service = createLocalService({
+      db,
+      ownerAccountId: OWNER,
+      memoryCount: 1,
+      accountTimezone: "UTC",
+      devSecretLabel: "folder-delete-restore-failure-test",
+      stores: Object.freeze({
+        ...base,
+        conversations: failingConversations,
+        folders,
+        folderDeletion,
+      }),
+    });
+    const request = (path: string, init: RequestInit = {}) => service.app.request(path, {
+      ...init,
+      headers: { authorization: `Bearer ${service.devToken}`, ...(init.headers ?? {}) },
+    });
+
+    try {
+      folders.upsert(OWNER, folder("target"));
       folders.upsert(OWNER, folder("source", { order: 1 }));
       expect(conversations.upsert(OWNER, conversation("source")).stored).toBe(true);
 
@@ -246,6 +317,7 @@ describe("DELETE /v1/folders/:id", () => {
       );
       expect(failed.status).toBe(500);
       expect(await body(failed)).toEqual({ error: "qa_server_error" });
+      expect(restoreCalls).toBe(1);
 
       const listedFolders = await body(await request("/v1/folders")) as FolderRecord[];
       expect(listedFolders.map((record) => record.id)).toEqual(["target", "source"]);

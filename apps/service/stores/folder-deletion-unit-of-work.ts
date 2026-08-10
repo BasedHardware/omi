@@ -82,8 +82,28 @@ export const createInMemoryFolderDeletionUnitOfWork = (
       }
       return Promise.resolve({ deleted: true, moved_to_folder_id: target });
     } catch (error) {
-      folders.restoreAccount(input.accountId, foldersBefore);
-      conversations.restoreAccount(input.accountId, conversationsBefore);
+      const rollbackErrors: unknown[] = [];
+      try {
+        folders.restoreAccount(input.accountId, foldersBefore);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+      try {
+        conversations.restoreAccount(input.accountId, conversationsBefore);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+      if (rollbackErrors.length > 0) {
+        // A failing participant must not strand the other at a different point
+        // in time. These adapter-private replacements contain no fault seam and
+        // restore the complete pre-operation account state before rejection.
+        folders.forceRestoreAccount(input.accountId, foldersBefore);
+        conversations.forceRestoreAccount(input.accountId, conversationsBefore);
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          "in-memory folder deletion rollback required emergency restoration",
+        );
+      }
       throw error;
     }
   },
