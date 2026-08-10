@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     observe_gateway_config_identity(
-        get_gateway_config(),
+        await get_gateway_config(),
         build_identity=os.getenv('OMI_LLM_GATEWAY_BUILD_IDENTITY', ''),
     )
     try:
