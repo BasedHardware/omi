@@ -13,6 +13,14 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
 
 class DeveloperModeProvider extends BaseProvider {
+  /// Test seam — overrides [setUserWebhookUrl] in [saveSettings].
+  @visibleForTesting
+  Future<bool> Function({required String type, required String url})? setUserWebhookUrlOverride;
+
+  /// Test seam — overrides [disableWebhook] in [saveSettings].
+  @visibleForTesting
+  Future<void> Function({required String type})? disableWebhookOverride;
+
   final TextEditingController webhookOnConversationCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
   final TextEditingController webhookAudioBytes = TextEditingController();
@@ -203,16 +211,29 @@ class DeveloperModeProvider extends BaseProvider {
     //   notifyListeners();
     //   return;
     // }
-    var w1 = setUserWebhookUrl(
+    final setUrl = setUserWebhookUrlOverride ?? setUserWebhookUrl;
+    var w1 = setUrl(
       type: 'audio_bytes',
       url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
     );
-    var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
-    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
-    var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
+    var w2 = setUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
+    var w3 = setUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
+    var w4 = setUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
-      Future.wait([w1, w2, w3, w4]);
+      final results = await Future.wait([w1, w2, w3, w4]);
+      if (results.contains(false)) {
+        throw Exception('backend rejected one or more webhook URLs');
+      }
+      // The backend enables a webhook whenever a non-empty URL is stored, so a save
+      // would silently turn every toggle the user switched off back on.
+      final disable = disableWebhookOverride ?? disableWebhook;
+      await Future.wait([
+        if (!audioBytesToggled) disable(type: 'audio_bytes'),
+        if (!transcriptsToggled) disable(type: 'realtime_transcript'),
+        if (!conversationEventsToggled) disable(type: 'memory_created'),
+        if (!daySummaryToggled) disable(type: 'day_summary'),
+      ]);
       prefs.webhookAudioBytes = webhookAudioBytes.text;
       prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
@@ -220,6 +241,12 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookDaySummary = webhookDaySummary.text;
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.failedToSaveCheckConnection ??
+            'Failed to save. Please check your connection.',
+      );
+      setIsLoading(false);
+      return;
     }
     // Experimental
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
