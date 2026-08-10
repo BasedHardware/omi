@@ -840,8 +840,8 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil"))
     XCTAssertTrue(
       chatBubbleSource.contains("var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil"))
-    XCTAssertTrue(chatBubbleSource.contains("calls.compactMap(\\.agentOpenRef).last"))
-    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
+    XCTAssertTrue(chatBubbleSource.contains("ForEach(timelineItems) { item in"))
+    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("Self.cleanToolName(name) == \"spawn_agent\""))
     XCTAssertTrue(chatBubbleSource.contains("Self.labeledValue(in: output, keys: [\"id\"])"))
     XCTAssertTrue(chatBubbleSource.contains("keys: [\"sessionid\", \"session_id\"]"))
@@ -1596,24 +1596,20 @@ import XCTest
       openClaw.coloredPixels, 0, "OpenClaw row mark must be a template mask so status color owns identity.")
   }
 
-  func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
+  func testFloatingAgentToolCallsUseSharedActivityTimelinePresentation() throws {
     let chatBubbleSource = try chatBubbleSource()
     let providerSource = try chatProviderSource()
 
     XCTAssertTrue(chatBubbleSource.contains("var compact: Bool = false"))
-    XCTAssertTrue(chatBubbleSource.contains("enum ToolCallsGroupExpansionPolicy"))
-    XCTAssertTrue(chatBubbleSource.contains("static func initiallyExpanded() -> Bool {\n    false"))
-    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())"))
-    XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
-    XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
-    XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatBubbleSource.contains("minimumHeight: compact ? 34 : nil"))
-    XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
+    XCTAssertTrue(chatBubbleSource.contains("enum ToolActivityTimelinePresentation"))
+    XCTAssertTrue(chatBubbleSource.contains("connectsToNext: position < toolCalls.count - 1"))
+    XCTAssertTrue(chatBubbleSource.contains(".spring(response: 0.36, dampingFraction: 0.86)"))
+    XCTAssertTrue(chatBubbleSource.contains(".move(edge: .top).combined(with: .opacity)"))
+    XCTAssertTrue(chatBubbleSource.contains("toolActivityIcon(name: name, status: displayStatus, size: 15)"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
-    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
+    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgent: onOpenAgent"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgentRef: onOpenAgentRef"))
-    XCTAssertTrue(chatBubbleSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
   }
