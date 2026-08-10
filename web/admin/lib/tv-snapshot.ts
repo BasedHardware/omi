@@ -29,7 +29,12 @@ const PLATFORM_EXPR = `multiIf(
 )`;
 
 const CHAT_EVENTS = `event IN ('Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent')`;
-const MEMORY_EVENTS = `event = 'Memory Extracted'`;
+// Count both the authoritative backend conversation-memory event
+// (Conversation Memories Extracted — emitted after durable persistence in
+// backend/utils/conversations/memory_extraction_telemetry.py) and the macOS
+// proactive screen-context assistant event (Memory Extracted). Counting only
+// the latter omits all regular mobile/device conversation memories.
+const MEMORY_EVENTS = `event IN ('Memory Extracted','Conversation Memories Extracted')`;
 const CONV_EVENT = `event IN ('Phone Mic Recording Started','Desktop Recording Started')`;
 
 export type SeriesPoint = {
