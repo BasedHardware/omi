@@ -75,7 +75,7 @@ if ! lsof -ti tcp:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 pkill -f 'chrome-devtools-mcp' || true
-pkill -f "chrome-devtools-mcp/chrome-profile" || true || true
+pkill -f "chrome-devtools-mcp/chrome-profile" || true
 pkill -f "codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C $SITE_DIR" || true
 sleep 1
 
