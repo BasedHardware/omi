@@ -21,6 +21,23 @@ test("production surfaces depend on stable store ports instead of QA fixtures", 
   // backend generation boundary depend on QA-only implementation details.
 });
 
+test("Listen is composed from the ratified platform stream and has no fixture dispatch", async () => {
+  const [main, listen, store] = await Promise.all([
+    read("src/production/main.tsx"),
+    read("src/production/ListenProduction.tsx"),
+    read("src/production/createPlatformListenStore.ts"),
+  ]);
+  assert.match(main, /createPlatformListenCaptureClient/);
+  assert.match(main, /createPlatformProductionListenStore/);
+  assert.match(main, /__OMI_LISTEN_PROTOCOL_SCHEMA__/);
+  assert.match(main, /route === "listen"/);
+  assert.doesNotMatch(main, /listen-fixtures|fixtureListenStore|listenFixture/);
+  assert.doesNotMatch(listen, /fixture\??:|data-qa-fixture|ProductionDataSourceBadge/);
+  assert.match(store, /platformListenCaptureState/);
+  // red-proof: restoring the QA dispatch or bypassing the typed platform
+  // client makes the production composition assertions fail.
+});
+
 test("bootstrap chooses backend generation through one production factory", async () => {
   const main = await read("src/production/main.tsx");
   const stores = await read("src/production/ProductionStores.ts");
