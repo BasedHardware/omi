@@ -199,13 +199,12 @@ static int validate_single_write(uint16_t len, uint16_t offset, uint8_t flags)
 #endif
 
 #ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
-static int update_advertising_name(const char *name, size_t len);
+static int start_advertising(bool update);
 
 static void advertising_name_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
-    const char *name = bt_get_name();
-    int err = update_advertising_name(name, strlen(name));
+    int err = start_advertising(true);
     if (err) {
         LOG_ERR("Failed to update advertising name (err %d)", err);
     }
@@ -369,9 +368,11 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            NULL),
     BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 #ifdef CONFIG_OMI_ENABLE_BLE_SLEEP_CMD
+    // Power and identity controls require an encrypted link: an unpaired nearby
+    // central must not be able to power off or rename the pendant.
     BT_GATT_CHARACTERISTIC(&settings_sleep_cmd_characteristic_uuid.uuid,
                            BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_WRITE_ENCRYPT,
                            NULL,
                            settings_sleep_cmd_write_handler,
                            NULL),
@@ -379,7 +380,7 @@ static struct bt_gatt_attr settings_service_attr[] = {
 #ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
     BT_GATT_CHARACTERISTIC(&settings_capture_state_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
                            settings_capture_state_read_handler,
                            settings_capture_state_write_handler,
                            NULL),
@@ -387,7 +388,7 @@ static struct bt_gatt_attr settings_service_attr[] = {
 #ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
     BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT,
                            settings_device_name_read_handler,
                            settings_device_name_write_handler,
                            NULL),
@@ -483,23 +484,33 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
 
 static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
-// Advertisement data
-static const struct bt_data bt_ad[] = {
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-};
+// Advertising payload budget: 31 bytes total, of which flags (3) and the 128-bit
+// audio service UUID (18) are fixed, leaving 10 for the name element (2 bytes of
+// header). Longer names are shortened in the advertisement and carried complete
+// in the scan response, so passive scanners still see a name.
+#define ADV_NAME_MAX_IN_AD 8
 
-// Scan response data
-#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
-static int update_advertising_name(const char *name, size_t len)
+static int start_advertising(bool update)
 {
+    const char *name = bt_get_name();
+    size_t name_len = strlen(name);
+    size_t ad_name_len = name_len > ADV_NAME_MAX_IN_AD ? ADV_NAME_MAX_IN_AD : name_len;
+
+    struct bt_data ad[] = {
+        BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+        BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
+        BT_DATA(ad_name_len < name_len ? BT_DATA_NAME_SHORTENED : BT_DATA_NAME_COMPLETE, name, ad_name_len),
+    };
     struct bt_data sd[] = {
         BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
-        BT_DATA(BT_DATA_NAME_COMPLETE, name, len),
+        BT_DATA(BT_DATA_NAME_COMPLETE, name, name_len),
     };
-    return bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), sd, ARRAY_SIZE(sd));
+
+    if (update) {
+        return bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+    }
+    return bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 }
-#endif
 
 //
 // State and Characteristics
@@ -921,6 +932,10 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     }
     current_mtu = 0;
     charging_status_last_notified = -1;
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+    // No link means no audio subscription, so capture state must not stay latched.
+    is_capturing = false;
+#endif
 
     // Reset the audio TX throttle semaphore so the pusher thread is not
     // left blocked forever if it was waiting for a slot when the connection dropped.
@@ -1637,12 +1652,7 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
-    const char *device_name = bt_get_name();
-    struct bt_data bt_sd[] = {
-        BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
-        BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
-    };
-    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    err = start_advertising(false);
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d), continuing without BLE", err);
         // Non-fatal: continue with pusher and ring buffer so offline recording works
