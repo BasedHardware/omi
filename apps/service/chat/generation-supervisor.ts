@@ -240,7 +240,7 @@ export const createChatGenerationSupervisor = (
       void deps.context.load({ accountId: input.accountId, admitted: input.stored })
         .then((context) => {
           if (state.terminal) return;
-          state.run = deps.source.start({
+          const run = deps.source.start({
             generationId,
             prompt: input.stored.message.text,
             context,
@@ -260,6 +260,8 @@ export const createChatGenerationSupervisor = (
               void finalize(state, "done", FALLBACK_TEXT);
             },
           });
+          state.run = run;
+          if (state.terminal) cancelRun(state);
         })
         .catch(() => { void finalize(state, "done", FALLBACK_TEXT); });
     },

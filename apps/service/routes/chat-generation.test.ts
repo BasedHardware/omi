@@ -269,6 +269,41 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("a synchronous terminal callback cancels the run returned afterward exactly once", async () => {
+    let cancelCalls = 0;
+    const synchronous: ChatGenerationSource = Object.freeze({
+      start(input) {
+        input.onDelta("synchronous answer");
+        input.onComplete();
+        return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      synchronous,
+      "chat-synchronous-terminal-proof",
+    );
+
+    const admitted = await post(local, create("synchronous-terminal"));
+    const frames = parseSse(await admitted.text());
+    const accepted = frames.find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+
+    expect(admitted.status).toBe(201);
+    expect(frames.map((frame) => frame.event)).toEqual([
+      "accepted", "snapshot", "delta", "done",
+    ]);
+    expect(cancelCalls).toBe(1);
+    expect(stores.chatEvents.listUnterminated()).toEqual([]);
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      .toBe("terminal");
+    expect((await history(local)).map((entry) => [entry.sender, entry.text])).toEqual([
+      ["human", "Tell me something useful"],
+      ["ai", "synchronous answer"],
+    ]);
+    db.close();
+  });
+
   test("cancellation retains a durable partial and replay is idempotent", async () => {
     const source = createScriptedChatGenerationSource([
       { delayMs: 2, text: "retained partial" },
