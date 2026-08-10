@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 .DS_Store
 *.local.ts
+/data/
