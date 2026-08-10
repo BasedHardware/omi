@@ -35,7 +35,7 @@ def test_resolves_supported_auto_lane_to_active_artifact():
     assert resolved.lane.lane_id == LANE_ID
     assert resolved.active_route.route_artifact_id == ACTIVE_ROUTE
     assert resolved.last_known_good_route.route_artifact_id == LKG_ROUTE
-    assert resolved.active_route.primary.provider == 'openrouter'
+    assert resolved.active_route.primary.provider == 'openai'
     assert resolved.validated_request.model == LANE_ID
 
 

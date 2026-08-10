@@ -31,6 +31,8 @@ from utils.llm.clients import (
     get_provider,
     get_qos_info,
     _active_profile_name,
+    anthropic_client,
+    ANTHROPIC_AGENT_MODEL,
 )
 
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
@@ -114,12 +116,12 @@ class TestPremiumMini:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — former light/binary features (now Luna)
+# Premium profile — gpt-5-nano light/binary features
 # ---------------------------------------------------------------------------
-class TestPremiumLightFeatures:
-    """Test formerly nano light/binary features respond via OpenRouter Luna."""
+class TestPremiumNano:
+    """Test gpt-5-nano features in premium profile respond to real prompts."""
 
-    LIGHT_FEATURES = [
+    NANO_FEATURES = [
         'conv_app_select',
         'conv_folder',
         'conv_discard',
@@ -129,10 +131,10 @@ class TestPremiumLightFeatures:
         'memory_category',
     ]
 
-    @pytest.mark.parametrize("feature", LIGHT_FEATURES)
-    def test_light_feature_responds(self, feature):
+    @pytest.mark.parametrize("feature", NANO_FEATURES)
+    def test_nano_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
+        assert model == 'gpt-5-nano', f"{feature} should be gpt-5-nano in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -155,12 +157,12 @@ class TestPremiumVision:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — former Gemini-lite features (now OpenRouter Luna)
+# Premium profile — gemini-2.5-flash-lite features (free-text cost optimization)
 # ---------------------------------------------------------------------------
-class TestPremiumFormerGeminiFeatures:
-    """Former Gemini-lite product features respond via OpenRouter Luna."""
+class TestPremiumGemini:
+    """Test gemini-2.5-flash-lite features in premium profile respond to real prompts."""
 
-    FORMER_GEMINI_FEATURES = [
+    GEMINI_FEATURES = [
         'session_titles',
         'followup',
         'onboarding',
@@ -168,11 +170,11 @@ class TestPremiumFormerGeminiFeatures:
         'trends',
     ]
 
-    @pytest.mark.parametrize("feature", FORMER_GEMINI_FEATURES)
-    def test_former_gemini_feature_responds(self, feature):
+    @pytest.mark.skipif(not HAS_GEMINI_KEY, reason="GEMINI_API_KEY not set")
+    @pytest.mark.parametrize("feature", GEMINI_FEATURES)
+    def test_gemini_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
-        assert get_provider(feature) == 'openrouter'
+        assert model == 'gemini-2.5-flash-lite', f"{feature} should be gemini-2.5-flash-lite in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -180,15 +182,14 @@ class TestPremiumFormerGeminiFeatures:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — wrapped_analysis via OpenRouter Luna
+# Premium profile — OpenRouter (only wrapped_analysis)
 # ---------------------------------------------------------------------------
 class TestPremiumOpenRouter:
-    """Test OpenRouter Luna feature responds."""
+    """Test OpenRouter feature responds."""
 
     def test_wrapped_analysis(self):
         model = get_model('wrapped_analysis')
-        assert model == 'gpt-5.6-luna'
-        assert get_provider('wrapped_analysis') == 'openrouter'
+        assert model == 'gemini-3-flash-preview'
         llm = get_llm('wrapped_analysis')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"wrapped_analysis ({model}) returned empty response"
@@ -196,18 +197,23 @@ class TestPremiumOpenRouter:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — chat_agent via OpenRouter get_llm()
+# Premium profile — Anthropic (via get_model + anthropic_client)
 # ---------------------------------------------------------------------------
-class TestPremiumChatAgent:
-    """Test chat_agent via OpenRouter (get_llm)."""
+class TestPremiumAnthropic:
+    """Test chat_agent via Anthropic client (get_model, not get_llm)."""
 
-    def test_chat_agent_openrouter(self):
+    @pytest.mark.asyncio
+    async def test_chat_agent_anthropic(self):
         model = get_model('chat_agent')
-        assert model == 'gpt-5.6-luna', f"chat_agent should be gpt-5.6-luna, got {model}"
-        assert get_provider('chat_agent') == 'openrouter'
-        llm = get_llm('chat_agent')
-        response = llm.invoke(SIMPLE_PROMPT)
-        text = response.content.strip()
+        assert model == 'claude-sonnet-4-6', f"chat_agent should be claude-sonnet-4-6, got {model}"
+        assert model == ANTHROPIC_AGENT_MODEL
+
+        response = await anthropic_client.messages.create(
+            model=model,
+            max_tokens=50,
+            messages=[{"role": "user", "content": SIMPLE_PROMPT}],
+        )
+        text = response.content[0].text.strip()
         assert text, f"chat_agent ({model}) returned empty response"
         print(f"  chat_agent ({model}): {text[:60]}")
 
@@ -244,27 +250,15 @@ class TestProfileRouting:
 
     def test_premium_profile_has_expected_variant_count(self):
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['premium'].values()}
-        expected = {
-            'gpt-5.6-luna',
-            'sonar-pro',
-        }
-        assert distinct == expected, f"Unexpected premium variants: {distinct}"
+        assert len(distinct) == 7, f"Expected 7 variants in premium, got {len(distinct)}: {distinct}"
 
     def test_max_profile_has_expected_variant_count(self):
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['max'].values()}
-        expected = {
-            'gpt-5.6-luna',
-            'sonar-pro',
-        }
-        assert distinct == expected, f"Unexpected max variants: {distinct}"
+        assert len(distinct) == 9, f"Expected 9 variants in max, got {len(distinct)}: {distinct}"
 
     def test_byok_profile_has_expected_variant_count(self):
         distinct = {model for model, _provider in MODEL_QOS_PROFILES['byok'].values()}
-        expected = {
-            'gpt-5.6-luna',
-            'sonar-pro',
-        }
-        assert distinct == expected, f"Unexpected byok variants: {distinct}"
+        assert len(distinct) == 9, f"Expected 9 variants in byok, got {len(distinct)}: {distinct}"
 
 
 # ---------------------------------------------------------------------------
