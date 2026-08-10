@@ -120,7 +120,10 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     let notificationIdentity = try XCTUnwrap(SuggestionAssistantTelemetry.NotificationIdentity(identity))
     XCTAssertEqual(
       Set(SuggestionAssistantTelemetry.DeliveryOutcome.allCases.map(\.rawValue)),
-      Set(["delivered", "filtered_low_confidence", "filtered_duplicate", "rejected_owner"])
+      Set([
+        "delivered", "filtered_low_confidence", "filtered_duplicate",
+        "filtered_ungrounded_commitment", "rejected_owner",
+      ])
     )
 
     let payload = SuggestionAssistantTelemetry.deliveryOutcomePayload(

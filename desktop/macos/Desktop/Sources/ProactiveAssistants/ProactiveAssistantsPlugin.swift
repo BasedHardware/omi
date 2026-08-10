@@ -1053,6 +1053,35 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
+  /// Drive the suggestion assistant's grounding → evaluation → delivery path on the most
+  /// recent captured frame, optionally relabelling which app/window it came from so a
+  /// leisure context can be probed without stealing the user's focus for 30 seconds.
+  func probeSuggestionNudge(
+    appOverride: String?,
+    windowTitleOverride: String?
+  ) async -> [String: String] {
+    let registered = AssistantCoordinator.shared.assistant(withIdentifier: "suggestion")
+    guard let assistant = registered as? SuggestionAssistant else {
+      return ["outcome": "assistant_unavailable"]
+    }
+    guard let latest = latestCapturedFrame else {
+      return ["outcome": "no_frame_captured"]
+    }
+
+    let frame = CapturedFrame(
+      jpegData: latest.jpegData,
+      appName: appOverride ?? latest.appName,
+      windowTitle: windowTitleOverride ?? latest.windowTitle,
+      frameNumber: latest.frameNumber,
+      captureTime: latest.captureTime,
+      screenshotId: latest.screenshotId
+    )
+
+    // The probe's own delivery does not need to fan out assistant events; the observable
+    // result is the notification itself plus the returned outcome.
+    return await assistant.probeEvaluateAndDeliver(frame: frame) { _, _ in }
+  }
+
   /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
   private func flushDebouncedFrame() {
     guard let frame = latestCapturedFrame else { return }

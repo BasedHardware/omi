@@ -343,3 +343,305 @@ final class SuggestionPromptContractTests: XCTestCase {
     XCTAssertTrue(grounding.promptSections().contains("OPEN COMMITMENTS"))
   }
 }
+
+/// The card Omi delivered at 90% on 2026-08-10: "You still haven't sent the investor update
+/// to Bob." Bob existed only in the prompt's worked examples — the user had no such task.
+/// A fabricated commitment clears the confidence bar (it scores *higher* than grounded
+/// ones) and clears dedup (it is novel), so the only thing that can catch it is asking
+/// whether the work it names is in the grounding at all.
+final class SuggestionCommitmentGuardTests: XCTestCase {
+  /// The user's real open tasks at the time of the incident.
+  private let realCommitments = [
+    "Exchange weekly tasks with accountability partner and update the shared Google Doc tracker",
+    "Record the Instagram demo video walkthrough",
+    "Follow up on the Figma comments from Sarah (due 2026-08-10)",
+  ]
+
+  private func isGrounded(
+    _ suggestion: String,
+    category: SuggestionCategory = .commitment,
+    commitments: [String]? = nil
+  ) -> Bool {
+    SuggestionCommitmentGuard.isGrounded(
+      suggestion: suggestion,
+      category: category,
+      openCommitments: commitments ?? realCommitments
+    )
+  }
+
+  func testRejectsTheFabricatedInvestorUpdateNudge() {
+    XCTAssertFalse(isGrounded("You still haven't sent the investor update to Bob."))
+  }
+
+  func testRejectsEveryNameLiftedFromThePromptExamples() {
+    XCTAssertFalse(isGrounded("You still haven't sent that email to Bob — good moment to knock it out"))
+    XCTAssertFalse(isGrounded("You told Sarah you'd send the deck Friday — this is that thread"))
+  }
+
+  func testAdmitsTheGroundedNudgeDeliveredInTheSameSession() {
+    XCTAssertTrue(isGrounded("Follow up on Sarah's Figma comments (due 2026-08-10)"))
+  }
+
+  /// A nudge names the task in fewer words than the task itself, so coverage is measured
+  /// against the commitment rather than requiring the two to look alike.
+  func testAdmitsAShorterParaphraseOfARealCommitment() {
+    XCTAssertTrue(isGrounded("Still owe the Instagram demo walkthrough"))
+  }
+
+  func testEmptyCommitmentsRejectEveryCommitmentNudge() {
+    XCTAssertFalse(isGrounded("You still haven't sent the investor update to Bob.", commitments: []))
+    XCTAssertFalse(isGrounded("Follow up on Sarah's Figma comments", commitments: []))
+  }
+
+  /// Only `commitment` claims work Omi holds; the rest describe the screen, which this
+  /// guard cannot see and must not veto.
+  func testOtherCategoriesArePassedThrough() {
+    for category in [SuggestionCategory.mistake, .opportunity, .connection, .other] {
+      XCTAssertTrue(
+        isGrounded("Sensitive credentials visible in terminal — mask before sharing", category: category),
+        "category \(category) must not be gated on commitments"
+      )
+    }
+  }
+
+  /// "send" and "update" appear in most commitments. Echoing a commitment's two most
+  /// generic words while dropping everything that identifies it — quarterly, board, deck,
+  /// investors — is not a reference to it.
+  func testGenericVerbsAloneDoNotVouchForACommitment() {
+    XCTAssertFalse(
+      isGrounded(
+        "You still need to send the update",
+        commitments: ["Send the quarterly board update deck to the investors"]
+      )
+    )
+  }
+}
+
+/// On 2026-08-10 six consecutive TikTok contexts lasted 6s or less — not because the user
+/// left, but because TikTok rewrites the tab title on every video and each rewrite counted
+/// as a fresh context. Dwell never reached 30s, so every decision logged `skippedDwell` and
+/// the distraction nudge could not fire on the one activity it was written for.
+final class SuggestionDwellAnchorTests: XCTestCase {
+  private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+  func testTitleChangeWithinTheSameAppKeepsTheClockRunning() {
+    let afterOneVideo = start.addingTimeInterval(3)
+    let anchor = SuggestionDwellAnchor.anchor(
+      current: start,
+      currentApp: "Google Chrome",
+      newApp: "Google Chrome",
+      now: afterOneVideo
+    )
+    XCTAssertEqual(anchor, start)
+  }
+
+  /// The real trace: title churn every few seconds, still one sitting. Under the old
+  /// behaviour dwell here was 3s; it must now be the full 33s.
+  func testDwellSurvivesRepeatedTitleChurnAndClearsTheGate() {
+    var anchor = start
+    for second in stride(from: 3, through: 33, by: 3) {
+      anchor = SuggestionDwellAnchor.anchor(
+        current: anchor,
+        currentApp: "Google Chrome",
+        newApp: "Google Chrome",
+        now: start.addingTimeInterval(TimeInterval(second))
+      )
+    }
+    let dwell = start.addingTimeInterval(33).timeIntervalSince(anchor)
+    XCTAssertEqual(dwell, 33)
+    XCTAssertGreaterThanOrEqual(dwell, 30, "33s of unbroken TikTok must clear the 30s bar")
+  }
+
+  func testSwitchingAppsRestartsTheClock() {
+    let switchedAt = start.addingTimeInterval(20)
+    let anchor = SuggestionDwellAnchor.anchor(
+      current: start,
+      currentApp: "Google Chrome",
+      newApp: "Warp",
+      now: switchedAt
+    )
+    XCTAssertEqual(anchor, switchedAt)
+  }
+
+  /// After an evaluation consumes the pending context, the next switch starts fresh.
+  func testFirstSwitchAfterAnEvaluationAnchorsToNow() {
+    let anchor = SuggestionDwellAnchor.anchor(
+      current: nil,
+      currentApp: nil,
+      newApp: "Google Chrome",
+      now: start
+    )
+    XCTAssertEqual(anchor, start)
+  }
+}
+
+/// "call mom" was stored as 2026-08-11 03:59 UTC — 23:59 tonight in EDT — and the raw
+/// `ISO8601DateFormatter` rendered it as *tomorrow*. The model scored a due-today task as
+/// not-yet-urgent (80%), it fell under the 85% bar, and Nik got nothing. Local calendar
+/// days, not UTC.
+final class SuggestionDueDescriptionTests: XCTestCase {
+  private let edt = TimeZone(identifier: "America/New_York")!
+
+  private func calendar() -> Calendar {
+    var c = Calendar(identifier: .gregorian)
+    c.timeZone = edt
+    return c
+  }
+
+  private func date(_ iso: String) -> Date {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime]
+    return f.date(from: iso)!
+  }
+
+  func testLateEveningTaskIsDueTodayNotTomorrow() {
+    // 2026-08-11T03:59Z == 2026-08-10 23:59 EDT
+    let due = date("2026-08-11T03:59:00Z")
+    let now = date("2026-08-10T23:18:00Z")  // 19:18 EDT, when Nik was on TikTok
+    XCTAssertEqual(
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      "due today"
+    )
+  }
+
+  func testTomorrowIsStillTomorrow() {
+    // 2026-08-11T15:00Z == 2026-08-11 11:00 EDT — genuinely the next calendar day.
+    let due = date("2026-08-11T15:00:00Z")
+    let now = date("2026-08-10T23:18:00Z")
+    XCTAssertEqual(
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      "due tomorrow"
+    )
+  }
+
+  func testFurtherOutCountsDays() {
+    let due = date("2026-08-12T15:00:00Z")
+    let now = date("2026-08-10T23:18:00Z")
+    XCTAssertEqual(
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      "due in 2 days"
+    )
+  }
+
+  func testOverdueReadsAsOverdue() {
+    let now = date("2026-08-10T23:18:00Z")
+    XCTAssertEqual(
+      SuggestionDueDescription.phrase(for: date("2026-08-09T15:00:00Z"), now: now, calendar: calendar()),
+      "overdue by a day"
+    )
+    XCTAssertEqual(
+      SuggestionDueDescription.phrase(for: date("2026-07-24T04:00:00Z"), now: now, calendar: calendar()),
+      "overdue by 17 days"
+    )
+  }
+
+  /// The phrase is what the model quotes, so it must never contain a machine date.
+  func testPhraseNeverContainsAnISODate() {
+    let now = date("2026-08-10T23:18:00Z")
+    for iso in ["2026-08-11T03:59:00Z", "2026-08-11T15:00:00Z", "2026-07-24T04:00:00Z"] {
+      let phrase = SuggestionDueDescription.phrase(for: date(iso), now: now, calendar: calendar())
+      XCTAssertFalse(phrase.contains("2026"), "\(phrase) leaks a machine date into the card")
+      XCTAssertFalse(phrase.contains("-"), "\(phrase) leaks a machine date into the card")
+    }
+  }
+}
+
+/// "The model produced a suggestion" and "the user saw a card" are different claims. The
+/// first version of the automation probe reported `produced` after calling delivery and
+/// never observed the result, so a card silently dropped by the confidence bar, dedup, or
+/// the commitment guard still read as a working delivery path.
+final class SuggestionDeliveryPolicyTests: XCTestCase {
+  private func decide(
+    hasOwner: Bool = true,
+    confidence: Double = 0.9,
+    threshold: Double = 0.85,
+    isDuplicate: Bool = false,
+    isGroundedCommitment: Bool = true
+  ) -> SuggestionAssistantTelemetry.DeliveryOutcome {
+    SuggestionDeliveryPolicy.decide(
+      hasOwner: hasOwner,
+      confidence: confidence,
+      threshold: threshold,
+      isDuplicate: isDuplicate,
+      isGroundedCommitment: isGroundedCommitment
+    )
+  }
+
+  func testDeliversWhenEveryFilterPasses() {
+    XCTAssertEqual(decide(), .delivered)
+  }
+
+  func testEachFilterIsReportedDistinctly() {
+    XCTAssertEqual(decide(hasOwner: false), .rejectedOwner)
+    XCTAssertEqual(decide(confidence: 0.80), .filteredLowConfidence)
+    XCTAssertEqual(decide(isDuplicate: true), .filteredDuplicate)
+    XCTAssertEqual(decide(isGroundedCommitment: false), .filteredUngroundedCommitment)
+  }
+
+  /// The real 80% "call parents" card, and the real 95% ungrounded tally: neither reached
+  /// Nik, and neither may be reported as delivered.
+  func testRealWorldSuppressionsAreNotDelivered() {
+    XCTAssertNotEqual(decide(confidence: 0.80), .delivered)
+    XCTAssertNotEqual(decide(confidence: 0.95, isGroundedCommitment: false), .delivered)
+  }
+
+  func testThresholdBoundaryDelivers() {
+    XCTAssertEqual(decide(confidence: 0.85, threshold: 0.85), .delivered)
+    XCTAssertEqual(decide(confidence: 0.8499, threshold: 0.85), .filteredLowConfidence)
+  }
+
+  /// Owner rejection outranks everything: a card must never land on the wrong account, even
+  /// if it would otherwise have been a perfect suggestion.
+  func testOwnerRejectionOutranksOtherFilters() {
+    XCTAssertEqual(
+      decide(hasOwner: false, confidence: 0.2, isDuplicate: true, isGroundedCommitment: false),
+      .rejectedOwner
+    )
+  }
+}
+
+/// Goals are personal. `APIClient.getGoals()` documents that its short-lived shared cache
+/// is NOT owner-validated, so an unsnapshotted fetch can return the *previous* account's
+/// goals — which would then sit in the assistant's 10-minute cache and be pasted into the
+/// next owner's prompt. These pin the capture/pass/validate contract at the authority
+/// level: a snapshot taken before an account switch must not validate after it.
+final class SuggestionGoalOwnerScopingTests: XCTestCase {
+  private let authority = RuntimeOwnerAuthorizationAuthority.shared
+
+  private func signIn(_ owner: String) {
+    authority.beginTransition()
+    authority.endTransition(ownerID: owner)
+  }
+
+  func testSnapshotFromPreviousOwnerDoesNotValidateAfterSwitch() throws {
+    signIn("owner-a")
+    let snapshot = try XCTUnwrap(authority.capture(ownerID: "owner-a", expectedOwnerID: nil))
+    XCTAssertTrue(authority.isCurrent(snapshot, ownerID: "owner-a"))
+
+    signIn("owner-b")
+    XCTAssertFalse(
+      authority.isCurrent(snapshot, ownerID: "owner-b"),
+      "goals fetched as owner-a must be dropped once owner-b is signed in"
+    )
+  }
+
+  /// Mid-transition there is no owner to attribute a fetch to, so nothing may be cached.
+  func testNoSnapshotIsIssuedDuringATransition() {
+    signIn("owner-a")
+    authority.beginTransition()
+    XCTAssertNil(
+      authority.capture(ownerID: nil, expectedOwnerID: nil),
+      "a goal fetch must not start while ownership is in flight"
+    )
+    authority.endTransition(ownerID: "owner-a")
+  }
+
+  /// Re-signing the same account still advances the generation, so a snapshot straddling
+  /// the boundary is stale even though the owner id is unchanged.
+  func testSameOwnerReSignInvalidatesEarlierSnapshots() throws {
+    signIn("owner-a")
+    let snapshot = try XCTUnwrap(authority.capture(ownerID: "owner-a", expectedOwnerID: nil))
+    signIn("owner-a")
+    XCTAssertFalse(authority.isCurrent(snapshot, ownerID: "owner-a"))
+  }
+}

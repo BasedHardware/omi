@@ -87,6 +87,8 @@ enum SuggestionAssistantTelemetry {
     case delivered
     case filteredLowConfidence = "filtered_low_confidence"
     case filteredDuplicate = "filtered_duplicate"
+    /// A commitment nudge that named work absent from the grounding it was given.
+    case filteredUngroundedCommitment = "filtered_ungrounded_commitment"
     case rejectedOwner = "rejected_owner"
   }
 
