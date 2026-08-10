@@ -19,7 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
   - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
-- desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingRevealAutomation.swift
   - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
