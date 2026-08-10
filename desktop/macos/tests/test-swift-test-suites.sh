@@ -184,7 +184,6 @@ fi
 if ! grep -q -- "--skip PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass PushToTalk hang skip to SwiftPM"
 fi
-fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
 # diagnosis explicitly asks for fewer workers.
