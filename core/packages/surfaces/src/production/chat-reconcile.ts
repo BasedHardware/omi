@@ -39,6 +39,8 @@ export type ChatHistoryPage = {
 export type ChatCapabilities = {
   /** null = the server has not reported a cap; attachments stay unavailable. */
   readonly maxAttachmentsPerMessage: number | null;
+  readonly maxAttachmentBytes: number | null;
+  readonly allowedAttachmentMimeTypes: readonly string[] | null;
 };
 
 function clientMessageIdOf(message: ChatMessage): string | null {
