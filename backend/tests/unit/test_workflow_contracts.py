@@ -352,7 +352,7 @@ def test_backend_static_contract_job_uses_the_pinned_backend_environment():
     pre_deploy = (BACKEND_DIR / 'scripts/pre-deploy-check.sh').read_text(encoding='utf-8')
 
     assert 'uses: actions/setup-python@v6' in workflow
-    assert 'uses: astral-sh/setup-uv@v5' in workflow
+    assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in workflow
     assert 'uv pip sync pylock.toml --system' in workflow
     assert 'backend/scripts/pre-deploy-check.sh' in workflow
     assert 'python3 -m pip install' not in pre_deploy
