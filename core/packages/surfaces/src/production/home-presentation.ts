@@ -39,21 +39,30 @@ export function combineHomeRefreshStatuses(
  * Notice keys come from `refreshPhaseNoticeKey` (lifecycle-presentation.ts) —
  * this module stays free of relative value imports so Node hermetic tests can
  * execute it directly (same discipline as chat-reconcile.ts).
+ *
+ * `emptyKind` splits true-empty (nothing in the loaded spine, no filter) from
+ * filter-miss (a kind chip or query excluded every loaded row). Both previously
+ * rendered as `common.noResults`.
  */
+export type HomeEmptyKind = "empty-projection" | "filtered-out";
+
 export function homeSurfacePresentation(
   status: RefreshStatus,
   rowCount: number,
   noticeKey: RefreshPhaseNoticeKey | null,
+  filtering = false,
 ): {
   phase: RefreshPhase;
   noticeKey: RefreshPhaseNoticeKey | null;
   showsSavedRows: boolean;
   showsFailureIndication: boolean;
+  emptyKind: HomeEmptyKind | null;
 } {
   return {
     phase: status.phase,
     noticeKey,
     showsSavedRows: rowCount > 0,
     showsFailureIndication: status.phase === "saved-but-refresh-failed" || status.phase === "unavailable",
+    emptyKind: rowCount > 0 ? null : filtering ? "filtered-out" : "empty-projection",
   };
 }
