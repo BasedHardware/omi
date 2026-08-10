@@ -63,6 +63,17 @@ export function homeSurfacePresentation(
     noticeKey,
     showsSavedRows: rowCount > 0,
     showsFailureIndication: status.phase === "saved-but-refresh-failed" || status.phase === "unavailable",
-    emptyKind: rowCount > 0 ? null : filtering ? "filtered-out" : "empty-projection",
+    // Only `ready` is entitled to an opinion about emptiness. Every other phase
+    // has zero rows because it has not finished, not because there is nothing —
+    // and announcing "nothing is saved", or worse "your filter excluded
+    // everything", while still loading is the exact lie `data-empty-kind` was
+    // introduced to remove. `listEmptyKind` gates on this; this helper received
+    // `status.phase` and never consulted it.
+    emptyKind:
+      status.phase !== "ready" || rowCount > 0
+        ? null
+        : filtering
+          ? "filtered-out"
+          : "empty-projection",
   };
 }

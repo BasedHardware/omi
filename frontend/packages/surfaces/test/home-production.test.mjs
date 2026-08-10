@@ -193,3 +193,28 @@ test("home combines two source phases with a conservative worst-of reading", () 
   // red-proof: returning ready whenever either side is ready would tell the user
   // Home is fine while the other projection is unavailable or stale-failed.
 });
+
+test("home makes no empty-state claim before it is ready to make one", () => {
+  // The review of aac098b87a..8b20f36e53 caught this: listEmptyKind gates on
+  // phase === "ready" precisely so a refresh notice is never paired with a
+  // lying empty region, but homeSurfacePresentation received status.phase and
+  // never consulted it. Home therefore announced "nothing is saved" — or worse,
+  // "your filter excluded everything" — while it was still loading.
+  for (const phase of ["initial-loading", "refreshing", "unavailable", "saved-but-refresh-failed"]) {
+    assert.equal(
+      present(phase, false, 0).emptyKind,
+      null,
+      `${phase} with zero rows must not claim an empty kind`,
+    );
+    assert.equal(
+      present(phase, false, 0, true).emptyKind,
+      null,
+      `${phase} with zero rows and an active filter must not claim a filter miss`,
+    );
+  }
+
+  // Ready is the only phase entitled to an opinion, and it keeps both of them.
+  assert.equal(present("ready", true, 0).emptyKind, "empty-projection");
+  assert.equal(present("ready", true, 0, true).emptyKind, "filtered-out");
+  assert.equal(present("ready", true, 3).emptyKind, null);
+});
