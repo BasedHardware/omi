@@ -33,6 +33,7 @@ const boot = (options: {
   readonly delayMs?: number;
   readonly consumedSeconds?: number;
   readonly transcriptionSource?: TranscriptionSource;
+  readonly credentialLeaseMilliseconds?: number;
 } = {}) => {
   const stores = createInMemoryLocalServiceStores();
   stores.settings.putIdentity(ACCOUNT, {
@@ -61,6 +62,7 @@ const boot = (options: {
       end: 1,
       consumedSeconds: options.consumedSeconds ?? 1,
     }]),
+    listenCredentialLeaseMilliseconds: options.credentialLeaseMilliseconds,
   });
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -389,6 +391,31 @@ describe("GET /v4/listen WebSocket", () => {
     });
     expect(stores.listen.readSession(ACCOUNT, SESSION)?.status).toBe("interrupted");
     expect(stores.conversations.readRecord(ACCOUNT, SESSION)).not.toBeNull();
+  });
+
+  test("a revoked credential cannot submit audio after the one-second lease bound", async () => {
+    const { service, stores, baseUrl } = boot({
+      credentialLeaseMilliseconds: 10,
+      delayMs: 0,
+    });
+    const observed = await observedSocket(service, baseUrl);
+    await observed.waitFor(isReady);
+    const revoked = await service.app.request("/v1/session/current", {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${service.devToken}` },
+    });
+    expect(revoked.status).toBe(204);
+    await Bun.sleep(15);
+
+    observed.socket.send(new Uint8Array([1, 2, 3, 4]));
+    const close = await Promise.race([
+      observed.closed,
+      Bun.sleep(250).then(() => { throw new Error("credential lease did not close socket"); }),
+    ]);
+    expect(close.code).toBe(1008);
+    expect(close.reason).toBe("unauthorized");
+    expect(stores.listen.listSegments(ACCOUNT, SESSION)).toEqual([]);
+    expect(stores.listen.readSession(ACCOUNT, SESSION)?.status).toBe("interrupted");
   });
 
   test("unmetered entitlement payloads retain honest usage and a tagged limit", () => {

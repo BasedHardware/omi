@@ -25,6 +25,7 @@ import type { ListenSegmentUnitOfWork } from "../stores/listen-segment-unit-of-w
 
 export const LISTEN_PATH = "/v4/listen";
 export const LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION = 4020;
+export const LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS = 1_000;
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -82,6 +83,8 @@ export interface ListenRouteDependencies {
   readonly transcription: TranscriptionSource;
   readonly conversations: ListenConversationFinalizer;
   readonly now: () => string;
+  readonly credentialLeaseMilliseconds: number;
+  readonly credentialNowMilliseconds: () => number;
   readonly createId?: () => string;
 }
 
@@ -183,6 +186,7 @@ const eventsForExhaustedEntitlement = (
 const eventsForSession = (
   deps: ListenRouteDependencies,
   principal: DevPrincipal,
+  token: string,
   session: ListenSessionRecord,
   pendingSegments: readonly ListenTranscriptSegment[],
   handshake: ListenHandshake,
@@ -193,6 +197,8 @@ const eventsForSession = (
   let terminal = false;
   let processing = Promise.resolve();
   let unregisterActive: (() => void) | null = null;
+  let credentialValidUntil = deps.credentialNowMilliseconds()
+    + deps.credentialLeaseMilliseconds;
 
   const finalize = (status: "completed" | "entitlement_exhausted", locked: boolean): void => {
     if (terminal) return;
@@ -222,6 +228,33 @@ const eventsForSession = (
       }));
       activeSocket.close(1011, "stt_failed");
     }
+  };
+
+  const credentialIsValid = (): boolean => {
+    const now = deps.credentialNowMilliseconds();
+    if (now < credentialValidUntil) return true;
+    const refreshed = deps.resolvePrincipal(token);
+    if (refreshed?.uid === principal.uid) {
+      credentialValidUntil = now + deps.credentialLeaseMilliseconds;
+      return true;
+    }
+    if (!terminal) {
+      terminal = true;
+      const closed = deps.store.closeSession(
+        principal.uid,
+        session.id,
+        "interrupted",
+        deps.now(),
+      );
+      if (closed !== null) {
+        deps.conversations.finalize({ accountId: principal.uid, session: closed, locked: false });
+      }
+      const activeSocket = socket;
+      if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
+        activeSocket.close(1008, "unauthorized");
+      }
+    }
+    return false;
   };
 
   const activeStream: ActiveListenStream = Object.freeze({
@@ -299,9 +332,12 @@ const eventsForSession = (
     onMessage(event) {
       if (terminal || typeof event.data === "string") return;
       if (event.data instanceof Blob) {
-        void event.data.arrayBuffer().then((data) => transcription.writeAudio(new Uint8Array(data)));
+        void event.data.arrayBuffer().then((data) => {
+          if (credentialIsValid()) transcription.writeAudio(new Uint8Array(data));
+        });
         return;
       }
+      if (!credentialIsValid()) return;
       transcription.writeAudio(new Uint8Array(event.data as ArrayBufferLike));
     },
 
@@ -327,6 +363,11 @@ const eventsForSession = (
 
 /** Registers the authenticated native WebSocket handshake at the ratified path. */
 export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): void => {
+  if (!Number.isFinite(deps.credentialLeaseMilliseconds)
+    || deps.credentialLeaseMilliseconds <= 0
+    || deps.credentialLeaseMilliseconds > LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS) {
+    throw new TypeError("invalid listen credential lease");
+  }
   const streamsByAccount = new Map<string, Set<ActiveListenStream>>();
   const registerActive = (accountId: string, stream: ActiveListenStream): (() => void) => {
     const streams = streamsByAccount.get(accountId) ?? new Set<ActiveListenStream>();
@@ -384,6 +425,7 @@ export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): 
     return upgradeWebSocket(context, eventsForSession(
       deps,
       principal,
+      token,
       opened.session,
       opened.pendingSegments,
       handshake,

@@ -52,7 +52,10 @@ import { registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMemoryRoutes } from "./routes/memories";
-import { registerListenRoutes } from "./routes/listen";
+import {
+  LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
+  registerListenRoutes,
+} from "./routes/listen";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -137,6 +140,9 @@ export interface LocalServiceOptions {
   readonly listenDefaultUnmetered?: boolean;
   /** The C1 default emits no generation frames; the next lane injects the real supervisor. */
   readonly chatSupervisor?: ChatGenerationSupervisor;
+  /** Test override; production-shaped listen authentication is rechecked at least once per second. */
+  readonly listenCredentialLeaseMilliseconds?: number;
+  readonly listenCredentialNowMilliseconds?: () => number;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -544,6 +550,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     transcription: options.transcriptionSource ?? createScriptedTranscriptionSource(),
     conversations: createListenConversationFinalizer(conversations),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds
+      ?? LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
+    credentialNowMilliseconds: options.listenCredentialNowMilliseconds ?? Date.now,
   });
   registerChatMessagesRoutes(app, {
     resolvePrincipal,
