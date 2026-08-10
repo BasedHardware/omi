@@ -191,6 +191,29 @@ async def test_reloader_stale_fallback_on_config_validation_error(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_reloader_records_fallback_when_serving_stale_config(tmp_path, monkeypatch):
+    """Serving the previous config is a degraded mode and must be observable."""
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        'llm_gateway.gateway.config_reload.record_fallback',
+        lambda **kwargs: recorded.append(kwargs),
+    )
+
+    config_dir = _copy_default_config_to(tmp_path)
+    reloader = GatewayConfigReloader(config_dir)
+    await reloader.get()
+    _bump_mtime(config_dir / "lanes.yaml")
+    (config_dir / "lanes.yaml").write_text("- item1\n- [unclosed")
+
+    await reloader.get()
+
+    assert len(recorded) == 1
+    assert recorded[0]['component'] == 'llm_gateway'
+    assert recorded[0]['to_mode'] == 'stale_config'
+    assert recorded[0]['outcome'] == 'degraded'
+
+
+@pytest.mark.asyncio
 async def test_reloader_propagates_first_call_error(tmp_path):
     """On first call, if the loader raises and there's no cached value, propagate."""
     config_dir = _copy_default_config_to(tmp_path)

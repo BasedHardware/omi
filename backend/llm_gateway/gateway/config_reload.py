@@ -25,6 +25,7 @@ from llm_gateway.gateway.config_loader import (
 from llm_gateway.gateway.daily_refresh import DailyRefreshCache
 from llm_gateway.gateway.lane_catalog import load_catalog
 from llm_gateway.gateway.resolver import ensure_catalog_loaded
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,22 @@ class GatewayConfigReloader:
         # Last successfully loaded config, kept for stale fallback even
         # after the cache is invalidated.
         self._cached: Optional[GatewayConfig] = None
-        self._cache: DailyRefreshCache[GatewayConfig] = DailyRefreshCache(ttl_seconds=ttl_seconds)
+        self._cache: DailyRefreshCache[GatewayConfig] = DailyRefreshCache(
+            ttl_seconds=ttl_seconds,
+            on_stale_fallback=self._record_stale_config_fallback,
+        )
+
+    @staticmethod
+    def _record_stale_config_fallback(exc: BaseException) -> None:
+        """Serving the previous config is a degraded mode, not a silent retry."""
+        record_fallback(
+            component='llm_gateway',
+            from_mode='reloaded_config',
+            to_mode='stale_config',
+            reason='config_incomplete' if isinstance(exc, ValueError) else 'other',
+            outcome='degraded',
+            log=logger,
+        )
 
     async def get(self) -> GatewayConfig:
         """Return the current config, reloading if any config file's mtime changed."""

@@ -57,11 +57,15 @@ class DailyRefreshCache(Generic[T]):
         self,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
+        on_stale_fallback: Optional[Callable[[BaseException], None]] = None,
     ):
         if ttl_seconds <= 0:
             raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
         self._ttl = ttl_seconds
         self._clock = clock
+        # Invoked when a refresh fails and the stale value is served instead.
+        # Owners use it to emit the shared fallback telemetry; it must never raise.
+        self._on_stale_fallback = on_stale_fallback
         # `_value` uses a sentinel (not `None`) so legitimate `None` payloads
         # can be cached. See `_MISSING` above.
         self._value: T | object = _MISSING
@@ -158,6 +162,11 @@ class DailyRefreshCache(Generic[T]):
                     # the timestamp is still old), creating a tight retry loop
                     # against the failing backend.
                     self._last_loaded_at = self._clock()
+                    if self._on_stale_fallback is not None:
+                        try:
+                            self._on_stale_fallback(e)
+                        except Exception:
+                            pass
                     return cast(T, self._value)
                 # No prior value — propagate.
                 raise
