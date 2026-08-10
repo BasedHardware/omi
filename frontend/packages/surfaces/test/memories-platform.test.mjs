@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import {
   citationSummary,
@@ -17,6 +17,11 @@ import {
   fixturePropositionStore,
 } from "../src/production/proposition-fixtures.ts";
 import { EN_MESSAGES } from "@omi-core/i18n";
+import {
+  closeRenderHarness,
+  loadProductionExport,
+  renderComponent,
+} from "./render-harness.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
@@ -31,6 +36,8 @@ const known = (status, reasons = [], extras = {}) => ({
   hasMore: extras.hasMore ?? false,
 });
 const item = (id, text, extras = {}) => ({ id, text, ...extras });
+
+after(closeRenderHarness);
 
 // ---------------------------------------------------------------------------
 // Completeness honesty. `complete` is the exceptional claim (core hard rule 12).
@@ -187,18 +194,52 @@ test("every production surface declares where its rows came from, and never hide
   );
   assert.match(styles, /html\[data-platform="desktop"\] \.data-source-badge/);
 
-  for (const file of ["MemoriesPlatformProduction.tsx", "ChatProduction.tsx", "SettingsProduction.tsx", "ListenProduction.tsx"]) {
-    const source = await read(`src/production/${file}`);
-    assert.match(source, /<ProductionDataSourceBadge/, `${file} does not declare its data source`);
-    assert.ok(
-      !/className="qa-label"/.test(source),
-      `${file} still uses the desktop-hidden qa-label instead of the badge`,
-    );
+  const cases = [
+    {
+      module: "MemoriesPlatformProduction.tsx",
+      exportName: "MemoriesPlatformProduction",
+      props: { store: fixturePropositionStore("normal"), source: { kind: "fixture", fixture: "normal" } },
+    },
+    {
+      module: "ChatProduction.tsx",
+      exportName: "ChatProduction",
+      fixtureModule: "chat-fixtures.ts",
+      fixtureExport: "fixtureChatStore",
+      fixtureState: "empty",
+    },
+    {
+      module: "SettingsProduction.tsx",
+      exportName: "SettingsProduction",
+      fixtureModule: "settings-fixtures.ts",
+      fixtureExport: "fixtureSettingsStore",
+      fixtureState: "signed-in",
+    },
+    {
+      module: "ListenProduction.tsx",
+      exportName: "ListenProduction",
+      fixtureModule: "listen-fixtures.ts",
+      fixtureExport: "fixtureListenStore",
+      fixtureState: "idle",
+    },
+  ];
+  for (const renderCase of cases) {
+    const Component = await loadProductionExport(renderCase.module, renderCase.exportName);
+    const props = renderCase.props ?? {
+      store: (await loadProductionExport(renderCase.fixtureModule, renderCase.fixtureExport))(renderCase.fixtureState),
+      fixture: renderCase.fixtureState,
+    };
+    const rendered = await renderComponent(Component, props);
+    try {
+      const badge = rendered.container.querySelector(".data-source-badge");
+      assert.ok(badge, `${renderCase.module} renders its data source`);
+      assert.ok(badge.textContent?.includes(EN_MESSAGES["dataSource.fixture"]));
+      assert.equal(rendered.container.querySelector(".qa-label"), null, `${renderCase.module} does not substitute a hidden QA label`);
+    } finally {
+      await rendered.cleanup();
+    }
   }
-  // red-proof: reverting any surface to the `qa-label` line, or adding display:none to the
-  // badge, makes this fail. Those are the two ways a fixture render silently starts
-  // looking like real signed-in data at desktop width — the exact confusion the
-  // coordinator flagged as demo-killing.
+  // Adding display:none to the badge is a CSS contract; reverting a surface to
+  // the hidden qa-label now fails against its actual DOM.
 });
 
 // ---------------------------------------------------------------------------

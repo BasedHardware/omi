@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import { backlogHours, describeCapture } from "../src/production/capture-state.ts";
+import {
+  closeRenderHarness,
+  loadProductionExport,
+  renderComponent,
+} from "./render-harness.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (relative) => readFile(resolve(root, relative), "utf8");
+after(closeRenderHarness);
 
 test("ceiling stop is loud and is not idle", () => {
   // red-proof: mapping stopped-at-ceiling to idle copy, or setting loud:false, must fail this
@@ -70,10 +71,38 @@ test("every capture kind is handled with a distinct non-empty title key", () => 
   assert.equal(new Set(titleKeys).size, titleKeys.length);
 });
 
-test("ListenProduction announces loud states and has no pause control", async () => {
-  const source = await read("src/production/ListenProduction.tsx");
-  assert.match(source, /role=\{description\.loud \? "alert" : "status"\}/);
-  assert.doesNotMatch(source, /store\.pause|listen\.pause|"pause"/i);
-  // red-proof (supplement): removing the loud alert branch or adding a pause
-  // control would fail this source guard.
+test("ListenProduction announces loud states and renders no pause control", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const fixtureListenStore = await loadProductionExport("listen-fixtures.ts", "fixtureListenStore");
+  const states = [
+    "idle",
+    "capturing",
+    "paused-for-entitlement",
+    "offline-buffering",
+    "stopped-at-ceiling",
+    "error-retryable",
+    "error-permanent",
+    "unavailable",
+  ];
+
+  for (const state of states) {
+    const rendered = await renderComponent(ListenProduction, {
+      store: fixtureListenStore(state),
+      fixture: state,
+    });
+    try {
+      const panel = rendered.container.querySelector(".listen-state-panel");
+      assert.ok(panel, `${state} renders the capture-state panel`);
+      assert.equal(
+        panel.getAttribute("role"),
+        panel.getAttribute("data-loud") === "true" ? "alert" : "status",
+        `${state} exposes loudness through its live-region role`,
+      );
+      const pauseControl = [...rendered.container.querySelectorAll("button")]
+        .find((button) => /pause/i.test(`${button.textContent} ${button.getAttribute("aria-label") ?? ""}`));
+      assert.equal(pauseControl, undefined, `${state} does not fabricate a pause control`);
+    } finally {
+      await rendered.cleanup();
+    }
+  }
 });

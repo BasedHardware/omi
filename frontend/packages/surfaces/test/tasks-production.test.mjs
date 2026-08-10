@@ -70,19 +70,6 @@ test("source and provenance are localized or suppressed, never leaked", async ()
   // backend values, including blank/unknown provenance, as product copy.
 });
 
-test("keyboard shortcuts mutate only a selected task and are input-safe", async () => {
-  const source = await read("src/production/TasksProduction.tsx");
-  assert.match(source, /event\.key\.toLowerCase\(\) === "n"/);
-  assert.match(source, /event\.key\.toLowerCase\(\) === "d"/);
-  assert.ok(source.includes('modifier && (event.key === "]" || event.key === "[")'));
-  assert.match(source, /Math\.max\(0, Math\.min\(3, selectedTask\.indentLevel/);
-  assert.match(source, /closest\("input, textarea, select/);
-  assert.match(source, /select, button, a/);
-  assert.match(source, /selectedTaskId/);
-  // red-proof: removing input-safety would turn typing Meta/Control-N or Meta-[
-  // inside the task editor into a destructive or structural mutation.
-});
-
 test("mutation failures stay localized and dead letters remain discardable", async () => {
   const source = await read("src/production/TasksProduction.tsx");
   const fixtures = await read("src/production/task-fixtures.ts");
@@ -102,62 +89,41 @@ test("mutation failures stay localized and dead letters remain discardable", asy
   // fixture operation would make terminal failures invisible to the user.
 });
 
-test("tasks use the shared production chrome and stable ready callback", async () => {
+test("tasks keep stable boot and date parsing internals", async () => {
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /import "\.\/tasks\.css"/);
-  assert.match(source, /className="production-shell tasks-production-shell"/);
-  assert.match(source, /ProductionChrome locale=\{locale\} active="tasks" placement="top"/);
-  assert.match(source, /ProductionChrome locale=\{locale\} active="tasks" placement="bottom"/);
-  assert.match(source, /import "\.\/tasks\.css"/);
-  assert.match(source, /className="production-shell tasks-production-shell"/);
   assert.match(source, /readyRef\.current/);
   assert.match(source, /parseDateInput/);
   assert.doesNotMatch(source, /Date\.parse\(/);
-  // red-proof: removing readyRef permits StrictMode's second effect pass to
-  // emit duplicate readiness, while Date.parse UTC would shift local dates.
-  // Dropping the stylesheet or production-shell class leaves the route without
-  // its responsive layout or shared bottom-navigation behavior.
+  // STRUCTURAL LIFECYCLE ASSERTION: readyRef is the implementation guard against
+  // repeated effects and local-date parsing deliberately avoids Date.parse.
+  // Rendered callback count, shell, and chrome are covered in tasks-rendering.
 });
 
 test("all task UI copy is translator-backed and desktop/mobile affordances exist", async () => {
   const source = await read("src/production/TasksProduction.tsx");
   const styles = await read("src/production/tasks.css");
   assert.match(source, /translate: Translate/);
-  assert.match(source, /tasks\.shortcuts/);
-  assert.match(source, /tasks\.shortcutNew/);
-  assert.match(source, /tasks\.shortcutDelete/);
-  assert.match(source, /tasks\.shortcutIndent/);
-  assert.match(source, /tasks\.shortcutOutdent/);
-  assert.match(source, /tasks-mobile-fab/);
   assert.match(styles, /html\[data-platform="desktop"\]/);
   assert.match(styles, /html\[data-platform="mobile"\]/);
   assert.match(styles, /tasks-mobile-fab/);
   assert.match(styles, /task-card\.is-completed/);
   assert.match(styles, /task-card\.is-selected/);
-  assert.match(source, /data-indent-level=\{indentLevel\}/);
   assert.match(styles, /task-card\.is-indent-3/);
   assert.match(source, /confirm\(translate\("tasks\.deleteConfirm"\)\)/);
   assert.doesNotMatch(styles, /#(?:[0-9a-f]{3,8})\b/i);
   assert.doesNotMatch(styles, /@media\s*\(/);
-  // red-proof: a raw JSX sentence or purple literal would bypass locale and
-  // semantic-token checks while still looking correct in one screenshot.
+  // STRUCTURAL TRANSLATION/CSS ASSERTION: source typing, confirmation routing,
+  // host-selected layouts, and semantic-token use are not computed by jsdom.
+  // The translated shortcuts, FAB, and indent DOM execute in tasks-rendering.
 });
 
 test("task polish keeps rows scannable and create, edit, and focus flows accessible", async () => {
-  const source = await read("src/production/TasksProduction.tsx");
   const styles = await read("src/production/tasks.css");
-  assert.match(source, /tasks-group-count/);
-  assert.match(source, /grouped\[group\]\.length/);
-  assert.match(source, /aria-expanded=\{createOpen\}/);
-  assert.match(source, /requestAnimationFrame\(\(\) => draftRef\.current\?\.focus\(\)\)/);
-  assert.match(source, /dateInputValue\(task\.dueAt\)/);
-  assert.match(source, /tabIndex=\{0\}/);
-  assert.match(source, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
-  assert.match(source, /querySelectorAll<HTMLElement>\("\.task-card"\)/);
   assert.match(styles, /tasks-create\.is-open/);
   assert.match(styles, /task-check\[aria-pressed="true"\]/);
   assert.match(styles, /task-card:not\(\.is-selected\) \.task-actions/);
   assert.match(styles, /tasks-shortcuts \{ position: sticky/);
-  // red-proof: always displaying the mobile composer and every row action
-  // restores the screenshot's form-heavy layout and destroys scan density.
+  // STRUCTURAL CSS ASSERTION: jsdom cannot prove the sticky and visibility
+  // layout. Counts, expansion, focus, keyboard movement, and date inputs render.
 });

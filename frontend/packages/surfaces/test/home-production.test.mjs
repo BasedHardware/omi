@@ -23,9 +23,9 @@ const refresh = (phase, hasSavedData) => ({ phase, hasSavedData });
 
 after(closeRenderHarness);
 
-function projection(initialPhase = "initial-loading") {
-  let rows = [];
-  let status = refresh(initialPhase, false);
+function projection(initialPhase = "initial-loading", initialRows = []) {
+  let rows = initialRows;
+  let status = refresh(initialPhase, initialRows.length > 0);
   const listeners = new Set();
   return {
     source: {
@@ -64,31 +64,21 @@ test("home search reads loaded projections without claiming backend completeness
   // Home cease to be a filter over the already-loaded projections.
 });
 
-test("home search is a merged chronological spine, clearable, and keyboard focusable", async () => {
+test("home search source stays a memory-and-conversation chronological projection", async () => {
   const source = await read("src/production/HomeProduction.tsx");
   const styles = await read("src/production/home.css");
-  assert.match(source, /autoFocus/);
-  assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
-  assert.match(source, /event\.key\.toLocaleLowerCase\(\) !== "k"/);
-  assert.match(source, /searchRef\.current\?\.focus\(\)/);
-  assert.match(source, /common\.clearSearch/);
-  assert.match(source, /common\.noResults/);
-  assert.match(source, /home-result-spine/);
   assert.match(source, /kind: "memory"/);
   assert.match(source, /kind: "conversation"/);
   assert.doesNotMatch(source, /kind: "task"/);
   assert.match(source, /sort\(\(left, right\) => right\.timestamp - left\.timestamp\)/);
-  assert.match(source, /home-kind-filter/);
   assert.match(source, /\["all", "conversation", "memory"\]/);
-  assert.match(source, /aria-disabled="true" disabled>\{t\(locale, "nav\.rewind"\)\}/);
-  assert.match(source, /home\.loadedCount/);
-  assert.match(source, /home\.matchCount/);
   assert.match(styles, /grid-template-rows:\s*auto 12px minmax\(0,1fr\)/);
   assert.match(styles, /height:\s*64px/);
   assert.doesNotMatch(styles, /@media\s*\(/);
   assert.doesNotMatch(styles, /#(?:[0-9a-f]{3,8})\b/i);
-  // red-proof: removing the controlled clear path, Cmd-K focus, or a result
-  // spine/filter fails this interaction-and-hierarchy guard.
+  // STRUCTURAL PROJECTION/CSS ASSERTION: the allowed union, descending sort,
+  // host-selected grid, and token use are implementation-boundary facts. The
+  // search, clear, focus, filter, and row hierarchy execute below.
 });
 
 test("home does not fabricate ask, chat, send, or mutation affordances", async () => {
@@ -143,9 +133,60 @@ test("HomeProduction with zero rows makes no empty claim while loading, then ren
   // the initial-loading assertion failed against that real shipped behavior.
 });
 
-test("home renders each of the five refresh states distinguishably", async () => {
-  const source = await read("src/production/HomeProduction.tsx");
+test("HomeProduction renders a merged searchable spine with clear, filter, and keyboard focus behavior", async () => {
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
+  const fixtureConversationStore = await loadProductionExport("conversation-fixtures.ts", "fixtureConversationStore");
+  const rendered = await renderComponent(HomeProduction, {
+    sources: {
+      memories: fixtureMemoryStore("normal"),
+      conversations: fixtureConversationStore("normal"),
+    },
+  });
 
+  try {
+    const input = rendered.container.querySelector('input[type="search"]');
+    assert.ok(input);
+    assert.equal(rendered.window.document.activeElement, input, "search is focused on entry");
+    const rows = [...rendered.container.querySelectorAll(".home-result-row")];
+    assert.ok(rows.some((row) => row.matches("article")), "merged spine contains memories");
+    assert.ok(rows.some((row) => row.matches("a")), "merged spine contains conversations");
+    assert.equal(rows[0].textContent?.includes("Keep the morning review short"), true, "rows render newest-first");
+
+    input.blur();
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    });
+    assert.equal(rendered.window.document.activeElement, input, "Command-K focuses search");
+
+    const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLInputElement.prototype, "value")?.set;
+    assert.ok(setter);
+    await rendered.act(async () => {
+      setter.call(input, "no saved row has this phrase");
+      input.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
+    });
+    assert.ok(rendered.container.querySelector('[data-empty-kind="filtered-out"]'));
+    const clear = rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["common.clearSearch"]}"]`);
+    assert.ok(clear);
+    await rendered.act(async () => { clear.click(); });
+    assert.equal(input.value, "");
+    assert.equal(rendered.window.document.activeElement, input);
+
+    const memoryFilter = [...rendered.container.querySelectorAll(".home-kind-filter button")]
+      .find((button) => button.textContent?.trim() === EN_MESSAGES["nav.memories"]);
+    assert.ok(memoryFilter);
+    await rendered.act(async () => { memoryFilter.click(); });
+    assert.ok(rendered.container.querySelectorAll(".home-result-row").length > 0);
+    assert.equal(rendered.container.querySelector("a.home-result-row"), null, "memory filter excludes conversation rows");
+    const rewind = [...rendered.container.querySelectorAll(".home-kind-filter button")]
+      .find((button) => button.textContent?.trim() === EN_MESSAGES["nav.rewind"]);
+    assert.ok(rewind?.disabled, "unsupported Rewind is visibly disabled");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("home renders each of the five refresh states distinguishably", async () => {
   const phases = [
     "initial-loading",
     "refreshing",
@@ -173,41 +214,47 @@ test("home renders each of the five refresh states distinguishably", async () =>
   assert.equal(EN_MESSAGES["lifecycle.savedFailed"], "Showing saved data. Couldn't refresh.");
 
   // Catalog keys already exist — inventing a new string fails i18n parity and this check.
-  // Keys live in lifecycle-presentation.ts (shared).
-  const lifecyclePresentation = await read("src/production/lifecycle-presentation.ts");
   for (const key of ["lifecycle.loading", "lifecycle.refreshing", "lifecycle.savedFailed", "lifecycle.unavailable"]) {
     assert.equal(typeof EN_MESSAGES[key], "string");
     assert.ok(EN_MESSAGES[key].length > 0);
-    assert.match(lifecyclePresentation, new RegExp(`"${key}"`));
   }
   assert.equal(refreshPhaseNoticeKey("ready"), null);
 
-  // STATIC TRIPWIRE — HomeProduction must consume homeSurfacePresentation for notice
-  // text, notice visibility, and row visibility. No jsdom here; same discipline as
-  // integration/cross-side/tasks-rendering-parity.test.mjs: pin the shipped wiring
-  // against the production file's own source text so an unmirrored edit fails loudly.
-  // Labelled a tripwire on purpose (AGENTS.md): reading source is not behavioural
-  // coverage; the behavioural half is homeSurfacePresentation above.
-  const mustContain = [
-    "homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase), filtering)",
-    "{presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role=\"status\">{t(locale, presentation.noticeKey)}</div>}",
-    "{presentation.showsSavedRows ? (",
-    "data-surface-state={presentation.phase}",
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
+  const [savedMemory] = await fixtureMemoryStore("normal").list();
+  const renderCases = [
+    { phase: "initial-loading", rows: [], notice: EN_MESSAGES["lifecycle.loading"], emptyKind: null },
+    { phase: "refreshing", rows: [savedMemory], notice: EN_MESSAGES["lifecycle.refreshing"], emptyKind: null },
+    { phase: "ready", rows: [], notice: null, emptyKind: "empty-projection" },
+    { phase: "saved-but-refresh-failed", rows: [savedMemory], notice: EN_MESSAGES["lifecycle.savedFailed"], emptyKind: null },
+    { phase: "unavailable", rows: [], notice: EN_MESSAGES["lifecycle.unavailable"], emptyKind: null },
   ];
-  const missing = mustContain.filter((fragment) => !source.includes(fragment));
-  assert.deepEqual(
-    missing,
-    [],
-    `HomeProduction.tsx no longer wires homeSurfacePresentation: ${JSON.stringify(missing)}`,
-  );
-  assert.doesNotMatch(source, /homePhaseLabel/);
-  assert.doesNotMatch(source, /loadFailed|setLoadFailed|home-load-error|lifecycle\.error/);
-  // A phase special-case in the JSX would let notice/rows diverge from the helper.
-  assert.doesNotMatch(source, /saved-but-refresh-failed/);
-  // red-proof: (1) suppress the failure notice in HomeProduction for
-  // saved-but-refresh-failed — the mustContain notice line fails.
-  // (2) map saved-but-refresh-failed to the ready notice in
-  // lifecycle-presentation.ts — savedFailed.noticeKey === "lifecycle.savedFailed" fails.
+  for (const renderCase of renderCases) {
+    const memories = projection(renderCase.phase, renderCase.rows);
+    const conversations = projection(renderCase.phase);
+    const rendered = await renderComponent(HomeProduction, {
+      sources: { memories: memories.source, conversations: conversations.source },
+    });
+    try {
+      const main = rendered.container.querySelector("main[data-route=home]");
+      assert.equal(main?.getAttribute("data-surface-state"), renderCase.phase);
+      const notice = rendered.container.querySelector(".status-notice");
+      assert.equal(notice?.textContent ?? null, renderCase.notice, `${renderCase.phase} renders its truthful notice`);
+      assert.equal(
+        rendered.container.querySelector("[data-empty-kind]")?.getAttribute("data-empty-kind") ?? null,
+        renderCase.emptyKind,
+        `${renderCase.phase} renders only its truthful empty claim`,
+      );
+      assert.equal(
+        rendered.container.querySelectorAll(".home-result-row").length,
+        renderCase.rows.length,
+        `${renderCase.phase} preserves the expected saved rows`,
+      );
+    } finally {
+      await rendered.cleanup();
+    }
+  }
 });
 
 test("home combines two source phases with a conservative worst-of reading", () => {
