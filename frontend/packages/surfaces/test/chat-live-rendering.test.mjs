@@ -154,7 +154,7 @@ test("rendered live Chat streams changing assistant text and converges without d
   }
 });
 
-test("native staged names render while only ordered opaque ids reach send", async () => {
+test("staged safe metadata renders generically while only ordered opaque ids reach send", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(
     "ProductionChatStore.ts",
@@ -164,7 +164,6 @@ test("native staged names render while only ordered opaque ids reach send", asyn
   const descriptors = [
     {
       id: "opaque-stage-one",
-      displayName: "server-one.pdf",
       mimeType: "application/pdf",
       sizeBytes: 100,
       expiresAt: "2026-08-11T12:00:00.000Z",
@@ -172,7 +171,6 @@ test("native staged names render while only ordered opaque ids reach send", asyn
     },
     {
       id: "opaque-stage-two",
-      displayName: "server-two.pdf",
       mimeType: "application/pdf",
       sizeBytes: 200,
       expiresAt: "2026-08-11T12:00:00.000Z",
@@ -193,8 +191,8 @@ test("native staged names render while only ordered opaque ids reach send", asyn
     await click(rendered, attach);
     assert.deepEqual(
       [...rendered.container.querySelectorAll(".chat-attachments li span")].map((item) => item.textContent),
-      ["server-one.pdf", "server-two.pdf"],
-      "the host/server-normalized safe names are what the user sees",
+      ["Staged application/pdf, 100 bytes", "Staged application/pdf, 200 bytes"],
+      "staging cannot claim a durable server name that P7 did not return",
     );
 
     const textarea = rendered.container.querySelector("textarea.chat-draft");
@@ -206,7 +204,7 @@ test("native staged names render while only ordered opaque ids reach send", asyn
       attachmentIds: ["opaque-stage-one", "opaque-stage-two"],
     }]);
     const serialized = JSON.stringify(domain.sent);
-    assert.doesNotMatch(serialized, /server-one|server-two|application\/pdf|sizeBytes|expiresAt/);
+    assert.doesNotMatch(serialized, /application\/pdf|sizeBytes|expiresAt/);
   } finally {
     await rendered.cleanup();
   }

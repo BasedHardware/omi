@@ -314,7 +314,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
             <ul className="chat-attachments" aria-label={t(locale, "chat.attachments")}>
               {attachments.map((attachment) => (
                 <li key={attachment.id}>
-                  <span>{attachment.displayName}</span>
+                  <span>{t(locale, "chat.stagedAttachment", {
+                    mimeType: attachment.mimeType,
+                    sizeBytes: attachment.sizeBytes,
+                  })}</span>
                   <button type="button" onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
                     {t(locale, "chat.attachmentRemove")}
                   </button>

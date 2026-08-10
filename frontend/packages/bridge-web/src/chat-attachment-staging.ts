@@ -81,14 +81,15 @@ export function isBridgeChatAttachmentStagingAvailable(): boolean {
 function isDescriptor(value: unknown): value is StagedChatAttachment {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  const expiresAt = item["expiresAt"];
   return (
-    typeof item["id"] === "string" && item["id"] !== "" && !item["id"].includes("://") &&
-    typeof item["displayName"] === "string" && item["displayName"] !== "" &&
-    !/[\\/\u0000-\u001f]/u.test(item["displayName"]) &&
-    typeof item["mimeType"] === "string" && /^[^\s/]+\/[^\s/]+$/u.test(item["mimeType"]) &&
-    Number.isSafeInteger(item["sizeBytes"]) && (item["sizeBytes"] as number) >= 0 &&
-    typeof item["expiresAt"] === "string" && item["expiresAt"] !== "" &&
-    !Number.isNaN(Date.parse(item["expiresAt"])) &&
+    typeof item["id"] === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(item["id"]) &&
+    typeof item["mimeType"] === "string" && item["mimeType"].length <= 127 &&
+    /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u.test(item["mimeType"]) &&
+    Number.isSafeInteger(item["sizeBytes"]) && (item["sizeBytes"] as number) > 0 &&
+    typeof expiresAt === "string" && expiresAt.length === 24 &&
+    !Number.isNaN(Date.parse(expiresAt)) && new Date(expiresAt).toISOString() === expiresAt &&
     item["state"] === "staged"
   );
 }
@@ -116,7 +117,6 @@ function parseReply(raw: unknown, id: string): StagedChatAttachment | null {
   }
   return {
     id: reply.attachment.id,
-    displayName: reply.attachment.displayName,
     mimeType: reply.attachment.mimeType,
     sizeBytes: reply.attachment.sizeBytes,
     expiresAt: reply.attachment.expiresAt,
