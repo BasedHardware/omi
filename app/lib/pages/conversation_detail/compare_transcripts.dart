@@ -51,7 +51,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                 Tab(text: 'Deepgram'),
                 Tab(text: 'Soniox'),
                 Tab(text: 'SpeechMatics'),
-                Tab(text: 'Prerecorded'),
+                Tab(text: 'Whisper-x'),
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),
@@ -138,7 +138,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             //     ? const SizedBox(height: 16)
                             //     : const SizedBox(height: 0),
                             TranscriptWidget(
-                              segments: transcripts?.prerecorded ?? [],
+                              segments: transcripts?.whisperx ?? [],
                               horizontalMargin: false,
                               topMargin: false,
                               canDisplaySeconds: true,

@@ -30,6 +30,7 @@ from utils.stt.streaming import process_audio_dg
 from groq import Groq
 
 from utils.other.storage import upload_postprocessing_audio
+from utils.stt.pre_recorded import postprocess_words
 
 
 def add_model_result_segments(model: str, new_segments: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
