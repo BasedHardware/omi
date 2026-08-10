@@ -6,6 +6,7 @@ import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./convers
 import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
+import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField, type ProductionFilterOption } from "./ProductionPrimitives.js";
 import "./conversations.css";
@@ -313,6 +314,11 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       label: folder.name,
     })),
   ], [folders, locale]);
+  const emptyKind = listEmptyKind({
+    phase: status.refresh.phase,
+    rowCount: rows.length,
+    visibleCount: visibleRows.length,
+  });
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
@@ -327,12 +333,12 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
       {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
       {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-      {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state">{t(locale, "conversations.detailNotFound")}</p> : <>
+      {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state" data-empty-kind="detail-not-found">{t(locale, "conversations.detailNotFound")}</p> : <>
         <div className="conversation-controls">
           <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>
         <ProductionFilterChips className="conversation-filter" label={t(locale, "conversations.title")} value={filter} options={filterOptions} onValueChange={setFilter} />
-        {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state"><strong>{t(locale, "conversations.emptyTitle")}</strong><p>{t(locale, "conversations.emptyBody")}</p></div> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
+        {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state" data-empty-kind="empty-projection"><strong>{t(locale, "conversations.emptyTitle")}</strong><p>{t(locale, "conversations.emptyBody")}</p></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
             <h2>{group.label}</h2>
             {group.rows.map((conversation) => <ConversationRow key={conversation.id} conversation={conversation} locale={locale} run={run} store={store} fixture={fixture} />)}
