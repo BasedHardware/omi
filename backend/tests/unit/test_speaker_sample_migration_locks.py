@@ -20,3 +20,32 @@ def test_migration_lock_is_released_after_v1_to_v2(monkeypatch):
 
     assert result['speech_samples_version'] == 2
     assert migration._migration_locks == {}
+    assert migration._migration_lock_holders == {}
+
+
+def test_lock_entry_survives_until_every_holder_releases(monkeypatch):
+    """A finishing migration must not evict a lock another caller is still using.
+
+    Otherwise the next caller builds a second Lock for the same person and the
+    two migrations run concurrently against the same Firestore document.
+    """
+    monkeypatch.setattr(migration, '_migration_locks', {}, raising=False)
+    monkeypatch.setattr(migration, '_migration_lock_holders', {}, raising=False)
+    key = ('uid-1', 'person-1')
+
+    async def scenario():
+        first = await migration._get_migration_lock(*key)
+        second = await migration._get_migration_lock(*key)
+        assert second is first
+
+        await migration._release_migration_lock(*key, first)
+        assert migration._migration_locks.get(key) is first
+        assert await migration._get_migration_lock(*key) is first
+
+        await migration._release_migration_lock(*key, second)
+        await migration._release_migration_lock(*key, first)
+
+    asyncio.run(scenario())
+
+    assert migration._migration_locks == {}
+    assert migration._migration_lock_holders == {}

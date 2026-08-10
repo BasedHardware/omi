@@ -29,24 +29,38 @@ logger = logging.getLogger(__name__)
 
 # In-process locks to prevent concurrent migration for same person
 _migration_locks: dict[tuple[str, str], asyncio.Lock] = {}
+_migration_lock_holders: dict[tuple[str, str], int] = {}
 _locks_lock = asyncio.Lock()
 
 
 async def _get_migration_lock(uid: str, person_id: str) -> asyncio.Lock:
-    """Get or create a lock for the given uid/person_id pair."""
+    """Get or create a lock for the given uid/person_id pair.
+
+    Registers the caller as a holder so the entry is only evicted once every
+    caller that observed this lock object has finished. Callers must pair this
+    with _release_migration_lock in a finally block.
+    """
     key = (uid, person_id)
     async with _locks_lock:
-        if key not in _migration_locks:
-            _migration_locks[key] = asyncio.Lock()
-        return _migration_locks[key]
+        lock = _migration_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _migration_locks[key] = lock
+        _migration_lock_holders[key] = _migration_lock_holders.get(key, 0) + 1
+        return lock
 
 
 async def _release_migration_lock(uid: str, person_id: str, lock: asyncio.Lock) -> None:
     key = (uid, person_id)
     async with _locks_lock:
-        existing = _migration_locks.get(key)
-        if existing is lock and not lock.locked():
-            _migration_locks.pop(key, None)
+        if _migration_locks.get(key) is not lock:
+            return
+        remaining = _migration_lock_holders.get(key, 1) - 1
+        if remaining > 0:
+            _migration_lock_holders[key] = remaining
+            return
+        _migration_locks.pop(key, None)
+        _migration_lock_holders.pop(key, None)
 
 
 async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
