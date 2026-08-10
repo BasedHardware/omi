@@ -142,6 +142,29 @@ check("host-injected-auth", boundaryRequest?.value(forHTTPHeaderField: "Authoriz
 check("host-injected-contract", boundaryRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
 check("host-injected-run-shell", boundaryRequest?.value(forHTTPHeaderField: "x-omi-client-id") == "run-stream-proof::macos")
 
+let malformedRequestCount: Int
+StubProtocol.lock.lock(); malformedRequestCount = StubProtocol.requests.count; StubProtocol.lock.unlock()
+let terminalMalformedFrames = [
+  ("s-extra-open", #"{"t":"open","id":"s-extra-open","channel":"chat-generation-events","params":"{\"generationId\":\"unused\"}","credit":1,"extra":true}"#),
+  ("s-invalid-params", #"{"t":"open","id":"s-invalid-params","channel":"chat-generation-events","params":"{\"generationId\":7}","credit":1}"#),
+  ("s-wrong-channel", #"{"t":"open","id":"s-wrong-channel","channel":"other-events","params":"{\"generationId\":\"unused\"}","credit":1}"#),
+  ("s-unknown-type", #"{"t":"unknown","id":"s-unknown-type","channel":"chat-generation-events"}"#),
+]
+for (id, raw) in terminalMalformedFrames {
+  host.receive(raw: raw)
+  check("malformed-\(id)-is-terminal", eventually {
+    let routed = framesFor(id, in: frames)
+    return routed.count == 1
+      && routed[0]["t"] as? String == "error"
+      && routed[0]["channel"] as? String == "chat-generation-events"
+      && routed[0]["failure"] as? String == "invalid-frame"
+  })
+}
+host.receive(raw: #"{"t":"open","channel":"chat-generation-events","params":"{}","credit":1}"#)
+check("no-id-garbage-remains-unrouteable", frames.filter { $0["failure"] as? String == "invalid-frame" }.count == terminalMalformedFrames.count)
+StubProtocol.lock.lock(); let malformedRequestCountAfter = StubProtocol.requests.count; StubProtocol.lock.unlock()
+check("malformed-routable-frames-do-not-dispatch", malformedRequestCountAfter == malformedRequestCount)
+
 let creditPath = "/v1/chat-generations/manual-credit/events"
 host.receive(raw: #"{"t":"open","id":"s-credit","channel":"chat-generation-events","params":"{\"generationId\":\"manual-credit\"}","credit":1}"#)
 check("credit-stream-response-started", eventually {
@@ -172,13 +195,16 @@ check("two-sessions-start", eventually {
     && framesFor("s-two", in: frames).filter { $0["t"] as? String == "data" }.count == 1
 })
 StubProtocol.lock.lock(); let requestsBeforeInvalid = StubProtocol.requests.count; StubProtocol.lock.unlock()
-host.receive(raw: #"{"t":"open","id":"s-one","channel":"chat-generation-events","params":"{\"generationId\":\"isolation\"}","credit":99}"#)
 host.receive(raw: #"{"t":"grant","id":"s-one","channel":"chat-generation-events","credit":"99"}"#)
-host.receive(raw: #"{"t":"cancel","id":"s-one","channel":"wrong-channel"}"#)
-host.receive(raw: #"{"t":"grant","id":"s-one","channel":"chat-generation-events","credit":1,"extra":true}"#)
 StubProtocol.lock.lock(); let requestsAfterInvalid = StubProtocol.requests.count; StubProtocol.lock.unlock()
-check("duplicate-open-does-not-dispatch", requestsAfterInvalid == requestsBeforeInvalid)
-check("malformed-and-wrong-channel-do-not-cross-contaminate", framesFor("s-one", in: frames).filter { $0["t"] as? String == "data" }.count == 1)
+check("malformed-active-frame-does-not-dispatch", requestsAfterInvalid == requestsBeforeInvalid)
+check("malformed-active-frame-retires-only-matching-session", eventually {
+  let own = framesFor("s-one", in: frames)
+  return own.filter { $0["t"] as? String == "data" }.count == 1
+    && own.last?["t"] as? String == "error"
+    && own.last?["failure"] as? String == "invalid-frame"
+    && !framesFor("s-two", in: frames).contains { $0["t"] as? String == "error" }
+})
 host.receive(raw: #"{"t":"grant","id":"s-two","channel":"chat-generation-events","credit":2}"#)
 check("other-session-resumes-independently", eventually { framesFor("s-two", in: frames).last?["t"] as? String == "end" })
 
