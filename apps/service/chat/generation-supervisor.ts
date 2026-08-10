@@ -189,6 +189,15 @@ export const createChatGenerationSupervisor = (
     onAdmitted(input): void {
       const generationId = input.acceptedEvent.generationId;
       const key = keyOf(input.accountId, generationId);
+      const lifecycle = deps.events.readLifecycle(input.accountId, generationId);
+      if (lifecycle === null) {
+        throw new TypeError("admitted chat generation event log disappeared");
+      }
+      if (lifecycle.state === "terminal") return;
+      if (lifecycle.state === "cancellation_requested") {
+        cancelFromDurableState(input.accountId, generationId);
+        return;
+      }
       if (active.has(key)) return;
       const state: ActiveGeneration = {
         accountId: input.accountId,
@@ -199,7 +208,12 @@ export const createChatGenerationSupervisor = (
         terminal: false,
       };
       active.set(key, state);
-      append(state, { kind: "snapshot", text: "" });
+      try {
+        append(state, { kind: "snapshot", text: "" });
+      } catch (error) {
+        active.delete(key);
+        throw error;
+      }
       void deps.context.load({ accountId: input.accountId, admitted: input.stored })
         .then((context) => {
           if (state.terminal) return;

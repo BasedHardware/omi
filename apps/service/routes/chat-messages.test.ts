@@ -154,8 +154,12 @@ describe("ratified /v1/chat-messages route", () => {
       upgradeAvailable: true,
     });
     let supervisorAdmissions = 0;
+    const supervisorGenerations = new Set<string>();
     const { db, local } = bootInMemory(stores, {
-      onAdmitted: () => { supervisorAdmissions += 1; },
+      onAdmitted: (input) => {
+        supervisorAdmissions += 1;
+        supervisorGenerations.add(input.acceptedEvent.generationId);
+      },
       cancel: (): void => {},
       recoverInterrupted: (): void => {},
     });
@@ -180,7 +184,8 @@ describe("ratified /v1/chat-messages route", () => {
     const admitted = stores.chatMessages.readMessage(ACCOUNT, "client-01")!;
     expect(stores.chatEvents.listAfter(ACCOUNT, admitted.generationId!, null)).toHaveLength(1);
     expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
-    expect(supervisorAdmissions).toBe(1);
+    expect(supervisorAdmissions).toBe(2);
+    expect(supervisorGenerations.size).toBe(1);
     db.close();
   });
 

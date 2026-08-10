@@ -466,14 +466,22 @@ export const registerChatMessagesRoutes = (
       });
       if (admission.kind === "conflict") return conflict();
       if (admission.kind === "entitlement") return entitlement();
-      if (admission.kind === "created") {
-        deps.supervisor.onAdmitted({
-          accountId: principal.uid,
-          stored: admission.stored,
-          acceptedEvent: admission.acceptedEvent,
-        });
-      }
       const admittedGenerationId = admission.stored.generationId ?? generationId;
+      const acceptedEvent = admission.kind === "created"
+        ? admission.acceptedEvent
+        : deps.events.listAfter(principal.uid, admittedGenerationId, null)
+          ?.find((event) => event.frame.kind === "accepted");
+      if (acceptedEvent === undefined) {
+        throw new TypeError("admitted chat generation has no accepted event");
+      }
+      // The accepted event is the durable dispatch record. Every replay offers
+      // it back to the idempotent supervisor so a synchronous dispatch failure
+      // is recoverable without waiting for a process restart.
+      deps.supervisor.onAdmitted({
+        accountId: principal.uid,
+        stored: admission.stored,
+        acceptedEvent,
+      });
       const stream = streamEvents({
         accountId: principal.uid,
         generationId: admittedGenerationId,

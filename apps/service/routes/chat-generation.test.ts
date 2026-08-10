@@ -16,6 +16,13 @@ import {
   createLocalDevService,
 } from "../app-facing";
 import {
+  createChatGenerationSupervisor,
+  type ChatGenerationSupervisor,
+} from "../chat/generation-supervisor";
+import {
+  createEmptyChatGenerationContextSource,
+} from "../chat/generation-context";
+import {
   createScriptedChatGenerationSource,
   type ChatGenerationSource,
 } from "../chat/generation-source";
@@ -126,6 +133,92 @@ const history = async (local: ReturnType<typeof createLocalDevService>): Promise
 };
 
 describe("ratified chat generation wire red proofs", () => {
+  test("same-process concurrent replay re-drives a dispatch throw exactly once", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    stores.settings.putEntitlement(ACCOUNT, {
+      planLabel: "Metered",
+      limitKey: "chat_messages",
+      used: 0,
+      limit: 2,
+      limitReached: false,
+      upgradeAvailable: true,
+    });
+    let sourceStarts = 0;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        sourceStarts += 1;
+        queueMicrotask(() => {
+          input.onDelta("Recovered answer.");
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const delegate = createChatGenerationSupervisor({
+      source,
+      context: createEmptyChatGenerationContextSource(),
+      messages: stores.chatMessages,
+      events: stores.chatEvents,
+      finalization: stores.chatFinalization,
+      nowEpochMilliseconds: () => 1_786_352_400_100,
+      assistantMessageId: (_accountId, generationId) => `assistant-${generationId}`,
+      eventId: (_accountId, generationId, kind, sequence) =>
+        `event-${generationId}-${kind}-${sequence}`,
+      revision: (_accountId, messageId, payloadHash) => `revision-${messageId}-${payloadHash}`,
+    });
+    let dispatchAttempts = 0;
+    const supervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted(input): void {
+        dispatchAttempts += 1;
+        if (dispatchAttempts === 1) throw new Error("injected dispatch crash");
+        delegate.onAdmitted(input);
+      },
+      cancel: delegate.cancel,
+      recoverInterrupted: delegate.recoverInterrupted,
+    });
+    const db = new Database(":memory:");
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "chat-dispatch-replay-proof",
+      generationSource: source,
+      generationContext: createEmptyChatGenerationContextSource(),
+      chatSupervisor: supervisor,
+    });
+    const request = create("dispatch-retry");
+
+    const first = await post(local, request);
+    expect(first.status).toBe(503);
+    expect(await first.json()).toEqual({
+      error: { code: "service_unavailable", retryable: true, action: "retry" },
+    });
+
+    const replays = await Promise.all(Array.from({ length: 8 }, () => post(local, request)));
+    expect(replays.map((response) => response.status)).toEqual(Array(8).fill(200));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const human = stores.chatMessages.readMessage(ACCOUNT, "dispatch-retry")!;
+    const eventKinds = stores.chatEvents.listAfter(
+      ACCOUNT,
+      human.generationId!,
+      null,
+    )!.map((event) => event.frame.kind);
+    expect(eventKinds).toEqual(["accepted", "snapshot", "delta", "done"]);
+    const lifecycle = stores.chatEvents.listUnterminated();
+    expect(lifecycle).toEqual([]);
+    expect(sourceStarts).toBe(1);
+    expect(dispatchAttempts).toBe(9);
+    expect((await history(local)).map((message) => [message.sender, message.text])).toEqual([
+      ["human", "Tell me something useful"],
+      ["ai", "Recovered answer."],
+    ]);
+    expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
+    expect(await Promise.all(replays.map((response) => response.text()))).toHaveLength(8);
+    db.close();
+  });
+
   test("terminal SSE frame is byte-equal to the canonical history message", async () => {
     const { db, local } = boot();
     const response = await post(local, create("terminal-canonical"));
