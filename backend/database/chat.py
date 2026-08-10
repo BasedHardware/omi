@@ -169,7 +169,7 @@ def get_app_messages(
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .where(filter=FieldFilter('app_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
         .offset(offset)
@@ -227,7 +227,7 @@ def get_messages(
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
         # App-scoped query: filter by plugin_id (None = main chat)
-        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+        messages_ref = messages_ref.where(filter=FieldFilter('app_id', '==', app_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
@@ -317,7 +317,7 @@ def get_cache_aligned_messages(
     if chat_session_id:
         scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+        scoped_ref = scoped_ref.where(filter=FieldFilter('app_id', '==', app_id))
 
     total_result = scoped_ref.count().get()
     total = int(total_result[0][0].value) if total_result and total_result[0] else 0
@@ -368,7 +368,7 @@ def get_messages_reconcile_page(
     if chat_session_id:
         query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     else:
-        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+        query = query.where(filter=FieldFilter('app_id', '==', app_id))
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     cursor_snapshot: Any = None
@@ -380,7 +380,7 @@ def get_messages_reconcile_page(
         cursor_in_scope = (
             cursor_payload.get('chat_session_id') == chat_session_id
             if chat_session_id
-            else cursor_payload.get('plugin_id') == app_id
+            else cursor_payload.get('app_id') == app_id
         )
         if not cursor_in_scope or cursor_payload.get('created_at') is None:
             raise MessageReconcileCursorError('message cursor is outside the requested scope')
@@ -524,9 +524,10 @@ def batch_delete_messages(
     parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> None:
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        messages_ref = messages_ref.where(filter=FieldFilter('app_id', '==', app_id))
     logger.info(f'batch_delete_messages {app_id}')
 
     while True:
@@ -657,7 +658,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         db.collection('users')
         .document(uid)
         .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .where(filter=FieldFilter('app_id', '==', app_id))
         .limit(1)
     )
 
@@ -836,7 +837,6 @@ def create_chat_session(uid: str, title: Optional[str] = None, app_id: Optional[
         'created_at': now,
         'updated_at': now,
         'app_id': app_id,
-        'plugin_id': app_id,  # Python chat.py queries chat_sessions by plugin_id
         'message_count': 0,
         'starred': False,
     }
@@ -851,7 +851,7 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     For main chat (app_id=None), matches sessions where plugin_id is None.
     """
     col = db.collection('users').document(uid).collection('chat_sessions')
-    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
+    query = col.where(filter=FieldFilter('app_id', '==', app_id)).limit(1)
     docs = list(query.stream())
     if docs:
         return docs[0].id
@@ -873,7 +873,7 @@ def get_chat_sessions(
     query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
     # Always filter — when app_id is None this returns only default-chat sessions
-    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    query = query.where(filter=FieldFilter('app_id', '==', app_id))
     if starred is not None:
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
@@ -976,7 +976,6 @@ def save_message(
         'sender': sender,
         'type': 'text',  # Desktop messages are always type 'text'
         'app_id': app_id,
-        'plugin_id': app_id,  # chat.py queries messages by plugin_id
         'session_id': session_id,
         'chat_session_id': session_id,  # chat.py uses this field name
         'from_external_integration': False,
@@ -1119,7 +1118,7 @@ def _assert_message_identity(
 ) -> None:
     mismatched = existing.get('sender') != sender
     mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
-    existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
+    existing_app_ids = [existing['app_id']] if 'app_id' in existing else [None]
     mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
     if session_id is not None:
         existing_session_ids = [
@@ -1170,7 +1169,7 @@ def _assert_idempotent_message_payload(
     mismatched = existing.get('text') != text or existing.get('sender') != sender
     mismatched = mismatched or existing.get('metadata') != metadata
     mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
-    existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
+    existing_app_ids = [existing['app_id']] if 'app_id' in existing else [None]
     mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
     if session_id is not None:
         existing_session_ids = [
@@ -1214,7 +1213,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
         query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
     else:
         # App-scoped delete: filter by plugin_id (None = main chat)
-        query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
+        query = col.where(filter=FieldFilter('app_id', '==', app_id))
 
     deleted = 0
     consecutive_conflicts = 0

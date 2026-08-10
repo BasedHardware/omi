@@ -11,6 +11,7 @@ import shutil as _shutil
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -929,6 +930,21 @@ def _cleanup_chat_client(saved):
     to_remove = [k for k in sys.modules if k not in saved]
     for k in to_remove:
         del sys.modules[k]
+
+
+def test_filter_messages_uses_app_id_for_app_scoped_history():
+    _client, module, saved = _make_chat_client()
+    try:
+        now = datetime.now(timezone.utc)
+        messages = [
+            module.Message(id='human', text='hello', created_at=now, sender='human', type='text', app_id='app-1'),
+            module.Message(id='reply', text='hi', created_at=now, sender='ai', type='text', app_id='app-1'),
+            module.Message(id='other', text='other', created_at=now, sender='ai', type='text', app_id='app-2'),
+        ]
+
+        assert module.filter_messages(messages, 'app-1') == messages[:2]
+    finally:
+        _cleanup_chat_client(saved)
 
 
 class TestVoiceMessageTranscribeEndpoint:
