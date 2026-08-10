@@ -1,21 +1,15 @@
+import { MetadataRoute } from 'next';
 import { getApprovedApps } from '@/lib/api/public';
 import { categoryMetadata } from '@/components/marketplace/category';
 
-type SitemapEntry = {
-  url: string;
-  lastModified: Date;
-  changeFrequency: 'daily' | 'weekly';
-  priority: number;
-};
-
-export default async function sitemap(): Promise<SitemapEntry[]> {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { plugins } = await getApprovedApps();
   const categories = Object.keys(categoryMetadata);
 
   const now = new Date();
 
   // Static pages
-  const staticPages: SitemapEntry[] = [
+  const staticPages: MetadataRoute.Sitemap = [
     {
       url: 'https://omi.me/apps',
       lastModified: now,
@@ -25,7 +19,7 @@ export default async function sitemap(): Promise<SitemapEntry[]> {
   ];
 
   // Category pages
-  const categoryPages: SitemapEntry[] = categories.map((category) => ({
+  const categoryPages: MetadataRoute.Sitemap = categories.map((category) => ({
     url: `https://omi.me/apps/category/${category}`,
     lastModified: now,
     changeFrequency: 'daily',
@@ -33,7 +27,7 @@ export default async function sitemap(): Promise<SitemapEntry[]> {
   }));
 
   // App detail pages
-  const appPages: SitemapEntry[] = plugins.map((app) => ({
+  const appPages: MetadataRoute.Sitemap = plugins.map((app) => ({
     url: `https://omi.me/apps/${app.id}`,
     lastModified: now,
     changeFrequency: 'weekly',

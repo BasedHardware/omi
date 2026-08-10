@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { cn } from '@/lib/utils';
-import Image from '@tschk/moonshine-next/image';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 interface LoginPanelProps {
   isOpen: boolean;

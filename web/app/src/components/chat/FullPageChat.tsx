@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import Image from '@tschk/moonshine-next/image';
+import Image from 'next/image';
 import { Send, Sparkles, Trash2, Brain, Paperclip, X } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';

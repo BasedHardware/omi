@@ -15,6 +15,7 @@ import { MessageSquare, Play, Pause, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LocationPin } from '@/types/recap';
 import { getConversation } from '@/lib/api';
+import 'leaflet/dist/leaflet.css';
 
 // Conversation info cache type
 interface ConversationInfo {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Sparkles, Loader2 } from 'lucide-react';
-import Image from '@tschk/moonshine-next/image';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { getChatApps, type App } from '@/lib/api';

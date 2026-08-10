@@ -1,6 +1,6 @@
 'use client';
 
-import Link from '@tschk/moonshine-next/link';
+import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { getCategoryIcon, getCategoryMetadata } from './category';
 

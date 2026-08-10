@@ -1,6 +1,6 @@
 'use client';
 
-import Link from '@tschk/moonshine-next/link';
+import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { App } from '@/types/apps';

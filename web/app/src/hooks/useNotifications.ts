@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import { useRouter } from 'next/navigation';
 import type {
   OmiNotification,
   NotificationType,

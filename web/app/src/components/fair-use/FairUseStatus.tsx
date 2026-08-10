@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, Loader2, Info, Copy, Check } from 'lucide-react';
 import { getFairUseStatus } from '@/lib/api';
 import type { FairUseStatus as FairUseStatusType } from '@/lib/api';

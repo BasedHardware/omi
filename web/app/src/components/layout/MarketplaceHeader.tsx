@@ -1,7 +1,7 @@
 'use client';
 
-import Link from '@tschk/moonshine-next/link';
-import Image from '@tschk/moonshine-next/image';
+import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 

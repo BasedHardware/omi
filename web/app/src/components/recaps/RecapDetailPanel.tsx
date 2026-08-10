@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Calendar,
@@ -14,7 +14,7 @@ import {
   Loader2,
   Maximize2,
 } from 'lucide-react';
-import dynamic from '@tschk/moonshine-next/dynamic';
+import dynamic from 'next/dynamic';
 
 // Dynamically import LocationMap to avoid SSR issues with Leaflet
 const LocationMap = dynamic(() => import('./sections/LocationMap'), {

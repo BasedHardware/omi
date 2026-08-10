@@ -1,4 +1,4 @@
-import { moonshineJson } from '@tschk/moonshine-next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 
@@ -6,34 +6,48 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me
  * API Proxy to avoid CORS issues during development
  * Forwards requests from /api/proxy/* to https://api.omi.me/*
  */
-export async function GET(request: Request) {
-  return handleRequest(request);
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  return handleRequest(request, await params);
 }
 
-export async function POST(request: Request) {
-  return handleRequest(request);
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  return handleRequest(request, await params);
 }
 
-export async function PATCH(request: Request) {
-  return handleRequest(request);
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  return handleRequest(request, await params);
 }
 
-export async function DELETE(request: Request) {
-  return handleRequest(request);
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> },
+) {
+  return handleRequest(request, await params);
 }
 
-async function handleRequest(request: Request) {
+async function handleRequest(request: NextRequest, params: { path: string[] }) {
   try {
-    const requestUrl = new URL(request.url);
-    const path = requestUrl.pathname.slice('/api/proxy/'.length);
-    const searchParams = requestUrl.searchParams.toString();
+    const path = params.path.join('/');
+    const searchParams = request.nextUrl.searchParams.toString();
     const url = `${API_BASE_URL}/${path}${searchParams ? `?${searchParams}` : ''}`;
 
     // Get auth header from incoming request
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return moonshineJson({ error: 'Authorization header required' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Authorization header required' },
+        { status: 401 },
+      );
     }
 
     // Check if this is a multipart form data request
@@ -86,7 +100,7 @@ async function handleRequest(request: Request) {
 
     // Handle 204 No Content responses (common for DELETE)
     if (response.status === 204) {
-      return new Response(null, { status: 204 });
+      return new NextResponse(null, { status: 204 });
     }
 
     // Get response data
@@ -98,7 +112,7 @@ async function handleRequest(request: Request) {
       responseContentType?.includes('text/plain')
     ) {
       const text = await response.text();
-      return new Response(text, {
+      return new NextResponse(text, {
         status: response.status,
         headers: {
           'Content-Type': responseContentType || 'text/plain',
@@ -109,7 +123,7 @@ async function handleRequest(request: Request) {
     // Handle download/streaming responses (e.g., data export) — pass body through without buffering
     const contentDisposition = response.headers.get('content-disposition');
     if (contentDisposition) {
-      return new Response(response.body, {
+      return new NextResponse(response.body, {
         status: response.status,
         headers: {
           'Content-Type': responseContentType || 'application/octet-stream',
@@ -134,7 +148,7 @@ async function handleRequest(request: Request) {
           'public, max-age=3600, stale-while-revalidate=86400';
       }
 
-      return moonshineJson(data, {
+      return NextResponse.json(data, {
         status: response.status,
         headers: cacheHeaders,
       });
@@ -142,7 +156,7 @@ async function handleRequest(request: Request) {
 
     // Default: return as text
     const data = await response.text();
-    return new Response(data, {
+    return new NextResponse(data, {
       status: response.status,
       headers: {
         'Content-Type': responseContentType || 'text/plain',
@@ -150,6 +164,6 @@ async function handleRequest(request: Request) {
     });
   } catch (error) {
     console.error('Proxy error:', error);
-    return moonshineJson({ error: 'Proxy request failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Proxy request failed' }, { status: 500 });
   }
 }

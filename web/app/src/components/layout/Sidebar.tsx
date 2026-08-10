@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Image from '@tschk/moonshine-next/image';
-import Link from '@tschk/moonshine-next/link';
-import { usePathname } from '@tschk/moonshine-next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GanttChartSquare,

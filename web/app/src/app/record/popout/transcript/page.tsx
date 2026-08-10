@@ -10,16 +10,10 @@ import {
   requestCurrentState,
   type RecordingBroadcastMessage,
 } from '@/lib/recordingBroadcast';
-import type {
-  RecordingState,
-  AudioMode,
-  TranscriptSegment,
-} from '@/components/recording/RecordingContext';
-import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import type { RecordingState, AudioMode, TranscriptSegment } from '@/components/recording/RecordingContext';
 
 // Extended message type for start command
-type ExtendedBroadcastMessage =
-  RecordingBroadcastMessage | { type: 'command'; command: 'start' };
+type ExtendedBroadcastMessage = RecordingBroadcastMessage | { type: 'command'; command: 'start' };
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -27,27 +21,17 @@ function formatDuration(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-registerMoonshineRoute('/record/popout/transcript', TranscriptPopoutPage, 'root');
-
 /**
  * Animated waveform visualization
  */
-function Waveform({
-  level,
-  isActive,
-  isPaused,
-}: {
-  level: number;
-  isActive: boolean;
-  isPaused: boolean;
-}) {
+function Waveform({ level, isActive, isPaused }: { level: number; isActive: boolean; isPaused: boolean }) {
   const bars = 7;
 
   const heights = useMemo(() => {
     return Array.from({ length: bars }, (_, i) => {
       const base = 0.3;
       const variance = Math.sin(i * 1.2) * 0.3 + 0.5;
-      return base + level * variance * 0.7;
+      return base + (level * variance * 0.7);
     });
   }, [level]);
 
@@ -57,15 +41,17 @@ function Waveform({
         <motion.div
           key={i}
           className={cn(
-            'w-1 rounded-full',
-            isActive && !isPaused ? 'bg-purple-400' : 'bg-gray-500',
+            "w-1 rounded-full",
+            isActive && !isPaused ? "bg-purple-400" : "bg-gray-500"
           )}
           animate={{
-            height: isActive && !isPaused ? `${Math.max(6, height * 24)}px` : '6px',
+            height: isActive && !isPaused
+              ? `${Math.max(6, height * 24)}px`
+              : '6px',
           }}
           transition={{
             duration: 0.15,
-            ease: 'easeOut',
+            ease: "easeOut",
           }}
         />
       ))}
@@ -184,18 +170,14 @@ export default function TranscriptPopoutPage() {
             {/* Status indicator */}
             {isActive && (
               <span className="relative flex h-3 w-3">
-                <span
-                  className={cn(
-                    'absolute inline-flex h-full w-full rounded-full opacity-75',
-                    isRecording ? 'animate-ping bg-red-400' : 'bg-yellow-400',
-                  )}
-                />
-                <span
-                  className={cn(
-                    'relative inline-flex rounded-full h-3 w-3',
-                    isRecording ? 'bg-red-500' : 'bg-yellow-500',
-                  )}
-                />
+                <span className={cn(
+                  "absolute inline-flex h-full w-full rounded-full opacity-75",
+                  isRecording ? "animate-ping bg-red-400" : "bg-yellow-400"
+                )} />
+                <span className={cn(
+                  "relative inline-flex rounded-full h-3 w-3",
+                  isRecording ? "bg-red-500" : "bg-yellow-500"
+                )} />
               </span>
             )}
 
@@ -239,18 +221,14 @@ export default function TranscriptPopoutPage() {
                 <button
                   onClick={isPaused ? handleResume : handlePause}
                   className={cn(
-                    'p-2 rounded-lg transition-colors',
+                    "p-2 rounded-lg transition-colors",
                     isPaused
-                      ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                      : 'bg-bg-tertiary hover:bg-bg-secondary text-text-primary',
+                      ? "bg-purple-500 hover:bg-purple-600 text-white"
+                      : "bg-bg-tertiary hover:bg-bg-secondary text-text-primary"
                   )}
-                  title={isPaused ? 'Resume' : 'Pause'}
+                  title={isPaused ? "Resume" : "Pause"}
                 >
-                  {isPaused ? (
-                    <Play className="w-4 h-4" />
-                  ) : (
-                    <Pause className="w-4 h-4" />
-                  )}
+                  {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                 </button>
 
                 <button
@@ -289,11 +267,7 @@ export default function TranscriptPopoutPage() {
               <User className="w-6 h-6 text-text-quaternary" />
             </div>
             <p className="text-sm text-text-tertiary">
-              {isActive
-                ? 'Listening for speech...'
-                : isInitializing
-                  ? 'Starting...'
-                  : 'No active recording'}
+              {isActive ? 'Listening for speech...' : isInitializing ? 'Starting...' : 'No active recording'}
             </p>
             {isIdle && (
               <button
@@ -325,7 +299,7 @@ export default function TranscriptPopoutPage() {
                             'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border',
                             colors.bg,
                             colors.text,
-                            colors.border,
+                            colors.border
                           )}
                         >
                           {segment.isUser && <User className="w-3 h-3" />}

@@ -1,13 +1,12 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/components/ui/Toast';
 import { claimChannelLink } from '@/lib/api';
-import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function Settings() {
   const searchParams = useSearchParams();
@@ -45,5 +44,3 @@ export default function Settings() {
     </div>
   );
 }
-
-registerMoonshineRoute('/settings', Settings, 'authenticated');

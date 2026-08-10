@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from '@tschk/moonshine-next/image';
-import Link from '@tschk/moonshine-next/link';
-import { useRouter } from '@tschk/moonshine-next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Star,

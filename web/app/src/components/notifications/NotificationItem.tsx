@@ -1,6 +1,6 @@
 'use client';
 
-import Image from '@tschk/moonshine-next/image';
+import Image from 'next/image';
 import {
   Clock,
   CalendarDays,

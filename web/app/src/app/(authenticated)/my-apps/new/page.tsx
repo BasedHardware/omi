@@ -1,7 +1,6 @@
 'use client';
 
 import { AppForm } from '@/components/apps/AppForm';
-import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function NewAppPage() {
   return (
@@ -10,5 +9,3 @@ export default function NewAppPage() {
     </div>
   );
 }
-
-registerMoonshineRoute('/my-apps/new', NewAppPage, 'authenticated');

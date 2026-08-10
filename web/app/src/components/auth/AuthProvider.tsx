@@ -1,16 +1,9 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-  useRef,
-  useCallback,
-} from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import {
+  auth,
   onAuthStateChange,
   signInWithGoogle,
   signInWithApple,
@@ -22,8 +15,8 @@ import { MixpanelManager } from '@/lib/analytics/mixpanel';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: (destination?: string) => Promise<void>;
-  signInWithApple: (destination?: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
   // Login panel state
@@ -66,9 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const handleSignInWithGoogle = async (destination?: string) => {
+  const handleSignInWithGoogle = async () => {
     try {
-      await signInWithGoogle(destination);
+      await signInWithGoogle();
       MixpanelManager.track('Sign In Completed', { method: 'google' });
     } catch (error) {
       console.error('Failed to sign in with Google:', error);
@@ -76,9 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const handleSignInWithApple = async (destination?: string) => {
+  const handleSignInWithApple = async () => {
     try {
-      await signInWithApple(destination);
+      await signInWithApple();
       MixpanelManager.track('Sign In Completed', { method: 'apple' });
     } catch (error) {
       console.error('Failed to sign in with Apple:', error);

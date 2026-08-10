@@ -1,7 +1,7 @@
 'use client';
 
 import { Twitter, Linkedin, Github } from 'lucide-react';
-import Image from '@tschk/moonshine-next/image';
+import Image from 'next/image';
 
 export function Footer() {
   return (
