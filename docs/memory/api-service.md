@@ -16,7 +16,7 @@ The response identifies `omi_backend`, the canonical `memory_items` collection, 
 
 ## Search
 
-`GET /v1/memory/platform/search` accepts `query`, `limit`, and `offset`. The authenticated user session determines the tenant. Query strings are limited to 500 characters, `limit` to 100 results, and `offset` to 100,000.
+`GET /v1/memory/platform/search` accepts `query`, `limit`, and `offset`. The authenticated user session determines the tenant. Query strings are limited to 500 characters, `limit` to 500 results (default 100), and `offset` to 100,000.
 
 ```bash
 curl "https://api.omi.me/v1/memory/platform/search?query=launch&limit=20" \
