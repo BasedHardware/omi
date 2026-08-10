@@ -81,11 +81,17 @@ if [ -n "$STAGED_WEB_FILES" ]; then
     if [ -x "$dir/node_modules/.bin/prettier" ]; then
       echo "$DIR_FILES" | xargs "$dir/node_modules/.bin/prettier" --write
     elif command -v npx >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs npx --prefix "$dir" prettier --write
-    elif command -v prettier >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs prettier --write
+      # No installed prettier: run the version this directory pins. A floating
+      # `npx prettier` resolves to the latest major, whose output CI's pinned
+      # prettier then rejects.
+      PINNED_PRETTIER=$(node -p "require('./$dir/package.json').devDependencies.prettier" 2>/dev/null)
+      if [ -z "$PINNED_PRETTIER" ] || [ "$PINNED_PRETTIER" = "undefined" ]; then
+        echo "Could not read the prettier version pinned by $dir/package.json. Run 'npm install' in $dir." >&2
+        exit 1
+      fi
+      echo "$DIR_FILES" | xargs npx --yes "prettier@$PINNED_PRETTIER" --write
     else
-      echo "prettier not found for $dir. Run 'npm install' in $dir or install prettier globally." >&2
+      echo "prettier not found for $dir. Run 'npm install' in $dir." >&2
       exit 1
     fi
     echo "$DIR_FILES" | xargs git add
