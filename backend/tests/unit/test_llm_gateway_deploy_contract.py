@@ -151,6 +151,7 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
         gke_env['OMI_LLM_GATEWAY_URL']['value'] == 'http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080'
     )
     assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+    assert gke_env['OMI_LLM_CHAT_AGENT_ROUTE']['value'] == 'gateway'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
     assert gke_env['USE_VERTEX_AI']['value'] == 'true'
@@ -165,6 +166,7 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
             'category': 'service_discovery',
         }
         assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+        assert service_config['env']['OMI_LLM_CHAT_AGENT_ROUTE']['value'] == 'gateway'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'

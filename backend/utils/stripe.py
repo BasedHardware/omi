@@ -107,6 +107,27 @@ def cancel_subscription(subscription_id: str):
         return None
 
 
+# Stripe statuses in which a subscription can no longer bill the customer. Stripe rejects
+# `cancel_at_period_end` on these ("A canceled subscription can only update its
+# cancellation_details and metadata"), so callers that only need the goal state — the
+# subscription is not billing — must ask Stripe rather than treat that 400 as a failure.
+TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
+
+
+def is_subscription_terminal(subscription_id: str) -> bool:
+    """Whether Stripe currently reports the subscription in a terminal, non-billing state.
+
+    Fails closed: an unreadable subscription or any non-terminal status returns False, so a
+    caller never mistakes a transport error for a subscription that is already canceled.
+    """
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+    except Exception as e:
+        logger.error(f"Error retrieving subscription: {e}")
+        return False
+    return subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES
+
+
 def find_app_subscription_by_customer_id(
     customer_id: str, app_id: str, uid: str, status_filter: str = 'all'
 ) -> Optional[Dict[str, Any]]:

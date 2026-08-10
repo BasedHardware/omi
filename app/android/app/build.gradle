@@ -165,3 +165,9 @@ dependencies {
     implementation 'io.intercom.android:intercom-sdk:latest.release'
     implementation 'com.twilio:voice-android:6.10.2'
 }
+
+// Local dev uses the non-production Firebase emulator project. Do not try to
+// upload its mapping files to Crashlytics; production variants retain uploads.
+tasks.matching { task -> task.name.startsWith('uploadCrashlyticsMappingFileDev') }.configureEach {
+    enabled = false
+}
