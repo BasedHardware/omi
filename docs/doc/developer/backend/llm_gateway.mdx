@@ -214,6 +214,23 @@ Gateway env:
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | `true` in deployed values; enables immutable Firestore usage-attempt events |
 | `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` | Bounded non-fatal Firestore-write timeout; `1` in deployed values |
 | `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Empty by default; enable a named, route-owned budget experiment only after its quality review |
+| `OMI_LLM_GATEWAY_SERVING_LANES` | Empty by default — every generated lane serves. Opt-in comma-separated lane-id allowlist; see below |
+| `OMI_LLM_GATEWAY_SERVING_LANES_DROP_CONFIRM` | Comma-separated lane ids explicitly acknowledged for removal; required whenever the allowlist narrows the served set |
+
+### Restricting the served lane set (opt-in)
+
+By default the gateway serves every lane it generates from `utils.llm.model_config`
+plus the hand-authored serving lanes. Nothing narrows that set unless an operator
+opts in.
+
+`OMI_LLM_GATEWAY_SERVING_LANES` names the exact lane set to serve. Because
+silently disabling production lanes is the failure mode this guards against, the
+gateway **refuses to start** if the allowlist would drop any currently-served
+lane, unless `OMI_LLM_GATEWAY_SERVING_LANES_DROP_CONFIRM` names *exactly* the
+dropped set. A lane id in the allowlist that the config does not generate is also
+a startup error. A confirmed narrowing emits the shared
+`record_fallback` telemetry (`component=llm_gateway`, `to_mode=allowlisted_lanes`,
+`reason=policy`, `outcome=degraded`) so the restricted mode is visible in ops.
 
 Gemini gateway lanes use native Vertex `generateContent` / `streamGenerateContent` with Application Default Credentials. The Kubernetes service account is annotated at deploy time from the environment-scoped GitHub variable `LLM_GATEWAY_GSA`; it must already be mapped through GKE Workload Identity to a dedicated Google service account with the required Vertex invocation permission (for example, `roles/aiplatform.user`) in the configured project. The exact dev/prod Google service-account identities and IAM bindings are an external platform prerequisite, not chart defaults or secrets.
 
