@@ -274,7 +274,15 @@ const parseHistoryQuery = (request: Request): {
 const TERMINAL_KINDS = new Set(["done", "failed", "cancelled"]);
 const isTerminal = (event: ChatGenerationEvent): boolean => TERMINAL_KINDS.has(event.frame.kind);
 
-const encodeSse = (event: ChatGenerationEvent): Uint8Array => new TextEncoder().encode(
+type ExternalChatGenerationEvent = ChatGenerationEvent & {
+  readonly frame: Exclude<ChatGenerationEvent["frame"], { readonly kind: "accepted" }>;
+};
+
+const isExternalGenerationEvent = (
+  event: ChatGenerationEvent,
+): event is ExternalChatGenerationEvent => event.frame.kind !== "accepted";
+
+const encodeSse = (event: ExternalChatGenerationEvent): Uint8Array => new TextEncoder().encode(
   `event: ${event.frame.kind}\nid: ${event.id}\ndata: ${JSON.stringify(event.frame)}\n\n`,
 );
 
@@ -300,8 +308,11 @@ const streamEvents = (input: {
       };
       const emit = (events: readonly ChatGenerationEvent[]): boolean => {
         for (const event of events) {
-          controller.enqueue(encodeSse(event));
           cursor = event.id;
+          // Admission is a durable dispatch record, not part of the external
+          // generation grammar. Advance past it without projecting it.
+          if (!isExternalGenerationEvent(event)) continue;
+          controller.enqueue(encodeSse(event));
           if (isTerminal(event)) {
             close();
             return true;
@@ -360,10 +371,12 @@ const currentSnapshot = (
   generationId: string,
   events: readonly ChatGenerationEvent[],
 ): ChatGenerationEvent | null => {
-  const latest = events.at(-1);
+  const advisory = events.filter((event) =>
+    event.frame.kind === "snapshot" || event.frame.kind === "delta");
+  const latest = advisory.at(-1);
   if (latest === undefined) return null;
   let text = "";
-  for (const event of events) {
+  for (const event of advisory) {
     if (event.frame.kind === "snapshot") text = event.frame.text;
     if (event.frame.kind === "delta") text += event.frame.text;
   }
@@ -510,19 +523,10 @@ export const registerChatMessagesRoutes = (
         stored: admission.stored,
         acceptedEvent,
       });
-      const stream = streamEvents({
-        accountId: principal.uid,
-        generationId: admittedGenerationId,
-        events: deps.events,
-        initial: Object.freeze([]),
-        afterEventId: null,
-        signal: context.req.raw.signal,
-        revalidate: () => deps.resolvePrincipal(authentication.token)?.uid === principal.uid,
-      });
-      return new Response(stream.body, {
-        status: admission.kind === "created" ? 201 : 200,
-        headers: stream.headers,
-      });
+      return response({
+        message: admission.stored.message,
+        generation: { id: admittedGenerationId },
+      }, admission.kind === "created" ? 201 : 200);
     } catch {
       return unavailable();
     }
@@ -547,6 +551,9 @@ export const registerChatMessagesRoutes = (
     if (lastEventId === "") return badRequest();
 
     if (lastEventId !== null) {
+      if (all.some((event) => event.id === lastEventId && !isExternalGenerationEvent(event))) {
+        return generationReplayExpired();
+      }
       const replay = deps.events.listAfter(principal.uid, generationId, lastEventId);
       if (replay === null) {
         const terminal = all.findLast(isTerminal);
@@ -574,12 +581,26 @@ export const registerChatMessagesRoutes = (
           revalidate,
         });
       }
+      const replayTerminal = replay.findLast(isTerminal);
+      if (replayTerminal !== undefined) {
+        return streamEvents({
+          accountId: principal.uid,
+          generationId,
+          events: deps.events,
+          initial: [replayTerminal],
+          afterEventId: replayTerminal.id,
+          signal: context.req.raw.signal,
+          revalidate,
+        });
+      }
+      const snapshot = currentSnapshot(generationId, all);
+      if (snapshot === null) return generationReplayExpired();
       return streamEvents({
         accountId: principal.uid,
         generationId,
         events: deps.events,
-        initial: replay,
-        afterEventId: replay.at(-1)?.id ?? lastEventId,
+        initial: [snapshot],
+        afterEventId: snapshot.id,
         signal: context.req.raw.signal,
         revalidate,
       });

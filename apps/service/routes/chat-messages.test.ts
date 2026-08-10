@@ -66,19 +66,12 @@ const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
   recoverInterrupted: (): void => {},
 });
 
-const firstSseFrame = async (response: Response): Promise<unknown> => {
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  while (!text.includes("\n\n")) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    text += decoder.decode(chunk.value, { stream: true });
-  }
-  await reader.cancel();
-  const data = text.split("\n").find((line) => line.startsWith("data: "));
-  if (data === undefined) throw new TypeError("missing SSE data frame");
-  return JSON.parse(data.slice("data: ".length)) as unknown;
+const admissionBody = async (response: Response): Promise<{
+  readonly message: ChatMessageRecord;
+  readonly generation: { readonly id: string };
+}> => await response.json() as {
+  readonly message: ChatMessageRecord;
+  readonly generation: { readonly id: string };
 };
 
 const bootInMemory = (
@@ -99,6 +92,23 @@ const bootInMemory = (
 };
 
 describe("ratified /v1/chat-messages route", () => {
+  test("POST admission is finite JSON with the canonical human message and generation id", async () => {
+    const { db, local } = bootInMemory();
+    const admitted = await post(local, payload("json-admission", 1_786_352_400_000));
+
+    expect(admitted.status).toBe(201);
+    expect(admitted.headers.get("content-type")).toContain("application/json");
+    expect(await admitted.json()).toEqual({
+      message: expect.objectContaining({
+        id: "json-admission",
+        text: "message json-admission",
+        sender: "human",
+      }),
+      generation: { id: expect.any(String) },
+    });
+    db.close();
+  });
+
   test("in-memory admission rolls message, quota, and event back when quota persistence crashes", async () => {
     const base = createInMemoryLocalServiceStores();
     base.settings.putEntitlement(ACCOUNT, {
@@ -171,7 +181,7 @@ describe("ratified /v1/chat-messages route", () => {
 
     expect(first.status).toBe(201);
     expect(replay.status).toBe(200);
-    expect(await firstSseFrame(replay)).toEqual(await firstSseFrame(first));
+    expect(await admissionBody(replay)).toEqual(await admissionBody(first));
     expect(mutated.status).toBe(409);
     expect(await mutated.json()).toEqual({
       error: {
@@ -516,7 +526,7 @@ describe("ratified /v1/chat-messages route", () => {
     }];
     const admitted = await post(local, payload("with-metadata", 500, { attachments }));
     expect(admitted.status).toBe(201);
-    expect((await firstSseFrame(admitted) as { message: ChatMessageRecord }).message.attachments)
+    expect((await admissionBody(admitted)).message.attachments)
       .toEqual(attachments);
 
     const history = await local.app.request("/v1/chat-messages", {

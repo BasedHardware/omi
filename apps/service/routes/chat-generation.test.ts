@@ -80,6 +80,42 @@ const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): P
     body: JSON.stringify(body),
   }));
 
+interface ChatAdmissionBody {
+  readonly message: ChatMessageRecord;
+  readonly generation: { readonly id: string };
+}
+
+const readAdmission = async (response: Response): Promise<ChatAdmissionBody> =>
+  await response.json() as ChatAdmissionBody;
+
+const generationEvents = (
+  local: ReturnType<typeof createLocalDevService>,
+  generationId: string,
+  lastEventId?: string,
+): Promise<Response> => Promise.resolve(local.app.request(
+  `/v1/chat-generations/${generationId}/events`,
+  {
+    headers: {
+      ...auth(local.devToken),
+      ...(lastEventId === undefined ? {} : { "last-event-id": lastEventId }),
+    },
+  },
+));
+
+const admitAndOpen = async (
+  local: ReturnType<typeof createLocalDevService>,
+  body: unknown,
+): Promise<{
+  readonly admissionResponse: Response;
+  readonly admission: ChatAdmissionBody;
+  readonly eventsResponse: Response;
+}> => {
+  const admissionResponse = await post(local, body);
+  const admission = await readAdmission(admissionResponse);
+  const eventsResponse = await generationEvents(local, admission.generation.id);
+  return { admissionResponse, admission, eventsResponse };
+};
+
 interface ParsedSseFrame {
   readonly event: string;
   readonly id: string;
@@ -247,25 +283,118 @@ describe("ratified chat generation wire red proofs", () => {
       ["ai", "Recovered answer."],
     ]);
     expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
-    expect(await Promise.all(replays.map((response) => response.text()))).toHaveLength(8);
+    const replayBodies = await Promise.all(replays.map((response) => response.text()));
+    expect(new Set(replayBodies).size).toBe(1);
     db.close();
   });
 
-  test("terminal SSE frame is byte-equal to the canonical history message", async () => {
+  test("POST is finite JSON and GET terminal is byte-equal to canonical history", async () => {
     const { db, local } = boot();
-    const response = await post(local, create("terminal-canonical"));
-    expect(response.status).toBe(201);
-    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const { admissionResponse, admission, eventsResponse } = await admitAndOpen(
+      local,
+      create("terminal-canonical"),
+    );
+    expect(admissionResponse.status).toBe(201);
+    expect(admissionResponse.headers.get("content-type")).toContain("application/json");
+    expect(eventsResponse.headers.get("content-type")).toContain("text/event-stream");
+    expect(admission.message).toMatchObject({
+      id: "terminal-canonical",
+      sender: "human",
+      text: "Tell me something useful",
+    });
 
-    const frames = parseSse(await response.text());
+    const frames = parseSse(await eventsResponse.text());
     expect(frames.map((frame) => frame.event)).toEqual([
-      "accepted", "snapshot", "delta", "delta", "done",
+      "snapshot", "delta", "delta", "done",
     ]);
+    expect(frames.some((frame) => frame.event === "accepted")).toBe(false);
     const terminal = frames.at(-1)?.data;
     expect(terminal?.kind).toBe("done");
     const canonical = (await history(local)).find((message) => message.sender === "ai");
     if (terminal?.kind !== "done" || canonical === undefined) throw new TypeError("missing terminal");
     expect(JSON.stringify(terminal.message)).toBe(JSON.stringify(canonical));
+    db.close();
+  });
+
+  test("POST returns finite JSON before a hanging provider completes", async () => {
+    const hanging: ChatGenerationSource = Object.freeze({
+      start() {
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      hanging,
+      "chat-finite-admission-proof",
+    );
+    const outcome = await Promise.race([
+      post(local, create("finite-before-provider")).then(async (admitted) => ({
+        kind: "response" as const,
+        status: admitted.status,
+        contentType: admitted.headers.get("content-type"),
+        text: await admitted.text(),
+      })),
+      new Promise<{ readonly kind: "timeout" }>((resolve) => {
+        setTimeout(() => resolve({ kind: "timeout" }), 100);
+      }),
+    ]);
+
+    expect(outcome.kind).toBe("response");
+    if (outcome.kind !== "response") throw new TypeError("POST waited for provider completion");
+    expect(outcome.status).toBe(201);
+    expect(outcome.contentType).toContain("application/json");
+    const admission = JSON.parse(outcome.text) as ChatAdmissionBody;
+    expect(admission.message).toMatchObject({
+      id: "finite-before-provider",
+      sender: "human",
+    });
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
+      .toBe("active");
+    db.close();
+  });
+
+  test("GET projects internal accepted records out of every generation stream", async () => {
+    const hanging: ChatGenerationSource = Object.freeze({
+      start() {
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      hanging,
+      "chat-internal-admission-projection-proof",
+    );
+    const admitted = await post(local, create("project-internal-admission"));
+    const admission = await readAdmission(admitted);
+    const stream = await generationEvents(local, admission.generation.id);
+    const reader = stream.body!.getReader();
+    const initial = await readUntil(reader, "snapshot");
+    const append = (eventId: string, frame: ChatGenerationFrame): void => {
+      expect(stores.chatEvents.append({
+        accountId: ACCOUNT,
+        generationId: admission.generation.id,
+        eventId,
+        createdAt: 1_786_352_400_200,
+        frame,
+      }).kind).toBe("appended");
+    };
+    append("event-internal-accepted-after-snapshot", {
+      kind: "accepted",
+      message: admission.message,
+      generation: { id: admission.generation.id },
+    });
+    append("event-external-delta-after-internal", { kind: "delta", text: "visible" });
+    append("event-external-failed-after-internal", {
+      kind: "failed",
+      error: { code: "proof_terminal", retryable: false },
+    });
+
+    const frames = parseSse(await readRemaining(reader, initial));
+    expect(frames.map((frame) => frame.event)).toEqual(["snapshot", "delta", "failed"]);
+    expect(frames.some((frame) => frame.event === "accepted")).toBe(false);
+    expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
+      (event) => event.frame.kind,
+    )).toEqual(["accepted", "snapshot", "accepted", "delta", "failed"]);
     db.close();
   });
 
@@ -284,18 +413,17 @@ describe("ratified chat generation wire red proofs", () => {
       "chat-synchronous-terminal-proof",
     );
 
-    const admitted = await post(local, create("synchronous-terminal"));
-    const frames = parseSse(await admitted.text());
-    const accepted = frames.find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const { admissionResponse, admission, eventsResponse } = await admitAndOpen(
+      local,
+      create("synchronous-terminal"),
+    );
+    const frames = parseSse(await eventsResponse.text());
 
-    expect(admitted.status).toBe(201);
-    expect(frames.map((frame) => frame.event)).toEqual([
-      "accepted", "snapshot", "delta", "done",
-    ]);
+    expect(admissionResponse.status).toBe(201);
+    expect(frames.map((frame) => frame.event)).toEqual(["done"]);
     expect(cancelCalls).toBe(1);
     expect(stores.chatEvents.listUnterminated()).toEqual([]);
-    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
       .toBe("terminal");
     expect((await history(local)).map((entry) => [entry.sender, entry.text])).toEqual([
       ["human", "Tell me something useful"],
@@ -310,14 +438,12 @@ describe("ratified chat generation wire red proofs", () => {
       { delayMs: 100, text: " must not arrive" },
     ]);
     const { db, local } = boot(createInMemoryLocalServiceStores(), source);
-    const admitted = await post(local, create("cancel-partial"));
-    const reader = admitted.body!.getReader();
+    const { admission, eventsResponse } = await admitAndOpen(local, create("cancel-partial"));
+    const reader = eventsResponse.body!.getReader();
     const throughDelta = await readUntil(reader, "delta");
-    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted")!;
-    if (accepted.data.kind !== "accepted") throw new TypeError("missing admission");
 
     const cancelled = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}`,
+      `/v1/chat-generations/${admission.generation.id}`,
       { method: "DELETE", headers: auth(local.devToken) },
     );
     expect(cancelled.status).toBe(202);
@@ -333,19 +459,19 @@ describe("ratified chat generation wire red proofs", () => {
     expect(JSON.stringify(canonical)).toBe(JSON.stringify(terminal.message));
 
     const repeated = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}`,
+      `/v1/chat-generations/${admission.generation.id}`,
       { method: "DELETE", headers: auth(local.devToken) },
     );
     expect(repeated.status).toBe(204);
     const replay = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}/events`,
+      `/v1/chat-generations/${admission.generation.id}/events`,
       { headers: auth(local.devToken) },
     );
     const replayFrames = parseSse(await replay.text());
     expect(replayFrames).toHaveLength(1);
     expect(replayFrames[0]?.data).toEqual(terminal);
     const replayAtTerminal = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}/events`,
+      `/v1/chat-generations/${admission.generation.id}/events`,
       { headers: { ...auth(local.devToken), "last-event-id": terminalFrames.at(-1)!.id } },
     );
     expect(parseSse(await replayAtTerminal.text())[0]?.data).toEqual(terminal);
@@ -365,12 +491,10 @@ describe("ratified chat generation wire red proofs", () => {
       },
     });
     const { db, local, stores } = boot(createInMemoryLocalServiceStores(), source);
-    const admitted = await post(local, create("duplicate-cancel"));
-    const reader = admitted.body!.getReader();
-    const throughDelta = await readUntil(reader, "delta");
-    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
-    const path = `/v1/chat-generations/${accepted.data.generation.id}`;
+    const { admission, eventsResponse } = await admitAndOpen(local, create("duplicate-cancel"));
+    const reader = eventsResponse.body!.getReader();
+    const throughDelta = await readUntil(reader, "snapshot");
+    const path = `/v1/chat-generations/${admission.generation.id}`;
 
     const firstDelete = local.app.request(path, { method: "DELETE", headers: auth(local.devToken) });
     const secondDelete = local.app.request(path, { method: "DELETE", headers: auth(local.devToken) });
@@ -383,7 +507,7 @@ describe("ratified chat generation wire red proofs", () => {
     expect(deletes.map((response) => response.status)).toEqual([202, 202]);
     expect(cancelCalls).toBe(1);
     expect(terminalKinds).toEqual(["cancelled"]);
-    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
       .toBe("terminal");
     expect((await history(local)).map((entry) => [entry.sender, entry.text])).toEqual([
       ["human", "Tell me something useful"],
@@ -406,14 +530,12 @@ describe("ratified chat generation wire red proofs", () => {
       },
     });
     const { db, local, stores } = boot(createInMemoryLocalServiceStores(), source);
-    const admitted = await post(local, create("cancel-rejection"));
-    const reader = admitted.body!.getReader();
-    const throughDelta = await readUntil(reader, "delta");
-    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const { admission, eventsResponse } = await admitAndOpen(local, create("cancel-rejection"));
+    const reader = eventsResponse.body!.getReader();
+    const throughDelta = await readUntil(reader, "snapshot");
 
     const cancelled = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}`,
+      `/v1/chat-generations/${admission.generation.id}`,
       { method: "DELETE", headers: auth(local.devToken) },
     );
     const frames = parseSse(await readRemaining(reader, throughDelta));
@@ -421,7 +543,7 @@ describe("ratified chat generation wire red proofs", () => {
     expect(cancelled.status).toBe(202);
     expect(cancelCalls).toBe(1);
     expect(frames.at(-1)?.event).toBe("cancelled");
-    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
       .toBe("terminal");
     db.close();
   });
@@ -470,21 +592,22 @@ describe("ratified chat generation wire red proofs", () => {
       devSecretLabel: "chat-callback-storage-proof",
       generationSource: source,
     });
-    const admitted = await post(local, create("callback-storage-failure"));
-    const reader = admitted.body!.getReader();
+    const { admission, eventsResponse } = await admitAndOpen(
+      local,
+      create("callback-storage-failure"),
+    );
+    const reader = eventsResponse.body!.getReader();
     const initial = await readUntil(reader, "snapshot");
-    const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
     const lifecycle = await waitForTerminalLifecycle(
       throwingEvents,
-      accepted.data.generation.id,
+      admission.generation.id,
       100,
     );
     if (lifecycle === "timeout") await reader.cancel();
 
     expect(lifecycle).toBe("terminal");
     expect(callbackError).toBeNull();
-    const events = base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)!;
+    const events = base.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)!;
     expect(events.map((event) => event.frame.kind)).toEqual(["accepted", "snapshot", "failed"]);
     expect(events.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind)))
       .toHaveLength(1);
@@ -546,16 +669,14 @@ describe("ratified chat generation wire red proofs", () => {
       generationSource: source,
       chatSupervisor: supervisor,
     });
-    const admitted = await post(local, create("terminal-recovery"));
-    const reader = admitted.body!.getReader();
-    const initial = await readUntil(reader, "delta");
-    const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const { admission, eventsResponse } = await admitAndOpen(local, create("terminal-recovery"));
+    const reader = eventsResponse.body!.getReader();
+    const initial = await readUntil(reader, "snapshot");
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(base.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+    expect(base.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
       .toBe("active");
-    expect(base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)?.map(
+    expect(base.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
       (event) => event.frame.kind,
     )).toEqual(["accepted", "snapshot", "delta"]);
     expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
@@ -563,7 +684,7 @@ describe("ratified chat generation wire red proofs", () => {
 
     allowTerminal = true;
     supervisor.recoverInterrupted();
-    expect(await waitForTerminalLifecycle(base.chatEvents, accepted.data.generation.id, 100))
+    expect(await waitForTerminalLifecycle(base.chatEvents, admission.generation.id, 100))
       .toBe("terminal");
     const completed = parseSse(await readRemaining(reader, initial));
     expect(completed.at(-1)?.event).toBe("failed");
@@ -613,17 +734,18 @@ describe("ratified chat generation wire red proofs", () => {
         devSecretLabel: `chat-in-memory-${faultPoint}-terminal-proof`,
         generationSource: source,
       });
-      const admitted = await post(local, create(`in-memory-${faultPoint}-terminal`));
-      const reader = admitted.body!.getReader();
+      const { admission, eventsResponse } = await admitAndOpen(
+        local,
+        create(`in-memory-${faultPoint}-terminal`),
+      );
+      const reader = eventsResponse.body!.getReader();
       const initial = await readUntil(reader, "snapshot");
-      const accepted = parseSse(initial).find((frame) => frame.event === "accepted");
-      if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
       await new Promise((resolve) => setTimeout(resolve, 10));
-      const lifecycle = base.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state;
+      const lifecycle = base.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state;
       if (lifecycle !== "terminal") await reader.cancel();
 
       expect(lifecycle).toBe("active");
-      expect(base.chatEvents.listAfter(ACCOUNT, accepted.data.generation.id, null)?.map(
+      expect(base.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
         (event) => event.frame.kind,
       )).toEqual(["accepted", "snapshot"]);
       expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
@@ -634,39 +756,43 @@ describe("ratified chat generation wire red proofs", () => {
   }
 
   test("reconnect starts with a current snapshot and Last-Event-ID replays strictly after", async () => {
+    let callbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
     const hanging: ChatGenerationSource = Object.freeze({
       start(input) {
-        queueMicrotask(() => input.onDelta("current partial"));
+        callbacks = input;
         return Object.freeze({ cancel: (): void => {} });
       },
     });
     const { db, local } = boot(createInMemoryLocalServiceStores(), hanging, "chat-reconnect-proof");
-    const admitted = await post(local, create("reconnect"));
-    const reader = admitted.body!.getReader();
+    const admissionResponse = await post(local, create("reconnect"));
+    const admission = await readAdmission(admissionResponse);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (callbacks === null) throw new TypeError("generation source did not start");
+    const initialResponse = await generationEvents(local, admission.generation.id);
+    const reader = initialResponse.body!.getReader();
+    callbacks.onDelta("current partial");
     const initial = parseSse(await readUntil(reader, "delta"));
-    const accepted = initial.find((frame) => frame.event === "accepted")!;
-    const snapshot = initial.find((frame) => frame.event === "snapshot")!;
-    if (accepted.data.kind !== "accepted") throw new TypeError("missing admission");
+    const delta = initial.find((frame) => frame.event === "delta")!;
+    expect(initial.map((frame) => frame.event)).toEqual(["snapshot", "delta"]);
+    expect(initial.some((frame) => frame.event === "accepted")).toBe(false);
     await reader.cancel();
 
-    const fresh = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}/events`,
-      { headers: auth(local.devToken) },
-    );
+    callbacks.onDelta(" plus more");
+    const fresh = await generationEvents(local, admission.generation.id);
     const freshReader = fresh.body!.getReader();
     const freshText = await readUntil(freshReader, "snapshot");
     const freshSnapshot = parseSse(freshText)[0];
-    expect(freshSnapshot?.data).toEqual({ kind: "snapshot", text: "current partial" });
+    expect(freshSnapshot?.data).toEqual({ kind: "snapshot", text: "current partial plus more" });
     await freshReader.cancel();
 
-    const afterAccepted = await local.app.request(
-      `/v1/chat-generations/${accepted.data.generation.id}/events`,
-      { headers: { ...auth(local.devToken), "last-event-id": accepted.id } },
-    );
-    const replayReader = afterAccepted.body!.getReader();
-    const replayText = await readUntil(replayReader, "delta");
-    expect(parseSse(replayText).map((frame) => frame.event)).toEqual(["snapshot", "delta"]);
-    expect(parseSse(replayText)[0]?.id).toBe(snapshot.id);
+    const continuation = await generationEvents(local, admission.generation.id, delta.id);
+    const replayReader = continuation.body!.getReader();
+    const replayText = await readUntil(replayReader, "snapshot");
+    expect(parseSse(replayText).map((frame) => frame.event)).toEqual(["snapshot"]);
+    expect(parseSse(replayText)[0]?.data).toEqual({
+      kind: "snapshot",
+      text: "current partial plus more",
+    });
     await replayReader.cancel();
     db.close();
   });
@@ -684,11 +810,9 @@ describe("ratified chat generation wire red proofs", () => {
       hanging,
       "chat-stream-revocation-proof",
     );
-    const admitted = await post(local, create("stream-revocation"));
-    const reader = admitted.body!.getReader();
-    const throughDelta = await readUntil(reader, "delta");
-    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
-    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+    const { admission, eventsResponse } = await admitAndOpen(local, create("stream-revocation"));
+    const reader = eventsResponse.body!.getReader();
+    await readUntil(reader, "snapshot");
 
     const revoked = await local.app.request("/v1/session/current", {
       method: "DELETE",
@@ -700,7 +824,7 @@ describe("ratified chat generation wire red proofs", () => {
     expect(revoked.status).toBe(204);
     expect(outcome).toEqual({ kind: "read", done: true });
     expect(cancelCalls).toBe(0);
-    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
       .toBe("active");
     db.close();
   });
@@ -716,11 +840,12 @@ describe("ratified chat generation wire red proofs", () => {
       });
       const stores = createInMemoryLocalServiceStores();
       const { db, local } = boot(stores, hanging, `chat-stream-${lifecycle}-proof`);
-      const admitted = await post(local, create(`stream-${lifecycle}`));
-      const reader = admitted.body!.getReader();
-      const throughDelta = await readUntil(reader, "delta");
-      const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
-      if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+      const { admission, eventsResponse } = await admitAndOpen(
+        local,
+        create(`stream-${lifecycle}`),
+      );
+      const reader = eventsResponse.body!.getReader();
+      await readUntil(reader, "snapshot");
 
       stores.accountLifecycle.setLifecycle(ACCOUNT, lifecycle);
       const outcome = await readOutcomeWithin(reader, 100);
@@ -728,7 +853,7 @@ describe("ratified chat generation wire red proofs", () => {
 
       expect(outcome).toEqual({ kind: "read", done: true });
       expect(cancelCalls).toBe(0);
-      expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      expect(stores.chatEvents.readLifecycle(ACCOUNT, admission.generation.id)?.state)
         .toBe("active");
       db.close();
     });
@@ -757,11 +882,11 @@ describe("ratified chat generation wire red proofs", () => {
           generationSource: hanging,
         });
         const admitted = await post(local, create("crash-mid-generation"));
-        const reader = admitted.body!.getReader();
-        const beforeCrash = parseSse(await readUntil(reader, "delta"));
-        const accepted = beforeCrash.find((frame) => frame.event === "accepted")!;
-        if (accepted.data.kind !== "accepted") throw new TypeError("missing admission");
-        generationId = accepted.data.generation.id;
+        const admission = await readAdmission(admitted);
+        generationId = admission.generation.id;
+        const events = await generationEvents(local, generationId);
+        const reader = events.body!.getReader();
+        await readUntil(reader, "snapshot");
         await reader.cancel();
         db.close();
       }
@@ -963,13 +1088,16 @@ describe("ratified chat generation wire red proofs", () => {
     const request = create("bill-once");
 
     const first = await post(local, request);
-    const firstFrames = parseSse(await first.text());
+    const firstBody = await first.text();
     const replay = await post(local, request);
-    const replayFrames = parseSse(await replay.text());
+    const replayBody = await replay.text();
 
     expect(first.status).toBe(201);
     expect(replay.status).toBe(200);
-    expect(replayFrames).toEqual(firstFrames);
+    expect(replayBody).toBe(firstBody);
+    const admission = JSON.parse(firstBody) as ChatAdmissionBody;
+    expect(await waitForTerminalLifecycle(stores.chatEvents, admission.generation.id, 100))
+      .toBe("terminal");
     expect((await history(local)).map((message) => message.sender)).toEqual(["human", "ai"]);
     expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
     db.close();
@@ -981,8 +1109,8 @@ describe("ratified chat generation wire red proofs", () => {
       { delayMs: 20, text: "after disconnect" },
     ]);
     const { db, local } = boot(createInMemoryLocalServiceStores(), source);
-    const response = await post(local, create("disconnect"));
-    const reader = response.body!.getReader();
+    const { eventsResponse } = await admitAndOpen(local, create("disconnect"));
+    const reader = eventsResponse.body!.getReader();
     await readUntil(reader, "delta");
     await reader.cancel();
     await new Promise((resolve) => setTimeout(resolve, 40));
