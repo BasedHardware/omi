@@ -122,15 +122,22 @@ function toHttpResponse(raw: unknown): HttpResponse {
     if (!r || typeof r.status !== "number") {
       return { status: BRIDGE_HTTP_FAILURE_STATUS["shell-error"], json: null };
     }
-    const base: HttpResponse = { status: r.status, json: parseBody(r.body ?? null) };
+    const body = r.body ?? null;
+    const base: HttpResponse = {
+      status: r.status,
+      json: parseBody(body),
+      ...(typeof body === "string" ? { text: body } : {}),
+    };
     return typeof r.retryAfterMs === "number" ? { ...base, retryAfterMs: r.retryAfterMs } : base;
   }
   const reason = reply.failure?.reason;
   const status =
-    reason !== undefined && reason in BRIDGE_HTTP_FAILURE_STATUS
+    typeof reason === "string" && Object.hasOwn(BRIDGE_HTTP_FAILURE_STATUS, reason)
       ? BRIDGE_HTTP_FAILURE_STATUS[reason]
       : BRIDGE_HTTP_FAILURE_STATUS["shell-error"];
-  return { status, json: null };
+  return typeof reason === "string" && Object.hasOwn(BRIDGE_HTTP_FAILURE_STATUS, reason)
+    ? { status, json: null, transportFailureReason: reason }
+    : { status, json: null };
 }
 
 /** Pending one-way requests, keyed by correlation id. */
