@@ -4,7 +4,17 @@ import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { openOnDiskFallbackSink } from "@omi-core/sync";
-import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
+import {
+  bridgeChatAttachmentStagingPort,
+  bridgeHttpClient,
+  bridgeStreamPort,
+  isBridgeHttpAvailable,
+  openWebStorageBridge,
+} from "@omi-core/bridge-web";
+import {
+  isSettingsAppearanceSelection,
+  type SettingsAppearancePreference,
+} from "@omi-core/contracts";
 import {
   createPlatformListenCaptureClient,
   type PlatformListenSocketFactory,
@@ -23,7 +33,9 @@ import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFi
 import { ChatProduction } from "./ChatProduction.js";
 import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
+import { FoldersProduction } from "./FoldersProduction.js";
 import { createProductionListenHostSocketFactory } from "./listen-host-socket.js";
+import { createPlatformProductionSettingsStore } from "./createPlatformSettingsStore.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
@@ -92,6 +104,15 @@ const colorModeFor = (selection: ThemeSelection): ColorMode => selection === "sy
 let themeName: ThemeName = themeNameFor(platform, colorModeFor(themeSelection));
 const locale = query.get("locale")?.trim() || navigator.language || "en";
 const translateTasks = t.bind(null, locale) as unknown as TasksProductionProps["translate"];
+const appearancePreference: SettingsAppearancePreference = {
+  async readAppearance() {
+    const value = localStorage.getItem("omi.settings.appearance.v1");
+    return isSettingsAppearanceSelection(value) ? value : null;
+  },
+  async writeAppearance(value) {
+    localStorage.setItem("omi.settings.appearance.v1", value);
+  },
+};
 document.title = t(locale, "app.name");
 const rootStyle = document.documentElement.style;
 const set = (name: string, value: string | number): void => rootStyle.setProperty(name, String(value));
@@ -218,7 +239,15 @@ function bridgeUnavailable(): React.JSX.Element {
     <main className="bridge-unavailable" data-production-shell="true" data-route={route} data-surface-state="bridge-unavailable" data-qa-fixture="none">
       <h1>{t(locale, "app.name")}</h1>
       <p>{t(locale, "qa.bridgeUnavailable")}</p>
-      <a href="?rig=dev">{t(locale, "qa.rig")}</a>
+    </main>
+  );
+}
+
+function unsupportedRoute(): React.JSX.Element {
+  return (
+    <main className="bridge-unavailable" data-production-shell="true" data-route="unsupported" data-surface-state="unsupported" data-qa-fixture="none">
+      <h1>{t(locale, "lifecycle.unavailable")}</h1>
+      <p>{t(locale, "common.unknownError")}</p>
     </main>
   );
 }
@@ -229,28 +258,27 @@ if (query.get("lab") === "1") {
   void import("../dev/main.js");
 } else {
   const fixtureValue = query.get("state");
-  const memoryFixture = requestedQa === "memories" && FIXTURE_STATES.includes(fixtureValue as FixtureState)
+  const fixtureRequest = requestedRoute === null;
+  const memoryFixture = fixtureRequest && requestedQa === "memories" && FIXTURE_STATES.includes(fixtureValue as FixtureState)
     ? fixtureValue as FixtureState
     : undefined;
-  const conversationFixture = (requestedQa === "conversations" || requestedQa === "conversation-detail") && CONVERSATION_FIXTURE_STATES.includes(fixtureValue as ConversationFixtureState)
+  const conversationFixture = fixtureRequest && (requestedQa === "conversations" || requestedQa === "conversation-detail") && CONVERSATION_FIXTURE_STATES.includes(fixtureValue as ConversationFixtureState)
     ? fixtureValue as ConversationFixtureState
     : undefined;
-  const taskFixture = requestedQa === "tasks" && TASK_FIXTURE_STATES.includes(fixtureValue as TaskFixtureState)
+  const taskFixture = fixtureRequest && requestedQa === "tasks" && TASK_FIXTURE_STATES.includes(fixtureValue as TaskFixtureState)
     ? fixtureValue as TaskFixtureState
     : undefined;
   const detailId = query.get("conversation") ?? (requestedQa === "conversation-detail" && conversationFixture ? fixtureConversationDetailId(conversationFixture) : undefined);
-  const propositionFixture = requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
+  const propositionFixture = fixtureRequest && requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
     ? fixtureValue as PropositionFixtureState
     : undefined;
-  // Chat and Settings remain fixture-only tonight. Listen graduated to the
-  // ratified platform wire and is composed only in the live branch below.
-  const chatFixture = requestedQa === "chat" && CHAT_FIXTURE_STATES.includes(fixtureValue as ChatFixtureState)
+  const chatFixture = fixtureRequest && requestedQa === "chat" && CHAT_FIXTURE_STATES.includes(fixtureValue as ChatFixtureState)
     ? fixtureValue as ChatFixtureState
     : undefined;
-  const settingsFixture = requestedQa === "settings" && SETTINGS_FIXTURE_STATES.includes(fixtureValue as SettingsFixtureState)
+  const settingsFixture = fixtureRequest && requestedQa === "settings" && SETTINGS_FIXTURE_STATES.includes(fixtureValue as SettingsFixtureState)
     ? fixtureValue as SettingsFixtureState
     : undefined;
-  const homeFixture = requestedQa === "home";
+  const homeFixture = fixtureRequest && requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
   if (propositionFixture) {
     // `source` is required by the component, so a fixture render can never be mistaken
@@ -268,6 +296,9 @@ if (query.get("lab") === "1") {
     root.render(<StrictMode><ConversationsProduction store={fixtureConversationStore(conversationFixture, requestedQa === "conversation-detail")} foldersStore={fixtureFolderStore()} fixture={conversationFixture} detailId={detailId} locale={locale} onReady={() => emitReady(`fixture:${conversationFixture}`)} /></StrictMode>);
   } else if (memoryFixture) {
     root.render(<StrictMode><MemoriesProduction store={fixtureStore(memoryFixture)} fixture={memoryFixture} locale={locale} onReady={() => emitReady(`fixture:${memoryFixture}`)} /></StrictMode>);
+  } else if (route === "unsupported") {
+    root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
+    emitReady("unsupported");
   } else if (!isBridgeHttpAvailable()) {
     root.render(<StrictMode>{bridgeUnavailable()}</StrictMode>);
     emitReady("bridge-unavailable");
@@ -293,7 +324,21 @@ if (query.get("lab") === "1") {
         // blocked/FE-SURFACES-bridge-two-origin-binding.md. Passing the same client twice is
         // stated here rather than hidden, because the silent version of this is exactly how
         // a client ends up reading the legacy wire while believing it is on the new one.
-        const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, generationSelection);
+        const platform = createPlatformProductionStoreFactory(
+          bridge,
+          env,
+          {
+            legacyHttp: http,
+            platformHttp: http,
+            ...(route === "chat"
+              ? {
+                  platformStream: bridgeStreamPort(),
+                  chatAttachmentStaging: bridgeChatAttachmentStagingPort(),
+                }
+              : {}),
+          },
+          generationSelection,
+        );
         const stores = platform;
         if (route === "memories" && platform.selection.memories === "platform") {
           const store = await platform.openSynthesizedMemories();
@@ -321,6 +366,10 @@ if (query.get("lab") === "1") {
           ]);
           markRendered("conversations", "legacy");
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+        } else if (route === "folders") {
+          const store = await stores.openFolders();
+          markRendered("folders", "legacy");
+          root.render(<StrictMode><FoldersProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "listen") {
           const openSocket = hostConfig.listenSocketFactory
             ?? createProductionListenHostSocketFactory();
@@ -335,10 +384,21 @@ if (query.get("lab") === "1") {
           const store = createPlatformProductionListenStore(client, env);
           markRendered("listen", "platform");
           root.render(<StrictMode><ListenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-listen")} /></StrictMode>);
-        } else {
+        } else if (route === "chat") {
+          const store = await platform.openChat();
+          markRendered("chat", "platform");
+          root.render(<StrictMode><ChatProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-chat")} /></StrictMode>);
+        } else if (route === "settings") {
+          const store = await createPlatformProductionSettingsStore(http, appearancePreference);
+          markRendered("settings", "platform");
+          root.render(<StrictMode><SettingsProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
+        } else if (route === "memories") {
           const store = await stores.openMemories();
           markRendered("memories-legacy", "legacy");
           root.render(<StrictMode><MemoriesProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+        } else {
+          root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
+          emitReady("unsupported");
         }
       } catch {
         root.render(<StrictMode>{bridgeUnavailable()}</StrictMode>);

@@ -304,7 +304,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
         : null;
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
+    <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`chat:messages:${messages.length}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
       <ProductionChrome locale={locale} active="chat" placement="top" />
       <section className="desktop-page-panel">
         <header className="production-header chat-header">

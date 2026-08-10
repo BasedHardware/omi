@@ -30,6 +30,20 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   // fixture or leaves the production Tasks navigation pointing at Memories.
 });
 
+test("production and lab surfaces do not teach navigation into the dev rig", async () => {
+  const [production, lab] = await Promise.all([
+    read("src/production/main.tsx"),
+    read("src/lab/main.tsx"),
+  ]);
+  assert.doesNotMatch(production, /href=["'{][^\n]*rig=dev/);
+  assert.doesNotMatch(lab, /href=["'{][^\n]*rig=dev/);
+  // The explicit developer invocation remains supported, but a visible page
+  // can no longer send a person into it.
+  assert.match(production, /query\.get\("rig"\) === "dev"/);
+  // red-proof: restore either production bridge-unavailable link or the lab
+  // hero link. The source contains a user-facing href and this fails.
+});
+
 test("conversation production slice stays within the ratified list/detail contract", async () => {
   // RETAINED-SOURCE-ASSERTION: allowed fields and forbidden transcript/create capabilities define the contract boundary.
   const source = await read("src/production/ConversationsProduction.tsx");

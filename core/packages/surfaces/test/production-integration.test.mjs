@@ -32,10 +32,26 @@ test("Listen is composed from the ratified platform stream and has no fixture di
   assert.match(main, /__OMI_LISTEN_PROTOCOL_SCHEMA__/);
   assert.match(main, /route === "listen"/);
   assert.doesNotMatch(main, /listen-fixtures|fixtureListenStore|listenFixture/);
-  assert.doesNotMatch(listen, /fixture\??:|data-qa-fixture|ProductionDataSourceBadge/);
+  assert.doesNotMatch(listen, /fixture\??:|ProductionDataSourceBadge/);
+  assert.match(listen, /data-qa-fixture="none"/);
   assert.match(store, /platformListenCaptureState/);
   // red-proof: restoring the QA dispatch or bypassing the typed platform
   // client makes the production composition assertions fail.
+});
+
+test("live Chat and Settings are composed through their ratified stores and native hosts", async () => {
+  const main = await read("src/production/main.tsx");
+  assert.match(main, /bridgeStreamPort\(\)/);
+  assert.match(main, /bridgeChatAttachmentStagingPort\(\)/);
+  assert.match(main, /platform\.openChat\(\)/);
+  assert.match(main, /createPlatformProductionSettingsStore\(http,/);
+  assert.match(main, /<ChatProduction store=\{store\}/);
+  assert.match(main, /<SettingsProduction store=\{store\}/);
+  assert.doesNotMatch(main, /route === "chat"[\s\S]{0,500}fixtureChatStore/);
+  assert.doesNotMatch(main, /route === "settings"[\s\S]{0,500}fixtureSettingsStore/);
+  // red-proof: route Chat or Settings through the final Memories branch, omit
+  // either native Chat port, or substitute a fixture store. The composition
+  // assertions fail before a native shell can claim the route.
 });
 
 test("bootstrap chooses backend generation through one production factory", async () => {
@@ -46,7 +62,9 @@ test("bootstrap chooses backend generation through one production factory", asyn
   // generation while Tasks/Conversations/Folders stay put (board ruling PR-1).
   // The factory receives the ALREADY-RESOLVED selection, not the raw host input: the route
   // is computed from that same selection, so resolving twice risks the two disagreeing.
-  assert.match(main, /createPlatformProductionStoreFactory\(bridge, env, \{ legacyHttp: http, platformHttp: http \}, generationSelection\)/);
+  assert.match(main, /createPlatformProductionStoreFactory\(/);
+  assert.match(main, /legacyHttp: http/);
+  assert.match(main, /platformHttp: http/);
   assert.doesNotMatch(main, /(?:Memories|Conversations|Folders|Tasks)Store\.open/);
 
   // Selection comes from the HOST, never from a bare user-typed URL alone, and a

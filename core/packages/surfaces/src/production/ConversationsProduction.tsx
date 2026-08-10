@@ -321,7 +321,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
   });
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
+    <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`conversations:visible:${visibleRows.length}:total:${rows.length}:folders:${folders.length}:detail:${selected ? "shown" : detailId ? "missing" : "none"}`}>
       <ProductionChrome locale={locale} active="conversations" placement="top" />
       <section className="desktop-page-panel">
       <ProductionLibrarySegment locale={locale} active="conversations" />

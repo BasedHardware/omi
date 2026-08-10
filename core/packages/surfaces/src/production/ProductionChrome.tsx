@@ -7,7 +7,7 @@ type Locale = string;
 // inventing a slot. Widening `active` lets those surfaces render with an honest chrome in
 // which nothing is falsely highlighted; every `active === ...` comparison below simply
 // finds no match. See status/FE-SURFACES.md.
-type ProductionRoute = "home" | "memories" | "conversations" | "tasks" | "chat" | "settings" | "listen";
+type ProductionRoute = "home" | "memories" | "conversations" | "folders" | "tasks" | "chat" | "settings" | "listen";
 type ChromeIconName = "home" | "library" | "tasks" | "rewind" | "apps" | "conversations" | "microphone" | "screen" | "settings";
 type ThemeSelection = "default" | "system" | "light" | "dark";
 
@@ -79,7 +79,7 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
           <div className="nav-desktop">
             <div className="nav-primary">
               <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
-              <a href={href("memories")} aria-current={active === "memories" || active === "conversations" ? "page" : undefined}><ChromeIcon name="library" />{t(locale, "nav.library")}</a>
+              <a href={href("memories")} aria-current={active === "memories" || active === "conversations" || active === "folders" ? "page" : undefined}><ChromeIcon name="library" />{t(locale, "nav.library")}</a>
               <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
             </div>
             <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
@@ -95,7 +95,7 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
         </div> : null}
         <div className="nav-mobile">
           <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
-          <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" ? "page" : undefined}><ChromeIcon name="conversations" />{t(locale, "nav.conversations")}</a>
+          <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" || active === "folders" ? "page" : undefined}><ChromeIcon name="conversations" />{t(locale, "nav.conversations")}</a>
           <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
         </div>
       </nav>
