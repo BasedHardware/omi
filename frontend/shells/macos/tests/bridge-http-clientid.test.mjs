@@ -52,16 +52,20 @@ let base = URL(string: "https://api.example")!
 do {
   let decision = BridgeHttpPolicy.prepare(
     id: "t1", method: "GET", path: "/v1/tasks",
-    headers: ["X-Omi-Client-Id": "forged-by-page"], body: nil,
+    headers: [
+      "X-Omi-Client-Id": "forged-by-page",
+      "X-Omi-Contract-Version": "999.0.0",
+    ], body: nil,
     baseURL: base, token: "tok", clientId: "real-run-id")
   if case let .dispatch(prepared) = decision {
-    check("forged-header-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "real-run-id")
+    check("forged-header-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "real-run-id::macos")
+    check("forged-contract-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
   } else {
     check("t1-dispatch", false)
   }
 }
 
-// Absent clientId sends no header at all — never a fabricated value.
+// Absent run id sends no header at all — never a fabricated value.
 do {
   let decision = BridgeHttpPolicy.prepare(
     id: "t2", method: "GET", path: "/v1/tasks",
@@ -74,14 +78,14 @@ do {
   }
 }
 
-// Present clientId is sent verbatim when the page sends nothing.
+// A present run id is combined with the fixed native shell identity.
 do {
   let decision = BridgeHttpPolicy.prepare(
     id: "t3", method: "GET", path: "/v1/tasks",
     headers: [:], body: nil,
     baseURL: base, token: "tok", clientId: "run-42")
   if case let .dispatch(prepared) = decision {
-    check("present-clientid-sent-verbatim", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "run-42")
+    check("present-run-composes-macos-identity", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "run-42::macos")
   } else {
     check("t3-dispatch", false)
   }
@@ -95,9 +99,26 @@ do {
     headers: ["x-omi-client-id": ""], body: nil,
     baseURL: base, token: "tok", clientId: "real-run-id")
   if case let .dispatch(prepared) = decision {
-    check("suppression-attempt-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "real-run-id")
+    check("suppression-attempt-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "real-run-id::macos")
   } else {
     check("t4-dispatch", false)
+  }
+}
+
+// Chat generation cancellation remains the authenticated generic DELETE, but
+// P7 producer attribution and contract version are still host-injected.
+do {
+  let decision = BridgeHttpPolicy.prepare(
+    id: "t5", method: "DELETE", path: "/v1/chat-generations/generation-opaque-01",
+    headers: ["x-omi-client-id": "forged", "x-omi-contract-version": "forged"],
+    body: nil, baseURL: base, token: "tok", clientId: "run-cancel")
+  if case let .dispatch(prepared) = decision {
+    check("chat-cancel-has-exact-host-identity", prepared.request.httpMethod == "DELETE"
+      && prepared.request.url?.path == "/v1/chat-generations/generation-opaque-01"
+      && prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "run-cancel::macos"
+      && prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
+  } else {
+    check("t5-dispatch", false)
   }
 }
 
@@ -130,22 +151,15 @@ test(
       // Every line must read OK — any FAIL line, or a nonzero exit (checked
       // implicitly: execFileSync throws on nonzero exit), is a real failure.
       const lines = output.trim().split("\n");
-      assert.ok(lines.length === 4, `expected 4 check lines, got: ${output}`);
+      assert.ok(lines.length === 6, `expected 6 check lines, got: ${output}`);
       for (const line of lines) {
         assert.ok(line.startsWith("OK:"), `expected OK, got: ${line}`);
       }
-      // red-proof: removing the `if let clientId, !clientId.isEmpty {
-      // outbound[clientIdHeader] = clientId }` block from
+      // red-proof: removing the `shellClientId(runId:)` injection block from
       // BridgeHttpPolicy.prepare in BridgeHttp.swift (so the shell's real
       // client id is never attached) deterministically fails
-      // "present-clientid-sent-verbatim", "suppression-attempt-overridden",
-      // and "forged-header-overridden" — confirmed by applying exactly that
-      // mutation: the harness printed
-      //   FAIL: forged-header-overridden
-      //   OK: absent-clientid-sends-no-header
-      //   FAIL: present-clientid-sent-verbatim
-      //   FAIL: suppression-attempt-overridden
-      // and exited 1, and this test throws on the first non-"OK:" line.
+      // "present-run-composes-macos-identity", "suppression-attempt-overridden",
+      // "forged-header-overridden", and the Chat cancellation identity check.
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }

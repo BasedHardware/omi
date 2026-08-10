@@ -68,14 +68,16 @@ enum BridgeHttpPolicyDecision {
 enum BridgeHttpPolicy {
   static let followsRedirects = false
 
-  /// Header carrying the per-run client identity (`OMI_RUN_CLIENT_ID`), so a
-  /// launcher's served-read count on the backend is joinable to the exact run
-  /// that made it, not just any client hitting the same endpoint. Confirmed
-  /// NOT present in `BridgeHttpContract.forbiddenHeaders` (that generated set
-  /// is authorization/cookie/proxy-authorization only) — so unlike those,
-  /// this file must do its own case-insensitive strip of caller-supplied
-  /// copies below, rather than relying on the generated contract to do it.
-  static let clientIdHeader = "x-omi-client-id"
+  /// The launcher supplies a run id. The native shell adds its fixed producer
+  /// identity so P7 can join evidence to the exact `run x shell` coordinate.
+  /// Unsafe values are omitted rather than normalized into someone else's run.
+  static func shellClientId(runId: String?) -> String? {
+    guard let runId, !runId.isEmpty, runId.count <= 96,
+      runId.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil,
+      !runId.hasPrefix("__"), runId != "anonymous", runId != "overflow"
+    else { return nil }
+    return "\(runId)::\(NativeChatRequestContract.shellIdentity)"
+  }
 
   /// Apply the exact request mutation sequence used by the live URLSession
   /// factory. The recorder in the generated conformance runner observes the
@@ -150,7 +152,8 @@ enum BridgeHttpPolicy {
     var outbound: [String: String] = [:]
     for (name, value) in headers
     where !BridgeHttpContract.forbiddenHeaders.contains(name.lowercased())
-      && name.lowercased() != clientIdHeader {
+      && name.lowercased() != NativeChatRequestContract.clientIdHeader
+      && name.lowercased() != NativeChatRequestContract.contractVersionHeader {
       outbound[name] = value
     }
     if body != nil {
@@ -160,9 +163,11 @@ enum BridgeHttpPolicy {
     // headers are copied in (and with any page-supplied copy of this same
     // header — any casing — already excluded by the loop above), so a page
     // can neither forge nor suppress the run's real client id.
-    if let clientId, !clientId.isEmpty {
-      outbound[clientIdHeader] = clientId
+    if let shellClientId = shellClientId(runId: clientId) {
+      outbound[NativeChatRequestContract.clientIdHeader] = shellClientId
     }
+    outbound[NativeChatRequestContract.contractVersionHeader] =
+      NativeChatRequestContract.contractVersion
     outbound["authorization"] = "Bearer \(token)"
     return .dispatch(
       BridgeHttpPreparedRequest(
