@@ -28,7 +28,7 @@
 // cover, and which arbiter counters a passing receipt is expected to carry.
 // L0/L1 are static/unit — no external system to disagree with, so no
 // arbiters. L3 drives the real backend, and the backend's own served-read
-// counters are the arbiter (see integration/dev-stack.sh's `servedReads`
+// counters are the arbiter (see integration/dev-stack.sh's `domainReadsServed`
 // cross-check) — the same lesson as that script's big comment: "the shell's
 // own PASS line" is not proof, "did the backend's independent counter move"
 // is.
@@ -167,11 +167,11 @@ export const LANE_REGISTRY = Object.freeze({
     name: "real integration",
     budgetMs: 90000,
     repos: Object.freeze(["core-foundation", "platform"]),
-    // Named after integration/dev-stack.sh's own arbiter: the backend's
-    // /qa/stats counters, cross-checked before/after driving the apps. A
-    // shell-reported PASS with these absent or unchanged is exactly the
-    // false-green shape dev-stack.sh's comments describe.
-    requiredArbiters: Object.freeze(["servedRequests", "servedReads"]),
+    // Named after the consolidated door's real arbiters: aggregate counters from
+    // `/v1/qa/status`, plus the exact-run join from
+    // `/v1/qa/control/stats?run=<client id>`. A shell-reported PASS with these
+    // absent is exactly the false-green shape dev-stack.sh's comments describe.
+    requiredArbiters: Object.freeze(["totalRequests", "domainReadsServed", "readsByThisRun"]),
     description: "the full stack via integration/dev-stack.sh.",
   }),
 });
@@ -347,14 +347,14 @@ export function writeReceipt({
   }
   // PRESENCE OF A KEY IS NOT PRESENCE OF A COUNTER.
   //
-  // This filter used to be `!(key in arbiters)`, and `"servedRequests" in
-  // { servedRequests: null }` is TRUE — so a receipt recording
-  // `servedRequests: null` satisfied a guard whose own comment says it exists
+  // This filter used to be `!(key in arbiters)`, and `"totalRequests" in
+  // { totalRequests: null }` is TRUE — so a receipt recording
+  // `totalRequests: null` satisfied a guard whose own comment says it exists
   // to stop a caller "laundering a bare exit code into what looks like
   // cross-checked evidence". A null counter is exactly that.
   //
   // Reachable, not hypothetical. `lanes.mjs`'s L3 arbiter read is
-  // `report.backend?.stats?.servedRequests ?? null` over a JSON report from a
+  // `report.backend?.status?.served?.totalRequests ?? null` over a JSON report from a
   // shared default directory, so a report that is absent, foreign, or merely
   // shaped differently yields `null` for every counter — and the receipt
   // recorded a PASS carrying nulls where the two independent measurements
@@ -363,7 +363,7 @@ export function writeReceipt({
   // the half that decides whether such a report can become a green receipt.
   //
   // `null` and `undefined` are refused; `0` is NOT. Zero is a real observation
-  // — "servedReads: 0 means nothing is talking to it, no matter how good the
+  // — "domainReadsServed: 0 means nothing is talking to it, no matter how good the
   // UI looks" is this program's signature false-green — and it must stay
   // recordable so a lane can fail on it honestly rather than be unable to say
   // it.

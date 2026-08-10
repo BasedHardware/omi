@@ -82,9 +82,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ── THE REAL DOOR: the registered app, bound to a socket ────────────────────
-# `createLocalService` — the same app the dev server, the route tests and the
-# shipped binding use. Not the retired `fence-server.ts`, which answered this
-# same path from its own handler with bytes the product does not send.
+# `createLocalDevService` — the dev-shaped app used by the dev server and route
+# tests. Not the retired `fence-server.ts`, which answered this same path from
+# its own handler with bytes the product does not send.
 ( cd "$PLATFORM_REPO" && exec bun run integration/control/live-service.ts ) > "$TMP/door.log" 2>&1 &
 DOOR_PID=$!
 for _ in $(seq 1 60); do

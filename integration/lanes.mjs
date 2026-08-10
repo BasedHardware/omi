@@ -358,8 +358,8 @@ function runLane(laneId, { json = false } = {}) {
   if (laneId === "L3") {
     try {
       const report = JSON.parse(readFileSync(join(process.env["OMI_DEV_STACK_RUNDIR"] ?? "/tmp/omi-dev-stack", "last-run.json"), "utf8"));
-      arbiters.servedRequests = report.backend?.stats?.servedRequests ?? null;
-      arbiters.servedReads = report.backend?.stats?.servedReads ?? null;
+      arbiters.totalRequests = report.backend?.status?.served?.totalRequests ?? null;
+      arbiters.domainReadsServed = report.backend?.status?.served?.domainReadsServed ?? null;
       arbiters.readsByThisRun = report.backend?.readsByThisRun ?? null;
       arbiters.runId = report.run?.id ?? null;
       arbiters.assertions = (report.assertions ?? []).map((a) => ({ name: a.name, result: a.result }));

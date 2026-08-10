@@ -19,6 +19,9 @@
 // Run: node --test integration/lib/run-report.test.mjs
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { buildReport, nextActions } from "./run-report.mjs";
@@ -26,9 +29,31 @@ import { workspaceStamps } from "./provenance.mjs";
 
 const CLIENT = "run-test-client";
 
+const qaStatus = (domainReadsServed) => ({
+  version: "qa-status-v1",
+  served: {
+    version: "served-count-v1",
+    domainReadsServed,
+    domainReadsDenied: 0,
+    domainReadsFailed: 0,
+    nonDomainRequests: 1,
+    totalRequests: domainReadsServed + 1,
+  },
+  seed: { version: "local-seed-v1", rows: 7 },
+});
+
+const qaControlStats = (reads) => ({
+  version: "qa-control-stats-v1",
+  run: CLIENT,
+  requestedRun: CLIENT,
+  normalised: false,
+  fence: null,
+  writeOps: null,
+  reads,
+});
+
 /** A facts object whose every assertion passes, as the baseline to mutate from. */
 function healthyFacts(overrides = {}) {
-  const stamps = workspaceStamps();
   const runtimeState = {
     route: "memories",
     selected: { memories: "platform" },
@@ -53,14 +78,9 @@ function healthyFacts(overrides = {}) {
     // stamps_agree test below supplies its own artifact instead, so this suite
     // never depends on whether somebody happened to run a build.
     wantSurfaces: false,
-    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
-    backendStatsAfter: JSON.stringify({
-      servedRequests: 4,
-      servedReads: 4,
-      servedReadsByClient: { [CLIENT]: 4 },
-      rows: 7,
-      stamp: { ...stamps.platform, artifact: "backend-process" },
-    }),
+    backendStatsBefore: JSON.stringify(qaStatus(0)),
+    backendStatsAfter: JSON.stringify(qaStatus(4)),
+    backendRunStatsAfter: JSON.stringify(qaControlStats({ served: 4 })),
     macos: {
       port: 5290,
       pid: "12345",
@@ -107,7 +127,7 @@ test("every assertion names its arbiter, and single-measurement claims say so", 
 
 test("RED-PROOF backend_reachable: the backend is gone", () => {
   // red-proof: this is the applied mutation `kill the backend mid-run`. With no
-  // parseable /qa/stats body there is no arbiter at all, and a run that cannot
+  // parseable /v1/qa/status body there is no arbiter at all, and a run that cannot
   // measure must never report pass.
   const report = buildReport(healthyFacts({ backendStatsAfter: "" }));
   assert.equal(assertionNamed(report, "backend_reachable").result, "fail");
@@ -119,16 +139,12 @@ test("RED-PROOF served_reads_by_this_run: another client produced the traffic", 
   // old `before -> after` delta would have accepted as proof. It was somebody
   // else's traffic. Keyed by client id, the claim correctly fails.
   const facts = healthyFacts({
-    backendStatsAfter: JSON.stringify({
-      servedRequests: 4,
-      servedReads: 4,
-      servedReadsByClient: { "some-other-agents-stack": 4 },
-    }),
+    backendRunStatsAfter: JSON.stringify(qaControlStats(null)),
   });
   const report = buildReport(facts);
   const a = assertionNamed(report, "served_reads_by_this_run");
   assert.equal(a.result, "fail");
-  assert.match(a.detail, /ZERO reads/);
+  assert.match(a.detail, /attributed no reads/);
   // The delta is still reported — it is context. It is just no longer evidence.
   assert.equal(report.backend.readsDelta, 4);
 });
@@ -164,24 +180,28 @@ test("RED-PROOF no_generation_mismatch: nothing was constructed at all", () => {
   assert.equal(assertionNamed(report, "no_generation_mismatch").result, "fail");
 });
 
-test("RED-PROOF stamps_agree: the artifact was built from a different tree", () => {
+test("RED-PROOF stamps_agree: the artifact was built from a different tree", (t) => {
   // red-proof: this is the applied mutation `point at a stale dist`. The stamp
   // is well-formed and internally consistent; it simply describes source that is
   // no longer checked out. This is the single check that subsumes stale dist,
   // wrong shell, wrong branch and edited-but-not-rebuilt.
   const stamps = workspaceStamps();
-  const facts = healthyFacts({
-    backendStatsAfter: JSON.stringify({
-      servedRequests: 4,
-      servedReads: 4,
-      servedReadsByClient: { [CLIENT]: 4 },
-      stamp: { ...stamps.platform, artifact: "backend-process", treeHash: "0".repeat(40) },
-    }),
-  });
+  const buildDir = mkdtempSync(join(tmpdir(), "omi-run-report-stale-app-"));
+  t.after(() => rmSync(buildDir, { recursive: true, force: true }));
+  const appName = "omi-on-integration";
+  const resources = join(buildDir, `${appName}.app`, "Contents", "Resources");
+  mkdirSync(resources, { recursive: true });
+  writeFileSync(
+    join(resources, "omi-build-stamp.json"),
+    `${JSON.stringify({ ...stamps.platform, artifact: "macos-app", treeHash: "0".repeat(40) })}\n`,
+  );
+  const facts = healthyFacts();
+  facts.macos.buildDir = buildDir;
+  facts.macos.appName = appName;
   const report = buildReport(facts);
   const a = assertionNamed(report, "stamps_agree");
   assert.equal(a.result, "fail");
-  assert.match(a.detail, /backend-process/);
+  assert.match(a.detail, /macos-app/);
 });
 
 test("RED-PROOF window_alive: the process died right after launch", () => {
@@ -219,8 +239,9 @@ test("RED-PROOF: a run that drove nothing is INCONCLUSIVE, never a pass", () => 
     mode: "run",
     backendUrl: "http://127.0.0.1:4851",
     wantSurfaces: false,
-    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
-    backendStatsAfter: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    backendStatsBefore: JSON.stringify(qaStatus(0)),
+    backendStatsAfter: JSON.stringify(qaStatus(0)),
+    backendRunStatsAfter: JSON.stringify(qaControlStats(null)),
     macos: null,
     ios: null,
   });
@@ -303,8 +324,9 @@ test("RED-PROOF write_journey: an advisory journey cannot supply the behavioural
     mode: "run",
     backendUrl: "http://127.0.0.1:4851",
     wantSurfaces: false,
-    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
-    backendStatsAfter: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    backendStatsBefore: JSON.stringify(qaStatus(0)),
+    backendStatsAfter: JSON.stringify(qaStatus(0)),
+    backendRunStatsAfter: JSON.stringify(qaControlStats(null)),
     macos: null,
     ios: null,
     writeJourney: journeyVerdict({ gating: false, failing: 1 }),
@@ -322,8 +344,9 @@ test("a green gating journey IS behavioural evidence on its own", () => {
     mode: "run",
     backendUrl: "http://127.0.0.1:4851",
     wantSurfaces: false,
-    backendStatsBefore: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
-    backendStatsAfter: JSON.stringify({ servedRequests: 0, servedReads: 0 }),
+    backendStatsBefore: JSON.stringify(qaStatus(0)),
+    backendStatsAfter: JSON.stringify(qaStatus(0)),
+    backendRunStatsAfter: JSON.stringify(qaControlStats(null)),
     macos: null,
     ios: null,
     writeJourney: journeyVerdict({ gating: true }),
@@ -337,14 +360,34 @@ test("no journey at all means the row does not apply — and the run cannot borr
   assert.equal(report.writeJourney, null);
 });
 
-test("readsByThisRun is null, not 0, when the backend cannot answer the question", () => {
-  // red-proof: replace `?? null` with `?? 0` in readsFor(). "The backend does
-  // not count per client" and "this run read nothing" are different findings,
-  // and collapsing them into 0 would report a working stack as broken — the
-  // false RED that trains people to ignore the check.
+test("reads: null fails served_reads without crashing or becoming an all-zero tally", () => {
+  // red-proof: coerce `reads: null` into `{ served: 0 }`, or skip the exact-run
+  // endpoint. "Nothing attributed to this run" must remain distinct from an
+  // observed numeric tally and must redden the guard without throwing.
   const facts = healthyFacts({
-    backendStatsAfter: JSON.stringify({ servedRequests: 4, servedReads: 4 }),
+    backendRunStatsAfter: JSON.stringify(qaControlStats(null)),
   });
   const report = buildReport(facts);
   assert.equal(report.backend.readsByThisRun, null);
+  assert.equal(assertionNamed(report, "served_reads_by_this_run").result, "fail");
+  assert.equal(report.result, "fail");
+});
+
+test("a qa-status-v1 backend without the exact-run reads tally still fails served_reads", () => {
+  const facts = healthyFacts({ backendRunStatsAfter: "" });
+  const report = buildReport(facts);
+  assert.equal(assertionNamed(report, "backend_reachable").result, "pass");
+  assert.equal(assertionNamed(report, "served_reads_by_this_run").result, "fail");
+  assert.equal(report.result, "fail");
+});
+
+test("the retired /qa/stats shape cannot satisfy either consolidated-door assertion", () => {
+  const retired = JSON.stringify({ servedRequests: 4, servedReads: 4 });
+  const report = buildReport(healthyFacts({
+    backendStatsAfter: retired,
+    backendRunStatsAfter: retired,
+  }));
+  assert.equal(assertionNamed(report, "backend_reachable").result, "fail");
+  assert.equal(assertionNamed(report, "served_reads_by_this_run").result, "fail");
+  assert.equal(report.result, "fail");
 });
