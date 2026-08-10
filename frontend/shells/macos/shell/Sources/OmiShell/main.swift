@@ -199,6 +199,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private let chatAttachmentStaging: ChatAttachmentStagingHandler?
   private var tornDown = false
   var onCommittedURL: ((URL) -> Void)?
+  var onFinishedNavigation: (() -> Void)?
 
   init(
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
@@ -248,10 +249,14 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   /// not yet on screen leaves `document.visibilityState === "hidden"`, which
   /// suspends requestAnimationFrame and timers in the page.
   func start() {
-    if loadURL.isFileURL {
-      webView.loadFileURL(loadURL, allowingReadAccessTo: loadURL.deletingLastPathComponent())
+    load(loadURL)
+  }
+
+  func load(_ url: URL) {
+    if url.isFileURL {
+      webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
     } else {
-      webView.load(URLRequest(url: loadURL))
+      webView.load(URLRequest(url: url))
     }
   }
 
@@ -260,6 +265,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     tornDown = true
     ticker?.invalidate()
     ticker = nil
+    listen?.cancelAll()
     chatStream?.teardown()
     chatAttachmentStaging?.teardown()
     let content = webView.configuration.userContentController
@@ -316,14 +322,20 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     onCommittedURL?(url)
   }
 
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    onFinishedNavigation?()
+  }
+
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
     // A new document owns a new JS sink/registry. Observation and staging work
     // from the previous document must not route into it.
+    listen?.cancelAll()
     chatStream?.cancelAll()
     chatAttachmentStaging?.cancelAll()
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    listen?.cancelAll()
     chatStream?.cancelAll()
     chatAttachmentStaging?.cancelAll()
   }
@@ -340,6 +352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var listenSocketHandler: ListenSocketHandler?
   var chatStreamHandler: ChatStreamHandler?
   var chatAttachmentStagingHandler: ChatAttachmentStagingHandler?
+  var consumerEvidenceDriver: ConsumerEvidenceDriver?
   private let env = ProcessInfo.processInfo.environment
   private var acceptanceEmitted = false
   private var acceptancePassed = true
@@ -461,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           }
         })
       httpHandler = authority.makeHTTPHandler(clientId: runClientId)
-      listenSocketHandler = authority.makeListenHandler()
+      listenSocketHandler = authority.makeListenHandler(clientId: runClientId)
       chatStreamHandler = ChatStreamHandler(
         baseURL: base, custody: authority.custody, runId: runClientId)
       chatAttachmentStagingHandler = ChatAttachmentStagingHandler(
@@ -503,6 +516,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       composition: GlassHostLayout.resolve(from: surfaceLoad.url))
     controller.onCommittedURL = { [weak glassHost] url in
       glassHost?.setComposition(GlassHostLayout.resolve(from: url))
+    }
+    if let resultPath = env["OMI_CONSUMER_EVIDENCE_PATH"], !resultPath.isEmpty {
+      let resultURL = URL(fileURLWithPath: resultPath)
+      try? FileManager.default.removeItem(at: resultURL)
+      do {
+        guard let runClientId else { throw ConsumerEvidenceError.invalidRunId }
+        let hashes = try ConsumerEvidenceTreeHashes.load(
+          shellStamp: shellStampURL, surfaceStamp: surfaceStampURL)
+        let collector = try ConsumerEvidenceCollector(
+          resultURL: resultURL, runId: runClientId, shell: "macos", hashes: hashes)
+        let driver = ConsumerEvidenceDriver(collector: collector, baseURL: surfaceLoad.url)
+        consumerEvidenceDriver = driver
+        controller.onFinishedNavigation = { [weak driver] in driver?.pageDidFinish() }
+      } catch {
+        FileHandle.standardError.write(
+          Data("CONSUMER-EVIDENCE: FAIL \(error)\n".utf8))
+        if env["OMI_CONSUMER_EVIDENCE_EXIT"] == "1" { Darwin.exit(1) }
+      }
     }
     window.contentView = glassHost
     // Scratch QA bundles must always open at the approved comparison frame.
@@ -549,7 +580,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       window.orderBack(nil)
     }
     FileHandle.standardError.write(Data("display-mode: \(headed ? "headed" : "headless (OMI_HEADED=1 to show a window)")\n".utf8))
-    controller.start()
+    if let consumerEvidenceDriver {
+      consumerEvidenceDriver.start(with: controller)
+    } else {
+      controller.start()
+    }
     // Diagnostic hook: OMI_PROBE_JS=<expr> prints the evaluated result to stdout
     // after load, so load strategies can be checked from a script.
     if env["OMI_PROBE_NATIVE"] != nil {
@@ -623,6 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    consumerEvidenceDriver?.teardown()
     controller?.teardown()
     loopback?.stop()
   }
