@@ -131,6 +131,35 @@ def test_iter_user_data_export_yields_before_heavy_reads(monkeypatch):
     get_profile.assert_not_called()
 
 
+def test_json_default_raises_type_error_for_unsupported_types():
+    import pytest
+    with pytest.raises(TypeError, match="Type <class 'set'> not serializable"):
+        data_export._json_default(set())
+
+
+def test_iter_user_data_export_skips_none_conversations_and_formats_arrays(monkeypatch):
+    monkeypatch.setattr(data_export, 'get_user_profile', MagicMock(return_value={}))
+    monkeypatch.setattr(data_export.memories_db, 'get_non_filtered_memories', MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, 'get_people', MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, 'get_standalone_action_items', MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        data_export.conversations_db,
+        'iter_all_conversations',
+        MagicMock(return_value=iter([{'id': 'conv1'}, None, {'id': 'conv2'}])),
+    )
+    monkeypatch.setattr(
+        data_export.chat_db,
+        'iter_all_messages',
+        MagicMock(return_value=iter([{'id': 'msg1'}, {'id': 'msg2'}])),
+    )
+
+    body = ''.join(data_export.iter_user_data_export('uid1'))
+    payload = json.loads(body)
+
+    assert payload['conversations'] == [{'id': 'conv1'}, {'id': 'conv2'}]
+    assert payload['chat_messages'] == [{'id': 'msg1'}, {'id': 'msg2'}]
+
+
 def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
     monkeypatch.setattr(data_export, 'get_user_profile', MagicMock(return_value={}))
     monkeypatch.setattr(data_export, 'get_people', MagicMock(return_value=[]))
