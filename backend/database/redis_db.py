@@ -976,13 +976,17 @@ if redis.call('get', KEYS[1]) == ARGV[1] then
 end
 return 0
 """
+_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS = 3
 
 
 def release_audio_bytes_webhook_lock(uid: str, token: str) -> None:
-    try:
-        r.eval(_RELEASE_AUDIO_BYTES_WEBHOOK_LOCK_SCRIPT, 1, f'users:{uid}:audio_bytes_webhook_lock', token)
-    except Exception as e:
-        logger.warning('release audio bytes webhook lock failed error=%s', type(e).__name__)
+    for attempt in range(_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS):
+        try:
+            r.eval(_RELEASE_AUDIO_BYTES_WEBHOOK_LOCK_SCRIPT, 1, f'users:{uid}:audio_bytes_webhook_lock', token)
+            return
+        except Exception as e:
+            if attempt == _AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS - 1:
+                logger.warning('release audio bytes webhook lock failed error=%s', type(e).__name__)
 
 
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:

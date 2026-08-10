@@ -26,8 +26,10 @@ def _stub_webhook_db_helpers(monkeypatch):
     etc. Individual tests override specific names via ``with patch(...)`` as needed.
     """
     monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
-    monkeypatch.setattr(webhooks_module, "try_acquire_audio_bytes_webhook_lock", MagicMock(return_value="lock-token"))
-    monkeypatch.setattr(webhooks_module, "release_audio_bytes_webhook_lock", MagicMock())
+    redis_helpers = MagicMock()
+    redis_helpers.try_acquire_audio_bytes_webhook_lock = MagicMock(return_value="lock-token")
+    redis_helpers.release_audio_bytes_webhook_lock = MagicMock()
+    monkeypatch.setattr(webhooks_module, "redis_db", redis_helpers)
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
@@ -194,7 +196,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client.post.side_effect = post
         lock = MagicMock(side_effect=["first-token", None])
 
-        with patch.object(webhooks_module, "try_acquire_audio_bytes_webhook_lock", lock), patch.object(
+        with patch.object(webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", lock), patch.object(
             webhooks_module,
             "get_webhook_circuit_breaker",
             return_value=MagicMock(allow_request=MagicMock(return_value=True)),
@@ -208,7 +210,7 @@ class TestSendAudioBytesDeveloperWebhook:
             await first_delivery
 
         assert mock_client.post.call_count == 1
-        webhooks_module.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "first-token")
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "first-token")
 
     @pytest.mark.asyncio
     async def test_invalid_url_releases_lock_without_delivery(self):
@@ -220,7 +222,7 @@ class TestSendAudioBytesDeveloperWebhook:
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
 
         mock_client.post.assert_not_called()
-        webhooks_module.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
 
     @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
@@ -258,7 +260,7 @@ class TestSendAudioBytesDeveloperWebhook:
         webhooks_module.record_dev_webhook_failure.assert_called_once_with(
             "uid-1", webhooks_module.WebhookType.audio_bytes, 0, "RuntimeError"
         )
-        webhooks_module.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
 
 
 class TestAudioBytesWebhookRedisLock:
@@ -286,10 +288,11 @@ class TestAudioBytesWebhookRedisLock:
 
     def test_release_redis_failure_is_best_effort(self, monkeypatch):
         mock_redis = MagicMock()
-        mock_redis.eval.side_effect = ConnectionError("redis unavailable")
+        mock_redis.eval.side_effect = [ConnectionError("redis unavailable"), 1]
         monkeypatch.setattr(redis_db_module, "r", mock_redis)
 
         redis_db_module.release_audio_bytes_webhook_lock("uid-1", "lock-token")
+        assert mock_redis.eval.call_count == 2
 
 
 class TestConversationAndSummaryWebhooksStructural:

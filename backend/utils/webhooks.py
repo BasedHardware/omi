@@ -7,11 +7,10 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import database.redis_db as redis_db
 from database.redis_db import (
     get_user_webhook_db,
     user_webhook_status_db,
-    try_acquire_audio_bytes_webhook_lock,
-    release_audio_bytes_webhook_lock,
     disable_user_webhook_db,
     enable_user_webhook_db,
     set_user_webhook_db,
@@ -32,6 +31,7 @@ logger = logging.getLogger(__name__)
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
 _AUDIO_BYTES_WEBHOOK_DEFAULT_SECONDS = 5
 _AUDIO_BYTES_WEBHOOK_LOCK_MIN_TTL_SECONDS = 180
+_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS = 3
 _WEBHOOK_REQUEST_TIMEOUT_SECONDS = 30
 
 
@@ -332,7 +332,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
     retry_delays = _get_dev_webhook_retry_delays()
     lock_token = await run_blocking(
         db_executor,
-        try_acquire_audio_bytes_webhook_lock,
+        redis_db.try_acquire_audio_bytes_webhook_lock,
         uid,
         _audio_bytes_webhook_lock_ttl(retry_delays),
     )
@@ -391,7 +391,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
         logger.error(f"Error sending audio bytes to developer webhook: {e}")
     finally:
-        await run_blocking(db_executor, release_audio_bytes_webhook_lock, uid, lock_token)
+        await run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
