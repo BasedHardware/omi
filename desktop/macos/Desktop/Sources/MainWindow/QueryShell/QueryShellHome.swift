@@ -66,10 +66,15 @@ struct QueryShellHome: View {
   /// and any test asserting composer behaviour through the bridge was asserting on a variable nothing
   /// rendered. A `QueryShellRequest` is assembled per render from the draft plus these.
   @State private var filters = QueryShellFilters()
-  // Home IS the conversation. The spine/search surface is not reachable from here any more — it
-  // lives in the Memory hub's Activity destination. The mode is a constant so no bridge action,
-  // escape key, or cleared transcript can put a search panel back on this page.
-  private let mode: QueryShellMode = QueryShellMode.homeDefault
+  /// The always-visible search bar's text. Not the chat draft: the one chat composer lives inside
+  /// the panel (INV-6) and keeps `chatProvider.composerDraft`; this field only narrows the spine.
+  @State private var searchText = ""
+  // Home IS the conversation. The panel rests on the chat and shows search results only while the
+  // search bar above it holds text — clearing the field (or esc) always lands back on the chat.
+  // There is no stored mode, so no bridge action or stale state can strand the page on the list.
+  private var mode: QueryShellMode {
+    searchText.isEmpty ? QueryShellMode.homeDefault : .results
+  }
   @State private var screenCount: Int?
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
@@ -115,36 +120,40 @@ struct QueryShellHome: View {
   private var querySurface: some View {
     GeometryReader { proxy in
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
-      let bodyHeight = QueryShellLayout.panelBodyHeight(
-        availableHeight: proxy.size.height,
-        composerHeight: composerHeight,
-        mode: mode)
+      // The search bar is always mounted above the panel, so the body's room subtracts it in both
+      // modes — `panelBodyHeight` only knows the hero reserve for `.results`.
+      let chrome = QueryShellLayout.panelChromeHeight(
+        mode: mode,
+        composerHeight: mode == .answer
+          ? max(QueryShellLayout.panelComposerMinHeight, composerHeight) : 0)
+      let room =
+        proxy.size.height - QueryShellLayout.surfaceTopInset - QueryShellLayout.barMinHeight
+        - QueryShellLayout.panelGap - chrome
+      let bodyHeight = min(
+        QueryShellLayout.maximumBodyHeight, max(QueryShellLayout.minimumBodyHeight, room))
       // **Only this column is woken by a keystroke.** The composer draft is not published on
       // `ChatProvider` (see `ChatComposerDraft`), so subscribing to it here keeps typing out of the
       // shell and the transcript while still giving the bar — and the list it filters — the live text.
       ChatDraftScope(draft: chatProvider.composerDraft) { draft in
         VStack(spacing: QueryShellLayout.panelGap) {
-          // **The search bar exists while you are searching.** In answer mode it is not hidden,
-          // moved or restyled in place — the same view is mounted inside the panel below instead, so
-          // the surface reads as one chat window with its input under the transcript rather than as
-          // a conversation with a search field parked on top of it.
-          if QueryComposerPlacement.of(mode) == .hero {
-            composerBar(draft: draft)
-          }
+          // **The search bar is always on screen.** It is pure search — typing narrows the spine
+          // below; clearing it returns the panel to the conversation. The chat composer is a
+          // different control and stays pinned inside the panel (INV-6: one chat composer).
+          QuerySearchBar(text: $searchText)
           QueryResultsPanel(
-            request: requestBinding(text: draft),
+            request: requestBinding(),
             mode: mode,
             total: total,
             onExitAnswer: nil,
             bodyHeight: bodyHeight,
             headerAccessory: { headerAccessory },
             footer: {
-              if QueryComposerPlacement.of(mode) == .panelFooter {
+              if mode == .answer {
                 composerBar(draft: draft)
               }
             }
           ) {
-            panelBody(request: QueryShellRequest(text: draft.wrappedValue, filters: filters))
+            panelBody(request: QueryShellRequest(text: searchText, filters: filters))
           }
           Spacer(minLength: 0)
         }
@@ -217,6 +226,13 @@ struct QueryShellHome: View {
       guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
       stageAttachments([URL(fileURLWithPath: path)])
     }
+    // Escape while searching clears the search and lands back on the conversation; with an empty
+    // field it falls through to the shell's own Escape (dismiss the window).
+    .onEscapeKey(priority: .content) {
+      guard !searchText.isEmpty else { return false }
+      searchText = ""
+      return true
+    }
     .task { await loadScreenCount() }
     // **No rule here reads an empty field as an instruction.** Emptying the bar used to eject you
     // from answer mode — so backspacing your last question to type a follow-up threw the conversation
@@ -256,11 +272,11 @@ struct QueryShellHome: View {
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
   /// half has an owner already (`chatProvider.composerDraft`) and a second copy of it here is the
   /// two-variables defect this surface shipped with.
-  private func requestBinding(text: Binding<String>) -> Binding<QueryShellRequest> {
+  private func requestBinding() -> Binding<QueryShellRequest> {
     Binding(
-      get: { QueryShellRequest(text: text.wrappedValue, filters: filters) },
+      get: { QueryShellRequest(text: searchText, filters: filters) },
       set: { next in
-        if next.text != text.wrappedValue { text.wrappedValue = next.text }
+        if next.text != searchText { searchText = next.text }
         filters = next.filters
       })
   }
@@ -297,7 +313,7 @@ struct QueryShellHome: View {
   /// into the conversation, and in the conversation it is what you can do to it.
   @ViewBuilder
   private var headerAccessory: some View {
-    if menu.isPresentable {
+    if mode == .answer, menu.isPresentable {
       chatMenu
     }
   }

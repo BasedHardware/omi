@@ -18,36 +18,41 @@ struct ActivityHubTab: View {
 
   @ObservedObject private var tasksStore = TasksStore.shared
   @State private var filters = QueryShellFilters()
+  @State private var searchText = ""
   @State private var screenCount: Int?
 
   var body: some View {
     GeometryReader { proxy in
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
-      // The panel arithmetic without the hero reserve: this host mounts no composer, so the body
-      // gets the room `panelBodyHeight` would have set aside for one.
+      // The panel arithmetic with the search bar in the hero slot but no composer inside the panel.
       let room =
-        proxy.size.height - QueryShellLayout.surfaceTopInset
+        proxy.size.height - QueryShellLayout.surfaceTopInset - QueryShellLayout.barMinHeight
+        - QueryShellLayout.panelGap
         - QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: 0)
       let bodyHeight = min(
         QueryShellLayout.maximumBodyHeight, max(QueryShellLayout.minimumBodyHeight, room))
-      QueryResultsPanel(
-        request: requestBinding,
-        mode: .results,
-        total: total,
-        onExitAnswer: nil,
-        bodyHeight: bodyHeight,
-        headerAccessory: { EmptyView() },
-        footer: { EmptyView() }
-      ) {
-        SpineStream(
-          request: QueryShellRequest(text: "", filters: filters),
-          appState: appState,
-          memoriesViewModel: memoriesViewModel,
-          tasksStore: tasksStore,
-          onOpenConversation: onOpenConversation,
-          onOpenBrainMap: onOpenBrainMap,
-          onOpenRewind: onOpenRewind
-        )
+      VStack(spacing: QueryShellLayout.panelGap) {
+        searchBar
+        QueryResultsPanel(
+          request: requestBinding,
+          mode: .results,
+          total: total,
+          onExitAnswer: nil,
+          bodyHeight: bodyHeight,
+          headerAccessory: { EmptyView() },
+          footer: { EmptyView() }
+        ) {
+          SpineStream(
+            request: QueryShellRequest(text: searchText, filters: filters),
+            appState: appState,
+            memoriesViewModel: memoriesViewModel,
+            tasksStore: tasksStore,
+            onOpenConversation: onOpenConversation,
+            onOpenBrainMap: onOpenBrainMap,
+            onOpenRewind: onOpenRewind
+          )
+        }
+        Spacer(minLength: 0)
       }
       .frame(width: lane)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -56,10 +61,17 @@ struct ActivityHubTab: View {
     .task { await loadScreenCount() }
   }
 
+  private var searchBar: some View {
+    QuerySearchBar(text: $searchText, accessibilityID: "activity-search-field")
+  }
+
   private var requestBinding: Binding<QueryShellRequest> {
     Binding(
-      get: { QueryShellRequest(text: "", filters: filters) },
-      set: { filters = $0.filters })
+      get: { QueryShellRequest(text: searchText, filters: filters) },
+      set: { next in
+        searchText = next.text
+        filters = next.filters
+      })
   }
 
   /// Same corpus arithmetic as Home's count line, minus nothing: the hub shows the same account.
