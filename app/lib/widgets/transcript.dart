@@ -19,11 +19,7 @@ import 'package:omi/utils/other/temp.dart';
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
 
-typedef TranscriptSegmentBuilder = Widget Function(
-  BuildContext context,
-  TranscriptSegment segment,
-  int index,
-);
+typedef TranscriptSegmentBuilder = Widget Function(BuildContext context, TranscriptSegment segment, int index);
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -112,6 +108,24 @@ class TranscriptScrollState {
   }
 }
 
+/// Owns live-transcript scroll intent for one mounted page.
+///
+/// A new page gets a fresh store and therefore starts at the live edge. The
+/// same page can still reuse its position when its transcript switches between
+/// the text-only and photo timeline layouts.
+class TranscriptScrollStateStore {
+  String? _sessionId;
+  TranscriptScrollState _state = TranscriptScrollState();
+
+  TranscriptScrollState forSession(String sessionId) {
+    if (_sessionId != sessionId) {
+      _sessionId = sessionId;
+      _state = TranscriptScrollState();
+    }
+    return _state;
+  }
+}
+
 class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Cache for person data to avoid repeated lookups
   final Map<String?, Person?> _personCache = {};
@@ -164,8 +178,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       return Image.asset(Assets.images.speaker0Icon.path, width: 24, height: 24);
     }
     // Always modulo by speakerImagePath.length to prevent index out of bounds
-    final imageIndex =
-        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
+    final imageIndex = person != null
+        ? person.colorIdx! % speakerImagePath.length
+        : speakerId % speakerImagePath.length;
     return Image.asset(speakerImagePath[imageIndex], width: 24, height: 24);
   }
 
@@ -234,11 +249,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
+    final contentChanged =
+        widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
-    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
@@ -289,6 +305,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final currentScroll = _scrollController.offset;
     final distanceFromBottom = _scrollController.position.maxScrollExtent - currentScroll;
     final isAtBottom = distanceFromBottom <= 24;
+    if (!_isAutoScrolling && !_isRestoringAnchor && !_pendingAnchorRestore) {
+      // Record the reader's intent on the first pixel of a drag. A live update
+      // can arrive before Flutter emits the corresponding idle notification.
+      final wasUserHasScrolled = _userHasScrolled;
+      _userHasScrolled = !isAtBottom;
+      if (isAtBottom && wasUserHasScrolled) {
+        widget.scrollState?.update(offset: currentScroll, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
+      }
+    }
     _setIsAtBottom(isAtBottom);
   }
 
@@ -445,8 +470,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  Future<void> _scrollToBottomGently({bool animated = true}) {
+  Future<void> _scrollToBottomGently({bool animated = true, bool force = false}) {
     if (!_scrollController.hasClients) return Future.value();
+    if (!force && widget.followLatest && _userHasScrolled) return Future.value();
     _followAgain = true;
     final activeFollow = _activeFollow;
     if (activeFollow != null) return activeFollow;
@@ -476,9 +502,29 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return false;
   }
 
+  bool _onScrollUpdate(ScrollUpdateNotification notification) {
+    if (notification.depth != 0 || notification.dragDetails == null) return false;
+    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
+
+    _isUserScrolling = true;
+    if (_isAutoScrolling) {
+      _userInterruptedAutoScroll = true;
+      _followAgain = false;
+      _isAutoScrolling = false;
+    }
+    _captureCurrentPosition();
+    return false;
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) return _onScrollUpdate(notification);
+    if (notification is UserScrollNotification) return _onUserScroll(notification);
+    return false;
+  }
+
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
     if (!widget.followLatest || _isAutoScrolling) return false;
-    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToBottomGently(animated: false);
@@ -566,13 +612,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _isAutoScrolling = true;
       _scrollController
           .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
+            targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOutCubic,
+          )
           .then((_) {
-        _isAutoScrolling = false;
-      });
+            _isAutoScrolling = false;
+          });
     }
   }
 
@@ -657,8 +703,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
-      child: NotificationListener<UserScrollNotification>(
-        onNotification: _onUserScroll,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () {
@@ -686,10 +732,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
               final segmentIndex = idx - widget.leadingItems.length - 1;
               if (segmentIndex == widget.segments.length) {
-                return SizedBox(
-                  key: const ValueKey('transcript_bottom_spacing'),
-                  height: widget.bottomMargin + 120,
-                );
+                return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
               }
 
               final segment = widget.segments[segmentIndex];
@@ -698,15 +741,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   ? _buildSegmentItem(segmentIndex)
                   : Container(key: _segmentKeys[segment.id], child: customSegment);
               if (widget.separator && segmentIndex > 0) {
-                child = Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [const SizedBox(height: 4), child],
-                );
+                child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
               }
-              return KeyedSubtree(
-                key: ValueKey('transcript-segment-${segment.id}'),
-                child: child,
-              );
+              return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
             },
           ),
         ),
@@ -738,7 +775,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       tooltip: context.l10n.jumpToLatestMessage,
                       backgroundColor: const Color(0xFF35343B),
                       foregroundColor: Colors.white,
-                      onPressed: () => _scrollToBottomGently(),
+                      onPressed: () => _scrollToBottomGently(force: true),
                       child: const Icon(Icons.keyboard_arrow_down_rounded),
                     ),
                   ),
@@ -832,9 +869,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               data.speakerId == omiSpeakerId
                                   ? 'omi'
                                   : (person?.name ??
-                                      context.l10n.speakerWithId(
-                                        '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
-                                      )),
+                                        context.l10n.speakerWithId(
+                                          '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
+                                        )),
                               style: TextStyle(
                                 color: data.speakerId == omiSpeakerId || person != null
                                     ? Colors.grey.shade300
@@ -875,8 +912,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18,
+                                    ? 6
+                                    : 18,
                               ),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: const Radius.circular(18),
@@ -939,8 +976,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           Text(
                                             SttProviderConfig.getDisplayName(data.sttProvider),
                                             style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.5)
+                                                  : Colors.grey.shade500,
                                               fontSize: 10,
                                               fontStyle: FontStyle.italic,
                                             ),
@@ -949,8 +987,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             Text(
                                               ' · ',
                                               style: TextStyle(
-                                                color:
-                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.5)
+                                                    : Colors.grey.shade500,
                                                 fontSize: 10,
                                               ),
                                             ),
@@ -966,8 +1005,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             child: Icon(
                                               Icons.play_circle_outline,
                                               size: 16,
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.7)
+                                                  : Colors.grey.shade400,
                                             ),
                                           ),
                                           const SizedBox(width: 6),
@@ -976,8 +1016,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           Text(
                                             data.getTimestampString(),
                                             style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.7)
+                                                  : Colors.grey.shade400,
                                               fontSize: 11,
                                             ),
                                           ),

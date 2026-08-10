@@ -30,9 +30,9 @@ class ArbitratedMic implements IMicRecorderService {
   final String _owner;
 
   ArbitratedMic({required IMicRecorderService inner, required MicArbiter arbiter, required String owner})
-      : _inner = inner,
-        _arbiter = arbiter,
-        _owner = owner;
+    : _inner = inner,
+      _arbiter = arbiter,
+      _owner = owner;
 
   @override
   Future<void> start({
@@ -96,5 +96,10 @@ class ArbitratedMic implements IMicRecorderService {
   void stop() {
     _inner.stop();
     _arbiter.release(_owner);
+  }
+
+  @override
+  void probeStallAfterForeground() {
+    _inner.probeStallAfterForeground();
   }
 }

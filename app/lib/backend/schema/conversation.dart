@@ -96,9 +96,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -411,12 +413,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -587,6 +591,13 @@ class SyncLocalFilesResponse {
   /// recovery rather than presenting a completed sync.
   int localUploadFailures;
 
+  /// Subset of [localUploadFailures] that are permanent server refusals
+  /// (HTTP 400/413, etc.). Soft-retry only applies when this stays zero.
+  int localUploadPermanentFailures;
+
+  /// Last permanent upload error message for SyncStatus.error surfacing.
+  String? localUploadPermanentError;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
@@ -594,6 +605,8 @@ class SyncLocalFilesResponse {
     this.totalSegments = 0,
     this.errors = const [],
     this.localUploadFailures = 0,
+    this.localUploadPermanentFailures = 0,
+    this.localUploadPermanentError,
   });
 
   bool get hasPartialFailure => failedSegments > 0;

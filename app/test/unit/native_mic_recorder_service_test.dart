@@ -53,20 +53,20 @@ void main() {
   });
 
   Future<void> startService() => service.start(
-        onByteReceived: cb.bytes.add,
-        onRecording: () => cb.recording++,
-        onStop: () => cb.stops++,
-        onInitializing: () => cb.initializing++,
-        onStalled: () => cb.stalls++,
-        onInterruption: cb.interruptions.add,
-      );
+    onByteReceived: cb.bytes.add,
+    onRecording: () => cb.recording++,
+    onStop: () => cb.stops++,
+    onInitializing: () => cb.initializing++,
+    onStalled: () => cb.stalls++,
+    onInterruption: cb.interruptions.add,
+  );
 
   Future<void> startBatchService() => service.startBatch(
-        onStop: () => cb.stops++,
-        onInterruption: cb.interruptions.add,
-        onBatchStalled: () => cb.batchStalls++,
-        onError: (code, message) => cb.errors.add(code),
-      );
+    onStop: () => cb.stops++,
+    onInterruption: cb.interruptions.add,
+    onBatchStalled: () => cb.batchStalls++,
+    onError: (code, message) => cb.errors.add(code),
+  );
 
   test('start calls host api and maps state events to callbacks', () async {
     await startService();
@@ -189,6 +189,63 @@ void main() {
       service.onStateChanged(PhoneMicCaptureState.interrupted, id);
       elapse(const Duration(seconds: 30));
       expect(cb.stalls, 2);
+
+      service.stop();
+    });
+  });
+
+  test('probeStallAfterForeground soft-rearms grace instead of immediate stall (#4706)', () {
+    fakeAsync((async) {
+      var now = DateTime(2026, 1, 1);
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: () => now);
+      void elapse(Duration d) {
+        now = now.add(d);
+        async.elapse(d);
+      }
+
+      startService();
+      async.flushMicrotasks();
+      final id = host.lastStartSessionId;
+      service.onStateChanged(PhoneMicCaptureState.starting, id);
+      service.onStateChanged(PhoneMicCaptureState.running, id);
+      service.onAudioFrame(Uint8List.fromList([1]), id);
+
+      // Wall-clock silence without timer ticks (suspended while backgrounded).
+      now = now.add(const Duration(seconds: 5));
+      expect(cb.stalls, 0);
+
+      // Soft re-arm must not escalate — avoids racing native rebuild / false restart.
+      service.probeStallAfterForeground();
+      expect(cb.stalls, 0);
+
+      // Genuine post-resume silence still trips the periodic watchdog.
+      elapse(const Duration(seconds: 4));
+      expect(cb.stalls, 1);
+
+      service.stop();
+    });
+  });
+
+  test('probeStallAfterForeground is a no-op while interrupted', () {
+    fakeAsync((async) {
+      var now = DateTime(2026, 1, 1);
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: () => now);
+      void elapse(Duration d) {
+        now = now.add(d);
+        async.elapse(d);
+      }
+
+      startService();
+      async.flushMicrotasks();
+      final id = host.lastStartSessionId;
+      service.onStateChanged(PhoneMicCaptureState.starting, id);
+      service.onStateChanged(PhoneMicCaptureState.running, id);
+      service.onAudioFrame(Uint8List.fromList([1]), id);
+      service.onStateChanged(PhoneMicCaptureState.interrupted, id);
+
+      service.probeStallAfterForeground();
+      elapse(const Duration(seconds: 10));
+      expect(cb.stalls, 0);
 
       service.stop();
     });

@@ -5,6 +5,7 @@ import XCTest
 final class MemoryGraphRevisitTests: XCTestCase {
   func testHomeMemoriesUsePersistentGraphViewModel() throws {
     let graph = try source(at: "Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift")
+    let hub = try source(at: "Sources/MainWindow/MemoryHubPage.swift")
     let home = try source(at: "Sources/MainWindow/DesktopHomeView.swift")
     let container = try source(at: "Sources/ViewModelContainer.swift")
 
@@ -16,15 +17,21 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // Memories card is gone — so MemoriesPage no longer receives the graph view
     // model at all. Both the canonical destination and legacy fallback must use
     // the persistent, container-owned instance.
-    XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(home.contains("viewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
-    // Static wiring tripwire: the Memory menu keeps the shared destination
-    // owner while the graph remains a dedicated spatial surface.
+    XCTAssertTrue(hub.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
+    XCTAssertTrue(hub.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    XCTAssertTrue(hub.contains("switch destination"))
+    // Static wiring tripwire: the shell owns the hub's placement, and the hub is
+    // a full-bleed destination — the readable-width cap belongs to the pages
+    // inside it, not to the hub itself.
     XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
-    XCTAssertTrue(home.contains("switch destination"))
-    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
-    XCTAssertTrue(graph.contains("scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)"))
+    // The Brain Map moved onto the glass panel. `OmiColors.backgroundPrimary` was the dark chrome's
+    // near-black page ground, and a SceneKit view that paints it is drawing a page ground of its own
+    // inside a translucent panel — the thing `InkGlass`'s "hosted content paints no background" rule
+    // exists to stop. The scene now paints nothing; the dark ground it genuinely needs (its nodes are
+    // emissive and its labels are white) is `glassMediaMat`, a framed media viewport applied around
+    // it, so the graph stays legible without the page pretending to be opaque.
+    XCTAssertTrue(graph.contains("scnView.backgroundColor = .clear"))
+    XCTAssertTrue(graph.contains(".glassMediaMat("))
   }
 
   func testMemoryHubDestinationMenuHasStableRoutes() {
@@ -32,9 +39,11 @@ final class MemoryGraphRevisitTests: XCTestCase {
       MemoryHubDestination.allCases,
       [.memories, .conversations, .brainMap]
     )
+    // Storage identity and reading order are different lists, and only one of them may be reordered
+    // freely: `allCases` is pinned by the persisted raw values above.
     XCTAssertEqual(
-      MemoryHubDestination.dropdownDestinations,
-      [.conversations, .brainMap]
+      MemoryHubDestination.switcherOrder,
+      [.conversations, .memories, .brainMap]
     )
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
@@ -54,75 +63,14 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
-  func testMemoryDropdownRejectsStaleHoverAndKeepsPointerTransitOpen() throws {
-    var state = MemoryDropdownInteractionState()
-
-    let staleOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertNil(state.hoverChanged(false, in: .anchor))
-    XCTAssertFalse(state.apply(staleOpen))
-    XCTAssertFalse(state.isPresented)
-
-    let activeOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertTrue(state.apply(activeOpen))
-    XCTAssertTrue(state.isPresented)
-
-    let pendingClose = try XCTUnwrap(state.hoverChanged(false, in: .anchor))
-    XCTAssertNil(state.hoverChanged(true, in: .dropdown))
-    XCTAssertFalse(state.apply(pendingClose))
-    XCTAssertTrue(state.isPresented)
-  }
-
-  func testMemoryDropdownDismissesAfterNavigation() throws {
-    var state = MemoryDropdownInteractionState()
-
-    let pendingOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertTrue(state.apply(pendingOpen))
-    XCTAssertTrue(state.isPresented)
-
-    state.dismiss()
-    XCTAssertFalse(state.isPresented)
-  }
-
-  func testMemoryDropdownPillsUseAnOpaqueOmiSurface() throws {
-    // omi-test-quality: source-inspection -- static visual contract: dropdown rows must
-    // occlude the page beneath them while retaining Omi's neutral pill styling.
-    let source = try source(at: "Sources/MainWindow/DesktopTopBar.swift")
-    let dropdownRowSource =
-      source.components(separatedBy: "private struct MemoryDropdownRow").last ?? ""
-
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundSecondary"))
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundTertiary"))
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.border.opacity(0.55)"))
-    XCTAssertFalse(dropdownRowSource.contains(": Color.clear"))
-  }
-
-  func testTopNavigationUsesCompactPillWidthsAndTightSpacing() {
+  /// The hover menu these three tests used to cover is gone, and so is
+  /// `MemoryDropdownInteractionState` — its hover-generation machinery had no other caller. The
+  /// Memory hub's three destinations are now selected by the hub's own switcher; that contract is
+  /// held behaviorally by `MemoryHubSwitcherTests` and `TopNavigationBarLayoutTests`.
+  func testTopNavigationUsesCompactPillSpacing() {
     XCTAssertEqual(TopNavigationPillMetrics.itemSpacing, 4)
     XCTAssertEqual(TopNavigationPillMetrics.horizontalPadding, 12)
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.dashboard.rawValue),
-      88
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.conversations.rawValue),
-      128
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.tasks.rawValue),
-      84
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.apps.rawValue),
-      80
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(
-        for: SidebarNavItem.tasks.rawValue,
-        badgeCount: 93
-      ),
-      122,
-      "badged pills must grow instead of clipping their count"
-    )
+    XCTAssertEqual(TopNavigationPillMetrics.height, 30)
   }
 
   func testMemoryHubUsesReadableWidthUntilTheActiveTranscriptOpens() {
@@ -242,6 +190,7 @@ final class MemoryGraphRevisitTests: XCTestCase {
       testsURL
       .deletingLastPathComponent()
       .appendingPathComponent(relativePath)
+    // omi-test-quality: source-inspection -- static contract: which token a call site names is a source fact; a rendered view cannot report it.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

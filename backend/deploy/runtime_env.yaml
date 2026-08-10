@@ -37,7 +37,7 @@ environments:
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
           MEMORY_ENABLED_USERS:
             category: memory_rollout
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -55,7 +55,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -68,6 +68,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -129,7 +132,7 @@ environments:
               key: TWILIO_ACCOUNT_SID
           MEMORY_MODE:
             category: memory_rollout
-            value: read
+            value: 'off'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -139,7 +142,7 @@ environments:
               key: MCP_RESOURCE_URL
           MEMORY_V3_GET_ENABLED:
             category: memory_rollout
-            value: 'true'
+            value: 'false'
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -220,7 +223,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -298,7 +301,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -362,7 +365,7 @@ environments:
               category: service_auth
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -387,6 +390,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
               value: '0.01'
               category: rollout
@@ -404,20 +410,20 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -488,7 +494,7 @@ environments:
               category: stt_policy
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -512,6 +518,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -540,7 +549,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -550,14 +559,14 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -624,7 +633,7 @@ environments:
               category: stt_policy
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -648,6 +657,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -676,7 +688,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -686,14 +698,14 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -748,7 +760,7 @@ environments:
           env:
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -781,8 +793,11 @@ environments:
               category: reliability
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -793,16 +808,16 @@ environments:
               category: telemetry
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GCP_LOCATION:
               value: us-central1
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -900,10 +915,13 @@ environments:
               category: rollout
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+              category: memory_rollout
+              value: 'false'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -915,7 +933,7 @@ environments:
               value: memories-backend-dev
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -924,9 +942,11 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
+              value: '25'
       workflow_files:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
@@ -990,7 +1010,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1003,6 +1023,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1160,7 +1183,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1261,6 +1284,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1404,6 +1430,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -1539,6 +1568,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -1677,6 +1709,9 @@ environments:
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
+              value: 'off'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1776,6 +1811,9 @@ environments:
               category: memory_rollout
               value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
             OMI_ENV_STAGE:

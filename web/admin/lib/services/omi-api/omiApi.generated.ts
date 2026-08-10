@@ -20,6 +20,37 @@ export interface AcceptSharedTasksRequest {
   token: string;
 }
 
+export type AccountCutoverCheckpointPhase = "not_started" | "inventory" | "offline_queue_fenced" | "exporting" | "importing" | "verifying" | "cutover_ready" | "completed" | "failed" | "paused";
+
+export type AccountCutoverClientAction = "none" | "force_upgrade" | "migration_maintenance";
+
+export interface AccountCutoverControl {
+  account_generation?: number;
+  api_generation?: number;
+  auth_bootstrap_reachable?: boolean;
+  client_action?: AccountCutoverClientAction;
+  legacy_writes_allowed?: boolean;
+  migration?: AccountCutoverManifestSummary;
+  minimum_supported_builds?: Array<PlatformMinimumBuild>;
+  offline_queue_instruction?: OfflineQueueInstruction;
+  product_traffic_allowed?: boolean;
+  schema_version?: 1;
+  state?: AccountCutoverState;
+  stranded_new_data?: boolean;
+  ui_generation?: number;
+}
+
+export interface AccountCutoverManifestSummary {
+  checkpoint_phase?: AccountCutoverCheckpointPhase;
+  checkpoint_token?: string | null;
+  destination_backend_bound?: boolean;
+  manifest_id?: string | null;
+  schema_version?: number;
+  stranded_new_data?: boolean;
+}
+
+export type AccountCutoverState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
+
 export interface Action {
   action: ActionType;
 }
@@ -37,6 +68,7 @@ export interface ActionItem {
   description: string;
   due_at?: string | null;
   ownership_confidence?: number | null;
+  source_segment_ids?: Array<string>;
   target_task_id?: string | null;
   updated_at?: string | null;
 }
@@ -1641,10 +1673,13 @@ export type EvidenceKind = "conversation" | "memory_item" | "workstream_event" |
 
 export interface EvidenceRef {
   device_id?: string | null;
+  end_seconds?: number | null;
   excerpt_hash?: string | null;
   id: string;
   kind: EvidenceKind;
   scope: EvidenceScope;
+  start_seconds?: number | null;
+  transcript_segment_ids?: Array<string> | null;
   version?: string | null;
 }
 
@@ -2459,6 +2494,8 @@ export interface OAuthUrlResponse {
   auth_url: string;
 }
 
+export type OfflineQueueInstruction = "none" | "drain" | "quarantine";
+
 export interface OnboardingStateResponse {
   acquisition_source?: string;
   completed?: boolean;
@@ -2645,6 +2682,11 @@ export interface PlanLimits {
 }
 
 export type PlanType = "basic" | "unlimited" | "architect" | "operator" | "plus" | "unlimited_v2";
+
+export interface PlatformMinimumBuild {
+  minimum_supported_build: number;
+  platform: string;
+}
 
 export interface PluginResult {
   content: string;
@@ -3885,6 +3927,11 @@ export interface OmiApiSchemas {
   "AIUserProfileResponse": AIUserProfileResponse;
   "AcceptSharedActionItemsResponse": AcceptSharedActionItemsResponse;
   "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
+  "AccountCutoverCheckpointPhase": AccountCutoverCheckpointPhase;
+  "AccountCutoverClientAction": AccountCutoverClientAction;
+  "AccountCutoverControl": AccountCutoverControl;
+  "AccountCutoverManifestSummary": AccountCutoverManifestSummary;
+  "AccountCutoverState": AccountCutoverState;
   "Action": Action;
   "ActionItem": ActionItem;
   "ActionItemCreateRequest": ActionItemCreateRequest;
@@ -4216,6 +4263,7 @@ export interface OmiApiSchemas {
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
   "NotificationSettingsResponse": NotificationSettingsResponse;
   "OAuthUrlResponse": OAuthUrlResponse;
+  "OfflineQueueInstruction": OfflineQueueInstruction;
   "OnboardingStateResponse": OnboardingStateResponse;
   "OnboardingStateUpdate": OnboardingStateUpdate;
   "OpenLoopDescriptor": OpenLoopDescriptor;
@@ -4242,6 +4290,7 @@ export interface OmiApiSchemas {
   "PhoneNumbersResponse": PhoneNumbersResponse;
   "PlanLimits": PlanLimits;
   "PlanType": PlanType;
+  "PlatformMinimumBuild": PlatformMinimumBuild;
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
@@ -4416,6 +4465,16 @@ export interface OmiApiSchemas {
 }
 
 export interface OmiApiPaths {
+  "/v1/account/cutover/control": {
+    get: {
+      operationId: "get_account_cutover_control_v1_account_cutover_control_get";
+      responses: {
+        "200": AccountCutoverControl;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/action-items": {
     get: {
       operationId: "get_action_items_v1_action_items_get";
@@ -8372,6 +8431,26 @@ export class OmiApiError extends Error {
     super(`Omi API error: HTTP ${status}`);
     this.name = "OmiApiError";
   }
+}
+
+export async function get_account_cutover_control_v1_account_cutover_control_get(header: { X_App_Platform?: string, X_App_Build?: string | null, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<AccountCutoverControl> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/account/cutover/control`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
 export async function get_action_items_v1_action_items_get(query: { limit?: number, offset?: number, completed?: boolean | null, conversation_id?: string | null, start_date?: string | null, end_date?: string | null, due_start_date?: string | null, due_end_date?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ActionItemsResponse> {
@@ -15758,10 +15837,13 @@ export async function create_memory_v3_memories_post(header: { authorization?: s
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_memories_v3_memories_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
+export async function delete_memories_v3_memories_delete(query: { scope?: "all" | "default" }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
     headers: {
@@ -16093,4 +16175,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 392 client methods generated.
+// Total: 393 client methods generated.

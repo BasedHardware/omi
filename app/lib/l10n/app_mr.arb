@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "आपल्या योजना {date} वर नवीकरण होईल.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "मुक्त योजना",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,28 @@
     "whisperModelSizeLarge": "मोठे",
     "whisperModelSizeMedium": "मध्यम",
     "whisperModelSizeSmall": "लहान",
-    "whisperModelSizeTiny": "अतिशय लहान"
+    "whisperModelSizeTiny": "अतिशय लहान",
+    "planSheetChooseYourPlan": "अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.",
+    "availableOnMacMobileWeb": "Mac, मोबाइल आणि वेबवर उपलब्ध",
+    "popularBadge": "लोकप्रिय",
+    "worksOnDesktop": "डेस्कटॉपवर चालते",
+    "noDesktopAccess": "डेस्कटॉपवर चालत नाही",
+    "annualBillingSummary": "{months} महिने / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 महिना मोफत} other{{count} महिने मोफत}}",
+    "freemiumLimitsIntro": "Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:",
+    "downgradeLimitDelayNotRealTime": "5-7 सेकंद विलंब (रिअल-टाइम नाही)",
+    "downgradeToFreemiumAction": "मोफत आवृत्तीवर जा",
+    "getFreeUnlimitedAccess": "मोफत अमर्यादित प्रवेश मिळवा",
+    "shareDataForTraining": "प्रशिक्षणासाठी डेटा सामायिक करा",
+    "yourRequestUnderReview": "तुमची विनंती पुनरावलोकनाधीन आहे",
+    "pinAsBaseline": "आधार म्हणून पिन करा",
+    "unpinAsBaseline": "आधारातून अनपिन करा",
+    "baselineMemory": "आधार स्मृती",
+    "alwaysInContext": "नेहमी संदर्भात",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 extension AppState {
   func requestMicrophonePermission() {
+    let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
     // Activate app to ensure permission dialog appears
     NSApp.activate()
 
@@ -16,6 +17,7 @@ extension AppState {
     Task {
       let granted = await AudioCaptureService.requestPermission()
       await MainActor.run {
+        if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
         self.hasMicrophonePermission = granted
         log("Microphone permission request completed, granted: \(granted)")
         if granted {
@@ -83,7 +85,8 @@ extension AppState {
         appPath: relaunchURL.path,
         isNonProduction: AppBuild.isNonProduction,
         automationPort: DesktopAutomationLaunchOptions.port,
-        terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier),
+        terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+        automationUIPresentationMode: DesktopAutomationLaunchOptions.uiPresentationMode),
     ]
 
     do {
@@ -125,11 +128,17 @@ extension AppState {
     appPath: String,
     isNonProduction: Bool,
     automationPort: UInt16,
-    terminatingProcessIdentifier: Int32
+    terminatingProcessIdentifier: Int32,
+    automationUIPresentationMode: DesktopAutomationUIPresentationMode = .normal
   ) -> String {
     var openCommand = "open \"\(appPath)\""
     if isNonProduction {
-      openCommand = "open -n \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+      let quietFlag =
+        automationUIPresentationMode == .normal
+        ? "" : " \(DesktopAutomationLaunchOptions.uiPresentationPrefix)\(automationUIPresentationMode.rawValue)"
+      let backgroundFlag = automationUIPresentationMode == .quiet ? " -g" : ""
+      openCommand =
+        "open -n\(backgroundFlag) \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)\(quietFlag)"
     }
     return
       "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
@@ -181,6 +190,17 @@ extension AppState {
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
+
+      // Reset Onboarding is someone deliberately asking to see first run again,
+      // so the cinematic intro replays — the one onboarding key sign-out keeps
+      // and this site clears. It is the last write before the relaunch on
+      // purpose: the onboarding view re-mounted the moment this method dropped
+      // hasCompletedOnboarding, and that doomed session marks the intro played
+      // on appear. See OnboardingFlow.armIntroReplayForOnboardingReset.
+      OnboardingFlow.armIntroReplayForOnboardingReset()
+      UserDefaults.standard.synchronize()
+      log("Armed the cinematic intro to replay on the next launch")
+
       // Keep onboarding reset scoped to the current app instance.
       // It must not mutate production defaults, shared local data, or TCC permissions.
       self.restartApp()
@@ -420,6 +440,7 @@ extension AppState {
     }
 
     log("System audio: Testing capture...")
+    let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
 
     // Create a test capture service
     let testService = SystemAudioCaptureService()
@@ -441,6 +462,7 @@ extension AppState {
         // Mark permission as granted
         recordSystemAudioCaptureOutcome(.granted)
         log("System audio: Permission verified")
+        if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
 
       } catch {
         logError("System audio: Test capture failed", error: error)
@@ -450,6 +472,7 @@ extension AppState {
         if let url = URL(
           string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         {
+          ShellSummon.suspendForPermissionPrompt()
           NSWorkspace.shared.open(url)
         }
       }

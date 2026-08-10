@@ -1,5 +1,4 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/utils/enums.dart';
 
 /// Marker stored in [Wal.device] for recordings produced by offline/batch mode.
 /// Lets the conversations list show *only* batch recordings — never the device
@@ -41,8 +40,7 @@ bool canAutoUploadPhoneRecordings({
   required bool useCustomStt,
   required bool autoSyncOfflineRecordings,
   required bool isUploading,
-}) =>
-    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+}) => !useCustomStt && autoSyncOfflineRecordings && !isUploading;
 
 /// The next offline-fallback recording to auto-upload from [fileNames], or null
 /// when none is eligible. Only auto-marker files qualify (explicit Transcribe
@@ -83,26 +81,6 @@ PhoneMicSessionMode selectPhoneMicSessionMode({
   if (!hasNetwork) return PhoneMicSessionMode.batchAuto;
   return PhoneMicSessionMode.live;
 }
-
-bool shouldFallbackToPhoneOnDeviceDisconnect({
-  required bool isRecordingDevice,
-  required bool isRecording,
-  required bool supportsBatch,
-  required bool batchAlreadyActive,
-  required bool isOnDeviceOfflineBatchActive,
-}) =>
-    isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive && !isOnDeviceOfflineBatchActive;
-
-/// Maps the capture state machine into the boolean that the fallback predicate
-/// (`shouldFallbackToPhoneOnDeviceDisconnect`) expects for `isRecording`.
-///
-/// In particular, active BLE device streaming uses `RecordingState.deviceRecord`,
-/// not `RecordingState.record`, so device disconnect fallback must treat
-/// `deviceRecord` as "recording".
-bool isRecordingDuringDeviceDisconnect(RecordingState recordingState) =>
-    recordingState == RecordingState.deviceRecord ||
-    recordingState == RecordingState.record ||
-    recordingState == RecordingState.interrupted;
 
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
@@ -170,8 +148,8 @@ class BatchRecordingInfo {
     final bytesPerSec = codec == BleAudioCodec.pcm16
         ? 32200
         : codec == BleAudioCodec.pcm8
-            ? 16100
-            : 2400;
+        ? 16100
+        : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
   }
 }

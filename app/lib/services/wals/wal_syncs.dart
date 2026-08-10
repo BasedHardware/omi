@@ -274,6 +274,8 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += preDrainResult.localUploadFailures;
+      resp.localUploadPermanentFailures += preDrainResult.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
     }
 
     // Phase 0: New offline storage sync, gated by firmware version.
@@ -358,6 +360,8 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += partialRes.localUploadFailures;
+      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
     }
 
     DebugLogManager.logEvent('sync_completed', {

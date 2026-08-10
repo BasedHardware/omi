@@ -9,7 +9,6 @@ import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
-import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -35,15 +34,14 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  );
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 class DeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
+  Future<void>? _activeDiscovery;
+  Future<void>? _queuedDiscovery;
 
   final List<DeviceDiscoverer> _discoverers = [
     NativeBluetoothDiscoverer(),
@@ -60,13 +58,36 @@ class DeviceService {
 
   DateTime? _firstConnectedAt;
 
-  Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
-    Logger.debug("Device discovering...");
-    if (_status != DeviceServiceStatus.ready) {
-      logCommonErrorMessage("Device service is not ready, may busying or stop");
-      return;
+  /// Runs one follow-up scan when a caller retries while the current scan is
+  /// still winding down. In particular, this makes the Bluetooth-enable
+  /// recovery action reliable instead of silently returning while a blocked
+  /// scan still owns the service.
+  Future<void> discover({String? desirableDeviceId, int timeout = 5}) {
+    if (_queuedDiscovery != null) return _queuedDiscovery!;
+    if (_status == DeviceServiceStatus.scanning) {
+      final activeDiscovery = _activeDiscovery;
+      if (activeDiscovery == null) return Future.value();
+      return _queuedDiscovery ??= activeDiscovery.then<void>(
+        (_) => _runQueuedDiscovery(desirableDeviceId: desirableDeviceId, timeout: timeout),
+        onError: (_, __) => _runQueuedDiscovery(desirableDeviceId: desirableDeviceId, timeout: timeout),
+      );
     }
+    if (_status != DeviceServiceStatus.ready) {
+      Logger.debug('Device service is not ready, may busying or stop');
+      return Future.value();
+    }
+    return _discover(desirableDeviceId: desirableDeviceId, timeout: timeout);
+  }
 
+  Future<void> _runQueuedDiscovery({String? desirableDeviceId, required int timeout}) async {
+    _queuedDiscovery = null;
+    await discover(desirableDeviceId: desirableDeviceId, timeout: timeout);
+  }
+
+  Future<void> _discover({String? desirableDeviceId, required int timeout}) async {
+    Logger.debug("Device discovering...");
+    final completion = Completer<void>();
+    _activeDiscovery = completion.future;
     _status = DeviceServiceStatus.scanning;
 
     try {
@@ -100,6 +121,8 @@ class DeviceService {
       }
     } finally {
       _status = DeviceServiceStatus.ready;
+      if (!completion.isCompleted) completion.complete();
+      _activeDiscovery = null;
     }
   }
 
@@ -114,16 +137,12 @@ class DeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug(
-      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
-    );
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug(
-        '[DeviceService] Device not in discovered list, checking stored device',
-      );
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
         Logger.debug('[DeviceService] Using stored device: ${device.name}');
@@ -131,22 +150,16 @@ class DeviceService {
           _devices.add(device);
         }
       } else {
-        Logger.debug(
-          '[DeviceService] No stored device available for $id, returning',
-        );
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
 
     _connection = DeviceConnectionFactory.create(device);
     if (_connection != null) {
-      await _connection!.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-      );
+      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      Logger.debug(
-        '[DeviceService] Failed to create device connection for ${device.id}',
-      );
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 
@@ -188,15 +201,9 @@ class DeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  ) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -210,15 +217,10 @@ class DeviceService {
 
   final Mutex _mutex = Mutex();
 
-  Future<DeviceConnection?> ensureConnection(
-    String deviceId, {
-    bool force = false,
-  }) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
-      Logger.debug(
-        "ensureConnection ${_connection?.device.id} ${_connection?.status} $force",
-      );
+      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
       // Connected to this device — return it
       if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
@@ -288,9 +290,7 @@ class DeviceService {
       try {
         await _connection!.transport.dispose();
       } catch (e) {
-        Logger.debug(
-          "DeviceService: transport dispose during forget failed: $e",
-        );
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
       }
       _connection = null;
     }

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 /// Phone-mic × Transcribe Later: filename parsing, the auto/explicit marker
@@ -96,8 +95,7 @@ void main() {
     ];
 
     for (final c in cases) {
-      test(
-          'supportsBatch=${c.supportsBatch} batchModeEnabled=${c.batchModeEnabled} '
+      test('supportsBatch=${c.supportsBatch} batchModeEnabled=${c.batchModeEnabled} '
           'hasNetwork=${c.hasNetwork} -> ${c.expected}', () {
         expect(
           selectPhoneMicSessionMode(
@@ -109,84 +107,5 @@ void main() {
         );
       });
     }
-  });
-
-  group('shouldFallbackToPhoneOnDeviceDisconnect', () {
-    test('maps RecordingState.deviceRecord to the predicate isRecording flag', () {
-      expect(isRecordingDuringDeviceDisconnect(RecordingState.deviceRecord), isTrue);
-      expect(isRecordingDuringDeviceDisconnect(RecordingState.record), isTrue);
-      // Interrupted is treated as "recording" for disconnect fallback purposes
-      // (e.g. socket drop preceded the BLE disconnect).
-      expect(isRecordingDuringDeviceDisconnect(RecordingState.interrupted), isTrue);
-    });
-
-    test('falls back only for an active supported wearable session', () {
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: true,
-          isRecording: true,
-          supportsBatch: true,
-          batchAlreadyActive: false,
-          isOnDeviceOfflineBatchActive: false,
-        ),
-        isTrue,
-      );
-    });
-
-    test('does not fall back when an on-device offline batch recording is already active', () {
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: true,
-          isRecording: true,
-          supportsBatch: true,
-          batchAlreadyActive: false,
-          isOnDeviceOfflineBatchActive: true,
-        ),
-        isFalse,
-      );
-    });
-
-    test('does not restart a stopped, unsupported, or already-batched session', () {
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: false,
-          isRecording: true,
-          supportsBatch: true,
-          batchAlreadyActive: false,
-          isOnDeviceOfflineBatchActive: false,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: true,
-          isRecording: false,
-          supportsBatch: true,
-          batchAlreadyActive: false,
-          isOnDeviceOfflineBatchActive: false,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: true,
-          isRecording: true,
-          supportsBatch: false,
-          batchAlreadyActive: false,
-          isOnDeviceOfflineBatchActive: false,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldFallbackToPhoneOnDeviceDisconnect(
-          isRecordingDevice: true,
-          isRecording: true,
-          supportsBatch: true,
-          batchAlreadyActive: true,
-          isOnDeviceOfflineBatchActive: false,
-        ),
-        isFalse,
-      );
-    });
   });
 }

@@ -476,8 +476,9 @@ class PhoneCallProvider extends ChangeNotifier {
     _transcriptionStatus = TranscriptionStatus.connecting;
     notifyListeners();
 
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,
@@ -487,7 +488,7 @@ class PhoneCallProvider extends ChangeNotifier {
     Logger.info('PhoneCallProvider: connecting to $wsUrl');
 
     try {
-      var headers = await buildHeaders(requireAuthCheck: true);
+      var headers = await buildHeaders(requireAuthCheck: true, url: wsUrl, forWebSocket: true);
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       _transcriptionSocket = IOWebSocketChannel.connect(
         wsUrl,
