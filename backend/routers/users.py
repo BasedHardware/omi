@@ -53,6 +53,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
+from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
@@ -210,14 +211,6 @@ class OnboardingStateResponse(BaseModel):
 class UserLanguageResponse(BaseModel):
     language: Optional[str] = None
 
-
-class AvailableLanguage(BaseModel):
-    code: str
-    name: str
-
-
-class AvailableLanguagesResponse(BaseModel):
-    languages: List[AvailableLanguage]
 
 
 class UserLanguageUpdateResponse(UserStatusResponse):
