@@ -74,6 +74,7 @@ import type { AccountControlObservation } from "../../../core/control/account-co
 import type { WriteFenceCounter } from "../control/fence-counter";
 import type { AccountControlProjectionStore } from "../control/projection-store";
 import type { DevPrincipal } from "../auth/dev-token";
+import type { ServedReadAttribution } from "../observability/served-read-attribution";
 import { resolveRunKey, type WriteOpsCounter } from "../observability/write-ops-counter";
 import type { StragglerTable } from "../stores/straggler-table";
 import type { TasksReadStore } from "../stores/tasks-store";
@@ -93,6 +94,7 @@ export interface QaControlRouteDependencies {
     readonly counter: WriteFenceCounter;
   };
   readonly writeOpsCounter: WriteOpsCounter;
+  readonly readAttribution: ServedReadAttribution;
   readonly stragglers: StragglerTable;
   readonly tasksRead: TasksReadStore;
   /** Ruling B5's collection, run when an epoch advance makes rows unreachable. */
@@ -188,7 +190,7 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
   });
 
   /**
-   * The two producer-side tallies, joined by run id.
+   * The producer-side tallies, joined by run id.
    *
    * `null` for a run that produced nothing — never an all-zero tally, which
    * would read as "measured, and nothing happened" and is exactly the number a
@@ -213,6 +215,7 @@ export const registerQaControlRoutes = (app: Hono, deps: QaControlRouteDependenc
       normalised: run !== asked,
       fence: deps.fence.counter.tally(run),
       writeOps: deps.writeOpsCounter.tally(run),
+      reads: deps.readAttribution.tally(run),
     });
   });
 

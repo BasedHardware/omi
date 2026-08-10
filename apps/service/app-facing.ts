@@ -44,6 +44,11 @@ import {
 } from "./control/settings-projection";
 import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
+import {
+  attributeServedReads,
+  createServedReadAttribution,
+  READ_CLIENT_ID_HEADER,
+} from "./observability/served-read-attribution";
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import {
@@ -374,7 +379,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const stragglers = stores.stragglers;
   const controlStore = stores.control;
 
-  const counter = createServedCounter();
+  const readAttribution = createServedReadAttribution();
+  const counter = attributeServedReads(createServedCounter(), readAttribution);
   const issuer = createDevTokenIssuer({
     signing_keyset: {
       active_key_id: DEV_KEY_ID,
@@ -524,6 +530,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const opsCounter = createWriteOpsCounter();
 
   const app = new Hono({ strict: true });
+  app.use("*", (context, next) =>
+    readAttribution.withRun(context.req.header(READ_CLIENT_ID_HEADER), next));
   app.get("/health", () => {
     counter.recordNonDomainRequest();
     return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: JSON_HEADERS });
@@ -610,6 +618,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     fence: { store: controlStore, counter: fenceCounter },
     writeOpsCounter: opsCounter,
+    readAttribution,
     stragglers,
     tasksRead: tasks,
     collectWriteIdsBelowEpoch: (accountId, activeEpoch) =>
