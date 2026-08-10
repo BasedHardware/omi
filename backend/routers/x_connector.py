@@ -15,6 +15,7 @@ themselves without the backend needing to know which is calling.
 
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -30,6 +31,42 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DEEP_LINK = 'omi://x/callback'
 X_POST_KINDS = (x_posts_db.KIND_TWEET, x_posts_db.KIND_BOOKMARK, x_posts_db.KIND_LIKE)
+
+# Mirrors routers.auth._validate_redirect_uri allowlist (custom schemes + loopback http).
+_LOOPBACK_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+_FORBIDDEN_REDIRECT_SCHEMES = frozenset(
+    {"https", "javascript", "data", "vbscript", "file", "blob", "filesystem", "about"}
+)
+_ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyz")
+_ASCII_ALNUM = _ASCII_LETTERS | frozenset("0123456789")
+
+
+def _is_valid_redirect_scheme(scheme: str) -> bool:
+    if not scheme or scheme[0] not in _ASCII_LETTERS:
+        return False
+    return all(c in _ASCII_ALNUM or c in "+-." for c in scheme)
+
+
+def is_allowed_success_redirect_url(redirect_uri: str) -> bool:
+    """Return True when redirect_uri is a safe native/loopback deep link."""
+    if not redirect_uri:
+        return False
+    parsed = urlparse(redirect_uri)
+    scheme = (parsed.scheme or "").strip().lower()
+    if not scheme:
+        return False
+    if scheme == "http":
+        hostname = (parsed.hostname or "").strip().lower()
+        return hostname in _LOOPBACK_HOSTNAMES
+    if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
+        return False
+    return _is_valid_redirect_scheme(scheme)
+
+
+def _validated_success_redirect(url: Optional[str]) -> str:
+    if url and is_allowed_success_redirect_url(url):
+        return url
+    return DEFAULT_DEEP_LINK
 
 
 class OAuthUrlResponse(BaseModel):
@@ -80,6 +117,8 @@ def x_oauth_url(
 ):
     if not x_connector.is_oauth_configured():
         return OAuthUrlResponse(success=False, error='x_oauth_not_configured')
+    if success_redirect_url is not None and not is_allowed_success_redirect_url(success_redirect_url):
+        raise HTTPException(status_code=400, detail='success_redirect_url is not permitted')
     try:
         url = x_connector.build_authorize_url(uid, success_redirect_url=success_redirect_url)
         return OAuthUrlResponse(success=True, auth_url=url)
@@ -119,7 +158,7 @@ async def x_oauth_callback(
         return _redirect_html(f'{DEFAULT_DEEP_LINK}?error=invalid_state', False, 'Link expired')
 
     uid = st['uid']
-    deep_link = st.get('success_redirect_url') or DEFAULT_DEEP_LINK
+    deep_link = _validated_success_redirect(st.get('success_redirect_url'))
     try:
         token_resp = await x_connector.exchange_code(code, st['verifier'])
         # Resolve the account so we can store the handle for status + RapidAPI fallback.

@@ -1,4 +1,6 @@
 import os
+import uuid
+from pathlib import Path
 from typing import List, Optional
 
 import av
@@ -94,7 +96,8 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
+    safe_suffix = Path(file.filename).name if file.filename else "upload"
+    file_path = f"_temp/{uid}/{uuid.uuid4().hex}_{safe_suffix}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
