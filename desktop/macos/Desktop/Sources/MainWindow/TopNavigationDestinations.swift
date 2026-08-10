@@ -63,6 +63,9 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   case apps
   case permissions
   case help
+  /// The chronological activity spine — Home's former landing surface, now the Memory hub's first
+  /// view. Appended last so the established cases keep their raw values.
+  case activity
 
   /// The one mechanism that reaches a destination. Not a description of the UI — a claim about
   /// reachability that `ShellDestination.unreachable` checks.
@@ -95,6 +98,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .apps: return "Apps"
     case .permissions: return "Permissions"
     case .help: return "Help"
+    case .activity: return "Activity"
     }
   }
 
@@ -102,7 +106,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var navItem: SidebarNavItem {
     switch self {
     case .home: return .dashboard
-    case .conversations, .memories, .brainMap: return .conversations
+    case .conversations, .memories, .brainMap, .activity: return .conversations
     case .tasks: return .tasks
     case .rewind: return .rewind
     case .apps: return .apps
@@ -117,6 +121,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
+    case .activity: return .activity
     case .home, .tasks, .rewind, .apps, .permissions, .help: return nil
     }
   }
@@ -126,13 +131,13 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     case .permissions: return .permissions
     case .help: return .help
-    case .home, .conversations, .memories, .brainMap, .tasks, .rewind, .apps: return nil
+    case .home, .conversations, .memories, .brainMap, .activity, .tasks, .rewind, .apps: return nil
     }
   }
 
   var reach: Reach {
     switch self {
-    case .conversations, .memories, .brainMap: return .memoryHubView
+    case .conversations, .memories, .brainMap, .activity: return .memoryHubView
     case .permissions, .help: return .settingsSidebar
     case .home, .tasks, .rewind, .apps: return .topBar
     }
