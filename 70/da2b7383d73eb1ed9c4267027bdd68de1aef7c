@@ -1,0 +1,93 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_8815d69cdccdc7::t_1f55e2b935c9c5 445,471,996-999,1003-1046,1050-1051,1054-1059,1062-1080
+  s_8815d69cdccdc7::t_c7b72c8116bde4 1000-1002,1049,1052-1053,1060-1061
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_8815d69cdccdc7::t_1f55e2b935c9c5 77
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_8815d69cdccdc7::t_1f55e2b935c9c5 4-5,13
+desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
+  s_8815d69cdccdc7::t_1f55e2b935c9c5 4-6,347-351
+  s_8815d69cdccdc7::t_c7b72c8116bde4 32-33
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_8815d69cdccdc7::t_1f55e2b935c9c5 169-172,178-179
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_8815d69cdccdc7::t_de5ff98b8eb064 4,15
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_8815d69cdccdc7::t_5d8139cfc5fa2f 5,13
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_8815d69cdccdc7::t_78edf71014c3dd 1668-1722
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  s_8815d69cdccdc7::t_2845d63a66ee5e 182-196
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  s_8815d69cdccdc7::t_597c4667e726c8 202
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_8815d69cdccdc7::t_02e535f648d92f 1507-1508
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_8815d69cdccdc7::t_4a48831764bb46 149-150
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  s_8815d69cdccdc7::t_0b72cea570d74b 13,18-20,34,43
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  s_8815d69cdccdc7::t_0a633b5610e0ff 37-39,81-93
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
+  s_8815d69cdccdc7::t_aa8a65ac4427b5 7-8,23-24
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
+  s_8815d69cdccdc7::t_8a7d110cfc388e 322-323,336
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
+  s_8815d69cdccdc7::t_93d02e740ed06e 1-92
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_8815d69cdccdc7::t_c5ae740d941d35 62-64,119-121,175-176
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
+  s_8815d69cdccdc7::t_f615c90af8f5b8 1-38
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_8815d69cdccdc7::t_1c88e214c03884 69-77,123-133,139-142,144,147,151,156,218,229-230,232-233,275,277,279,316-317,373,407-408
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_8815d69cdccdc7::t_e8319629d7e389 137-141
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_8815d69cdccdc7::t_88dba212eba9cd 40-41
+desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  s_8815d69cdccdc7::t_bb3ace66e60e50 66-68,92,101,109,124,134,140,213-214,216-217
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_8815d69cdccdc7::t_984ac1224af2c5 1256-1257
+desktop/macos/Desktop/Sources/Sound/OmiUISound.swift
+  s_8815d69cdccdc7::t_ef83d1e98df888 10-12,21-22,32-33,51,55,68-70,123,126-127
+desktop/macos/Desktop/Tests/ChatFirstDestinationParityTests.swift
+  s_8815d69cdccdc7::t_d58d2580c05b3c 30
+desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift
+  s_8815d69cdccdc7::t_3599062c2e60d0 498-517
+desktop/macos/Desktop/Tests/MemoryHubSidebarRoutingTests.swift
+  s_8815d69cdccdc7::t_21a77e5ef16faf 6-18
+desktop/macos/Desktop/Tests/OmiUISoundTests.swift
+  s_8815d69cdccdc7::t_39ddf5dcfb462b 124-136,166,228,240-241,243-244,247-248,252-253,263,275
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_8815d69cdccdc7::t_e4af18074e0a5a 70-76
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_8815d69cdccdc7::t_afbba6f7747ba4 164-165,180-181,184-186,190-191,255-256
+desktop/macos/changelog/unreleased/20260810-chat-tab-rename.json
+  s_8815d69cdccdc7::t_268c8327203a01 1-3
+desktop/macos/changelog/unreleased/20260810-home-chat-first.json
+  s_8815d69cdccdc7::t_0bcef1398ed1d7 1-3
+desktop/macos/changelog/unreleased/20260810-notch-clickthrough.json
+  s_8815d69cdccdc7::t_5e9b07251d6372 1-3
+desktop/macos/changelog/unreleased/20260810-quiet-button-actions.json
+  s_8815d69cdccdc7::t_5f062b2fc0b5f1 1-3
+desktop/macos/e2e/flows/home.yaml
+  s_8815d69cdccdc7::t_272233ad35ee6b 4,14,24,28
+desktop/macos/e2e/flows/memories.yaml
+  s_8815d69cdccdc7::t_9e85ea30b678b9 4,13-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "70da2b7383d73eb1ed9c4267027bdd68de1aef7c",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
