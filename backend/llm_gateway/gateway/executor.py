@@ -39,7 +39,6 @@ from llm_gateway.gateway.schemas import (
     RouteServingClass,
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
-from utils.llm.openrouter_model_catalog import apply_openrouter_completion_clamp
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -460,11 +459,7 @@ def _provider_request(
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
-    return apply_openrouter_completion_clamp(
-        provider_request,
-        provider=provider_ref.provider,
-        model=provider_ref.model,
-    )
+    return provider_request
 
 
 def _sanitize_openai_chat_completions_request(

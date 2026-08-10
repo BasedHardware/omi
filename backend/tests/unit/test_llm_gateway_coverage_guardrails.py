@@ -55,9 +55,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENROUTER_API_KEY'),
-    # Reads the OpenRouter /api/v1/models catalog for context and completion limits.
-    # Metadata only: no product text is generated here, so it does not belong on a lane.
-    DirectUse('utils/llm/openrouter_model_catalog.py', 'OPENROUTER_API_KEY'),
     DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
