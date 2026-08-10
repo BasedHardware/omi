@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createInMemoryLocalServiceStores,
-  createLocalService,
+  createLocalDevService,
 } from "../app-facing";
 
 const ACCOUNT_ID = "account-lifecycle-auth-fixture";
@@ -17,7 +17,7 @@ const boot = (state: LifecycleState) => {
     email: "lifecycle@example.invalid",
   });
   base.accountLifecycle.setLifecycle(ACCOUNT_ID, state);
-  const service = createLocalService({
+  const service = createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: ACCOUNT_ID,
     memoryCount: 1,

@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
-import { createInMemoryLocalServiceStores, createLocalService } from "../app-facing";
+import { createInMemoryLocalServiceStores, createLocalDevService } from "../app-facing";
 import {
   createInMemoryConversationsStore,
   type ConversationRecord,
@@ -47,7 +47,7 @@ const conversation = (folderId: string): ConversationRecord => ({
 const boot = (injected = false) => {
   const db = new Database(":memory:");
   const stores = injected ? createInMemoryLocalServiceStores() : undefined;
-  const service = createLocalService({
+  const service = createLocalDevService({
     db,
     ownerAccountId: OWNER,
     memoryCount: 1,
@@ -225,7 +225,7 @@ describe("DELETE /v1/folders/:id", () => {
       },
     );
     const db = new Database(":memory:");
-    const service = createLocalService({
+    const service = createLocalDevService({
       db,
       ownerAccountId: OWNER,
       memoryCount: 1,
@@ -288,7 +288,7 @@ describe("DELETE /v1/folders/:id", () => {
       },
     );
     const db = new Database(":memory:");
-    const service = createLocalService({
+    const service = createLocalDevService({
       db,
       ownerAccountId: OWNER,
       memoryCount: 1,

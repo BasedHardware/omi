@@ -15,7 +15,7 @@ import {
   parseSynthesizedPageJson,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 
 /**
  * Proves the bytes `/v1/memories` emits satisfy the RATIFIED synthesized-read
@@ -90,7 +90,7 @@ interface BootedService {
  * difference from the dev server is that this binds no socket.
  */
 const bootService = (): BootedService => {
-  const service = createLocalService({
+  const service = createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: OWNER_ACCOUNT_ID,
     memoryCount: MEMORY_COUNT,

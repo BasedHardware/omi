@@ -44,12 +44,12 @@ import { Database } from "bun:sqlite";
 
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { TASKS_READ_PATH } from "./tasks-read";
 
 const service = () => {
   const db = new Database(":memory:");
-  return createLocalService({
+  return createLocalDevService({
     db,
     ownerAccountId: "acct-tasks-read-test",
     memoryCount: 3,
@@ -77,7 +77,7 @@ const authed = (token: string, path: string, init: RequestInit = {}): Request =>
 const ACTIVE_EPOCH = 7;
 
 const control = async (
-  local: ReturnType<typeof createLocalService>,
+  local: ReturnType<typeof createLocalDevService>,
   path: string,
   body: unknown,
 ): Promise<Response> =>
@@ -87,7 +87,7 @@ const control = async (
     body: JSON.stringify(body),
   });
 
-const cutOver = async (local: ReturnType<typeof createLocalService>): Promise<void> => {
+const cutOver = async (local: ReturnType<typeof createLocalDevService>): Promise<void> => {
   const observation = (overrides: Record<string, unknown>) => ({
     control_revision: 1,
     account_generation: "legacy",
@@ -106,7 +106,7 @@ const cutOver = async (local: ReturnType<typeof createLocalService>): Promise<vo
 };
 
 const seedTask = async (
-  local: ReturnType<typeof createLocalService>,
+  local: ReturnType<typeof createLocalDevService>,
   overrides: Record<string, unknown> = {},
 ): Promise<void> => {
   await cutOver(local);
@@ -299,7 +299,7 @@ describe("tasks read route — the ratified shape, over the bytes", () => {
     // handles matched, the id would be a cross-reader correlation key over
     // exactly the closure the codecs exist to keep separate.
     const first = service();
-    const second = createLocalService({
+    const second = createLocalDevService({
       db: new Database(":memory:"),
       ownerAccountId: "acct-tasks-read-test",
       memoryCount: 3,

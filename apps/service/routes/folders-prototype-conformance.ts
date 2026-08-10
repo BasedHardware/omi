@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import type { ConversationRecord } from "../stores/conversations-store";
 import type { FolderRecord } from "../stores/folders-store";
 
@@ -39,7 +39,7 @@ interface Step {
 
 interface Scenario {
   readonly label: string;
-  readonly setup?: (prototype: PrototypeApi, service: ReturnType<typeof createLocalService>) => void;
+  readonly setup?: (prototype: PrototypeApi, service: ReturnType<typeof createLocalDevService>) => void;
   readonly steps: readonly Step[];
 }
 
@@ -98,7 +98,7 @@ const prototype = prototypeModule.createQaApiServer({ port: 0 });
 const address = await prototype.start();
 const prototypeBase = `http://${address.host}:${address.port}`;
 const db = new Database(":memory:");
-const service = createLocalService({
+const service = createLocalDevService({
   db,
   ownerAccountId: OWNER,
   memoryCount: 1,

@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import {
   createInMemoryLocalServiceStores,
-  createLocalService,
+  createLocalDevService,
   type LocalServiceStores,
 } from "../app-facing";
 import type { ChatGenerationSupervisor } from "../chat/generation-supervisor";
@@ -52,7 +52,7 @@ const payload = (
   ...overrides,
 });
 
-const post = (local: ReturnType<typeof createLocalService>, body: unknown): Promise<Response> =>
+const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): Promise<Response> =>
   Promise.resolve(local.app.request("/v1/chat-messages", {
     method: "POST",
     headers: { ...AUTHORIZATION(local.devToken), "content-type": "application/json" },
@@ -64,7 +64,7 @@ const bootInMemory = (
   chatSupervisor?: ChatGenerationSupervisor,
 ) => {
   const db = new Database(":memory:");
-  const local = createLocalService({
+  const local = createLocalDevService({
     db,
     stores,
     ownerAccountId: ACCOUNT,
@@ -123,7 +123,7 @@ describe("ratified /v1/chat-messages route", () => {
     const secondary = new Database(path);
     try {
       const stores = createSqliteLocalServiceStores(primary);
-      const local = createLocalService({
+      const local = createLocalDevService({
         db: primary,
         stores,
         ownerAccountId: ACCOUNT,

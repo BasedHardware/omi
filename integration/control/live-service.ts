@@ -33,13 +33,13 @@
 
 import { Database } from "bun:sqlite";
 
-import { createLocalService } from "../../apps/service/app-facing";
+import { createLocalDevService } from "../../apps/service/app-facing";
 import { LOOPBACK_HOST } from "../../apps/service/net/loopback";
 
 /** Fixed, non-secret dev key material — the same label the dev server uses. */
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
 
-const service = createLocalService({
+const service = createLocalDevService({
   db: new Database(":memory:"),
   ownerAccountId: "local-dev-user",
   memoryCount: 4,

@@ -25,7 +25,10 @@ import {
 } from "./auth/current-session";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
 import { createListenConversationFinalizer } from "./listen/conversation-finalizer";
-import { createDeterministicListenConversationProcessor } from "./listen/conversation-processor";
+import {
+  createDeterministicListenConversationProcessor,
+  type ListenConversationProcessorFactory,
+} from "./listen/conversation-processor";
 import {
   createScriptedTranscriptionSource,
   type TranscriptionSource,
@@ -135,8 +138,10 @@ export interface LocalServiceOptions {
    * The caller owns their lifecycle, including any SQLite Database handle.
    */
   readonly stores?: LocalServiceStores;
-  /** Production STT is an adapter swap; local composition uses a timed script. */
-  readonly transcriptionSource?: TranscriptionSource;
+  /** Required fail-closed adapter for production-shaped composition. */
+  readonly transcriptionSource: TranscriptionSource;
+  /** Required downstream processing adapter factory, bound to this composition's store. */
+  readonly conversationProcessorFactory: ListenConversationProcessorFactory;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
   readonly listenDefaultUnmetered?: boolean;
   /** The C1 default emits no generation frames; the next lane injects the real supervisor. */
@@ -297,7 +302,30 @@ export interface LocalService {
   };
 }
 
+export type LocalDevServiceOptions = Omit<
+  LocalServiceOptions,
+  "conversationProcessorFactory" | "transcriptionSource"
+> & {
+  /** Explicit dev/test override; omission selects the named scripted adapter. */
+  readonly transcriptionSource?: TranscriptionSource;
+  readonly conversationProcessorFactory?: ListenConversationProcessorFactory;
+};
+
+export const createLocalDevService = (options: LocalDevServiceOptions): LocalService =>
+  createLocalService({
+    ...options,
+    transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource(),
+    conversationProcessorFactory: options.conversationProcessorFactory
+      ?? createDeterministicListenConversationProcessor,
+  });
+
 export const createLocalService = (options: LocalServiceOptions): LocalService => {
+  if (options.transcriptionSource === undefined) {
+    throw new TypeError("transcriptionSource is required");
+  }
+  if (options.conversationProcessorFactory === undefined) {
+    throw new TypeError("conversationProcessorFactory is required");
+  }
   const ownsStores = options.stores === undefined;
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const conversations = stores.conversations;
@@ -548,10 +576,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     entitlement: stores.settings,
     store: stores.listen,
     segments: stores.listenSegments,
-    transcription: options.transcriptionSource ?? createScriptedTranscriptionSource(),
+    transcription: options.transcriptionSource,
     conversations: createListenConversationFinalizer(
       conversations,
-      createDeterministicListenConversationProcessor(conversations),
+      options.conversationProcessorFactory(conversations),
     ),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
     credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds

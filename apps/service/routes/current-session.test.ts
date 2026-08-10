@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { createInMemoryCurrentSessionPort } from "../auth/current-session";
 import { registerCurrentSessionRoutes } from "./current-session";
 
@@ -81,7 +81,7 @@ describe("DELETE /v1/session/current", () => {
 
   test("the real composition rejects later app-facing use and accepts sign-out replay", async () => {
     const db = new Database(":memory:");
-    const local = createLocalService({
+    const local = createLocalDevService({
       db,
       ownerAccountId: "account-a",
       memoryCount: 1,

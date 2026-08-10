@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 
 import { APP_CONTRACT_VERSION_HEADER } from "@omi-core/ratified-contracts/projections/synthesized";
 
-import { createLocalService, type LocalService } from "../app-facing";
+import { createLocalDevService, type LocalService } from "../app-facing";
 
 /**
  * COORD-contract-evolution-policy.md §4: every app-facing request declares
@@ -23,7 +23,7 @@ const ACCOUNT_TIMEZONE = "America/Los_Angeles";
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
 
 const bootService = (): LocalService =>
-  createLocalService({
+  createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: OWNER_ACCOUNT_ID,
     memoryCount: MEMORY_COUNT,

@@ -9,9 +9,11 @@ import {
   createInMemoryLocalServiceStores,
   createLocalService,
   type LocalService,
+  type LocalServiceOptions,
 } from "../app-facing";
 import { createScriptedTranscriptionSource } from "../listen/transcription-source";
 import type { TranscriptionSource } from "../listen/transcription-source";
+import { createDeterministicListenConversationProcessor } from "../listen/conversation-processor";
 import {
   createSqliteListenSegmentUnitOfWork,
   createSqliteLocalServiceStores,
@@ -62,6 +64,7 @@ const boot = (options: {
       end: 1,
       consumedSeconds: options.consumedSeconds ?? 1,
     }]),
+    conversationProcessorFactory: createDeterministicListenConversationProcessor,
     listenCredentialLeaseMilliseconds: options.credentialLeaseMilliseconds,
   });
   const server = Bun.serve({
@@ -197,6 +200,16 @@ const rawUpgradeResponse = async (
 });
 
 describe("GET /v4/listen WebSocket", () => {
+  test("production-shaped composition refuses a missing transcription adapter", () => {
+    expect(() => createLocalService({
+      db: new Database(":memory:"),
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "listen-missing-adapter",
+    } as unknown as LocalServiceOptions)).toThrow("transcriptionSource is required");
+  });
+
   test("a crash between transcript durability and usage rolls both back before retry", async () => {
     const db = new Database(":memory:");
     const baseStores = createSqliteLocalServiceStores(db);
@@ -234,6 +247,7 @@ describe("GET /v4/listen WebSocket", () => {
         { delayMs: 0, text: "rolled back", start: 0, end: 1, consumedSeconds: 1 },
         { delayMs: 0, text: "retry accepted", start: 1, end: 2, consumedSeconds: 1 },
       ]),
+      conversationProcessorFactory: createDeterministicListenConversationProcessor,
     });
     const server = Bun.serve({
       hostname: "127.0.0.1",

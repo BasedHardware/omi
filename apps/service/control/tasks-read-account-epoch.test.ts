@@ -27,7 +27,7 @@ import {
   type AccountControlProjectionStore,
 } from "./projection-store";
 import { applyWriteFence } from "./write-fence-guard";
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { createServedCounter } from "../observability/served-count";
 import { registerTasksReadRoutes, TASKS_READ_PATH } from "../routes/tasks-read";
 import { createInMemoryTasksStore } from "../stores/tasks-store";
@@ -277,7 +277,7 @@ describe("tasks read account epoch — binding proofs", () => {
 
     // Finally pin the REAL registered composition: QA control and the tasks
     // read route must see the same store created by `createLocalService`.
-    const real = createLocalService({
+    const real = createLocalDevService({
       db: new Database(":memory:"),
       ownerAccountId: ACCOUNT_A,
       memoryCount: 1,

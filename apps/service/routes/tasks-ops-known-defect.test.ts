@@ -27,7 +27,7 @@ import { describe, expect, test } from "bun:test";
 
 import { WRITE_ERRORS, WRITE_REFUSALS } from "@omi-core/ratified-contracts/write/ops";
 
-import { createLocalService, type LocalService } from "../app-facing";
+import { createLocalDevService, type LocalService } from "../app-facing";
 
 const OWNER_ACCOUNT_ID = "local-dev-user";
 const EPOCH = 7;
@@ -35,7 +35,7 @@ const EPOCH = 7;
 interface Booted { readonly service: LocalService; readonly auth: string }
 
 const boot = (): Booted => {
-  const service = createLocalService({
+  const service = createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: OWNER_ACCOUNT_ID,
     memoryCount: 2,

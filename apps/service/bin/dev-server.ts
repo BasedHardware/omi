@@ -1,7 +1,7 @@
 // domain-pending(DIV-DOMCORE-001)
 import { Database } from "bun:sqlite";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
 
@@ -120,9 +120,9 @@ const main = (): void => {
   const config = readConfig();
   const db = openDatabase(config.databasePath);
 
-  let service: ReturnType<typeof createLocalService>;
+  let service: ReturnType<typeof createLocalDevService>;
   try {
-    service = createLocalService({
+    service = createLocalDevService({
       db,
       ownerAccountId: config.ownerAccountId,
       memoryCount: config.memoryCount,

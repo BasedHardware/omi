@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 
 import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 
 /**
  * Adversarial route-hardening for `GET /v1/memories`.
@@ -74,7 +74,7 @@ const requestWithRawAuthorization = (authorization: string): Request => {
 };
 
 const bootService = (devSecretLabel: string = DEV_KEY_MATERIAL_LABEL): BootedService => {
-  const service = createLocalService({
+  const service = createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: OWNER_ACCOUNT_ID,
     memoryCount: MEMORY_COUNT,

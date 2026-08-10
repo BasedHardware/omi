@@ -28,7 +28,7 @@ import {
 
 import {
   createInMemoryLocalServiceStores,
-  createLocalService,
+  createLocalDevService,
   type LocalService,
 } from "../app-facing";
 import { WRITE_RUN_ID_HEADER } from "../observability/write-ops-counter";
@@ -55,7 +55,7 @@ interface Booted {
 }
 
 const boot = (): Booted => {
-  const service = createLocalService({
+  const service = createLocalDevService({
     db: new Database(":memory:"),
     ownerAccountId: OWNER_ACCOUNT_ID,
     memoryCount: 2,
@@ -244,7 +244,7 @@ describe("the rendered Settings entitlement is the write fence entitlement", () 
       limitReached: false,
       upgradeAvailable: true,
     });
-    const service = createLocalService({
+    const service = createLocalDevService({
       db: new Database(":memory:"),
       ownerAccountId: OWNER_ACCOUNT_ID,
       memoryCount: 2,

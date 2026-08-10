@@ -5,7 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
 
-import { createLocalService } from "../../../apps/service/app-facing";
+import { createLocalDevService } from "../../../apps/service/app-facing";
 import { createSqliteLocalServiceStores, createSqliteWriteUnitOfWork } from "./index";
 
 const OWNER = "acct-i7-crash-proof";
@@ -38,7 +38,7 @@ const envelope = JSON.stringify({
 });
 
 const request = async (
-  service: ReturnType<typeof createLocalService>,
+  service: ReturnType<typeof createLocalDevService>,
   path: string,
   init: RequestInit = {},
 ): Promise<{ readonly status: number; readonly body: string }> => {
@@ -61,7 +61,7 @@ const observe = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
-const activate = async (service: ReturnType<typeof createLocalService>): Promise<void> => {
+const activate = async (service: ReturnType<typeof createLocalDevService>): Promise<void> => {
   for (const observation of [
     observe({}),
     observe({ control_revision: 2, account_generation: "migrating" }),
@@ -82,7 +82,7 @@ const activate = async (service: ReturnType<typeof createLocalService>): Promise
   if (result.status !== 200) throw new Error(`control activation failed: ${result.status}`);
 };
 
-const postWrite = (service: ReturnType<typeof createLocalService>) => request(service, "/v1/tasks/ops", {
+const postWrite = (service: ReturnType<typeof createLocalDevService>) => request(service, "/v1/tasks/ops", {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: envelope,
@@ -119,7 +119,7 @@ const main = async (): Promise<void> => {
         ...stores,
         unitOfWork,
       });
-      const service = createLocalService({
+      const service = createLocalDevService({
         db,
         ownerAccountId: OWNER,
         memoryCount: 1,
@@ -133,7 +133,7 @@ const main = async (): Promise<void> => {
     }
 
     const beforeReplay = counts(db);
-    const service = createLocalService({
+    const service = createLocalDevService({
       db,
       ownerAccountId: OWNER,
       memoryCount: 1,

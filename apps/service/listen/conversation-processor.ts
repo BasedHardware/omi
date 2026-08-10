@@ -13,6 +13,10 @@ export interface ListenConversationProcessor {
   }): void;
 }
 
+export type ListenConversationProcessorFactory = (
+  conversations: ConversationsStore,
+) => ListenConversationProcessor;
+
 /** Deterministic local adapter: processing is complete once transcript persistence finishes. */
 export const createDeterministicListenConversationProcessor = (
   conversations: ConversationsStore,

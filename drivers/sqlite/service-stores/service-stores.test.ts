@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
-import { createLocalService } from "../../../apps/service/app-facing";
+import { createLocalDevService } from "../../../apps/service/app-facing";
 import type { AccountControlObservation } from "../../../core/control/account-control";
 import {
   SqliteAccountControlProjectionStore,
@@ -184,10 +184,10 @@ describe("the SQLite service-store adapters", () => {
     secondDb.close();
   });
 
-  test("createLocalService uses an injected bundle and retains the in-memory default", () => {
+  test("createLocalDevService uses an injected bundle and retains the in-memory default", () => {
     const sqliteDb = open(databasePath("injection"));
     const stores = createSqliteLocalServiceStores(sqliteDb);
-    const injected = createLocalService({
+    const injected = createLocalDevService({
       db: sqliteDb,
       ownerAccountId: "acct-injected",
       memoryCount: 1,
@@ -213,7 +213,7 @@ describe("the SQLite service-store adapters", () => {
     sqliteDb.close();
 
     const memoryDb = new Database(":memory:");
-    const defaulted = createLocalService({
+    const defaulted = createLocalDevService({
       db: memoryDb,
       ownerAccountId: "acct-default",
       memoryCount: 1,

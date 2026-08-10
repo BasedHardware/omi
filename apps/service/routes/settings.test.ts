@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Hono } from "hono";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { createInMemorySettingsProjectionStore } from "../control/settings-projection";
 import { createServedCounter } from "../observability/served-count";
 import { registerSettingsRoutes } from "./settings";
@@ -30,7 +30,7 @@ const authorization = (token = TOKEN): HeadersInit => ({ authorization: `Bearer 
 describe("GET /v1/settings", () => {
   test("is registered by the real composition root", async () => {
     const db = new Database(":memory:");
-    const local = createLocalService({
+    const local = createLocalDevService({
       db,
       ownerAccountId: "account-a",
       memoryCount: 1,

@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 
-import { createLocalService } from "../../../apps/service/app-facing";
+import { createLocalDevService } from "../../../apps/service/app-facing";
 import { createSqliteLocalServiceStores } from "./index";
 
 const OWNER = "acct-i5-restart-proof";
@@ -36,7 +36,7 @@ const envelope = JSON.stringify({
 });
 
 const request = async (
-  service: ReturnType<typeof createLocalService>,
+  service: ReturnType<typeof createLocalDevService>,
   path: string,
   init: RequestInit = {},
 ): Promise<{ readonly status: number; readonly body: string }> => {
@@ -68,7 +68,7 @@ const main = async (): Promise<void> => {
 
   const db = open(databasePath);
   try {
-    const service = createLocalService({
+    const service = createLocalDevService({
       db,
       ownerAccountId: OWNER,
       memoryCount: 1,
@@ -117,4 +117,3 @@ const main = async (): Promise<void> => {
 };
 
 await main();
-

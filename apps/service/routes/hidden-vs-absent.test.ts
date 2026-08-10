@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
-import { createLocalService } from "../app-facing";
+import { createLocalDevService } from "../app-facing";
 import { seedQaSnapshot } from "../qa/seed";
 
 /**
@@ -53,7 +53,7 @@ const boot = (hiddenCount: number): Booted => {
   const db = new Database(":memory:");
   // createLocalService seeds on construction; re-seed with the hidden rows and
   // then let the service's own reseed path be irrelevant to this test.
-  const service = createLocalService({
+  const service = createLocalDevService({
     db,
     ownerAccountId: OWNER,
     memoryCount: VISIBLE_MEMORIES,

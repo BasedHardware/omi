@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createInMemoryLocalServiceStores,
-  createLocalService,
+  createLocalDevService,
 } from "../app-facing";
 import type { ConversationRecord } from "../stores/conversations-store";
 
@@ -50,7 +50,7 @@ const boot = () => {
   });
   stores.conversations.upsert(OWNER, row("conversation-a"));
   stores.conversations.upsert(OWNER, row("conversation-b"));
-  const service = createLocalService({
+  const service = createLocalDevService({
     db,
     ownerAccountId: OWNER,
     memoryCount: 1,
@@ -73,7 +73,7 @@ const body = async (response: Response): Promise<unknown> => response.json();
 describe("GET /v1/conversations", () => {
   test("is registered in the default real composition with the prototype seed", async () => {
     const db = new Database(":memory:");
-    const service = createLocalService({
+    const service = createLocalDevService({
       db,
       ownerAccountId: OWNER,
       memoryCount: 1,
