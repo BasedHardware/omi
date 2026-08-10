@@ -563,7 +563,7 @@ async def test_public_lane_provider_contract_enforces_output_cap_from_caller_and
     await execute_chat_completion(
         resolved,
         build_omi_managed_credential_context(ServiceCaller(name='backend')),
-        ProviderRegistry({'openai': provider}),
+        ProviderRegistry({'openrouter': provider, 'openai': provider}),
     )
 
     provider_request = provider.calls[0].request
@@ -918,8 +918,8 @@ def test_gateway_config_inventory_and_promotion_contract():
     assert lane.active_route == lane.last_known_good
     assert lane.capabilities.streaming is False
     assert lane.capabilities.tools is False
-    assert route.primary.provider == 'openai'
-    assert route.primary.model == 'gpt-5-nano'
+    assert route.primary.provider == 'openrouter'
+    assert route.primary.model == 'openai/gpt-5.6-luna'
     assert route.artifact_digest == route.content_digest
     assert route.fallbacks == []
     assert route.retry.max_attempts == 1

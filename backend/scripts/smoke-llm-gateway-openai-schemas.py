@@ -18,7 +18,8 @@ from models.structured_extraction import ActionItemsExtraction, ConversationStru
 from utils.llm.chat import RequiresContext
 from utils.llm.gateway_client import _chat_structured_payload  # type: ignore[reportPrivateUsage]  # test script accessing internal helper
 
-PROVIDER_REF = ProviderRef(provider='openai', model='gpt-5.6-luna')
+# Match generated gateway routes: openrouter + vendor-prefixed OpenAI model id.
+PROVIDER_REF = ProviderRef(provider='openrouter', model='openai/gpt-5.6-luna')
 SMOKE_FEATURES = (
     ('chat_extraction.requires_context', RequiresContext),
     ('conversation_structure.extract.shadow', ConversationStructureExtraction),
@@ -28,7 +29,7 @@ SMOKE_FEATURES = (
 
 async def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description='Smoke-test live OpenAI acceptance of LLM gateway structured-output schemas.'
+        description='Smoke-test live OpenRouter acceptance of LLM gateway structured-output schemas.'
     )
     parser.add_argument(
         '--timeout-ms',
@@ -38,10 +39,14 @@ async def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not os.getenv('OPENAI_API_KEY'):
-        parser.error('OPENAI_API_KEY is required')
+    if not os.getenv('OPENROUTER_API_KEY'):
+        parser.error('OPENROUTER_API_KEY is required')
 
-    provider = OpenAICompatibleChatCompletionProvider()
+    provider = OpenAICompatibleChatCompletionProvider(
+        api_key_env='OPENROUTER_API_KEY',
+        base_url='https://openrouter.ai/api/v1',
+        default_headers={'X-Title': 'Omi Chat'},
+    )
     try:
         for feature, output_model in SMOKE_FEATURES:
             request = _chat_structured_payload(

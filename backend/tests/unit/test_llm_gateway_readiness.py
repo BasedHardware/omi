@@ -20,6 +20,7 @@ def test_ready_requires_service_auth(monkeypatch):
 
 def test_ready_validates_gateway_config(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'sk-or-test')
 
     response = TestClient(app).get('/ready', headers=auth_headers())
 
@@ -29,23 +30,24 @@ def test_ready_validates_gateway_config(monkeypatch):
     assert len(response.json()['lanes']) >= len(get_all_configured_features())
     assert response.json()['route_artifact_count'] >= len(get_all_configured_features()) + 2
     assert response.json()['managed_messages_provider'] == 'none'
-    assert response.json()['managed_chat_provider'] == 'openai'
+    assert response.json()['managed_chat_provider'] == 'openrouter'
 
 
 def test_ready_does_not_require_anthropic_key_after_chat_agent_migration(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'sk-or-test')
     monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
 
     response = TestClient(app).get('/ready', headers=auth_headers())
 
     assert response.status_code == 200
     assert response.json()['managed_messages_provider'] == 'none'
-    assert response.json()['managed_chat_provider'] == 'openai'
+    assert response.json()['managed_chat_provider'] == 'openrouter'
 
 
-def test_ready_fails_closed_when_managed_openai_key_is_missing(monkeypatch):
+def test_ready_fails_closed_when_managed_openrouter_key_is_missing(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
-    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
 
     response = TestClient(app).get('/ready', headers=auth_headers())
 
@@ -55,9 +57,11 @@ def test_ready_fails_closed_when_managed_openai_key_is_missing(monkeypatch):
 
 def test_ready_fails_closed_when_an_explicit_anthropic_lane_is_present(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'sk-or-test')
     monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
     monkeypatch.setattr(health, '_managed_anthropic_messages_enabled', lambda _config: True)
     monkeypatch.setattr(health, '_managed_openai_chat_enabled', lambda _config: False)
+    monkeypatch.setattr(health, '_managed_openrouter_chat_enabled', lambda _config: False)
 
     response = TestClient(app).get('/ready', headers=auth_headers())
 

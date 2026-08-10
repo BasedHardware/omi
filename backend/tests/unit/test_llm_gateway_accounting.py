@@ -100,6 +100,56 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
 
 
+def test_openrouter_gpt56_luna_rate_card_is_available() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openrouter',
+        configured_model='openai/gpt-5.6-luna',
+        route_artifact_id='route.chat_agent.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=1_000_000,
+                cached_input_tokens=0,
+                uncached_input_tokens=1_000_000,
+                output_tokens=1_000_000,
+                total_tokens=2_000_000,
+            )
+        ),
+    )
+    event = build_accounting_event(_context(), attempt)
+    assert event.rate_card_id == 'openrouter.openai.gpt-5.6-luna.2026-08-09'
+    assert event.cost_status == CostStatus.ESTIMATED
+
+
+def test_openrouter_gpt5_nano_rate_card_is_available() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openrouter',
+        configured_model='openai/gpt-5-nano',
+        route_artifact_id='route.persona_chat.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=1_000_000,
+                cached_input_tokens=0,
+                uncached_input_tokens=1_000_000,
+                output_tokens=1_000_000,
+                total_tokens=2_000_000,
+            )
+        ),
+    )
+    event = build_accounting_event(_context(), attempt)
+    assert event.rate_card_id == 'openrouter.openai.gpt-5-nano.2026-08-09'
+    assert event.cost_status == CostStatus.ESTIMATED
+
+
 def test_empty_usage_object_is_unreported_not_a_zero_cost_completion() -> None:
     metadata = openai_usage_from_response({'id': 'chatcmpl-empty', 'model': 'gpt-5.4-nano', 'usage': {}})
     trace = AttemptTrace()

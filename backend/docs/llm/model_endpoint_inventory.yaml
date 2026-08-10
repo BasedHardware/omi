@@ -70,14 +70,14 @@ model_config_features:
     pinned:
       - fair_use
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; managed product text features resolve to OpenRouter openai/gpt-5.6-luna (including former Gemini-lite and wrapped_analysis routes); web_search remains Perplexity; residual gateway Gemini native Vertex paths are out of model_config; Gemini BYOK remains unsupported and fails closed; OpenAI-family BYOK on OpenRouter-hosted routes remaps to direct OpenAI keys.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
   - surface: public_shared_conversation_chat
     code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
-    current_provider_model: gateway-only openai/gpt-5-nano
+    current_provider_model: gateway-only openrouter openai/gpt-5.6-luna
     request_shape: non-streaming plain chat with server-resolved shared transcript, at most eight user/assistant history entries, and no tools or retrieval
     gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
     migration_status: gateway_only_trusted_frontend_bff
@@ -91,10 +91,10 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: anthropic_agentic_chat
     code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStream
-    current_provider_model: anthropic/chat_agent
+    current_provider_model: openrouter/openai/gpt-5.6-luna via omi:auto:chat-agent
     request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
-    migration_status: gateway_only_fail_closed; transport failures and an open circuit return a typed gateway-unavailable error without constructing or calling a direct Anthropic client
+    gateway_lane_capability_needed: OpenAI-compatible chat-completions (or anthropic.messages BYOK) with streaming and tools on omi:auto:chat-agent
+    migration_status: gateway_only_fail_closed; managed chat_agent is OpenRouter Luna; Anthropic transport remains for Anthropic BYOK / specialist aliases; transport failures and an open circuit return a typed gateway-unavailable error without constructing a direct Anthropic client for managed traffic
     test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
@@ -133,14 +133,14 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: fair_use_classifier
     code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
-    current_provider_model: openai/fair_use pinned feature
+    current_provider_model: openrouter/openai/gpt-5.6-luna fair_use pinned feature
     request_shape: async plain chat JSON
     gateway_lane_capability_needed: generated omi:auto:fair-use lane
     migration_status: get_llm_routed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: production_like_memory_ingestion
     code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
-    current_provider_model: openai/memories feature
+    current_provider_model: openrouter/openai/gpt-5.6-luna memories feature
     request_shape: parser chain
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed

@@ -17,6 +17,7 @@ from utils.llm.model_config import (
     get_route_options,
     is_structured_output_feature,
 )
+from utils.llm.openrouter_model_names import openrouter_provider_model_name
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
@@ -281,8 +282,13 @@ def _generated_feature_route_items(
 
 
 def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
-    """Keep pilot caps explicit and disabled until an operator enables the experiment."""
-    if feature == 'session_titles' and provider == 'gemini':
+    """Keep pilot caps explicit and disabled until an operator enables the experiment.
+
+    The cap expresses how much output a session title needs, not a provider quirk, so it
+    survives repointing the feature (it was provider-gated on gemini and silently vanished
+    when session_titles moved to OpenRouter).
+    """
+    if feature == 'session_titles':
         return {
             'experiment': 'session_titles',
             'max_completion_tokens': 128,
@@ -331,6 +337,4 @@ def _credential_policy() -> dict[str, Any]:
 
 
 def _provider_model_name(provider: str, model: str) -> str:
-    if provider == 'openrouter' and model.startswith('gemini'):
-        return f'google/{model}'
-    return model
+    return openrouter_provider_model_name(provider, model)

@@ -1,175 +1,171 @@
 route_artifacts:
-  - route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
-    artifact_digest: sha256:f9900baf225db6fc1386b668d008d9fe9de391f1ea8c1b1b3de15e6486800df4
-    lane_id: omi:auto:public-shared-conversation-chat
-    surface: openai.chat_completions
-    primary:
-      provider: openai
-      model: gpt-5-nano
-    fallbacks: []
-    provider_options:
-      reasoning_effort: minimal
-    output_budget:
-      experiment: public_shared_conversation_chat
-      max_completion_tokens: 600
-    timeouts:
-      request_ms: 20000
-    retry:
-      max_attempts: 1
-    capabilities:
-      text_input: true
-      streaming: false
-      structured_output: none
-      tools: false
-    evidence:
-      benchmark_snapshot: contract.public_shared_conversation_chat.2026_07_19
-      eval_report: backend.tests.unit.test_public_shared_conversation_chat
-      benchmark_source: omi_eval
-      dev_only: false
-    rollout:
-      stage: active
-      percent: 100
-    credential_policy:
-      mode: omi_paid
-      allow_byok_to_omi_paid_fallback: false
-      fallback_eligible_failure_classes: []
-      never_fallback_failure_classes:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
-    fallback_policy:
-      fallback_on: []
-      never_fallback_on:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
-
-  - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:2ef9eea0738cd58dfdf9a70b89f8fc5aaf6ae1b2278e67987fe1d3d6a17c0c2e
-    lane_id: omi:auto:chat-structured
-    surface: openai.chat_completions
-    primary:
-      provider: openai
-      model: gpt-5.6-luna
-    fallbacks:
-      - provider: openai
-        model: gpt-5.6-luna
-    provider_options:
-      reasoning_effort: low
-    timeouts:
-      request_ms: 30000
-    retry:
-      max_attempts: 1
-    capabilities:
-      text_input: true
-      streaming: false
-      structured_output: json_schema
-      tools: false
-    evidence:
-      benchmark_snapshot: bench.omi.chat_structured.2026_06_27
-      eval_report: eval.chat_extraction_requires_context.2026_06_27
-      benchmark_source: omi_eval
-      dev_only: false
-    rollout:
-      stage: shadow
-      percent: 0
-    credential_policy:
-      mode: omi_paid
-      allow_byok_to_omi_paid_fallback: false
-      fallback_eligible_failure_classes:
-        - timeout_before_output
-        - provider_429_omi_paid
-        - provider_5xx_omi_paid
-      never_fallback_failure_classes:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
-    fallback_policy:
-      fallback_on:
-        - timeout_before_output
-        - provider_429_omi_paid
-        - provider_5xx_omi_paid
-      never_fallback_on:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
-
-  - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:13b7df3652fd6015ef5578deda43bd0e97f914c6cf66deb60e296c167a497507
-    lane_id: omi:auto:chat-structured
-    surface: openai.chat_completions
-    # The gateway LKG mirrors the active model so shadow serving and fallback use
-    # the same gateway-only model policy without changing legacy chat extraction.
-    primary:
-      provider: openai
-      model: gpt-5.6-luna
-    fallbacks: []
-    provider_options:
-      reasoning_effort: low
-    timeouts:
-      request_ms: 30000
-    retry:
-      max_attempts: 1
-    capabilities:
-      text_input: true
-      streaming: false
-      structured_output: json_schema
-      tools: false
-    evidence:
-      benchmark_snapshot: bench.omi.chat_structured.2026_06_20
-      eval_report: eval.chat_extraction_requires_context.2026_06_20
-      benchmark_source: omi_eval
-      dev_only: false
-    rollout:
-      stage: active
-      percent: 100
-    credential_policy:
-      mode: omi_paid
-      allow_byok_to_omi_paid_fallback: false
-      fallback_eligible_failure_classes:
-        - timeout_before_output
-        - provider_429_omi_paid
-        - provider_5xx_omi_paid
-      never_fallback_failure_classes:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
-    fallback_policy:
-      fallback_on:
-        - timeout_before_output
-        - provider_429_omi_paid
-        - provider_5xx_omi_paid
-      never_fallback_on:
-        - byok_auth
-        - byok_quota
-        - byok_rate_limit
-        - byok_unsupported_provider
-        - missing_byok_key
-        - capability_mismatch
-        - provider_invalid_request
-        - invalid_config
+- route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
+  artifact_digest: sha256:17fd222062a22973f979ffef0b5cf5ef6c90d569e56c6e8feff4893fc01da2d9
+  lane_id: omi:auto:public-shared-conversation-chat
+  surface: openai.chat_completions
+  primary:
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+  fallbacks: []
+  provider_options:
+    reasoning_effort: minimal
+  output_budget:
+    experiment: public_shared_conversation_chat
+    max_completion_tokens: 600
+  timeouts:
+    request_ms: 20000
+  retry:
+    max_attempts: 1
+  capabilities:
+    text_input: true
+    streaming: false
+    structured_output: none
+    tools: false
+  evidence:
+    benchmark_snapshot: contract.public_shared_conversation_chat.2026_07_19
+    eval_report: backend.tests.unit.test_public_shared_conversation_chat
+    benchmark_source: omi_eval
+    dev_only: false
+  rollout:
+    stage: active
+    percent: 100
+  credential_policy:
+    mode: omi_paid
+    allow_byok_to_omi_paid_fallback: false
+    fallback_eligible_failure_classes: []
+    never_fallback_failure_classes:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config
+  fallback_policy:
+    fallback_on: []
+    never_fallback_on:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config
+- route_artifact_id: route.chat_structured.2026_06_27.001
+  artifact_digest: sha256:62c281bd81791c15dd4665a6f9fa0a675af63b9211b77b868d8b6c777641d78e
+  lane_id: omi:auto:chat-structured
+  surface: openai.chat_completions
+  primary:
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+  fallbacks:
+  - provider: openrouter
+    model: openai/gpt-5.6-luna
+  provider_options:
+    reasoning_effort: low
+  timeouts:
+    request_ms: 30000
+  retry:
+    max_attempts: 1
+  capabilities:
+    text_input: true
+    streaming: false
+    structured_output: json_schema
+    tools: false
+  evidence:
+    benchmark_snapshot: bench.omi.chat_structured.2026_06_27
+    eval_report: eval.chat_extraction_requires_context.2026_06_27
+    benchmark_source: omi_eval
+    dev_only: false
+  rollout:
+    stage: shadow
+    percent: 0
+  credential_policy:
+    mode: omi_paid
+    allow_byok_to_omi_paid_fallback: false
+    fallback_eligible_failure_classes:
+    - timeout_before_output
+    - provider_429_omi_paid
+    - provider_5xx_omi_paid
+    never_fallback_failure_classes:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config
+  fallback_policy:
+    fallback_on:
+    - timeout_before_output
+    - provider_429_omi_paid
+    - provider_5xx_omi_paid
+    never_fallback_on:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config
+- route_artifact_id: route.chat_structured.2026_06_20.001
+  artifact_digest: sha256:8ec9d6cf3de3efdcc98793141a35fa6002c377b77c265d1b04b568e823d452be
+  lane_id: omi:auto:chat-structured
+  surface: openai.chat_completions
+  primary:
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+  fallbacks: []
+  provider_options:
+    reasoning_effort: low
+  timeouts:
+    request_ms: 30000
+  retry:
+    max_attempts: 1
+  capabilities:
+    text_input: true
+    streaming: false
+    structured_output: json_schema
+    tools: false
+  evidence:
+    benchmark_snapshot: bench.omi.chat_structured.2026_06_20
+    eval_report: eval.chat_extraction_requires_context.2026_06_20
+    benchmark_source: omi_eval
+    dev_only: false
+  rollout:
+    stage: active
+    percent: 100
+  credential_policy:
+    mode: omi_paid
+    allow_byok_to_omi_paid_fallback: false
+    fallback_eligible_failure_classes:
+    - timeout_before_output
+    - provider_429_omi_paid
+    - provider_5xx_omi_paid
+    never_fallback_failure_classes:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config
+  fallback_policy:
+    fallback_on:
+    - timeout_before_output
+    - provider_429_omi_paid
+    - provider_5xx_omi_paid
+    never_fallback_on:
+    - byok_auth
+    - byok_quota
+    - byok_rate_limit
+    - byok_unsupported_provider
+    - missing_byok_key
+    - capability_mismatch
+    - provider_invalid_request
+    - invalid_config

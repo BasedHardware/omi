@@ -66,7 +66,9 @@ def test_chat_completions_invalid_json_records_pre_route_rejection(monkeypatch, 
 def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -86,11 +88,12 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     # traffic is served by the last-known-good route. The LKG primary uses the
     # gateway-only chat_extraction policy (gpt-5.6-luna), aligned with the
     # direct product route while shadow-only.
-    assert provider.calls[0].model == 'gpt-5.6-luna'
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].model == 'openai/gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'openai/gpt-5.6-luna'
     # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
     # invalid_request_error param=temperature ("Only the default (1) value is supported").
-    # Gateway strips non-default temperatures so callers cannot trip that 400.
+    # Gateway strips non-default temperatures so callers cannot trip that 400 — including
+    # when the same model is reached through OpenRouter's openai/ namespace.
     assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
@@ -121,7 +124,9 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     recorded: list[dict] = []
     provider = FakeChatCompletionProvider([ProviderFailure(failure_class, provider_rejection=provider_rejection)])
     monkeypatch.setattr(openai_compatible, 'observe_error', lambda *_args, **kwargs: recorded.append(kwargs))
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -136,8 +141,8 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     assert len(recorded) == 1
     error = recorded[0]['error']
     assert error.failure_class == failure_class
-    assert error.provider == 'openai'
-    assert error.model == 'gpt-5.6-luna'
+    assert error.provider == 'openrouter'
+    assert error.model == 'openai/gpt-5.6-luna'
     assert error.provider_rejection == provider_rejection
 
 
@@ -148,14 +153,16 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
 def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, failure_class):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider([ProviderFailure(failure_class)])
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
             json=valid_request(),
             headers={
                 **auth_headers(),
-                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+                'X-Omi-Byok-OpenRouter-Key': 'sk-user-byok',
             },
         )
     finally:
@@ -178,17 +185,74 @@ def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, 
         assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
 
 
-def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
+def test_openai_family_byok_on_an_openrouter_route_uses_the_forwarded_openai_key(monkeypatch):
+    """The backend forwards X-Omi-Byok-OpenAI-Key for OpenRouter-hosted OpenAI models.
+
+    Checking the route's literal openrouter provider would fail closed with
+    missing_byok_key on a key the user did supply, so the route follows the key to the
+    vendor and drops the openai/ prefix.
+    """
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
-    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
             json=valid_request(),
             headers={
                 **auth_headers(),
-                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-openai',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert provider.calls[0].provider == 'openai'
+    assert provider.calls[0].model == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+
+
+def test_byok_without_the_vendor_key_still_fails_closed(monkeypatch):
+    """The remap is key-driven: an unrelated vendor key must not admit the request."""
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-Anthropic-Key': 'sk-user-anthropic',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()['error']['failure_class'] == FailureClass.MISSING_BYOK_KEY.value
+    assert not provider.calls
+
+
+def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenRouter-Key': 'sk-user-byok',
             },
         )
     finally:
@@ -223,7 +287,9 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
         ]
     )
     monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -262,7 +328,33 @@ def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged()
         ],
     )
     resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
-    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='openai/gpt-5.6-luna'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    assert forwarded['messages'] == request['messages']
+
+
+def test_gateway_provider_body_keeps_gpt56_cache_fields_for_vendor_prefixed_model():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openrouter', model='openai/gpt-5.6-luna'))
 
     assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
     assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
@@ -304,7 +396,9 @@ def test_metadata_feature_never_enters_the_accounting_context(monkeypatch):
 
     monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -321,14 +415,16 @@ def test_metadata_feature_never_enters_the_accounting_context(monkeypatch):
 def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
             json=valid_request(),
             headers={
                 **auth_headers(),
-                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+                'X-Omi-Byok-OpenRouter-Key': 'sk-user-byok',
             },
         )
     finally:
@@ -404,7 +500,9 @@ def test_image_generation_normalizes_auto_defaults_for_estimated_accounting(monk
 def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         request = _chat_structured_payload(
             'Extract action items.',
@@ -438,7 +536,9 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
 def test_chat_completions_forwards_conversation_structure_extraction_strict_schema(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         request = _chat_structured_payload(
             'Extract conversation structure.',
@@ -514,9 +614,9 @@ def test_chat_completions_rejects_unknown_request_parameter(monkeypatch):
     assert response.json()['error']['param'] == 'unexpected_parameter'
 
 
-def test_chat_completions_fails_closed_when_openai_key_is_not_configured(monkeypatch):
+def test_chat_completions_fails_closed_when_openrouter_key_is_not_configured(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
-    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
 
     response = TestClient(app).post('/v1/chat/completions', json=valid_request(), headers=auth_headers())
 
@@ -530,7 +630,7 @@ def test_streaming_provider_setup_failure_returns_json_error_before_streaming(mo
     monkeypatch.setattr(openai_compatible, 'observe_error', lambda *_args, **kwargs: recorded.append(kwargs))
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
     app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
-        {'openai': FailingStreamProvider()}
+        {'openrouter': FailingStreamProvider(), 'openai': FailingStreamProvider()}
     )
     try:
         response = TestClient(app).post('/v1/chat/completions', json=valid_request(stream=True), headers=auth_headers())
@@ -588,7 +688,7 @@ async def test_streaming_cancellation_before_output_records_cancelled(monkeypatc
             request,
             ServiceCaller(name='backend'),
             _streaming_enabled_gateway_config(),
-            ProviderRegistry({'openai': CancellingStreamProvider()}),
+            ProviderRegistry({'openrouter': CancellingStreamProvider(), 'openai': CancellingStreamProvider()}),
         )
 
     assert len(recorded) == 1
@@ -630,7 +730,9 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
 
     monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -638,7 +740,7 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
             headers={
                 **auth_headers(),
                 'x-omi-request-id': request_id,
-                'x-omi-byok-openai-key': 'sk-test-byok',
+                'x-omi-byok-openrouter-key': 'sk-test-byok',
             },
         )
     finally:
@@ -675,7 +777,9 @@ def test_streaming_payload_text_cannot_fake_done_marker(monkeypatch):
     provider = TerminalStreamProvider([b'data: {"choices":[{"delta":{"content":"data: [DONE]"}}]}\n\n'])
     monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry(
+        {'openrouter': provider, 'openai': provider}
+    )
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
@@ -707,7 +811,7 @@ async def test_streaming_midstream_provider_failure_records_error_exactly_once(m
         first_chunk=b'data: {"choices":[]}\n\n',
         stream=failing_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model='openai/gpt-5.6-luna',
         fallback_used=False,
         fallback_reason=None,
     )
@@ -745,7 +849,7 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
             first_chunk=b'data: {"choices":[]}\n\n',
             stream=remaining_stream(),
             provider='openai',
-            model='gpt-5.6-luna',
+            model='openai/gpt-5.6-luna',
             fallback_used=False,
             fallback_reason=None,
         ),

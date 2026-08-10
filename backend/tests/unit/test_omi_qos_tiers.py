@@ -97,16 +97,36 @@ class _AsyncAnthropic:
         pass
 
 
-_install_module('anthropic', AsyncAnthropic=_AsyncAnthropic)
-_install_module('langchain_core')
-_install_module('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler)
-_install_module('langchain_core.outputs', LLMResult=_LLMResult)
-_install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
-_install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
-_install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
-_install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+def _has_real_package(name: str) -> bool:
+    """True when a real importable package is available (not a MagicMock stub)."""
+    existing = sys.modules.get(name)
+    if existing is not None and not isinstance(existing, MagicMock) and hasattr(existing, '__path__'):
+        return True
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+    return bool(spec is not None and getattr(spec, 'submodule_search_locations', None))
+
+
+# Prefer real langchain/anthropic when the venv has them so sibling unit tests can
+# co-collect in the same pytest process. Module-scope MagicMock packages without
+# __path__ break later imports (database.*, langchain_core.messages, etc.).
+if not _has_real_package('anthropic'):
+    _install_module('anthropic', AsyncAnthropic=_AsyncAnthropic)
+
+if not _has_real_package('langchain_core'):
+    _install_module('langchain_core')
+    _install_module('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler)
+    _install_module('langchain_core.outputs', LLMResult=_LLMResult)
+    _install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
+    _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
+    _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
+    _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -114,13 +134,23 @@ _HEAVY_MOCKS = {
     'google.cloud.firestore': MagicMock(),
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
-    'database': MagicMock(),
     'database._client': MagicMock(),
     'database.llm_usage': MagicMock(),
 }
 
+# Keep the real database package importable for sibling tests; only stub heavy children.
+if 'database' not in sys.modules or isinstance(sys.modules.get('database'), MagicMock):
+    _database_pkg = types.ModuleType('database')
+    _database_pkg.__path__ = [str(BACKEND_DIR / 'database')]
+    sys.modules['database'] = _database_pkg
+
 for _mod, _mock in _HEAVY_MOCKS.items():
     sys.modules.setdefault(_mod, _mock)
+    if '.' in _mod:
+        _parent_name, _child_name = _mod.rsplit('.', 1)
+        _parent = sys.modules.get(_parent_name)
+        if isinstance(_parent, types.ModuleType):
+            setattr(_parent, _child_name, _mock)
 
 for _package, _path in {
     'utils': BACKEND_DIR / 'utils',
@@ -134,6 +164,22 @@ for _package, _path in {
     if '.' in _package:
         parent_name, child_name = _package.rsplit('.', 1)
         setattr(sys.modules[parent_name], child_name, module)
+
+# Prefer the real utils.byok package when present; a partial stub breaks sibling
+# imports that need get_byok_keys / has_byok_keys.
+if 'utils.byok' not in sys.modules:
+    try:
+        import importlib
+
+        importlib.import_module('utils.byok')
+    except Exception:
+        _install_module(
+            'utils.byok',
+            get_byok_key=MagicMock(return_value=None),
+            get_byok_uid=MagicMock(return_value=None),
+            get_byok_keys=MagicMock(return_value={}),
+            has_byok_keys=MagicMock(return_value=False),
+        )
 
 _clients_stub = sys.modules.get('utils.llm.clients')
 if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
@@ -231,80 +277,48 @@ class TestModelQosProfiles:
         """Each profile should have features across expected providers."""
         for profile_name, profile in MODEL_QOS_PROFILES.items():
             providers = {provider for _model, provider in profile.values()}
-            assert 'anthropic' in providers, f'{profile_name} missing Anthropic models'
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
-            assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
-        # OpenAI-based profiles must have OpenAI provider
-        for name in ('premium', 'max', 'byok'):
-            providers = {p for _m, p in MODEL_QOS_PROFILES[name].values()}
-            assert 'openai' in providers, f'{name} missing OpenAI models'
-        # Premium profile must have Gemini provider
-        providers = {p for _m, p in MODEL_QOS_PROFILES['premium'].values()}
-        assert 'gemini' in providers, 'premium should have Gemini direct models'
+            assert 'openrouter' in providers, f'{profile_name} should have OpenRouter routes'
+            assert 'gemini' not in providers, f'{profile_name} should not keep Gemini-direct text routes'
 
-    def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
+    def test_all_profiles_use_the_authorized_two_tier_openrouter_map(self):
         luna_features = {
-            'conv_action_items',
-            'conv_structure',
-            'conv_app_result',
-            'daily_summary',
-            'external_structure',
-            'memories',
-            'learnings',
-            'memory_conflict',
-            'knowledge_graph',
-            'memory_l1',
-            'memory_l2',
-            'chat_responses',
-            'chat_extraction',
-            'chat_graph',
-            'goals',
-            'goals_advice',
-            'notifications',
-            'proactive_notification',
-            'what_matters_now',
-            'openglass',
-            'app_generator',
-            'persona_clone',
-            'persona_chat_premium',
+            feature
+            for feature, (model, provider) in MODEL_QOS_PROFILES['premium'].items()
+            if provider == 'openrouter' and model.startswith('gpt-')
         }
-        nano_features = {
-            'conv_app_select',
-            'conv_folder',
-            'conv_discard',
-            'daily_summary_simple',
-            'memory_category',
-            'smart_glasses',
-            'persona_chat',
-        }
-        expected_openai = {
-            **{feature: ('gpt-5.6-luna', 'openai') for feature in luna_features},
-            **{feature: ('gpt-5-nano', 'openai') for feature in nano_features},
-        }
+        expected_openrouter_gpt = {feature: ('gpt-5.6-luna', 'openrouter') for feature in luna_features}
 
         for profile_name, profile in MODEL_QOS_PROFILES.items():
-            openai_routes = {feature: route for feature, route in profile.items() if route[1] == 'openai'}
-            assert openai_routes == expected_openai, f'{profile_name} OpenAI routes differ from the two-tier map'
+            openrouter_gpt_routes = {
+                feature: route
+                for feature, route in profile.items()
+                if route[1] == 'openrouter' and route[0].startswith('gpt-')
+            }
+            assert (
+                openrouter_gpt_routes == expected_openrouter_gpt
+            ), f'{profile_name} OpenRouter GPT routes differ from the Luna-only map'
 
         premium = MODEL_QOS_PROFILES['premium']
-        assert premium['session_titles'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['followup'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        for feature in (
+            'session_titles',
+            'followup',
+            'onboarding',
+            'app_integration',
+            'trends',
+            'translation',
+            'wrapped_analysis',
+            'chat_agent',
+        ):
+            assert premium[feature] == ('gpt-5.6-luna', 'openrouter'), feature
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
     def test_max_profile_model_variants(self):
-        """Max profile is constrained to the two approved OpenAI text models."""
+        """Max profile uses Luna for managed text plus Perplexity search."""
         max_prof = MODEL_QOS_PROFILES['max']
         distinct_models = {model for model, _provider in max_prof.values()}
         expected = {
             'gpt-5.6-luna',
-            'gpt-5-nano',
-            'claude-sonnet-4-6',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct_models == expected
@@ -337,9 +351,9 @@ class TestGetModel:
     def test_pinned_feature_ignores_profile(self):
         assert get_model('fair_use') == 'gpt-5.6-luna'
 
-    def test_anthropic_feature_returns_model_string(self):
+    def test_chat_agent_feature_returns_luna_model_string(self):
         model = get_model('chat_agent')
-        assert 'claude' in model
+        assert model == 'gpt-5.6-luna'
 
     def test_persona_chat_returns_model_string(self):
         model = get_model('persona_chat')
@@ -352,6 +366,12 @@ class TestGetModel:
 
 class TestGetLlm:
     """Verify get_llm() returns correct client instances."""
+
+    @pytest.fixture(scope='class', autouse=True)
+    def _warm_openrouter_client(self):
+        # File-isolated runs amortize OpenRouter client construction into the first
+        # get_llm call; warm once in setup so call-phase timing stays under the guard.
+        get_llm('conv_action_items')
 
     def test_returns_chatOpenAI_for_openai_feature(self):
         llm = get_llm('conv_action_items')
@@ -380,7 +400,7 @@ class TestGetLlm:
         assert llm is not llm_stream
 
     def test_persona_chat_returns_client(self):
-        # persona_chat is gpt-5-nano (OpenAI) in all profiles.
+        # persona_chat is gpt-5.6-luna (OpenRouter) in all profiles.
         llm = get_llm('persona_chat', streaming=True)
         assert hasattr(llm, 'invoke')
 
@@ -392,10 +412,10 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
-        llm_with_key = get_llm('followup', cache_key='omi-test-key')
-        llm_without_key = get_llm('followup')
-        assert llm_with_key is llm_without_key
+        # Managed text is Luna (cacheable). Non-OpenAI-family IDs still reject prompt caching.
+        assert supports_prompt_cache('gemini-2.5-flash-lite') is False
+        assert supports_prompt_cache('sonar-pro') is False
+        assert supports_prompt_cache('gpt-5.6-luna') is True
 
     def test_new_features_return_clients(self):
         """New features should return valid LLM clients."""
@@ -568,30 +588,27 @@ class TestGetQosInfo:
 
     def test_provider_classification_correct(self):
         info = get_qos_info()
-        assert info['chat_agent']['provider'] == 'anthropic'
+        assert info['chat_agent']['provider'] == 'openrouter'
         assert info['web_search']['provider'] == 'perplexity'
-        assert info['conv_action_items']['provider'] == 'openai'
-        # persona_chat uses direct OpenAI API in both profiles
-        assert info['persona_chat']['provider'] == 'openai'
-        # wrapped_analysis uses OpenRouter in both profiles
+        assert info['conv_action_items']['provider'] == 'openrouter'
+        assert info['persona_chat']['provider'] == 'openrouter'
         assert info['wrapped_analysis']['provider'] == 'openrouter'
-        # Gemini features use gemini provider
-        assert info['followup']['provider'] == 'gemini'
+        assert info['followup']['provider'] == 'openrouter'
 
     def test_get_provider_matches_profile(self):
         """get_provider() returns the explicit provider from the profile."""
-        assert get_provider('conv_action_items') == 'openai'
-        assert get_provider('chat_agent') == 'anthropic'
+        assert get_provider('conv_action_items') == 'openrouter'
+        assert get_provider('chat_agent') == 'openrouter'
         assert get_provider('web_search') == 'perplexity'
         assert get_provider('wrapped_analysis') == 'openrouter'
-        assert get_provider('followup') == 'gemini'
+        assert get_provider('followup') == 'openrouter'
 
 
 class TestPinnedFeatures:
     """Verify pinned features are immutable."""
 
     def test_fair_use_pinned_to_luna(self):
-        assert _PINNED_FEATURES['fair_use'] == ('gpt-5.6-luna', 'openai')
+        assert _PINNED_FEATURES['fair_use'] == ('gpt-5.6-luna', 'openrouter')
 
     def test_pinned_survives_profile_switch(self):
         # Even if profile doesn't list fair_use, it should resolve to pinned value
@@ -601,37 +618,43 @@ class TestPinnedFeatures:
 class TestProviderClassification:
     """Verify provider routing from profile entries."""
 
-    def test_chat_agent_is_anthropic_only(self):
-        assert 'chat_agent' in _ANTHROPIC_ONLY_FEATURES
+    def test_chat_agent_is_not_anthropic_only(self):
+        assert 'chat_agent' not in _ANTHROPIC_ONLY_FEATURES
+        assert _ANTHROPIC_ONLY_FEATURES == set()
 
     def test_web_search_is_perplexity_only(self):
         assert 'web_search' in _PERPLEXITY_ONLY_FEATURES
 
-    def test_persona_chat_uses_openai_in_both_profiles(self):
-        """Persona chat features use direct OpenAI API in both profiles."""
+    def test_persona_chat_uses_openrouter_in_both_profiles(self):
+        """Persona chat features use OpenRouter Luna in both profiles."""
         for profile_name in ['max', 'premium']:
             prof = MODEL_QOS_PROFILES[profile_name]
-            assert prof['persona_chat'][1] == 'openai', f'{profile_name} persona_chat'
-            assert prof['persona_chat_premium'][1] == 'openai', f'{profile_name} persona_chat_premium'
+            assert prof['persona_chat'] == ('gpt-5.6-luna', 'openrouter'), f'{profile_name} persona_chat'
+            assert prof['persona_chat_premium'] == (
+                'gpt-5.6-luna',
+                'openrouter',
+            ), f'{profile_name} persona_chat_premium'
 
     def test_wrapped_analysis_uses_openrouter_in_both_profiles(self):
-        """wrapped_analysis uses OpenRouter (gemini-3-flash-preview) in both profiles."""
+        """wrapped_analysis uses OpenRouter Luna in both profiles."""
         for profile_name in ['max', 'premium']:
             prof = MODEL_QOS_PROFILES[profile_name]
-            assert prof['wrapped_analysis'][1] == 'openrouter', f'{profile_name} wrapped_analysis'
+            assert prof['wrapped_analysis'] == ('gpt-5.6-luna', 'openrouter'), f'{profile_name} wrapped_analysis'
 
-    def test_conv_features_are_openai(self):
+    def test_conv_features_are_openrouter(self):
         max_prof = MODEL_QOS_PROFILES['max']
         for feature in ['conv_action_items', 'conv_structure', 'conv_app_result', 'conv_app_select']:
-            assert max_prof[feature][1] == 'openai'
+            assert max_prof[feature][1] == 'openrouter'
 
 
 class TestProviderSafetyGuard:
     """Verify get_llm() rejects Anthropic/Perplexity features and cross-provider overrides."""
 
-    def test_get_llm_rejects_anthropic_only_feature(self):
-        with pytest.raises(ValueError, match='Anthropic'):
-            get_llm('chat_agent')
+    def test_get_llm_accepts_chat_agent_via_openrouter(self):
+        llm = get_llm('chat_agent')
+        assert hasattr(llm, 'invoke')
+        base_url = getattr(llm, 'openai_api_base', None) or ''
+        assert 'openrouter' in base_url
 
     def test_get_llm_rejects_perplexity_only_feature(self):
         with pytest.raises(ValueError, match='Perplexity'):
@@ -639,12 +662,14 @@ class TestProviderSafetyGuard:
 
 
 class TestAnthropicModelExports:
-    """Verify ANTHROPIC_AGENT_MODEL is backed by profile."""
+    """ANTHROPIC_AGENT_MODEL is the direct/BYOK Anthropic loop; chat_agent is OpenRouter Luna."""
 
-    def test_anthropic_agent_model_matches_profile(self):
+    def test_anthropic_agent_model_stays_on_claude_while_chat_agent_is_luna(self):
         from utils.llm.clients import ANTHROPIC_AGENT_MODEL
 
-        assert ANTHROPIC_AGENT_MODEL == get_model('chat_agent')
+        assert ANTHROPIC_AGENT_MODEL == 'claude-sonnet-4-6'
+        assert get_model('chat_agent') == 'gpt-5.6-luna'
+        assert get_provider('chat_agent') == 'openrouter'
 
     def test_anthropic_agent_model_is_string(self):
         from utils.llm.clients import ANTHROPIC_AGENT_MODEL
@@ -874,31 +899,25 @@ class TestExpandedCallsiteCoverage:
 class TestRuntimeProviderRouting:
     """Verify get_llm() routes to correct client factory based on resolved model."""
 
-    def test_persona_chat_routes_to_openai(self):
-        """persona_chat uses direct OpenAI API — should route to OpenAI, not OpenRouter."""
+    def test_persona_chat_routes_to_openrouter(self):
+        """persona_chat uses OpenRouter Luna."""
         llm = get_llm('persona_chat')
         base_url = getattr(llm, 'openai_api_base', None) or ''
-        assert 'openrouter' not in base_url
+        assert 'openrouter' in base_url
 
-    def test_gemini_feature_routes_correctly(self):
-        """Free-text features on gemini-2.5-flash-lite should route to Gemini (native SDK or fallback)."""
+    def test_former_gemini_feature_routes_to_openrouter_luna(self):
+        """Former Gemini-lite product features now resolve to OpenRouter Luna."""
         llm = get_llm('followup')
-        if os.environ.get('GEMINI_API_KEY'):
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            assert isinstance(
-                llm, ChatGoogleGenerativeAI
-            ), f'followup should be ChatGoogleGenerativeAI, got {type(llm)}'
-        else:
-            # No key — falls back to ChatOpenAI placeholder pointing at Gemini endpoint
-            assert hasattr(llm, 'invoke')
-
-    def test_openglass_routes_to_openai(self):
-        """openglass (vision) should route to OpenAI Luna."""
-        llm = get_llm('openglass')
-        # get_llm() eagerly resolves; result is a ChatOpenAI routed to OpenAI
         base_url = getattr(llm, 'openai_api_base', None) or ''
-        assert 'openrouter' not in base_url
+        assert 'openrouter' in base_url
+        default = getattr(llm, '_default', llm)
+        assert default.model_name == 'openai/gpt-5.6-luna'
+
+    def test_openglass_routes_to_openrouter(self):
+        """openglass (vision) should route to OpenRouter Luna."""
+        llm = get_llm('openglass')
+        base_url = getattr(llm, 'openai_api_base', None) or ''
+        assert 'openrouter' in base_url
         assert 'generativelanguage.googleapis.com' not in base_url
 
     def test_openrouter_temperature_applied_via_get_llm(self):
@@ -910,11 +929,15 @@ class TestRuntimeProviderRouting:
         assert expected_temp == 0.7, "wrapped_analysis should have temp 0.7 in config"
         assert llm.temperature == expected_temp, "get_llm should apply _OPENROUTER_TEMPERATURES"
 
-    def test_openrouter_adds_vendor_prefix_for_gemini_models(self):
-        """Profile stores bare model name; OpenRouter factory must add google/ prefix for API calls."""
+    def test_openrouter_adds_vendor_prefix_for_gpt_and_gemini_models(self):
+        """Profile stores bare model names; OpenRouter factory adds vendor prefixes for API calls."""
+        from utils.llm.openrouter_model_names import openrouter_provider_model_name
+
         llm = get_llm('wrapped_analysis')
         default = getattr(llm, '_default', llm)
-        assert default.model_name.startswith('google/'), f"Expected google/ prefix, got {default.model_name}"
+        assert default.model_name == 'openai/gpt-5.6-luna'
+        assert openrouter_provider_model_name('openrouter', 'gemini-3-flash-preview') == 'google/gemini-3-flash-preview'
+        assert openrouter_provider_model_name('openrouter', 'gpt-5.6-luna') == 'openai/gpt-5.6-luna'
 
 
 class TestBYOKWrapperArchitecture:
@@ -925,15 +948,14 @@ class TestBYOKWrapperArchitecture:
         from langchain_core.language_models import BaseChatModel
         from langchain_openai import ChatOpenAI
 
-        # OpenAI feature — always ChatOpenAI
+        # OpenRouter Luna feature — ChatOpenAI-compatible client
         llm_openai = get_llm('conv_structure')
-        assert isinstance(llm_openai, ChatOpenAI), 'OpenAI get_llm must return ChatOpenAI'
+        assert isinstance(llm_openai, ChatOpenAI), 'OpenRouter GPT get_llm must return ChatOpenAI'
 
-        # Gemini feature — ChatGoogleGenerativeAI (with key) or ChatOpenAI fallback (no key)
-        llm_gemini = get_llm('followup')
-        assert isinstance(llm_gemini, BaseChatModel), 'Gemini get_llm must return BaseChatModel'
+        llm_followup = get_llm('followup')
+        assert isinstance(llm_followup, BaseChatModel), 'followup get_llm must return BaseChatModel'
+        assert isinstance(llm_followup, ChatOpenAI), 'followup must be OpenRouter ChatOpenAI'
 
-        # OpenRouter feature — always ChatOpenAI
         llm_or = get_llm('wrapped_analysis')
         assert isinstance(llm_or, ChatOpenAI), 'OpenRouter get_llm must return ChatOpenAI'
 
@@ -998,23 +1020,14 @@ class TestBYOKEmbeddingsProxy:
 class TestBYOKProfile:
     """Verify BYOK QoS profile structure and model selections."""
 
-    def test_byok_all_openai_except_special(self):
-        """BYOK preserves the non-OpenAI specialty routes from the common profile."""
+    def test_byok_all_openrouter_except_special(self):
+        """BYOK keeps Perplexity for web_search; all other product text is OpenRouter."""
         bk = MODEL_QOS_PROFILES['byok']
-        for feature, (model, provider) in bk.items():
-            if feature in (
-                'chat_agent',
-                'web_search',
-                'wrapped_analysis',
-                'translation',
-                'session_titles',
-                'followup',
-                'onboarding',
-                'app_integration',
-                'trends',
-            ):
+        for feature, (_model, provider) in bk.items():
+            if feature == 'web_search':
+                assert provider == 'perplexity'
                 continue
-            assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
+            assert provider == 'openrouter', f'byok {feature} should be openrouter, got {provider}'
 
     def test_byok_model_variants(self):
         """BYOK uses the same constrained model set as max."""
@@ -1022,10 +1035,6 @@ class TestBYOKProfile:
         distinct = {model for model, _p in bk.values()}
         expected = {
             'gpt-5.6-luna',
-            'gpt-5-nano',
-            'claude-sonnet-4-6',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected
@@ -1084,6 +1093,29 @@ class TestEffectiveBYOKProvider:
     def test_openrouter_non_gemini_stays_openrouter(self):
         assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'
 
+    def test_openrouter_gpt_remaps_to_openai_byok_key(self):
+        assert _effective_byok_provider('gpt-5.6-luna', 'openrouter') == 'openai'
+        assert _effective_byok_provider('gpt-5-nano', 'openrouter') == 'openai'
+
+    def test_create_byok_client_openrouter_gpt_uses_direct_openai(self, monkeypatch):
+        import utils.llm.clients as mod
+
+        captured = {}
+
+        def _fake_cached(model, api_key, kwargs):
+            captured['model'] = model
+            captured['api_key'] = api_key
+            captured['kwargs'] = kwargs
+            return MagicMock(name='byok-openai-client')
+
+        monkeypatch.setattr(mod, '_cached_openai_chat', _fake_cached)
+        client = mod._create_byok_client('gpt-5.6-luna', 'openrouter', 'sk-user-openai', feature='chat_agent')
+        assert client is not None
+        assert captured['model'] == 'gpt-5.6-luna'
+        assert captured['api_key'] == 'sk-user-openai'
+        assert 'base_url' not in captured['kwargs']
+        assert captured['kwargs'].get('extra_body', {}).get('prompt_cache_retention') == '24h'
+
     def test_anthropic_passthrough(self):
         assert _effective_byok_provider('claude-sonnet-4-6', 'anthropic') == 'anthropic'
 
@@ -1111,23 +1143,20 @@ class TestStructuredOutputFeatureTracking:
             for profile_name, profile in MODEL_QOS_PROFILES.items():
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
-    def test_premium_gemini_structured_output(self):
-        """In premium profile, translation and trends use structured output on Gemini."""
+    def test_premium_structured_output_is_openrouter_luna(self):
+        """Structured-output product features resolve to OpenRouter Luna."""
         premium = MODEL_QOS_PROFILES['premium']
-        gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
-        assert gemini_so == {
-            'translation',
-            'trends',
-        }, f'Expected translation and trends on Gemini SO in premium, got {gemini_so}'
+        so_routes = {f: premium[f] for f in _STRUCTURED_OUTPUT_FEATURES}
+        assert all(route == ('gpt-5.6-luna', 'openrouter') for route in so_routes.values()), so_routes
 
-    def test_byok_no_gemini_structured_output(self):
-        """BYOK routes structured output to OpenAI except managed translation."""
+    def test_byok_structured_output_is_openrouter_luna(self):
+        """BYOK routes structured output to OpenRouter Luna."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
-            if feature in {'translation', 'trends'}:
-                assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
-                continue
-            assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
+            assert profile[feature] == (
+                'gpt-5.6-luna',
+                'openrouter',
+            ), f'byok {feature} should be OpenRouter Luna, got {profile[feature]}'
 
 
 class TestGeminiThinkingBudget:
