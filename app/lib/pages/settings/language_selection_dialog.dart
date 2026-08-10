@@ -32,9 +32,9 @@ class LanguageSelectionDialog {
 
     // Preset the selected language if the user has one
     String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null
-        ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key
-        : null;
+    // getLanguageName rather than firstWhere: the list is served now, so a
+    // stored code can be absent from it and this threw a StateError on a miss.
+    String? selectedLanguageName = selectedLanguage != null ? homeProvider.getLanguageName(selectedLanguage) : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController scrollController = ScrollController();
