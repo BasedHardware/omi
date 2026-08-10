@@ -686,10 +686,18 @@ class SharedPreferencesUtil {
 
   set authToken(String value) => saveString('authToken', value);
 
-  // OIDC refresh token (ADR-0038); empty when AUTH_BACKEND=firebase.
-  String get oidcRefreshToken => getString('oidcRefreshToken');
+  // OIDC refresh token (ADR-0038) — legacy plaintext slot only. The token is a long-lived replay
+  // credential and now lives in platform secure storage (OidcAuthService); this prefs key survives
+  // solely to migrate an already-signed-in session, and is READ-AND-CLEAR-ONLY. There is
+  // intentionally no public setter, so nothing can persist a refresh token to plaintext
+  // SharedPreferences.
+  String takeLegacyOidcRefreshToken() {
+    final value = getString('oidcRefreshToken');
+    clearLegacyOidcRefreshToken();
+    return value;
+  }
 
-  set oidcRefreshToken(String value) => saveString('oidcRefreshToken', value);
+  void clearLegacyOidcRefreshToken() => saveString('oidcRefreshToken', '');
 
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 
@@ -715,7 +723,7 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
     authToken = '';
-    oidcRefreshToken = '';
+    clearLegacyOidcRefreshToken();
     tokenExpirationTime = 0;
     uid = '';
     email = '';

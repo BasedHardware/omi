@@ -74,22 +74,22 @@ class OidcAuthService {
     final secure = await _secureStorage.read(key: _refreshTokenKey);
     if (secure != null && secure.isNotEmpty) return secure;
     // One-time migration: an existing session may still hold the token in plaintext prefs.
-    final legacy = SharedPreferencesUtil().oidcRefreshToken;
+    // takeLegacy* reads and clears the plaintext slot in one step.
+    final legacy = SharedPreferencesUtil().takeLegacyOidcRefreshToken();
     if (legacy.isNotEmpty) {
       await _secureStorage.write(key: _refreshTokenKey, value: legacy);
-      SharedPreferencesUtil().oidcRefreshToken = '';
     }
     return legacy;
   }
 
   Future<void> _writeRefreshToken(String token) async {
     await _secureStorage.write(key: _refreshTokenKey, value: token);
-    SharedPreferencesUtil().oidcRefreshToken = ''; // scrub any legacy plaintext copy
+    SharedPreferencesUtil().clearLegacyOidcRefreshToken(); // scrub any legacy plaintext copy
   }
 
   Future<void> _deleteRefreshToken() async {
     await _secureStorage.delete(key: _refreshTokenKey);
-    SharedPreferencesUtil().oidcRefreshToken = '';
+    SharedPreferencesUtil().clearLegacyOidcRefreshToken();
   }
 
   // flutter_appauth rejects concurrent token operations ("Concurrent operations

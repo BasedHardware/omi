@@ -284,7 +284,7 @@ void main() {
 
     test('legacy plaintext token is read, moved to secure storage, and the pref is scrubbed', () async {
       final prefs = SharedPreferencesUtil();
-      prefs.oidcRefreshToken = 'legacy-rt'; // pre-existing plaintext session
+      await prefs.saveString(_refreshTokenPrefKey, 'legacy-rt'); // pre-existing plaintext session
 
       // Response returns no refresh token, so _persist re-writes the one we
       // refreshed with — proving the migrated value reached secure storage.
@@ -307,7 +307,7 @@ void main() {
       expect(outcome.ok, isTrue);
       expect(appAuth.lastTokenRequest?.refreshToken, 'legacy-rt',
           reason: 'the refresh must use the token migrated from the legacy pref');
-      expect(SharedPreferencesUtil().oidcRefreshToken, '', reason: 'the plaintext pref must be scrubbed');
+      expect(SharedPreferencesUtil().getString(_refreshTokenPrefKey), '', reason: 'the plaintext pref must be scrubbed');
       expect(storage.store[_refreshTokenPrefKey], 'legacy-rt', reason: 'the token must live in secure storage');
     });
   });
@@ -336,7 +336,7 @@ void main() {
 
       expect(outcome.ok, isTrue);
       expect(storage.store[_refreshTokenPrefKey], 'rt-2', reason: 'new refresh token stored in secure storage');
-      expect(prefs.oidcRefreshToken, '', reason: 'refresh token must NEVER be written to plaintext prefs');
+      expect(prefs.getString(_refreshTokenPrefKey), '', reason: 'refresh token must NEVER be written to plaintext prefs');
       expect(prefs.uid, 'user-42');
       expect(prefs.authToken, 'access-42');
       expect(prefs.tokenExpirationTime, expiry.millisecondsSinceEpoch);
@@ -376,7 +376,7 @@ void main() {
       final prefs = SharedPreferencesUtil();
       expect(prefs.authToken, isEmpty);
       expect(prefs.uid, isEmpty);
-      expect(prefs.oidcRefreshToken, isEmpty);
+      expect(prefs.getString(_refreshTokenPrefKey), isEmpty);
     });
   });
 }
