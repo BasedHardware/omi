@@ -9,6 +9,7 @@ import type { AccountControlObservation } from "../../../core/control/account-co
 import {
   SqliteAccountControlProjectionStore,
   SqliteConversationsStore,
+  SqliteCurrentSessionPort,
   SqliteFolderDeletionUnitOfWork,
   SqliteFoldersStore,
   SqliteSettingsProjectionStore,
@@ -208,6 +209,7 @@ describe("the SQLite service-store adapters", () => {
     expect(injected.writePath.stragglers).toBe(stores.stragglers);
     expect(injected.writePath.control).toBe(stores.control);
     expect(stores.settings).toBeInstanceOf(SqliteSettingsProjectionStore);
+    expect(stores.currentSession).toBeInstanceOf(SqliteCurrentSessionPort);
     sqliteDb.close();
 
     const memoryDb = new Database(":memory:");

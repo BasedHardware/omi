@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import type { LocalServiceStores } from "../../../apps/service/app-facing";
 import { SqliteConversationsStore } from "./conversations-store";
+import { SqliteCurrentSessionPort } from "./current-session";
 import { SqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
 import { SqliteFoldersStore } from "./folders-store";
 import { SqliteAccountControlProjectionStore } from "./projection-store";
@@ -43,5 +44,6 @@ export const createSqliteLocalServiceStores = (
     stragglers: new SqliteStragglerTable(db),
     control: new SqliteAccountControlProjectionStore(db),
     settings: new SqliteSettingsProjectionStore(db),
+    currentSession: new SqliteCurrentSessionPort(db),
   });
 };

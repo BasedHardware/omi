@@ -12,6 +12,10 @@ import {
   devPrincipalToAuthorizationRequest,
   type DevPrincipal,
 } from "./auth/dev-token";
+import {
+  createInMemoryCurrentSessionPort,
+  type CurrentSessionPort,
+} from "./auth/current-session";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
 import { createWriteFenceCounter, type WriteFenceCounter } from "./control/fence-counter";
 import {
@@ -27,6 +31,7 @@ import { createServedCounter, type ServedCounter } from "./observability/served-
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import { registerConversationRoutes } from "./routes/conversations";
+import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
@@ -105,6 +110,7 @@ export interface LocalServiceStores {
   readonly stragglers: StragglerTable;
   readonly control: AccountControlProjectionStore;
   readonly settings: SettingsProjectionStore;
+  readonly currentSession: CurrentSessionPort;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -170,6 +176,7 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     stragglers: createInMemoryStragglerTable(),
     control: createInMemoryAccountControlProjectionStore(),
     settings: createInMemorySettingsProjectionStore(),
+    currentSession: createInMemoryCurrentSessionPort(),
   });
 };
 
@@ -252,8 +259,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   // read path hermetic - no wall clock anywhere in the flow.
   const anchorEpochSeconds = Math.floor(Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC) / 1000);
   const devToken = issuer.issue(options.ownerAccountId, anchorEpochSeconds);
-  const resolvePrincipal = (token: string): DevPrincipal | null =>
+  const resolveDevToken = (token: string): DevPrincipal | null =>
     issuer.resolve(token, anchorEpochSeconds);
+  const resolvePrincipal = (token: string): DevPrincipal | null =>
+    stores.currentSession.authenticate(token, resolveDevToken);
 
   const codecRootSecret = derive32(`${options.devSecretLabel}:codec-root`);
   const cursorSigningKeyset = {
@@ -410,6 +419,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     projections: stores.settings,
     counter,
+  });
+  registerCurrentSessionRoutes(app, {
+    sessions: stores.currentSession,
+    resolveDevToken,
   });
   registerQaControlRoutes(app, {
     resolvePrincipal,
