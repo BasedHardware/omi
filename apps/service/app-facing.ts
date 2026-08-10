@@ -25,6 +25,7 @@ import {
 } from "./auth/current-session";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
 import { createListenConversationFinalizer } from "./listen/conversation-finalizer";
+import { createDeterministicListenConversationProcessor } from "./listen/conversation-processor";
 import {
   createScriptedTranscriptionSource,
   type TranscriptionSource,
@@ -548,7 +549,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     store: stores.listen,
     segments: stores.listenSegments,
     transcription: options.transcriptionSource ?? createScriptedTranscriptionSource(),
-    conversations: createListenConversationFinalizer(conversations),
+    conversations: createListenConversationFinalizer(
+      conversations,
+      createDeterministicListenConversationProcessor(conversations),
+    ),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
     credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds
       ?? LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,

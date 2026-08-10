@@ -292,7 +292,16 @@ describe("GET /v4/listen WebSocket", () => {
     expect(service.writePath.settings).toBe(stores.settings);
     expect(stores.listen.listSegments(ACCOUNT, SESSION)).toHaveLength(1);
     await waitUntil(() => stores.conversations.readRecord(ACCOUNT, SESSION) !== null);
-    expect(stores.conversations.readRecord(ACCOUNT, SESSION)?.status).toBe("processing");
+    expect(stores.conversations.readRecord(ACCOUNT, SESSION)?.status).toBe("completed");
+    const conversationsResponse = await service.app.request("/v1/conversations", {
+      headers: { authorization: `Bearer ${service.devToken}` },
+    });
+    const conversations = await conversationsResponse.json() as readonly {
+      readonly id: string;
+      readonly status: string;
+    }[];
+    expect(conversations.find((conversation) => conversation.id === SESSION)?.status)
+      .toBe("completed");
   });
 
   test("crossing a metered ceiling emits the final entitlement frame then closes 4020", async () => {

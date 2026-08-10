@@ -3,6 +3,7 @@
 
 import type { ConversationsStore } from "../stores/conversations-store";
 import type { ListenSessionRecord } from "../stores/listen-store";
+import type { ListenConversationProcessor } from "./conversation-processor";
 
 /**
  * Downstream seam after transcript durability.
@@ -21,6 +22,7 @@ export interface ListenConversationFinalizer {
 
 export const createListenConversationFinalizer = (
   conversations: ConversationsStore,
+  processor: ListenConversationProcessor,
 ): ListenConversationFinalizer => Object.freeze({
   finalize({ accountId, session, locked }): void {
     const endedAt = session.endedAt ?? session.updatedAt;
@@ -43,5 +45,6 @@ export const createListenConversationFinalizer = (
     if (!outcome.stored) {
       throw new TypeError("listen conversation finalization was refused");
     }
+    processor.process({ accountId, conversation: outcome.record });
   },
 });
