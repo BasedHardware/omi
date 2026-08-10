@@ -358,10 +358,9 @@ class _AppShellState extends State<AppShell> {
     if (isSignedIn) {
       final homeProvider = context.read<HomeProvider>();
       homeProvider.setupHasSpeakerProfile();
-      // Chained, not awaited: the picker must not open on the bundled list
-      // while the served one is still in flight, but the rest of startup
-      // should not wait on it.
-      homeProvider.loadAvailableLanguages().whenComplete(homeProvider.setupUserPrimaryLanguage);
+      // Not awaited: the picker must not open on the bundled list while the
+      // served one is in flight, but the rest of startup should not wait.
+      homeProvider.loadLanguagesThenSetupPrimary();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
       try {

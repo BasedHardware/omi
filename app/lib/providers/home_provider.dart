@@ -239,6 +239,17 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads the picker options, then runs primary-language setup — but only if
+  /// the session survived the request. setupUserPrimaryLanguage captures the
+  /// generation when it starts, which is too late to notice a sign-out that
+  /// happened while the options were still loading.
+  Future<void> loadLanguagesThenSetupPrimary({Future<Map<String, String>?> Function()? fetch}) async {
+    final generation = _sessionGeneration;
+    await loadAvailableLanguages(fetch: fetch);
+    if (generation != _sessionGeneration) return;
+    await setupUserPrimaryLanguage();
+  }
+
   Future<void> setupUserPrimaryLanguage() async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;

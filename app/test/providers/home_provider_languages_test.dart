@@ -28,7 +28,7 @@ void main() {
 
       final provider = HomeProvider();
       addTearDown(provider.dispose);
-      await provider.loadAvailableLanguages();
+      await provider.loadAvailableLanguages(fetch: () async => null);
 
       // Swahili is not in the bundled copy — proving the cache is being read.
       expect(provider.availableLanguages['Swahili'], 'sw');
@@ -39,7 +39,7 @@ void main() {
 
       final provider = HomeProvider();
       addTearDown(provider.dispose);
-      await provider.loadAvailableLanguages();
+      await provider.loadAvailableLanguages(fetch: () async => null);
 
       expect(provider.availableLanguages['English'], 'en');
     });
@@ -49,7 +49,7 @@ void main() {
 
       final provider = HomeProvider();
       addTearDown(provider.dispose);
-      await provider.loadAvailableLanguages();
+      await provider.loadAvailableLanguages(fetch: () async => null);
 
       expect(provider.availableLanguages, isNotEmpty);
     });
@@ -107,6 +107,33 @@ void main() {
     });
   });
 
+  group('a sign-out mid-request', () {
+    test('does not install the list it was fetching', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData(); // signs out while the request is in flight
+        return {'Swahili': 'sw'};
+      });
+
+      expect(provider.availableLanguages.containsKey('Swahili'), isFalse);
+      expect(provider.availableLanguages['English'], 'en');
+    });
+
+    test('leaves the cache untouched', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadLanguagesThenSetupPrimary(fetch: () async {
+        provider.clearUserData();
+        return {'Swahili': 'sw'};
+      });
+
+      expect(SharedPreferencesUtil().cachedAvailableLanguages, isEmpty);
+    });
+  });
+
   group('getLanguageName', () {
     test('resolves a code the current list carries', () {
       final provider = HomeProvider();
@@ -120,7 +147,7 @@ void main() {
       SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode({'English': 'en'});
       final provider = HomeProvider();
       addTearDown(provider.dispose);
-      await provider.loadAvailableLanguages();
+      await provider.loadAvailableLanguages(fetch: () async => null);
 
       expect(provider.getLanguageName('ja'), 'Japanese');
     });
