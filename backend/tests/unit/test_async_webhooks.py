@@ -24,6 +24,7 @@ def _stub_webhook_db_helpers(monkeypatch):
     etc. Individual tests override specific names via ``with patch(...)`` as needed.
     """
     monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
+    monkeypatch.setattr(webhooks_module, "try_acquire_audio_bytes_webhook_lock", MagicMock(return_value=True))
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())

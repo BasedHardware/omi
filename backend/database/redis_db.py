@@ -958,6 +958,12 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     return result is not None
 
 
+def try_acquire_audio_bytes_webhook_lock(uid: str, ttl: int = 5) -> bool:
+    """Atomically try to acquire audio bytes webhook rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
+    result = r.set(f'users:{uid}:audio_bytes_webhook_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
     """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
     try:

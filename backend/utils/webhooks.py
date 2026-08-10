@@ -1,3 +1,4 @@
+import re
 import asyncio
 import json
 import os
@@ -9,6 +10,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from database.redis_db import (
     get_user_webhook_db,
     user_webhook_status_db,
+    try_acquire_audio_bytes_webhook_lock,
     disable_user_webhook_db,
     enable_user_webhook_db,
     set_user_webhook_db,
@@ -311,20 +313,28 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"send_audio_bytes_developer_webhook {uid}")
-    # TODO: add a lock, send shorter segments, validate regex.
+
+    if not await run_blocking(db_executor, try_acquire_audio_bytes_webhook_lock, uid):
+        return
+
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.audio_bytes)
     if toggled:
         webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.audio_bytes)
         if not webhook_url:
             return
         webhook_url = webhook_url_from_setting(WebhookType.audio_bytes, webhook_url)
-        if not webhook_url:
+        if not webhook_url or not re.match(r"^https?://", webhook_url):
             return
+
         webhook_url = _append_query_params(webhook_url, {'sample_rate': sample_rate, 'uid': uid})
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
             logger.info(f'send_audio_bytes_developer_webhook: circuit breaker open for {webhook_url[:80]}')
             return
+
+        max_bytes = sample_rate * 2 * 5
+        data = data[:max_bytes]
+
         try:
             response = await _post_dev_webhook(
                 'send_audio_bytes_developer_webhook',
