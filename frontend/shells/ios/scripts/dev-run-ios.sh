@@ -140,6 +140,12 @@ else
     --dart-define=OMI_API_TOKEN="$token"
     --dart-define=OMI_RUN_CLIENT_ID="$run_id"
   )
+  if [[ -n "${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
+    defines+=(
+      --dart-define=OMI_CONSUMER_EVIDENCE_PATH="$OMI_CONSUMER_EVIDENCE_PATH"
+      --dart-define=OMI_CONSUMER_EVIDENCE_EXIT=true
+    )
+  fi
   echo "MODE: LIVE — route $route, backend $api_base (reachable, HTTP $code), credential held by the shell."
   echo "PRODUCER: x-omi-client-id=${run_id}::ios"
 fi

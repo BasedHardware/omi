@@ -5,12 +5,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'bridge_http_host.dart';
 import 'chat_attachment_staging_host.dart';
 import 'chat_bridge_javascript_sink.dart';
 import 'chat_stream_host.dart';
+import 'consumer_evidence.dart';
 import 'gen/bridge.g.dart';
 import 'gen/bridge_http_contract.g.dart';
 import 'listen_socket_host.dart';
@@ -45,12 +47,16 @@ const String _apiToken = String.fromEnvironment('OMI_API_TOKEN', defaultValue: '
 // Per-run QA identity. The shell appends its fixed `ios` identity natively;
 // neither value is placed in the surface URL or JavaScript state.
 const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultValue: '');
+// Launcher-owned native result path. It is never placed in the surface URL or
+// JavaScript state, and an existing file is removed before any route is driven.
+const String _consumerEvidencePath = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_PATH', defaultValue: '');
 // Optional scheme query/profile namespace. Values are appended to the local
 // scheme URL, never interpolated into page JavaScript or logs.
 const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
 const String _surfaceProfile = String.fromEnvironment('SURFACE_PROFILE', defaultValue: '');
 const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: false);
 const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
+const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
 
 void main() => runApp(const ProtoApp());
 
@@ -83,6 +89,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   ChatBridgeJavaScriptSink? _chatSink;
   ChatStreamHost? _chatStream;
   ChatAttachmentStagingHost? _chatStaging;
+  ConsumerEvidenceDriver? _consumerEvidence;
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
@@ -208,6 +215,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
+            unawaited(_listen?.resetForNavigation());
             unawaited(_chatStream?.resetForNavigation());
             unawaited(_chatStaging?.resetForNavigation());
           },
@@ -226,6 +234,18 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
 
   Future<void> _finishPageLoad() async {
     await _chatSink?.activateDocument();
+    if (_consumerEvidence != null) {
+      try {
+        await _consumerEvidence!.pageFinished();
+        if (_consumerEvidenceExit && await File(_consumerEvidencePath).exists()) {
+          exit(0);
+        }
+      } catch (error) {
+        debugPrint('CONSUMER-EVIDENCE: FAIL $error');
+        if (_consumerEvidenceExit) exit(1);
+      }
+      return;
+    }
     if (const bool.fromEnvironment('AUTODRIVE')) {
       await _autodrive();
     } else if (_acceptance || _acceptanceExit) {
@@ -282,11 +302,47 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         );
         // Probe phase machine only for the original v1/v2/v3 suite.
         _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
-        await _mountBundle(_schemeBundle);
+        if (_consumerEvidencePath.isNotEmpty) {
+          await _startConsumerEvidence();
+        } else {
+          await _mountBundle(_schemeBundle);
+        }
       case SurfaceMode.ship:
         // Asset mode: file:// origin, allowed to read sibling assets in the bundle.
         await _controller.loadFlutterAsset('assets/surface/index.html');
     }
+  }
+
+  Future<void> _startConsumerEvidence() async {
+    final result = File(_consumerEvidencePath);
+    if (await result.exists()) {
+      await result.delete();
+    }
+    if (_mode != SurfaceMode.scheme || _schemeBundle != 'surfaces' || _http == null) {
+      throw StateError('consumer evidence requires the live surfaces scheme host');
+    }
+    final gate = await _scheme!.gateCheck('surfaces', kBridgeContractVersion);
+    if (!gate.ok) {
+      throw StateError('consumer evidence bundle failed the native contract gate');
+    }
+    await _scheme!.setActiveBundle('surfaces');
+    final hashes = ConsumerEvidenceTreeHashes.fromAssetJson(shellStamp: await rootBundle.loadString('assets/surfaces/omi-ios-shell-build-stamp.json'), surfaceStamp: await rootBundle.loadString('assets/surfaces/omi-build-stamp.json'));
+    final collector = ConsumerEvidenceCollector(resultPath: _consumerEvidencePath, runId: _runClientId, hashes: hashes);
+    await collector.prepare();
+    _consumerEvidence = ConsumerEvidenceDriver(
+      collector: collector,
+      navigate: (route) => _controller.loadRequest(Uri.parse('omi-ui://local/index.html?route=${route.wireName}&platform=mobile')),
+      observe: () async {
+        final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
+        if (result is String) return result;
+        return result.toString() == 'null' ? null : result.toString();
+      },
+      startListen: () async {
+        final result = await _controller.runJavaScriptReturningResult(startListenConsumerEvidenceJavaScript);
+        return result == true || result.toString() == 'true';
+      },
+    );
+    await _consumerEvidence!.start();
   }
 
   /// Gate-then-navigate. Returns false when the contract gate refused the
@@ -637,6 +693,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     unawaited(_listen?.close());
     unawaited(_chatStream?.close());
     unawaited(_chatStaging?.close());
+    unawaited(_consumerEvidence?.teardown());
     super.dispose();
   }
 
