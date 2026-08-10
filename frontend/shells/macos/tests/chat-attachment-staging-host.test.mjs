@@ -119,7 +119,7 @@ check("reply-is-exact-name-less-descriptor", Set(descriptor.keys) == ["id", "mim
 check("reply-hides-file-origin-and-token", !String(describing: success).contains(large.path) && !String(describing: success).contains("service.example") && !String(describing: success).contains("attachment-token"))
 check("upload-target-is-fixed", capturedRequest?.httpMethod == "POST" && capturedRequest?.url?.absoluteString == "https://service.example.test/v1/chat-attachments")
 check("upload-auth-is-host-injected", capturedRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer attachment-token")
-check("upload-contract-is-host-injected", capturedRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
+check("upload-contract-is-host-injected", capturedRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
 check("upload-run-shell-is-host-injected", capturedRequest?.value(forHTTPHeaderField: "x-omi-client-id") == "run-attachment-proof::macos")
 check("upload-content-type-has-one-boundary", capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "multipart/form-data; boundary=\(multipartBoundary(capturedRequest))")
 check("temporary-multipart-is-removed-after-success", capturedBodyURL.map { !FileManager.default.fileExists(atPath: $0.path) } == true)

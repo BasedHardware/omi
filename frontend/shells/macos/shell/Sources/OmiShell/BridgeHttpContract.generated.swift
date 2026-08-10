@@ -87,7 +87,7 @@ enum BridgeChatAttachmentStagingContract {
 
 enum NativeChatRequestContract {
   static let contractVersionHeader = "x-omi-contract-version"
-  static let contractVersion = "0.8.0"
+  static let contractVersion = "1.0.0"
   static let clientIdHeader = "x-omi-client-id"
   static let shellIdentity = "macos"
 }

@@ -59,7 +59,7 @@ do {
     baseURL: base, token: "tok", clientId: "real-run-id")
   if case let .dispatch(prepared) = decision {
     check("forged-header-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "real-run-id::macos")
-    check("forged-contract-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
+    check("forged-contract-overridden", prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
   } else {
     check("t1-dispatch", false)
   }
@@ -116,7 +116,7 @@ do {
     check("chat-cancel-has-exact-host-identity", prepared.request.httpMethod == "DELETE"
       && prepared.request.url?.path == "/v1/chat-generations/generation-opaque-01"
       && prepared.request.value(forHTTPHeaderField: "x-omi-client-id") == "run-cancel::macos"
-      && prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "0.8.0")
+      && prepared.request.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
   } else {
     check("t5-dispatch", false)
   }

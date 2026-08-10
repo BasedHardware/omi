@@ -64,7 +64,7 @@ test("generated Swift binds the exact stream, staging, and P7 host vocabulary", 
     '"sizeBytes"',
     '"expiresAt"',
     'static let contractVersionHeader = "x-omi-contract-version"',
-    'static let contractVersion = "0.8.0"',
+    'static let contractVersion = "1.0.0"',
   ]) assert.ok(generated.includes(expected), `generated Swift omitted ${expected}`);
 
   execFileSync(process.execPath, [generator, "--check"], { cwd: coreRoot, stdio: "pipe" });
@@ -81,7 +81,11 @@ test("every extracted stream/staging symbol or descriptor change reddens Swift d
     ["contracts/src/bridge/chat-attachment-staging.ts", 't: "pick-and-stage"', 't: "pick-and-stage-changed"'],
     ["contracts/src/bridge/chat-attachment-staging.ts", '| "unavailable"', '| "host-unavailable"'],
     ["contracts/src/bridge/chat-attachment-staging.ts", 'mimeType: string;', 'serverMimeType: string;'],
-    ["contracts/ratified/package.json", '"version": "0.8.0"', '"version": "0.8.1"'],
+    [
+      "contracts/ratified/src/projections/synthesized.ts",
+      'SYNTHESIZED_READ_CONTRACT_VERSION = "1.0.0"',
+      'SYNTHESIZED_READ_CONTRACT_VERSION = "1.0.1"',
+    ],
   ];
   for (const [relative, before, after] of mutations) {
     const fixture = makeFixture();
@@ -99,4 +103,18 @@ test("every extracted stream/staging symbol or descriptor change reddens Swift d
   }
   // red-proof: each mutation above leaves the checked-in Swift untouched and
   // the real generator exits 1 with `bridge swift drift:`.
+});
+
+test("ratified package release version is not the executable app wire version", () => {
+  const fixture = makeFixture();
+  try {
+    const packageFile = join(fixture.fixtureCore, "contracts/ratified/package.json");
+    const source = readFileSync(packageFile, "utf8");
+    assert.match(source, /"version": "0\.8\.0"/);
+    writeFileSync(packageFile, source.replace('"version": "0.8.0"', '"version": "99.0.0"'));
+    const result = checkFixture(fixture);
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  } finally {
+    rmSync(fixture.scratch, { recursive: true, force: true });
+  }
 });

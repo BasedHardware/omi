@@ -20,7 +20,6 @@ const ROOT = process.env.OMI_CORE_ROOT ?? new URL("..", import.meta.url).pathnam
 const STREAM_SOURCE_REL = "contracts/src/bridge/stream.ts";
 const STAGING_SOURCE_REL = "contracts/src/bridge/chat-attachment-staging.ts";
 const APP_CONTRACT_SOURCE_REL = "contracts/ratified/src/projections/synthesized.ts";
-const APP_CONTRACT_PACKAGE_REL = "contracts/ratified/package.json";
 const OUT_REL = {
   path: "shell/Sources/OmiShell/BridgeHttpContract.generated.swift",
   envVar: "OMI_MACOS_SHELL_DIR",
@@ -74,10 +73,13 @@ function readNativeChatContract() {
   const stream = stripped(STREAM_SOURCE_REL);
   const staging = stripped(STAGING_SOURCE_REL);
   const appContract = stripped(APP_CONTRACT_SOURCE_REL);
-  const packageJSON = JSON.parse(fs.readFileSync(path.join(ROOT, APP_CONTRACT_PACKAGE_REL), "utf8"));
-  const appContractVersion = packageJSON.version;
-  if (typeof appContractVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(appContractVersion)) {
-    throw new Error("ratified package version is not a semantic version");
+  const appWireVersion = requiredMatch(
+    appContract,
+    /export const SYNTHESIZED_READ_CONTRACT_VERSION\s*=\s*"([^"]+)"/,
+    "SYNTHESIZED_READ_CONTRACT_VERSION",
+  );
+  if (!/^\d+\.\d+\.\d+$/.test(appWireVersion)) {
+    throw new Error("SYNTHESIZED_READ_CONTRACT_VERSION is not a semantic version");
   }
 
   const streamToShellBody = requiredMatch(
@@ -149,7 +151,7 @@ function readNativeChatContract() {
       /export const APP_CONTRACT_VERSION_HEADER\s*=\s*"([^"]+)"/,
       "APP_CONTRACT_VERSION_HEADER",
     ),
-    appContractVersion,
+    appWireVersion,
   };
 }
 
@@ -238,7 +240,7 @@ const content =
     "",
     "enum NativeChatRequestContract {",
     `  static let contractVersionHeader = "${nativeChat.appContractHeader}"`,
-    `  static let contractVersion = "${nativeChat.appContractVersion}"`,
+    `  static let contractVersion = "${nativeChat.appWireVersion}"`,
     "  static let clientIdHeader = \"x-omi-client-id\"",
     "  static let shellIdentity = \"macos\"",
     "}",
@@ -252,7 +254,7 @@ process.exit(
     outRel: OUT_REL,
     content,
     check,
-    summary: `http=${channel}, stream=${nativeChat.streamChannel}, staging=${nativeChat.stagingChannel}, contract=${nativeChat.appContractVersion}`,
+    summary: `http=${channel}, stream=${nativeChat.streamChannel}, staging=${nativeChat.stagingChannel}, contract=${nativeChat.appWireVersion}`,
     fs,
     path,
   }),
