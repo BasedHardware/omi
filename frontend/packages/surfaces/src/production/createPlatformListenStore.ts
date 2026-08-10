@@ -43,9 +43,14 @@ export function platformListenCaptureState(
 
   const stream = client.stream();
   const segments = stream.getTranscriptSegments();
-  const elapsed = elapsedSeconds(transport.startedAt, now);
+  const elapsed = elapsedSeconds(transport.startedAt, transport.stoppedAt ?? now);
   const backlog = untranscribedSeconds(elapsed, segments);
   const entitlement = stream.getEntitlementState();
+
+  const closeAdvice = stream.getListenCaptureCloseAdvice();
+  if (closeAdvice?.entitlementExhaustion) {
+    return { kind: "stopped-at-ceiling", untranscribedSeconds: backlog };
+  }
 
   if (
     entitlement !== null
@@ -67,11 +72,6 @@ export function platformListenCaptureState(
     return { kind: "stopped-at-ceiling", untranscribedSeconds: backlog };
   }
 
-  const closeAdvice = stream.getListenCaptureCloseAdvice();
-  if (closeAdvice?.entitlementExhaustion) {
-    return { kind: "stopped-at-ceiling", untranscribedSeconds: backlog };
-  }
-
   if (transport.phase === "reconnecting") {
     const bufferedSeconds = transport.disconnectedAt === null
       ? 0
@@ -85,7 +85,11 @@ export function platformListenCaptureState(
   }
 
   if (transport.phase === "failed") {
-    return { kind: "error", retryable: transport.failureRetryable ?? true };
+    return {
+      kind: "error",
+      retryable: transport.failureRetryable ?? true,
+      untranscribedSeconds: backlog,
+    };
   }
 
   return { kind: "capturing", elapsedSeconds: elapsed };
@@ -114,9 +118,51 @@ export function createPlatformProductionListenStore(
   client: PlatformListenCaptureClient,
   env: Env,
 ): ProductionListenStore {
+  const listeners = new Set<() => void>();
+  let unsubscribeClient: (() => void) | null = null;
+  let cancelTick: (() => void) | null = null;
+
+  const clockIsRunning = (): boolean => {
+    const snapshot = client.snapshot();
+    return snapshot.captureRequested && snapshot.stoppedAt === null;
+  };
+  const notify = (): void => {
+    for (const listener of listeners) listener();
+  };
+  const scheduleTick = (): void => {
+    if (listeners.size === 0 || !clockIsRunning()) {
+      cancelTick?.();
+      cancelTick = null;
+      return;
+    }
+    if (cancelTick !== null) return;
+    cancelTick = env.delay(1_000, () => {
+      cancelTick = null;
+      notify();
+      scheduleTick();
+    });
+  };
+  const clientChanged = (): void => {
+    scheduleTick();
+    notify();
+  };
+
   return {
     status: () => status(client),
-    subscribe: (listener) => client.subscribe(listener),
+    subscribe(listener) {
+      listeners.add(listener);
+      if (unsubscribeClient === null) unsubscribeClient = client.subscribe(clientChanged);
+      scheduleTick();
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          cancelTick?.();
+          cancelTick = null;
+          unsubscribeClient?.();
+          unsubscribeClient = null;
+        }
+      };
+    },
     refresh: () => client.refresh(),
     captureState: () => platformListenCaptureState(client, env.now()),
     transcriptSegments: () => client.stream().getTranscriptSegments(),
