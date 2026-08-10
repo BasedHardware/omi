@@ -32,7 +32,8 @@ async def test_extract_knowledge_graph_returns_client_graph_without_persisting(m
             edges=[ExtractedEdge(source_label='Neo', target_label='Neo', label='is')],
         )
 
-    def fake_to_client(extraction):
+    def fake_to_client(extraction, *, uid):
+        calls['client_graph_uid'] = uid
         return {
             'nodes': [{'id': 'n1', 'label': 'Neo', 'node_type': 'person', 'aliases': ['Thomas']}],
             'edges': [],
@@ -58,6 +59,8 @@ async def test_extract_knowledge_graph_returns_client_graph_without_persisting(m
     assert calls['kwargs']['load_existing_from_db'] is False
     # A malformed model response must fail closed rather than look like "no entities".
     assert calls['kwargs']['strict_parse'] is True
+    # Client ids are owner-scoped, so the uid must reach the id derivation.
+    assert calls['client_graph_uid'] == UID
 
 
 async def test_extract_knowledge_graph_fails_closed_when_extractor_returns_none(monkeypatch):

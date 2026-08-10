@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Any, Optional, cast
 import threading
+import hashlib
 import uuid
 import logging
 import json
@@ -166,38 +167,81 @@ def extract_kg_from_text(
         return None
 
 
-def extraction_to_client_graph(extraction: KnowledgeGraphExtraction) -> Dict[str, List[Dict[str, Any]]]:
-    """Assign stable local ids so desktop save tools can persist without inventing schema."""
+def _normalized_label(label: str) -> str:
+    return " ".join(label.split()).lower()
+
+
+def client_node_id(uid: str, label: str) -> str:
+    """Stable per-user id for an extracted entity.
+
+    Both desktop graphs upsert by id, so a random id per extraction made a second
+    discovery of the same entity a second node instead of a merge. Deriving the id from
+    the owner plus the normalized label makes repeat discoveries converge, and scoping it
+    to the uid keeps ids from being comparable across accounts.
+    """
+    digest = hashlib.sha256(f"{uid}\x1f{_normalized_label(label)}".encode("utf-8")).hexdigest()
+    return f"kg_{digest[:32]}"
+
+
+def extraction_to_client_graph(extraction: KnowledgeGraphExtraction, *, uid: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Assign stable local ids so desktop save tools can persist without inventing schema.
+
+    Ids are deterministic per (uid, normalized label), so two entries for the same entity
+    in one extraction merge into one node rather than emitting duplicate rows that share
+    an id — colliding ids would overwrite each other on upsert.
+    """
     label_to_node_id: Dict[str, str] = {}
-    nodes: List[Dict[str, Any]] = []
+    nodes_by_id: Dict[str, Dict[str, Any]] = {}
+    ordered_ids: List[str] = []
+
     for node in extraction.nodes:
-        node_id = label_to_node_id.get(node.label.lower()) or str(uuid.uuid4())
-        label_to_node_id[node.label.lower()] = node_id
-        for alias in node.aliases:
-            label_to_node_id.setdefault(alias.lower(), node_id)
-        nodes.append(
-            {
+        key = _normalized_label(node.label)
+        if not key:
+            continue
+        node_id = client_node_id(uid, key)
+        # A node's own label always wins over an alias another node claimed.
+        label_to_node_id[key] = node_id
+
+        existing = nodes_by_id.get(node_id)
+        if existing is None:
+            nodes_by_id[node_id] = {
                 'id': node_id,
                 'label': node.label,
                 'node_type': node.node_type,
-                'aliases': list(node.aliases),
+                'aliases': list(dict.fromkeys(a for a in node.aliases if a.strip())),
             }
-        )
+            ordered_ids.append(node_id)
+        else:
+            for alias in node.aliases:
+                if alias.strip() and alias not in existing['aliases']:
+                    existing['aliases'].append(alias)
+
+        for alias in node.aliases:
+            alias_key = _normalized_label(alias)
+            if alias_key:
+                label_to_node_id.setdefault(alias_key, node_id)
+
+    nodes = [nodes_by_id[node_id] for node_id in ordered_ids]
 
     edges: List[Dict[str, Any]] = []
+    seen_edge_ids: set[str] = set()
     for edge in extraction.edges:
-        source_id = label_to_node_id.get(edge.source_label.lower())
-        target_id = label_to_node_id.get(edge.target_label.lower())
-        if source_id and target_id and source_id != target_id:
-            edge_id = f'{source_id}_{target_id}_{edge.label.lower().replace(" ", "_")}'
-            edges.append(
-                {
-                    'id': edge_id,
-                    'source_id': source_id,
-                    'target_id': target_id,
-                    'label': edge.label,
-                }
-            )
+        source_id = label_to_node_id.get(_normalized_label(edge.source_label))
+        target_id = label_to_node_id.get(_normalized_label(edge.target_label))
+        if not source_id or not target_id or source_id == target_id:
+            continue
+        edge_id = f'{source_id}_{target_id}_{_normalized_label(edge.label).replace(" ", "_")}'
+        if edge_id in seen_edge_ids:
+            continue
+        seen_edge_ids.add(edge_id)
+        edges.append(
+            {
+                'id': edge_id,
+                'source_id': source_id,
+                'target_id': target_id,
+                'label': edge.label,
+            }
+        )
     return {'nodes': nodes, 'edges': edges}
 
 
