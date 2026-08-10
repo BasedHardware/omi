@@ -1,0 +1,35 @@
+desktop/macos/changelog/unreleased/20260810-quiet-button-actions.json
+  s_09da0eb30ca872::t_6fff6f5b293a7a 1-3
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_09da0eb30ca872::t_b4c07438db40b2 41
+  s_09da0eb30ca872::t_6fff6f5b293a7a 40
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  s_09da0eb30ca872::t_5627ab2cbe5486 202
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
+  s_09da0eb30ca872::t_b4c07438db40b2 322-323,336
+desktop/macos/Desktop/Sources/Sound/OmiUISound.swift
+  s_09da0eb30ca872::t_42dca3f4ffc83e 10-12,55,68-70
+  s_09da0eb30ca872::t_9bd84ad3f93933 21-22,32-33,51,123,126-127
+desktop/macos/Desktop/Tests/OmiUISoundTests.swift
+  s_09da0eb30ca872::t_f022766b75c978 124,126-136,241,243-244,247-248,252-253
+  s_09da0eb30ca872::t_6fff6f5b293a7a 125,228
+  s_09da0eb30ca872::t_9bd84ad3f93933 166,240,263,275
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_09da0eb30ca872::t_9bd84ad3f93933 149-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e852e588cbb0b1680ba297c56936b8834d5acff6",
+  "prompts": {},
+  "sessions": {
+    "s_09da0eb30ca872": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec41-f97e-7e61-ae5c-89db89980b3d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
