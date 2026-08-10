@@ -34,7 +34,7 @@ struct ActivityHubTab: View {
         request: requestBinding,
         mode: .results,
         total: total,
-        onExitAnswer: {},
+        onExitAnswer: nil,
         bodyHeight: bodyHeight,
         headerAccessory: { EmptyView() },
         footer: { EmptyView() }
