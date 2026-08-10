@@ -136,10 +136,9 @@ export function wireToChatMessage(raw: unknown): ChatMessage | null {
     if (parsed === null) return null;
     attachments.push(parsed);
   }
-  return {
+  const fields = {
     id: parsedId.id,
     text: raw["text"],
-    sender,
     type,
     createdAt: raw["createdAt"],
     updatedAt: raw["updatedAt"],
@@ -150,10 +149,16 @@ export function wireToChatMessage(raw: unknown): ChatMessage | null {
     messageSource: raw["messageSource"],
     rating: raw["rating"],
     reported: raw["reported"],
-    generationOutcome,
     revision: raw["revision"],
     attachments,
   };
+  if (sender === "human") return { ...fields, sender, generationOutcome: null };
+  if (sender === "ai") {
+    return generationOutcome === "completed"
+      ? { ...fields, sender, generationOutcome }
+      : { ...fields, sender, generationOutcome: "cancelled" };
+  }
+  return { ...fields, sender, generationOutcome };
 }
 
 function wireToCapabilities(raw: unknown): ChatCapabilitiesWire | null {
@@ -184,11 +189,17 @@ export function wireToChatHistoryEnvelope(raw: unknown): ChatHistoryEnvelope | n
   if (
     capabilities === null ||
     !isNullableString(olderCursor) ||
-    typeof hasOlder !== "boolean" ||
-    (hasOlder && olderCursor === null) ||
-    (!hasOlder && olderCursor !== null)
+    typeof hasOlder !== "boolean"
   ) {
     return null;
+  }
+  let page: ChatHistoryEnvelope["page"];
+  if (hasOlder) {
+    if (olderCursor === null) return null;
+    page = { olderCursor, hasOlder: true };
+  } else {
+    if (olderCursor !== null) return null;
+    page = { olderCursor, hasOlder: false };
   }
   const messages: ChatMessage[] = [];
   const seen = new Set<string>();
@@ -199,7 +210,7 @@ export function wireToChatHistoryEnvelope(raw: unknown): ChatHistoryEnvelope | n
     seen.add(message.id);
     messages.push(message);
   }
-  return { messages, page: { olderCursor, hasOlder }, capabilities };
+  return { messages, page, capabilities };
 }
 
 export interface ChatHistoryRequest {
@@ -298,16 +309,23 @@ export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | n
     case "snapshot":
     case "delta":
       return typeof raw["text"] === "string" ? { kind: raw["kind"], text: raw["text"] } : null;
-    case "done":
-    case "cancelled": {
+    case "done": {
       const message = wireToChatMessage(raw["message"]);
-      const expectedOutcome = raw["kind"] === "done" ? "completed" : "cancelled";
       if (
         message === null ||
         message.sender !== "ai" ||
-        message.generationOutcome !== expectedOutcome
+        message.generationOutcome !== "completed"
       ) return null;
-      return { kind: raw["kind"], message };
+      return { kind: "done", message };
+    }
+    case "cancelled": {
+      const message = wireToChatMessage(raw["message"]);
+      if (
+        message === null ||
+        message.sender !== "ai" ||
+        message.generationOutcome !== "cancelled"
+      ) return null;
+      return { kind: "cancelled", message };
     }
     case "failed": {
       const error = raw["error"];

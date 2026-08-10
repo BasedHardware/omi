@@ -56,7 +56,7 @@ export type ChatMessageAuthoredSender = "human";
  */
 export type ChatMessageType = "text" | "day_summary" | "unknown";
 
-/** null for human rows; every canonical assistant row states how it ended. */
+/** null for human/unknown rows; every canonical assistant row states how it ended. */
 export type ChatGenerationOutcome = "completed" | "cancelled" | null;
 
 /**
@@ -91,11 +91,9 @@ export interface ChatAttachment {
  * the exemplar pair (the wire field name `client_message_id` is an adapter
  * concern).
  */
-export interface ChatMessage {
+interface ChatMessageFields {
   id: RecordId;
   text: string;
-  /** // domain-pending(DIV-CHAT-SENDER-001) */
-  sender: ChatMessageSender;
   /** // domain-pending(DIV-CHAT-TYPE-001) */
   type: ChatMessageType;
   createdAt: number;
@@ -133,8 +131,6 @@ export interface ChatMessage {
   /** Thumbs: `1` up, `-1` down, `null` unset. AI-sender feedback only on wire. */
   rating: number | null;
   reported: boolean;
-  /** Durable cancellation honesty; never inferred from text length. */
-  generationOutcome: ChatGenerationOutcome;
   /** Canonical attachment order. Durable metadata remains after content expiry. */
   attachments: readonly ChatAttachment[];
   /**
@@ -145,6 +141,37 @@ export interface ChatMessage {
    */
   revision: string | null;
 }
+
+/** Canonical client-authored record admitted before assistant generation. */
+export type ChatHumanMessage = ChatMessageFields & {
+  sender: "human";
+  generationOutcome: null;
+};
+
+/** Canonical assistant success. The outcome is part of the discriminator. */
+export type ChatCompletedAssistantMessage = ChatMessageFields & {
+  sender: "ai";
+  generationOutcome: "completed";
+};
+
+/** Canonical retained assistant cancellation. */
+export type ChatCancelledAssistantMessage = ChatMessageFields & {
+  sender: "ai";
+  generationOutcome: "cancelled";
+};
+
+export type ChatAssistantMessage =
+  | ChatCompletedAssistantMessage
+  | ChatCancelledAssistantMessage;
+
+/** Read-tolerant record whose future sender semantics are not yet known. */
+export type ChatUnknownSenderMessage = ChatMessageFields & {
+  sender: "unknown";
+  generationOutcome: ChatGenerationOutcome;
+};
+
+/** Sender and generation outcome are one discriminated state, never two flags. */
+export type ChatMessage = ChatHumanMessage | ChatAssistantMessage | ChatUnknownSenderMessage;
 
 /**
  * Fields a patch may touch. Absent key = unchanged, by construction.
@@ -199,10 +226,9 @@ export interface ChatCapabilitiesWire {
 }
 
 /** Opaque, concurrent-insert-safe backward keyset page metadata. */
-export interface ChatHistoryPageWire {
-  olderCursor: string | null;
-  hasOlder: boolean;
-}
+export type ChatHistoryPageWire =
+  | { olderCursor: string; hasOlder: true }
+  | { olderCursor: null; hasOlder: false };
 
 /** Ratified GET /v1/chat-messages success envelope. */
 export interface ChatHistoryEnvelope {
@@ -223,7 +249,7 @@ export interface ChatErrorEnvelope {
 /** Send admission is the first event and echoes the canonical human record. */
 export type ChatAcceptedFrame = {
   kind: "accepted";
-  message: ChatMessage;
+  message: ChatHumanMessage;
   generation: { id: string };
 };
 
@@ -242,9 +268,9 @@ export type ChatAdvisoryFrame =
  * canonical assistant record.
  */
 export type ChatTerminalFrame =
-  | { kind: "done"; message: ChatMessage }
+  | { kind: "done"; message: ChatCompletedAssistantMessage }
   | { kind: "failed"; error: { code: string; retryable: boolean } }
-  | { kind: "cancelled"; message: ChatMessage };
+  | { kind: "cancelled"; message: ChatCancelledAssistantMessage };
 
 /** Complete ratified SSE data-frame grammar. Heartbeat comments are not frames. */
 export type ChatGenerationFrame = ChatAcceptedFrame | ChatAdvisoryFrame | ChatTerminalFrame;
