@@ -757,7 +757,7 @@ class TestExpandedCallsiteCoverage:
         calls = re.findall(r"get_llm\('(\w+)'", source)
         for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        assert calls.count('memories') == 2, "memories should appear exactly twice"
+        assert calls.count('memories') == 3, "memories should appear exactly three times"
 
     def test_knowledge_graph_all_keys(self):
         import re

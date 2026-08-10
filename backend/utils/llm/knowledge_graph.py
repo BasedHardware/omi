@@ -72,6 +72,9 @@ def _existing_nodes_prompt_json(existing_nodes: List[Dict[str, Any]]) -> str:
     return json.dumps(summary) if summary else "None yet"
 
 
+MAX_EXTRACT_TEXT_CHARS = 100_000
+
+
 EXTRACTION_PROMPT = """Analyze the following memory like a human brain processing new information. Extract key entities and their relationships, focusing on logical connections and cognitive patterns.
 
 **GUIDELINES FOR BRAIN-LIKE PROCESSING:**
@@ -110,6 +113,152 @@ Extract entities and relationships. If no meaningful patterns found, return empt
 """
 
 
+def extract_kg_from_text(
+    uid: str,
+    text: str,
+    *,
+    user_name: str = "User",
+    existing_nodes: Optional[List[Dict[str, Any]]] = None,
+    load_existing_from_db: bool = False,
+    db_client: Any = None,
+    strict_parse: bool = False,
+    usage_memory_id: str = "extract",
+) -> Optional[KnowledgeGraphExtraction]:
+    """Run SSOT KG extraction via the managed knowledge_graph feature without persisting.
+
+    Desktop onboarding and other local-cache writers should call this (or the
+    /v1/knowledge-graph/extract HTTP surface) instead of inventing nodes/edges
+    with chat_agent prompts.
+    """
+    content = (text or "").strip()
+    if not content:
+        return KnowledgeGraphExtraction(nodes=[], edges=[])
+    if len(content) > MAX_EXTRACT_TEXT_CHARS:
+        content = content[:MAX_EXTRACT_TEXT_CHARS]
+
+    nodes_for_prompt = existing_nodes
+    if nodes_for_prompt is None and load_existing_from_db:
+        nodes_for_prompt = kg_db.get_knowledge_nodes(uid, db_client=db_client)
+    if nodes_for_prompt is None:
+        nodes_for_prompt = []
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=KnowledgeGraphExtraction)
+        prompt = EXTRACTION_PROMPT.format(
+            existing_nodes_json=_existing_nodes_prompt_json(nodes_for_prompt),
+            memory_content=content,
+            user_name=user_name,
+            format_instructions=parser.get_format_instructions(),
+        )
+
+        with track_usage(uid, Features.KNOWLEDGE_GRAPH):
+            response = get_llm('knowledge_graph').invoke(prompt)
+
+        try:
+            return parser.parse(cast(str, cast(Any, response).content))
+        except Exception as e:
+            logger.error(f"KG extraction parse failed for memory {usage_memory_id}: {type(e).__name__}")
+            if strict_parse:
+                return None
+            return KnowledgeGraphExtraction(nodes=[], edges=[])
+    except Exception:
+        logging.exception(f"Error extracting knowledge graph from memory_id: {usage_memory_id}")
+        return None
+
+
+def extraction_to_client_graph(extraction: KnowledgeGraphExtraction) -> Dict[str, List[Dict[str, Any]]]:
+    """Assign stable local ids so desktop save tools can persist without inventing schema."""
+    label_to_node_id: Dict[str, str] = {}
+    nodes: List[Dict[str, Any]] = []
+    for node in extraction.nodes:
+        node_id = label_to_node_id.get(node.label.lower()) or str(uuid.uuid4())
+        label_to_node_id[node.label.lower()] = node_id
+        for alias in node.aliases:
+            label_to_node_id.setdefault(alias.lower(), node_id)
+        nodes.append(
+            {
+                'id': node_id,
+                'label': node.label,
+                'node_type': node.node_type,
+                'aliases': list(node.aliases),
+            }
+        )
+
+    edges: List[Dict[str, Any]] = []
+    for edge in extraction.edges:
+        source_id = label_to_node_id.get(edge.source_label.lower())
+        target_id = label_to_node_id.get(edge.target_label.lower())
+        if source_id and target_id and source_id != target_id:
+            edge_id = f'{source_id}_{target_id}_{edge.label.lower().replace(" ", "_")}'
+            edges.append(
+                {
+                    'id': edge_id,
+                    'source_id': source_id,
+                    'target_id': target_id,
+                    'label': edge.label,
+                }
+            )
+    return {'nodes': nodes, 'edges': edges}
+
+
+def _persist_extraction(
+    uid: str,
+    extraction: KnowledgeGraphExtraction,
+    memory_id: str,
+    existing_nodes: List[Dict[str, Any]],
+    *,
+    db_client: Any = None,
+) -> Dict[str, Any]:
+    label_to_node_id: Dict[str, str] = {}
+    for existing in existing_nodes:
+        label_to_node_id[existing['label'].lower()] = existing['id']
+        for alias in existing.get('aliases', []):
+            label_to_node_id[alias.lower()] = existing['id']
+
+    created_nodes: List[Any] = []
+    for node in extraction.nodes:
+        existing_id = label_to_node_id.get(node.label.lower())
+        for alias in node.aliases:
+            if not existing_id:
+                existing_id = label_to_node_id.get(alias.lower())
+
+        node_id = cast(str, existing_id) or str(uuid.uuid4())
+
+        node_data = {
+            'id': node_id,
+            'label': node.label,
+            'node_type': node.node_type,
+            'aliases': node.aliases,
+            'memory_ids': [memory_id],
+        }
+
+        saved_node = kg_db.upsert_knowledge_node(uid, node_data, db_client=db_client)
+        created_nodes.append(saved_node)
+        label_to_node_id[node.label.lower()] = saved_node['id']
+        for alias in node.aliases:
+            label_to_node_id[alias.lower()] = saved_node['id']
+
+    created_edges: List[Any] = []
+    for edge in extraction.edges:
+        source_id = label_to_node_id.get(edge.source_label.lower())
+        target_id = label_to_node_id.get(edge.target_label.lower())
+
+        if source_id and target_id:
+            edge_data = {
+                'source_id': source_id,
+                'target_id': target_id,
+                'label': edge.label,
+                'memory_ids': [memory_id],
+            }
+            saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data, db_client=db_client)
+            created_edges.append(saved_edge)
+
+    return {
+        'nodes': created_nodes,
+        'edges': created_edges,
+    }
+
+
 def extract_knowledge_from_memory(
     uid: str,
     memory_content: str,
@@ -120,77 +269,19 @@ def extract_knowledge_from_memory(
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
     existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
-    existing_nodes_json = _existing_nodes_prompt_json(existing_nodes)
-
+    extraction = extract_kg_from_text(
+        uid,
+        memory_content,
+        user_name=user_name,
+        existing_nodes=existing_nodes,
+        db_client=db_client,
+        strict_parse=strict_parse,
+        usage_memory_id=memory_id,
+    )
+    if extraction is None:
+        return None
     try:
-        parser = PydanticOutputParser(pydantic_object=KnowledgeGraphExtraction)
-        prompt = EXTRACTION_PROMPT.format(
-            existing_nodes_json=existing_nodes_json,
-            memory_content=memory_content,
-            user_name=user_name,
-            format_instructions=parser.get_format_instructions(),
-        )
-
-        with track_usage(uid, Features.KNOWLEDGE_GRAPH):
-            response = get_llm('knowledge_graph').invoke(prompt)
-
-        try:
-            extraction: KnowledgeGraphExtraction = parser.parse(cast(str, cast(Any, response).content))
-        except Exception as e:
-            logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
-            if strict_parse:
-                return None
-            extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
-
-        label_to_node_id: Dict[str, str] = {}
-        for existing in existing_nodes:
-            label_to_node_id[existing['label'].lower()] = existing['id']
-            for alias in existing.get('aliases', []):
-                label_to_node_id[alias.lower()] = existing['id']
-
-        created_nodes: List[Any] = []
-        for node in extraction.nodes:
-            existing_id = label_to_node_id.get(node.label.lower())
-            for alias in node.aliases:
-                if not existing_id:
-                    existing_id = label_to_node_id.get(alias.lower())
-
-            node_id = cast(str, existing_id) or str(uuid.uuid4())
-
-            node_data = {
-                'id': node_id,
-                'label': node.label,
-                'node_type': node.node_type,
-                'aliases': node.aliases,
-                'memory_ids': [memory_id],
-            }
-
-            saved_node = kg_db.upsert_knowledge_node(uid, node_data, db_client=db_client)
-            created_nodes.append(saved_node)
-            label_to_node_id[node.label.lower()] = saved_node['id']
-            for alias in node.aliases:
-                label_to_node_id[alias.lower()] = saved_node['id']
-
-        created_edges: List[Any] = []
-        for edge in extraction.edges:
-            source_id = label_to_node_id.get(edge.source_label.lower())
-            target_id = label_to_node_id.get(edge.target_label.lower())
-
-            if source_id and target_id:
-                edge_data = {
-                    'source_id': source_id,
-                    'target_id': target_id,
-                    'label': edge.label,
-                    'memory_ids': [memory_id],
-                }
-                saved_edge = kg_db.upsert_knowledge_edge(uid, edge_data, db_client=db_client)
-                created_edges.append(saved_edge)
-
-        return {
-            'nodes': created_nodes,
-            'edges': created_edges,
-        }
-
+        return _persist_extraction(uid, extraction, memory_id, existing_nodes, db_client=db_client)
     except Exception:
         logging.exception(f"Error extracting knowledge graph from memory_id: {memory_id}")
         return None
