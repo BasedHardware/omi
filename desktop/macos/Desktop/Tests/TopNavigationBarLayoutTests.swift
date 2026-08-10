@@ -182,13 +182,13 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
       [.conversations, .memories, .brainMap, .activity])
-    // Home is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
-    // animates while Omi is answering.
+    // Chat is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
+    // animates while Omi is answering. The pill wears a chat glyph because the page IS the chat.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
     XCTAssertEqual(ShellDestination.home.reach, .topBar)
     XCTAssertEqual(
-      TopNavigationRoutes.primaryItems.first?.icon, "magnifyingglass",
-      "Home must not spend the Omi mark on a static nav glyph")
+      TopNavigationRoutes.primaryItems.first?.icon, "bubble.left.and.text.bubble.right",
+      "Chat must not spend the Omi mark on a static nav glyph")
 
   }
 
