@@ -71,22 +71,33 @@ void main() {
 
     test('mobile beta keeps OAuth on the production identity plane', () {
       expect(
-        Env.authApiBaseUrlForProfile(AppEnvironmentProfile.mobileBeta, servingApiBaseUrl: 'https://api.omiapi.com/'),
+        Env.authApiBaseUrlForProfile(
+          AppEnvironmentProfile.mobileBeta,
+          servingApiBaseUrl: 'https://api.omiapi.com/',
+        ),
         Env.productionApiBaseUrl,
       );
     });
 
     test('local profile rejects a production Firebase project', () {
       expect(
-        () =>
-            Env.validateFirebaseProject(projectId: 'based-hardware', configuredProfile: AppEnvironmentProfile.localDev),
+        () => Env.validateFirebaseProject(
+          projectId: 'based-hardware',
+          configuredProfile: AppEnvironmentProfile.localDev,
+        ),
         throwsStateError,
       );
     });
 
     test('flavor defaults map to production and local profiles', () {
-      expect(AppEnvironmentProfile.forFlavor(productionFlavor: true), AppEnvironmentProfile.production);
-      expect(AppEnvironmentProfile.forFlavor(productionFlavor: false), AppEnvironmentProfile.localDev);
+      expect(
+        AppEnvironmentProfile.forFlavor(productionFlavor: true),
+        AppEnvironmentProfile.production,
+      );
+      expect(
+        AppEnvironmentProfile.forFlavor(productionFlavor: false),
+        AppEnvironmentProfile.localDev,
+      );
     });
   });
 
@@ -163,6 +174,9 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
-    expect(mainSource, contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'));
+    expect(
+      mainSource,
+      contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'),
+    );
   });
 }
