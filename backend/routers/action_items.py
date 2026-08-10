@@ -26,7 +26,6 @@ from utils.other import endpoints as auth
 from utils.notifications import (
     send_notification,
     send_action_item_data_message,
-    send_action_item_update_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
     sync_action_item_reminder,
@@ -34,7 +33,6 @@ from utils.notifications import (
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence.proactive_engine import run_task_changed_wake
 from pydantic import BaseModel, Field, ValidationError
-from models.shared import StatusResponse
 from models.action_item import (
     ActionItemCreateRequest,
     ActionItemResponse,
