@@ -4,6 +4,7 @@
 #
 #   ./scripts/dev-run-ios.sh                      # LIVE against the default backend
 #   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4747
+#   ./scripts/dev-run-ios.sh --route chat
 #   ./scripts/dev-run-ios.sh --fixture conversations   # FIXTURE, bridge bypassed
 #   ./scripts/dev-run-ios.sh --device <udid>
 #
@@ -30,17 +31,27 @@ api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4801}"
 fixture=""
 device=""
 accept=0
+route="home"
 
 while (( $# )); do
   case "$1" in
     --api) api_base="${2:?--api needs a URL}"; shift 2 ;;
     --fixture) fixture="${2:?--fixture needs a name}"; shift 2 ;;
     --device) device="${2:?--device needs a udid}"; shift 2 ;;
+    --route) route="${2:?--route needs a production route}"; shift 2 ;;
     --accept) accept=1; shift ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+case "$route" in
+  home|memories|conversations|tasks|chat|settings|listen) ;;
+  *) echo "ERROR: --route must be one of home|memories|conversations|tasks|chat|settings|listen." >&2; exit 2 ;;
+esac
+case "$api_base" in
+  https://api.omi.me|https://api.omi.me/) echo "ERROR: production api.omi.me is forbidden in the iOS QA launcher." >&2; exit 2 ;;
+esac
 
 flutter_bin="${FLUTTER_BIN:-$(command -v flutter || true)}"
 if [[ -z "$flutter_bin" ]]; then
@@ -86,6 +97,11 @@ if [[ -n "$fixture" ]]; then
   echo "MODE: FIXTURE (qa=${fixture}) — bridge is NOT exercised; no backend traffic."
   echo "      Nothing seen in this mode is evidence about the backend."
 else
+  run_id="${OMI_RUN_CLIENT_ID:-run-ios-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+  if [[ ! "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] || [[ "$run_id" == anonymous || "$run_id" == overflow || "$run_id" == __* ]]; then
+    echo "ERROR: OMI_RUN_CLIENT_ID is not a bounded producer-evidence run id." >&2
+    exit 2
+  fi
   token="${OMI_API_TOKEN:-}"
   if [[ -z "$token" && -n "${OMI_DEV_TOKEN_ISSUER_URL:-}" ]]; then
     echo "MODE: LIVE — no OMI_API_TOKEN set; requesting one from the dev issuer."
@@ -109,11 +125,13 @@ else
   fi
   # The simulator shares the host network stack, so 127.0.0.1 reaches the host.
   defines+=(
-    --dart-define=SURFACE_QUERY="route=home&platform=mobile"
+    --dart-define=SURFACE_QUERY="route=${route}&platform=mobile"
     --dart-define=OMI_API_BASE_URL="$api_base"
     --dart-define=OMI_API_TOKEN="$token"
+    --dart-define=OMI_RUN_CLIENT_ID="$run_id"
   )
-  echo "MODE: LIVE — backend $api_base (reachable, HTTP $code), credential held by the shell."
+  echo "MODE: LIVE — route $route, backend $api_base (reachable, HTTP $code), credential held by the shell."
+  echo "PRODUCER: x-omi-client-id=${run_id}::ios"
 fi
 
 if (( accept )); then
