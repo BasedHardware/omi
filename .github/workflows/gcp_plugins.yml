@@ -27,14 +27,17 @@ concurrency:
   group: deploy-cloud-run-plugins-${{ github.event.inputs.environment }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: read
 
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Validate Environment Input
         env:
@@ -53,6 +56,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.branch }}
+          persist-credentials: false
 
       - name: Google Auth
         id: auth
@@ -62,13 +66,18 @@ jobs:
 
       - run: gcloud auth configure-docker
 
+      - name: Set immutable image tag
+        id: image
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/Dockerfile .
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image.outputs.tag }}"
+          docker build -t "$IMAGE" -f plugins/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile plugins/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+            --image "$IMAGE"
+          docker push "$IMAGE"
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -76,7 +85,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image.outputs.tag }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

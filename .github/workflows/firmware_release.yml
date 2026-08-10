@@ -64,6 +64,7 @@ jobs:
   build-cv1:
     name: Omi CV1 (nRF5340)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     concurrency:
       group: firmware-release-cv1
       cancel-in-progress: false
@@ -102,7 +103,11 @@ jobs:
         uses: actions/cache@v6
         with:
           path: omi/firmware/v2.9.0
-          key: ncs-v2.9.0-${{ runner.os }}
+          # Include the build script hash so an NCS/toolchain bump cannot restore
+          # a mismatched workspace under a constant version key.
+          key: ncs-v2.9.0-${{ runner.os }}-${{ hashFiles('omi/firmware/scripts/ci/build-cv1.sh') }}
+          restore-keys: |
+            ncs-v2.9.0-${{ runner.os }}-
 
       - name: Sync firmware version into config
         env:

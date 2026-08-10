@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: main
 
+permissions:
+  contents: read
+
 concurrency:
   group: mobile-app-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -53,9 +56,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -112,9 +114,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -223,6 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.has_app_compile_smoke == 'true'
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -249,9 +251,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
