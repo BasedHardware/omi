@@ -123,9 +123,18 @@ const bearerPrincipal = (
   authorization: string | undefined,
   resolvePrincipal: ChatMessagesRouteDependencies["resolvePrincipal"],
 ): DevPrincipal | null => {
+  return bearerAuthentication(authorization, resolvePrincipal)?.principal ?? null;
+};
+
+const bearerAuthentication = (
+  authorization: string | undefined,
+  resolvePrincipal: ChatMessagesRouteDependencies["resolvePrincipal"],
+): { readonly token: string; readonly principal: DevPrincipal } | null => {
   if (authorization === undefined || !authorization.startsWith("Bearer ")) return null;
   const token = authorization.slice("Bearer ".length);
-  return token.length === 0 ? null : resolvePrincipal(token);
+  if (token.length === 0) return null;
+  const principal = resolvePrincipal(token);
+  return principal === null ? null : Object.freeze({ token, principal });
 };
 
 const recordContractVersion = (header: string | undefined): void => {
@@ -276,6 +285,7 @@ const streamEvents = (input: {
   readonly initial: readonly ChatGenerationEvent[];
   readonly afterEventId: string | null;
   readonly signal: AbortSignal;
+  readonly revalidate: () => boolean;
 }): Response => {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
@@ -303,6 +313,15 @@ const streamEvents = (input: {
       const poll = (): void => {
         if (stopped) return;
         if (input.signal.aborted) {
+          close();
+          return;
+        }
+        try {
+          if (!input.revalidate()) {
+            close();
+            return;
+          }
+        } catch {
           close();
           return;
         }
@@ -423,11 +442,12 @@ export const registerChatMessagesRoutes = (
   });
 
   app.post(CHAT_MESSAGES_PATH, async (context) => {
-    const principal = bearerPrincipal(
+    const authentication = bearerAuthentication(
       context.req.header("authorization"),
       deps.resolvePrincipal,
     );
-    if (principal === null) return unauthorized();
+    if (authentication === null) return unauthorized();
+    const { principal } = authentication;
     recordContractVersion(context.req.header(APP_CONTRACT_VERSION_HEADER));
     let value: unknown;
     try {
@@ -497,6 +517,7 @@ export const registerChatMessagesRoutes = (
         initial: Object.freeze([]),
         afterEventId: null,
         signal: context.req.raw.signal,
+        revalidate: () => deps.resolvePrincipal(authentication.token)?.uid === principal.uid,
       });
       return new Response(stream.body, {
         status: admission.kind === "created" ? 201 : 200,
@@ -508,11 +529,14 @@ export const registerChatMessagesRoutes = (
   });
 
   app.get(`${CHAT_GENERATIONS_PATH}/:generationId/events`, (context) => {
-    const principal = bearerPrincipal(
+    const authentication = bearerAuthentication(
       context.req.header("authorization"),
       deps.resolvePrincipal,
     );
-    if (principal === null) return unauthorized();
+    if (authentication === null) return unauthorized();
+    const { principal } = authentication;
+    const revalidate = (): boolean =>
+      deps.resolvePrincipal(authentication.token)?.uid === principal.uid;
     recordContractVersion(context.req.header(APP_CONTRACT_VERSION_HEADER));
     const generationId = context.req.param("generationId");
     const lifecycle = deps.events.readLifecycle(principal.uid, generationId);
@@ -534,6 +558,7 @@ export const registerChatMessagesRoutes = (
           initial: [terminal],
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
+          revalidate,
         });
       }
       if (replay.length === 0 && lifecycle.state === "terminal") {
@@ -546,6 +571,7 @@ export const registerChatMessagesRoutes = (
           initial: [terminal],
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
+          revalidate,
         });
       }
       return streamEvents({
@@ -555,6 +581,7 @@ export const registerChatMessagesRoutes = (
         initial: replay,
         afterEventId: replay.at(-1)?.id ?? lastEventId,
         signal: context.req.raw.signal,
+        revalidate,
       });
     }
 
@@ -567,6 +594,7 @@ export const registerChatMessagesRoutes = (
         initial: [terminal],
         afterEventId: terminal.id,
         signal: context.req.raw.signal,
+        revalidate,
       });
     }
     const snapshot = currentSnapshot(generationId, all);
@@ -578,6 +606,7 @@ export const registerChatMessagesRoutes = (
       initial: [snapshot],
       afterEventId: snapshot.id,
       signal: context.req.raw.signal,
+      revalidate,
     });
   });
 

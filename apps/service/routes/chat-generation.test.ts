@@ -124,6 +124,21 @@ const readRemaining = async (
   }
 };
 
+const readOutcomeWithin = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  milliseconds: number,
+): Promise<Readonly<{ kind: "read"; done: boolean } | { kind: "timeout" }>> => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const outcome = await Promise.race([
+    reader.read().then((result) => ({ kind: "read" as const, done: result.done })),
+    new Promise<{ kind: "timeout" }>((resolve) => {
+      timer = setTimeout(() => resolve({ kind: "timeout" }), milliseconds);
+    }),
+  ]);
+  if (timer !== null) clearTimeout(timer);
+  return outcome;
+};
+
 const history = async (local: ReturnType<typeof createLocalDevService>): Promise<ChatMessageRecord[]> => {
   const response = await local.app.request("/v1/chat-messages?limit=100", {
     headers: auth(local.devToken),
@@ -396,6 +411,69 @@ describe("ratified chat generation wire red proofs", () => {
     await replayReader.cancel();
     db.close();
   });
+
+  test("revoking the authenticated session promptly closes its existing SSE without cancellation", async () => {
+    let cancelCalls = 0;
+    const hanging: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onDelta("visible before revoke"));
+        return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      hanging,
+      "chat-stream-revocation-proof",
+    );
+    const admitted = await post(local, create("stream-revocation"));
+    const reader = admitted.body!.getReader();
+    const throughDelta = await readUntil(reader, "delta");
+    const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
+    if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+
+    const revoked = await local.app.request("/v1/session/current", {
+      method: "DELETE",
+      headers: auth(local.devToken),
+    });
+    const outcome = await readOutcomeWithin(reader, 100);
+    if (outcome.kind === "timeout") await reader.cancel();
+
+    expect(revoked.status).toBe(204);
+    expect(outcome).toEqual({ kind: "read", done: true });
+    expect(cancelCalls).toBe(0);
+    expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+      .toBe("active");
+    db.close();
+  });
+
+  for (const lifecycle of ["deletion_pending", "deleted"] as const) {
+    test(`${lifecycle} promptly closes an existing SSE without cancelling generation`, async () => {
+      let cancelCalls = 0;
+      const hanging: ChatGenerationSource = Object.freeze({
+        start(input) {
+          queueMicrotask(() => input.onDelta(`visible before ${lifecycle}`));
+          return Object.freeze({ cancel: (): void => { cancelCalls += 1; } });
+        },
+      });
+      const stores = createInMemoryLocalServiceStores();
+      const { db, local } = boot(stores, hanging, `chat-stream-${lifecycle}-proof`);
+      const admitted = await post(local, create(`stream-${lifecycle}`));
+      const reader = admitted.body!.getReader();
+      const throughDelta = await readUntil(reader, "delta");
+      const accepted = parseSse(throughDelta).find((frame) => frame.event === "accepted");
+      if (accepted?.data.kind !== "accepted") throw new TypeError("missing admission");
+
+      stores.accountLifecycle.setLifecycle(ACCOUNT, lifecycle);
+      const outcome = await readOutcomeWithin(reader, 100);
+      if (outcome.kind === "timeout") await reader.cancel();
+
+      expect(outcome).toEqual({ kind: "read", done: true });
+      expect(cancelCalls).toBe(0);
+      expect(stores.chatEvents.readLifecycle(ACCOUNT, accepted.data.generation.id)?.state)
+        .toBe("active");
+      db.close();
+    });
+  }
 
   test("an interrupted durable generation becomes an explicit failed terminal after restart", async () => {
     const directory = mkdtempSync(join(tmpdir(), "omi-chat-generation-crash-"));
