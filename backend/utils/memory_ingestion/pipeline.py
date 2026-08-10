@@ -58,7 +58,7 @@ from utils.memory_ingestion.models import (
 )
 from utils.memory_ingestion.redaction import redact_payload, redact_text
 from utils.memory_ingestion.stages.verify_output import verify_output
-from utils.memory_ingestion.text import edit_distance as _edit_distance
+from utils.memory_ingestion.ids import edit_distance as _edit_distance
 
 
 class Clock(Protocol):

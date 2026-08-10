@@ -5,7 +5,7 @@ import re
 
 from utils.memory_ingestion.ids import stable_hash
 from utils.memory_ingestion.models import EvidenceSpan, LintResult, MemoryPipelineOutput
-from utils.memory_ingestion.text import edit_distance as _edit_distance
+from utils.memory_ingestion.ids import edit_distance as _edit_distance
 
 
 def _check_confidence_contradiction(output: MemoryPipelineOutput) -> list[LintResult]:
