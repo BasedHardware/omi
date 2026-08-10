@@ -26,7 +26,11 @@ function roleLabel(role: ChatMessage["role"], locale: Locale): string {
 }
 
 function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
-  if (message.streaming) return t(locale, "chat.streaming");
+  if (message.delivery.kind === "streaming") return t(locale, "chat.streaming");
+  if (
+    message.delivery.kind === "canonical" &&
+    message.delivery.generationOutcome === "cancelled"
+  ) return t(locale, "chat.stopped");
   if (message.delivery.kind === "echo") return t(locale, "chat.pending");
   if (message.delivery.kind === "failed") return t(locale, "chat.failed");
   return null;
@@ -134,6 +138,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
       role: "user",
       text,
       delivery: { kind: "echo", clientMessageId },
+      attachments: [],
     };
     const submittedAttachments = attachments;
     setMessages((current) => [...current, echo]);
@@ -141,7 +146,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     setAttachments([]);
     setOperationError(null);
     try {
-      await store.send({ text, clientMessageId, attachments: submittedAttachments });
+      await store.send({ text, clientMessageId, attachmentIds: submittedAttachments });
       const page = await store.history();
       setMessages((current) => reconcileMessages(current, page.messages));
       setHasOlder(page.hasOlder);
@@ -189,6 +194,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
 
   const retryFailed = (clientMessageId: string): void => {
     void run(() => store.retry(clientMessageId));
+  };
+
+  const cancelGeneration = (generationId: string): void => {
+    void run(() => store.cancel(generationId));
   };
 
   const attachmentHint = capState.reason === "unknown-cap"
@@ -246,14 +255,19 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
             <ol className="chat-message-list" ref={messageListRef}>
               {messages.map((message) => {
                 const statusLabel = deliveryLabel(message, locale);
-                const busy = Boolean(message.streaming);
+                const busy = message.delivery.kind === "streaming";
                 const failedClientMessageId = message.delivery.kind === "failed" && message.delivery.retryable
                   ? message.delivery.clientMessageId
                   : null;
+                const streamingGenerationId = message.delivery.kind === "streaming"
+                  ? message.delivery.generationId
+                  : null;
+                const cancelled = message.delivery.kind === "canonical" &&
+                  message.delivery.generationOutcome === "cancelled";
                 return (
                   <li
                     key={messageKey(message)}
-                    className={`chat-message is-${message.role}${message.delivery.kind === "failed" ? " is-failed" : ""}${message.delivery.kind === "echo" ? " is-pending" : ""}${busy ? " is-streaming" : ""}`}
+                    className={`chat-message is-${message.role}${message.delivery.kind === "failed" ? " is-failed" : ""}${message.delivery.kind === "echo" ? " is-pending" : ""}${busy ? " is-streaming" : ""}${cancelled ? " is-cancelled" : ""}`}
                     data-delivery={message.delivery.kind}
                     aria-busy={busy || undefined}
                   >
@@ -265,6 +279,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                     {failedClientMessageId && (
                       <button type="button" onClick={() => retryFailed(failedClientMessageId)} aria-label={t(locale, "chat.retrySend")}>
                         {t(locale, "chat.retrySend")}
+                      </button>
+                    )}
+                    {streamingGenerationId && (
+                      <button type="button" onClick={() => cancelGeneration(streamingGenerationId)} aria-label={t(locale, "chat.stop")}>
+                        {t(locale, "chat.stop")}
                       </button>
                     )}
                   </li>
