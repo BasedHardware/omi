@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1643,
     "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3554,
-    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1856
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1805
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Task visibility writes now emit the shared Home-count invalidation after logging, so Dashboard totals refresh without waiting for an activation cooldown.",
