@@ -38,7 +38,7 @@ struct ImportConnector: Identifiable {
       id: "apple-reminders",
       title: "Apple Reminders",
       subtitle: "This Mac",
-      description: "Keep Omi tasks synced with Apple Reminders.",
+      description: "Two-way sync; deleting a synced reminder also deletes its Omi task.",
       brand: .appleReminders,
       statusText: "Not connected",
       metricText: nil,
