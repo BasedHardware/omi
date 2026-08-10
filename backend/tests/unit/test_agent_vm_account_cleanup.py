@@ -1,57 +1,30 @@
 from __future__ import annotations
 
-import importlib
-import importlib.abc
-import importlib.machinery
 import os
-import sys
-import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-class _AutoMockModule(types.ModuleType):
-    __path__ = []
-
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def __init__(self):
-        self._created = set()
-
-    def find_spec(self, name, path=None, target=None):
-        if name == 'database' or name.startswith('database.') or name == 'utils' or name.startswith('utils.'):
-            return importlib.machinery.ModuleSpec(name, self, is_package=True)
-        return None
-
-    def create_module(self, spec):
-        self._created.add(spec.name)
-        return _AutoMockModule(spec.name)
-
-    def exec_module(self, module):
-        pass
+@pytest.fixture(scope='module')
+def agent_vm_account_cleanup():
+    stubs = {
+        name: AutoMockModule(name) for name in ('database', 'database.users', 'database.account_deletion_transitions')
+    }
+    stubs['database'].__path__ = []
+    with stub_modules(stubs):
+        yield load_module_fresh(
+            'services.users.agent_vm_account_cleanup',
+            str(BACKEND_DIR / 'services' / 'users' / 'agent_vm_account_cleanup.py'),
+        )
 
 
-_finder = _StubFinder()
-sys.meta_path.insert(0, _finder)
-try:
-    agent_vm_account_cleanup = importlib.import_module('services.users.agent_vm_account_cleanup')
-finally:
-    sys.meta_path.remove(_finder)
-    for _name in _finder._created:
-        sys.modules.pop(_name, None)
-    for _name in ('services.users.agent_vm_account_cleanup', 'services.users', 'services'):
-        sys.modules.pop(_name, None)
-
-
-def test_gce_project_id_precedence():
+def test_gce_project_id_precedence(agent_vm_account_cleanup):
     with patch.dict(
         os.environ,
         {
@@ -97,13 +70,13 @@ def test_gce_project_id_precedence():
         assert agent_vm_account_cleanup._gce_project_id() is None
 
 
-def test_owner_disk_label():
+def test_owner_disk_label(agent_vm_account_cleanup):
     uid = 'test-user-id'
     expected_hash = agent_vm_account_cleanup.hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]
     assert agent_vm_account_cleanup._owner_disk_label(uid) == expected_hash
 
 
-def test_delete_agent_vm_for_account_no_vm():
+def test_delete_agent_vm_for_account_no_vm(agent_vm_account_cleanup):
     uid = 'test-uid'
     with (
         patch.object(agent_vm_account_cleanup, 'users_db') as mock_users_db,
@@ -122,7 +95,7 @@ def test_delete_agent_vm_for_account_no_vm():
         mock_read_journals.assert_called_once_with(uid)
 
 
-def test_delete_agent_vm_for_account_lease_active():
+def test_delete_agent_vm_for_account_lease_active(agent_vm_account_cleanup):
     uid = 'test-uid'
     with (
         patch.object(agent_vm_account_cleanup, 'users_db') as mock_users_db,
@@ -137,7 +110,7 @@ def test_delete_agent_vm_for_account_lease_active():
             agent_vm_account_cleanup.delete_agent_vm_for_account(uid)
 
 
-def test_delete_agent_vm_for_account_no_gce_project():
+def test_delete_agent_vm_for_account_no_gce_project(agent_vm_account_cleanup):
     uid = 'test-uid'
     with (
         patch.object(agent_vm_account_cleanup, '_gce_project_id') as mock_gce_project_id,
@@ -154,7 +127,7 @@ def test_delete_agent_vm_for_account_no_gce_project():
             agent_vm_account_cleanup.delete_agent_vm_for_account(uid)
 
 
-def test_delete_agent_vm_for_account_success():
+def test_delete_agent_vm_for_account_success(agent_vm_account_cleanup):
     uid = 'test-uid'
     vm = {'vmName': 'test-vm'}
     with (
