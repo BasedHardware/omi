@@ -10,6 +10,8 @@ import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { SqliteWriteUnitOfWork } from "./write-unit-of-work";
 
+export { SqliteSettingsProjectionStore } from "./settings-projection";
+
 export { SqliteAccountControlProjectionStore } from "./projection-store";
 export { SqliteConversationsStore } from "./conversations-store";
 export { SqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
