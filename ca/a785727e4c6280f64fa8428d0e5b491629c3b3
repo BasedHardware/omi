@@ -1,0 +1,52 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_8815d69cdccdc7::t_a70ebc8a9c0407 447,449-451
+  s_8815d69cdccdc7::t_5b8b7561a5bb96 441-442
+  s_8815d69cdccdc7::t_3b333b102d9988 487-489,1080-1081
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 752-798,802-803,820-821,825
+  s_8815d69cdccdc7::t_df8bdc680e89af 823-824
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_569f1df936cc22::t_1bd15428d5f10a 5
+  s_8815d69cdccdc7::t_ccfd0fdbfe60b6 4
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchGlassChrome.swift
+  s_8815d69cdccdc7::t_8f464fb6b228d3 194-197,224-225
+desktop/macos/changelog/unreleased/20260810-floating-notch-clicks.json
+  s_8815d69cdccdc7::t_591bd506a009c0 1-3
+desktop/macos/Desktop/Tests/FloatingGlassChromeTests.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 222-224
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_8815d69cdccdc7::t_3b333b102d9988 164-167,1057
+  s_8815d69cdccdc7::t_a186cf8871cfb0 324,327,330-333,335-341,355,802,841,874,930-931,985-987,1000,1271,1763-1765,1779,1855,1864-1865,1902,2037,4821
+  s_8815d69cdccdc7::t_a70ebc8a9c0407 989-991,1866-1877,1899-1901
+  s_8815d69cdccdc7::t_ce01741bcc1a13 1963,2103,2117,2126
+  s_8815d69cdccdc7::t_279ff8b139f723 1903
+.github/failure-classes/FC-transparent-top-level-window-occlusion.json
+  s_8815d69cdccdc7::t_c408d6896c33e0 1-8,10-14
+  s_8815d69cdccdc7::t_abe7411f276970 9
+desktop/macos/Desktop/Sources/FloatingControlBar/ARCHITECTURE.md
+  s_8815d69cdccdc7::t_3b333b102d9988 41-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "caa785727e4c6280f64fa8428d0e5b491629c3b3",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
