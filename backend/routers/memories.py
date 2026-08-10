@@ -91,6 +91,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Next-Cursor',
         'X-Omi-Memory-Device-Scope-Supported',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
         'Link',
         'Cache-Control',
     }
@@ -98,6 +99,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
 
 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
+_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 
 
 @dataclass(frozen=True)
@@ -285,6 +287,7 @@ def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
         headers={
             _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
             _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+            _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
         },
     )
 
@@ -357,6 +360,10 @@ def _set_canonical_lifecycle_exposure_header(http_response: Response, *, exposed
     http_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = 'true' if exposed else 'false'
 
 
+def _set_default_delete_capability_header(http_response: Response, *, supported: bool) -> None:
+    http_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true' if supported else 'false'
+
+
 def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> bool:
     return memory_response.http_status == 200 and memory_response.source in {
         'memory',
@@ -377,11 +384,12 @@ def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client: Any) -> bool
 def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: Any) -> None:
     """Mirror a canonical delete into legacy while the user still reads legacy.
 
-    Canonical writes turn on at MEMORY_MODE=write, but GET /v3/memories keeps reading
-    legacy until MEMORY_MODE=read. In that dual-write stage a canonical-only delete is
-    invisible: the client drops the row optimistically and the next refresh re-reads
-    legacy, where it still exists, so the memory "comes back" seconds later (#10446).
-    Deleting is symmetric with dual-write, so mirror it until read cutover.
+    Canonical writes can become ready in persisted control state before canonical
+    reads pass their control/head/grant/projection checks. In that convergence
+    window a canonical-only delete is invisible: the client drops the row
+    optimistically and the next refresh re-reads legacy, where it still exists,
+    so the memory "comes back" seconds later (#10446). Deleting is symmetric
+    with dual-write, so mirror it until read cutover.
 
     Best-effort by design: canonical is already authoritative and its delete has
     committed, so a legacy cleanup failure must not fail the request the user
@@ -428,10 +436,11 @@ def _purge_legacy_memories(uid: str) -> None:
 def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
     """Mirror a canonical delete-all into legacy while the user still reads legacy.
 
-    Same window and reasoning as _mirror_delete_into_legacy: at MEMORY_MODE=write the
-    canonical wipe is invisible because GET /v3/memories still reads legacy, so "delete
-    everything" leaves the user's list intact on the next refresh (#10446). No-ops after
-    read cutover, and best-effort because canonical is authoritative and already
+    Same window and reasoning as _mirror_delete_into_legacy: when persisted
+    write readiness precedes read cutover, the canonical wipe is invisible
+    because GET /v3/memories still reads legacy, so "delete everything" leaves
+    the user's list intact on the next refresh (#10446). No-ops after read
+    cutover, and best-effort because canonical is authoritative and already
     committed.
     """
     if canonical_read_enabled(uid, db_client=db_client):
@@ -802,6 +811,7 @@ def get_memories(
             headers={
                 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
                 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+                _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
             },
         )
 
@@ -809,6 +819,7 @@ def get_memories(
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
         _set_canonical_lifecycle_exposure_header(response, exposed=True)
+        _set_default_delete_capability_header(response, supported=True)
         # Clamp pagination parameters before handing an eligible account to a
         # canonical reader.
         clamped_offset = max(0, offset)
@@ -840,6 +851,7 @@ def get_memories(
 
     _set_device_scope_capability_header(response, supported=False)
     _set_canonical_lifecycle_exposure_header(response, exposed=False)
+    _set_default_delete_capability_header(response, supported=False)
 
     if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
@@ -856,6 +868,7 @@ def get_memories(
     memory_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = (
         'true' if canonical_lifecycle_exposed else 'false'
     )
+    memory_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true'
     _apply_memory_response_headers(response, memory_response)
     logger.info(
         "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
@@ -1020,13 +1033,20 @@ def delete_memory(
 
 @router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
+    scope: Literal['all', 'default'] = Query(
+        'all',
+        description="Delete all memories or only default-access Short-term and Long-term memories.",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        MemoryService(db_client=db_client).delete_all(uid)
+        if scope == 'default':
+            MemoryService(db_client=db_client).delete_default(uid)
+        else:
+            MemoryService(db_client=db_client).delete_all(uid)
         _mirror_delete_all_into_legacy(uid, db_client=db_client)
         return {'status': 'ok'}
 

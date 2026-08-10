@@ -681,6 +681,9 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
     drop_stale_module("models.memories", os.path.join(backend_dir, "models", "memories.py"))
     drop_stale_module("models.conversation_enums", os.path.join(backend_dir, "models", "conversation_enums.py"))
     drop_stale_module("models.mcp_api_key", os.path.join(backend_dir, "models", "mcp_api_key.py"))
+    drop_stale_module("utils.mcp_data", os.path.join(backend_dir, "utils", "mcp_data.py"))
+    drop_stale_module("utils.mcp_memories", os.path.join(backend_dir, "utils", "mcp_memories.py"))
+    drop_stale_module("database.screen_activity", os.path.join(backend_dir, "database", "screen_activity.py"))
 
     stub_names = [
         "database._client",
@@ -702,6 +705,7 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
         "database.fair_use",
         "database.auth",
         "database.dev_api_key",
+        "database.screen_activity",
         "firebase_admin",
         "firebase_admin.messaging",
         "firebase_admin.auth",

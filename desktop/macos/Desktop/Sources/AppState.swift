@@ -209,13 +209,22 @@ class AppState: ObservableObject {
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
-  @Published var isTranscribing = false
+  @Published var isTranscribing = false {
+    didSet {
+      // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
+      if isTranscribing {
+        preferredMicrophoneReconnectMonitor.start(observing: self)
+      } else {
+        preferredMicrophoneReconnectMonitor.stop()
+      }
+    }
+  }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  /// Monotonically increasing counter — incremented each time a new recording starts.
-  /// Used to detect if a new recording began during the post-stop force-process delay.
+  /// Monotonically increasing counter — incremented for each recording start or stop request.
+  /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed
@@ -354,6 +363,8 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
+  let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
   /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
@@ -410,6 +421,9 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Serializes segment persistence so a local duplicate replacement cannot race
+  /// the original mic segment's upsert in SQLite.
+  var transcriptPersistenceTail: Task<Void, Never>?
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
@@ -849,10 +863,6 @@ extension Notification.Name {
   static let conversationsPageDidLoad = Notification.Name("conversationsPageDidLoad")
   /// Posted when Tasks page finishes loading initial data
   static let tasksPageDidLoad = Notification.Name("tasksPageDidLoad")
-  /// Posted when Focus page finishes loading initial data
-  static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
-  /// Posted when Advice page finishes loading initial data
-  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService
@@ -881,8 +891,6 @@ extension Notification.Name {
     "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
-  /// Posted from Settings to trigger the file indexing sheet
-  static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
   static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

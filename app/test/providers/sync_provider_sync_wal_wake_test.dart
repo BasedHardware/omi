@@ -100,7 +100,9 @@ void main() {
     provider.dispose();
   });
 
-  test('partial localUploadFailures still complete then surface error', () async {
+  test('partial localUploadFailures re-arm recovery without SyncStatus.error', () async {
+    // Regression #4587: leave/background aborts paint as localUploadFailures;
+    // schema says those WALs stay miss and must soft-retry, not red-error.
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -127,10 +129,48 @@ void main() {
 
     await provider.syncWal(wal);
 
+    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncState.isIdle, isTrue);
+    expect(wal.status, WalStatus.miss);
+    expect(
+      wakes,
+      [WakeTrigger.cooldownElapsed],
+      reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync',
+    );
+    provider.dispose();
+  });
+
+  test('permanent localUploadFailures still surface SyncStatus.error', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])
+      ..nextSyncResult = SyncLocalFilesResponse(
+        newConversationIds: [],
+        updatedConversationIds: [],
+        localUploadFailures: 1,
+        localUploadPermanentFailures: 1,
+        localUploadPermanentError: 'Exception: Audio file could not be processed by server',
+      );
+    final wakes = <WakeTrigger>[];
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (trigger) async {
+        wakes.add(trigger);
+      },
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
     expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, contains('Upload failed'));
-    // Still wakes — successful HTTP return with partial failures may include uploads.
-    expect(wakes, [WakeTrigger.cooldownElapsed]);
+    expect(wakes, isEmpty, reason: 'permanent refusals must not soft-retry via cooldown wake');
     provider.dispose();
   });
 

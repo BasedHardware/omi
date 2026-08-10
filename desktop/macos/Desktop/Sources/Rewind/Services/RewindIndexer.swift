@@ -618,13 +618,17 @@ actor RewindIndexer {
 
     let retentionDays = RewindSettings.shared.retentionDays
 
+    // "Keep everything" is the absence of a cutoff, not a very old one. Returning here — before
+    // the database is even opened — is what lets a Rewind timeline be all-time: there is no pass
+    // that could delete the oldest day out from under it.
+    guard let cutoffDate = RewindSettings.retentionCutoff(retentionDays: retentionDays) else {
+      return
+    }
+
     do {
       // Ensure recovery has a chance to run if a previous cleanup closed the DB
       // after a corruption/I/O error.
       try await RewindDatabase.shared.initialize()
-
-      // Get cutoff date
-      let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())!
 
       // Delete from database and get paths to delete
       let deleteResult = try await RewindDatabase.shared.deleteScreenshotsOlderThan(cutoffDate)

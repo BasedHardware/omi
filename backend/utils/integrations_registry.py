@@ -22,6 +22,12 @@ INTEGRATION_PROVIDERS: Dict[str, Dict[str, Any]] = {
             'contacts': GOOGLE_CONTACTS_SCOPES,
             'google_contacts': GOOGLE_CONTACTS_SCOPES,
         },
+        # Scopes declared as capabilities (so routing/enforcement stay wired) but
+        # WITHHELD from the consent request until Google approves them. gmail.readonly
+        # is a Google *restricted* scope: requesting it before verification + CASA are
+        # granted makes Google show every user an "unverified app" screen and blocks
+        # sign-in. Remove a scope from this tuple only once verification is granted.
+        'consent_pending_scopes': (GMAIL_READ_SCOPE,),
         'oauth': {
             'client_id_env': 'GOOGLE_CLIENT_ID',
             'client_secret_env': 'GOOGLE_CLIENT_SECRET',
@@ -55,9 +61,19 @@ def oauth_scopes(provider: Dict[str, Any]) -> Tuple[str, ...]:
     checks stored grants against — is derived from this, so the scopes requested
     and the scopes enforced cannot drift apart. Adding a capability here widens
     the consent request, so treat any addition as a user-consent change.
+
+    Scopes listed in `consent_pending_scopes` are excluded: they are declared but
+    not yet approved by Google, so requesting them would trip the "unverified app"
+    screen. They stay resolvable as capabilities but are never sent on the wire.
     """
+    pending = set(provider.get('consent_pending_scopes', ()))
     return tuple(
-        dict.fromkeys(scope for required_scopes in provider['capabilities'].values() for scope in required_scopes)
+        dict.fromkeys(
+            scope
+            for required_scopes in provider['capabilities'].values()
+            for scope in required_scopes
+            if scope not in pending
+        )
     )
 
 

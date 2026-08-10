@@ -2,6 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+extension Notification.Name {
+  static let chatVerticalWheelPassthrough = Notification.Name("chatVerticalWheelPassthrough")
+}
+
 /// The narrow distance from the live edge that means the reader has actually
 /// returned to it. A generous threshold makes a deliberate small upward scroll
 /// look like "follow the stream" and pulls the reader back down on the next token.
@@ -11,394 +15,110 @@ enum ChatScrollLiveEdge {
   /// newly expanded final row. Repeating the bottom-anchor scroll on the next
   /// turn makes the explicit intent land at the true live edge.
   static let explicitJumpSettlingDelay: TimeInterval = 0.05
+  /// The initial history restore can span several SwiftUI layout turns. A
+  /// single early scrollTo may resolve against the pre-history document and
+  /// leave a long transcript at its top, so settle the live edge again after
+  /// the first layout has materialized the lazy rows.
+  static let initialRestoreSettlingDelays: [TimeInterval] = [0.05, 0.2, 0.5, 1.0]
 
   static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
     visibleMaxY >= documentHeight - intentEpsilon
   }
-}
 
-/// Owns the legacy scroller state while a prompt rail is visible. The original
-/// state is restored when the rail disappears, so narrower transcript surfaces
-/// retain their normal AppKit scrolling affordance.
-@MainActor
-final class ChatPromptTimelineScrollerController {
-  private struct ScrollerVisualState {
-    let isHidden: Bool
-    let alphaValue: CGFloat
+  /// Converts AppKit's document-space clip origin into one stable coordinate:
+  /// zero at the visual top, increasing toward the live edge. SwiftUI-hosted
+  /// document views are not guaranteed to be flipped, so reading `origin.y`
+  /// directly reverses the scroll direction on those views and can classify
+  /// the visual top as the bottom.
+  static func topBasedScrollOffset(
+    clipOriginY: CGFloat,
+    viewportHeight: CGFloat,
+    documentHeight: CGFloat,
+    isDocumentFlipped: Bool
+  ) -> CGFloat {
+    let maximum = max(documentHeight - viewportHeight, 0)
+    let raw =
+      isDocumentFlipped
+      ? clipOriginY
+      : documentHeight - (clipOriginY + viewportHeight)
+    return min(max(raw, 0), maximum)
   }
 
-  private weak var scrollView: NSScrollView?
-  private weak var verticalScroller: NSScroller?
-  private var originalHasVerticalScroller: Bool?
-  private var originalScrollerVisualState: ScrollerVisualState?
-  private var isSuppressed = false
-
-  func attach(to scrollView: NSScrollView) {
-    guard self.scrollView !== scrollView else { return }
-    restore()
-    self.scrollView = scrollView
-    applyVisibility()
+  enum FollowResumeSource: Equatable {
+    case passivePosition
+    case settledUserScroll
   }
 
-  @discardableResult
-  func setSuppressed(_ isSuppressed: Bool) -> Bool {
-    guard self.isSuppressed != isSuppressed else { return false }
-    self.isSuppressed = isSuppressed
-    applyVisibility()
-    return true
-  }
-
-  func restore() {
-    if let originalHasVerticalScroller, let scrollView {
-      scrollView.hasVerticalScroller = originalHasVerticalScroller
-    }
-    if let originalScrollerVisualState, let verticalScroller {
-      verticalScroller.isHidden = originalScrollerVisualState.isHidden
-      verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
-    }
-    originalHasVerticalScroller = nil
-    originalScrollerVisualState = nil
-    verticalScroller = nil
-    scrollView = nil
-  }
-
-  private func applyVisibility() {
-    guard let scrollView else { return }
-    if isSuppressed {
-      if originalHasVerticalScroller == nil {
-        originalHasVerticalScroller = scrollView.hasVerticalScroller
-        verticalScroller = scrollView.verticalScroller
-        if let verticalScroller {
-          originalScrollerVisualState = ScrollerVisualState(
-            isHidden: verticalScroller.isHidden,
-            alphaValue: verticalScroller.alphaValue)
-        }
-      }
-      scrollView.hasVerticalScroller = false
-      verticalScroller?.isHidden = true
-      verticalScroller?.alphaValue = 0
-    } else if let originalHasVerticalScroller {
-      scrollView.hasVerticalScroller = originalHasVerticalScroller
-      if let originalScrollerVisualState, let verticalScroller {
-        verticalScroller.isHidden = originalScrollerVisualState.isHidden
-        verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
-      }
-      self.originalHasVerticalScroller = nil
-      self.originalScrollerVisualState = nil
-      verticalScroller = nil
-    }
+  /// Only a completed physical scroll at the live edge may hand transcript
+  /// ownership back to auto-follow. AppKit also emits bottom-position samples
+  /// after programmatic prompt jumps and layout changes; treating those as
+  /// reader intent makes the viewport snap away from selected history.
+  static func canResumeFollowing(
+    source: FollowResumeSource,
+    isAtBottom: Bool,
+    userIsScrolling: Bool
+  ) -> Bool {
+    source == .settledUserScroll && isAtBottom && !userIsScrolling
   }
 }
 
-/// A zero-chrome AppKit bridge mounted inside the transcript document view.
-/// It reaches the enclosing SwiftUI NSScrollView and hides its legacy vertical
-/// scroller while the custom prompt rail is available.
-struct ChatTimelineScrollerSuppressionHost: NSViewRepresentable {
-  let isSuppressed: Bool
+/// **How often a following transcript re-reaches the live edge while an answer
+/// streams.** A rate limiter, not a quiet period.
+///
+/// The previous implementation cancelled its pending scroll on every content
+/// change and rescheduled it 80 ms out. That is a trailing debounce wearing a
+/// throttle's name, and it has one behaviour that matters here: while the input
+/// keeps arriving faster than the window, the scroll never runs at all.
+/// `ChatProvider` flushes streamed text every 35 ms
+/// (`ChatStreamingBuffer(flushInterval: 0.035)`), which is exactly that case —
+/// so a following reader was abandoned for the entire answer and then snapped
+/// back the instant the stream stopped. Measured on the mounted transcript, the
+/// live edge ran 387 pt past a 600 pt viewport and never once caught up.
+///
+/// A throttle instead: the first request runs immediately, and any request
+/// inside the window queues **one** run at the window's end without pushing that
+/// deadline back. Continuous streaming therefore follows at a steady ~12 Hz.
+enum ChatScrollFollowThrottle {
+  /// One follow per frame-ish. Small enough that the live edge never visibly
+  /// falls behind, large enough that a token burst cannot saturate the main
+  /// thread with `scrollTo` + layout.
+  static let interval: TimeInterval = 0.08
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    _ = context.coordinator.setSuppressed(isSuppressed)
-    scheduleAttachment(of: view, with: context.coordinator)
-    return view
+  enum Decision: Equatable {
+    /// Run the scroll on this turn.
+    case now
+    /// A run is already queued for this window — adding another would be the
+    /// debounce again.
+    case alreadyScheduled
+    /// Queue exactly one run this far ahead.
+    case schedule(after: TimeInterval)
   }
 
-  func updateNSView(_ nsView: NSView, context: Context) {
-    if context.coordinator.setSuppressed(isSuppressed) {
-      scheduleAttachment(of: nsView, with: context.coordinator)
-    }
-  }
-
-  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-    coordinator.restore()
-  }
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator()
-  }
-
-  private func scheduleAttachment(of view: NSView, with coordinator: Coordinator) {
-    // SwiftUI can create the background representable before inserting it into
-    // the document view. Retry through the next layout turns so the actual
-    // transcript NSScrollView is always found rather than leaving its overlay
-    // scroller visible for this rail session.
-    for delay in [0.0, 0.1, 0.3] {
-      DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-        coordinator.attach(toEnclosingScrollViewOf: view)
-      }
-    }
-  }
-
-  final class Coordinator: NSObject, @unchecked Sendable {
-    private let controller = ChatPromptTimelineScrollerController()
-
-    func setSuppressed(_ isSuppressed: Bool) -> Bool {
-      MainActor.assumeIsolated {
-        controller.setSuppressed(isSuppressed)
-      }
-    }
-
-    func attach(toEnclosingScrollViewOf view: NSView) {
-      MainActor.assumeIsolated {
-        var current: NSView? = view
-        while let candidate = current {
-          if let scrollView = candidate as? NSScrollView {
-            controller.attach(to: scrollView)
-            return
-          }
-          current = candidate.superview
-        }
-      }
-    }
-
-    func restore() {
-      MainActor.assumeIsolated {
-        controller.restore()
-      }
-    }
-
-    deinit {
-      MainActor.assumeIsolated {
-        controller.restore()
-      }
-    }
+  static func decide(now: TimeInterval, lastRun: TimeInterval?, hasQueuedRun: Bool) -> Decision {
+    guard !hasQueuedRun else { return .alreadyScheduled }
+    guard let lastRun else { return .now }
+    let elapsed = now - lastRun
+    // A clock that went backwards (or an unchanged timestamp) must not strand
+    // the transcript in a window that never expires.
+    guard elapsed >= 0, elapsed < interval else { return .now }
+    return .schedule(after: interval - elapsed)
   }
 }
 
-/// Detects scroll position changes by observing the underlying NSScrollView.
-struct ScrollPositionDetector: NSViewRepresentable {
-  let onScrollPositionChange: (ChatScrollPosition) -> Void
+/// A stable representable host that tells its coordinator when SwiftUI moves it
+/// between transcript hierarchies. The enclosing NSScrollView is not guaranteed
+/// to survive a lazy document replacement, especially during a fast gesture.
+private final class ScrollDetectorHostView: NSView {
+  var onHierarchyChange: (() -> Void)?
 
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      context.coordinator.setupScrollObserver(for: view)
-    }
-    return view
+  override func viewDidMoveToSuperview() {
+    super.viewDidMoveToSuperview()
+    onHierarchyChange?()
   }
 
-  func updateNSView(_ nsView: NSView, context: Context) {}
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator(onScrollPositionChange: onScrollPositionChange)
-  }
-
-  final class Coordinator: NSObject, @unchecked Sendable {
-    let onScrollPositionChange: (ChatScrollPosition) -> Void
-    private var scrollView: NSScrollView?
-    private var boundsObservation: NSObjectProtocol?
-    private var documentFrameObservation: NSObjectProtocol?
-    private var coalesceWorkItem: DispatchWorkItem?
-    private var lastReportedPosition: ChatScrollPosition?
-    private var pendingPosition: ChatScrollPosition?
-
-    init(onScrollPositionChange: @escaping (ChatScrollPosition) -> Void) {
-      self.onScrollPositionChange = onScrollPositionChange
-    }
-
-    func setupScrollObserver(for view: NSView) {
-      MainActor.assumeIsolated {
-        var current: NSView? = view
-        while let v = current {
-          if let sv = v as? NSScrollView {
-            scrollView = sv
-            break
-          }
-          current = v.superview
-        }
-
-        guard let scrollView else { return }
-        let clipView = scrollView.contentView
-        clipView.postsBoundsChangedNotifications = true
-        boundsObservation = NotificationCenter.default.addObserver(
-          forName: NSView.boundsDidChangeNotification,
-          object: clipView,
-          queue: .main
-        ) { [weak self] _ in
-          self?.checkScrollPosition()
-        }
-
-        // Document growth is just as important as reader movement: it is how
-        // the rail learns that a streaming final response changed the true live
-        // edge. Observe it from AppKit rather than feeding SwiftUI geometry
-        // measurements back into the transcript's own layout pass.
-        let documentView = scrollView.documentView
-        documentView?.postsFrameChangedNotifications = true
-        documentFrameObservation = NotificationCenter.default.addObserver(
-          forName: NSView.frameDidChangeNotification,
-          object: documentView,
-          queue: .main
-        ) { [weak self] _ in
-          self?.checkScrollPosition()
-        }
-
-        checkScrollPosition()
-      }
-    }
-
-    func checkScrollPosition() {
-      MainActor.assumeIsolated {
-        guard let scrollView, let documentView = scrollView.documentView else { return }
-
-        let clipBounds = scrollView.contentView.bounds
-        let documentHeight = documentView.frame.height
-        let visibleMaxY = clipBounds.origin.y + clipBounds.height
-        let position = ChatScrollPosition(
-          isAtBottom: ChatScrollLiveEdge.isAtBottom(
-            visibleMaxY: visibleMaxY,
-            documentHeight: documentHeight),
-          scrollTop: clipBounds.origin.y,
-          viewportHeight: clipBounds.height,
-          documentHeight: documentHeight
-        )
-        guard shouldReport(position) else { return }
-
-        coalesceWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-          guard let self, let pendingPosition = self.pendingPosition else { return }
-          self.lastReportedPosition = pendingPosition
-          self.onScrollPositionChange(pendingPosition)
-        }
-        coalesceWorkItem = workItem
-        pendingPosition = position
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
-      }
-    }
-
-    private func shouldReport(_ position: ChatScrollPosition) -> Bool {
-      guard let lastReportedPosition else { return true }
-      return position.isAtBottom != lastReportedPosition.isAtBottom
-        || abs(position.scrollTop - lastReportedPosition.scrollTop) >= 4
-        || abs(position.viewportHeight - lastReportedPosition.viewportHeight) >= 4
-        || abs(position.documentHeight - lastReportedPosition.documentHeight) >= 4
-    }
-
-    deinit {
-      coalesceWorkItem?.cancel()
-      if let boundsObservation {
-        NotificationCenter.default.removeObserver(boundsObservation)
-      }
-      if let documentFrameObservation {
-        NotificationCenter.default.removeObserver(documentFrameObservation)
-      }
-    }
-  }
-}
-
-/// An AppKit-owned snapshot of the transcript viewport. Sending this through
-/// the scroll detector keeps scroll/layout measurement out of the SwiftUI
-/// `LazyVStack`, which otherwise risks an AttributeGraph feedback loop.
-struct ChatScrollPosition: Equatable {
-  let isAtBottom: Bool
-  let scrollTop: CGFloat
-  let viewportHeight: CGFloat
-  let documentHeight: CGFloat
-}
-
-/// Reports a user prompt's document position after AppKit has completed its
-/// layout. SwiftUI geometry actions inside the transcript's `LazyVStack` used
-/// to feed those measurements back into the same layout transaction and could
-/// pin the main thread in AttributeGraph. This bridge keeps the prompt rail's
-/// exact ordering without reintroducing that feedback edge.
-struct ChatPromptRowAnchorReporter: NSViewRepresentable {
-  let markID: String
-  let geometry: ChatTranscriptGeometry
-
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    context.coordinator.configure(view: view, markID: markID, geometry: geometry)
-    return view
-  }
-
-  func updateNSView(_ nsView: NSView, context: Context) {
-    context.coordinator.configure(view: nsView, markID: markID, geometry: geometry)
-  }
-
-  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-    coordinator.stop()
-  }
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator()
-  }
-
-  final class Coordinator: NSObject, @unchecked Sendable {
-    private weak var view: NSView?
-    private weak var geometry: ChatTranscriptGeometry?
-    private var markID = ""
-    private var frameObservation: NSObjectProtocol?
-    private var reportWorkItem: DispatchWorkItem?
-
-    func configure(view: NSView, markID: String, geometry: ChatTranscriptGeometry) {
-      MainActor.assumeIsolated {
-        let isNewAnchor = self.view !== view || self.markID != markID || self.geometry !== geometry
-        guard isNewAnchor else { return }
-        stop()
-        self.view = view
-        self.markID = markID
-        self.geometry = geometry
-        view.postsFrameChangedNotifications = true
-        frameObservation = NotificationCenter.default.addObserver(
-          forName: NSView.frameDidChangeNotification,
-          object: view,
-          queue: .main
-        ) { [weak self] _ in
-          self?.scheduleReport()
-        }
-        scheduleReport()
-      }
-    }
-
-    func stop() {
-      MainActor.assumeIsolated {
-        reportWorkItem?.cancel()
-        reportWorkItem = nil
-        if let frameObservation {
-          NotificationCenter.default.removeObserver(frameObservation)
-        }
-        frameObservation = nil
-        view = nil
-        geometry = nil
-      }
-    }
-
-    private func scheduleReport() {
-      MainActor.assumeIsolated {
-        reportWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-          MainActor.assumeIsolated {
-            guard let self, let view = self.view, let geometry = self.geometry else { return }
-            guard let documentView = Self.enclosingScrollView(for: view)?.documentView else { return }
-            let origin = view.convert(view.bounds.origin, to: documentView)
-            let offset =
-              documentView.isFlipped
-              ? origin.y
-              : documentView.bounds.height - origin.y - view.bounds.height
-            geometry.setRowOffset(offset, for: self.markID)
-          }
-        }
-        reportWorkItem = work
-        DispatchQueue.main.async(execute: work)
-      }
-    }
-
-    @MainActor
-    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
-      var current: NSView? = view
-      while let candidate = current {
-        if let scrollView = candidate as? NSScrollView {
-          return scrollView
-        }
-        current = candidate.superview
-      }
-      return nil
-    }
-
-    deinit {
-      MainActor.assumeIsolated {
-        stop()
-      }
-    }
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    onHierarchyChange?()
   }
 }
 
@@ -409,14 +129,24 @@ struct UserScrollDetector: NSViewRepresentable {
   var onScrollSettledAtBottom: () -> Void = {}
 
   func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      context.coordinator.install(for: view)
+    let view = ScrollDetectorHostView()
+    view.onHierarchyChange = { [weak coordinator = context.coordinator, weak view] in
+      guard let coordinator, let view else { return }
+      coordinator.scheduleAttachment(for: view)
     }
+    context.coordinator.scheduleAttachment(for: view)
     return view
   }
 
-  func updateNSView(_ nsView: NSView, context: Context) {}
+  func updateNSView(_ nsView: NSView, context: Context) {
+    // Keep the event monitor attached to the current transcript scroll view
+    // when SwiftUI rebuilds the lazy document hierarchy.
+    context.coordinator.install(for: nsView)
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.stop()
+  }
 
   func makeCoordinator() -> Coordinator {
     Coordinator(onUserScroll: onUserScroll, onScrollSettledAtBottom: onScrollSettledAtBottom)
@@ -426,6 +156,24 @@ struct UserScrollDetector: NSViewRepresentable {
     let onUserScroll: () -> Void
     let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
+    private weak var installedScrollView: NSScrollView?
+    private var settleWorkItem: DispatchWorkItem?
+    /// Where the viewport sat when the current press began, so movement can be
+    /// told apart from a click that never moved anything.
+    private var pressOriginScrollTop: CGFloat?
+    private var pressCandidateOwnsViewport = false
+    private var pressBoundsObservation: NSObjectProtocol?
+    private static let dragMovementEpsilon: CGFloat = 1
+    /// AppKit may route dozens of wheel deltas through one trackpad gesture.
+    /// Reader ownership crosses into SwiftUI once per gesture, not once per
+    /// delta, so a long lazy transcript is not invalidated while AppKit is
+    /// still delivering momentum to its current scroll view.
+    private var wheelGestureOwnsViewport = false
+    private var willStartLiveScrollObservation: NSObjectProtocol?
+    private var didEndLiveScrollObservation: NSObjectProtocol?
+    private var verticalWheelPassthroughObservation: NSObjectProtocol?
+
+    private static let settledBottomDelay: TimeInterval = 0.36
 
     private static let scrollNavigationKeyCodes: Set<UInt16> = [
       125,  // Down arrow
@@ -441,44 +189,150 @@ struct UserScrollDetector: NSViewRepresentable {
       self.onScrollSettledAtBottom = onScrollSettledAtBottom
     }
 
+    func scheduleAttachment(for view: NSView) {
+      for delay in [0.0, 0.05, 0.2] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak view] in
+          guard let self, let view else { return }
+          self.install(for: view)
+        }
+      }
+    }
+
     func install(for view: NSView) {
       MainActor.assumeIsolated {
-        var scrollView: NSScrollView?
-        var current: NSView? = view
-        while let v = current {
-          if let sv = v as? NSScrollView {
-            scrollView = sv
-            break
-          }
-          current = v.superview
+        guard let targetScrollView = Self.enclosingScrollView(for: view) else {
+          stop()
+          return
         }
-        let targetScrollView = scrollView
+        guard installedScrollView !== targetScrollView else { return }
+        stop()
+        installedScrollView = targetScrollView
+
+        // AppKit owns the lifecycle of a trackpad/wheel gesture, including
+        // momentum. A wall-clock debounce can fire during a brief gap in a
+        // fast gesture and incorrectly decide that the reader settled at the
+        // live edge. That re-arms follow mode and the next streaming/layout
+        // update snaps the transcript back to the bottom. Observe the native
+        // live-scroll boundary instead, so ownership cannot return until
+        // AppKit says the complete gesture (momentum included) has ended.
+        willStartLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.willStartLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.beginUserScroll()
+        }
+        didEndLiveScrollObservation = NotificationCenter.default.addObserver(
+          forName: NSScrollView.didEndLiveScrollNotification,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] _ in
+          guard let self, let targetScrollView else { return }
+          self.finishUserScroll(on: targetScrollView)
+        }
+        verticalWheelPassthroughObservation = NotificationCenter.default.addObserver(
+          forName: .chatVerticalWheelPassthrough,
+          object: targetScrollView,
+          queue: .main
+        ) { [weak self, weak targetScrollView] notification in
+          guard let self, let targetScrollView else { return }
+          self.beginUserScroll()
+          if let event = notification.userInfo?["event"] as? NSEvent,
+            event.phase.isEmpty, event.momentumPhase.isEmpty
+          {
+            self.scheduleUnphasedWheelEnd(for: targetScrollView)
+          }
+        }
 
         let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
-          guard let self, let targetScrollView else { return event }
+          guard let self else { return event }
           guard event.window == targetScrollView.window else { return event }
 
           if event.type == .keyDown {
             guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
             guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
             self.onUserScroll()
+            self.scheduleDiscreteInputSettledBottomCheck(for: targetScrollView)
           } else {
-            let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
-            guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-            if event.type == .scrollWheel {
+            switch event.type {
+            case .scrollWheel:
+              let wheelLocation = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(wheelLocation) else { break }
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
-                self.onUserScroll()
+                self.beginUserScroll()
+                if event.phase.isEmpty, event.momentumPhase.isEmpty {
+                  self.scheduleUnphasedWheelEnd(for: targetScrollView)
+                }
               }
-            } else {
-              self.onUserScroll()
+            case .leftMouseDown:
+              // A press is not viewport movement. Clicking inside the transcript
+              // to focus the window, select text, or hit a control used to claim
+              // scroll ownership outright, which cancelled the one-shot launch
+              // placement and left a freshly opened chat stranded at the top of
+              // its history. Open a candidate instead; only real displacement of
+              // this clip view promotes it to ownership.
+              let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
+              guard targetScrollView.bounds.contains(locationInScrollView) else { break }
+              self.beginPressCandidate(on: targetScrollView)
+            case .leftMouseUp:
+              self.endPressCandidate(on: targetScrollView)
+            default:
+              // Deliberately not bounds-checked: a scrollbar drag and a
+              // selection autoscroll both leave the transcript's bounds while
+              // still moving it, and dropping those events lost the reader's
+              // ownership exactly when they were moving fastest.
+              self.promotePressCandidateIfMoved(on: targetScrollView)
             }
           }
-          self.scheduleSettledBottomChecks(for: targetScrollView)
           return event
         }
         monitor = NSEvent.addLocalMonitorForEvents(
-          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown], handler: handler)
+          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown],
+          handler: handler)
       }
+    }
+
+    func stop() {
+      MainActor.assumeIsolated {
+        settleWorkItem?.cancel()
+        settleWorkItem = nil
+        if let pressBoundsObservation {
+          NotificationCenter.default.removeObserver(pressBoundsObservation)
+        }
+        pressBoundsObservation = nil
+        pressOriginScrollTop = nil
+        pressCandidateOwnsViewport = false
+        wheelGestureOwnsViewport = false
+        if let willStartLiveScrollObservation {
+          NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
+        }
+        willStartLiveScrollObservation = nil
+        if let didEndLiveScrollObservation {
+          NotificationCenter.default.removeObserver(didEndLiveScrollObservation)
+        }
+        didEndLiveScrollObservation = nil
+        if let verticalWheelPassthroughObservation {
+          NotificationCenter.default.removeObserver(verticalWheelPassthroughObservation)
+        }
+        verticalWheelPassthroughObservation = nil
+        if let monitor {
+          NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+        installedScrollView = nil
+      }
+    }
+
+    @MainActor
+    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
+      var current: NSView? = view
+      while let candidate = current {
+        if let scrollView = candidate as? NSScrollView {
+          return scrollView
+        }
+        current = candidate.superview
+      }
+      return nil
     }
 
     private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
@@ -488,12 +342,120 @@ struct UserScrollDetector: NSViewRepresentable {
       }
     }
 
-    private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
-      for delay in [0.12, 0.36] {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak scrollView] in
-          guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
-          self.onScrollSettledAtBottom()
+    @MainActor
+    private func beginPressCandidate(on scrollView: NSScrollView) {
+      pressOriginScrollTop = Self.scrollTop(of: scrollView)
+      pressCandidateOwnsViewport = false
+      // A scrollbar track click repositions the viewport during mouse-down and
+      // may never produce a drag event, so watch the clip view rather than
+      // waiting for one.
+      scrollView.contentView.postsBoundsChangedNotifications = true
+      pressBoundsObservation = NotificationCenter.default.addObserver(
+        forName: NSView.boundsDidChangeNotification,
+        object: scrollView.contentView,
+        queue: .main
+      ) { [weak self, weak scrollView] _ in
+        guard let self, let scrollView else { return }
+        MainActor.assumeIsolated { self.promotePressCandidateIfMoved(on: scrollView) }
+      }
+    }
+
+    @MainActor
+    private func promotePressCandidateIfMoved(on scrollView: NSScrollView) {
+      guard let origin = pressOriginScrollTop, !pressCandidateOwnsViewport else { return }
+      guard abs(Self.scrollTop(of: scrollView) - origin) >= Self.dragMovementEpsilon else { return }
+      pressCandidateOwnsViewport = true
+      onUserScroll()
+    }
+
+    @MainActor
+    private func endPressCandidate(on scrollView: NSScrollView) {
+      let ownedViewport = pressCandidateOwnsViewport
+      if let observation = pressBoundsObservation {
+        NotificationCenter.default.removeObserver(observation)
+      }
+      pressBoundsObservation = nil
+      pressOriginScrollTop = nil
+      pressCandidateOwnsViewport = false
+      guard ownedViewport else { return }
+      scheduleDiscreteInputSettledBottomCheck(for: scrollView)
+    }
+
+    private func beginUserScroll() {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      guard !wheelGestureOwnsViewport else { return }
+      wheelGestureOwnsViewport = true
+      onUserScroll()
+    }
+
+    private func finishUserScroll(on scrollView: NSScrollView) {
+      settleWorkItem?.cancel()
+      settleWorkItem = nil
+      wheelGestureOwnsViewport = false
+      // The notification is delivered at the end of AppKit's live-scroll
+      // transaction. Read the final clip bounds on the next main turn, after
+      // the scroll view has committed its terminal position.
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func scheduleUnphasedWheelEnd(for scrollView: NSScrollView) {
+      // Detent wheels and synthetic classic-wheel events do not always emit
+      // AppKit's live-scroll start/end notifications. Debounce only that
+      // unphased path. Trackpad and momentum events use didEndLiveScroll and
+      // never depend on this wall-clock fallback.
+      settleWorkItem?.cancel()
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self else { return }
+        self.wheelGestureOwnsViewport = false
+        guard let scrollView, Self.isAtBottom(scrollView) else {
+          self.settleWorkItem = nil
+          return
         }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Self.settledBottomDelay,
+        execute: workItem
+      )
+    }
+
+    private func scheduleDiscreteInputSettledBottomCheck(for scrollView: NSScrollView) {
+      // Keyboard navigation and scrollbar mouse interaction do not reliably
+      // participate in the live-scroll notification lifecycle. Keep a bounded
+      // fallback for those discrete inputs only; wheel/trackpad gestures must
+      // never use this timer because momentum can outlive it.
+      settleWorkItem?.cancel()
+      let workItem = DispatchWorkItem { [weak self, weak scrollView] in
+        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
+        self.settleWorkItem = nil
+      }
+      settleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + Self.settledBottomDelay,
+        execute: workItem
+      )
+    }
+
+    private static func scrollTop(of scrollView: NSScrollView) -> CGFloat {
+      MainActor.assumeIsolated {
+        guard let documentView = scrollView.documentView else { return 0 }
+        let clipBounds = scrollView.contentView.bounds
+        return ChatScrollLiveEdge.topBasedScrollOffset(
+          clipOriginY: clipBounds.origin.y,
+          viewportHeight: clipBounds.height,
+          documentHeight: documentView.frame.height,
+          isDocumentFlipped: documentView.isFlipped
+        )
       }
     }
 
@@ -501,18 +463,18 @@ struct UserScrollDetector: NSViewRepresentable {
       MainActor.assumeIsolated {
         guard let documentView = scrollView.documentView else { return false }
         let clipBounds = scrollView.contentView.bounds
-        let documentHeight = documentView.frame.height
-        let visibleMaxY = clipBounds.origin.y + clipBounds.height
+        let visibleMaxY = scrollTop(of: scrollView) + clipBounds.height
         return ChatScrollLiveEdge.isAtBottom(
           visibleMaxY: visibleMaxY,
-          documentHeight: documentHeight
+          documentHeight: documentView.frame.height
         )
       }
     }
 
     deinit {
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
+      settleWorkItem?.cancel()
+      MainActor.assumeIsolated {
+        stop()
       }
     }
   }
@@ -560,6 +522,8 @@ struct ChatScrollContainer<Content: View>: View {
   @State private var userScrollEndWorkItem: DispatchWorkItem?
   @State private var settleWorkItems: [DispatchWorkItem] = []
   @State private var lastViewportSize: CGSize = .zero
+  @State private var lastFollowScrollTime: TimeInterval?
+  @State private var hasQueuedFollowScroll = false
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -601,32 +565,33 @@ struct ChatScrollContainer<Content: View>: View {
   }
 
   private var scrollDetectors: some View {
-    ZStack {
-      ScrollPositionDetector { position in
-        if position.isAtBottom && scrollMode == .freeScrolling {
-          cancelAllPendingScrolls()
-          userIsScrolling = false
-          scrollMode = .followingBottom
-          hasActivityBelow = false
-        }
-      }
-      UserScrollDetector {
-        scrollMode = .freeScrolling
-        userIsScrolling = true
-        hasActivityBelow = false
-        cancelAllPendingScrolls()
-        let endWork = DispatchWorkItem {
-          userIsScrolling = false
-        }
-        userScrollEndWorkItem = endWork
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
-      } onScrollSettledAtBottom: {
-        guard scrollMode == .freeScrolling else { return }
-        cancelAllPendingScrolls()
+    UserScrollDetector {
+      scrollMode = .freeScrolling
+      userIsScrolling = true
+      hasActivityBelow = false
+      cancelAllPendingScrolls()
+      let endWork = DispatchWorkItem {
         userIsScrolling = false
-        scrollMode = .followingBottom
-        hasActivityBelow = false
       }
+      userScrollEndWorkItem = endWork
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+    } onScrollSettledAtBottom: {
+      // Same contract as ChatMessagesView: the detector only reports a settle
+      // once the input finished, so release the wall-clock latch here rather
+      // than consulting it — it is still true on this very run-loop turn.
+      userScrollEndWorkItem?.cancel()
+      userScrollEndWorkItem = nil
+      userIsScrolling = false
+      guard
+        ChatScrollLiveEdge.canResumeFollowing(
+          source: .settledUserScroll,
+          isAtBottom: true,
+          userIsScrolling: userIsScrolling
+        ), scrollMode == .freeScrolling
+      else { return }
+      cancelAllPendingScrolls()
+      scrollMode = .followingBottom
+      hasActivityBelow = false
     }
   }
 
@@ -719,19 +684,35 @@ struct ChatScrollContainer<Content: View>: View {
     }
   }
 
+  /// Same contract and same reason as `ChatMessagesView`: this is a throttle, so
+  /// a stream that never pauses still reaches the live edge every window.
   private func throttledScrollToBottom(proxy: ScrollViewProxy) {
     guard !userIsScrolling else { return }
-    scrollThrottleWorkItem?.cancel()
-    let workItem = DispatchWorkItem {
+    let now = ProcessInfo.processInfo.systemUptime
+    switch ChatScrollFollowThrottle.decide(
+      now: now, lastRun: lastFollowScrollTime, hasQueuedRun: hasQueuedFollowScroll)
+    {
+    case .alreadyScheduled:
+      return
+    case .now:
+      lastFollowScrollTime = now
       scrollToBottom(proxy: proxy, animated: true)
+    case .schedule(let delay):
+      hasQueuedFollowScroll = true
+      let workItem = DispatchWorkItem {
+        hasQueuedFollowScroll = false
+        lastFollowScrollTime = ProcessInfo.processInfo.systemUptime
+        scrollToBottom(proxy: proxy, animated: true)
+      }
+      scrollThrottleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
-    scrollThrottleWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
   }
 
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
+    if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
     for item in settleWorkItems {

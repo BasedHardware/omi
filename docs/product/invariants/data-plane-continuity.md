@@ -1,15 +1,23 @@
 # INV-DATA-1: Production-family customer data-plane continuity
 
-**Status:** locked
+**Status:** proposed
 
-**Statement:** A production-family Omi artifact has exactly one customer data
-plane. Stable, internal, alpha, beta, TestFlight, and Play Internal all use the
-canonical production API, agent endpoint, desktop API, Firebase/Firestore
-identity, and account universe. On macOS, Beta and Stable are channels of the
-same canonical `Omi.app` / `com.omi.computer-macos` identity; Beta is represented
-only by its channel pointer and feed. A user who installs an earlier build must
-see the same account, recordings, conversations, integrations, and sync state
-as on stable.
+This revision is proposed as of 2026-08-01. It must remain unchanged for seven
+days, with its routing and qualification guards, before a follow-up can lock it.
+
+**Statement:** A production-family artifact preserves one canonical customer
+identity/data plane: Stable, Beta, internal, alpha, TestFlight, and Play Internal
+use production Firebase Auth and Firestore (`based-hardware`) and preserve the
+same UID, recordings, conversations, integrations, and sync state. On macOS,
+Stable is `com.omi.computer-macos`; Beta is the separately-installable
+`com.omi.computer-macos.beta` dogfood identity. Beta's separate local storage is
+intentional isolation, not a separate cloud account or Firestore universe.
+
+Stable is pinned to the production Python and desktop APIs. Beta is pinned to the
+development Python (`api.omiapi.com`) and desktop (`desktop-backend-dt5lrfkkoa`)
+serving endpoints, while its OAuth authority remains production (`api.omi.me`).
+This is the sole allowed serving-plane split: it must not select another Firebase
+project, account universe, or arbitrary endpoint.
 
 A release channel controls *eligibility, rollout exposure, diagnostics, and
 feature availability*. It MUST NOT select a different account or customer-data
@@ -17,26 +25,28 @@ universe. TestFlight detection, an Android dart define, an update-channel
 preference, a launch environment, or a bundled environment file is not
 authority to redirect a production-family package.
 
-The canonical current production routing is:
+The routing authority matrix is:
 
 | Surface | Production-family authority |
 | --- | --- |
 | Flutter API | `https://api.omi.me/` |
 | Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
-| macOS Python API | `https://api.omi.me/` |
-| macOS desktop API | `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
-| macOS production identity | `Omi.app` / `com.omi.computer-macos`; Beta and Stable share this identity |
+| macOS Stable Python / desktop API | `https://api.omi.me/` / `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
+| macOS Beta Python / desktop API | `https://api.omiapi.com/` / `https://desktop-backend-dt5lrfkkoa-uc.a.run.app/` |
+| macOS Beta OAuth API | `https://api.omi.me/` |
+| macOS production identities | Stable: `com.omi.computer-macos`; Beta: `com.omi.computer-macos.beta` |
 | macOS Firebase/Firestore config | the shipped production customer project (`based-hardware`) |
 
 ## MUST NOT
 
-- Route a production-family artifact to staging, development, a beta API, or
-  any arbitrary endpoint through a build define, CI variable, runtime
-  preference, update channel, process environment, or bundled `.env` value.
+- Route Stable, mobile, or any other production-family artifact to development,
+  staging, a beta API, or any arbitrary endpoint through a build define, CI
+  variable, runtime preference, update channel, process environment, or bundled
+  `.env` value. Beta's two fixed development serving authorities are the sole exception.
+- Route Beta OAuth, Firebase Auth, Firebase API-key binding, or Firestore to a
+  development project or endpoint. Beta must ignore `OMI_AUTH_API_URL`.
 - Treat `OMI_BETA_RELEASE_RING`, `STAGING_API_URL`, `api-beta.omi.me`, or an
   equivalent beta/staging selector as a production-family routing mechanism.
-- Create a separate macOS Beta app or bundle identity. Beta is a channel pointer
-  and feed for the canonical production app, not a separate install identity.
 - Publish an external preview under a production-family identity. An external
   preview needs a reserved preview identity plus signed metadata that explicitly
   selects its permitted data plane; malformed metadata fails closed to the
@@ -49,7 +59,8 @@ The canonical current production routing is:
 A customer data-plane migration is not a beta rollout. It requires an explicit
 `INV-DATA-1` PR citation, architecture and product review, identity/data
 continuity evidence, a rollback plan, and an artifact-level assertion of the
-new immutable authority before it can ship. A separate development/test app
+new immutable authority before it can ship. The fixed Beta serving-plane split
+above is not a customer data-plane migration. A separate development/test app
 identity and test credentials may use non-production services; it must not
 reuse a production-family identity.
 
@@ -57,9 +68,9 @@ reuse a production-family identity.
 
 - `app/test/unit/env_test.dart` — production startup rejects non-canonical API
   and agent routing.
-- `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — the canonical
-  production identity resolves only canonical production endpoints for both
-  Stable and Beta channels despite contaminated process values.
+- `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — Stable remains
+  production-routed; Beta resolves only its fixed development serving endpoints
+  and production auth despite contaminated values.
 - `desktop/macos/Desktop/Tests/ExternalPreviewBuildTests.swift` — preview
   identities require signed backend metadata and fail closed.
 - `.github/scripts/check-mobile-production-routing.py` — exact production
@@ -68,6 +79,10 @@ reuse a production-family identity.
   for missing, conflicting, staging, arbitrary, and legacy assignments.
 - Signed mobile and desktop artifact smoke remains release evidence; static CI
   guards are tripwires, not a substitute for artifact verification.
+- `backend/scripts/probe_beta_uid_continuity.py` — the non-human production
+  Firebase probe creates a bounded sentinel through production, reads that
+  exact record through Beta's fixed development Python endpoint, then deletes
+  it through production before qualification can promote Beta.
 
 ## Path globs
 

@@ -946,11 +946,10 @@ export type OmiBridgeApi = {
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
   readStickyNotes: () => Promise<StickyNotesReadResult>
-  // Auth: run the backend-mediated Google OAuth flow in the SYSTEM browser
-  // (main owns the loopback callback + token exchange; Google blocks embedded
-  // webview OAuth, so there is no in-app popup path). The renderer finishes
-  // with signInWithCustomToken on the returned custom token.
-  signInWithGoogle: () => Promise<GoogleSignInResult>
+  // Auth: run the backend-mediated Google or Apple OAuth flow in the SYSTEM
+  // browser (main owns the loopback callback + token exchange; the renderer
+  // finishes with signInWithCustomToken on the returned custom token).
+  signInWithProvider: (provider: SignInProvider) => Promise<SignInResult>
   // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
   // and REST reads; the renderer synthesizes the returned items and writes
   // /v3/memories + /v1/action-items itself (it holds the Firebase token).
@@ -1887,12 +1886,14 @@ export type StickyNotesReadResult = {
   error?: string
 }
 
-// --- Auth: backend-mediated Google sign-in (system browser + loopback) ---
+// --- Auth: backend-mediated provider sign-in (system browser + loopback) ---
 
 /** Result of the main-process sign-in flow. On ok the renderer completes the
  *  session with firebase signInWithCustomToken(customToken); email/name are
- *  display-only claims decoded (unverified) from the Google id_token. */
-export type GoogleSignInResult =
+ *  display-only claims decoded (unverified) from the provider's id_token. */
+export type SignInProvider = 'google' | 'apple'
+
+export type SignInResult =
   | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
   | { ok: false; error: string }
 

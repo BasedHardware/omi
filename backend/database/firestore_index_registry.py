@@ -282,6 +282,48 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_canonical_graph_read',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('graph_ready', '==', 'graph_ready'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('graph_ready'),
+        _desc('updated_at'),
+        _desc('__name__'),
+    ),
+)
+
+CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_canonical_atlas_read',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _desc('updated_at'),
+        _desc('__name__'),
+    ),
+)
+
 CONVERSATION_SOURCE_MEMORY_QUERY = FirestoreQuerySpec(
     identifier='memory_items_by_conversation_source',
     collection_group='memory_items',
@@ -494,6 +536,7 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    CANONICAL_GRAPH_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,

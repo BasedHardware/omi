@@ -12,6 +12,7 @@ from fastapi import HTTPException
 import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -73,6 +74,7 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
 )
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
@@ -258,8 +260,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        user_name = get_user_name(uid, use_default=False)
-        transcript_text = main_conv.get_transcript(False, people=people, user_name=user_name)  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -276,7 +277,7 @@ def _get_structured(
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
-                    transcript_text,
+                    action_items_transcript,
                     conv_started_at,
                     language_code,
                     tz_str,
@@ -313,7 +314,7 @@ def _get_structured(
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
-                transcript_text,
+                action_items_transcript,
                 conv_started_at,
                 language_code,
                 tz_str,
@@ -325,8 +326,7 @@ def _get_structured(
             )
         return structured, False
     except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
+        raise conversation_processing_http_exception(e) from e
 
 
 def _get_conversation_obj(
@@ -490,9 +490,8 @@ def _trigger_apps(
 
     def execute_app(app: App) -> None:
         with track_usage(uid, Features.CONVERSATION_APPS):
-            result = get_app_result(
-                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
-            ).strip()
+            transcript = conversation_transcript_for_llm(uid, conversation, people)
+            result = get_app_result(transcript, conversation.photos, app, language_code=language_code).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -1299,7 +1298,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+    if conversation_capture.process_conversation_before_legacy(uid, conversation):
         return
 
     action_items_data: List[Dict[str, Any]] = []
@@ -1315,7 +1314,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
-            **conversation_capture.canonical_fields(action_item, conversation.id),
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
         }
         action_items_data.append(action_item_data)
 

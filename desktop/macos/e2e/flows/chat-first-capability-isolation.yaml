@@ -31,6 +31,7 @@ app: non-prod
 covers:
   # Each case below drives this root's real sampled-control failure/disabled path.
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstCapabilityProjection.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   # S1 traverses the legacy half of the exact-route visibility wait; the
@@ -45,7 +46,7 @@ preconditions:
 
 steps:
   - id: S1
-    name: Navigate the prepared capability-off bundle to its actual legacy Chat surface
+    name: Navigate the prepared capability-off bundle to its legacy chat surface (Home)
     bridge.navigate:
       target: chat
       activateApp: false

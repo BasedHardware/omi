@@ -68,8 +68,55 @@ class TasksStore: ObservableObject {
       let hasMore: Bool
     }
 
+    struct IncompleteTaskSurface {
+      let datedTasks: [TaskActionItem]
+      let noDeadlineTasks: [TaskActionItem]
+      let hasMoreNoDeadline: Bool
+      /// Number of raw rows consumed from the API's No Deadline partition.
+      /// This is intentionally separate from the deduplicated rows presented
+      /// by the store.
+      let apiConsumedNoDeadlineCount: Int
+
+      init(
+        datedTasks: [TaskActionItem],
+        noDeadlineTasks: [TaskActionItem],
+        hasMoreNoDeadline: Bool,
+        apiConsumedNoDeadlineCount: Int? = nil
+      ) {
+        self.datedTasks = datedTasks
+        self.noDeadlineTasks = noDeadlineTasks
+        self.hasMoreNoDeadline = hasMoreNoDeadline
+        self.apiConsumedNoDeadlineCount = apiConsumedNoDeadlineCount ?? noDeadlineTasks.count
+      }
+
+      var activeDatedTasks: [TaskActionItem] {
+        TasksStore.activeDatedOnly(datedTasks)
+      }
+
+      /// Raw dated-bucket row count for the API's null-due boundary. Includes
+      /// retired dated rows the backend still orders before the No Deadline
+      /// partition; presentation uses `activeDatedTasks` instead.
+      var apiDatedBucketCount: Int {
+        TasksStore.apiDatedBucketCount(in: datedTasks)
+      }
+
+      var activeNoDeadlineTasks: [TaskActionItem] {
+        TasksStore.noDeadlineOnly(noDeadlineTasks)
+      }
+
+      var stablePresentationItems: [TaskActionItem] {
+        TasksStore.stableIncompleteTaskSurfaceItems(
+          datedTasks: activeDatedTasks,
+          noDeadlineTasks: activeNoDeadlineTasks
+        )
+      }
+    }
+
     var fetchPage:
       ((_ completed: Bool, _ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
+    var fetchIncompleteSurface: ((_ ownerID: String) async throws -> IncompleteTaskSurface)?
+    var fetchDatedTasks: ((_ ownerID: String) async throws -> [TaskActionItem])?
+    var fetchNoDeadlinePage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
     var fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])?
     var fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
     var reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)?
@@ -80,6 +127,9 @@ class TasksStore: ObservableObject {
     var markAbsent: ((_ ids: Set<String>, _ ownerID: String) async throws -> Void)?
     var purgeDeleted: ((_ ownerID: String) async throws -> Int)?
     var loadIncomplete: ((_ ownerID: String) async throws -> [TaskActionItem])?
+    var loadIncompleteSurface: ((_ ownerID: String) async throws -> IncompleteTaskSurface)?
+    var loadIncompleteSurfaceForLimit:
+      ((_ ownerID: String, _ noDeadlineLimit: Int) async throws -> IncompleteTaskSurface)?
     var loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var refreshDashboard: ((_ ownerID: String) async -> Void)?
@@ -92,6 +142,11 @@ class TasksStore: ObservableObject {
       fetchPage: (
         (_ completed: Bool, _ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage
       )? = nil,
+      fetchIncompleteSurface: ((_ ownerID: String) async throws -> IncompleteTaskSurface)? = nil,
+      fetchDatedTasks: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
+      fetchNoDeadlinePage: (
+        (_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage
+      )? = nil,
       fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])? = nil,
       fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
       reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)? = nil,
@@ -103,6 +158,9 @@ class TasksStore: ObservableObject {
       markAbsent: ((_ ids: Set<String>, _ ownerID: String) async throws -> Void)? = nil,
       purgeDeleted: ((_ ownerID: String) async throws -> Int)? = nil,
       loadIncomplete: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
+      loadIncompleteSurface: ((_ ownerID: String) async throws -> IncompleteTaskSurface)? = nil,
+      loadIncompleteSurfaceForLimit:
+        ((_ ownerID: String, _ noDeadlineLimit: Int) async throws -> IncompleteTaskSurface)? = nil,
       loadCompleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       loadDeleted: ((_ ownerID: String) async throws -> [TaskActionItem])? = nil,
       refreshDashboard: ((_ ownerID: String) async -> Void)? = nil,
@@ -112,6 +170,9 @@ class TasksStore: ObservableObject {
       backfillRelevance: ((_ ownerID: String) async throws -> Int)? = nil
     ) {
       self.fetchPage = fetchPage
+      self.fetchIncompleteSurface = fetchIncompleteSurface
+      self.fetchDatedTasks = fetchDatedTasks
+      self.fetchNoDeadlinePage = fetchNoDeadlinePage
       self.fetchAllTaskIds = fetchAllTaskIds
       self.fetchTaskDetail = fetchTaskDetail
       self.reconcileVisibility = reconcileVisibility
@@ -121,6 +182,8 @@ class TasksStore: ObservableObject {
       self.markAbsent = markAbsent
       self.purgeDeleted = purgeDeleted
       self.loadIncomplete = loadIncomplete
+      self.loadIncompleteSurface = loadIncompleteSurface
+      self.loadIncompleteSurfaceForLimit = loadIncompleteSurfaceForLimit
       self.loadCompleted = loadCompleted
       self.loadDeleted = loadDeleted
       self.refreshDashboard = refreshDashboard
@@ -203,7 +266,7 @@ class TasksStore: ObservableObject {
     error = nil
     incompleteError = nil
     completedError = nil
-    incompleteOffset = 0
+    incompleteSurfaceState.reset()
     completedOffset = 0
     deletedOffset = 0
     hasLoadedIncomplete = false
@@ -215,7 +278,70 @@ class TasksStore: ObservableObject {
 
   // MARK: - Private State
 
-  private var incompleteOffset = 0
+  /// Tracks dated vs no-deadline bucket boundaries and API vs presentation
+  /// offsets for incomplete-task pagination.
+  private var incompleteSurfaceState = IncompleteTaskSurfaceState()
+
+  private struct IncompleteTaskSurfaceState {
+    /// Number of raw dated-bucket rows in the current owner-scoped API snapshot.
+    /// Includes retired dated rows the backend still orders before No Deadline.
+    var datedCount = 0
+    /// Raw API row offset at the null-bucket boundary in general list order.
+    var datedAPIBoundaryOffset = 0
+    /// Offset within the bounded No Deadline bucket (local presentation count).
+    var noDeadlinePresentationOffset = 0
+    /// Number of raw rows consumed from the API's No Deadline partition.
+    var noDeadlineAPIOffset = 0
+
+    mutating func reset() {
+      datedCount = 0
+      datedAPIBoundaryOffset = 0
+      noDeadlinePresentationOffset = 0
+      noDeadlineAPIOffset = 0
+    }
+
+    mutating func syncFrom(surface: OwnerBoundOperations.IncompleteTaskSurface) {
+      datedCount = surface.apiDatedBucketCount
+      noDeadlinePresentationOffset = surface.activeNoDeadlineTasks.count
+    }
+
+    mutating func syncFrom(
+      datedCount: Int,
+      noDeadlinePresentationOffset: Int,
+      noDeadlineAPIOffset: Int? = nil,
+      datedAPIBoundaryOffset: Int? = nil
+    ) {
+      self.datedCount = datedCount
+      self.noDeadlinePresentationOffset = noDeadlinePresentationOffset
+      if let apiOffset = noDeadlineAPIOffset {
+        self.noDeadlineAPIOffset = apiOffset
+      }
+      if let boundaryOffset = datedAPIBoundaryOffset {
+        self.datedAPIBoundaryOffset = boundaryOffset
+      }
+    }
+
+    mutating func syncNoDeadlinePresentation(from items: [TaskActionItem]) {
+      noDeadlinePresentationOffset = items.filter { $0.dueAt == nil }.count
+    }
+
+    mutating func recordInitialFetch(
+      surface: OwnerBoundOperations.IncompleteTaskSurface,
+      noDeadlineTasks: [TaskActionItem],
+      preservedNoDeadlineAPIOffset: Int = 0
+    ) {
+      datedCount = surface.apiDatedBucketCount
+      noDeadlinePresentationOffset = noDeadlineTasks.count
+      noDeadlineAPIOffset = max(
+        preservedNoDeadlineAPIOffset,
+        max(surface.apiConsumedNoDeadlineCount, noDeadlineTasks.count)
+      )
+    }
+
+    mutating func advanceNoDeadlineAPI(by rawConsumed: Int) {
+      noDeadlineAPIOffset += rawConsumed
+    }
+  }
   private var completedOffset = 0
   private var deletedOffset = 0
   private let pageSize = 100  // Reduced from 1000 for better performance
@@ -484,9 +610,7 @@ class TasksStore: ObservableObject {
       // limit for the local reload would drop every task past row 500 from a
       // user who has paginated beyond it (mergeWithoutAdding removes current
       // rows absent from its source), collapsing a 600+ list back to 500.
-      let limits = Self.refreshLimits(pageSize: pageSize, loadedCount: incompleteTasks.count)
-      let apiLimit = limits.api
-      let localReloadLimit = limits.local
+      let apiLimit = Self.refreshLimits(pageSize: pageSize, loadedCount: incompleteTasks.count).api
       let response = try await fetchPage(
         completed: false,
         offset: 0,
@@ -530,17 +654,16 @@ class TasksStore: ObservableObject {
         log("TasksStore: Auto-refresh skipped destructive reconciliation until legacy task recovery succeeds")
       }
 
-      // Reload from local cache (respects local changes like completions/deletions).
-      // Uses the unclamped local limit so a user paginated past 500 keeps every
-      // loaded row instead of being truncated by the backend's API cap.
-      let mergedTasks = try await loadCachedTasks(
-        scope: .incomplete,
-        limit: localReloadLimit,
-        offset: 0,
+      // Reload the complete dated surface plus the currently displayed bounded
+      // No Deadline surface. A mixed first-page read can drop expanded undated
+      // rows even when its limit is large enough in aggregate.
+      let mergedSurface = try await reloadIncompleteTaskSurface(
         lease: lease,
-        operations: operations
+        operations: operations,
+        displayedNoDeadlineCount: incompleteTasks.filter { $0.dueAt == nil }.count
       )
       guard isCurrent(lease) else { return }
+      let mergedTasks = surfaceItems(mergedSurface)
 
       // Merge without triggering @Published unless something actually changed
       let merged = Self.mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
@@ -563,12 +686,12 @@ class TasksStore: ObservableObject {
         }
 
         incompleteTasks = merged
-        incompleteOffset = merged.count
+        incompleteSurfaceState.syncNoDeadlinePresentation(from: merged)
         log("TasksStore: Auto-refresh updated incomplete tasks (\(merged.count) items)")
       } else {
         log("RENDER: Auto-refresh: no changes detected, skipping update")
       }
-      let newHasMore = mergedTasks.count >= localReloadLimit
+      let newHasMore = mergedSurface.hasMoreNoDeadline
       if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
       await refreshDashboardCache(lease: lease, operations: operations)
     } catch {
@@ -744,19 +867,16 @@ class TasksStore: ObservableObject {
 
       if deleted > 0 {
         log("TasksStore: Full reconciliation: hard-deleted \(deleted) absent tasks")
-        // Reload from cache to reflect deletions in UI
-        let reloadLimit = max(pageSize, incompleteTasks.count)
-        let refreshed = try await loadCachedTasks(
-          scope: .incomplete,
-          limit: reloadLimit,
-          offset: 0,
+        let refreshedSurface = try await reloadIncompleteTaskSurface(
           lease: lease,
-          operations: operations
+          operations: operations,
+          displayedNoDeadlineCount: incompleteTasks.filter { $0.dueAt == nil }.count
         )
         guard isCurrent(lease) else { return }
+        let refreshed = surfaceItems(refreshedSurface)
         if refreshed != incompleteTasks {
           incompleteTasks = refreshed
-          incompleteOffset = refreshed.count
+          incompleteSurfaceState.syncFrom(surface: refreshedSurface)
         }
         await refreshDashboardCache(lease: lease, operations: operations)
       }
@@ -809,16 +929,17 @@ class TasksStore: ObservableObject {
     guard hasLoadedIncomplete else { return }
 
     do {
-      let reloadLimit = max(pageSize, incompleteTasks.count + 10)
-      let cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
-        limit: reloadLimit,
-        offset: 0,
-        completed: false
+      let cachedSurface = try await reloadIncompleteTaskSurface(
+        lease: lease,
+        operations: .init(),
+        displayedNoDeadlineCount: incompleteTasks.filter { $0.dueAt == nil }.count
       )
+      let cachedTasks = surfaceItems(cachedSurface)
       guard isCurrent(lease) else { return }
       if cachedTasks != incompleteTasks {
         incompleteTasks = cachedTasks
-        incompleteOffset = cachedTasks.count
+        incompleteSurfaceState.syncFrom(surface: cachedSurface)
+        hasMoreIncompleteTasks = cachedSurface.hasMoreNoDeadline
         log("TasksStore: Reloaded \(cachedTasks.count) incomplete tasks from local cache (external change)")
       }
     } catch {
@@ -1023,6 +1144,243 @@ class TasksStore: ObservableObject {
       authorizationSnapshot: lease.authorizationSnapshot
     )
     return .init(items: response.items, hasMore: response.hasMore)
+  }
+
+  /// Keep the dated and null-due buckets disjoint even if a concurrent backend
+  /// update or a duplicate response races a page boundary.
+  nonisolated static func stableIncompleteTaskSurfaceItems(
+    datedTasks: [TaskActionItem],
+    noDeadlineTasks: [TaskActionItem]
+  ) -> [TaskActionItem] {
+    var seen = Set<String>()
+    return (datedTasks + noDeadlineTasks).filter { seen.insert($0.id).inserted }
+  }
+
+  nonisolated static func noDeadlineOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
+    var seen = Set<String>()
+    return items.filter {
+      $0.dueAt == nil && !$0.completed && !$0.isRetired && seen.insert($0.id).inserted
+    }
+  }
+
+  nonisolated static func activeDatedOnly(_ items: [TaskActionItem]) -> [TaskActionItem] {
+    items.filter { $0.dueAt != nil && !$0.completed && !$0.isRetired }
+  }
+
+  /// Count every incomplete dated row in the API's dated bucket, including
+  /// retired rows that still occupy ordering slots before the null-due bucket.
+  nonisolated static func apiDatedBucketCount(in items: [TaskActionItem]) -> Int {
+    items.reduce(into: 0) { count, item in
+      if item.dueAt != nil, !item.completed {
+        count += 1
+      }
+    }
+  }
+
+  private func surfaceItems(_ surface: OwnerBoundOperations.IncompleteTaskSurface) -> [TaskActionItem] {
+    surface.stablePresentationItems
+  }
+
+  private func loadIncompleteTaskSurface(
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations,
+    noDeadlineLimit: Int = 100,
+    noDeadlineOffset: Int = 0
+  ) async throws -> OwnerBoundOperations.IncompleteTaskSurface {
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    if noDeadlineOffset == 0,
+      noDeadlineLimit == pageSize,
+      let loadIncompleteSurface = operations.loadIncompleteSurface
+    {
+      return try await loadIncompleteSurface(lease.ownerID)
+    }
+    if noDeadlineOffset == 0,
+      let loadIncompleteSurfaceForLimit = operations.loadIncompleteSurfaceForLimit
+    {
+      return try await loadIncompleteSurfaceForLimit(lease.ownerID, noDeadlineLimit)
+    }
+    // Existing operation seams intentionally retain their old one-page
+    // behavior for unrelated tests and callers. Production uses the split
+    // storage primitive below.
+    if operations.loadIncompleteSurface == nil, let loadIncomplete = operations.loadIncomplete {
+      let items = try await loadIncomplete(lease.ownerID)
+      return .init(
+        datedTasks: Self.activeDatedOnly(items),
+        noDeadlineTasks: Self.noDeadlineOnly(items),
+        hasMoreNoDeadline: items.filter { $0.dueAt == nil }.count >= noDeadlineLimit
+      )
+    }
+    let local = try await ActionItemStorage.shared.getIncompleteTaskSurface(
+      noDeadlineLimit: noDeadlineLimit,
+      noDeadlineOffset: noDeadlineOffset
+    )
+    return .init(
+      datedTasks: local.dated,
+      noDeadlineTasks: local.noDeadline,
+      hasMoreNoDeadline: local.hasMoreNoDeadline
+    )
+  }
+
+  /// Reload the complete dated surface and exactly the currently displayed
+  /// bounded No Deadline surface. All cache reload callers use this helper so
+  /// an expanded No Deadline list is never truncated back to the first page.
+  private func reloadIncompleteTaskSurface(
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations,
+    displayedNoDeadlineCount: Int
+  ) async throws -> OwnerBoundOperations.IncompleteTaskSurface {
+    let noDeadlineLimit = max(pageSize, displayedNoDeadlineCount)
+    return try await loadIncompleteTaskSurface(
+      lease: lease,
+      operations: operations,
+      noDeadlineLimit: noDeadlineLimit
+    )
+  }
+
+  /// Rebuild the incomplete UI surface after background full sync. This is
+  /// internal so behavioral tests can drive the same production helper with
+  /// injected cache operations.
+  func reloadIncompleteTaskSurfaceAfterFullSync(
+    expectedOwnerID: String? = nil,
+    operations: OwnerBoundOperations = OwnerBoundOperations()
+  ) async {
+    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+    await reloadIncompleteTaskSurfaceAfterFullSync(lease: lease, operations: operations)
+  }
+
+  private func reloadIncompleteTaskSurfaceAfterFullSync(
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations
+  ) async {
+    do {
+      let refreshedSurface = try await reloadIncompleteTaskSurface(
+        lease: lease,
+        operations: operations,
+        displayedNoDeadlineCount: incompleteTasks.filter { $0.dueAt == nil }.count
+      )
+      guard isCurrent(lease) else { return }
+      incompleteTasks = surfaceItems(refreshedSurface)
+      incompleteSurfaceState.syncFrom(surface: refreshedSurface)
+      hasMoreIncompleteTasks = refreshedSurface.hasMoreNoDeadline
+      log("TasksStore: Refreshed UI after full sync - \(incompleteTasks.count) incomplete tasks")
+    } catch {
+      if isCurrent(lease) {
+        logError("TasksStore: Failed to refresh UI after full sync", error: error)
+      }
+    }
+  }
+
+  private func fetchIncompleteTaskSurface(
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations
+  ) async throws -> OwnerBoundOperations.IncompleteTaskSurface {
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    if let fetchIncompleteSurface = operations.fetchIncompleteSurface {
+      return try await fetchIncompleteSurface(lease.ownerID)
+    }
+    // Keep the legacy test seam compatible. Production's default path is the
+    // split dated/null query below, because a general first page cannot prove
+    // that every dated bucket is complete.
+    if operations.fetchIncompleteSurface == nil, let fetchPage = operations.fetchPage {
+      let page = try await fetchPage(false, 0, pageSize, lease.ownerID)
+      return .init(
+        datedTasks: Self.activeDatedOnly(page.items),
+        noDeadlineTasks: Self.noDeadlineOnly(page.items),
+        hasMoreNoDeadline: page.hasMore,
+        apiConsumedNoDeadlineCount: page.items.count
+      )
+    }
+
+    let datedBucket = try await fetchDatedBucketScan(lease: lease, operations: operations)
+    incompleteSurfaceState.datedAPIBoundaryOffset = datedBucket.apiBoundaryOffset
+
+    let noDeadlinePage = try await APIClient.shared.getNoDeadlineActionItems(
+      limit: pageSize,
+      offset: 0,
+      datedBoundaryOffset: datedBucket.apiBoundaryOffset,
+      completed: false,
+      expectedOwnerId: lease.ownerID,
+      authorizationSnapshot: lease.authorizationSnapshot
+    )
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    return .init(
+      datedTasks: datedBucket.items,
+      noDeadlineTasks: Self.noDeadlineOnly(noDeadlinePage.items),
+      hasMoreNoDeadline: noDeadlinePage.hasMore,
+      apiConsumedNoDeadlineCount: noDeadlinePage.items.count
+    )
+  }
+
+  private struct DatedBucketScan {
+    let items: [TaskActionItem]
+    let apiBoundaryOffset: Int
+  }
+
+  private func fetchDatedBucketScan(
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations
+  ) async throws -> DatedBucketScan {
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    if let fetchDatedTasks = operations.fetchDatedTasks {
+      let items = try await fetchDatedTasks(lease.ownerID)
+      let boundary = Self.apiDatedBucketCount(in: items)
+      incompleteSurfaceState.datedAPIBoundaryOffset = boundary
+      return .init(items: items, apiBoundaryOffset: boundary)
+    }
+    // Preserve older injected mixed-page seams. Production uses the complete
+    // dated-bucket scan below, which refreshes the null-bucket boundary before
+    // every No Deadline page.
+    if operations.fetchPage != nil {
+      let items = Self.activeDatedOnly(incompleteTasks)
+      let boundary = Self.apiDatedBucketCount(in: items)
+      incompleteSurfaceState.datedAPIBoundaryOffset = boundary
+      return .init(items: items, apiBoundaryOffset: boundary)
+    }
+
+    return try await scanDatedIncompleteBuckets(lease: lease)
+  }
+
+  /// Scan every dated incomplete bucket page from the API, crossing the 2000-row
+  /// offset cap with keyset windows when needed.
+  private func scanDatedIncompleteBuckets(
+    lease: OwnerOperationLease
+  ) async throws -> DatedBucketScan {
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    let scan = try await APIClient.shared.scanDatedIncompleteActionItems(
+      completed: false,
+      pageLimit: Self.apiPageLimitCap,
+      expectedOwnerId: lease.ownerID,
+      authorizationSnapshot: lease.authorizationSnapshot
+    )
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    incompleteSurfaceState.datedAPIBoundaryOffset = scan.boundaryOffset
+    let items = scan.items.filter { $0.dueAt != nil && !$0.completed && !$0.isRetired }
+    return .init(items: items, apiBoundaryOffset: scan.boundaryOffset)
+  }
+
+  private func fetchNoDeadlinePage(
+    offset: Int,
+    limit: Int,
+    lease: OwnerOperationLease,
+    operations: OwnerBoundOperations
+  ) async throws -> OwnerBoundOperations.ActionItemsPage {
+    guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    if let fetchNoDeadlinePage = operations.fetchNoDeadlinePage {
+      return try await fetchNoDeadlinePage(offset, limit, lease.ownerID)
+    }
+    // Preserve the pre-split operation seam for existing owner-bound tests.
+    if operations.fetchNoDeadlinePage == nil, let fetchPage = operations.fetchPage {
+      return try await fetchPage(false, offset, limit, lease.ownerID)
+    }
+    let page = try await APIClient.shared.getNoDeadlineActionItems(
+      limit: limit,
+      offset: offset,
+      datedBoundaryOffset: incompleteSurfaceState.datedAPIBoundaryOffset,
+      completed: false,
+      expectedOwnerId: lease.ownerID,
+      authorizationSnapshot: lease.authorizationSnapshot
+    )
+    return .init(items: page.items, hasMore: page.hasMore)
   }
 
   private func fetchDeletedPage(
@@ -1352,58 +1710,60 @@ class TasksStore: ObservableObject {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
     guard !isLoadingIncomplete else { return }
 
+    let displayedNoDeadlineCount = incompleteTasks.filter { $0.dueAt == nil }.count
+    let preservedNoDeadlineAPIOffset = incompleteSurfaceState.noDeadlineAPIOffset
+
     isLoadingIncomplete = true
     error = nil
     incompleteError = nil
-    incompleteOffset = 0
+    incompleteSurfaceState.reset()
 
-    // Step 1: Load from local cache first for instant display
+    // Step 1: Load the complete dated surface plus one bounded No Deadline
+    // page from local cache for instant display.
     do {
-      let cachedTasks = try await loadCachedTasks(
-        scope: .incomplete,
-        limit: pageSize,
-        offset: 0,
+      let cachedSurface = try await reloadIncompleteTaskSurface(
         lease: lease,
-        operations: operations
+        operations: operations,
+        displayedNoDeadlineCount: displayedNoDeadlineCount
       )
       guard isCurrent(lease) else { return }
+      let cachedTasks = surfaceItems(cachedSurface)
       if !cachedTasks.isEmpty {
         incompleteTasks = cachedTasks
-        incompleteOffset = cachedTasks.count
-        hasMoreIncompleteTasks = cachedTasks.count >= pageSize
-        isLoadingIncomplete = false  // Show cached data immediately
+        incompleteSurfaceState.syncFrom(surface: cachedSurface)
+        hasMoreIncompleteTasks = cachedSurface.hasMoreNoDeadline
         log("TasksStore: Loaded \(cachedTasks.count) incomplete tasks from local cache")
       }
     } catch {
       log("TasksStore: Local cache unavailable for incomplete tasks, falling back to API")
     }
 
-    // Step 2: Fetch from API, sync to cache, reload from cache
+    // Step 2: Fetch every dated page, then only the first No Deadline page.
     do {
-      let response: OwnerBoundOperations.ActionItemsPage
-      if let fetchPage = operations.fetchPage {
-        response = try await fetchPage(false, 0, pageSize, lease.ownerID)
-      } else {
-        let page = try await APIClient.shared.getActionItems(
-          limit: pageSize,
-          offset: 0,
-          completed: false,
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-        response = .init(items: page.items, hasMore: page.hasMore)
-      }
+      let surface = try await fetchIncompleteTaskSurface(lease: lease, operations: operations)
       guard isCurrent(lease) else { return }
       hasLoadedIncomplete = true
-      log("TasksStore: Fetched \(response.items.count) incomplete tasks from API")
+      let datedTasks = surface.activeDatedTasks
+      let noDeadlineTasks = surface.activeNoDeadlineTasks
+      incompleteSurfaceState.recordInitialFetch(
+        surface: surface,
+        noDeadlineTasks: noDeadlineTasks,
+        preservedNoDeadlineAPIOffset: preservedNoDeadlineAPIOffset
+      )
+      hasMoreIncompleteTasks = surface.hasMoreNoDeadline
+      let fetchedTasks = surface.stablePresentationItems
+      log(
+        "TasksStore: Fetched \(datedTasks.count) dated and \(noDeadlineTasks.count) No Deadline incomplete tasks "
+          + "(hasMoreNoDeadline=\(surface.hasMoreNoDeadline))"
+      )
 
       // Sync API data to local cache
       do {
         if let syncPage = operations.syncPage {
-          try await syncPage(response.items, false, lease.ownerID)
+          try await syncPage(fetchedTasks, false, lease.ownerID)
         } else {
           try await ActionItemStorage.shared.syncTaskActionItems(
-            response.items,
+            fetchedTasks,
             authorization: Self.localMutationAuthorization(
               snapshot: lease.authorizationSnapshot
             )
@@ -1416,18 +1776,27 @@ class TasksStore: ObservableObject {
         }
       }
 
-      // Reload from cache to get merged data (local changes + API data)
-      let mergedTasks = try await loadCachedTasks(
-        scope: .incomplete,
-        limit: pageSize,
-        offset: 0,
+      // Reload from the split cache surface to retain local optimistic edits
+      // without widening the No Deadline read.
+      let mergedSurface = try await reloadIncompleteTaskSurface(
         lease: lease,
-        operations: operations
+        operations: operations,
+        displayedNoDeadlineCount: displayedNoDeadlineCount
       )
       guard isCurrent(lease) else { return }
+      let mergedNoDeadlineTasks = Self.noDeadlineOnly(
+        mergedSurface.noDeadlineTasks + noDeadlineTasks
+      )
+      let mergedTasks = Self.stableIncompleteTaskSurfaceItems(
+        datedTasks: mergedSurface.activeDatedTasks,
+        noDeadlineTasks: mergedNoDeadlineTasks
+      )
       incompleteTasks = mergedTasks
-      incompleteOffset = mergedTasks.count
-      hasMoreIncompleteTasks = mergedTasks.count >= pageSize
+      incompleteSurfaceState.syncFrom(
+        datedCount: surface.apiDatedBucketCount,
+        noDeadlinePresentationOffset: mergedNoDeadlineTasks.count
+      )
+      hasMoreIncompleteTasks = surface.hasMoreNoDeadline || mergedSurface.hasMoreNoDeadline
       log("TasksStore: Showing \(mergedTasks.count) incomplete tasks from merged local cache")
     } catch {
       if isCurrent(lease) {
@@ -1519,18 +1888,16 @@ class TasksStore: ObservableObject {
 
       if deleted > 0 {
         log("TasksStore: Reconciled on load: hard-deleted \(deleted) absent tasks")
-        let reloadLimit = max(pageSize, incompleteTasks.count)
-        let refreshed = try await loadCachedTasks(
-          scope: .incomplete,
-          limit: reloadLimit,
-          offset: 0,
+        let refreshedSurface = try await reloadIncompleteTaskSurface(
           lease: lease,
-          operations: operations
+          operations: operations,
+          displayedNoDeadlineCount: incompleteTasks.filter { $0.dueAt == nil }.count
         )
         guard isCurrent(lease) else { return }
+        let refreshed = surfaceItems(refreshedSurface)
         if refreshed != incompleteTasks {
           incompleteTasks = refreshed
-          incompleteOffset = refreshed.count
+          incompleteSurfaceState.syncFrom(surface: refreshedSurface)
         }
         await refreshDashboardCache(lease: lease, operations: operations)
       } else {
@@ -1848,32 +2215,12 @@ class TasksStore: ObservableObject {
       UserDefaults.standard.set(true, forKey: syncKey)
       log("TasksStore: Full sync completed - \(totalSynced) tasks synced total")
 
-      // Reload incomplete tasks from cache so UI reflects the full dataset
-      do {
-        let refreshed: [TaskActionItem]
-        if let loadIncomplete = operations.loadIncomplete {
-          refreshed = try await loadIncomplete(lease.ownerID)
-        } else {
-          refreshed = try await ActionItemStorage.shared.getLocalActionItems(
-            limit: pageSize,
-            offset: 0,
-            completed: false
-          )
-        }
-        guard isCurrent(lease) else { return }
-        incompleteTasks = refreshed
-        incompleteOffset = refreshed.count
-        hasMoreIncompleteTasks = refreshed.count >= pageSize
-        log("TasksStore: Refreshed UI after full sync - \(refreshed.count) incomplete tasks")
-        await loadDashboardTasks(
-          expectedOwnerID: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-      } catch {
-        if isCurrent(lease) {
-          logError("TasksStore: Failed to refresh UI after full sync", error: error)
-        }
-      }
+      await reloadIncompleteTaskSurfaceAfterFullSync(lease: lease, operations: operations)
+      guard isCurrent(lease) else { return }
+      await loadDashboardTasks(
+        expectedOwnerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
 
     } catch {
       if isCurrent(lease) {
@@ -2007,6 +2354,10 @@ class TasksStore: ObservableObject {
       )
     else { return }
     let ownerID = lease.ownerID
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      log("TasksStore: Skipping retryUnsyncedItems — account cutover offline upload gate closed")
+      return
+    }
     guard activeRetryLease == nil else {
       log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
       return
@@ -2033,6 +2384,10 @@ class TasksStore: ObservableObject {
     var synced = 0
     for item in items {
       guard isCurrent(lease) else { return }
+      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+        log("TasksStore: Interrupted retryUnsyncedItems — account cutover offline upload gate closed")
+        return
+      }
       guard let localId = item.id else { continue }
 
       // Re-check: the normal sync path may have synced this item while we were iterating
@@ -2134,7 +2489,11 @@ class TasksStore: ObservableObject {
     operations: OwnerBoundOperations = OwnerBoundOperations()
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    guard hasMoreIncompleteTasks, !isLoadingMore else { return }
+    guard hasMoreIncompleteTasks, !isLoadingMore, !isLoadingIncomplete else { return }
+    // Dated buckets are complete after the initial split load. Pagination is
+    // exclusively for No Deadline rows, so a dated row can never trigger a
+    // late side-effect page.
+    guard currentTask.dueAt == nil else { return }
 
     let thresholdIndex =
       incompleteTasks.index(incompleteTasks.endIndex, offsetBy: -10, limitedBy: incompleteTasks.startIndex)
@@ -2146,33 +2505,53 @@ class TasksStore: ObservableObject {
     }
 
     isLoadingMore = true
+    defer { isLoadingMore = false }
 
     do {
-      let response = try await fetchPage(
-        completed: false,
-        offset: incompleteOffset,
+      // Recompute the dated boundary immediately before consuming the next
+      // No Deadline page. The API exposes the null bucket through a general
+      // offset, so a dated row created/completed during pagination otherwise
+      // shifts that boundary and can cause skips or duplicates.
+      let datedBucket = try await fetchDatedBucketScan(lease: lease, operations: operations)
+      guard isCurrent(lease) else { return }
+      incompleteSurfaceState.datedCount = Self.apiDatedBucketCount(in: datedBucket.items)
+      incompleteSurfaceState.datedAPIBoundaryOffset = datedBucket.apiBoundaryOffset
+      let datedTasks = Self.activeDatedOnly(datedBucket.items)
+      let response = try await fetchNoDeadlinePage(
+        offset: incompleteSurfaceState.noDeadlineAPIOffset,
         limit: pageSize,
         lease: lease,
         operations: operations
       )
       guard isCurrent(lease) else { return }
+      let noDeadlineItems = Self.noDeadlineOnly(response.items)
 
       // Sync to cache
-      try await syncPage(response.items, lease: lease, operations: operations)
+      try await syncPage(noDeadlineItems, lease: lease, operations: operations)
       guard isCurrent(lease) else { return }
 
-      incompleteTasks.append(contentsOf: response.items)
+      let refreshedDatedIDs = Set(datedTasks.map(\.id))
+      let visibleDatedTasks =
+        datedTasks
+        + incompleteTasks.filter {
+          $0.dueAt != nil && !$0.completed && !$0.isRetired && !refreshedDatedIDs.contains($0.id)
+        }
+      incompleteTasks = Self.stableIncompleteTaskSurfaceItems(
+        datedTasks: visibleDatedTasks,
+        noDeadlineTasks: incompleteTasks.filter { $0.dueAt == nil } + noDeadlineItems
+      )
       hasMoreIncompleteTasks = response.hasMore
-      incompleteOffset += response.items.count
-      log("TasksStore: Loaded \(response.items.count) more incomplete tasks from API")
+      // Advance the API cursor by raw API consumption, not by the number of
+      // accepted/deduplicated rows in the local presentation.
+      incompleteSurfaceState.advanceNoDeadlineAPI(by: response.items.count)
+      incompleteSurfaceState.syncNoDeadlinePresentation(from: incompleteTasks)
+      log("TasksStore: Loaded \(noDeadlineItems.count) more No Deadline tasks from API")
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to load more incomplete tasks", error: error)
       }
     }
 
-    guard isCurrent(lease) else { return }
-    isLoadingMore = false
   }
 
   /// Load more completed tasks (pagination) - local-first
@@ -2194,6 +2573,7 @@ class TasksStore: ObservableObject {
     }
 
     isLoadingMore = true
+    defer { isLoadingMore = false }
 
     // Step 1: Try to load more from local cache first
     do {
@@ -2211,7 +2591,6 @@ class TasksStore: ObservableObject {
         completedOffset += moreFromCache.count
         hasMoreCompletedTasks = moreFromCache.count >= pageSize
         log("TasksStore: Loaded \(moreFromCache.count) more completed tasks from local cache")
-        isLoadingMore = false
         return
       }
     } catch {
@@ -2245,8 +2624,6 @@ class TasksStore: ObservableObject {
       }
     }
 
-    guard isCurrent(lease) else { return }
-    isLoadingMore = false
   }
 
   /// Legacy pagination - routes to appropriate method based on task completion status

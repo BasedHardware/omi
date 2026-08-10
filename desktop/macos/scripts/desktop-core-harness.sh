@@ -500,7 +500,7 @@ PY
 }
 
 ensure_dev_stack() {
-  local probe_json probe_status attempt
+  local probe_json probe_status attempt startup_attempt startup_attempt_limit dev_up_status
   set +e
   probe_json="$(probe_dev_stack)"
   probe_status=$?
@@ -521,25 +521,40 @@ ensure_dev_stack() {
 
   echo "desktop-core-harness: dev stack not healthy; starting with PROVIDER_MODE=offline"
   echo "$probe_json"
-  PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up
+  startup_attempt_limit=1
+  if [[ "$READINESS" -eq 1 && "$KEEP_STACK" -eq 0 ]]; then
+    startup_attempt_limit=2
+  fi
 
-  for attempt in $(seq 1 15); do
-    set +e
-    probe_json="$(probe_dev_stack)"
-    probe_status=$?
-    set -e
-    if [[ "$probe_status" -eq 0 ]]; then
-      DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
-      echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
-      return 0
-    fi
-    if [[ "$probe_status" -eq 2 ]]; then
-      echo "desktop-core-harness: dev stack provider_mode is not offline after dev-up" >&2
-      echo "$probe_json" >&2
-      exit 1
-    fi
-    if [[ "$attempt" -lt 15 ]]; then
+  for startup_attempt in $(seq 1 "$startup_attempt_limit"); do
+    dev_up_status=0
+    PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up || dev_up_status=$?
+
+    for attempt in $(seq 1 15); do
+      set +e
+      probe_json="$(probe_dev_stack)"
+      probe_status=$?
+      set -e
+      if [[ "$probe_status" -eq 0 ]]; then
+        DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
+        echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
+        return 0
+      fi
+      if [[ "$probe_status" -eq 2 ]]; then
+        echo "desktop-core-harness: dev stack provider_mode is not offline after dev-up" >&2
+        echo "$probe_json" >&2
+        exit 1
+      fi
+      if [[ "$dev_up_status" -ne 0 || "$attempt" -eq 15 ]]; then
+        break
+      fi
       sleep 2
+    done
+
+    if [[ "$startup_attempt" -lt "$startup_attempt_limit" ]]; then
+      echo "desktop-core-harness: offline stack startup failed; cleaning owned state and retrying once" >&2
+      echo "$probe_json" >&2
+      make -C "$REPO_ROOT" dev-down
     fi
   done
 
@@ -653,6 +668,20 @@ target = Path(path)
 target.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 target.chmod(0o600)
 PY
+}
+
+wait_for_fault_launch_signal() {
+  local attempts="${OMI_FAULT_LAUNCH_SIGNAL_ATTEMPTS:-200}" attempt
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] || {
+    echo "desktop-core-harness: OMI_FAULT_LAUNCH_SIGNAL_ATTEMPTS must be a positive integer" >&2
+    return 1
+  }
+  for attempt in $(seq 1 "$attempts"); do
+    [[ -f "$FAULT_LAUNCH_SIGNAL_FILE" ]] && return 0
+    sleep 0.05
+  done
+  echo "desktop-core-harness: timed out waiting for fault launch signal" >&2
+  return 1
 }
 
 validated_fault_app_pid() {
@@ -889,6 +918,11 @@ start_fault_stack() {
   for attempt in $(seq 1 "$bridge_ready_attempts"); do
     if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
       OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/omi-ctl" wait-ready 90
+      # The detached `open` launcher can make the bridge healthy before its
+      # owner-only launch signal is written. Wait for that proof before
+      # recording the process, otherwise a fast runner can report a false
+      # missing-launch-proof failure.
+      wait_for_fault_launch_signal
       record_owned_fault_app
       echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT (bundle: $expected_bundle)"
       return 0

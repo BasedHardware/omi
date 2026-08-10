@@ -1574,6 +1574,7 @@ actor AgentRuntimeProcess {
     requestId: String,
     ownerId: String?,
     sessionId: String,
+    surfaceKind: String,
     prompt: String,
     mode: String?,
     imageData: Data?,
@@ -1589,6 +1590,7 @@ actor AgentRuntimeProcess {
       ownerId: ownerId
     )
     message["sessionId"] = sessionId
+    message["surfaceKind"] = surfaceKind
     message["prompt"] = prompt
     if let mode { message["mode"] = mode }
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
@@ -2415,6 +2417,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         ownerId: authorizationSnapshot.ownerID,
         sessionId: sessionId,
+        surfaceKind: surface.surfaceKind,
         prompt: prompt,
         mode: mode,
         imageData: imageData,
@@ -2554,6 +2557,14 @@ actor AgentRuntimeProcess {
     log(
       "AgentRuntimeProcess: starting node=\(nodePath) (exists=\(nodeExists)), bridge=\(bridgePath) (exists=\(bridgeExists)), package.json=\(pkgJsonExists)"
     )
+
+    // Refuse an incomplete payload here rather than spawning a runtime that exits 1 seconds
+    // after the person has already sent their message. `AgentRuntimePayload` owns the reason.
+    if let refusal = AgentRuntimePayload.startRefusal(bridgeScriptPath: bridgePath) {
+      startupBinaryPresent = false
+      log(refusal.logLine)
+      throw refusal.error
+    }
 
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: nodePath)
@@ -2912,8 +2923,8 @@ actor AgentRuntimeProcess {
       return .exitedDuringStartup
     case .agentError:
       return .incompatibleHandshake
-    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError,
-      .failedToStart, .stopped, .restarting, .requestAlreadyActive,
+    case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
+      .encodingError, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
       .agentRuntimeFailure, .quotaExceeded, .authMissing:
       return .launchFailed
     }

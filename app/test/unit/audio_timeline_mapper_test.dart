@@ -31,6 +31,39 @@ void main() {
       expect(mapper.wallToArtifact(209.9), 10.0);
     });
 
+    test('wallToArtifactStrict returns null in collapsed gaps (#4471)', () {
+      expect(mapper.wallToArtifactStrict(100.0), isNull);
+      expect(mapper.wallToArtifactStrict(209.9), isNull);
+      expect(mapper.wallToArtifactStrict(0.0), isNull);
+      expect(mapper.wallToArtifactStrict(999.0), isNull);
+    });
+
+    test('wallToArtifactStrict maps inside spans without snapping', () {
+      expect(mapper.wallToArtifactStrict(10.0), 0.0);
+      expect(mapper.wallToArtifactStrict(15.0), 5.0);
+      expect(mapper.wallToArtifactStrict(19.9), closeTo(9.9, 1e-9));
+      expect(mapper.wallToArtifactStrict(20.0), isNull); // half-open end of A
+      expect(mapper.wallToArtifactStrict(212.5), 12.5);
+    });
+
+    test('wallToArtifactStrictInclusive includes span wallEnd for stop-at-end', () {
+      expect(mapper.wallToArtifactStrictInclusive(20.0), 10.0);
+      expect(mapper.wallToArtifactStrictInclusive(215.0), 15.0);
+      expect(mapper.wallToArtifactStrictInclusive(100.0), isNull);
+    });
+
+    test('reporter-shaped gap: 701s snaps under scrubber but is unavailable for segment tap', () {
+      // Span A ends at wall 700; span B starts at 723 (~22s gap, matching #4471 shape).
+      final reporter = AudioTimelineMapper(const [
+        ConversationAudioSpan(fileId: 'A', wallOffset: 690.0, artifactOffset: 0.0, len: 10.0),
+        ConversationAudioSpan(fileId: 'B', wallOffset: 723.0, artifactOffset: 10.0, len: 14.0),
+      ]);
+      expect(reporter.wallToArtifact(701.0), 10.0); // scrubber snap into B @ 12:03
+      expect(reporter.wallToArtifactStrict(701.0), isNull); // segment tap must not snap
+      expect(reporter.wallToArtifactStrict(723.0), 10.0);
+      expect(reporter.wallToArtifactStrictInclusive(737.0), 24.0);
+    });
+
     test('wallToArtifact clamps outside the timeline', () {
       expect(mapper.wallToArtifact(0.0), 0.0);
       expect(mapper.wallToArtifact(-5.0), 0.0);

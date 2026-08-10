@@ -13,10 +13,19 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DailyScoreWidget.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/FocusSummaryWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/RecentConversationsWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TodaysTasksWidget.swift
   - desktop/macos/Desktop/Sources/WhatsNewToast.swift
+  - desktop/macos/Desktop/Sources/Theme/Ink.swift
+  - desktop/macos/Desktop/Sources/Theme/InkGlass.swift
+  - desktop/macos/Desktop/Sources/Theme/InkType.swift
+  - desktop/macos/Desktop/Sources/Theme/WindowGlass.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiColors.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
+  - desktop/macos/Desktop/Sources/MainWindow/GlassShellChrome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/GlassContentChrome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
 preconditions:
   - automation_bridge_ready
 

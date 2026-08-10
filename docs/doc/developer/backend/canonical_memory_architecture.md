@@ -76,7 +76,7 @@ direct-to-Long-term writer.
 | Whitelist | Only UIDs in `CANONICAL_MEMORY_USERS` get canonical memory, task intelligence, and Chat-first | `backend/config/canonical_memory_cohort.py`, `resolve_memory_system` |
 | Default | Absent from whitelist → `MemorySystem.LEGACY`, task intelligence off, Chat-first off | `canonical_memory_cohort.py` and `utils/task_intelligence/rollout.py` |
 | Kill-switch | Removing a UID from the code whitelist overrides stale Firestore controls and hides canonical task routes | `canonical_memory_cohort.py` and `routers/canonical_task_access.py` |
-| Operational controls | `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` may govern maintenance readiness only; they never select or suppress a user's request path | `backend/.env.template` |
+| Operational controls | `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` govern deployment readiness only; they never grant product entitlement. `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only, while consolidation remains an independent L2 incident/cost switch. | `docs/runbooks/canonical-memory-rollout-flags.md` |
 | Request pin | HTTP/MCP handlers pin cohort once per request to avoid mid-request flips | `backend/utils/memory/memory_system_pin.py:17-40` |
 | Routing seam | `MemoryService._resolve_backend` picks `CanonicalMemoryBackend` vs `LegacyMemoryBackend`; an enrolled-but-unready account fails closed rather than falling back | `backend/utils/memory/memory_service.py` |
 | Maintenance refusal | Consolidation/promotion return `skipped_reason="not_canonical_cohort"` for legacy users | `canonical_consolidation.py:784-785`, `short_term_promotion.py:361-362` |
@@ -93,8 +93,14 @@ Primary seams:
 
 ## 2. Maintenance: normalize, enforce TTL, route once
 
-The enabled `memory-maintenance-job` runs
-`run_canonical_short_term_maintenance` once per canonical cohort user:
+The enabled `memory-maintenance-job` first reconciles code-whitelisted users
+into its exact inert control state, advances only that scheduler-owned state to
+the guarded write stage, and resumes one bounded legacy-backfill page. It never
+opens a global read gate, grants default memory access, or marks a projection
+ready. Only after a user's terminal backfill checkpoint does it reconcile the
+write control to the trusted state-head generation and allow that user's graph
+enrichment. It then runs `run_canonical_short_term_maintenance` once per canonical
+cohort user:
 
 1. `memory_outbox_worker.py` drains already-committed work before any
    Short-term row is parsed.

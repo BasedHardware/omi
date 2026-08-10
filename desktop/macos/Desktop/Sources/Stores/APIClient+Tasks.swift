@@ -23,6 +23,23 @@ struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
 }
 
 extension APIClient {
+  /// The backend's action-item list orders every non-null `due_at` before the
+  /// null bucket. Firestore inequality filters also exclude documents where
+  /// `due_at` is missing/null, so this lower bound is the smallest supported
+  /// query that returns only dated action items without materializing the
+  /// No Deadline universe.
+  static let earliestActionItemDueDate = Date(timeIntervalSince1970: -62_135_596_800)
+
+  /// Matches `backend/database/action_items.py::_ACTION_ITEMS_LIST_HARD_MAX`.
+  /// Offset pagination cannot scan beyond this many raw rows per query window.
+  static let actionItemsListHardMax = 2000
+
+  struct DatedActionItemsScanResult: Sendable {
+    let items: [TaskActionItem]
+    /// Raw rows consumed from the dated incomplete bucket in general list order.
+    let boundaryOffset: Int
+  }
+
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
   func getActionItems(
@@ -50,6 +67,107 @@ extension APIClient {
     if let deleted { queryItems.append("deleted=\(deleted)") }
     return try await get(
       "v1/action-items?\(queryItems.joined(separator: "&"))",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  /// Fetch one page from the complete dated active/completed bucket. The
+  /// lower-bound query intentionally has no upper bound: dated tasks in Today,
+  /// Tomorrow, and Later must all be represented regardless of their year.
+  func getDatedActionItems(
+    limit: Int = 500,
+    offset: Int = 0,
+    completed: Bool,
+    dueStartDate: Date? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ActionItemsListResponse {
+    try await getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      dueStartDate: dueStartDate ?? Self.earliestActionItemDueDate,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  /// Scan every dated row in the incomplete bucket. Offset pagination alone
+  /// cannot cross `actionItemsListHardMax`, so this helper continues with a
+  /// keyset window on `due_at` when the read cap is reached.
+  func scanDatedIncompleteActionItems(
+    completed: Bool,
+    pageLimit: Int = 500,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> DatedActionItemsScanResult {
+    var items: [TaskActionItem] = []
+    var seenIDs = Set<String>()
+    var dueStart = Self.earliestActionItemDueDate
+    var boundaryOffset = 0
+
+    while true {
+      var pageOffset = 0
+      var chunkHasMore = false
+      var lastChunkDueAt: Date?
+
+      while true {
+        let page = try await getDatedActionItems(
+          limit: pageLimit,
+          offset: pageOffset,
+          completed: completed,
+          dueStartDate: dueStart,
+          expectedOwnerId: expectedOwnerId,
+          authorizationSnapshot: authorizationSnapshot
+        )
+        chunkHasMore = page.hasMore
+        boundaryOffset += page.items.count
+        lastChunkDueAt = page.items.compactMap(\.dueAt).max() ?? lastChunkDueAt
+
+        for item in page.items where !seenIDs.contains(item.id) {
+          seenIDs.insert(item.id)
+          items.append(item)
+        }
+
+        if page.items.isEmpty || !page.hasMore { break }
+        pageOffset += page.items.count
+        if pageOffset + pageLimit > Self.actionItemsListHardMax { break }
+      }
+
+      if !chunkHasMore { break }
+      guard let nextDueStart = lastChunkDueAt?.addingTimeInterval(0.001) else { break }
+      if nextDueStart <= dueStart { break }
+      dueStart = nextDueStart
+    }
+
+    return DatedActionItemsScanResult(items: items, boundaryOffset: boundaryOffset)
+  }
+
+  /// Fetch one No Deadline page from the general action-item ordering.
+  ///
+  /// The current backend has no `due_at IS NULL` query parameter. Its stable
+  /// product ordering places all dated rows before null rows, so callers first
+  /// count the dated bucket, then page from that boundary. `datedBoundaryOffset`
+  /// must count raw API rows in general list order (including rows the caller
+  /// later filters), not a deduplicated or client-filtered projection. The
+  /// caller must still reject any non-null rows defensively because concurrent
+  /// server mutations can change a page between requests.
+  func getNoDeadlineActionItems(
+    limit: Int = 100,
+    offset: Int = 0,
+    datedBoundaryOffset: Int,
+    completed: Bool,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ActionItemsListResponse {
+    guard datedBoundaryOffset >= 0, offset >= 0 else { throw APIError.invalidResponse }
+    let (generalOffset, overflow) = datedBoundaryOffset.addingReportingOverflow(offset)
+    guard !overflow else { throw APIError.invalidResponse }
+    return try await getActionItems(
+      limit: limit,
+      offset: generalOffset,
+      completed: completed,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )

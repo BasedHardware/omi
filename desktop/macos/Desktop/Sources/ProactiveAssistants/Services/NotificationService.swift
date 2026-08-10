@@ -13,47 +13,17 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
-  case focusLost
-  case focusRegained
   case none
 
   var unSound: UNNotificationSound? {
     switch self {
     case .default:
       return .default
-    case .focusLost, .focusRegained:
-      // Custom sounds are played manually via NSSound (see playCustomSound)
-      // because UNNotificationSound(named:) can't find SPM-bundled resources.
-      return nil
     case .none:
       return nil
     }
   }
 
-  /// Play the custom sound manually from the SPM resource bundle.
-  func playCustomSound() {
-    let filename: String
-    switch self {
-    case .focusLost:
-      filename = "focus-lost"
-    case .focusRegained:
-      filename = "focus-regained"
-    default:
-      return
-    }
-
-    guard let url = Bundle.resourceBundle.url(forResource: filename, withExtension: "aiff") else {
-      log("NotificationSound: Could not find \(filename).aiff in bundle")
-      return
-    }
-
-    guard let sound = NSSound(contentsOf: url, byReference: true) else {
-      log("NotificationSound: Could not load sound from \(url)")
-      return
-    }
-
-    sound.play()
-  }
 }
 
 @MainActor
@@ -269,9 +239,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           surface: "system_notification"
         )
 
-        // If this is a screen capture reset notification, trigger the reset
-        if title == Self.screenCaptureResetTitle {
+        switch Self.openAction(assistantId: assistantId, title: title) {
+        case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .openSupportThread:
+          self.openSupportThread(source: "notification_click")
+        case .none:
+          break
         }
 
       case UNNotificationDismissActionIdentifier:
@@ -308,6 +282,33 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     completionHandler()
   }
 
+  /// What tapping a delivered banner does, beyond recording that it was tapped.
+  ///
+  /// Tapping a notification is a request to *see the thing it is about*. A banner whose tap only
+  /// fires analytics is worse than no banner: it interrupts, then refuses. This names the cases
+  /// where the app owes the user a destination.
+  enum OpenAction: Equatable {
+    /// Nothing to open — the notification's content was the whole message.
+    case none
+    /// The screen-recording repair, which is an action rather than a page.
+    case resetScreenCapture
+    /// The founder/support thread the reply arrived in.
+    case openSupportThread
+  }
+
+  /// Resolve the tap destination from the notification's provenance.
+  ///
+  /// Support replies are matched on `assistantId`, not on their display title, because the title is
+  /// user-visible copy: renaming the banner must not silently disconnect its tap. The
+  /// screen-capture case still matches on title only because that is how its own delivery gates
+  /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
+  /// change with its own suppression-state migration.
+  static func openAction(assistantId: String, title: String) -> OpenAction {
+    if assistantId == SupportThreadRoute.assistantId { return .openSupportThread }
+    if title == screenCaptureResetTitle { return .resetScreenCapture }
+    return .none
+  }
+
   /// Handle screen capture reset action from notification click or action button
   private func handleScreenCaptureResetAction(source: String) {
     log("Screen capture reset triggered from \(source)")
@@ -315,15 +316,34 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
   }
 
+  /// Bring up the support thread the tapped reply belongs to.
+  ///
+  /// The window is revealed first because a banner can arrive with the main window closed, which is
+  /// exactly when a founder reply is worth surfacing. Non-`private` so a test can drive this
+  /// without a real `UNUserNotificationCenter` delivery.
+  func openSupportThread(source: String) {
+    log("Support thread open requested from \(source)")
+    SupportThreadRoute.open()
+  }
+
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
-  /// floating-bar only — users who disabled the floating bar reported clicking the
-  /// top-right system banner and getting no conversation context, which was confusing.
+  /// floating-bar only by default — users who disabled the floating bar reported clicking
+  /// the top-right system banner and getting no conversation context, which was confusing.
   /// Functional notifications (Crisp support replies, screen-recording permission
   /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.
+  ///
+  /// That default is no longer absolute: `FloatingBarNotificationPreviewPolicy` forces a
+  /// system banner anyway once the user has explicitly muted in-bar previews
+  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the Floating
+  /// Bar is still enabled, so the notification is never fully silenced (#6765). That banner
+  /// still lacks the in-bar conversation context noted above — the tradeoff is accepted only
+  /// for that explicit opt-out, not by default. Disabling the Floating Bar itself does
+  /// *not* force a banner: floating-bar-only notifications stay silent in that case, same
+  /// as before this policy existed, per the contentless-banner confusion noted above.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -409,21 +429,36 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
     }
 
-    FloatingControlBarManager.shared.showNotification(
-      ownerID: ownerID,
-      title: title,
-      message: message,
-      assistantId: assistantId,
-      sound: sound,
-      context: context,
-      action: action,
-      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
-      screenshotData: screenshotData
-    )
+    let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
+
+    if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
+    ) {
+      FloatingControlBarManager.shared.showNotification(
+        ownerID: ownerID,
+        title: title,
+        message: message,
+        assistantId: assistantId,
+        sound: sound,
+        context: context,
+        action: action,
+        suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+        screenshotData: screenshotData
+      )
+    }
 
     // Default path: floating-bar only. Functional callers opt-in via
-    // `deliverSystemBanner: true` (see the parameter doc above).
-    guard deliverSystemBanner else { return }
+    // `deliverSystemBanner: true` (see the parameter doc above). When the user
+    // explicitly muted in-bar previews (bar still enabled), fall back to the
+    // system banner so the notification is never fully silenced. Disabling the
+    // Floating Bar itself does not force a banner — see the parameter doc.
+    guard
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
+    else { return }
 
     UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -433,21 +468,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       guard authorizationStatus == .authorized else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
 
-        // If auth reverted to notDetermined (not explicitly denied), trigger repair.
-        // Debounce: at most once per 10 minutes to avoid hammering lsregister.
-        if authorizationStatus == .notDetermined {
-          let now = Date()
-          if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
-            self?.lastRepairAttempt = now
-            log("Notification auth is notDetermined at send time — triggering repair")
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "send_time_not_determined",
-              previousStatus: "unknown",
-              currentStatus: "notDetermined"
-            )
-            ProactiveAssistantsPlugin.repairNotificationRegistration()
-          }
-        }
+        // Sending an assistant notification is not consent to change TCC or
+        // LaunchServices state. A user can repair notification access from
+        // Settings; background delivery simply remains unavailable.
         return
       }
 
@@ -487,8 +510,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         authorizationSnapshot: authorizationSnapshot
       ),
       taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
-      focusSuppressed: FocusStorage.shared.currentStatus == .focused
-        || ProactiveTaskInterruptionSettings.isFocusSuppressed,
+      focusSuppressed: ProactiveTaskInterruptionSettings.isFocusSuppressed,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       now: now,
       calendar: calendar
@@ -594,9 +616,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: assistantId,
       authorizationSnapshot: authorizationSnapshot
     )
-
-    // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
-    sound.playCustomSound()
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
     UserNotificationCallbackBridge.add(request) { [weak self] result in

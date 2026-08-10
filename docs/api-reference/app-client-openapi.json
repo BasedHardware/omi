@@ -107,6 +107,173 @@
         "title": "AcceptSharedTasksRequest",
         "type": "object"
       },
+      "AccountCutoverCheckpointPhase": {
+        "description": "Forward-migration checkpoint phases (legacy-side seam only).",
+        "enum": [
+          "not_started",
+          "inventory",
+          "offline_queue_fenced",
+          "exporting",
+          "importing",
+          "verifying",
+          "cutover_ready",
+          "completed",
+          "failed",
+          "paused"
+        ],
+        "title": "AccountCutoverCheckpointPhase",
+        "type": "string"
+      },
+      "AccountCutoverClientAction": {
+        "description": "Fail-closed client surface before product traffic.",
+        "enum": [
+          "none",
+          "force_upgrade",
+          "migration_maintenance"
+        ],
+        "title": "AccountCutoverClientAction",
+        "type": "string"
+      },
+      "AccountCutoverControl": {
+        "additionalProperties": false,
+        "description": "Authenticated bootstrap/control projection for bridge clients.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "api_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Api Generation",
+            "type": "integer"
+          },
+          "auth_bootstrap_reachable": {
+            "default": true,
+            "title": "Auth Bootstrap Reachable",
+            "type": "boolean"
+          },
+          "client_action": {
+            "$ref": "#/components/schemas/AccountCutoverClientAction",
+            "default": "none"
+          },
+          "legacy_writes_allowed": {
+            "default": true,
+            "title": "Legacy Writes Allowed",
+            "type": "boolean"
+          },
+          "migration": {
+            "$ref": "#/components/schemas/AccountCutoverManifestSummary"
+          },
+          "minimum_supported_builds": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlatformMinimumBuild"
+            },
+            "title": "Minimum Supported Builds",
+            "type": "array"
+          },
+          "offline_queue_instruction": {
+            "$ref": "#/components/schemas/OfflineQueueInstruction",
+            "default": "none"
+          },
+          "product_traffic_allowed": {
+            "default": true,
+            "title": "Product Traffic Allowed",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AccountCutoverState",
+            "default": "legacy"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          },
+          "ui_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Ui Generation",
+            "type": "integer"
+          }
+        },
+        "title": "AccountCutoverControl",
+        "type": "object"
+      },
+      "AccountCutoverManifestSummary": {
+        "additionalProperties": false,
+        "description": "Opaque forward-migration manifest identity without user content.",
+        "properties": {
+          "checkpoint_phase": {
+            "$ref": "#/components/schemas/AccountCutoverCheckpointPhase",
+            "default": "not_started"
+          },
+          "checkpoint_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Token"
+          },
+          "destination_backend_bound": {
+            "default": false,
+            "title": "Destination Backend Bound",
+            "type": "boolean"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountCutoverManifestSummary",
+        "type": "object"
+      },
+      "AccountCutoverState": {
+        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverState",
+        "type": "string"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -268,6 +435,13 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           },
           "target_task_id": {
             "anyOf": [
@@ -5578,6 +5752,57 @@
         "title": "CandidateSubjectKind",
         "type": "string"
       },
+      "CanonicalKnowledgeGraphResponse": {
+        "properties": {
+          "catalog_nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Catalog Nodes",
+            "type": "array"
+          },
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "has_more"
+        ],
+        "title": "CanonicalKnowledgeGraphResponse",
+        "type": "object"
+      },
       "CaptureLinkSpec": {
         "additionalProperties": false,
         "properties": {
@@ -7302,6 +7527,8 @@
       "CreateCheckoutRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -10154,6 +10381,18 @@
             ],
             "title": "Device Id"
           },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
           "excerpt_hash": {
             "anyOf": [
               {
@@ -10178,6 +10417,35 @@
           },
           "scope": {
             "$ref": "#/components/schemas/EvidenceScope"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "transcript_segment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segment Ids"
           },
           "version": {
             "anyOf": [
@@ -14922,6 +15190,16 @@
         "title": "OAuthUrlResponse",
         "type": "object"
       },
+      "OfflineQueueInstruction": {
+        "description": "Server instruction for legacy offline/outbox queues on clients.\n\n``drain`` is only legal before the migration fence (legacy plane still\nwritable). ``quarantine`` applies once the account enters ``migrating``.",
+        "enum": [
+          "none",
+          "drain",
+          "quarantine"
+        ],
+        "title": "OfflineQueueInstruction",
+        "type": "string"
+      },
       "OnboardingStateResponse": {
         "properties": {
           "acquisition_source": {
@@ -15980,6 +16258,28 @@
         ],
         "title": "PlanType",
         "type": "string"
+      },
+      "PlatformMinimumBuild": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_supported_build": {
+            "minimum": 0.0,
+            "title": "Minimum Supported Build",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "minimum_supported_build"
+        ],
+        "title": "PlatformMinimumBuild",
+        "type": "object"
       },
       "PluginResult": {
         "properties": {
@@ -19354,6 +19654,53 @@
         "title": "SyncLocalFilesResultResponse",
         "type": "object"
       },
+      "SyncRecoveryWindowExceededResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lane"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "SyncRecoveryWindowExceededResponse",
+        "type": "object"
+      },
+      "SyncRequestValidationErrorResponse": {
+        "description": "FastAPI's multipart/request validation shape for sync input failures.",
+        "properties": {
+          "detail": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -21964,6 +22311,8 @@
       "UpgradeSubscriptionRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -23528,6 +23877,100 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/account/cutover/control": {
+      "get": {
+        "description": "Stable authenticated bootstrap projection for bridge clients.\n\nAlways reachable for signed-in users, including while product traffic is\nfenced for migrating / force-upgrade / stranded states. Does not migrate\nany account; absent documents project as legacy. Malformed authoritative\ndocuments fail closed.",
+        "operationId": "get_account_cutover_control_v1_account_cutover_control_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCutoverControl"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Cutover Control",
+        "tags": [
+          "account-cutover"
+        ]
+      }
+    },
     "/v1/action-items": {
       "get": {
         "description": "Get action items for the current user.",
@@ -25395,7 +25838,7 @@
     },
     "/v1/agent/vm-ensure": {
       "post": {
-        "description": "Check VM status; if stopped/terminated, restart it in the background.",
+        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
         "operationId": "ensure_vm_v1_agent_vm_ensure_post",
         "parameters": [
           {
@@ -25470,7 +25913,7 @@
     },
     "/v1/agent/vm-status": {
       "get": {
-        "description": "Return the user's agent VM info from Firestore.",
+        "description": "Return the user's agent VM info from Firestore.\n\nTools paths do not probe GCE (reconciler authority). They still refuse to\nreport eternal ``ready`` while reconciler demand/missing/lease state is\nalready recorded — that is the shared read contract with desktop status.",
         "operationId": "get_vm_status_v1_agent_vm_status_get",
         "parameters": [
           {
@@ -40950,6 +41393,111 @@
         ]
       }
     },
+    "/v1/knowledge-graph/canonical": {
+      "get": {
+        "operationId": "get_canonical_knowledge_graph_v1_knowledge_graph_canonical_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalKnowledgeGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Canonical Knowledge Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
     "/v1/knowledge-graph/rebuild": {
       "post": {
         "operationId": "rebuild_graph_v1_knowledge_graph_rebuild_post",
@@ -55744,11 +56292,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SyncRecoveryWindowExceededResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SyncRequestValidationErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Sync Local Files V2 V2 Sync Local Files Post"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Automatic recovery window exceeded or malformed request"
           }
         },
         "security": [
@@ -56138,6 +56694,22 @@
       "delete": {
         "operationId": "delete_memories_v3_memories_delete",
         "parameters": [
+          {
+            "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+              "enum": [
+                "all",
+                "default"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

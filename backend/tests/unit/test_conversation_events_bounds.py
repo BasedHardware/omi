@@ -237,17 +237,18 @@ def test_valid_index_still_updates(router):
 class _FakeSegment:
     """Minimal transcript segment: assignable (.is_user / .person_id) and model_dump-able."""
 
-    def __init__(self):
+    def __init__(self, segment_id=None):
+        self.id = segment_id
         self.is_user = False
         self.person_id = None
 
     def model_dump(self):
-        return {"is_user": self.is_user, "person_id": self.person_id}
+        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id}
 
 
-def _fake_conversation_with_segments(count):
-    segments = [_FakeSegment() for _ in range(count)]
-    return SimpleNamespace(transcript_segments=segments), segments
+def _fake_conversation_with_segments(count, status=None, with_ids=False):
+    segments = [_FakeSegment(f"segment-{index}" if with_ids else None) for index in range(count)]
+    return SimpleNamespace(transcript_segments=segments, status=status), segments
 
 
 def _segment_assign_handler(conv):
@@ -306,3 +307,84 @@ def test_segment_assign_valid_index_still_updates(router):
     assert segments[1].is_user is True
     assert segments[0].is_user is False  # untouched
     assert result is convo
+
+
+def test_bulk_assign_resolves_legacy_positional_target_and_persists_canonical_id(router):
+    """The desktop's #index fallback must resolve to the same segment the backend persists."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["#index:0"],
+        assign_type="person_id",
+        value="person-9",
+    )
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+        result = router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert result is convo
+    assert segments[0].person_id == "person-9"
+    assert segments[0].is_user is False
+    assert segments[1].person_id is None
+    assert len(background_tasks.tasks) == 1
+    assert background_tasks.tasks[0].kwargs["segment_ids"] == ["segment-0"]
+
+
+def test_bulk_assign_exact_id_still_supports_user_assignment(router):
+    """Already-shipped clients using persisted IDs retain the existing assignment path."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    segments[0].person_id = "old-person"
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["segment-0"],
+        assign_type="is_user",
+        value="true",
+    )
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+        router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert segments[0].is_user is True
+    assert segments[0].person_id is None
+    assert segments[1].is_user is False
+    assert background_tasks.tasks == []
+
+
+def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
+    """A stale or malformed target must fail closed instead of reporting a silent no-op."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    segments[0].person_id = "old-person"
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["segment-0", "#index:99"],
+        assign_type="person_id",
+        value="person-9",
+    )
+    update = MagicMock()
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments", update):
+        with pytest.raises(HTTPException) as exc:
+            router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert exc.value.status_code == 409
+    assert segments[0].person_id == "old-person"
+    assert update.call_count == 0
+    assert background_tasks.tasks == []

@@ -139,6 +139,8 @@ make_signed_smoke_fixture() {
   local app="$1"
   local bundle_id="$2"
   local feed_url="$3"
+  local python_api_url="${4:-https://api.omi.me}"
+  local desktop_api_url="${5:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
 
   mkdir -p \
     "$app/Contents/MacOS" \
@@ -148,7 +150,8 @@ make_signed_smoke_fixture() {
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-x64/lib" \
-    "$app/Contents/Resources/pi-mono-extension" \
+    "$app/Contents/Resources/agent/dist/runtime" \
+    "$app/Contents/Resources/pi-mono-extension/node_modules/@omi/placeholder" \
     "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources"
   cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -165,15 +168,26 @@ make_signed_smoke_fixture() {
 </dict>
 </plist>
 PLIST
-  cat > "$app/Contents/Resources/.env" <<'ENV'
-OMI_PYTHON_API_URL=https://api.omi.me
-OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/
-ENV
+  printf 'OMI_PYTHON_API_URL=%s\nOMI_DESKTOP_API_URL=%s\n' "$python_api_url" "$desktop_api_url" \
+    > "$app/Contents/Resources/.env"
+  cat > "$app/Contents/Resources/GoogleService-Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>PROJECT_ID</key><string>based-hardware</string></dict></plist>
+PLIST
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  # The runtime payload pi-mono loads after the bridge script. Non-empty on
+  # purpose: a zero-byte entry point cannot answer a turn either.
+  printf 'runtime\n' > "$app/Contents/Resources/agent/dist/index.js"
+  printf 'manifest\n' > "$app/Contents/Resources/agent/dist/runtime/omi-tool-manifest.js"
+  printf '{}\n' > "$app/Contents/Resources/agent/package.json"
+  printf 'extension\n' > "$app/Contents/Resources/pi-mono-extension/index.ts"
+  printf '{}\n' > "$app/Contents/Resources/pi-mono-extension/package.json"
+  printf '{}\n' > "$app/Contents/Resources/pi-mono-extension/node_modules/@omi/placeholder/package.json"
+  printf '{}\n' > "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/package.json"
   touch \
-    "$app/Contents/Resources/agent/src/runtime/omi-tool-manifest.ts" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64.node" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.42.dylib" \
@@ -234,13 +248,20 @@ make_signed_smoke_fixture "$canonical_dmg_app" \
   https://api.omi.me/v2/desktop/appcast.xml
 make_signed_smoke_fixture "$signed_beta_app" \
   com.omi.computer-macos.beta \
-  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  https://api.omiapi.com/ \
+  https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
 make_signed_smoke_fixture "$renamed_canonical_app" \
   com.omi.computer-macos \
   https://api.omi.me/v2/desktop/appcast.xml
 make_signed_smoke_fixture "$renamed_beta_app" \
   com.omi.computer-macos.beta \
-  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta'
+  'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  https://api.omiapi.com/ \
+  https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
+# Firebase Web API keys are public client configuration, required for desktop
+# sign-in, and bound by the signed GoogleService-Info.plist project check.
+printf 'FIREBASE_API_KEY=public-firebase-web-key\n' >> "$signed_beta_app/Contents/Resources/.env"
 dummy_dmg="$tmp_root/fixture.dmg"
 touch "$dummy_dmg"
 
@@ -255,6 +276,8 @@ PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$signed_beta_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-beta-dmg.out 2>/tmp/omi-smoke-beta-dmg.err \
   || fail "Omi Beta.app DMG should pass: $(cat /tmp/omi-smoke-beta-dmg.err)"
 
@@ -263,6 +286,8 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$canonical_dmg_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-beta-wrong-dmg.out 2>/tmp/omi-smoke-beta-wrong-dmg.err; then
   fail "beta smoke must reject a DMG containing only Omi.app"
 fi
@@ -284,12 +309,60 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$renamed_beta_app" \
   --tag v0.12.34+12034-macos \
   --expected-bundle-id com.omi.computer-macos.beta \
   --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
   >/tmp/omi-smoke-renamed-beta.out 2>/tmp/omi-smoke-renamed-beta.err; then
   fail "beta identity must reject a renamed app and matching DMG"
 fi
 grep -q "app bundle name for com.omi.computer-macos.beta must be Omi Beta.app, got Anything Beta.app" \
   /tmp/omi-smoke-renamed-beta.err \
   || fail "renamed beta rejection should bind Omi Beta.app to its bundle identity"
+
+mkdir -p "$tmp_root/wrong-firebase"
+wrong_firebase_beta="$tmp_root/wrong-firebase/Omi Beta.app"
+cp -R "$signed_beta_app" "$wrong_firebase_beta"
+/usr/libexec/PlistBuddy -c 'Set :PROJECT_ID based-hardware-dev' \
+  "$wrong_firebase_beta/Contents/Resources/GoogleService-Info.plist"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$wrong_firebase_beta" \
+  "$SMOKE" --app "$wrong_firebase_beta" --tag v0.12.34+12034-macos \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url 'https://api.omi.me/v2/desktop/appcast.xml?identity=beta' \
+  --expected-python-api-url https://api.omiapi.com/ \
+  --expected-desktop-api-url https://desktop-backend-dt5lrfkkoa-uc.a.run.app/ \
+  >/tmp/omi-smoke-beta-wrong-firebase.out 2>/tmp/omi-smoke-beta-wrong-firebase.err; then
+  fail "beta smoke must reject a non-production Firebase project"
+fi
+grep -q "Firebase project must be based-hardware" /tmp/omi-smoke-beta-wrong-firebase.err \
+  || fail "Firebase project rejection should be explicit"
+
+# A signed artifact whose pi-mono-extension is present but empty passed the old
+# directory-exists check and still failed every chat turn (pi-mono exits 1 on
+# `Unknown provider "omi"`). The release lane must reject it before publication.
+mkdir -p "$tmp_root/hollow-runtime"
+hollow_runtime_app="$tmp_root/hollow-runtime/Omi.app"
+cp -R "$canonical_dmg_app" "$hollow_runtime_app"
+rm -f "$hollow_runtime_app/Contents/Resources/pi-mono-extension/index.ts"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$hollow_runtime_app" \
+  "$SMOKE" --app "$hollow_runtime_app" --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-hollow-runtime.out 2>/tmp/omi-smoke-hollow-runtime.err; then
+  fail "smoke must reject an artifact whose agent runtime payload is incomplete"
+fi
+grep -q "agent runtime payload incomplete" /tmp/omi-smoke-hollow-runtime.err \
+  || fail "incomplete runtime payload rejection should name the contract"
+grep -q "pi-mono-extension/index.ts" /tmp/omi-smoke-hollow-runtime.err \
+  || fail "incomplete runtime payload rejection should name the missing component"
+
+mkdir -p "$tmp_root/missing-tool-manifest"
+missing_tool_manifest_app="$tmp_root/missing-tool-manifest/Omi.app"
+cp -R "$canonical_dmg_app" "$missing_tool_manifest_app"
+rm -f "$missing_tool_manifest_app/Contents/Resources/agent/dist/runtime/omi-tool-manifest.js"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$missing_tool_manifest_app" \
+  "$SMOKE" --app "$missing_tool_manifest_app" --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-missing-tool-manifest.out 2>/tmp/omi-smoke-missing-tool-manifest.err; then
+  fail "smoke must reject an artifact whose compiled agent tool manifest is missing"
+fi
+grep -q "agent/dist/runtime/omi-tool-manifest.js" /tmp/omi-smoke-missing-tool-manifest.err \
+  || fail "compiled tool manifest rejection should name the missing component"
 
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation
