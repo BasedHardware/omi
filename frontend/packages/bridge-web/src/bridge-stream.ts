@@ -16,6 +16,8 @@ interface MessageChannel {
 
 type IteratorResultValue = IteratorResult<string, undefined>;
 
+const STREAM_REGISTRY = Symbol.for("@omi-core/bridge-web/stream-registry");
+
 export class BridgeStreamProtocolError extends Error {
   constructor(readonly violation: string) {
     super(`bridge stream protocol violation: ${violation}`);
@@ -196,31 +198,69 @@ class Session implements BridgePayloadStream, AsyncIterator<string, undefined> {
   }
 }
 
+interface RealmStreamRegistry {
+  sequence: number;
+  readonly sessions: Map<string, Session>;
+  readonly sink: (raw: unknown) => void;
+}
+
+function realmStreamRegistry(): RealmStreamRegistry {
+  const realm = globalThis as unknown as Record<PropertyKey, unknown>;
+  const existing = realm[STREAM_REGISTRY] as RealmStreamRegistry | undefined;
+  if (existing !== undefined) return existing;
+  const sessions = new Map<string, Session>();
+  const registry: RealmStreamRegistry = {
+    sequence: 0,
+    sessions,
+    sink(raw) {
+      const frame = parseFrame(raw);
+      if (frame !== null) {
+        sessions.get(frame.id)?.accept(frame);
+        return;
+      }
+      let routedId: string | null = null;
+      if (typeof raw === "string") {
+        try {
+          const partial = JSON.parse(raw) as { id?: unknown };
+          if (typeof partial?.id === "string") routedId = partial.id;
+        } catch {
+          // An unparseable frame has no trustworthy route.
+        }
+      }
+      if (routedId !== null) {
+        sessions.get(routedId)?.failMalformed();
+        return;
+      }
+      // The sink is shared by every live stream in this realm. If a malformed
+      // frame cannot be routed, none of those sessions can safely wait for a
+      // terminal that may have been the malformed frame.
+      for (const session of [...sessions.values()]) session.failMalformed();
+    },
+  };
+  realm[STREAM_REGISTRY] = registry;
+  return registry;
+}
+
+function installRealmStreamSink(registry: RealmStreamRegistry): void {
+  const realm = globalThis as unknown as Record<string, unknown>;
+  if (realm[BRIDGE_STREAM_SINK_FUNCTION] === registry.sink) return;
+  // A removed/replaced sink severs routing for every still-registered stream.
+  // Close them before installing the realm sink again so teardown cannot leave
+  // promises hanging or route a later document's frame into an old session.
+  for (const session of [...registry.sessions.values()]) session.failMalformed();
+  realm[BRIDGE_STREAM_SINK_FUNCTION] = registry.sink;
+}
+
 /** Bind streams to the native channel installed in the current document. */
 export function bridgeStreamPort(): BridgeStreamPort {
   const host = detectChannel();
   if (!host) {
     throw new Error(`bridge stream unavailable: no "${BRIDGE_STREAM_MESSAGE_CHANNEL}" channel on this host`);
   }
-  let sequence = 0;
-  const sessions = new Map<string, Session>();
+  const registry = realmStreamRegistry();
+  installRealmStreamSink(registry);
   const send = (message: StreamToShellWire): void => {
     host.postMessage(JSON.stringify(message));
-  };
-
-  (globalThis as unknown as Record<string, unknown>)[BRIDGE_STREAM_SINK_FUNCTION] = (raw: unknown): void => {
-    const frame = parseFrame(raw);
-    if (frame === null) {
-      if (typeof raw !== "string") return;
-      try {
-        const partial = JSON.parse(raw) as { id?: unknown };
-        if (typeof partial?.id === "string") sessions.get(partial.id)?.failMalformed();
-      } catch {
-        // Without a trustworthy id, malformed input cannot target any stream.
-      }
-      return;
-    }
-    sessions.get(frame.id)?.accept(frame);
   };
 
   return {
@@ -229,11 +269,11 @@ export function bridgeStreamPort(): BridgeStreamPort {
         throw new BridgeStreamProtocolError("initial-credit-must-be-positive");
       }
       if (request.channel === "") throw new BridgeStreamProtocolError("channel-must-be-nonempty");
-      sequence += 1;
-      const id = `s${sequence}`;
+      registry.sequence += 1;
+      const id = `s${registry.sequence}`;
       let session!: Session;
-      session = new Session(id, request, send, () => sessions.delete(id));
-      sessions.set(id, session);
+      session = new Session(id, request, send, () => registry.sessions.delete(id));
+      registry.sessions.set(id, session);
       try {
         send({
           t: "open",
@@ -243,7 +283,7 @@ export function bridgeStreamPort(): BridgeStreamPort {
           credit: request.initialCredit,
         });
       } catch (error) {
-        sessions.delete(id);
+        registry.sessions.delete(id);
         throw error;
       }
       return session;

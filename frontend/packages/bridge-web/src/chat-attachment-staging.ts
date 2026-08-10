@@ -21,6 +21,49 @@ type Transport =
   | { kind: "reply"; handler: ReplyHandler }
   | { kind: "one-way"; channel: OneWayChannel };
 
+const STAGING_REGISTRY = Symbol.for("@omi-core/bridge-web/chat-attachment-staging-registry");
+
+interface PendingStagingReply {
+  resolve(reply: unknown): void;
+  reject(error: Error): void;
+}
+
+interface RealmStagingRegistry {
+  sequence: number;
+  readonly pending: Map<string, PendingStagingReply>;
+  readonly sink: (id: unknown, reply: unknown) => void;
+}
+
+function realmStagingRegistry(): RealmStagingRegistry {
+  const realm = globalThis as unknown as Record<PropertyKey, unknown>;
+  const existing = realm[STAGING_REGISTRY] as RealmStagingRegistry | undefined;
+  if (existing !== undefined) return existing;
+  const pending = new Map<string, PendingStagingReply>();
+  const registry: RealmStagingRegistry = {
+    sequence: 0,
+    pending,
+    sink(id, reply) {
+      if (typeof id !== "string") return;
+      const settle = pending.get(id);
+      if (!settle) return;
+      pending.delete(id);
+      settle.resolve(reply);
+    },
+  };
+  realm[STAGING_REGISTRY] = registry;
+  return registry;
+}
+
+function installRealmStagingSink(registry: RealmStagingRegistry): void {
+  const realm = globalThis as unknown as Record<string, unknown>;
+  if (realm[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] === registry.sink) return;
+  for (const pending of registry.pending.values()) {
+    pending.reject(new Error("attachment staging reply sink was replaced"));
+  }
+  registry.pending.clear();
+  realm[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] = registry.sink;
+}
+
 function detectTransport(): Transport | null {
   const host = globalThis as unknown as {
     webkit?: { messageHandlers?: Record<string, ReplyHandler | undefined> };
@@ -83,19 +126,9 @@ function parseReply(raw: unknown, id: string): StagedChatAttachment | null {
 
 export function bridgeChatAttachmentStagingPort(): ChatAttachmentStagingPort {
   const transport = detectTransport();
-  let sequence = 0;
-  const pending = new Map<string, (reply: unknown) => void>();
+  const registry = realmStagingRegistry();
   if (transport?.kind === "one-way") {
-    (globalThis as unknown as Record<string, unknown>)[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] = (
-      id: unknown,
-      reply: unknown,
-    ): void => {
-      if (typeof id !== "string") return;
-      const settle = pending.get(id);
-      if (!settle) return;
-      pending.delete(id);
-      settle(reply);
-    };
+    installRealmStagingSink(registry);
   }
   return {
     isAvailable: () => transport !== null,
@@ -103,15 +136,20 @@ export function bridgeChatAttachmentStagingPort(): ChatAttachmentStagingPort {
       if (!transport) {
         throw new Error(`attachment staging unavailable: no "${BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL}" channel`);
       }
-      sequence += 1;
-      const id = `a${sequence}`;
+      registry.sequence += 1;
+      const id = `a${registry.sequence}`;
       const request: BridgeChatAttachmentStagingRequest = { t: "pick-and-stage", id };
       if (transport.kind === "reply") {
         return parseReply(await transport.handler.postMessage(request), id);
       }
-      const reply = await new Promise<unknown>((resolve) => {
-        pending.set(id, resolve);
-        transport.channel.postMessage(JSON.stringify(request));
+      const reply = await new Promise<unknown>((resolve, reject) => {
+        registry.pending.set(id, { resolve, reject });
+        try {
+          transport.channel.postMessage(JSON.stringify(request));
+        } catch (error) {
+          registry.pending.delete(id);
+          reject(error);
+        }
       });
       return parseReply(reply, id);
     },
