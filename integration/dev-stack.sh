@@ -29,7 +29,7 @@
 #   *** `--generation platform`, BOTH apps read memories from 4851.
 #   ***
 #   *** Verified on a clean run of this script: the backend's own counter went
-#   *** servedReads 0 -> 4 for macOS and 4 -> 6 when iOS joined, and both apps
+#   *** domainReadsServed 0 -> 4 for macOS and 4 -> 6 when iOS joined, and both apps
 #   *** log `rendered=memories-platform ... mismatch=no`.
 #   ***
 #   *** Still trust the CROSS-CHECK, not this script's own summary. `rendered`
@@ -138,7 +138,7 @@
 #   id. See integration/lib/write-journey.mjs for what each step's two arbiters
 #   are and why a dispatch-side number never appears in the verdict.
 #
-#   THE DOOR IS THE REGISTERED APP — `createLocalService`, bound directly to
+#   THE DOOR IS THE REGISTERED DEV APP — `createLocalDevService`, bound directly to
 #   4851 by `integration/lib/write-journey-door.mjs`. Memories, task writes,
 #   task reads, QA control and their counters are one composition, one process,
 #   one token and one store. The old memories-only 4851 plus ephemeral task door
@@ -197,7 +197,7 @@ TRACKER="$WORKSPACE/omi-frontend-unification-and-microapps-project-tracker"
 # equivalent: its bridge counts requests at DISPATCH, so it reports a healthy
 # nonzero servedCount while every request fails and the backend serves nothing.
 # The promoted shell keys acceptance on succeededCount and emits a traffic
-# breakdown. Driving the prototype is what made my first servedReads claim
+# breakdown. Driving the prototype is what made my first served-read claim
 # unreproducible. Override only if you know why.
 MACOS_SHELL="${OMI_MACOS_SHELL:-$CORE_REPO/core/shells/macos}"
 IOS_SHELL="$TRACKER/prototypes/flutter-webview"
@@ -232,15 +232,15 @@ export TZ=UTC
 # A per-run client id, threaded to the shells and sent as `x-omi-client-id` on
 # every bridge request.
 #
-# WHY: the launcher used to prove traffic with a `servedReads before -> after`
+# WHY: the launcher used to prove traffic with a `domainReadsServed before -> after`
 # DELTA on a global counter. That delta is satisfied by ANY client — a stray
 # curl, the acceptance probe, another agent's stack on the same machine, the
 # user's own window left open from an hour ago. The claim we actually want to
 # make is "the app **I** launched read the backend N times", and a delta cannot
 # express it. A client id turns an aggregate into a JOINABLE KEY: the backend
-# reports servedReadsByClient[<this id>], and nobody else's traffic can satisfy
-# it. The global delta is still reported, because it is useful context — it is
-# just no longer allowed to be the evidence.
+# reports `reads.served` from `/v1/qa/control/stats?run=<this id>`, and nobody
+# else's traffic can satisfy it. The global delta is still reported, because it
+# is useful context — it is just no longer allowed to be the evidence.
 RUN_ID="run-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 RUN_CLIENT_ID="$RUN_ID"
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -641,8 +641,11 @@ fi
 #
 # `integration/lib/write-journey-door.mjs` is process glue, not a replacement
 # composition: it constructs no route, handler or store of its own. It imports
-# `createLocalService` — the same app the dev server, route tests and shipped
-# binding use — and binds it directly to 4851. The URL, dev token and owner are
+# `createLocalDevService` — the dev-shaped app used by the dev server and route
+# tests, with deterministic scripted adapters supplied explicitly by that
+# factory. The production-shaped `createLocalService` deliberately refuses
+# missing adapters. The launcher binds the dev composition directly to 4851.
+# The URL, dev token and owner are
 # read from its one-line JSON announcement; nothing here guesses them.
 #
 # R34 removes the separate-process exception: the journey must read the
@@ -791,7 +794,7 @@ ok "surfaces at http://127.0.0.1:$SURFACES_PORT/ — $(node "$HERE/lib/provenanc
 fi
 
 # ── 4. Shell configuration, shared by BOTH apps ─────────────────────────────
-STATS_BEFORE="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
+STATS_BEFORE="$(curl -s "$BACKEND_URL/v1/qa/status" 2>/dev/null || echo '{}')"
 
 # Set OUTSIDE the macOS block on purpose: iOS consumes the same three values as
 # --dart-defines. While this lived inside `if [[ $WANT_MACOS -eq 1 ]]`, running
@@ -1009,9 +1012,10 @@ fi
 
 # ── 6. Did anything actually flow? ──────────────────────────────────────────
 sleep 3
-STATS_AFTER="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
-read_before="$(echo "$STATS_BEFORE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).servedReads??0)}catch{console.log(0)}})')"
-read_after="$(echo "$STATS_AFTER" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).servedReads??0)}catch{console.log(0)}})')"
+STATS_AFTER="$(curl -s "$BACKEND_URL/v1/qa/status" 2>/dev/null || echo '{}')"
+RUN_STATS_AFTER="$(curl -sG --data-urlencode "run=$RUN_CLIENT_ID" "$BACKEND_URL/v1/qa/control/stats" 2>/dev/null || echo '{}')"
+read_before="$(echo "$STATS_BEFORE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).served?.domainReadsServed??0)}catch{console.log(0)}})')"
+read_after="$(echo "$STATS_AFTER" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).served?.domainReadsServed??0)}catch{console.log(0)}})')"
 
 echo
 printf '%s\n' "${B}══════════════════ stack up ══════════════════${Z}"
@@ -1021,7 +1025,7 @@ printf '  %-22s %s\n' "surfaces"     "http://127.0.0.1:$SURFACES_PORT/"
 [[ $WANT_MACOS -eq 1 ]] && printf "  %-22s %s\n" "macOS app" "http://127.0.0.1:${SHELL_PORT:-5290}/  (app window)"
 [[ $WANT_IOS  -eq 1 ]] && printf '  %-22s %s\n' "iOS app" "simulator ${UDID:-none}"
 echo
-printf '  %s\n' "${B}served by the NEW backend:${Z} servedReads ${read_before} -> ${read_after}"
+printf '  %s\n' "${B}served by the NEW backend:${Z} domainReadsServed ${read_before} -> ${read_after}"
 if [[ "$read_after" == "0" && "$GENERATION" == "platform" ]]; then
   printf '  %s\n' "${R}FAIL: you asked for generation=platform and the new backend served ZERO${Z}"
   printf '  %s\n' "${R}reads. The app is NOT on the new backend, whatever it looks like.${Z}"
@@ -1034,8 +1038,9 @@ else
   printf '  %s\n' "${G}The app read the NEW backend ${read_after} time(s) over GET /v1/memories.${Z}"
 fi
 echo
-printf '  %s\n' "poke it:   curl -s $BACKEND_URL/qa/stats"
-printf '  %s\n' "reseed:    curl -s '$BACKEND_URL/qa/reset?seed=12'"
+printf '  %s\n' "status:    curl -s $BACKEND_URL/v1/qa/status"
+printf '  %s\n' "this run:  curl -sG --data-urlencode 'run=$RUN_CLIENT_ID' '$BACKEND_URL/v1/qa/control/stats'"
+printf '  %s\n' "reset:     curl -s -X POST -H 'Authorization: Bearer $WRITE_TOKEN' '$BACKEND_URL/v1/qa/reset'"
 printf '  %s\n' "logs:      $LOGDIR"
 printf '  %s\n' "stop:      Ctrl-C  (or: integration/dev-stack.sh --stop)"
 echo
@@ -1043,7 +1048,8 @@ echo
 if [[ "$RED_PROOF" == "dead-backend" ]]; then
   warn "RED-PROOF dead-backend: killing the backend now that the apps have been driven."
   free_port "$BACKEND_PORT" "integration/lib/write-journey-door.mjs"
-  STATS_AFTER="$(curl -s --max-time 2 "$BACKEND_URL/qa/stats" 2>/dev/null || echo '')"
+  STATS_AFTER="$(curl -s --max-time 2 "$BACKEND_URL/v1/qa/status" 2>/dev/null || echo '')"
+  RUN_STATS_AFTER="$(curl -sG --max-time 2 --data-urlencode "run=$RUN_CLIENT_ID" "$BACKEND_URL/v1/qa/control/stats" 2>/dev/null || echo '')"
 fi
 
 # ── 7. The run report ───────────────────────────────────────────────────────
@@ -1088,7 +1094,7 @@ if [[ $WANT_MACOS -eq 1 ]]; then
 fi
 
 RUN_ID="$RUN_ID" STARTED_AT="$RUN_STARTED_AT" CLIENT_ID="$RUN_CLIENT_ID" GENERATION="$GENERATION" \
-BACKEND_URL="$BACKEND_URL" STATS_BEFORE="$STATS_BEFORE" STATS_AFTER="$STATS_AFTER" \
+BACKEND_URL="$BACKEND_URL" STATS_BEFORE="$STATS_BEFORE" STATS_AFTER="$STATS_AFTER" RUN_STATS_AFTER="$RUN_STATS_AFTER" \
 MACOS_FACTS="$MACOS_FACTS" ATTACH="$MODE_ATTACH" WANT_SURFACES="$WANT_SURFACES" \
 MODE="$([[ $MODE_ATTACH -eq 1 ]] && echo attach || { [[ $MODE_UP -eq 1 ]] && echo up || echo run; })" \
 FACTSFILE="$FACTSFILE" JOURNEY_FILE="${JOURNEY_FILE:-}" \
@@ -1105,6 +1111,7 @@ node -e '
     mode:e.MODE, attach:e.ATTACH==="1", backendUrl:e.BACKEND_URL,
     wantSurfaces:e.WANT_SURFACES==="1",
     backendStatsBefore:e.STATS_BEFORE, backendStatsAfter:e.STATS_AFTER,
+    backendRunStatsAfter:e.RUN_STATS_AFTER,
     macos:JSON.parse(e.MACOS_FACTS), ios:null,
     writeJourneyPath:e.JOURNEY_FILE||null, writeJourney,
   }, null, 2));'

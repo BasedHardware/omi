@@ -76,13 +76,13 @@ export const ASSERTIONS = [
   {
     name: "backend_reachable",
     claim: "the backend under test answers on its own control plane",
-    measuredBy: "launcher: GET /qa/stats",
+    measuredBy: "launcher: GET /v1/qa/status with version=qa-status-v1",
     corroboratedBy: null,
     applies: () => true,
     evaluate: (report) =>
       report.backend.reachable
-        ? { result: "pass", detail: `${report.backend.url} answered /qa/stats` }
-        : { result: "fail", detail: `no answer from ${report.backend.url}/qa/stats` },
+        ? { result: "pass", detail: `${report.backend.url} answered /v1/qa/status with qa-status-v1` }
+        : { result: "fail", detail: `no parseable qa-status-v1 answer from ${report.backend.url}/v1/qa/status` },
   },
   {
     name: "stamps_agree",
@@ -103,7 +103,7 @@ export const ASSERTIONS = [
   {
     name: "served_reads_by_this_run",
     claim: "the app THIS run launched read the backend at least once",
-    measuredBy: "backend: servedReadsByClient[<this run's client id>]",
+    measuredBy: "backend: GET /v1/qa/control/stats?run=<this run's client id> reads.served",
     corroboratedBy: "macOS shell: ACCEPTANCE succeeded=N, the host-observed count of 2xx responses",
     // Only meaningful when something was actually pointed at the new backend.
     applies: (report) => report.run.generation === "platform" && (report.apps.macos !== null || report.apps.ios !== null),
@@ -119,6 +119,12 @@ export const ASSERTIONS = [
           detail:
             `backend served ZERO reads to client ${report.run.clientId}`
             + ` (global delta was ${report.backend.readsDelta}, which ANY client could have produced — that is why this is keyed by client id)`,
+        };
+      }
+      if (mine === null) {
+        return {
+          result: "fail",
+          detail: `backend attributed no reads to client ${report.run.clientId}; /v1/qa/control/stats returned reads: null or an unjoinable payload`,
         };
       }
       return { result: "fail", detail: `backend counted ${mine} read(s) for this run but the shell observed ${succeeded} success(es) — the two arbiters disagree` };
@@ -292,10 +298,17 @@ export function parseAcceptanceLine(raw) {
   };
 }
 
-function readsFor(stats, clientId) {
-  const byClient = stats?.servedReadsByClient;
-  if (byClient == null || typeof byClient !== "object") return null;
-  return Number(byClient[clientId] ?? 0);
+function readsFor(controlStats, clientId) {
+  if (
+    typeof clientId !== "string"
+    || clientId === ""
+    || controlStats?.version !== "qa-control-stats-v1"
+    || controlStats.run !== clientId
+    || controlStats.requestedRun !== clientId
+    || controlStats.normalised !== false
+  ) return null;
+  const served = controlStats.reads?.served;
+  return typeof served === "number" && Number.isFinite(served) ? served : null;
 }
 
 /**
@@ -305,9 +318,13 @@ function readsFor(stats, clientId) {
  * report a stamp it invented.
  */
 export function buildReport(facts) {
-  const statsBefore = parseJsonSafe(facts.backendStatsBefore) ?? {};
-  const statsAfter = parseJsonSafe(facts.backendStatsAfter) ?? {};
-  const reachable = typeof statsAfter.servedRequests === "number";
+  const statusBefore = parseJsonSafe(facts.backendStatsBefore) ?? {};
+  const statusAfter = parseJsonSafe(facts.backendStatsAfter) ?? {};
+  const controlStatsAfter = parseJsonSafe(facts.backendRunStatsAfter) ?? {};
+  const reachable = statusAfter.version === "qa-status-v1"
+    && statusAfter.served?.version === "served-count-v1"
+    && typeof statusAfter.served.domainReadsServed === "number"
+    && typeof statusAfter.served.totalRequests === "number";
 
   const artifacts = {};
   // Checked whenever the stamp exists, INCLUDING in attach mode. Attach does not
@@ -323,13 +340,9 @@ export function buildReport(facts) {
       artifacts["macos-app"] = { ...verifyArtifact(readStampFile(appStampPath)), path: appStampPath };
     }
   }
-  if (statsAfter.stamp) {
-    artifacts["backend-process"] = { ...verifyArtifact(statsAfter.stamp), path: `${facts.backendUrl}/qa/stats` };
-  }
-
-  const readsBefore = Number(statsBefore.servedReads ?? 0);
-  const readsAfter = Number(statsAfter.servedReads ?? 0);
-  const readsByThisRun = readsFor(statsAfter, facts.clientId);
+  const readsBefore = Number(statusBefore.served?.domainReadsServed ?? 0);
+  const readsAfter = Number(statusAfter.served?.domainReadsServed ?? 0);
+  const readsByThisRun = readsFor(controlStatsAfter, facts.clientId);
 
   const macos = facts.macos
     ? {
@@ -360,7 +373,8 @@ export function buildReport(facts) {
     backend: {
       url: facts.backendUrl,
       reachable,
-      stats: statsAfter,
+      status: statusAfter,
+      controlStats: controlStatsAfter,
       readsBefore,
       readsAfter,
       readsDelta: readsAfter - readsBefore,
@@ -431,7 +445,7 @@ export function formatHuman(report) {
     out.push(`  built ${name.padEnd(16)} ${a.agree ? "matches working tree" : `STALE — ${a.reason}`}`);
   }
   out.push("");
-  out.push(`  backend ${report.backend.url}  servedReads ${report.backend.readsBefore} -> ${report.backend.readsAfter}`
+  out.push(`  backend ${report.backend.url}  domainReadsServed ${report.backend.readsBefore} -> ${report.backend.readsAfter}`
     + `  (this run's client ${report.run.clientId}: ${report.backend.readsByThisRun ?? "not counted by this backend"})`);
   out.push("");
   for (const a of report.assertions) {
