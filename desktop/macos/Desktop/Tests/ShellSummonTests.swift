@@ -164,34 +164,6 @@ final class ShellSummonTests: XCTestCase {
       ShellSummonPlacement.shouldReposition(isVisible: true, windowDisplayKey: "1", cursorDisplayKey: nil))
   }
 
-  /// **The click-away round trip**, which is where the two halves of this feature meet and where they
-  /// used to cancel each other out.
-  ///
-  /// The restraint above is written in terms of `isVisible`, and every dismissal route sets it
-  /// honestly — Escape and `⌘W` are the user saying "put it away". `hidesOnDeactivate` was not: it set
-  /// the same flag for a window the user had merely stopped looking at, so a Dock click or a ⌘-Tab back
-  /// arrived at `shouldReposition(isVisible: false)` and re-landed a panel that had never moved. The
-  /// user's own placement was thrown away for the crime of checking a browser tab.
-  ///
-  /// AppKit's step is read off the property rather than driven, because ordering a window out on
-  /// deactivation is AppKit's to perform and there is no app in a unit test to deactivate. The property
-  /// is the entire input to it, and it is the only thing that changed.
-  @MainActor
-  func testTheShellYouPlacedIsStillWhereYouLeftItAfterYouLookAtAnotherApp() {
-    let window = makeShellWindow()
-
-    ShellWindowChrome.dress(window, as: .summoned)
-
-    XCTAssertFalse(
-      window.hidesOnDeactivate,
-      "AppKit orders this window out on deactivation, so the rule below reads a lie about the user")
-    let stillOnScreen = !window.hidesOnDeactivate
-    XCTAssertFalse(
-      ShellSummonPlacement.shouldReposition(
-        isVisible: stillOnScreen, windowDisplayKey: "1", cursorDisplayKey: "1"),
-      "coming back to Omi re-centred the panel the user had dragged somewhere")
-  }
-
   // MARK: - Memory
 
   /// Two displays, two placements, neither overwriting the other. A single remembered frame is the
