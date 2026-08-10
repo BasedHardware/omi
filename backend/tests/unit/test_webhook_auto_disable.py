@@ -692,6 +692,19 @@ class TestChatToolCircuitBreaker:
         mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
 
 
+def _patch_sync_httpx_client(response=None, side_effect=None):
+    """Patch utils.apps.httpx.Client for sync pinned outbound health checks."""
+    mock_client = MagicMock()
+    if side_effect is not None:
+        mock_client.request.side_effect = side_effect
+    else:
+        mock_client.request.return_value = response
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_client
+    mock_cm.__exit__.return_value = None
+    return patch('utils.apps.httpx.Client', return_value=mock_cm), mock_client
+
+
 class TestReEnableRouterBehavior:
     """Tests for the production validate_app_endpoints_for_reenable helper from utils.apps."""
 
@@ -719,7 +732,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -731,7 +744,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_mcp_non_2xx_allowed(self):
@@ -740,7 +753,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 401
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_chat_tool_reachability_check_allows_non_2xx(self):
@@ -752,7 +765,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 404
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_timeout_blocks_reenable(self):
@@ -761,7 +774,7 @@ class TestReEnableRouterBehavior:
 
         app = {'external_integration': {'webhook_url': 'https://slow.example.com'}, 'chat_tools': []}
         update = {}
-        with patch("utils.apps.httpx.request", side_effect=httpx.TimeoutException("timeout")):
+        with _patch_sync_httpx_client(side_effect=httpx.TimeoutException("timeout"))[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -773,7 +786,7 @@ class TestReEnableRouterBehavior:
 
         app = {'external_integration': {'webhook_url': 'https://down.example.com'}, 'chat_tools': []}
         update = {}
-        with patch("utils.apps.httpx.request", side_effect=httpx.ConnectError("refused")):
+        with _patch_sync_httpx_client(side_effect=httpx.ConnectError("refused"))[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -794,7 +807,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
 
         assert len(call_urls) == 3
@@ -825,7 +838,7 @@ class TestReEnableRouterBehavior:
                 return resp
             raise httpx.ConnectError("refused")
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -846,7 +859,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert probed_urls == ['https://new-fixed.example.com/api']
 
@@ -865,7 +878,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert probed_urls == ['https://example.com/hook']
 
@@ -884,7 +897,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert len(probed_urls) == 2
         assert 'https://example.com/webhook' in probed_urls

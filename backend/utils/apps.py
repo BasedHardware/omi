@@ -149,15 +149,15 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
                 detail=f'{label.capitalize()} endpoint is not a public http(s) URL. Fix it before re-enabling.',
             )
         try:
-            resp = httpx.request(
-                method,
-                pinned_url,
-                json={},
-                timeout=10.0,
-                follow_redirects=False,
-                headers=pin_kwargs['headers'],
-                extensions=pin_kwargs['extensions'],
-            )
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.request(
+                    method,
+                    pinned_url,
+                    json={},
+                    follow_redirects=False,
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                )
             if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
                 raise HTTPException(
                     status_code=400,
@@ -1537,13 +1537,13 @@ def fetch_app_chat_tools_from_manifest(
             'User-Agent': 'Omi-App-Store/1.0',
             **pin_kwargs['headers'],
         }
-        response = httpx.get(
-            pinned_url,
-            timeout=float(timeout),
-            headers=headers,
-            extensions=pin_kwargs['extensions'],
-            follow_redirects=False,
-        )
+        with httpx.Client(timeout=float(timeout)) as client:
+            response = client.get(
+                pinned_url,
+                headers=headers,
+                extensions=pin_kwargs['extensions'],
+                follow_redirects=False,
+            )
 
         if response.status_code != 200:
             logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")

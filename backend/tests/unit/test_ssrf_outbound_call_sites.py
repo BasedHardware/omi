@@ -261,11 +261,11 @@ async def test_post_dev_webhook_pins_and_disables_redirects():
 def test_fetch_manifest_rejects_non_public_url(monkeypatch):
     monkeypatch.setattr(apps_mod, 'safe_request_target', MagicMock(side_effect=UnsafeWebhookURLError('private')))
     monkeypatch.setattr(apps_mod, 'get_generic_cache', MagicMock(return_value=None))
-    get_mock = MagicMock()
-    monkeypatch.setattr(apps_mod.httpx, 'get', get_mock)
+    client_cls = MagicMock()
+    monkeypatch.setattr(apps_mod.httpx, 'Client', client_cls)
 
     assert apps_mod.fetch_app_chat_tools_from_manifest('http://169.254.169.254/manifest.json') is None
-    get_mock.assert_not_called()
+    client_cls.assert_not_called()
 
 
 def test_fetch_manifest_uses_pinned_target(monkeypatch):
@@ -285,16 +285,20 @@ def test_fetch_manifest_uses_pinned_target(monkeypatch):
             }
         ]
     }
-    get_mock = MagicMock(return_value=mock_resp)
-    monkeypatch.setattr(apps_mod.httpx, 'get', get_mock)
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_resp
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_client
+    mock_cm.__exit__.return_value = None
+    monkeypatch.setattr(apps_mod.httpx, 'Client', MagicMock(return_value=mock_cm))
     monkeypatch.setattr(apps_mod, 'assert_public_http_url', MagicMock(return_value=PUBLIC_IP))
 
     result = apps_mod.fetch_app_chat_tools_from_manifest('https://app.example.com/.well-known/omi-tools.json')
     assert result is not None
     assert result['tools'][0]['name'] == 't'
-    assert get_mock.call_args.args[0] == pinned
-    assert get_mock.call_args.kwargs['follow_redirects'] is False
-    assert get_mock.call_args.kwargs['extensions']['sni_hostname'] == 'app.example.com'
+    assert mock_client.get.call_args.args[0] == pinned
+    assert mock_client.get.call_args.kwargs['follow_redirects'] is False
+    assert mock_client.get.call_args.kwargs['extensions']['sni_hostname'] == 'app.example.com'
 
 
 def test_validate_tool_definition_rejects_private_endpoint(monkeypatch):
