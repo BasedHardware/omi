@@ -10781,5 +10781,5 @@
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
     "accountCutoverOpenStore": "Открыть магазин",
-    "signInWithSSO": "Приказаць праз SSO"
+    "signInWithSSO": "Увайсці праз SSO"
 }
