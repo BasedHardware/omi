@@ -204,6 +204,15 @@ const eventsForSession = (
   const fail = (): void => {
     if (terminal) return;
     terminal = true;
+    const closed = deps.store.closeSession(
+      principal.uid,
+      session.id,
+      "interrupted",
+      deps.now(),
+    );
+    if (closed !== null) {
+      deps.conversations.finalize({ accountId: principal.uid, session: closed, locked: false });
+    }
     const activeSocket = socket;
     if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
       sendJson(activeSocket, Object.freeze({

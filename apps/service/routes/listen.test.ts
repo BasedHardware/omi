@@ -11,6 +11,7 @@ import {
   type LocalService,
 } from "../app-facing";
 import { createScriptedTranscriptionSource } from "../listen/transcription-source";
+import type { TranscriptionSource } from "../listen/transcription-source";
 import {
   createSqliteListenSegmentUnitOfWork,
   createSqliteLocalServiceStores,
@@ -31,6 +32,7 @@ const boot = (options: {
   readonly limit?: number | null;
   readonly delayMs?: number;
   readonly consumedSeconds?: number;
+  readonly transcriptionSource?: TranscriptionSource;
 } = {}) => {
   const stores = createInMemoryLocalServiceStores();
   stores.settings.putIdentity(ACCOUNT, {
@@ -52,7 +54,7 @@ const boot = (options: {
     accountTimezone: "UTC",
     devSecretLabel: `listen-${options.used ?? 0}-${options.limit ?? "unmetered"}`,
     stores,
-    transcriptionSource: createScriptedTranscriptionSource([{
+    transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource([{
       delayMs: options.delayMs ?? 20,
       text: "persisted transcript",
       start: 0,
@@ -360,6 +362,33 @@ describe("GET /v4/listen WebSocket", () => {
 
     expect(wireResponse.split("\r\n", 1)[0]).toBe("HTTP/1.1 401 Unauthorized");
     expect(stores.listen.readSession(ACCOUNT, SESSION)).toBeNull();
+  });
+
+  test("fatal STT failure durably interrupts and finalizes before the 1011 close", async () => {
+    const failingSource: TranscriptionSource = Object.freeze({
+      connect(input) {
+        return Object.freeze({
+          writeAudio() {
+            input.onError(new Error("provider failed"));
+          },
+          finish() {},
+        });
+      },
+    });
+    const { service, stores, baseUrl } = boot({ transcriptionSource: failingSource });
+    const observed = await observedSocket(service, baseUrl);
+    await observed.waitFor(isReady);
+    observed.socket.send(new Uint8Array([1, 2, 3]));
+    const close = await observed.closed;
+
+    expect(close.code).toBe(1011);
+    expect(observed.frames.at(-1)).toEqual({
+      type: "service_status",
+      status: "stt_failed",
+      retryable: true,
+    });
+    expect(stores.listen.readSession(ACCOUNT, SESSION)?.status).toBe("interrupted");
+    expect(stores.conversations.readRecord(ACCOUNT, SESSION)).not.toBeNull();
   });
 
   test("unmetered entitlement payloads retain honest usage and a tagged limit", () => {
