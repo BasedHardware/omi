@@ -286,14 +286,14 @@ Future<bool> updateConversationSummary(String conversationId, String? appId, Str
 class TranscriptsResponse {
   List<TranscriptSegment> deepgram;
   List<TranscriptSegment> soniox;
+  List<TranscriptSegment> whisperx;
   List<TranscriptSegment> speechmatics;
-  List<TranscriptSegment> prerecorded;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
+    this.whisperx = const [],
     this.speechmatics = const [],
-    this.prerecorded = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -316,8 +316,8 @@ class TranscriptsResponse {
     return TranscriptsResponse(
       deepgram: readSegments('deepgram'),
       soniox: readSegments('soniox'),
+      whisperx: readSegments('whisperx'),
       speechmatics: readSegments('speechmatics'),
-      prerecorded: readSegments('prerecorded'),
     );
   }
 }

@@ -1,4 +1,6 @@
+import base64
 import json
+import mimetypes
 import os
 from typing import Any, Dict, List, cast
 
@@ -8,6 +10,7 @@ from openai import OpenAI
 from utils.other.endpoints import timeit
 
 os.environ['GROQ_API_KEY'] = ''
+os.environ['FAL_KEY'] = ''
 
 # filename = '../audioSamples/empty.wav'
 
@@ -68,7 +71,9 @@ def diarization(content: str):
     Here is the output schema:
     ```
     {"properties": {"segments": {"title": "Segments", "description": "The segments of the conversation", "default": [], "type": "array", "items": {"$ref": "#/definitions/Segment"}}}, "definitions": {"Segment": {"title": "Segment", "type": "object", "properties": {"speaker": {"title": "Speaker", "description": "The speaker id for this segment", "default": "SPEAKER_00", "type": "string"}, "text": {"title": "Text", "description": "The text of the segment", "default": "", "type": "string"}}}}}
-    ```'''.replace('  ', '').strip()
+    ```'''.replace(
+        '  ', ''
+    ).strip()
 
     response = client.chat.completions.create(
         # model="gpt-4o",
@@ -77,6 +82,22 @@ def diarization(content: str):
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": content}],
     )
     return response.choices[0].message.content
+
+
+def file_to_base64_url(file_path: str) -> str:
+    # Determine the MIME type of the file
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        mime_type = 'application/octet-stream'
+
+    # Read the file and encode it in base64
+    with open(file_path, 'rb') as file:
+        file_content = file.read()
+        encoded_string = base64.b64encode(file_content).decode('utf-8')
+
+    # Format as data URL
+    base64_url = f"data:{mime_type};base64,{encoded_string}"
+    return base64_url
 
 
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
@@ -112,6 +133,7 @@ if __name__ == '__main__':
     for path in os.listdir('../audioSamples'):
         filename = f'../audioSamples/{path}'
         transcription = execute_groq()
+        # transcription = fal()
         print(diarization(cast(str, transcription)))
     # has_audio()
     # print(retrieve_proper_segment_points(filename))
