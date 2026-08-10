@@ -24,7 +24,7 @@ preconditions:
 steps:
   - id: S1
     name: Navigate to Apps page
-do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8; the sidebar this step used to name no longer exists). Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons, including the Apple Calendar, Apple Reminders, and Apple Notes Connections."
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8; the sidebar this step used to name no longer exists). Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons, including the Apple Calendar, Apple Reminders, and Apple Notes Connections."
     expect:
       interactive_count: { min: 10 }
       text_visible:
