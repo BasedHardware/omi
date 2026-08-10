@@ -11,6 +11,7 @@ import org.json.JSONObject
  * The module loads the shared Omi C++ boundary through a small JNI adapter.
  */
 class OmiNativeModule(context: Context) : LynxModule(context) {
+    private val ble = OmiBleController(context)
     companion object {
         init {
             System.loadLibrary("omi_lynx_native")
@@ -34,4 +35,22 @@ class OmiNativeModule(context: Context) : LynxModule(context) {
         val raw = Base64.decode(rawBase64, Base64.DEFAULT)
         return nativeNormalizePacket(raw)
     }
+
+    @LynxMethod
+    fun getBluetoothState(): String = ble.capabilities().toString()
+
+    @LynxMethod
+    fun startOmiScan(): String = ble.startScan().toString()
+
+    @LynxMethod
+    fun stopOmiScan(): String = ble.stopScan().toString()
+
+    @LynxMethod
+    fun getOmiScanResults(): String = ble.scanResults()
+
+    @LynxMethod
+    fun connectOmi(address: String): String = ble.connect(address).toString()
+
+    @LynxMethod
+    fun disconnectOmi(): String = ble.disconnect().toString()
 }

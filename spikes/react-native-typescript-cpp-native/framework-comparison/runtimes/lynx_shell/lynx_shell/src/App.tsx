@@ -1,17 +1,46 @@
 import { useEffect, useState } from '@lynx-js/react';
 
 import './App.css';
-import { getNativeCapabilities, normalizePacket } from './native/omiNative';
+import {
+  connectOmi,
+  getBluetoothState,
+  getNativeCapabilities,
+  getOmiScanResults,
+  normalizePacket,
+  startOmiScan,
+  stopOmiScan,
+  type BluetoothState,
+  type OmiDevice,
+} from './native/omiNative';
 
 export function App(props: { onRender?: () => void }) {
   const [nativeCapabilities, setNativeCapabilities] = useState('not connected');
   const [nativePacketStatus, setNativePacketStatus] = useState('not tested');
+  const [bluetooth, setBluetooth] = useState<BluetoothState>({});
+  const [devices, setDevices] = useState<OmiDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     setNativeCapabilities(getNativeCapabilities());
     setNativePacketStatus(normalizePacket(''));
+    setBluetooth(getBluetoothState());
   }, []);
   props.onRender?.();
+
+  const scan = () => {
+    const state = startOmiScan();
+    setBluetooth(state);
+    if (!state.scanActive) return;
+    setScanning(true);
+    setTimeout(() => {
+      const stopped = stopOmiScan();
+      setDevices(getOmiScanResults());
+      setBluetooth(stopped);
+      setScanning(false);
+    }, 4000);
+  };
+
+  const connect = (device: OmiDevice) => setBluetooth(connectOmi(device.id));
 
   return (
     <scroll-view scroll-orientation="vertical" className="Page">
@@ -22,36 +51,42 @@ export function App(props: { onRender?: () => void }) {
 
       <view className="Hero">
         <text className="Greeting">Hi, I’m Omi</text>
-        <text className="Subtitle">I help remember the things you say.</text>
+        <text className="Subtitle">Connect the real Omi device nearby.</text>
         <view className="Connection">
           <view className="Dot" />
-          <text>Bluetooth is not connected</text>
+          <text>{bluetooth.connection === 'connected' ? 'Omi is connected' : 'Bluetooth is not connected'}</text>
         </view>
 
-        <view className="ListenButton ListenButton--disabled">
-          <text className="ListenIcon">○</text>
-          <text className="ListenLabel">Connect Omi</text>
-          <text className="ListenHint">Bluetooth support is not wired yet</text>
+        <view className="ListenButton" bindtap={scan}>
+          <text className="ListenIcon">⌁</text>
+          <text className="ListenLabel">{scanning ? 'Looking for Omi…' : 'Find my Omi'}</text>
+          <text className="ListenHint">Uses the phone’s real Bluetooth adapter</text>
         </view>
       </view>
 
       <view className="TodayCard">
-        <text className="CardTitle">Today</text>
-        <view className="EmptyState">
-          <text className="EmptyNumber">—</text>
-          <text className="CardNote">Moments will appear here after a real Omi is connected.</text>
-        </view>
+        <text className="CardTitle">Nearby Omi devices</text>
+        {devices.length === 0 ? (
+          <view className="EmptyState">
+            <text className="EmptyNumber">—</text>
+            <text className="CardNote">Tap “Find my Omi” while your device is advertising.</text>
+          </view>
+        ) : devices.map((device) => (
+          <view className="DeviceRow" bindtap={() => connect(device)} key={device.id}>
+            <view className="DeviceCircle"><text>omi</text></view>
+            <view className="DeviceWords">
+              <text className="DeviceName">{device.name || 'Omi'}</text>
+              <text className="DeviceDetail">{device.id} · RSSI {device.rssi} · Tap to connect</text>
+            </view>
+          </view>
+        ))}
       </view>
 
       <view className="DeviceCard">
-        <text className="CardTitle">Your Omi</text>
-        <view className="DeviceRow">
-          <view className="DeviceCircle"><text>omi</text></view>
-          <view className="DeviceWords">
-            <text className="DeviceName">No device connected</text>
-            <text className="DeviceDetail">We will show your Omi here when Bluetooth is ready.</text>
-          </view>
-        </view>
+        <text className="CardTitle">Bluetooth adapter</text>
+        <text className="CardNote">State: {bluetooth.state ?? 'unknown'}</text>
+        <text className="CardNote">Implementation: {bluetooth.implementation ?? 'unavailable'}</text>
+        {bluetooth.lastError ? <text className="CardNote">Error: {bluetooth.lastError}</text> : null}
       </view>
 
       <view className="NativeCard">
@@ -60,7 +95,7 @@ export function App(props: { onRender?: () => void }) {
         <text className="CardNote">Packet check: {nativePacketStatus}</text>
       </view>
 
-      <text className="Footer">This spike does not pretend to have BLE. Hardware support comes after the native adapter is implemented.</text>
+      <text className="Footer">This uses real Omi GATT discovery. Audio notifications and capture controls come after the connection path is verified on hardware.</text>
     </scroll-view>
   );
 }
