@@ -57,7 +57,8 @@
  * ADR-007 §2 keeps reachable while product writes are fenced.
  */
 
-import type { WriteFenceDecision, WriteFenceOutcome } from "../../../core/control/write-fence";
+import type { WriteFenceOutcome } from "../../../core/control/write-fence";
+import type { WriteEnforcementDecision } from "./write-enforcement-decision";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -95,7 +96,7 @@ export const WRITE_FENCE_REFUSALS: Readonly<Record<WriteFenceOutcome, WireRefusa
  * write path owns the success shape, and returning some placeholder 200 from here
  * would put two modules in charge of what an applied write looks like.
  */
-export const writeFenceRefusalResponse = (decision: WriteFenceDecision): Response => {
+export const writeFenceRefusalResponse = (decision: WriteEnforcementDecision): Response => {
   if (decision.admitted) {
     throw new TypeError("write fence: admitted decisions have no refusal response");
   }

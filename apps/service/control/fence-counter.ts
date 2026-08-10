@@ -23,7 +23,8 @@
  *    outcome the fence did not reach.
  */
 
-import type { WriteFenceDecision, WriteFenceOutcome } from "../../../core/control/write-fence";
+import type { WriteFenceOutcome } from "../../../core/control/write-fence";
+import type { WriteEnforcementDecision } from "./write-enforcement-decision";
 
 /** Bucket for requests that carried no usable run id. Never a real run id. */
 export const UNATTRIBUTED_RUN = "__unattributed__";
@@ -37,7 +38,7 @@ export interface WriteFenceRunTally {
 
 export interface WriteFenceCounter {
   /** Called with the decision the fence actually produced, at the point it is produced. */
-  record(runId: string | null | undefined, decision: WriteFenceDecision): void;
+  record(runId: string | null | undefined, decision: WriteEnforcementDecision): void;
   /** `null` when this run produced no fence decision at all — distinct from all-zero. */
   tally(runId: string): WriteFenceRunTally | null;
 }
@@ -68,7 +69,7 @@ export const createWriteFenceCounter = (): WriteFenceCounter => {
   const runs = new Map<string, ReturnType<typeof zeroTally>>();
 
   return Object.freeze({
-    record(runId: string | null | undefined, decision: WriteFenceDecision): void {
+    record(runId: string | null | undefined, decision: WriteEnforcementDecision): void {
       const key = normaliseRunId(runId);
       const tally = runs.get(key) ?? zeroTally();
       if (decision.admitted) {

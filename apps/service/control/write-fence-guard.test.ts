@@ -7,6 +7,7 @@ import { createInMemoryAccountControlProjectionStore } from "./projection-store"
 import { applyWriteFence } from "./write-fence-guard";
 
 const ACCOUNT = "acct-guard-unit-fixture";
+const noEntitlement = Object.freeze({ readEntitlement: () => null });
 
 const observation = (
   overrides: Partial<AccountControlObservation> = {},
@@ -35,7 +36,7 @@ describe("the store denies for an account it has never been told about", () => {
     const store = createInMemoryAccountControlProjectionStore();
     expect(store.read("acct-never-heard-of")).toBeNull();
     const decision = applyWriteFence(
-      { store, counter: createWriteFenceCounter() },
+      { store, entitlement: noEntitlement, counter: createWriteFenceCounter() },
       { accountId: "acct-never-heard-of", requestEpoch: 7, runId: "r" },
     );
     expect(decision).toMatchObject({ admitted: false, reason: "control_state_absent" });
@@ -57,7 +58,10 @@ describe("a rejected observation still changes the row when it poisons", () => {
   test("a conflicting observation persists the poison and stops writes", () => {
     const store = liveStore();
     const counter = createWriteFenceCounter();
-    expect(applyWriteFence({ store, counter }, { accountId: ACCOUNT, requestEpoch: 7, runId: "r1" }).admitted)
+    expect(applyWriteFence(
+      { store, entitlement: noEntitlement, counter },
+      { accountId: ACCOUNT, requestEpoch: 7, runId: "r1" },
+    ).admitted)
       .toBe(true);
 
     const conflicting = store.observe(observation({
@@ -66,7 +70,10 @@ describe("a rejected observation still changes the row when it poisons", () => {
     expect(conflicting.accepted).toBe(false);
     expect(store.read(ACCOUNT)?.conflict).not.toBeNull();
 
-    expect(applyWriteFence({ store, counter }, { accountId: ACCOUNT, requestEpoch: 7, runId: "r1" }))
+    expect(applyWriteFence(
+      { store, entitlement: noEntitlement, counter },
+      { accountId: ACCOUNT, requestEpoch: 7, runId: "r1" },
+    ))
       .toMatchObject({ admitted: false, reason: "control_state_conflicting" });
   });
 
@@ -76,7 +83,7 @@ describe("a rejected observation still changes the row when it poisons", () => {
     expect(stale).toMatchObject({ accepted: false, reason: "stale_observation" });
     expect(store.read(ACCOUNT)?.conflict).toBeNull();
     expect(applyWriteFence(
-      { store, counter: createWriteFenceCounter() },
+      { store, entitlement: noEntitlement, counter: createWriteFenceCounter() },
       { accountId: ACCOUNT, requestEpoch: 7, runId: "r" },
     ).admitted).toBe(true);
   });
@@ -92,7 +99,7 @@ describe("the producer-side counter is keyed by run and derived from the decisio
   test("tallies separate runs and count the outcome the fence produced", () => {
     const store = liveStore();
     const counter = createWriteFenceCounter();
-    const dependencies = { store, counter };
+    const dependencies = { store, entitlement: noEntitlement, counter };
 
     applyWriteFence(dependencies, { accountId: ACCOUNT, requestEpoch: 7, runId: "run-a" });
     applyWriteFence(dependencies, { accountId: ACCOUNT, requestEpoch: 6, runId: "run-a" });
@@ -115,8 +122,14 @@ describe("the producer-side counter is keyed by run and derived from the decisio
   test("a missing run id is bucketed visibly rather than dropped", () => {
     const store = liveStore();
     const counter = createWriteFenceCounter();
-    applyWriteFence({ store, counter }, { accountId: ACCOUNT, requestEpoch: 6, runId: undefined });
-    applyWriteFence({ store, counter }, { accountId: ACCOUNT, requestEpoch: 6, runId: "  " });
+    applyWriteFence(
+      { store, entitlement: noEntitlement, counter },
+      { accountId: ACCOUNT, requestEpoch: 6, runId: undefined },
+    );
+    applyWriteFence(
+      { store, entitlement: noEntitlement, counter },
+      { accountId: ACCOUNT, requestEpoch: 6, runId: "  " },
+    );
     expect(counter.tally(UNATTRIBUTED_RUN)?.refused.stale_epoch).toBe(2);
   });
 });
@@ -150,7 +163,7 @@ describe("the reference HTTP binding keeps the four outcome classes distinguisha
     const store = liveStore();
     const counter = createWriteFenceCounter();
     const decision = applyWriteFence(
-      { store, counter },
+      { store, entitlement: noEntitlement, counter },
       { accountId: ACCOUNT, requestEpoch: 6, runId: "leak-check" },
     );
     const response = writeFenceRefusalResponse(decision);

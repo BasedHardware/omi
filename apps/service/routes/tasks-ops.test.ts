@@ -26,7 +26,11 @@ import {
   isTrustedWriteAccepted,
 } from "@omi-core/ratified-contracts/write/ops";
 
-import { createLocalService, type LocalService } from "../app-facing";
+import {
+  createInMemoryLocalServiceStores,
+  createLocalService,
+  type LocalService,
+} from "../app-facing";
 import { WRITE_RUN_ID_HEADER } from "../observability/write-ops-counter";
 import { RETENTION_CAP_SECONDS } from "../stores/straggler-table";
 import { TASKS_OPS_PATH } from "./tasks-ops";
@@ -222,6 +226,79 @@ describe("an admitted write is APPLIED, not acknowledged", () => {
     expect(stale.status).toBe(WRITE_ERRORS.conflict.status);
     expect(stale.text).toBe(WRITE_ERRORS.conflict.body);
     expect(stale.text).not.toBe(WRITE_ERRORS.write_id_reuse.body);
+  });
+});
+
+describe("the rendered Settings entitlement is the write fence entitlement", () => {
+  test("changing the one entitlement projection moves Settings and enforcement together", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    stores.settings.putIdentity(OWNER_ACCOUNT_ID, {
+      displayName: "Entitled user",
+      email: "entitled@example.invalid",
+    });
+    stores.settings.putEntitlement(OWNER_ACCOUNT_ID, {
+      planLabel: "Omi Plus",
+      limitKey: "tasks",
+      used: 9,
+      limit: 10,
+      limitReached: false,
+      upgradeAvailable: true,
+    });
+    const service = createLocalService({
+      db: new Database(":memory:"),
+      ownerAccountId: OWNER_ACCOUNT_ID,
+      memoryCount: 2,
+      accountTimezone: "America/Los_Angeles",
+      devSecretLabel: DEV_KEY_MATERIAL_LABEL,
+      stores,
+    });
+    const booted = { service, auth: `Bearer ${service.devToken}` };
+    await cutOver(booted);
+
+    const settingsBefore = await service.app.request("/v1/settings", {
+      headers: { authorization: booted.auth },
+    });
+    expect(settingsBefore.status).toBe(200);
+    expect(await settingsBefore.json()).toMatchObject({
+      entitlement: { limitKey: "tasks", used: 9, limit: 10, limitReached: false },
+    });
+
+    const before = await post(booted, envelope({
+      writeId: writeId("entitlement-before"),
+      op: create("task-before-entitlement-change"),
+    }));
+    expect(before.status).toBe(200);
+
+    stores.settings.putEntitlement(OWNER_ACCOUNT_ID, {
+      planLabel: "Omi Plus",
+      limitKey: "tasks",
+      used: 10,
+      limit: 10,
+      limitReached: true,
+      upgradeAvailable: true,
+    });
+
+    const settings = await service.app.request("/v1/settings", {
+      headers: { authorization: booted.auth },
+    });
+    expect(settings.status).toBe(200);
+    expect(await settings.json()).toMatchObject({
+      entitlement: { limitKey: "tasks", used: 10, limit: 10, limitReached: true },
+    });
+
+    const after = await post(booted, envelope({
+      writeId: writeId("entitlement-after"),
+      op: create("task-after-entitlement-change"),
+    }));
+    expect(after).toEqual({
+      status: WRITE_REFUSALS.entitlement.status,
+      text: WRITE_REFUSALS.entitlement.body,
+      retryAfter: null,
+    });
+    expect(service.writePath.tasksRead.readRecord(
+      OWNER_ACCOUNT_ID,
+      "task-after-entitlement-change",
+    )).toBeNull();
   });
 });
 

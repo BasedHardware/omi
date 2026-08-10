@@ -62,6 +62,7 @@ import {
 import type { WriteFenceCounter } from "../control/fence-counter";
 import { writeFenceRefusalResponse } from "../control/fence-http";
 import type { AccountControlProjectionStore } from "../control/projection-store";
+import type { EntitlementProjectionReader } from "../control/settings-projection";
 import { applyWriteFence } from "../control/write-fence-guard";
 import type { DevPrincipal } from "../auth/dev-token";
 import {
@@ -105,6 +106,7 @@ export interface TasksOpsRouteDependencies {
   /** The fence's store and producer-side counter — its one composition. */
   readonly fence: {
     readonly store: AccountControlProjectionStore;
+    readonly entitlement: EntitlementProjectionReader;
     readonly counter: WriteFenceCounter;
   };
   readonly counter: WriteOpsCounter;
@@ -195,10 +197,15 @@ export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencie
     }
 
     // ── 3. The account epoch fence ──────────────────────────────────────────
-    // Three lines, exactly as `EPOCH-fence-interface.md` specifies them. The
-    // account id is the authenticated principal's.
+    // The account/epoch fence and the Settings-rendered entitlement projection
+    // meet in one enforcement call. The account id is the authenticated
+    // principal's.
     const decision = applyWriteFence(
-      { store: deps.fence.store, counter: deps.fence.counter },
+      {
+        store: deps.fence.store,
+        entitlement: deps.fence.entitlement,
+        counter: deps.fence.counter,
+      },
       { accountId: principal.uid, requestEpoch: envelope.account_epoch, runId },
     );
     if (!decision.admitted) {

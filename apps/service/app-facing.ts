@@ -404,7 +404,11 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     unitOfWork,
     stragglers,
-    fence: { store: controlStore, counter: fenceCounter },
+    fence: {
+      store: controlStore,
+      entitlement: stores.settings,
+      counter: fenceCounter,
+    },
     counter: opsCounter,
     // The same fixed instant the read path uses. No wall clock anywhere.
     now: () => anchorEpochSeconds,

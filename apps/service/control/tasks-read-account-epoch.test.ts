@@ -252,11 +252,11 @@ describe("tasks read account epoch — binding proofs", () => {
     const local = boot({ epochs: { [ACCOUNT_A]: 0, [ACCOUNT_B]: 29 } });
     const fenceCounter = createWriteFenceCounter();
     expect(applyWriteFence(
-      { store: local.store, counter: fenceCounter },
+      { store: local.store, entitlement: { readEntitlement: () => null }, counter: fenceCounter },
       { accountId: ACCOUNT_A, requestEpoch: 0, runId: "epoch-a" },
     )).toEqual({ admitted: true, account_epoch: 0 });
     expect(applyWriteFence(
-      { store: local.store, counter: fenceCounter },
+      { store: local.store, entitlement: { readEntitlement: () => null }, counter: fenceCounter },
       { accountId: ACCOUNT_B, requestEpoch: 29, runId: "epoch-b" },
     )).toEqual({ admitted: true, account_epoch: 29 });
     local.storeReads.length = 0;

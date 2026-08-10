@@ -1,8 +1,8 @@
 /**
- * THE ONE COMPOSITION of the account epoch fence for a request path.
+ * THE ONE COMPOSITION of app-facing write enforcement for a request path.
  *
- * Store lookup, fence evaluation and the producer-side count are joined here so
- * that a write route cannot do two of the three. That is not tidiness: a route
+ * Account-control lookup, entitlement lookup, evaluation, and the producer-side
+ * count are joined here so a write route cannot omit one. That is not tidiness: a route
  * that evaluated the fence but forgot to count produces a green test and an
  * unjoinable claim, and a route that counted before evaluating produces the
  * wave-9 shape where the number moves and nothing happened.
@@ -25,9 +25,13 @@
 import { evaluateWriteFence, type WriteFenceDecision } from "../../../core/control/write-fence";
 import type { WriteFenceCounter } from "./fence-counter";
 import type { AccountControlProjectionStore } from "./projection-store";
+import type { EntitlementProjectionReader } from "./settings-projection";
+import type { WriteEnforcementDecision } from "./write-enforcement-decision";
 
 export interface WriteFenceDependencies {
   readonly store: AccountControlProjectionStore;
+  /** The same entitlement projection rendered by Settings. */
+  readonly entitlement: EntitlementProjectionReader;
   readonly counter: WriteFenceCounter;
 }
 
@@ -43,9 +47,23 @@ export interface WriteFenceInput {
 export const applyWriteFence = (
   dependencies: WriteFenceDependencies,
   input: WriteFenceInput,
-): WriteFenceDecision => {
+): WriteEnforcementDecision => {
   const projection = dependencies.store.read(input.accountId);
-  const decision = evaluateWriteFence(projection, { request_epoch: input.requestEpoch });
+  const accountDecision: WriteFenceDecision = evaluateWriteFence(
+    projection,
+    { request_epoch: input.requestEpoch },
+  );
+  const entitlement = accountDecision.admitted
+    ? dependencies.entitlement.readEntitlement(input.accountId)
+    : null;
+  const decision: WriteEnforcementDecision = accountDecision.admitted && entitlement?.limitReached === true
+    ? Object.freeze({
+        admitted: false,
+        outcome: "entitlement",
+        reason: "entitlement_limit_reached",
+        evidence: "record_nothing",
+      })
+    : accountDecision;
   // Recorded from the decision, after it exists. Both facts matter; see
   // fence-counter.ts.
   dependencies.counter.record(input.runId, decision);
