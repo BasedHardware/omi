@@ -13,8 +13,6 @@ export const BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION = "__omiChatAttachmen
 export interface StagedChatAttachment {
   /** Opaque server-issued staging identity. */
   id: string;
-  /** Server-normalized safe display name. */
-  displayName: string;
   /** Server-sniffed MIME type. */
   mimeType: string;
   sizeBytes: number;
