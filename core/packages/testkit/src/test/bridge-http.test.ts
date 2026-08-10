@@ -26,6 +26,7 @@ import {
   type BridgeHttpRequest,
 } from "@omi-core/contracts";
 import { bridgeHttpClient, isBridgeHttpAvailable } from "@omi-core/bridge-web";
+import { fetchPlatformSettings } from "@omi-core/adapters-platform";
 import { classifyStatus } from "@omi-core/kernel";
 
 /** Install a fake shell handler; returns the requests it saw. */
@@ -146,6 +147,36 @@ test("a server rejection stays a server status, distinct from a transport failur
     assert.equal((f as { reason: string }).reason, "validation");
   } finally {
     shell.uninstall();
+  }
+});
+
+test("Settings consumes the bridge artifact's host reason without confusing a real 401", async () => {
+  const absent = installShell((req) => ({
+    ok: false,
+    failure: { id: req.id, reason: "not-authenticated", detail: "shell holds no credential" },
+  }));
+  try {
+    const outcome = await fetchPlatformSettings(bridgeHttpClient());
+    assert.deepEqual(outcome, {
+      kind: "snapshot",
+      snapshot: { identity: null, entitlement: null },
+    });
+  } finally {
+    absent.uninstall();
+  }
+
+  const invalid = installShell((req) => ({
+    ok: true,
+    response: { id: req.id, status: 401, body: '{"error":"unauthorized"}' },
+  }));
+  try {
+    const outcome = await fetchPlatformSettings(bridgeHttpClient());
+    assert.deepEqual(outcome, { kind: "auth-invalid", status: 401 });
+    // red-proof: drop HttpResponse.transportFailureReason and make the adapter
+    // infer signed-out from status 401; this real server rejection becomes the
+    // same snapshot as the host failure above and this assertion fails.
+  } finally {
+    invalid.uninstall();
   }
 });
 

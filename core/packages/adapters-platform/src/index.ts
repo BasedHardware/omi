@@ -3,6 +3,7 @@ export * from "./account-epoch.js";
 export * from "./chat.js";
 export * from "./listen.js";
 export * from "./memories.js";
+export * from "./settings.js";
 export * from "./tasks-ops.js";
 export * from "./tasks.js";
 export * from "./write-ops.js";
