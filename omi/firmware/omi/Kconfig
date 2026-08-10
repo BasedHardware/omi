@@ -132,15 +132,21 @@ config OMI_WATCHDOG_TIMEOUT_MS
 
 config OMI_ENABLE_IDLE_SLEEP
     bool "Idle auto-sleep (system off)"
-    depends on OMI_ENABLE_BUTTON
+    depends on OMI_ENABLE_BUTTON && !OMI_ENABLE_OFFLINE_STORAGE
     default n
     help
         "Automatically enter system off (deep sleep) after the device has been
-         idle for OMI_IDLE_SLEEP_TIMEOUT_MIN minutes. Idle means no audio is
-         streaming to a subscribed central and the device is not charging.
-         Wake by pressing the user button (same wake path as the long-press
-         power off). The BLE radio is off in system off, so a new connection
-         cannot wake the device."
+         idle for OMI_IDLE_SLEEP_TIMEOUT_MIN minutes. Idle means not charging,
+         no audio streaming to a subscribed central, and no storage sync in
+         flight. Wake by pressing the user button (same wake path as the
+         long-press power off). The BLE radio is off in system off, so a new
+         connection cannot wake the device.
+
+         Unavailable with OMI_ENABLE_OFFLINE_STORAGE: a disconnected pendant
+         may be mid-recording to SD and the firmware cannot distinguish that
+         from idle, so auto-sleep could silently end a recording session.
+         Because the user gets no warning before system off, keep this off in
+         shipping configs until the product surfaces the behaviour in-app."
 
 config OMI_IDLE_SLEEP_TIMEOUT_MIN
     int "Idle timeout before auto-sleep (minutes)"

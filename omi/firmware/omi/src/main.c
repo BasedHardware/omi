@@ -8,6 +8,7 @@
 #include "lib/core/config.h"
 #include "lib/core/feedback.h"
 #include "lib/core/haptic.h"
+#include "lib/core/idle_sleep.h"
 #include "lib/core/led.h"
 #include "lib/core/lib/battery/battery.h"
 #include "lib/core/mic.h"
@@ -132,6 +133,17 @@ static void boot_ready_sequence(void)
     k_msleep(10);
 }
 
+// LED language (first match wins):
+//   off                                  device powered off
+//   blink red (+ green while charging)   RTC not synced, connect the app
+//   solid green                          charging, battery full
+//   blink green (+ blue/red phase)       charging
+//   solid blue                           connected
+//   solid red                            disconnected
+// Opt-in patterns, off in the shipping config so the default language above is
+// unchanged; enable only together with an app-side explanation:
+//   CONFIG_OMI_ENABLE_CAPTURE_LED       blue only while audio capture is subscribed
+//   CONFIG_OMI_ENABLE_BATTERY_LOW_LED   blink red at or below the low threshold
 void set_led_state()
 {
     // If device is off, turn off all LEDs immediately
@@ -194,20 +206,24 @@ void set_led_state()
 
 #ifdef CONFIG_OMI_ENABLE_IDLE_SLEEP
 #define IDLE_SLEEP_TIMEOUT_SEC (CONFIG_OMI_IDLE_SLEEP_TIMEOUT_MIN * 60)
+#define IDLE_SLEEP_TICK_SEC 1
 static uint32_t idle_seconds = 0;
 
 static void update_idle_sleep(void)
 {
-    // Streaming audio to a subscribed central, or charging, holds the device awake.
-    bool active = is_charging || (is_connected && transport_is_audio_subscribed());
+    struct omi_idle_inputs inputs = {
+        .charging = is_charging,
+        .connected = is_connected,
+        .audio_subscribed = transport_is_audio_subscribed(),
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        .storage_transfer_active = storage_transfer_active(),
+        // A disconnected pendant with offline storage may be mid-recording, and the
+        // firmware cannot distinguish that from idle, so this build never auto-sleeps.
+        .offline_capture_possible = true,
+#endif
+    };
 
-    if (active) {
-        idle_seconds = 0;
-        return;
-    }
-
-    idle_seconds++;
-    if (idle_seconds >= IDLE_SLEEP_TIMEOUT_SEC) {
+    if (omi_idle_tick(&inputs, IDLE_SLEEP_TICK_SEC, IDLE_SLEEP_TIMEOUT_SEC, &idle_seconds)) {
         LOG_INF("Idle for %u s; entering system off", idle_seconds);
         turnoff_all();
     }

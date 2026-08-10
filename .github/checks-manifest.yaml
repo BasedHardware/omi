@@ -260,6 +260,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
+  - id: firmware-idle-sleep-tests
+    command: ["bash", "omi/firmware/omi/tests/run_idle_sleep_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/idle_sleep.h", "omi/firmware/omi/tests/test_idle_sleep.c", "omi/firmware/omi/tests/run_idle_sleep_test.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "idle auto-sleep powers the pendant off; the policy that decides when the device is busy must stay host-verifiable without NCS hardware"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
