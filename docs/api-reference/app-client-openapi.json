@@ -17367,6 +17367,23 @@
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
       },
+      "RejectAppRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "RejectAppRequest",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -30195,6 +30212,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectAppRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

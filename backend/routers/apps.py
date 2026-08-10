@@ -2271,7 +2271,12 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
-def reject_app(app_id: str, uid: str, payload: RejectAppRequest = Body(default_factory=RejectAppRequest), secret_key: str = Header(...)):
+def reject_app(
+    app_id: str,
+    uid: str,
+    payload: RejectAppRequest = Body(default_factory=RejectAppRequest),
+    secret_key: str = Header(...),
+):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
