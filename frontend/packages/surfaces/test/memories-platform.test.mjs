@@ -76,6 +76,7 @@ test("reason precedence matches the ratified derivation: degraded outranks incom
 });
 
 test("an unknown limitation reason cannot reach this surface as a known state", async () => {
+  // RETAINED-SOURCE-ASSERTION: ratified reason validation and typed presentation exhaustiveness are contract structure.
   const ratified = await read("../../contracts/ratified/src/projections/synthesized.ts");
   // The ratified boundary rejects a whole page whose reasons are outside its vocabulary,
   // so a mystery reason arrives as kind:"unknown" — never as a known state the surface
@@ -175,6 +176,7 @@ test("absent citations and zero citations are different answers", () => {
 // ---------------------------------------------------------------------------
 
 test("every production surface declares where its rows came from, and never hides it", async () => {
+  // RETAINED-SOURCE-ASSERTION: badge export/wiring plus platform CSS visibility are cross-surface structural inventory.
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
 
@@ -247,6 +249,7 @@ test("every production surface declares where its rows came from, and never hide
 // ---------------------------------------------------------------------------
 
 test("every ratified limitation reason has surface copy and is recognised by the notice", async () => {
+  // RETAINED-SOURCE-ASSERTION: this is an explicit ratified-contract-to-presentation classification audit.
   const ratified = await read("../../contracts/ratified/src/projections/synthesized.ts");
   const presentation = await read("src/production/proposition-presentation.ts");
 
@@ -354,6 +357,7 @@ test("filtering matches proposition text over loaded rows only", () => {
 });
 
 test("the platform Memories surface exposes no write affordance and no legacy memory field", async () => {
+  // RETAINED-SOURCE-ASSERTION: capability and legacy-field absence is a complete module-boundary claim.
   const source = await read("src/production/MemoriesPlatformProduction.tsx");
   for (const forbidden of ["store.create", "store.patch", "store.delete", "memories.visibility", "memory.visibility", "makePublic", "makePrivate", "deleteConfirm", "<textarea"]) {
     assert.ok(!source.includes(forbidden), `platform Memories must not reference ${forbidden}`);

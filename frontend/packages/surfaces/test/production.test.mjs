@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("production entry gates fixtures and marks the explicit host platform", async () => {
+  // RETAINED-SOURCE-ASSERTION: entrypoint query gating and host-marker wiring are bootstrap structure.
   const source = await read("src/production/main.tsx");
   assert.match(source, /requestedQa === "memories"/);
   assert.match(source, /dataset\["platform"\]/);
@@ -30,6 +31,7 @@ test("production entry gates fixtures and marks the explicit host platform", asy
 });
 
 test("conversation production slice stays within the ratified list/detail contract", async () => {
+  // RETAINED-SOURCE-ASSERTION: allowed fields and forbidden transcript/create capabilities define the contract boundary.
   const source = await read("src/production/ConversationsProduction.tsx");
   const fixtures = await read("src/production/conversation-fixtures.ts");
   assert.match(source, /store\.patch\(conversation\.id/);
@@ -60,6 +62,7 @@ test("conversation production slice stays within the ratified list/detail contra
 });
 
 test("conversation rows are compact, day-grouped, and only attribute safe sources", async () => {
+  // RETAINED-SOURCE-ASSERTION: safe-source allowlisting and host-selected CSS rules span branches beyond fixtures.
   const source = await read("src/production/ConversationsProduction.tsx");
   const fixtures = await read("src/production/conversation-fixtures.ts");
   assert.match(source, /conversation-day-group/);
@@ -85,6 +88,7 @@ test("conversation rows are compact, day-grouped, and only attribute safe source
 });
 
 test("production controls share search and filter primitives and expose deterministic appearance selection", async () => {
+  // RETAINED-SOURCE-ASSERTION: shared-primitive adoption and deterministic appearance wiring are structural reuse facts.
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const conversations = await read("src/production/ConversationsProduction.tsx");
   const memories = await read("src/production/MemoriesProduction.tsx");
@@ -105,6 +109,7 @@ test("production controls share search and filter primitives and expose determin
 });
 
 test("conversation links inherit production colors instead of browser defaults", async () => {
+  // RETAINED-SOURCE-ASSERTION: inherited CSS token declarations are not observable through jsdom layout/style resolution.
   const styles = await read("src/production/conversations.css");
   const backLink = styles.match(/\.conversation-back\s*\{([\s\S]*?)\}/)?.[1] ?? "";
   assert.match(backLink, /color:\s*var\(--content-primary\)/);
@@ -114,6 +119,7 @@ test("conversation links inherit production colors instead of browser defaults",
 });
 
 test("production chrome preserves QA context while clearing fixture selection", async () => {
+  // RETAINED-SOURCE-ASSERTION: URL parameter preservation/removal is shared navigation wiring across every route.
   const source = await read("src/production/ProductionChrome.tsx");
   assert.match(source, /params\.delete\("qa"\)/);
   assert.match(source, /params\.delete\("state"\)/);
@@ -130,6 +136,7 @@ test("production chrome preserves QA context while clearing fixture selection", 
 });
 
 test("desktop glass chrome keeps host-selected layout without changing mobile navigation", async () => {
+  // RETAINED-SOURCE-ASSERTION: platform CSS selectors and the absence of viewport branching are stylesheet structure.
   const styles = await read("src/production/styles.css");
   assert.match(styles, /grid-template-rows: var\(--desktop-nav-height\) var\(--desktop-panel-gap\) minmax\(0, 1fr\)/);
   assert.match(styles, /data-native-glass="true"/);
@@ -141,6 +148,7 @@ test("desktop glass chrome keeps host-selected layout without changing mobile na
 });
 
 test("memory cards keep locked and provenance behavior honest", async () => {
+  // RETAINED-SOURCE-ASSERTION: forbidden raw provenance/backend text and mutation wiring span all conditional branches.
   const source = await read("src/production/MemoriesProduction.tsx");
   assert.match(source, /presentMemoryContent\(memory\.content\)/);
   assert.match(source, /locked\.body/);
@@ -161,6 +169,7 @@ test("memory cards keep locked and provenance behavior honest", async () => {
 });
 
 test("fixture matrix covers the truthful production states", async () => {
+  // RETAINED-SOURCE-ASSERTION: the fixture-state catalog and fixed-clock declaration are structural QA inventory.
   const source = await read("src/production/memory-fixtures.ts");
   for (const state of ["loading", "empty", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "locked", "long"]) {
     assert.match(source, new RegExp(`\\"${state}\\"`));
@@ -171,6 +180,7 @@ test("fixture matrix covers the truthful production states", async () => {
 });
 
 test("i18n hardcoded-copy guard walks nested JSX text and expressions", async () => {
+  // RETAINED-SOURCE-ASSERTION: this test intentionally verifies the static checker's AST coverage, not UI behavior.
   const source = await read("../../scripts/check-i18n-parity.mjs");
   assert.match(source, /ts\.isJsxText\(node\)/);
   assert.match(source, /ts\.isJsxExpression\(node\)/);
@@ -185,6 +195,7 @@ test("i18n hardcoded-copy guard walks nested JSX text and expressions", async ()
 });
 
 test("fixture ids are parsed RecordIds and platform CSS is attribute-driven", async () => {
+  // RETAINED-SOURCE-ASSERTION: ID boundary parsing and platform-selector CSS are construction-time constraints.
   const fixtures = await read("src/production/memory-fixtures.ts");
   const styles = await read("src/production/styles.css");
   assert.match(fixtures, /parseRecordId/);
