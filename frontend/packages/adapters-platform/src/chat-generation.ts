@@ -7,6 +7,7 @@ import {
   type ChatGenerationFrame,
   type ChatTerminalFrame,
 } from "@omi-core/contracts";
+import type { Env } from "@omi-core/kernel";
 import { wireToChatGenerationFrame } from "./chat.js";
 
 export interface ParsedChatGenerationEvent {
@@ -139,6 +140,7 @@ export interface ChatGenerationObservation {
 }
 
 const INITIAL_GENERATION_CREDIT = 4;
+const GENERATION_RECONNECT_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000] as const;
 
 function isTerminal(frame: ChatGenerationFrame): frame is ChatTerminalFrame {
   return frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled";
@@ -151,10 +153,12 @@ function isTerminal(frame: ChatGenerationFrame): frame is ChatTerminalFrame {
 export function observeChatGeneration(
   streamPort: BridgeStreamPort,
   generationId: string,
+  env: Env,
   resumeAfterEventId?: string,
 ): ChatGenerationObservation {
   let cancelled = false;
   let active: BridgePayloadStream | null = null;
+  let cancelReconnectDelay: (() => void) | null = null;
   const seenIds = new Set<string>(resumeAfterEventId === undefined ? [] : [resumeAfterEventId]);
   let lastEventId = resumeAfterEventId;
 
@@ -162,6 +166,24 @@ export function observeChatGeneration(
     if (cancelled) return;
     cancelled = true;
     active?.cancel(reason ?? "generation-observation-cancelled");
+    cancelReconnectDelay?.();
+  };
+
+  const waitToReconnect = async (delayMs: number): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      let cancelTimer = (): void => undefined;
+      const finish = (): void => {
+        if (finished) return;
+        finished = true;
+        cancelTimer();
+        cancelReconnectDelay = null;
+        resolve();
+      };
+      cancelTimer = env.delay(delayMs, finish);
+      cancelReconnectDelay = finish;
+      if (cancelled) finish();
+    });
   };
 
   const events = (async function* (): AsyncGenerator<ChatGenerationObservationEvent> {
@@ -169,6 +191,7 @@ export function observeChatGeneration(
       yield { kind: "error", failure: "generation id is empty" };
       return;
     }
+    let reconnectStep = 0;
     while (!cancelled) {
       const params = JSON.stringify({
         generationId,
@@ -186,11 +209,13 @@ export function observeChatGeneration(
       }
       const parser = new IncrementalChatGenerationParser();
       let firstFresh = true;
+      let advancedCursor = false;
       try {
         for await (const chunk of active) {
           for (const event of parser.push(chunk)) {
             if (seenIds.has(event.id)) continue;
             seenIds.add(event.id);
+            advancedCursor = true;
             if (firstFresh) {
               firstFresh = false;
               if (event.frame.kind !== "snapshot" && !isTerminal(event.frame)) {
@@ -210,6 +235,7 @@ export function observeChatGeneration(
         for (const event of parser.finish()) {
           if (seenIds.has(event.id)) continue;
           seenIds.add(event.id);
+          advancedCursor = true;
           if (firstFresh && event.frame.kind !== "snapshot" && !isTerminal(event.frame)) {
             throw new Error("generation connection omitted its leading snapshot");
           }
@@ -235,8 +261,17 @@ export function observeChatGeneration(
         yield { kind: "error", failure: "generation disconnected before its first event" };
         return;
       }
-      // Reopen immediately with the exact last opaque event id. The host owns
-      // authentication and translates it to Last-Event-ID.
+      if (advancedCursor) reconnectStep = 0;
+      if (reconnectStep >= GENERATION_RECONNECT_DELAYS_MS.length) {
+        yield { kind: "error", failure: "generation observation reconnect limit reached" };
+        return;
+      }
+      const delayMs = GENERATION_RECONNECT_DELAYS_MS[reconnectStep]!;
+      reconnectStep += 1;
+      await waitToReconnect(delayMs);
+      // Reopen only after injected deterministic backoff, with the exact last
+      // opaque event id. The host owns authentication and translates the value
+      // to Last-Event-ID.
     }
   })();
 
