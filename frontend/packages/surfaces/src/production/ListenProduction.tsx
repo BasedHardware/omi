@@ -7,6 +7,7 @@ import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { boundedRenderedTranscript } from "./consumer-observation.js";
 import "./listen.css";
 
 type Locale = string;
@@ -152,6 +153,9 @@ export function ListenProduction({ store, locale = "en", onReady }: {
       data-route="listen"
       data-surface-state={status.refresh.phase}
       data-capture-kind={presentedCapture.kind}
+      data-qa-fixture="none"
+      data-consumer-semantic={`listen:capture:${presentedCapture.kind}:segments:${segments.length}`}
+      data-consumer-transcript={segments.length > 0 ? boundedRenderedTranscript(segments) : undefined}
     >
       <ProductionChrome locale={locale} active="listen" placement="top" />
       <section className="desktop-page-panel">
@@ -229,6 +233,7 @@ export function ListenProduction({ store, locale = "en", onReady }: {
             <button
               type="button"
               className="listen-primary-control"
+              data-consumer-action="start-listen"
               aria-label={t(locale, "listen.start")}
               onClick={() => void run(() => store.start())}
             >

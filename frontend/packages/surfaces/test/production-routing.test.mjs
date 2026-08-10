@@ -38,7 +38,10 @@ test("an explicit route always beats the platform default", () => {
   assert.equal(route("home", null, "platform"), "home");
   assert.equal(route("tasks", null, "platform"), "tasks");
   assert.equal(route("conversations", null, "platform"), "conversations");
+  assert.equal(route("folders", null, "platform"), "folders");
   assert.equal(route("listen", null, "platform"), "listen");
+  assert.equal(route("chat", null, "platform"), "chat");
+  assert.equal(route("settings", null, "platform"), "settings");
   // red-proof: dropping the "host named nothing" guard makes the first case return
   // "memories". I shipped exactly that for one build: `?generation=platform&route=home`
   // served 2 platform reads instead of 0, i.e. a host that asked for Home silently got
@@ -60,9 +63,19 @@ test("every explicit destination resolves the same whatever the generation is", 
     assert.equal(route("conversations", null, generation), "conversations");
     assert.equal(route("home", null, generation), "home");
     assert.equal(route("listen", null, generation), "listen");
+    assert.equal(route("folders", null, generation), "folders");
+    assert.equal(route("chat", null, generation), "chat");
+    assert.equal(route("settings", null, generation), "settings");
   }
   // red-proof: making any explicit branch depend on the generation reintroduces a
   // route that changes under the host's feet.
+});
+
+test("an unknown explicit route is unsupported instead of falling through", () => {
+  assert.equal(route("memroies", null, "legacy"), "unsupported");
+  assert.equal(route("memroies", null, "platform"), "unsupported");
+  // red-proof: return Home or Memories from the unknown-route branch. This
+  // reproduces a truthful-looking page for a destination the host never loaded.
 });
 
 // ---------------------------------------------------------------------------
