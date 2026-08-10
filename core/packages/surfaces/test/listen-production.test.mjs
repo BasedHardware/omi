@@ -74,18 +74,18 @@ test("every capture kind is handled with a distinct non-empty title key", () => 
 test("ListenProduction announces loud states and renders no pause control", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const fixtureListenStore = await loadProductionExport("listen-fixtures.ts", "fixtureListenStore");
-  const states = [
-    "idle",
-    "capturing",
-    "paused-for-entitlement",
-    "offline-buffering",
-    "stopped-at-ceiling",
-    "error-retryable",
-    "error-permanent",
-    "unavailable",
-  ];
+  const expectedLoudness = {
+    idle: false,
+    capturing: false,
+    "paused-for-entitlement": false,
+    "offline-buffering": false,
+    "stopped-at-ceiling": true,
+    "error-retryable": false,
+    "error-permanent": true,
+    unavailable: false,
+  };
 
-  for (const state of states) {
+  for (const [state, loud] of Object.entries(expectedLoudness)) {
     const rendered = await renderComponent(ListenProduction, {
       store: fixtureListenStore(state),
       fixture: state,
@@ -93,11 +93,8 @@ test("ListenProduction announces loud states and renders no pause control", asyn
     try {
       const panel = rendered.container.querySelector(".listen-state-panel");
       assert.ok(panel, `${state} renders the capture-state panel`);
-      assert.equal(
-        panel.getAttribute("role"),
-        panel.getAttribute("data-loud") === "true" ? "alert" : "status",
-        `${state} exposes loudness through its live-region role`,
-      );
+      assert.equal(panel.getAttribute("data-loud"), String(loud), `${state} renders its required loudness`);
+      assert.equal(panel.getAttribute("role"), loud ? "alert" : "status", `${state} renders its required live-region role`);
       const pauseControl = [...rendered.container.querySelectorAll("button")]
         .find((button) => /pause/i.test(`${button.textContent} ${button.getAttribute("aria-label") ?? ""}`));
       assert.equal(pauseControl, undefined, `${state} does not fabricate a pause control`);
@@ -105,4 +102,6 @@ test("ListenProduction announces loud states and renders no pause control", asyn
       await rendered.cleanup();
     }
   }
+  // red-proof: rendering stopped-at-ceiling with data-loud=false and
+  // role=status must fail both exact mapping assertions above.
 });
