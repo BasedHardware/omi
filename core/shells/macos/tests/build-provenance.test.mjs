@@ -69,11 +69,14 @@ test("the ACCEPTANCE line carries shellStamp, surfaceStamp, and clientId after t
   // literal-match assertions above.
 });
 
-test("clientId is threaded through BridgeHttpHandler's init, not read from ProcessInfo inside the policy seam", async () => {
+test("clientId and shared custody are injected into both native transport hosts", async () => {
   const bridgeHttp = await read("shell/Sources/OmiShell/BridgeHttp.swift");
   const listenSocket = await read("shell/Sources/OmiShell/ListenSocket.swift");
   const main = await read("shell/Sources/OmiShell/main.swift");
-  assert.match(bridgeHttp, /init\(baseURL: URL, token: String\?, clientId: String\? = nil\)/);
+  assert.match(
+    bridgeHttp,
+    /init\(\s*baseURL: URL,\s*custody: ShellCredentialCustody,\s*clientId: String\? = nil/,
+  );
   assert.match(bridgeHttp, /static func prepare\(/);
   assert.match(bridgeHttp, /clientId: String\? = nil/);
   // The policy seam itself must stay free of ProcessInfo/environment reads —
@@ -81,17 +84,22 @@ test("clientId is threaded through BridgeHttpHandler's init, not read from Proce
   assert.doesNotMatch(bridgeHttp, /ProcessInfo/);
   assert.match(
     listenSocket,
-    /func makeHTTPHandler\(clientId: String\?\)[\s\S]*BridgeHttpHandler\(baseURL: baseURL, token: token, clientId: clientId\)/,
+    /func makeHTTPHandler\(clientId: String\?\)[\s\S]*BridgeHttpHandler\(baseURL: baseURL, custody: custody, clientId: clientId\)/,
   );
-  assert.match(main, /ShellTransportAuthority\(baseURL: base, token: session\.token\)/);
+  assert.match(
+    listenSocket,
+    /func makeListenHandler\(\)[\s\S]*ListenSocketHandler\(baseURL: baseURL, custody: custody\)/,
+  );
+  assert.doesNotMatch(listenSocket, /private let token: String\?/);
   assert.match(
     main,
-    /authority\.makeHTTPHandler\(\s*clientId: runClientId,\s*onSuccessfulSignOut:/,
+    /ShellTransportAuthority\(\s*baseURL: base, token: session\.token,\s*onSuccessfulSignOut:/,
   );
+  assert.match(main, /authority\.makeHTTPHandler\(clientId: runClientId\)/);
   // red-proof: deleting the `clientId` parameter from BridgeHttpHandler.init
   // and reading `ProcessInfo.processInfo.environment["OMI_RUN_CLIENT_ID"]`
-  // directly inside BridgeHttpPolicy.prepare instead reddens the
-  // doesNotMatch(/ProcessInfo/) assertion — confirmed by mutation below.
+  // directly inside BridgeHttpPolicy.prepare, or retaining a private token in
+  // ListenSocketHandler, reddens a named assertion above.
 });
 
 // This suite needs an actual build to have run (it reads bundle files under
