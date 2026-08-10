@@ -22,7 +22,9 @@ LIMIT=${1:-10}
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
-HTTP_CODE=$(curl -sS -o "$TMP" -w "%{http_code}"   -H "x-auth-token: $CODEMAGIC_API_TOKEN"   "https://api.codemagic.io/builds?appId=$APP_ID&limit=$LIMIT")
+HTTP_CODE=$(curl -sS -o "$TMP" -w "%{http_code}" \
+  -H "x-auth-token: $CODEMAGIC_API_TOKEN" \
+  "https://api.codemagic.io/builds?appId=$APP_ID&limit=$LIMIT")
 
 if [ "$HTTP_CODE" != "200" ]; then
   echo "Error: Codemagic API returned HTTP $HTTP_CODE" >&2
