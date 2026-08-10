@@ -47,12 +47,25 @@ class RenderedDomainChat {
   deliveries = [];
   dead = [];
   discarded = [];
+  caps = {
+    maxAttachmentsPerMessage: 2,
+    maxAttachmentBytes: 10_000,
+    allowedAttachmentMimeTypes: ["application/pdf"],
+  };
+  sendFailure = null;
+  sendGate = null;
+  window = { hasOlder: false, olderCursor: null };
+  olderRows = [];
+  admittedAttachments = [];
 
   status() { return status(); }
   subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   async refresh() {}
-  historyPage() { return { hasOlder: false, olderCursor: null }; }
-  async loadOlder() { return []; }
+  historyPage() { return this.window; }
+  async loadOlder() {
+    this.window = { hasOlder: false, olderCursor: null };
+    return this.olderRows;
+  }
   async list() { return this.rows; }
   pendingMessageIds() { return []; }
   activeGenerations() { return this.active; }
@@ -64,16 +77,15 @@ class RenderedDomainChat {
     this.notify();
   }
   capabilities() {
-    return {
-      maxAttachmentsPerMessage: 2,
-      maxAttachmentBytes: 10_000,
-      allowedAttachmentMimeTypes: ["application/pdf"],
-    };
+    return this.caps;
   }
   async send(text, attachmentIds) {
     this.sent.push({ text, attachmentIds: [...attachmentIds] });
+    if (this.sendGate) await this.sendGate;
+    if (this.sendFailure) throw this.sendFailure;
     const admitted = row("domain-authored-human", "human", text);
     admitted.revision = null;
+    admitted.attachments = this.admittedAttachments;
     this.rows = [admitted];
     this.active = [{
       generationId: "generation-live",
@@ -173,6 +185,13 @@ test("staged safe metadata renders generically while only ordered opaque ids rea
     "createProductionChatStore",
   );
   const domain = new RenderedDomainChat();
+  domain.admittedAttachments = [{
+    id: "canonical-one",
+    displayName: "normalized-report.pdf",
+    mediaType: "application/pdf",
+    sizeBytes: 100,
+    contentReference: "opaque-content-one",
+  }];
   const descriptors = [
     {
       id: "opaque-stage-one",
@@ -217,6 +236,13 @@ test("staged safe metadata renders generically while only ordered opaque ids rea
     }]);
     const serialized = JSON.stringify(domain.sent);
     assert.doesNotMatch(serialized, /application\/pdf|sizeBytes|expiresAt/);
+    assert.equal(rendered.container.querySelector(".chat-attachments"), null);
+    assert.ok(
+      rendered.container.querySelector(".chat-message-attachments")?.textContent.includes(
+        "normalized-report.pdf",
+      ),
+      "canonical admission metadata replaces the provisional staged description",
+    );
   } finally {
     await rendered.cleanup();
   }
@@ -237,7 +263,149 @@ test("absent staging host renders unavailable and cannot mint a placeholder atta
     assert.ok(attach);
     assert.equal(attach.disabled, true);
     assert.ok(rendered.container.textContent.includes(EN_MESSAGES["chat.attachmentUnavailable"]));
+    const describedBy = attach.getAttribute("aria-describedby");
+    assert.ok(describedBy, "disabled Attach names the element carrying its reason");
+    assert.equal(
+      rendered.container.querySelector(`#${describedBy}`)?.textContent,
+      EN_MESSAGES["chat.attachmentUnavailable"],
+    );
     assert.equal(rendered.container.querySelector(".chat-attachments"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("send failure preserves draft and staged descriptors and double submit is fenced", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.sendFailure = new Error("enqueue failed");
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() {
+      return {
+        id: "opaque-preserved",
+        mimeType: "application/pdf",
+        sizeBytes: 100,
+        expiresAt: "2026-08-11T12:00:00.000Z",
+        state: "staged",
+      };
+    },
+  };
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain, staging),
+  });
+  try {
+    await click(rendered, rendered.container.querySelector("button.chat-attach"));
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    await setTextarea(rendered, textarea, "Keep this authored draft");
+    await click(rendered, rendered.container.querySelector("button.chat-send"));
+    assert.equal(textarea.value, "Keep this authored draft");
+    assert.equal(rendered.container.querySelectorAll(".chat-attachments li").length, 1);
+
+    let release;
+    domain.sendFailure = null;
+    domain.sendGate = new Promise((resolve) => { release = resolve; });
+    await click(rendered, rendered.container.querySelector("button.chat-send"));
+    await click(rendered, rendered.container.querySelector("button.chat-send"));
+    assert.equal(domain.sent.length, 2, "one failed attempt plus one in-flight retry; double submit adds none");
+    await setTextarea(rendered, textarea, "A new edit while enqueue is pending");
+    await rendered.act(async () => { release(); await Promise.resolve(); });
+    assert.equal(textarea.value, "A new edit while enqueue is pending", "successful old enqueue cannot clear a newer edit");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("two concurrent Attach clicks at cap one select exactly one unique descriptor", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.caps = { ...domain.caps, maxAttachmentsPerMessage: 1 };
+  const resolvers = [];
+  let calls = 0;
+  const staging = {
+    isAvailable: () => true,
+    pickAndStage() {
+      calls += 1;
+      return new Promise((resolve) => resolvers.push(resolve));
+    },
+  };
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain, staging),
+  });
+  try {
+    const attach = rendered.container.querySelector("button.chat-attach");
+    await click(rendered, attach);
+    await click(rendered, attach);
+    assert.equal(calls, 1, "the first native picker reserves the sole slot synchronously");
+    await rendered.act(async () => {
+      resolvers[0]({
+        id: "opaque-only",
+        mimeType: "application/pdf",
+        sizeBytes: 100,
+        expiresAt: "2026-08-11T12:00:00.000Z",
+        state: "staged",
+      });
+      await Promise.resolve();
+    });
+    assert.equal(rendered.container.querySelectorAll(".chat-attachments li").length, 1);
+    assert.equal(attach.disabled, true, "the reported cap is rechecked after completion");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("canonical and expired attachment metadata render in newest and older messages", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const newest = row("newest-human", "human", "Newest attachment");
+  newest.attachments = [{
+    id: "canonical-new",
+    displayName: "normalized-new.pdf",
+    mediaType: "application/pdf",
+    sizeBytes: 321,
+    contentReference: "opaque-content-new",
+  }];
+  const older = row("older-human", "human", "Older expired attachment");
+  older.attachments = [{
+    id: "canonical-old",
+    displayName: "normalized-old.txt",
+    mediaType: "text/plain",
+    sizeBytes: 654,
+    contentReference: null,
+  }];
+  domain.rows = [newest];
+  domain.window = { hasOlder: true, olderCursor: "older-cursor" };
+  domain.olderRows = [older];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    let canonical = rendered.container.querySelector(".chat-message-attachments");
+    assert.ok(canonical);
+    assert.ok(canonical.textContent.includes("normalized-new.pdf"));
+    assert.ok(canonical.textContent.includes("application/pdf"));
+    assert.ok(canonical.textContent.includes("321"));
+    await click(rendered, rendered.container.querySelector(".chat-history-controls button"));
+    const lists = [...rendered.container.querySelectorAll(".chat-message-attachments")];
+    assert.equal(lists.length, 2);
+    assert.ok(lists[0].textContent.includes("normalized-old.txt"));
+    assert.ok(lists[0].textContent.includes("text/plain"));
+    assert.ok(lists[0].textContent.includes("654"));
+    assert.ok(lists[0].textContent.includes(EN_MESSAGES["chat.attachmentExpired"]));
+    assert.equal(lists[0].querySelector("a"), null);
+    assert.equal(lists[0].querySelector("button"), null);
   } finally {
     await rendered.cleanup();
   }
