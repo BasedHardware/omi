@@ -493,16 +493,15 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_only_the_merged_main_source(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        # Manual candidate publication only. Automatic push/schedule tagging was
-        # retired so merges no longer mint a new macOS version tag per CI run.
-        # workflow_dispatch stays bare (no manual inputs). No `inputs:` may appear
-        # in the trigger block.
+        # Candidate publication is the hourly schedule plus bare manual
+        # dispatch. Per-merge push tagging stays retired so merges no longer
+        # mint a new macOS version tag per CI run, and workflow_dispatch stays
+        # bare (no manual inputs) — the schedule/dispatch split is expressed as
+        # the planner's --min-tag-interval-seconds argument instead.
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
         trigger = workflow.split("\njobs:", 1)[0]
         self.assertNotIn("\n  push:", trigger)
-        self.assertNotIn("schedule:", trigger)
-        self.assertNotIn("cron:", trigger)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
@@ -552,16 +551,116 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("if: always()", tag_release)
         self.assertIn("desktop-pre-tag-readiness", tag_release)
 
-    def test_auto_release_is_manual_only(self) -> None:
-        # Candidate tags must not fire on push/schedule. The planner may still
-        # gate a manual run; continuous path filters are intentionally gone.
+    def test_auto_release_is_an_hourly_train_plus_manual_dispatch(self) -> None:
+        # Candidate tags fire from the hourly schedule (throttled by the
+        # planner's --min-tag-interval-seconds so at most one candidate ships
+        # per hour) and from deliberate workflow_dispatch (immediate — the
+        # emergency lane #11374 relied on). Per-merge push tagging stays gone.
         workflow = WORKFLOW.read_text(encoding="utf-8")
         trigger = workflow.split("\njobs:", 1)[0]
         self.assertIn("workflow_dispatch:", trigger)
+        self.assertIn("schedule:", trigger)
+        self.assertIn('cron: "7 * * * *"', trigger)
         self.assertNotIn("\n  push:", trigger)
-        self.assertNotIn("schedule:", trigger)
         with self.assertRaises(AssertionError):
             _parse_push_filter(workflow)
+        self.assertIn(
+            "--min-tag-interval-seconds \"${{ github.event_name == 'schedule' && '3300' || '0' }}\"",
+            workflow,
+        )
+
+    def test_hourly_train_defers_while_the_latest_tag_is_young(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "tag_age_seconds", return_value=120),
+                patch.object(planner, "releasable_desktop_changes_since") as changes,
+                patch.object(
+                    sys,
+                    "argv",
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                ),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("Hourly release train", outputs)
+
+    def test_manual_dispatch_ignores_the_train_interval(self) -> None:
+        # --min-tag-interval-seconds defaults to 0: a fresh tag never defers a
+        # deliberate dispatch.
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "tag_age_seconds", return_value=1) as age,
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        age.assert_not_called()
+        self.assertNotIn("Hourly release train", outputs)
+
+    def test_blocked_newest_sha_falls_back_to_the_newest_green_releasable_sha(self) -> None:
+        fallback_sha = "b" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=["desktop/macos/a.swift"]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(
+                    planner,
+                    "wait_for_required_source_checks",
+                    return_value=planner.SourceCheckGate("blocked", "required check failed"),
+                ),
+                patch.object(planner, "releasable_desktop_shas_since", return_value=[SOURCE_SHA, fallback_sha]),
+                patch.object(
+                    planner,
+                    "required_source_checks_gate",
+                    return_value=planner.SourceCheckGate("ready"),
+                ),
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn(f"source_sha={fallback_sha}", outputs)
+        self.assertIn("should_release=true", outputs)
+
+    def test_blocked_newest_sha_without_a_green_fallback_stays_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=["desktop/macos/a.swift"]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(
+                    planner,
+                    "wait_for_required_source_checks",
+                    return_value=planner.SourceCheckGate("blocked", "required check failed"),
+                ),
+                patch.object(planner, "releasable_desktop_shas_since", return_value=[SOURCE_SHA]),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("source gate blocked", outputs)
 
 
 if __name__ == "__main__":

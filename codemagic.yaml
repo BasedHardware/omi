@@ -1893,6 +1893,11 @@ workflows:
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
+        # SwiftPM build products for both release triples. Without this every
+        # candidate cold-compiles the full dependency graph twice (~the largest
+        # single cost in the release wall-clock); SwiftPM's own fingerprinting
+        # invalidates stale objects, so reuse is safe.
+        - $CM_BUILD_DIR/desktop/macos/Desktop/.build
     scripts: &desktop_signed_artifact_steps
       - name: Resolve trusted source and build identity
         script: |
