@@ -18,7 +18,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
 
     assert 'timeout-minutes: 20' in job
     assert 'uses: actions/setup-python@v6' in job
-    assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
+    assert 'uses: astral-sh/setup-uv@v5' in job
     assert 'uv venv .venv' in job
     assert 'uv pip sync pylock.toml --python .venv/bin/python' in job
     assert 'uses: actions/setup-node@v7' in job
