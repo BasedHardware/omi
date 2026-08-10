@@ -3,7 +3,7 @@
 //
 // Process-only launcher for platform's registered app-facing composition.
 // Routes, handlers, stores, tokens, counters and composition all come from
-// `createLocalService`; this file contributes only fixture config and the
+// `createLocalDevService`; this file contributes only fixture config and the
 // loopback socket that dev-stack allocates to port 4851.
 
 import { join } from "node:path";
@@ -44,14 +44,14 @@ export function readRegisteredDoorArgs(argv) {
 export async function bootRegisteredDoor(config) {
   const appFacingUrl = pathToFileURL(join(config.platformRepo, "apps/service/app-facing.ts")).href;
   const loopbackUrl = pathToFileURL(join(config.platformRepo, "apps/service/net/loopback.ts")).href;
-  const [{ Database }, { createLocalService }, { LOOPBACK_HOST }] = await Promise.all([
+  const [{ Database }, { createLocalDevService }, { LOOPBACK_HOST }] = await Promise.all([
     import("bun:sqlite"),
     import(appFacingUrl),
     import(loopbackUrl),
   ]);
 
   const db = new Database(":memory:");
-  const service = createLocalService({
+  const service = createLocalDevService({
     db,
     ownerAccountId: config.ownerAccountId,
     memoryCount: config.memoryCount,
