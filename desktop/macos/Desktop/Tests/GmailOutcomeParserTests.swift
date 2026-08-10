@@ -43,6 +43,26 @@ final class GmailOutcomeParserTests: XCTestCase {
     XCTAssertEqual(emails.count, 1)
   }
 
+  func testEmptyBootstrapInboxIsStillSuccess() {
+    let json: [String: Any] = [
+      "ok": true,
+      "browser": "Chrome",
+      "source": "bootstrap",
+      "emails": [],
+      "attempts": [
+        ["browser": "Chrome", "stage": "ok", "reason": "ok", "had_auth": true],
+      ],
+    ]
+
+    guard case let .success(emails, browser, source) = GmailOutcomeParser.parse(json) else {
+      return XCTFail("expected empty inbox success")
+    }
+
+    XCTAssertEqual(browser, "Chrome")
+    XCTAssertEqual(source, "bootstrap")
+    XCTAssertTrue(emails.isEmpty)
+  }
+
   func testNotSignedInRetainsEveryProfileAttempt() {
     let json: [String: Any] = [
       "ok": false,

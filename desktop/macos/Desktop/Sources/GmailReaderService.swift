@@ -722,7 +722,7 @@ actor GmailReaderService {
               status, final, body = fetch_home_page(jar)
               if status == 200:
                   emails, parse_err = parse_bootstrap_page(body, max_results)
-                  if not parse_err and emails:
+                  if not parse_err and emails is not None:
                       attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
                       write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'bootstrap',
                                                        'emails': emails, 'count': len(emails), 'attempts': attempts})
