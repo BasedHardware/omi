@@ -1,0 +1,176 @@
+// domain-pending(DIV-CHAT-SENDER-001)
+// domain-pending(DIV-CHAT-TYPE-001)
+// domain-pending(DIV-CHAT-SESSION-001)
+// domain-pending(DIV-CHAT-REV-001)
+// domain-pending(DIV-CHAT-HASH-001)
+// domain-pending(DIV-CHAT-SOURCE-001)
+
+import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import type { ChatMessageRecord } from "../../../apps/service/stores/chat-messages-store";
+import { createSqliteChatAdmission } from "./chat-admission";
+import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
+import { SqliteChatMessagesStore } from "./chat-messages-store";
+import { SqliteSettingsProjectionStore } from "./settings-projection";
+
+const message = (overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord => ({
+  id: "client-1",
+  text: "hello",
+  sender: "human",
+  type: "text",
+  createdAt: 100,
+  updatedAt: 100,
+  chatSessionId: null,
+  appId: null,
+  journalRevision: 1,
+  payloadHash: "sha256:one",
+  messageSource: "desktop_chat",
+  rating: null,
+  reported: false,
+  revision: "revision-1",
+  attachments: [{ displayName: "a.pdf", mediaType: "application/pdf", size: 42 }],
+  ...overrides,
+});
+
+test("SQLite chat admission atomically records message, one quota use, and one accepted event", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  const events = new SqliteChatGenerationEventsStore(db);
+  const settings = new SqliteSettingsProjectionStore(db);
+  const admission = createSqliteChatAdmission(db, messages, events, settings);
+  settings.putEntitlement("account", {
+    planLabel: "Metered",
+    limitKey: "chat_messages",
+    used: 0,
+    limit: 2,
+    limitReached: false,
+    upgradeAvailable: true,
+  });
+  const input = {
+    accountId: "account",
+    message: message(),
+    generationId: "generation-1",
+    acceptedEventId: "event-1",
+    admittedAt: 200,
+  } as const;
+
+  expect(admission.admit(input).kind).toBe("created");
+  expect(admission.admit(input).kind).toBe("replay");
+  expect(admission.admit({
+    ...input,
+    message: message({ text: "mutated", payloadHash: "sha256:two" }),
+  }).kind).toBe("conflict");
+  expect(settings.readEntitlement("account")?.used).toBe(1);
+  expect(messages.readSnapshotSequence("account")).toBe(1);
+  expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([
+    { displayName: "a.pdf", mediaType: "application/pdf", size: 42 },
+  ]);
+  expect(events.listAfter("account", "generation-1", null)?.map((event) => event.frame.kind))
+    .toEqual(["accepted"]);
+  db.close();
+});
+
+test("SQLite refuses unknown vocabulary on write but reads restored unknown rows", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  expect(messages.writeCanonical("account", message({ sender: "unknown" }), null).kind)
+    .toBe("invalid_vocabulary");
+  expect(messages.writeCanonical("account", message({ type: "unknown" }), null).kind)
+    .toBe("invalid_vocabulary");
+
+  db.query(`
+    INSERT INTO service_chat_messages (
+      account_id, id, text, sender, message_type, created_at, updated_at,
+      chat_session_id, app_id, journal_revision, payload_hash, message_source,
+      rating, reported, server_revision, attachments_json, generation_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "account", "restored", "future vocabulary", "unknown", "unknown", 1, 1,
+    null, null, 1, "sha256:restored", "restore", null, 0, "revision-restored", null, null,
+  );
+  expect(messages.readMessage("account", "restored")?.message).toMatchObject({
+    sender: "unknown",
+    type: "unknown",
+  });
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence: messages.readSnapshotSequence("account"),
+    olderThan: null,
+  }).messages.map((stored) => stored.id)).toEqual(["restored"]);
+  db.close();
+});
+
+test("SQLite preserves monotonic journal revision and the cancelled-partial event shape", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  const events = new SqliteChatGenerationEventsStore(db);
+  expect(messages.admitHuman("account", message({ journalRevision: 3 }), "generation-1").kind)
+    .toBe("created");
+  expect(messages.admitHuman("account", message({ journalRevision: 2 }), "generation-1").kind)
+    .toBe("replay");
+  expect(messages.readMessage("account", "client-1")?.message.journalRevision).toBe(3);
+  expect(messages.admitHuman("account", message({
+    journalRevision: 4,
+    updatedAt: 400,
+    revision: "revision-4",
+  }), "generation-1").kind).toBe("replay");
+  const partial = message({ id: "assistant-partial", sender: "ai", text: "partial" });
+  expect(events.append({
+    accountId: "account",
+    generationId: "generation-1",
+    eventId: "event-cancelled",
+    createdAt: 500,
+    frame: { kind: "cancelled", message: partial },
+  }).kind).toBe("appended");
+  const event = events.listAfter("account", "generation-1", null)?.[0];
+  expect(event?.frame).toEqual({ kind: "cancelled", message: partial });
+  db.close();
+});
+
+test("SQLite chat message, quota, and event records survive adapter restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "omi-chat-restart-"));
+  const path = join(directory, "service.sqlite");
+  try {
+    {
+      const db = new Database(path);
+      const messages = new SqliteChatMessagesStore(db);
+      const events = new SqliteChatGenerationEventsStore(db);
+      const settings = new SqliteSettingsProjectionStore(db);
+      settings.putEntitlement("account", {
+        planLabel: "Metered",
+        limitKey: "chat_messages",
+        used: 0,
+        limit: 5,
+        limitReached: false,
+        upgradeAvailable: true,
+      });
+      expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+        accountId: "account",
+        message: message(),
+        generationId: "generation-1",
+        acceptedEventId: "event-1",
+        admittedAt: 200,
+      }).kind).toBe("created");
+      db.close();
+    }
+    {
+      const db = new Database(path);
+      const messages = new SqliteChatMessagesStore(db);
+      const events = new SqliteChatGenerationEventsStore(db);
+      const settings = new SqliteSettingsProjectionStore(db);
+      expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([
+        { displayName: "a.pdf", mediaType: "application/pdf", size: 42 },
+      ]);
+      expect(settings.readEntitlement("account")?.used).toBe(1);
+      expect(events.listAfter("account", "generation-1", null)?.map((event) => event.id))
+        .toEqual(["event-1"]);
+      db.close();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

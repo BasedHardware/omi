@@ -2,6 +2,8 @@
 // domain-pending(UNK-DOMCORE-002)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-CHAT-REV-001)
+// domain-pending(DIV-CHAT-HASH-001)
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
@@ -40,6 +42,12 @@ import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
+import {
+  createStubChatGenerationSupervisor,
+  type ChatGenerationSupervisor,
+} from "./chat/generation-supervisor";
+import { createChatHistoryCursorCodec } from "./chat/history-cursor";
+import { registerChatMessagesRoutes } from "./routes/chat-messages";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { registerFolderRoutes } from "./routes/folders";
@@ -70,6 +78,15 @@ import { createInMemoryListenStore, type ListenStore } from "./stores/listen-sto
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
 import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
+import { createInMemoryChatAdmission, type ChatAdmission } from "./stores/chat-admission";
+import {
+  createInMemoryChatGenerationEventsStore,
+  type ChatGenerationEventsStore,
+} from "./stores/chat-generation-events-store";
+import {
+  createInMemoryChatMessagesStore,
+  type ChatMessagesStore,
+} from "./stores/chat-messages-store";
 
 /**
  * Builds the complete app-facing service.
@@ -113,6 +130,8 @@ export interface LocalServiceOptions {
   readonly transcriptionSource?: TranscriptionSource;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
   readonly listenDefaultUnmetered?: boolean;
+  /** The C1 default emits no generation frames; the next lane injects the real supervisor. */
+  readonly chatSupervisor?: ChatGenerationSupervisor;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -129,6 +148,9 @@ export interface LocalServiceStores {
   readonly currentSession: CurrentSessionPort;
   readonly accountLifecycle: AccountLifecycleStore;
   readonly listen: ListenStore;
+  readonly chatMessages: ChatMessagesStore;
+  readonly chatEvents: ChatGenerationEventsStore;
+  readonly chatAdmission: ChatAdmission;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -184,6 +206,9 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
   const conversations = createInMemoryConversationsStore({
     hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
+  const settings = createInMemorySettingsProjectionStore();
+  const chatMessages = createInMemoryChatMessagesStore();
+  const chatEvents = createInMemoryChatGenerationEventsStore();
   return Object.freeze({
     conversations,
     folders,
@@ -193,10 +218,13 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
     stragglers: createInMemoryStragglerTable(),
     control: createInMemoryAccountControlProjectionStore(),
-    settings: createInMemorySettingsProjectionStore(),
+    settings,
     currentSession: createInMemoryCurrentSessionPort(),
     accountLifecycle: createInMemoryAccountLifecycleStore(),
     listen: createInMemoryListenStore(),
+    chatMessages,
+    chatEvents,
+    chatAdmission: createInMemoryChatAdmission(chatMessages, chatEvents, settings),
   });
 };
 
@@ -231,6 +259,9 @@ export interface LocalService {
     readonly opsCounter: WriteOpsCounter;
     readonly settings: SettingsProjectionStore;
     readonly listen: ListenStore;
+    readonly chatMessages: ChatMessagesStore;
+    readonly chatEvents: ChatGenerationEventsStore;
+    readonly chatAdmission: ChatAdmission;
   };
 }
 
@@ -271,6 +302,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
         });
       }
       stores.listen.reset();
+      stores.chatMessages.reset();
+      stores.chatEvents.reset();
     }
   };
   reseed();
@@ -315,6 +348,14 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     active_key_id: DEV_KEY_ID,
     keys: [{ key_id: DEV_KEY_ID, secret: derive32(`${options.devSecretLabel}:cursor`) }],
   };
+  const chatCursor = createChatHistoryCursorCodec({
+    activeId: DEV_KEY_ID,
+    keys: [{ id: DEV_KEY_ID, secret: derive32(`${options.devSecretLabel}:chat-cursor`) }],
+  });
+  const opaqueChatId = (kind: string, ...parts: readonly string[]): string =>
+    `${kind}_${createHash("sha256")
+      .update(`${options.devSecretLabel}:chat:${kind}\0${parts.join("\0")}`, "utf8")
+      .digest("hex")}`;
 
   const prepareRead = async (principal: DevPrincipal) => {
     const loader = createSqliteQaRecallLoader({
@@ -478,6 +519,22 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     conversations: createListenConversationFinalizer(conversations),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
   });
+  registerChatMessagesRoutes(app, {
+    resolvePrincipal,
+    messages: stores.chatMessages,
+    admission: stores.chatAdmission,
+    supervisor: options.chatSupervisor ?? createStubChatGenerationSupervisor(),
+    cursor: chatCursor,
+    counter,
+    nowEpochMilliseconds: () => anchorEpochSeconds * 1_000,
+    nowEpochSeconds: () => anchorEpochSeconds,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    generationId: (accountId, messageId) => opaqueChatId("generation", accountId, messageId),
+    acceptedEventId: (accountId, generationId) =>
+      opaqueChatId("event", accountId, generationId, "accepted"),
+    revision: (accountId, messageId, journalRevision, payloadHash) =>
+      opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
+  });
   registerCurrentSessionRoutes(app, {
     sessions: stores.currentSession,
     resolveDevToken: resolveActiveDevToken,
@@ -528,6 +585,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       opsCounter,
       settings: stores.settings,
       listen: stores.listen,
+      chatMessages: stores.chatMessages,
+      chatEvents: stores.chatEvents,
+      chatAdmission: stores.chatAdmission,
     }),
   });
 };

@@ -13,6 +13,9 @@ import { SqliteListenStore } from "./listen-store";
 import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
+import { SqliteChatMessagesStore } from "./chat-messages-store";
+import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
+import { createSqliteChatAdmission } from "./chat-admission";
 
 export { SqliteAccountLifecycleStore } from "./account-lifecycle";
 export { SqliteCurrentSessionPort } from "./current-session";
@@ -27,6 +30,9 @@ export { SqliteStragglerTable } from "./straggler-table";
 export { SqliteTasksStore } from "./tasks-store";
 export { SqliteWriteIdRegistry } from "./write-id-registry";
 export { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
+export { SqliteChatMessagesStore } from "./chat-messages-store";
+export { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
+export { createSqliteChatAdmission } from "./chat-admission";
 
 /** Builds all service stores and the tasks unit of work over one SQLite connection. */
 export const createSqliteLocalServiceStores = (
@@ -38,6 +44,9 @@ export const createSqliteLocalServiceStores = (
   const conversations = new SqliteConversationsStore(db, {
     hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
+  const settings = new SqliteSettingsProjectionStore(db);
+  const chatMessages = new SqliteChatMessagesStore(db);
+  const chatEvents = new SqliteChatGenerationEventsStore(db);
   return Object.freeze({
     conversations,
     folders,
@@ -47,9 +56,12 @@ export const createSqliteLocalServiceStores = (
     unitOfWork: createSqliteWriteUnitOfWork(db),
     stragglers: new SqliteStragglerTable(db),
     control: new SqliteAccountControlProjectionStore(db),
-    settings: new SqliteSettingsProjectionStore(db),
+    settings,
     currentSession: new SqliteCurrentSessionPort(db),
     accountLifecycle: new SqliteAccountLifecycleStore(db),
     listen: new SqliteListenStore(db),
+    chatMessages,
+    chatEvents,
+    chatAdmission: createSqliteChatAdmission(db, chatMessages, chatEvents, settings),
   });
 };
