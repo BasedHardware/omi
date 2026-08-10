@@ -18,11 +18,14 @@ import Foundation
 
 let base = URL(string: "https://staging.example.test/api")!
 let authority = ShellTransportAuthority(baseURL: base, token: "shell-token")
-let decision = authority.prepareListen(id: "listen-1", path: "/v4/listen?language=en")
+let decision = authority.prepareListen(
+  id: "listen-1", path: "/v4/listen?language=en", clientId: "run-listen-proof")
 if case let .dispatch(prepared) = decision {
   print("URL=\(prepared.request.url!.absoluteString)")
   let auth = prepared.request.value(forHTTPHeaderField: "Authorization") ?? "missing"
   print("AUTH=\(auth)")
+  let clientId = prepared.request.value(forHTTPHeaderField: "x-omi-client-id") ?? "missing"
+  print("CLIENT-ID=\(clientId)")
   exit(0)
 }
 print("FAIL")
@@ -48,7 +51,7 @@ test(
         "-framework", "WebKit",
       ]);
       const output = execFileSync(binary, { encoding: "utf8" });
-      assert.equal(output, "URL=wss://staging.example.test/v4/listen?language=en\nAUTH=Bearer shell-token\n");
+      assert.equal(output, "URL=wss://staging.example.test/v4/listen?language=en\nAUTH=Bearer shell-token\nCLIENT-ID=run-listen-proof::macos\n");
       assert.equal(output.includes("127.0.0.1:5290"), false);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
