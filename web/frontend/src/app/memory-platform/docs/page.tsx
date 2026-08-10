@@ -81,7 +81,7 @@ export default function MemoryPlatformDocsPage() {
             {searchExample}
           </pre>
           <p className="mt-4 text-sm text-[#f4f1e8]/50">
-            Limits: query ≤ 500 characters, limit 1–100, offset 0–100,000.
+            Limits: query ≤ 500 characters, limit 1–500 (default 100), offset 0–100,000.
           </p>
         </section>
 
