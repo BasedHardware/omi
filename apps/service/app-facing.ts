@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
+import { websocket } from "hono/bun";
 
 import { createSqliteQaRecallLoader } from "../../drivers/sqlite/application-recall-read";
 import {
@@ -21,6 +22,11 @@ import {
   type CurrentSessionPort,
 } from "./auth/current-session";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
+import { createListenConversationFinalizer } from "./listen/conversation-finalizer";
+import {
+  createScriptedTranscriptionSource,
+  type TranscriptionSource,
+} from "./listen/transcription-source";
 import { createWriteFenceCounter, type WriteFenceCounter } from "./control/fence-counter";
 import {
   createInMemoryAccountControlProjectionStore,
@@ -38,6 +44,7 @@ import { registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMemoryRoutes } from "./routes/memories";
+import { registerListenRoutes } from "./routes/listen";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -59,6 +66,7 @@ import {
   type FolderDeletionUnitOfWork,
 } from "./stores/folder-deletion-unit-of-work";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
+import { createInMemoryListenStore, type ListenStore } from "./stores/listen-store";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
 import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
@@ -101,6 +109,10 @@ export interface LocalServiceOptions {
    * The caller owns their lifecycle, including any SQLite Database handle.
    */
   readonly stores?: LocalServiceStores;
+  /** Production STT is an adapter swap; local composition uses a timed script. */
+  readonly transcriptionSource?: TranscriptionSource;
+  /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
+  readonly listenDefaultUnmetered?: boolean;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -116,6 +128,7 @@ export interface LocalServiceStores {
   readonly settings: SettingsProjectionStore;
   readonly currentSession: CurrentSessionPort;
   readonly accountLifecycle: AccountLifecycleStore;
+  readonly listen: ListenStore;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -183,11 +196,14 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     settings: createInMemorySettingsProjectionStore(),
     currentSession: createInMemoryCurrentSessionPort(),
     accountLifecycle: createInMemoryAccountLifecycleStore(),
+    listen: createInMemoryListenStore(),
   });
 };
 
 export interface LocalService {
   readonly app: Hono;
+  /** The Bun handler paired with `app.fetch` for real WebSocket upgrades. */
+  readonly websocket: typeof websocket;
   readonly devToken: string;
   readonly counter: ServedCounter;
   readonly reseed: () => void;
@@ -213,6 +229,8 @@ export interface LocalService {
     readonly control: AccountControlProjectionStore;
     readonly fenceCounter: WriteFenceCounter;
     readonly opsCounter: WriteOpsCounter;
+    readonly settings: SettingsProjectionStore;
+    readonly listen: ListenStore;
   };
 }
 
@@ -242,6 +260,17 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
         email: "",
       });
       stores.settings.putEntitlement(options.ownerAccountId, null);
+      if (options.listenDefaultUnmetered === true) {
+        stores.settings.putEntitlement(options.ownerAccountId, {
+          planLabel: "Omi Plus",
+          limitKey: "transcription_seconds",
+          used: 0,
+          limit: null,
+          limitReached: false,
+          upgradeAvailable: false,
+        });
+      }
+      stores.listen.reset();
     }
   };
   reseed();
@@ -441,6 +470,14 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     projections: stores.settings,
     counter,
   });
+  registerListenRoutes(app, {
+    resolvePrincipal,
+    entitlement: stores.settings,
+    store: stores.listen,
+    transcription: options.transcriptionSource ?? createScriptedTranscriptionSource(),
+    conversations: createListenConversationFinalizer(conversations),
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+  });
   registerCurrentSessionRoutes(app, {
     sessions: stores.currentSession,
     resolveDevToken: resolveActiveDevToken,
@@ -472,6 +509,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
 
   return Object.freeze({
     app,
+    websocket,
     devToken,
     counter,
     reseed,
@@ -488,6 +526,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       control: controlStore,
       fenceCounter,
       opsCounter,
+      settings: stores.settings,
+      listen: stores.listen,
     }),
   });
 };

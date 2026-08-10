@@ -111,6 +111,29 @@ export class SqliteSettingsProjectionStore implements SettingsProjectionStore {
     return row === null ? null : entitlementFromRow(row);
   }
 
+  consumeTranscriptionSeconds(
+    accountId: string,
+    amount: number,
+  ): SettingsEntitlementProjection | null {
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+      throw new TypeError("invalid consumed transcription seconds");
+    }
+    const consume = this.db.transaction((): SettingsEntitlementProjection | null => {
+      const changed = this.db.query(`
+        UPDATE service_settings_entitlement_projections
+        SET used = used + ?,
+            limit_reached = CASE
+              WHEN limit_value IS NULL THEN 0
+              WHEN used + ? >= limit_value THEN 1
+              ELSE 0
+            END
+        WHERE account_id = ?
+      `).run(amount, amount, accountId);
+      return changed.changes === 0 ? null : this.readEntitlement(accountId);
+    });
+    return consume.immediate();
+  }
+
   readSettings(accountId: string): SettingsProjectionRead {
     const read = this.db.transaction((): SettingsProjectionRead => {
       const identityRow = this.db.query(`

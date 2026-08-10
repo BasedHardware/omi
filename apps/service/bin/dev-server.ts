@@ -128,6 +128,7 @@ const main = (): void => {
       memoryCount: config.memoryCount,
       accountTimezone: config.accountTimezone,
       devSecretLabel: config.devSecretLabel,
+      listenDefaultUnmetered: true,
     });
   } catch (error) {
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -143,6 +144,7 @@ const main = (): void => {
       hostname: LOOPBACK_HOST,
       port: config.port,
       fetch: service.app.fetch,
+      websocket: service.websocket,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

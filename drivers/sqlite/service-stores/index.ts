@@ -9,6 +9,7 @@ import { SqliteFoldersStore } from "./folders-store";
 import { SqliteAccountControlProjectionStore } from "./projection-store";
 import { SqliteStragglerTable } from "./straggler-table";
 import { SqliteSettingsProjectionStore } from "./settings-projection";
+import { SqliteListenStore } from "./listen-store";
 import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
@@ -16,6 +17,7 @@ import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
 export { SqliteAccountLifecycleStore } from "./account-lifecycle";
 export { SqliteCurrentSessionPort } from "./current-session";
 export { SqliteSettingsProjectionStore } from "./settings-projection";
+export { SqliteListenStore } from "./listen-store";
 
 export { SqliteAccountControlProjectionStore } from "./projection-store";
 export { SqliteConversationsStore } from "./conversations-store";
@@ -48,5 +50,6 @@ export const createSqliteLocalServiceStores = (
     settings: new SqliteSettingsProjectionStore(db),
     currentSession: new SqliteCurrentSessionPort(db),
     accountLifecycle: new SqliteAccountLifecycleStore(db),
+    listen: new SqliteListenStore(db),
   });
 };

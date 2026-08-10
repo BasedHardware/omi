@@ -51,6 +51,17 @@ export interface SettingsProjectionReader extends EntitlementProjectionReader {
 export interface SettingsProjectionStore extends SettingsProjectionReader {
   putIdentity(accountId: string, projection: SettingsIdentityProjection): void;
   putEntitlement(accountId: string, projection: SettingsEntitlementProjection | null): void;
+  /**
+   * Adds real consumed transcription seconds to this same projection.
+   *
+   * Returning null preserves the distinction between an absent entitlement
+   * projection and an explicitly unmetered one. Callers must never manufacture
+   * an "unlimited" sentinel to fill that gap.
+   */
+  consumeTranscriptionSeconds(
+    accountId: string,
+    amount: number,
+  ): SettingsEntitlementProjection | null;
 }
 
 const detachedIdentity = (projection: SettingsIdentityProjection): SettingsIdentityProjection => {
@@ -85,6 +96,13 @@ export const detachedEntitlement = (
   });
 };
 
+const assertConsumedSeconds = (amount: number): number => {
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
+    throw new TypeError("invalid consumed transcription seconds");
+  }
+  return amount;
+};
+
 /** In-memory adapter used by the hermetic local composition. */
 export const createInMemorySettingsProjectionStore = (): SettingsProjectionStore => {
   const identities = new Map<string, SettingsIdentityProjection>();
@@ -105,6 +123,23 @@ export const createInMemorySettingsProjectionStore = (): SettingsProjectionStore
 
     readEntitlement(accountId: string): SettingsEntitlementProjection | null {
       return entitlements.get(accountId) ?? null;
+    },
+
+    consumeTranscriptionSeconds(
+      accountId: string,
+      amount: number,
+    ): SettingsEntitlementProjection | null {
+      const increment = assertConsumedSeconds(amount);
+      const current = entitlements.get(accountId);
+      if (current === undefined) return null;
+      const used = current.used + increment;
+      const next = detachedEntitlement({
+        ...current,
+        used,
+        limitReached: current.limit !== null && used >= current.limit,
+      });
+      entitlements.set(accountId, next);
+      return next;
     },
 
     readSettings(accountId: string): SettingsProjectionRead {
