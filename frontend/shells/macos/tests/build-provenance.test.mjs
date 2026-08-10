@@ -71,6 +71,7 @@ test("the ACCEPTANCE line carries shellStamp, surfaceStamp, and clientId after t
 
 test("clientId is threaded through BridgeHttpHandler's init, not read from ProcessInfo inside the policy seam", async () => {
   const bridgeHttp = await read("shell/Sources/OmiShell/BridgeHttp.swift");
+  const listenSocket = await read("shell/Sources/OmiShell/ListenSocket.swift");
   const main = await read("shell/Sources/OmiShell/main.swift");
   assert.match(bridgeHttp, /init\(baseURL: URL, token: String\?, clientId: String\? = nil\)/);
   assert.match(bridgeHttp, /static func prepare\(/);
@@ -78,7 +79,12 @@ test("clientId is threaded through BridgeHttpHandler's init, not read from Proce
   // The policy seam itself must stay free of ProcessInfo/environment reads —
   // that purity is what lets the generated host-conformance runner call it.
   assert.doesNotMatch(bridgeHttp, /ProcessInfo/);
-  assert.match(main, /BridgeHttpHandler\(baseURL: base, token: session\.token, clientId: runClientId\)/);
+  assert.match(
+    listenSocket,
+    /func makeHTTPHandler\(clientId: String\?\)[\s\S]*BridgeHttpHandler\(baseURL: baseURL, token: token, clientId: clientId\)/,
+  );
+  assert.match(main, /ShellTransportAuthority\(baseURL: base, token: session\.token\)/);
+  assert.match(main, /authority\.makeHTTPHandler\(clientId: runClientId\)/);
   // red-proof: deleting the `clientId` parameter from BridgeHttpHandler.init
   // and reading `ProcessInfo.processInfo.environment["OMI_RUN_CLIENT_ID"]`
   // directly inside BridgeHttpPolicy.prepare instead reddens the
