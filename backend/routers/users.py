@@ -53,7 +53,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
-from utils.user_language import normalize_user_language
+from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -209,6 +209,15 @@ class OnboardingStateResponse(BaseModel):
 
 class UserLanguageResponse(BaseModel):
     language: Optional[str] = None
+
+
+class AvailableLanguage(BaseModel):
+    code: str
+    name: str
+
+
+class AvailableLanguagesResponse(BaseModel):
+    languages: List[AvailableLanguage]
 
 
 class UserLanguageUpdateResponse(UserStatusResponse):
@@ -829,6 +838,16 @@ def set_chat_message_analytics(
 # ***************************************
 # ************* Language ****************
 # ***************************************
+
+
+@router.get('/v1/users/available-languages', tags=['v1'], response_model=AvailableLanguagesResponse)
+def get_available_languages():
+    """Primary-language options for the picker, in render order.
+
+    Served rather than hardcoded in the app so a language can be added without an
+    app release. Clients fall back to their bundled copy when offline.
+    """
+    return {'languages': [{'code': code, 'name': name} for code, name in PRIMARY_LANGUAGE_OPTIONS]}
 
 
 @router.get('/v1/users/language', tags=['v1'], response_model=UserLanguageResponse)

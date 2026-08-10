@@ -22,6 +22,91 @@ ACCEPTED_BASE_LANGUAGES: Final[frozenset[str]] = MODULATE_SUPPORTED_LANGUAGES | 
     PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
 )
 
+# Primary-language picker options, in the order clients render them.
+#
+# This list used to live in the Flutter app, so adding a language needed an app
+# release even when the backend could already transcribe it. Clients read it from
+# GET /v1/users/available-languages instead; the app keeps a bundled copy only as
+# an offline fallback.
+#
+# Every code here must survive normalize_user_language(), or the picker would
+# offer something PATCH /v1/users/language rejects. Enforced by
+# tests/unit/test_language_catalog.py.
+PRIMARY_LANGUAGE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    # Top languages first
+    ('en', 'English'),
+    ('en-US', 'English (US)'),
+    ('en-GB', 'English (UK)'),
+    ('en-AU', 'English (Australia)'),
+    ('en-NZ', 'English (New Zealand)'),
+    ('en-IN', 'English (India)'),
+    ('es', 'Spanish'),
+    ('es-419', 'Spanish (Latin America)'),
+    ('zh', 'Chinese (Mandarin, Simplified)'),
+    ('zh-CN', 'Chinese (Mandarin, Simplified, CN)'),
+    ('zh-Hans', 'Chinese (Mandarin, Simplified, Hans)'),
+    ('hi', 'Hindi'),
+    ('pt', 'Portuguese'),
+    ('pt-BR', 'Portuguese (Brazil)'),
+    ('pt-PT', 'Portuguese (Portugal)'),
+    ('ru', 'Russian'),
+    ('ja', 'Japanese'),
+    ('de', 'German'),
+    # Other languages alphabetically
+    ('ar', 'Arabic'),
+    ('be', 'Belarusian'),
+    ('bn', 'Bengali'),
+    ('bs', 'Bosnian'),
+    ('bg', 'Bulgarian'),
+    ('ca', 'Catalan'),
+    ('zh-TW', 'Chinese (Mandarin, Traditional)'),
+    ('zh-Hant', 'Chinese (Mandarin, Traditional, Hant)'),
+    ('zh-HK', 'Chinese (Cantonese, Traditional)'),
+    ('hr', 'Croatian'),
+    ('cs', 'Czech'),
+    ('da', 'Danish'),
+    ('da-DK', 'Danish (Denmark)'),
+    ('nl', 'Dutch'),
+    ('et', 'Estonian'),
+    ('fi', 'Finnish'),
+    ('nl-BE', 'Flemish'),
+    ('fr', 'French'),
+    ('fr-CA', 'French (Canada)'),
+    ('de-CH', 'German (Switzerland)'),
+    ('el', 'Greek'),
+    ('he', 'Hebrew'),
+    ('hu', 'Hungarian'),
+    ('id', 'Indonesian'),
+    ('it', 'Italian'),
+    ('kn', 'Kannada'),
+    ('ko', 'Korean'),
+    ('ko-KR', 'Korean (Korea)'),
+    ('lv', 'Latvian'),
+    ('lt', 'Lithuanian'),
+    ('mk', 'Macedonian'),
+    ('ms', 'Malay'),
+    ('mr', 'Marathi'),
+    ('no', 'Norwegian'),
+    ('fa', 'Persian'),
+    ('pl', 'Polish'),
+    ('ro', 'Romanian'),
+    ('sr', 'Serbian'),
+    ('sk', 'Slovak'),
+    ('sl', 'Slovenian'),
+    ('sv', 'Swedish'),
+    ('sv-SE', 'Swedish (Sweden)'),
+    ('tl', 'Tagalog'),
+    ('ta', 'Tamil'),
+    ('te', 'Telugu'),
+    ('th', 'Thai'),
+    ('th-TH', 'Thai (Thailand)'),
+    ('tr', 'Turkish'),
+    ('uk', 'Ukrainian'),
+    ('ur', 'Urdu'),
+    ('vi', 'Vietnamese'),
+)
+
+
 # English names for every accepted code, plus the aliases clients have actually sent.
 LANGUAGE_NAME_TO_BASE: Final[dict[str, str]] = {
     'afrikaans': 'af',

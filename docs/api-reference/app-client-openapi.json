@@ -4273,6 +4273,40 @@
         "title": "AuthStep",
         "type": "object"
       },
+      "AvailableLanguage": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "AvailableLanguage",
+        "type": "object"
+      },
+      "AvailableLanguagesResponse": {
+        "properties": {
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/AvailableLanguage"
+            },
+            "title": "Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "languages"
+        ],
+        "title": "AvailableLanguagesResponse",
+        "type": "object"
+      },
       "AvailablePlansResponse": {
         "properties": {
           "plans": {
@@ -48689,6 +48723,36 @@
         "summary": "Update Assistant Settings",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/v1/users/available-languages": {
+      "get": {
+        "description": "Primary-language options for the picker, in render order.\n\nServed rather than hardcoded in the app so a language can be added without an\napp release. Clients fall back to their bundled copy when offline.",
+        "operationId": "get_available_languages_v1_users_available_languages_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailableLanguagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Available Languages",
+        "tags": [
+          "v1"
         ]
       }
     },
