@@ -1,6 +1,10 @@
 import Foundation
 
 enum KnowledgeGraphToolSupport {
+  /// Release-lane contract: this type crosses the async seam out of `resolveDiscoveryText`, so it
+  /// must stay `Sendable` — the whole-module release compile (the auto-release gate) rejects a
+  /// non-Sendable return here even when debug builds stay quiet. See #11373/#11374.
+  ///
   /// The dictionaries are `[String: Any]` because the tool plumbing consumes heterogeneous
   /// JSON-shaped values, but every value put in them here is an immutable `String` or `[String]`
   /// built locally in `resolveDiscoveryText` — nothing shared or mutable crosses the boundary.
