@@ -51,7 +51,9 @@ def postprocess_conversation(
 
     expected_min_duration = 10
     if conversation.transcript_segments:
-        expected_min_duration = conversation.transcript_segments[-1].end - conversation.transcript_segments[0].start - 10
+        expected_min_duration = (
+            conversation.transcript_segments[-1].end - conversation.transcript_segments[0].start - 10
+        )
 
     if aseg.duration_seconds < expected_min_duration:
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.

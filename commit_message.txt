@@ -1,0 +1,5 @@
+fix: use transcript segments to validate audio duration
+
+Replaced the hardcoded 10-second minimum duration check for uploaded audio with a dynamic calculation based on the duration of transcript segments `(segment.last.end - segment.first.start - 10)`. Default minimum is kept at 10 seconds if no segments exist. This prevents incorrectly failing valid post-processing requests.
+
+Failure-Class: none
