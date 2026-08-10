@@ -533,6 +533,22 @@ public class ProactiveAssistantsPlugin: NSObject {
     return (isMonitoring, currentApp)
   }
 
+  /// Which silent gate is currently skipping capture ticks, or nil when frames flow.
+  /// Logged only on transition: the gates above return without a trace, and a stuck
+  /// gate (idle misread, phantom screen share, excluded frontmost app) reads exactly
+  /// like a healthy quiet pipeline — that ambiguity cost a full debugging session.
+  private var lastCaptureGateReason: String??
+
+  private func logCaptureGate(_ reason: String?) {
+    guard lastCaptureGateReason != reason else { return }
+    lastCaptureGateReason = reason
+    if let reason {
+      log("CaptureGate: skipping capture ticks (\(reason))")
+    } else {
+      log("CaptureGate: capture ticks flowing")
+    }
+  }
+
   private func handleCaptureTargetUnavailable() {
     // A secure/system/helper surface is not proof that the capture engine or
     // permission failed. Keep the normal timer armed so the very next real
@@ -672,26 +688,34 @@ public class ProactiveAssistantsPlugin: NSObject {
       screenshotBackoffDuration: screenshotAppBackoffDuration,
       shareBackoffDuration: screenShareBackoffDuration
     ) {
+      logCaptureGate("external_capture_yield")
       return
     }
 
     // Cheap early exits before resolving the active window.
     let idleSeconds = systemIdleSeconds()
     if idleSeconds >= captureTrigger.idleThreshold {
+      logCaptureGate("idle")
       return
     }
     if let currentApp = currentApp, RewindSettings.shared.isAppExcluded(currentApp) {
+      logCaptureGate("excluded_app")
       return
     }
 
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
-    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
+    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else {
+      logCaptureGate("waiting_for_user_window")
+      return
+    }
 
     guard let windowID else {
+      logCaptureGate("no_window_id")
       handleCaptureTargetUnavailable()
       return
     }
+    logCaptureGate(nil)
 
     // Check if the current app is excluded from Rewind capture
     var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false

@@ -54,3 +54,53 @@ final class TaskSuggestionTriageTests: XCTestCase {
     XCTAssertFalse(task(source: "screenshot", deleted: true).isPendingSuggestion)
   }
 }
+
+/// Collapsed Suggestions render no rows, so keyboard navigation and select-all
+/// must skip them too — otherwise arrow keys focus an invisible row and bulk
+/// actions silently hit tasks the user cannot see.
+@MainActor
+final class TasksPageCollapsedSuggestionsNavigationTests: XCTestCase {
+  private let expandedKey = "tasksSuggestionsSectionExpanded"
+  private var savedExpanded: Any?
+
+  override func setUp() async throws {
+    savedExpanded = UserDefaults.standard.object(forKey: expandedKey)
+    TasksStore.shared.resetSessionState()
+  }
+
+  override func tearDown() async throws {
+    if let savedExpanded {
+      UserDefaults.standard.set(savedExpanded, forKey: expandedKey)
+    } else {
+      UserDefaults.standard.removeObject(forKey: expandedKey)
+    }
+    TasksStore.shared.resetSessionState()
+  }
+
+  private func seedViewModel() -> TasksViewModel {
+    let accepted = TaskActionItem(
+      id: "accepted", description: "Send the investor update email to Bob",
+      completed: false, createdAt: Date(timeIntervalSince1970: 0), source: "manual")
+    let capture = TaskActionItem(
+      id: "capture", description: "AI capture from a screenshot",
+      completed: false, createdAt: Date(timeIntervalSince1970: 0), source: "screenshot")
+    TasksStore.shared.incompleteTasks = [accepted, capture]
+    let vm = TasksViewModel()
+    vm.selectedTags = [.todo]
+    return vm
+  }
+
+  func testCollapsedSuggestionsAreExcludedFromKeyboardNavAndSelectAll() {
+    UserDefaults.standard.set(false, forKey: expandedKey)
+    let vm = seedViewModel()
+    XCTAssertEqual(vm.navigationOrder.map(\.id), ["accepted"])
+    XCTAssertEqual(vm.visibleTaskIDsForSelection, ["accepted"])
+  }
+
+  func testExpandedSuggestionsAreReachableAgain() {
+    UserDefaults.standard.set(true, forKey: expandedKey)
+    let vm = seedViewModel()
+    XCTAssertEqual(vm.navigationOrder.map(\.id), ["accepted", "capture"])
+    XCTAssertEqual(vm.visibleTaskIDsForSelection, ["accepted", "capture"])
+  }
+}
