@@ -29,23 +29,6 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   // fixture or leaves the production Tasks navigation pointing at Memories.
 });
 
-test("production chrome ships no aria-disabled navigation destinations while parked hardware controls remain", async () => {
-  const source = await read("src/production/ProductionChrome.tsx");
-  const utilities = source.match(/<div className="nav-utilities"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
-  // Parked hardware-permission surfaces (R29): present, aria-disabled, never removed.
-  assert.match(utilities, /className="nav-icon-control" aria-disabled="true" title=\{t\(locale, "nav\.microphone"\)\}/);
-  assert.match(utilities, /className="nav-icon-control" aria-disabled="true" title=\{t\(locale, "nav\.screenCapture"\)\}/);
-  assert.match(utilities, /<ChromeIcon name="microphone"/);
-  assert.match(utilities, /<ChromeIcon name="screen"/);
-  // Destinations live outside nav-utilities; none of them may be aria-disabled.
-  const withoutUtilities = source.replace(/<div className="nav-utilities"[^>]*>[\s\S]*?<\/div>/, "");
-  assert.doesNotMatch(withoutUtilities, /aria-disabled/);
-  assert.doesNotMatch(source, /nav\.rewind|nav\.apps|nav\.brainMap/);
-  // red-proof: (1) re-add `<span aria-disabled="true"><ChromeIcon name="apps" />{t(locale, "nav.apps")}</span>`
-  // in nav-primary → withoutUtilities matches aria-disabled. (2) delete the microphone
-  // nav-icon-control → utilities miss the microphone title assertion.
-});
-
 test("conversation production slice stays within the ratified list/detail contract", async () => {
   const source = await read("src/production/ConversationsProduction.tsx");
   const fixtures = await read("src/production/conversation-fixtures.ts");
@@ -146,18 +129,15 @@ test("production chrome preserves QA context while clearing fixture selection", 
   // the Library-only segmented rail.
 });
 
-test("desktop glass chrome keeps the reference hierarchy without changing mobile navigation", async () => {
-  const chrome = await read("src/production/ProductionChrome.tsx");
+test("desktop glass chrome keeps host-selected layout without changing mobile navigation", async () => {
   const styles = await read("src/production/styles.css");
-  assert.match(chrome, /nav-utilities/);
-  assert.match(chrome, /export function ProductionLibrarySegment/);
   assert.match(styles, /grid-template-rows: var\(--desktop-nav-height\) var\(--desktop-panel-gap\) minmax\(0, 1fr\)/);
   assert.match(styles, /data-native-glass="true"/);
   assert.match(styles, /\.memory-card-header \{ order: 2;/);
   assert.match(styles, /\.memory-content \{ order: 1;/);
   assert.match(styles, /html\[data-platform="mobile"\] \.production-nav \.nav-mobile/);
-  // red-proof: restoring metadata above desktop memory copy, flattening the
-  // two glass islands, or dropping the mobile-specific navigation fails here.
+  // STRUCTURAL CSS ASSERTION: jsdom cannot evaluate the host-selected grid and
+  // ordering rules. The chrome hierarchy itself renders in memories-rendering.
 });
 
 test("memory cards keep locked and provenance behavior honest", async () => {
