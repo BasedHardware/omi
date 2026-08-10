@@ -723,6 +723,11 @@ checks:
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: firmware-ble-permissions
+    command: ["python3", ".github/scripts/check_firmware_ble_permissions.py"]
+    triggers: ["omi/firmware/omi/src/**", ".github/scripts/check_firmware_ble_permissions.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "static tripwire: merging the upstream revert that moved the button GATT service back into button.c silently restored plain BT_GATT_PERM_READ on the button characteristic, and no firmware harness runs GATT permissions on a host"
 
 exempt:
   - path: ".github/scripts/guardrail_pulse.py"
