@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
-import type { ProductionChatStore, ChatMessage, ChatCapabilities } from "./ProductionChatStore.js";
+import type {
+  ProductionChatStore,
+  ChatMessage,
+  ChatCapabilities,
+  StagedChatAttachment,
+} from "./ProductionChatStore.js";
 import {
   attachmentCapState,
   mergeOlderPage,
@@ -48,13 +53,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   const [capabilities, setCapabilities] = useState<ChatCapabilities>(() => store.capabilities());
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<StagedChatAttachment[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
-  const clientSeqRef = useRef(0);
-  const attachmentSeqRef = useRef(0);
   const messageListRef = useRef<HTMLOListElement>(null);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
@@ -127,26 +130,21 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   }, [locale, status]);
 
   const capState = attachmentCapState(capabilities, attachments.length);
+  const stagingAvailable = store.stagingAvailable();
   const canSend = draft.trim().length > 0;
 
   const send = async (): Promise<void> => {
     const text = draft.trim();
     if (!text) return;
-    clientSeqRef.current += 1;
-    const clientMessageId = `local-${clientSeqRef.current}`;
-    const echo: ChatMessage = {
-      role: "user",
-      text,
-      delivery: { kind: "echo", clientMessageId },
-      attachments: [],
-    };
     const submittedAttachments = attachments;
-    setMessages((current) => [...current, echo]);
     setDraft((current) => current.trim() === text ? "" : current);
     setAttachments([]);
     setOperationError(null);
     try {
-      await store.send({ text, clientMessageId, attachmentIds: submittedAttachments });
+      await store.send({
+        text,
+        attachmentIds: submittedAttachments.map((attachment) => attachment.id),
+      });
       const page = await store.history();
       setMessages((current) => reconcileMessages(current, page.messages));
       setHasOlder(page.hasOlder);
@@ -154,11 +152,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
       setCapabilities(store.capabilities());
       setStatus(store.status());
     } catch {
-      setMessages((current) => current.map((message) => (
-        message.delivery.kind === "echo" && message.delivery.clientMessageId === clientMessageId
-          ? { ...message, delivery: { kind: "failed", clientMessageId, retryable: true } }
-          : message
-      )));
       setOperationError(t(locale, "chat.error"));
       setStatus(store.status());
     }
@@ -182,14 +175,29 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     }
   };
 
-  const attach = (): void => {
-    if (!capState.enabled) return;
-    attachmentSeqRef.current += 1;
-    setAttachments((current) => [...current, `attachment-${attachmentSeqRef.current}`]);
+  const attach = async (): Promise<void> => {
+    if (!stagingAvailable || !capState.enabled) return;
+    setOperationError(null);
+    try {
+      const staged = await store.stageAttachment();
+      if (staged === null) return;
+      if (
+        capabilities.maxAttachmentBytes === null ||
+        capabilities.allowedAttachmentMimeTypes === null ||
+        staged.sizeBytes > capabilities.maxAttachmentBytes ||
+        !capabilities.allowedAttachmentMimeTypes.includes(staged.mimeType)
+      ) {
+        setOperationError(t(locale, "chat.error"));
+        return;
+      }
+      setAttachments((current) => [...current, staged]);
+    } catch {
+      setOperationError(t(locale, "chat.error"));
+    }
   };
 
-  const removeAttachment = (name: string): void => {
-    setAttachments((current) => current.filter((item) => item !== name));
+  const removeAttachment = (id: string): void => {
+    setAttachments((current) => current.filter((item) => item.id !== id));
   };
 
   const retryFailed = (clientMessageId: string): void => {
@@ -200,7 +208,9 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     void run(() => store.cancel(generationId));
   };
 
-  const attachmentHint = capState.reason === "unknown-cap"
+  const attachmentHint = !stagingAvailable
+    ? t(locale, "chat.attachmentUnavailable")
+    : capState.reason === "unknown-cap"
     ? t(locale, "chat.attachmentCapUnknown")
     : capState.reason === "at-limit" && capabilities.maxAttachmentsPerMessage !== null
       ? t(locale, "chat.attachmentLimitReached", { count: capabilities.maxAttachmentsPerMessage })
@@ -302,10 +312,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
         >
           {attachments.length > 0 && (
             <ul className="chat-attachments" aria-label={t(locale, "chat.attachments")}>
-              {attachments.map((name) => (
-                <li key={name}>
-                  <span>{name}</span>
-                  <button type="button" onClick={() => removeAttachment(name)} aria-label={t(locale, "chat.attachmentRemove")}>
+              {attachments.map((attachment) => (
+                <li key={attachment.id}>
+                  <span>{attachment.displayName}</span>
+                  <button type="button" onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
                     {t(locale, "chat.attachmentRemove")}
                   </button>
                 </li>
@@ -317,10 +327,10 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
             <button
               type="button"
               className="chat-attach"
-              disabled={!capState.enabled}
+              disabled={!stagingAvailable || !capState.enabled}
               aria-label={t(locale, "chat.attach")}
               title={attachmentHint ?? t(locale, "chat.attach")}
-              onClick={attach}
+              onClick={() => void attach()}
             >
               {t(locale, "chat.attach")}
             </button>

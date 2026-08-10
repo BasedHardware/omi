@@ -1,6 +1,8 @@
 import type {
   Conversation,
   ConversationPatch,
+  BridgeStreamPort,
+  ChatAttachmentStagingPort,
   DeadLetter,
   Folder,
   HttpClient,
@@ -24,6 +26,10 @@ import {
   SynthesizedMemoriesStore,
   TasksStore,
 } from "@omi-core/domain";
+import {
+  openProductionChatStore,
+  type ProductionChatStore,
+} from "./ProductionChatStore.js";
 import {
   resolveGenerationSelection,
   type GenerationRejection,
@@ -204,6 +210,8 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
    * rollback is the same line, which is what D2's parity bought.
    */
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
+  /** Named live Chat seam. C3b3 owns routing a production surface to it. */
+  openChat(): Promise<ProductionChatStore>;
 };
 
 /**
@@ -220,6 +228,10 @@ export interface ProductionTransports {
    * adapter reports which boundary it managed to use.
    */
   readonly platformHttp: HttpClient;
+  /** Required only when `openChat()` is used. */
+  readonly platformStream?: BridgeStreamPort;
+  /** Optional native-only pick/stage port; absence remains truthfully unsupported. */
+  readonly chatAttachmentStaging?: ChatAttachmentStagingPort;
 }
 
 /**
@@ -252,5 +264,17 @@ export function createPlatformProductionStoreFactory(
     openSynthesizedMemories: () =>
       SynthesizedMemoriesStore.open(bridge, env, transports.platformHttp),
     openPlatformTasks: () => PlatformTasksStore.open(bridge, env, transports.platformHttp),
+    openChat: () => {
+      if (transports.platformStream === undefined) {
+        throw new Error("live Chat unavailable: platform stream bridge is not installed");
+      }
+      return openProductionChatStore(
+        bridge,
+        env,
+        transports.platformHttp,
+        transports.platformStream,
+        transports.chatAttachmentStaging,
+      );
+    },
   };
 }

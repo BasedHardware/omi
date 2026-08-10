@@ -233,6 +233,7 @@ export const EN_MESSAGES = {
   "chat.attachmentLimit": "Up to {count} attachments per message.",
   "chat.attachmentLimitReached": "Attachment limit reached: {count}.",
   "chat.attachmentCapUnknown": "Attachments stay unavailable until the server reports its limit.",
+  "chat.attachmentUnavailable": "Attachments are unavailable on this device.",
   "chat.error": "The response could not be completed.",
 
   // Settings / Account.

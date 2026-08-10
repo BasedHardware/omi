@@ -99,7 +99,11 @@ test("older-page merge is idempotent and does not reorder", () => {
 test("unreported attachment cap disables the attach affordance", () => {
   // red-proof: defaulting a missing cap to any number must fail this exact shape.
   assert.deepEqual(
-    attachmentCapState({ maxAttachmentsPerMessage: null }, 0),
+    attachmentCapState({
+      maxAttachmentsPerMessage: null,
+      maxAttachmentBytes: null,
+      allowedAttachmentMimeTypes: null,
+    }, 0),
     { enabled: false, atLimit: false, reason: "unknown-cap" },
   );
 });
