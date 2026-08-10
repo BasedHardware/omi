@@ -492,7 +492,7 @@ class TasksViewModel: ObservableObject {
   /// select-all either — an invisible focused row scrolls to nothing and bulk operations
   /// would silently hit tasks the user cannot see.
   var suggestionsSectionExpandedForNavigation: Bool {
-    UserDefaults.standard.bool(forKey: "tasksSuggestionsSectionExpanded")
+    UserDefaults.standard.bool(forKey: DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
   }
 
   /// The categories whose rows are actually rendered in the categorized list.
@@ -3361,7 +3361,8 @@ struct TasksPage: View {
 
   /// Suggestions stay collapsed until the user opens them — AI captures must not
   /// interrupt attention. Persisted so the choice survives relaunch.
-  @AppStorage("tasksSuggestionsSectionExpanded") private var suggestionsSectionExpanded = false
+  @AppStorage(DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
+  private var suggestionsSectionExpanded = false
 
   // Keyboard navigation state
   @State private var inlineCreateText = ""

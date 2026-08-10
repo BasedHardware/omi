@@ -60,7 +60,7 @@ final class TaskSuggestionTriageTests: XCTestCase {
 /// actions silently hit tasks the user cannot see.
 @MainActor
 final class TasksPageCollapsedSuggestionsNavigationTests: XCTestCase {
-  private let expandedKey = "tasksSuggestionsSectionExpanded"
+  private let expandedKey = DefaultsKey.tasksSuggestionsSectionExpanded.rawValue
   private var savedExpanded: Any?
 
   override func setUp() async throws {

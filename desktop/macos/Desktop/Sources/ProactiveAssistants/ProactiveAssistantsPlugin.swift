@@ -577,8 +577,17 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// `kCGAnyInputEventType` — the "seconds since ANY input" sentinel for
   /// `CGEventSource.secondsSinceLastEventType`. Not bridged to Swift's `CGEventType`
-  /// cases; the C header defines it as `((CGEventType)(~0))`.
-  private static let anyInputEventType = CGEventType(rawValue: ~0)!
+  /// cases; the C header defines it as `((CGEventType)(~0))`. The raw-value init for
+  /// an imported C enum cannot actually fail; the `.null` fallback exists only to
+  /// satisfy the no-force-unwrap rule and would reintroduce the always-idle bug, so
+  /// it also asserts in debug.
+  private static let anyInputEventType: CGEventType = {
+    guard let type = CGEventType(rawValue: ~0) else {
+      assertionFailure("kCGAnyInputEventType (~0) must be representable as CGEventType")
+      return .null
+    }
+    return type
+  }()
 
   /// Seconds since the last HID (keyboard/mouse) event. Used to pause capture
   /// when the user is away from the machine without polling the screen.
