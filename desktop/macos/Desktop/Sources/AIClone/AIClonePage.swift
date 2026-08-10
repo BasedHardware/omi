@@ -19,7 +19,7 @@ struct AIClonePage: View {
         .frame(maxWidth: 760, alignment: .leading)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 }
 
@@ -56,10 +56,10 @@ struct AICloneContent: View {
       .padding(OmiSpacing.xl)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(OmiColors.backgroundTertiary.opacity(0.5))
+          .fill(Ink.rowFill.opacity(0.5))
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+              .stroke(Ink.hairline.opacity(0.3), lineWidth: 1)
           )
       )
   }
@@ -67,13 +67,13 @@ struct AICloneContent: View {
   private func cardTitle(_ text: String) -> some View {
     Text(text)
       .scaledFont(size: OmiType.subheading, weight: .semibold)
-      .foregroundColor(OmiColors.textPrimary)
+      .foregroundColor(Ink.primary)
   }
 
   private func cardSubtitle(_ text: String) -> some View {
     Text(text)
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .fixedSize(horizontal: false, vertical: true)
   }
 
@@ -123,7 +123,7 @@ struct AICloneContent: View {
         if case .failed(let message) = service.connectionState {
           Text(message)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(PageGlass.warning)
             .fixedSize(horizontal: false, vertical: true)
         }
       }
@@ -136,11 +136,11 @@ struct AICloneContent: View {
       case .connected:
         Label("Connected", systemImage: "checkmark.circle.fill").foregroundColor(.green)
       case .connecting:
-        Label("Connecting", systemImage: "arrow.triangle.2.circlepath").foregroundColor(OmiColors.textSecondary)
+        Label("Connecting", systemImage: "arrow.triangle.2.circlepath").foregroundColor(Ink.secondary)
       case .failed:
-        Label("Not connected", systemImage: "exclamationmark.triangle.fill").foregroundColor(OmiColors.warning)
+        Label("Not connected", systemImage: "exclamationmark.triangle.fill").foregroundColor(PageGlass.warning)
       case .disconnected:
-        Label("Not connected", systemImage: "circle").foregroundColor(OmiColors.textTertiary)
+        Label("Not connected", systemImage: "circle").foregroundColor(Ink.tertiary)
       }
     }
     .scaledFont(size: OmiType.caption, weight: .medium)
@@ -155,9 +155,9 @@ struct AICloneContent: View {
           .padding(.vertical, OmiSpacing.xxs)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-              .fill(OmiColors.backgroundQuaternary.opacity(0.4))
+              .fill(Ink.hairline.opacity(0.4))
           )
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
   }
@@ -191,10 +191,10 @@ struct AICloneContent: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Text(number)
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.tertiary)
       Text(text)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
   }
@@ -209,10 +209,10 @@ struct AICloneContent: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("\(approval.chatTitle) · \(approval.network)")
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             Text("They said: \(approval.inboundPreview)")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.tertiary)
             TextEditor(
               text: Binding(
                 get: { editedApprovalText[approval.id] ?? approval.replyText },
@@ -224,7 +224,7 @@ struct AICloneContent: View {
             .padding(OmiSpacing.sm)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(OmiColors.backgroundQuaternary.opacity(0.35)))
+                .fill(Ink.hairline.opacity(0.35)))
             HStack(spacing: OmiSpacing.sm) {
               Button("Send") {
                 let text = editedApprovalText[approval.id]
@@ -243,7 +243,7 @@ struct AICloneContent: View {
           .padding(OmiSpacing.md)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .fill(OmiColors.backgroundQuaternary.opacity(0.25)))
+              .fill(Ink.hairline.opacity(0.25)))
         }
       }
     }
@@ -261,7 +261,7 @@ struct AICloneContent: View {
         ForEach(service.chats) { chat in
           chatRow(chat)
           if chat.id != service.chats.last?.id {
-            Divider().overlay(OmiColors.backgroundQuaternary.opacity(0.3))
+            Divider().overlay(Ink.hairline.opacity(0.3))
           }
         }
       }
@@ -273,18 +273,18 @@ struct AICloneContent: View {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(chat.title ?? "Untitled chat")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
         HStack(spacing: OmiSpacing.sm) {
           Text(chat.network ?? "Beeper")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.tertiary)
           if let result = service.configuration.benchmarkResults[chat.id] {
             Text("matches you \(result.matchScore)%")
               .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(
                 result.matchScore >= service.configuration.autoModeMinimumBenchmarkScore
-                  ? .green : OmiColors.warning)
+                  ? .green : PageGlass.warning)
           }
         }
       }
@@ -335,30 +335,30 @@ struct AICloneContent: View {
             HStack(spacing: OmiSpacing.sm) {
               Text(entry.chatTitle)
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               Text(entry.network)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.tertiary)
               Spacer()
               outcomeBadge(entry.outcome)
               Text(entry.date, style: .relative)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textQuaternary)
+                .foregroundColor(Ink.tertiary)
             }
             Text("They said: \(entry.inboundPreview)")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.tertiary)
               .lineLimit(1)
             if let reply = entry.replyText, !reply.isEmpty {
               Text("Clone: \(reply)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(2)
             }
           }
           .padding(.vertical, OmiSpacing.xxs)
           if entry.id != service.configuration.activityLog.prefix(30).last?.id {
-            Divider().overlay(OmiColors.backgroundQuaternary.opacity(0.3))
+            Divider().overlay(Ink.hairline.opacity(0.3))
           }
         }
       }
@@ -368,13 +368,13 @@ struct AICloneContent: View {
   private func outcomeBadge(_ outcome: AICloneActionOutcome) -> some View {
     let (label, color): (String, Color)
     switch outcome {
-    case .drafted: (label, color) = ("Drafted", OmiColors.textSecondary)
-    case .askedApproval: (label, color) = ("Needs approval", OmiColors.warning)
+    case .drafted: (label, color) = ("Drafted", Ink.secondary)
+    case .askedApproval: (label, color) = ("Needs approval", PageGlass.warning)
     case .sentAutomatically: (label, color) = ("Sent", .green)
     case .sentAfterApproval: (label, color) = ("Sent (approved)", .green)
-    case .stayedSilent: (label, color) = ("Left for you", OmiColors.textTertiary)
-    case .declinedInjection: (label, color) = ("Blocked suspicious", OmiColors.error)
-    case .failed: (label, color) = ("Failed", OmiColors.error)
+    case .stayedSilent: (label, color) = ("Left for you", Ink.tertiary)
+    case .declinedInjection: (label, color) = ("Blocked suspicious", Ink.errorRed)
+    case .failed: (label, color) = ("Failed", Ink.errorRed)
     }
     return Text(label)
       .scaledFont(size: OmiType.micro, weight: .semibold)
