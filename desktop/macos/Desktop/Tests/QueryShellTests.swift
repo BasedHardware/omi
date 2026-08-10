@@ -67,6 +67,13 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  /// **Opening the app is opening a chat with Omi.** Home lands in the conversation, with the
+  /// spine/search surface one `esc` / `‹ Results` away — not the other way round.
+  func testHomeOpensInTheConversation() {
+    XCTAssertEqual(QueryShellMode.homeDefault, .answer)
+    XCTAssertEqual(QueryComposerPlacement.of(QueryShellMode.homeDefault), .panelFooter)
+  }
+
   // MARK: - Where the composer stands
 
   /// **A chat you have opened is not searching.** The field belongs above the rows it filters and

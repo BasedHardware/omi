@@ -465,6 +465,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     setupViews()
     updateNotchIslandState()
     registerMenuTrackingObservers()
+    installMouseInterceptionSync()
 
     if ShortcutSettings.shared.draggableBarEnabled,
       !notchModeEnabled,
@@ -490,6 +491,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   deinit {
     menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
+    interceptionMonitors.forEach(NSEvent.removeMonitor)
   }
 
   // MARK: - Window Level
@@ -1021,25 +1023,91 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     resizeForAgentSwitcher(visible: allowed)
   }
 
+  // MARK: - Mouse interception sync
+  //
+  // A view-level `hitTest` nil CANNOT make a window click-through: the window server routes the
+  // click to whichever window is under the cursor, and the window's frame view (NSNextStepFrame)
+  // swallows anything its content view declined. So the fixed, oversized notch panel was an
+  // invisible click sink over everything beneath it — other apps, and Omi's own centered shell
+  // (dead top-bar pills). The only working mechanism is `ignoresMouseEvents`, kept in sync with
+  // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
+  // Two monitors are required — the local one sees moves while we are interactive; the global one
+  // while we are ignored (events then belong to the window below).
+  private nonisolated(unsafe) var interceptionMonitors: [Any] = []
+
+  fileprivate func syncMouseInterception() {
+    let mouse = NSEvent.mouseLocation
+    let shouldInteract: Bool
+    if frame.contains(mouse) {
+      let local = NSPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
+      shouldInteract = acceptsMouseHit(inContentPoint: local)
+    } else {
+      // Pointer elsewhere: stay interactive so tracking areas fire the moment it arrives.
+      shouldInteract = true
+    }
+    if ignoresMouseEvents == shouldInteract {
+      ignoresMouseEvents = !shouldInteract
+    }
+  }
+
+  private func installMouseInterceptionSync() {
+    // Monitor handlers are delivered on the main thread; hop back into MainActor explicitly.
+    let sync: @Sendable () -> Void = { [weak self] in
+      DispatchQueue.main.async { self?.syncMouseInterception() }
+    }
+    let global = NSEvent.addGlobalMonitorForEvents(
+      matching: [.mouseMoved, .leftMouseDragged],
+      handler: { _ in sync() })
+    if let global { interceptionMonitors.append(global) }
+    let local = NSEvent.addLocalMonitorForEvents(
+      matching: [.mouseMoved],
+      handler: { event in
+        sync()
+        return event
+      })
+    if let local { interceptionMonitors.append(local) }
+    syncMouseInterception()
+  }
+
+  /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
+  func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
+    acceptsMouseHit(inContentPoint: point)
+  }
+
   fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     guard notchModeEnabled else { return true }
-    guard !state.showingAIConversation,
-      state.currentNotification == nil
-    else { return true }
-
-    // Content-derived hit region: the fixed window is larger than the
-    // visible chrome/menu, and its transparent margins must keep passing
-    // clicks through to windows below (hitTest returns nil outside this).
-    let chromeHeight =
-      state.isNotchHoverMenuVisible
-      ? max(Self.notchActivationHeight, notchVisibleContentHeight)
-      : notchChromeHeightForCurrentScreen
-    return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
-      localPoint: point,
-      windowSize: frame.size,
-      chromeHeight: chromeHeight,
-      horizontalOutset: notchVisibleContentHorizontalOutset
-    )
+    // Only content that visibly fills the fixed window may own the whole frame: an expanded
+    // response panel or a notification card. A conversation that is merely open (ask input,
+    // "thinking" shimmer) draws chrome plus at most the input panel — treating it as
+    // whole-window turned the 430×527 fixed frame into an invisible click sink that reached
+    // down over the main window's top navigation (dead Tasks/Rewind/Apps pills).
+    guard
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: state.showingAIConversation,
+        showingAIResponse: state.showingAIResponse,
+        hasNotification: state.currentNotification != nil)
+    else {
+      // Content-derived hit region: the fixed window is larger than the
+      // visible chrome/menu, and its transparent margins must keep passing
+      // clicks through to windows below (hitTest returns nil outside this).
+      var chromeHeight =
+        state.isNotchHoverMenuVisible
+        ? max(Self.notchActivationHeight, notchVisibleContentHeight)
+        : notchChromeHeightForCurrentScreen
+      var horizontalOutset = notchVisibleContentHorizontalOutset
+      if state.showingAIConversation {
+        // Conversation without an expanded response: chrome plus the ask-input panel.
+        chromeHeight = max(chromeHeight, notchChromeHeightForCurrentScreen + inputPanelHeight)
+        horizontalOutset = Self.notchGlowOutsetX
+      }
+      return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+        localPoint: point,
+        windowSize: frame.size,
+        chromeHeight: chromeHeight,
+        horizontalOutset: horizontalOutset
+      )
+    }
+    return true
   }
 
   private func observeNotchAgentPills() {

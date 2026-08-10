@@ -1,9 +1,9 @@
 //
 //  ShellSummon.swift — where the shell lands when you call it, and where it goes when you don't.
 //
-//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, and floating in front of
-//  whatever else is on screen until you put it away. This says *where*, and it is a separate file
-//  because "where" is the half that is per-display state rather than per-window properties.
+//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, floating, hiding itself the
+//  moment it loses focus. This says *where*, and it is a separate file because "where" is the half
+//  that is per-display state rather than per-window properties.
 //
 //  ## Why per-display, and not one remembered frame
 //
@@ -28,13 +28,8 @@
 //
 //  ## Dismissal
 //
-//  Always asked for, never a side effect of looking at something else. The shell does not hide itself
-//  when another app takes focus — `ShellWindowChrome`'s header carries that argument, and the placement
-//  rule below is half of it: a hidden window reports `isVisible == false`, so auto-hiding turned every
-//  click into another app into a re-landing of the panel the user had positioned. Putting it away is
-//  `⌘W`, the menu bar item, or Escape.
-//
-//  Escape is `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
+//  Two ways out, and neither is a button. Clicking away is `hidesOnDeactivate`, which AppKit does for
+//  us. Escape is `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
 //  after every modal, editor, page and navigation handler has declined it. Escape on a page still goes
 //  Home; Escape on Home, where nothing else wants it, puts the shell away.
 //
@@ -76,12 +71,6 @@ enum ShellSummonPlacement {
   ///
   /// `false` is the interesting answer: a shell already up on the display you are on is a shell you
   /// are already using, and moving it would be the app fighting the user.
-  ///
-  /// `isVisible` only carries that meaning because nothing hides the shell behind the user's back any
-  /// more. While `hidesOnDeactivate` was on, clicking into another app made this read `false` for a
-  /// window the user had deliberately placed, so coming back re-landed it — the panel jumped to the
-  /// centre of the screen for having looked at a browser. Anything that orders the shell out without
-  /// the user asking reintroduces that, whatever it is called.
   static func shouldReposition(isVisible: Bool, windowDisplayKey: String?, cursorDisplayKey: String?) -> Bool {
     guard isVisible else { return true }
     guard let cursorDisplayKey, let windowDisplayKey else { return false }
@@ -301,6 +290,11 @@ enum ShellSummon {
     applyPresentation(to: window)
     window.setFrame(frame, display: true)
     window.makeKeyAndOrderFront(nil)
+    // Order-in can re-constrain a frame in some sessions (space restore, display re-layout);
+    // re-asserting after it keeps "permission UI must not re-center the shell" true everywhere.
+    if window.frame != frame {
+      window.setFrame(frame, display: true)
+    }
     hasBeenShown = true
   }
 
