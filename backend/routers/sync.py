@@ -686,7 +686,10 @@ async def sync_local_files(
                 triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
-                    asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                    start_background_task(
+                        trigger_classifier_if_needed(uid, triggered_caps),
+                        name=f'sync_fair_use_classifier:{uid}',
+                    )
 
         is_locked = should_lock
 

@@ -249,7 +249,7 @@ app.add_middleware(BYOKMiddleware)
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     validate_account_deletion_dispatch_configuration()
-    asyncio.create_task(log_executor_health())
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

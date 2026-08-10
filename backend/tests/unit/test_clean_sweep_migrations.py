@@ -327,15 +327,18 @@ class TestChatUtilsExecutorMigration:
 
 
 class TestPostprocessExecutorMigration:
-    """Verify postprocess_conversation uses storage_executor for audio cleanup."""
+    """Verify postprocess_conversation defers audio cleanup without parking pool threads."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/conversations/postprocess_conversation.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_storage_executor(self):
+    def test_uses_deferred_deleter(self):
         src = _read_source('utils/conversations/postprocess_conversation.py')
-        assert 'storage_executor.submit(' in src
+        assert 'schedule_postprocessing_audio_deletion(file_path)' in src
+        assert 'DeferredDeleter' in src
+        assert 'storage_executor.submit(' not in src
+        assert 'time.sleep(300)' not in src
 
 
 class TestNotificationsExecutorMigration:

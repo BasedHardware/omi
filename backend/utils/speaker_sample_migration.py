@@ -41,6 +41,14 @@ async def _get_migration_lock(uid: str, person_id: str) -> asyncio.Lock:
         return _migration_locks[key]
 
 
+async def _release_migration_lock(uid: str, person_id: str, lock: asyncio.Lock) -> None:
+    key = (uid, person_id)
+    async with _locks_lock:
+        existing = _migration_locks.get(key)
+        if existing is lock and not lock.locked():
+            _migration_locks.pop(key, None)
+
+
 async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
     """
     Migrate person's speech samples from v1 to v2.
@@ -66,99 +74,104 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
     person_id = person['id']
     lock = await _get_migration_lock(uid, person_id)
 
-    async with lock:
-        # Re-check version inside lock (another call may have migrated)
-        fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-        if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
-            return fresh_person
+    try:
+        async with lock:
+            # Re-check version inside lock (another call may have migrated)
+            fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
+                return fresh_person
 
-        samples = person.get('speech_samples', [])
-        if not samples:
-            if person.get('speaker_embedding'):
-                await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
-                logger.info(f"v1→v2 migration: cleared stale embedding for person with no samples {uid} {person_id}")
-            await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 2)
+            samples = person.get('speech_samples', [])
+            if not samples:
+                if person.get('speaker_embedding'):
+                    await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
+                    logger.info(
+                        f"v1→v2 migration: cleared stale embedding for person with no samples {uid} {person_id}"
+                    )
+                await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 2)
+                person['speech_samples_version'] = 2
+                person['speech_sample_transcripts'] = []
+                person['speaker_embedding'] = None
+                return person
+
+            valid_samples: List[Any] = []
+            valid_transcripts: List[Any] = []
+            samples_to_delete: List[Any] = []
+            has_transient_failures = False
+
+            for sample_path in samples:
+                try:
+                    audio_bytes = await run_blocking(storage_executor, download_sample_audio, sample_path)
+                except NotFound:
+                    logger.warning(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
+                    # Mark for removal from Firestore (blob already gone)
+                    samples_to_delete.append(sample_path)
+                    continue
+                except Exception as e:
+                    logger.error(f"Error downloading sample {sample_path}: {e} {uid} {person_id}")
+                    # Transient download failure - keep sample, skip migration for now
+                    has_transient_failures = True
+                    continue
+
+                transcript, is_valid, reason = await verify_and_transcribe_sample(audio_bytes, 16000)
+
+                if is_valid:
+                    valid_samples.append(sample_path)
+                    valid_transcripts.append(transcript)
+                elif reason.startswith("transcription_failed"):
+                    # Transient API failure - keep sample, don't migrate yet
+                    logger.error(f"Transcription failed for {sample_path}, keeping sample: {reason} {uid} {person_id}")
+                    has_transient_failures = True
+                else:
+                    # Quality issue - mark for deletion (defer actual delete)
+                    logger.info(f"Marking sample for deletion {sample_path}: {reason} {uid} {person_id}")
+                    samples_to_delete.append(sample_path)
+
+            # Don't commit changes if there were transient failures - retry next time
+            if has_transient_failures:
+                logger.warning(f"Migration incomplete due to transient failures, will retry later {uid} {person_id}")
+                return person
+
+            # Now safe to delete blobs - no transient failures
+            for sample_path in samples_to_delete:
+                try:
+                    await run_blocking(storage_executor, delete_sample_from_storage, sample_path)
+                except Exception as e:
+                    logger.error(f"Failed to delete sample {sample_path}: {e} {uid} {person_id}")
+
+            new_embedding = None
+            if valid_samples:
+                try:
+                    first_sample_audio = await run_blocking(storage_executor, download_sample_audio, valid_samples[0])
+                    embedding = await run_blocking(
+                        sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
+                    )
+                    new_embedding = embedding.flatten().tolist()
+                except Exception as e:
+                    logger.error(f"Error extracting speaker embedding: {e} {uid} {person_id}")
+
+            await run_blocking(
+                db_executor,
+                users_db.update_person_speech_samples_after_migration,
+                uid,
+                person_id,
+                samples=valid_samples,
+                transcripts=valid_transcripts,
+                version=2,
+                speaker_embedding=new_embedding,
+            )
+
+            person['speech_samples'] = valid_samples
+            person['speech_sample_transcripts'] = valid_transcripts
             person['speech_samples_version'] = 2
-            person['speech_sample_transcripts'] = []
-            person['speaker_embedding'] = None
+            if new_embedding is not None:
+                person['speaker_embedding'] = new_embedding
+            elif not valid_samples:
+                person['speaker_embedding'] = None
+
             return person
-
-        valid_samples: List[Any] = []
-        valid_transcripts: List[Any] = []
-        samples_to_delete: List[Any] = []
-        has_transient_failures = False
-
-        for sample_path in samples:
-            try:
-                audio_bytes = await run_blocking(storage_executor, download_sample_audio, sample_path)
-            except NotFound:
-                logger.warning(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
-                # Mark for removal from Firestore (blob already gone)
-                samples_to_delete.append(sample_path)
-                continue
-            except Exception as e:
-                logger.error(f"Error downloading sample {sample_path}: {e} {uid} {person_id}")
-                # Transient download failure - keep sample, skip migration for now
-                has_transient_failures = True
-                continue
-
-            transcript, is_valid, reason = await verify_and_transcribe_sample(audio_bytes, 16000)
-
-            if is_valid:
-                valid_samples.append(sample_path)
-                valid_transcripts.append(transcript)
-            elif reason.startswith("transcription_failed"):
-                # Transient API failure - keep sample, don't migrate yet
-                logger.error(f"Transcription failed for {sample_path}, keeping sample: {reason} {uid} {person_id}")
-                has_transient_failures = True
-            else:
-                # Quality issue - mark for deletion (defer actual delete)
-                logger.info(f"Marking sample for deletion {sample_path}: {reason} {uid} {person_id}")
-                samples_to_delete.append(sample_path)
-
-        # Don't commit changes if there were transient failures - retry next time
-        if has_transient_failures:
-            logger.warning(f"Migration incomplete due to transient failures, will retry later {uid} {person_id}")
-            return person
-
-        # Now safe to delete blobs - no transient failures
-        for sample_path in samples_to_delete:
-            try:
-                await run_blocking(storage_executor, delete_sample_from_storage, sample_path)
-            except Exception as e:
-                logger.error(f"Failed to delete sample {sample_path}: {e} {uid} {person_id}")
-
-        new_embedding = None
-        if valid_samples:
-            try:
-                first_sample_audio = await run_blocking(storage_executor, download_sample_audio, valid_samples[0])
-                embedding = await run_blocking(
-                    sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
-                )
-                new_embedding = embedding.flatten().tolist()
-            except Exception as e:
-                logger.error(f"Error extracting speaker embedding: {e} {uid} {person_id}")
-
-        await run_blocking(
-            db_executor,
-            users_db.update_person_speech_samples_after_migration,
-            uid,
-            person_id,
-            samples=valid_samples,
-            transcripts=valid_transcripts,
-            version=2,
-            speaker_embedding=new_embedding,
-        )
-
-        person['speech_samples'] = valid_samples
-        person['speech_sample_transcripts'] = valid_transcripts
-        person['speech_samples_version'] = 2
-        if new_embedding is not None:
-            person['speaker_embedding'] = new_embedding
-        elif not valid_samples:
-            person['speaker_embedding'] = None
-
-        return person
+    finally:
+        await _release_migration_lock(uid, person_id, lock)
 
 
 async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:
@@ -187,58 +200,65 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
     person_id = person['id']
     lock = await _get_migration_lock(uid, person_id)
 
-    async with lock:
-        # Re-check version inside lock (another call may have migrated)
-        fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-        if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
-            return fresh_person
+    try:
+        async with lock:
+            # Re-check version inside lock (another call may have migrated)
+            fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
+                return fresh_person
 
-        samples = person.get('speech_samples', [])
-        if not samples:
-            # No samples to re-extract from — clear stale embedding from old model
-            # first, then bump version (order matters: avoids race where a concurrent
-            # sample add writes a valid embedding that we'd then delete)
-            if person.get('speaker_embedding'):
-                await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
-                logger.info(f"v2→v3 migration: cleared stale embedding for person with no samples {uid} {person_id}")
-            await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 3)
-            person['speech_samples_version'] = 3
-            person['speaker_embedding'] = None
-            return person
+            samples = person.get('speech_samples', [])
+            if not samples:
+                # No samples to re-extract from — clear stale embedding from old model
+                # first, then bump version (order matters: avoids race where a concurrent
+                # sample add writes a valid embedding that we'd then delete)
+                if person.get('speaker_embedding'):
+                    await run_blocking(db_executor, users_db.clear_person_speaker_embedding, uid, person_id)
+                    logger.info(
+                        f"v2→v3 migration: cleared stale embedding for person with no samples {uid} {person_id}"
+                    )
+                await run_blocking(db_executor, users_db.update_person_speech_samples_version, uid, person_id, 3)
+                person['speech_samples_version'] = 3
+                person['speaker_embedding'] = None
+                return person
 
-        # Regenerate embedding from the first (latest) sample using v2/embedding API
-        new_embedding = None
-        try:
-            first_sample_audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
-            embedding = await run_blocking(
-                sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
+            # Regenerate embedding from the first (latest) sample using v2/embedding API
+            new_embedding = None
+            try:
+                first_sample_audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
+                embedding = await run_blocking(
+                    sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
+                )
+                new_embedding = embedding.flatten().tolist()
+            except NotFound:
+                # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
+                logger.warning(
+                    f"First sample not found during v2→v3 migration, skipping: {samples[0]} {uid} {person_id}"
+                )
+                return person
+            except Exception as e:
+                logger.error(f"Error extracting speaker embedding during v2→v3 migration: {e} {uid} {person_id}")
+                # Transient error, don't migrate yet
+                return person
+
+            # Update version and embedding
+            await run_blocking(
+                db_executor,
+                users_db.update_person_speech_samples_after_migration,
+                uid,
+                person_id,
+                samples=person.get('speech_samples', []),
+                transcripts=person.get('speech_sample_transcripts', []),
+                version=3,
+                speaker_embedding=new_embedding,
             )
-            new_embedding = embedding.flatten().tolist()
-        except NotFound:
-            # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
-            logger.warning(f"First sample not found during v2→v3 migration, skipping: {samples[0]} {uid} {person_id}")
+
+            person['speech_samples_version'] = 3
+            person['speaker_embedding'] = new_embedding
+
             return person
-        except Exception as e:
-            logger.error(f"Error extracting speaker embedding during v2→v3 migration: {e} {uid} {person_id}")
-            # Transient error, don't migrate yet
-            return person
-
-        # Update version and embedding
-        await run_blocking(
-            db_executor,
-            users_db.update_person_speech_samples_after_migration,
-            uid,
-            person_id,
-            samples=person.get('speech_samples', []),
-            transcripts=person.get('speech_sample_transcripts', []),
-            version=3,
-            speaker_embedding=new_embedding,
-        )
-
-        person['speech_samples_version'] = 3
-        person['speaker_embedding'] = new_embedding
-
-        return person
+    finally:
+        await _release_migration_lock(uid, person_id, lock)
 
 
 async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> Dict[str, Any]:

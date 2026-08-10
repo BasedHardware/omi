@@ -1,9 +1,6 @@
 import asyncio
 import os
-import time
 from typing import List
-
-from utils.executors import storage_executor
 
 from pydub import AudioSegment
 
@@ -15,6 +12,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
+from utils.other.deferred_delete import DeferredDeleter
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
 from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
@@ -22,6 +20,25 @@ from utils.stt.vad import vad_is_empty
 import logging
 
 logger = logging.getLogger(__name__)
+
+POSTPROCESSING_AUDIO_DELETE_DELAY_SECONDS = 300
+
+
+def _cleanup_postprocessing_audio(file_path: str) -> None:
+    delete_postprocessing_audio(file_path)
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        pass
+
+
+_postprocessing_audio_deleter = DeferredDeleter(_cleanup_postprocessing_audio, name='postprocessing-audio-janitor')
+
+
+def schedule_postprocessing_audio_deletion(
+    file_path: str, delay_seconds: float = POSTPROCESSING_AUDIO_DELETE_DELAY_SECONDS
+) -> None:
+    _postprocessing_audio_deleter.schedule(file_path, delay_seconds)
 
 
 # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
@@ -74,7 +91,7 @@ def postprocess_conversation(
     try:
         aseg = AudioSegment.from_wav(file_path)
         signed_url = upload_postprocessing_audio(file_path)
-        storage_executor.submit(_delete_postprocessing_audio, file_path)
+        schedule_postprocessing_audio_deletion(file_path)
 
         if aseg.frame_rate == 16000 and get_user_store_recording_permission(uid):
             upload_conversation_recording(file_path, uid, conversation_id)
@@ -145,12 +162,6 @@ def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
     if conversation is None:
         return None
     return conversation
-
-
-def _delete_postprocessing_audio(file_path):
-    time.sleep(300)  # 5 min
-    delete_postprocessing_audio(file_path)
-    os.remove(file_path)
 
 
 async def _process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):

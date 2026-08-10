@@ -1956,7 +1956,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             len(triggered_caps),
                         )
                         try:
-                            asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                            start_background_task(
+                                trigger_classifier_if_needed(uid, triggered_caps),
+                                name=f'sync_job_fair_use_classifier:{uid}',
+                            )
                         except Exception as e:
                             logger.error(
                                 'event=sync_classifier outcome=schedule_failed exception_type=%s',
