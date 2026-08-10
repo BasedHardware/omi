@@ -49,7 +49,7 @@ try largeHandle.close()
 
 let multipart = try ChatMultipartBodyBuilder.build(sourceURL: large, temporaryDirectory: scratch)
 defer { try? FileManager.default.removeItem(at: multipart.fileURL) }
-check("large-file-copied-in-bounded-chunks", multipart.sourceSize == 50 * 1_024 * 1_024 && multipart.maximumChunkBytes <= 64 * 1_024)
+check("large-file-copied-in-bounded-chunks", multipart.sourceSize == 50 * 1_024 * 1_024 && multipart.copiedBytes == multipart.sourceSize && multipart.maximumChunkBytes <= 64 * 1_024)
 check("multipart-length-is-source-plus-bounded-envelope", multipart.contentLength > multipart.sourceSize && multipart.contentLength - multipart.sourceSize < 4_096)
 let bodyHandle = try FileHandle(forReadingFrom: multipart.fileURL)
 let prefix = try bodyHandle.read(upToCount: 1_024)!
@@ -59,7 +59,84 @@ try bodyHandle.close()
 let prefixText = String(data: prefix, encoding: .utf8) ?? ""
 let suffixText = String(data: suffix, encoding: .utf8) ?? ""
 check("multipart-has-exactly-one-file-part", prefixText.components(separatedBy: "name=\"file\"").count - 1 == 1 && !suffixText.contains("name=\"file\""))
+check("multipart-uses-generic-filename", prefixText.contains("filename=\"upload\"") && !prefixText.contains("large fixture.pdf"))
+check("multipart-omits-part-content-type", !prefixText.contains("Content-Type:"))
 check("multipart-closes-with-own-boundary", suffixText.hasSuffix("--\(multipart.boundary)--\r\n"))
+
+let mutationScratch = scratch.appendingPathComponent("mutations", isDirectory: true)
+try FileManager.default.createDirectory(at: mutationScratch, withIntermediateDirectories: true)
+
+func mutationFixture(_ name: String) throws -> URL {
+  let url = mutationScratch.appendingPathComponent(name)
+  let bytes = Data(repeating: 0x41, count: ChatMultipartBodyBuilder.chunkBytes * 2 + 17)
+  try bytes.write(to: url, options: .atomic)
+  return url
+}
+
+func temporaryMultipartArtifacts() -> [URL] {
+  (try? FileManager.default.contentsOfDirectory(
+    at: mutationScratch, includingPropertiesForKeys: nil
+  ).filter { $0.lastPathComponent.hasPrefix("omi-chat-multipart-") }) ?? []
+}
+
+func rejectsMutation(
+  _ name: String,
+  mutate: @escaping (URL) throws -> Void
+) throws -> Bool {
+  let source = try mutationFixture(name)
+  var changed = false
+  do {
+    _ = try ChatMultipartBodyBuilder.build(
+      sourceURL: source, temporaryDirectory: mutationScratch,
+      afterChunk: { _ in
+        guard !changed else { return }
+        changed = true
+        try! mutate(source)
+      })
+    return false
+  } catch {
+    return changed && temporaryMultipartArtifacts().isEmpty
+  }
+}
+
+check("growth-is-rejected-and-cleaned", try rejectsMutation("grow.bin") { source in
+  let handle = try FileHandle(forWritingTo: source)
+  try handle.seekToEnd()
+  try handle.write(contentsOf: Data([0x42]))
+  try handle.close()
+})
+check("shrink-is-rejected-and-cleaned", try rejectsMutation("shrink.bin") { source in
+  let handle = try FileHandle(forWritingTo: source)
+  try handle.truncate(atOffset: UInt64(ChatMultipartBodyBuilder.chunkBytes))
+  try handle.close()
+})
+check("replacement-is-rejected-and-cleaned", try rejectsMutation("replace.bin") { source in
+  let moved = source.appendingPathExtension("original")
+  try FileManager.default.moveItem(at: source, to: moved)
+  let bytes = Data(repeating: 0x41, count: ChatMultipartBodyBuilder.chunkBytes * 2 + 17)
+  try bytes.write(to: source)
+})
+check("same-size-mutation-is-rejected-and-cleaned", try rejectsMutation("same-size.bin") { source in
+  let handle = try FileHandle(forWritingTo: source)
+  try handle.seek(toOffset: UInt64(ChatMultipartBodyBuilder.chunkBytes + 1))
+  try handle.write(contentsOf: Data([0x43]))
+  try handle.close()
+  try FileManager.default.setAttributes(
+    [.modificationDate: Date(timeIntervalSince1970: 1)], ofItemAtPath: source.path)
+})
+
+let cancellationSource = try mutationFixture("cancel-copy.bin")
+var cancellationRequested = false
+var cancellationRejected = false
+do {
+  _ = try ChatMultipartBodyBuilder.build(
+    sourceURL: cancellationSource, temporaryDirectory: mutationScratch,
+    cancelled: { cancellationRequested },
+    afterChunk: { _ in cancellationRequested = true })
+} catch ChatMultipartBodyError.cancelled {
+  cancellationRejected = true
+}
+check("copy-cancellation-is-rejected-and-cleaned", cancellationRejected && temporaryMultipartArtifacts().isEmpty)
 
 let base = URL(string: "https://service.example.test/base")!
 let custody = ShellCredentialCustody(token: "attachment-token")
@@ -95,7 +172,9 @@ let directoryPicker = ChatAttachmentStagingHandler(
 directoryPicker.receive(body: ["t": "pick-and-stage", "id": "a-directory"]) { value, _ in
   replies.append(value as! [String: Any])
 }
-check("picker-refuses-non-regular-file", replies.last?["reason"] as? String == "shell-error" && uploadCount == 0)
+check("picker-refuses-non-regular-file", eventually {
+  replies.last?["reason"] as? String == "shell-error" && uploadCount == 0
+})
 
 let handler = ChatAttachmentStagingHandler(
   baseURL: base, custody: custody, runId: "run-attachment-proof",
@@ -129,7 +208,14 @@ func multipartBoundary(_ request: URLRequest?) -> String {
   return value.components(separatedBy: "boundary=").last ?? ""
 }
 
-let exactResponse = HTTPURLResponse(url: base, statusCode: 201, httpVersion: nil, headerFields: nil)!
+let exactResponse = HTTPURLResponse(
+  url: base, statusCode: 201, httpVersion: nil,
+  headerFields: ["Content-Type": "Application/JSON; Charset=UTF-8"])!
+let wrongMimeResponse = HTTPURLResponse(
+  url: base, statusCode: 201, httpVersion: nil,
+  headerFields: ["Content-Type": "text/plain"])!
+let missingMimeResponse = HTTPURLResponse(
+  url: base, statusCode: 201, httpVersion: nil, headerFields: nil)!
 let redirectResponse = HTTPURLResponse(url: base, statusCode: 302, httpVersion: nil, headerFields: nil)!
 func parsed(_ object: Any, response: URLResponse = exactResponse, expectedSize: Int64 = 50 * 1_024 * 1_024) -> Bool {
   let data = try! JSONSerialization.data(withJSONObject: object)
@@ -153,7 +239,21 @@ for (name, mutation) in [
 }
 check("reject-extra-envelope-field", !parsed(["attachment": exactAttachment, "name": "forbidden"]))
 check("reject-redirect", !parsed(["attachment": exactAttachment], response: redirectResponse))
+check("reject-wrong-response-mime", !parsed(["attachment": exactAttachment], response: wrongMimeResponse))
+check("reject-missing-response-mime", !parsed(["attachment": exactAttachment], response: missingMimeResponse))
 check("reject-malformed-json", ChatAttachmentStagingPolicy.parseResponse(data: Data("{".utf8), response: exactResponse, expectedSize: 50 * 1_024 * 1_024) == nil)
+
+let redirectDelegate = ChatAttachmentUploadDelegate()
+let redirectSession = URLSession(configuration: .ephemeral)
+let redirectTask = redirectSession.dataTask(with: base)
+var delegateAcceptedRedirect = true
+redirectDelegate.urlSession(
+  redirectSession, task: redirectTask,
+  willPerformHTTPRedirection: redirectResponse,
+  newRequest: URLRequest(url: URL(string: "https://redirect.example.test/elsewhere")!),
+  completionHandler: { delegateAcceptedRedirect = $0 != nil })
+check("actual-upload-delegate-refuses-redirect", !delegateAcceptedRedirect)
+redirectSession.invalidateAndCancel()
 
 let signedOutCustody = ShellCredentialCustody(token: "gone")
 signedOutCustody.observe(method: "DELETE", path: "/v1/session/current", status: 204)

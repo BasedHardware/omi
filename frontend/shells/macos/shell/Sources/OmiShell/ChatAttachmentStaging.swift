@@ -1,5 +1,6 @@
 import AppKit
 import CoreFoundation
+import Darwin
 import Foundation
 import WebKit
 
@@ -7,6 +8,7 @@ struct ChatMultipartBody {
   let fileURL: URL
   let contentLength: Int64
   let sourceSize: Int64
+  let copiedBytes: Int64
   let maximumChunkBytes: Int
   let boundary: String
 }
@@ -22,23 +24,52 @@ enum ChatMultipartBodyBuilder {
   static let maximumAttachmentBytes: Int64 = 50 * 1_024 * 1_024
   static let chunkBytes = 64 * 1_024
 
+  private struct SourceSnapshot: Equatable {
+    let device: dev_t
+    let inode: ino_t
+    let mode: mode_t
+    let size: Int64
+    let modifiedSeconds: Int64
+    let modifiedNanoseconds: Int64
+    let changedSeconds: Int64
+    let changedNanoseconds: Int64
+
+    init(_ value: stat) {
+      device = value.st_dev
+      inode = value.st_ino
+      mode = value.st_mode
+      size = Int64(value.st_size)
+      modifiedSeconds = Int64(value.st_mtimespec.tv_sec)
+      modifiedNanoseconds = Int64(value.st_mtimespec.tv_nsec)
+      changedSeconds = Int64(value.st_ctimespec.tv_sec)
+      changedNanoseconds = Int64(value.st_ctimespec.tv_nsec)
+    }
+
+    var isRegularFile: Bool { mode & S_IFMT == S_IFREG }
+  }
+
   static func build(
     sourceURL: URL,
     temporaryDirectory: URL = FileManager.default.temporaryDirectory,
     cancelled: () -> Bool = { false },
-    registerHandles: (FileHandle?, FileHandle?) -> Void = { _, _ in }
+    registerHandles: (FileHandle?, FileHandle?) -> Void = { _, _ in },
+    afterChunk: (Int64) throws -> Void = { _ in }
   ) throws -> ChatMultipartBody {
-    let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-    guard values.isRegularFile == true else { throw ChatMultipartBodyError.notRegularFile }
-    guard let size = values.fileSize, size > 0, Int64(size) <= maximumAttachmentBytes else {
+    guard sourceURL.isFileURL else { throw ChatMultipartBodyError.notRegularFile }
+    let input = try FileHandle(forReadingFrom: sourceURL)
+    registerHandles(input, nil)
+    defer {
+      registerHandles(nil, nil)
+      try? input.close()
+    }
+    let initial = try descriptorSnapshot(input.fileDescriptor)
+    guard initial.isRegularFile else { throw ChatMultipartBodyError.notRegularFile }
+    guard initial.size > 0, initial.size <= maximumAttachmentBytes else {
       throw ChatMultipartBodyError.invalidSize
     }
     let boundary = "omi-chat-\(UUID().uuidString.lowercased())"
-    let filename = safeFilename(sourceURL.lastPathComponent)
-    let escapedFilename = filename.replacingOccurrences(of: "\\", with: "\\\\")
-      .replacingOccurrences(of: "\"", with: "\\\"")
     let header = Data(
-      "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(escapedFilename)\"\r\n\r\n"
+      "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"upload\"\r\n\r\n"
         .utf8)
     let trailer = Data("\r\n--\(boundary)--\r\n".utf8)
     let bodyURL = temporaryDirectory.appendingPathComponent(
@@ -49,42 +80,61 @@ enum ChatMultipartBodyBuilder {
     else { throw ChatMultipartBodyError.io }
 
     do {
-      let input = try FileHandle(forReadingFrom: sourceURL)
       let output = try FileHandle(forWritingTo: bodyURL)
       registerHandles(input, output)
       defer {
-        registerHandles(nil, nil)
-        try? input.close()
         try? output.close()
       }
       try output.write(contentsOf: header)
-      var observed = 0
-      while true {
+      var copied: Int64 = 0
+      var observedChunkBytes = 0
+      while copied < initial.size {
         if cancelled() { throw ChatMultipartBodyError.cancelled }
-        guard let chunk = try input.read(upToCount: chunkBytes), !chunk.isEmpty else { break }
-        observed = max(observed, chunk.count)
+        let remaining = initial.size - copied
+        let requested = min(chunkBytes, Int(remaining))
+        guard let chunk = try input.read(upToCount: requested), !chunk.isEmpty else {
+          throw ChatMultipartBodyError.io
+        }
+        copied += Int64(chunk.count)
+        observedChunkBytes = max(observedChunkBytes, chunk.count)
         try output.write(contentsOf: chunk)
+        try afterChunk(copied)
       }
       if cancelled() { throw ChatMultipartBodyError.cancelled }
+      if let extra = try input.read(upToCount: 1), !extra.isEmpty {
+        throw ChatMultipartBodyError.io
+      }
+      let finalDescriptor = try descriptorSnapshot(input.fileDescriptor)
+      let finalPath = try pathSnapshot(sourceURL)
+      guard finalDescriptor == initial, finalPath == initial else {
+        throw ChatMultipartBodyError.io
+      }
       try output.write(contentsOf: trailer)
       try output.synchronize()
-      let bodySize = Int64(header.count) + Int64(size) + Int64(trailer.count)
+      let bodySize = Int64(header.count) + initial.size + Int64(trailer.count)
       return ChatMultipartBody(
-        fileURL: bodyURL, contentLength: bodySize, sourceSize: Int64(size),
-        maximumChunkBytes: observed, boundary: boundary)
+        fileURL: bodyURL, contentLength: bodySize, sourceSize: initial.size,
+        copiedBytes: copied, maximumChunkBytes: observedChunkBytes, boundary: boundary)
     } catch {
       try? FileManager.default.removeItem(at: bodyURL)
       throw error
     }
   }
 
-  private static func safeFilename(_ value: String) -> String {
-    let normalized = value.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalized.isEmpty, normalized != ".", normalized != "..",
-      normalized.utf8.count <= 255,
-      normalized.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7f })
-    else { return "upload" }
-    return normalized
+  private static func descriptorSnapshot(_ descriptor: Int32) throws -> SourceSnapshot {
+    var value = stat()
+    guard fstat(descriptor, &value) == 0 else { throw ChatMultipartBodyError.io }
+    return SourceSnapshot(value)
+  }
+
+  private static func pathSnapshot(_ url: URL) throws -> SourceSnapshot {
+    var value = stat()
+    let result = url.withUnsafeFileSystemRepresentation { path in
+      guard let path else { return Int32(-1) }
+      return fstatat(AT_FDCWD, path, &value, 0)
+    }
+    guard result == 0 else { throw ChatMultipartBodyError.io }
+    return SourceSnapshot(value)
   }
 }
 
@@ -145,6 +195,7 @@ enum ChatAttachmentStagingPolicy {
   ) -> StagedChatAttachmentDescriptor? {
     guard data.count <= 64 * 1_024,
       let http = response as? HTTPURLResponse, http.statusCode == 201,
+      normalizedMediaType(http.value(forHTTPHeaderField: "Content-Type")) == "application/json",
       let object = try? JSONSerialization.jsonObject(with: data),
       let envelope = object as? [String: Any], Set(envelope.keys) == ["attachment"],
       let attachment = envelope["attachment"] as? [String: Any],
@@ -178,6 +229,14 @@ enum ChatAttachmentStagingPolicy {
     guard let date = formatter.date(from: value) else { return false }
     return formatter.string(from: date) == value
   }
+
+  private static func normalizedMediaType(_ value: String?) -> String? {
+    guard let value,
+      let mediaType = value.split(separator: ";", maxSplits: 1).first
+    else { return nil }
+    let normalized = mediaType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalized.isEmpty ? nil : normalized
+  }
 }
 
 protocol ChatAttachmentUploadCancelling: AnyObject {
@@ -194,7 +253,7 @@ typealias ChatAttachmentUploadStarter = (
   @escaping ChatAttachmentUploadCompletion
 ) -> ChatAttachmentUploadCancelling
 
-private final class ChatAttachmentUploadDelegate: NSObject, URLSessionTaskDelegate {
+final class ChatAttachmentUploadDelegate: NSObject, URLSessionTaskDelegate {
   func urlSession(
     _ session: URLSession,
     task: URLSessionTask,
@@ -367,8 +426,7 @@ final class ChatAttachmentStagingHandler: NSObject, WKScriptMessageHandlerWithRe
       replyHandler(failure(id: id, reason: .cancelled), nil)
       return
     }
-    let values = try? sourceURL.resourceValues(forKeys: [.isRegularFileKey])
-    guard sourceURL.isFileURL, values?.isRegularFile == true else {
+    guard sourceURL.isFileURL else {
       replyHandler(failure(id: id, reason: .shellError), nil)
       return
     }
@@ -481,8 +539,6 @@ final class ChatAttachmentStagingHandler: NSObject, WKScriptMessageHandlerWithRe
     panel.canCreateDirectories = false
     panel.resolvesAliases = true
     guard panel.runModal() == .OK, panel.urls.count == 1 else { return nil }
-    let url = panel.urls[0]
-    let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
-    return values?.isRegularFile == true ? url : nil
+    return panel.urls[0]
   }
 }
