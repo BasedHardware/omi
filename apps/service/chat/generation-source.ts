@@ -1,7 +1,10 @@
+import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
+
 export interface ChatGenerationSourceInput {
   readonly generationId: string;
   readonly prompt: string;
   readonly context: readonly string[];
+  readonly attachments: readonly ChatGenerationAttachmentDescriptor[];
   readonly onDelta: (text: string) => void;
   readonly onComplete: () => void;
   readonly onError: (error: unknown) => void;

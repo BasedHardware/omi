@@ -228,6 +228,7 @@ describe("ratified chat generation wire red proofs", () => {
       messages: stores.chatMessages,
       events: stores.chatEvents,
       finalization: stores.chatFinalization,
+      attachments: stores.chatAttachments,
       nowEpochMilliseconds: () => 1_786_352_400_100,
       assistantMessageId: (_accountId, generationId) => `assistant-${generationId}`,
       eventId: (_accountId, generationId, kind, sequence) =>
@@ -648,6 +649,7 @@ describe("ratified chat generation wire red proofs", () => {
       messages: base.chatMessages,
       events: base.chatEvents,
       finalization,
+      attachments: base.chatAttachments,
       nowEpochMilliseconds: () => 1_786_352_400_100,
       assistantMessageId: (_accountId, generationId) => `assistant-${generationId}`,
       eventId: (_accountId, generationId, kind, sequence) =>
@@ -944,6 +946,7 @@ describe("ratified chat generation wire red proofs", () => {
           generationId: "generation-restart-cancel",
           acceptedEventId: "event-restart-cancel-accepted",
           admittedAt: 100,
+          attachmentIds: [],
         });
         expect(admitted.kind).toBe("created");
         expect(stores.chatEvents.requestCancellation(ACCOUNT, "generation-restart-cancel").kind)
@@ -1015,6 +1018,7 @@ describe("ratified chat generation wire red proofs", () => {
         generationId: "generation-race",
         acceptedEventId: "event-race-accepted",
         admittedAt: 100,
+        attachmentIds: [],
       });
       if (admitted.kind !== "created") throw new TypeError("race admission failed");
       let firstCallbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
@@ -1035,6 +1039,7 @@ describe("ratified chat generation wire red proofs", () => {
         messages: stores.chatMessages,
         events: stores.chatEvents,
         finalization: stores.chatFinalization,
+        attachments: stores.chatAttachments,
         nowEpochMilliseconds: () => 200,
         assistantMessageId: () => "assistant-race",
         eventId: (_accountId, _generationId, kind, sequence) => `event-race-${kind}-${sequence}`,

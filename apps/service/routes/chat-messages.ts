@@ -23,8 +23,15 @@ import {
 } from "../chat/history-cursor";
 import type { ServedCounter } from "../observability/served-count";
 import type { ChatAdmission } from "../stores/chat-admission";
+import type { ChatAttachmentsStore } from "../stores/chat-attachments-store";
+import {
+  CHAT_ALLOWED_ATTACHMENT_MIME_TYPES,
+  CHAT_MAX_ATTACHMENT_BYTES,
+  CHAT_MAX_ATTACHMENTS_PER_MESSAGE,
+  isAllowedChatAttachmentMimeType,
+  MAIN_CHAT_ATTACHMENT_SCOPE,
+} from "../chat/attachment-policy";
 import type {
-  ChatAttachmentMetadata,
   ChatMessageRecord,
   ChatMessagesStore,
   WritableChatMessageType,
@@ -37,9 +44,9 @@ import type {
 export const CHAT_MESSAGES_PATH = "/v1/chat-messages";
 export const CHAT_GENERATIONS_PATH = "/v1/chat-generations";
 export const CHAT_CAPABILITIES = Object.freeze({
-  maxAttachmentsPerMessage: 0,
-  maxAttachmentBytes: 0,
-  allowedAttachmentMimeTypes: Object.freeze([] as string[]),
+  maxAttachmentsPerMessage: CHAT_MAX_ATTACHMENTS_PER_MESSAGE,
+  maxAttachmentBytes: CHAT_MAX_ATTACHMENT_BYTES,
+  allowedAttachmentMimeTypes: CHAT_ALLOWED_ATTACHMENT_MIME_TYPES,
 });
 
 const DEFAULT_LIMIT = 50;
@@ -53,6 +60,7 @@ const JSON_HEADERS = Object.freeze({
 export interface ChatMessagesRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly messages: ChatMessagesStore;
+  readonly attachments: ChatAttachmentsStore;
   readonly control: AccountControlProjectionStore;
   readonly admission: ChatAdmission;
   readonly supervisor: ChatGenerationSupervisor;
@@ -81,7 +89,6 @@ interface ParsedCreate {
   readonly messageSource: string;
   readonly metadata: string | null;
   readonly attachmentIds: readonly string[];
-  readonly attachments?: readonly ChatAttachmentMetadata[];
 }
 
 const errorBody = (code: string, action: string, retryable = false): string =>
@@ -118,6 +125,7 @@ const generationReplayExpired = (): Response => response(
   errorBody("generation_replay_expired", "refresh_history"),
   410,
 );
+const attachmentNotFound = (): Response => response(errorBody("not_found", "edit_request"), 404);
 
 const bearerPrincipal = (
   authorization: string | undefined,
@@ -154,23 +162,6 @@ const exactObject = (
     && keys.every((key) => allowed.has(key));
 };
 
-const parseAttachments = (value: unknown): readonly ChatAttachmentMetadata[] | null => {
-  if (!Array.isArray(value)) return null;
-  const parsed: ChatAttachmentMetadata[] = [];
-  for (const item of value) {
-    if (!exactObject(item, ["displayName", "mediaType", "size"])
-      || typeof item.displayName !== "string"
-      || typeof item.mediaType !== "string"
-      || !Number.isSafeInteger(item.size) || (item.size as number) < 0) return null;
-    parsed.push(Object.freeze({
-      displayName: item.displayName,
-      mediaType: item.mediaType,
-      size: item.size as number,
-    }));
-  }
-  return Object.freeze(parsed);
-};
-
 const parseStringArray = (value: unknown): readonly string[] | null => {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.length === 0)) {
     return null;
@@ -184,7 +175,7 @@ const parseCreate = (value: unknown): ParsedCreate | null => {
     ["op", "opId", "id", "at", "text", "sender", "journalRevision"],
     [
       "type", "appId", "chatSessionId", "messageSource", "metadata",
-      "attachmentIds", "attachments",
+      "attachmentIds",
     ],
   )) return null;
   if (value.op !== "create" || typeof value.opId !== "string" || value.opId.length === 0
@@ -203,8 +194,6 @@ const parseCreate = (value: unknown): ParsedCreate | null => {
     ? Object.freeze([] as string[])
     : parseStringArray(value.attachmentIds);
   if (attachmentIds === null) return null;
-  const attachments = value.attachments === undefined ? undefined : parseAttachments(value.attachments);
-  if (attachments === null) return null;
   return Object.freeze({
     id: value.id,
     at: value.at as number,
@@ -214,7 +203,6 @@ const parseCreate = (value: unknown): ParsedCreate | null => {
     messageSource: (value.messageSource ?? "desktop_chat") as string,
     metadata: (value.metadata ?? null) as string | null,
     attachmentIds,
-    ...(attachments === undefined ? {} : { attachments }),
   });
 };
 
@@ -227,17 +215,9 @@ const canonicalJson = (value: Json): string => {
 };
 
 export const chatMessagePayloadHash = (create: ParsedCreate): string => {
-  const attachments: Json = create.attachments === undefined
-    ? null
-    : create.attachments.map((attachment): Json => ({
-        displayName: attachment.displayName,
-        mediaType: attachment.mediaType,
-        size: attachment.size,
-      }));
   const subject: { readonly [key: string]: Json } = {
     at: create.at,
     attachmentIds: create.attachmentIds,
-    attachments,
     appId: null,
     chatSessionId: null,
     messageSource: create.messageSource,
@@ -422,7 +402,18 @@ export const registerChatMessagesRoutes = (
         snapshotSequence,
         olderThan: cursor?.olderThan ?? null,
       });
-      const oldest = page.messages[0];
+      const nowEpochMilliseconds = deps.nowEpochMilliseconds();
+      const messages = Object.freeze(page.messages.map((message): ChatMessageRecord =>
+        Object.freeze({
+          ...message,
+          attachments: deps.attachments.projectMessageAttachments({
+            accountId: principal.uid,
+            messageId: message.id,
+            attachments: message.attachments ?? Object.freeze([]),
+            nowEpochMilliseconds,
+          }),
+        })));
+      const oldest = messages[0];
       const cursorIssuedAt = cursor?.issuedAtEpochSeconds ?? deps.nowEpochSeconds();
       const olderCursor = page.hasOlder && oldest !== undefined
         ? deps.cursor.issue({
@@ -436,7 +427,7 @@ export const registerChatMessagesRoutes = (
         : null;
       deps.counter.recordDomainRead("served");
       return response({
-        messages: page.messages,
+        messages,
         page: { olderCursor, hasOlder: page.hasOlder },
         capabilities: CHAT_CAPABILITIES,
       }, 200);
@@ -473,9 +464,23 @@ export const registerChatMessagesRoutes = (
     if (create.attachmentIds.length > CHAT_CAPABILITIES.maxAttachmentsPerMessage) {
       return validation();
     }
+    if (new Set(create.attachmentIds).size !== create.attachmentIds.length) return validation();
     try {
       const payloadHash = chatMessagePayloadHash(create);
       const generationId = deps.generationId(principal.uid, create.id);
+      const admittedAt = deps.nowEpochMilliseconds();
+      const resolvedAttachments = deps.attachments.resolveForAdmission({
+        accountId: principal.uid,
+        scope: MAIN_CHAT_ATTACHMENT_SCOPE,
+        attachmentIds: create.attachmentIds,
+        messageId: create.id,
+        nowEpochMilliseconds: admittedAt,
+      });
+      if (resolvedAttachments.kind === "not_found") return attachmentNotFound();
+      if (resolvedAttachments.attachments.some((attachment) =>
+        !isAllowedChatAttachmentMimeType(attachment.mediaType)
+        || attachment.sizeBytes <= 0
+        || attachment.sizeBytes > CHAT_MAX_ATTACHMENT_BYTES)) return validation();
       const record: ChatMessageRecord = Object.freeze({
         id: create.id,
         text: create.text,
@@ -496,17 +501,19 @@ export const registerChatMessagesRoutes = (
           create.journalRevision,
           payloadHash,
         ),
-        ...(create.attachments === undefined ? {} : { attachments: create.attachments }),
+        attachments: resolvedAttachments.attachments,
       });
       const admission = deps.admission.admit({
         accountId: principal.uid,
         message: record,
         generationId,
         acceptedEventId: deps.acceptedEventId(principal.uid, generationId),
-        admittedAt: deps.nowEpochMilliseconds(),
+        admittedAt,
+        attachmentIds: create.attachmentIds,
       });
       if (admission.kind === "conflict") return conflict();
       if (admission.kind === "entitlement") return entitlement();
+      if (admission.kind === "attachment_not_found") return attachmentNotFound();
       const admittedGenerationId = admission.stored.generationId ?? generationId;
       const acceptedEvent = admission.kind === "created"
         ? admission.acceptedEvent
@@ -523,8 +530,17 @@ export const registerChatMessagesRoutes = (
         stored: admission.stored,
         acceptedEvent,
       });
+      const projectedMessage = Object.freeze({
+        ...admission.stored.message,
+        attachments: deps.attachments.projectMessageAttachments({
+          accountId: principal.uid,
+          messageId: admission.stored.message.id,
+          attachments: admission.stored.message.attachments ?? Object.freeze([]),
+          nowEpochMilliseconds: admittedAt,
+        }),
+      });
       return response({
-        message: admission.stored.message,
+        message: projectedMessage,
         generation: { id: admittedGenerationId },
       }, admission.kind === "created" ? 201 : 200);
     } catch {

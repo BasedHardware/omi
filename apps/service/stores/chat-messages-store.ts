@@ -11,11 +11,13 @@ export type ChatMessageType = string;
 export type WritableChatMessageSender = "human" | "ai";
 export type WritableChatMessageType = "text" | "day_summary";
 
-/** Metadata survives admission even while attachment content support is disabled. */
+/** Durable attachment metadata plus the currently retained opaque content reference. */
 export interface ChatAttachmentMetadata {
+  readonly id: string;
   readonly displayName: string;
   readonly mediaType: string;
-  readonly size: number;
+  readonly sizeBytes: number;
+  readonly contentReference: string | null;
 }
 
 /** The canonical durable Chat record served by history. */
@@ -120,13 +122,19 @@ const detachAttachments = (
   return Object.freeze(attachments.map((attachment) => {
     if (typeof attachment.displayName !== "string"
       || typeof attachment.mediaType !== "string"
-      || !isNonNegativeSafeInteger(attachment.size)) {
+      || typeof attachment.id !== "string" || attachment.id.length === 0
+      || !isNonNegativeSafeInteger(attachment.sizeBytes)
+      || !(attachment.contentReference === null
+        || (typeof attachment.contentReference === "string"
+          && attachment.contentReference.length > 0))) {
       throw new TypeError("invalid chat attachment metadata");
     }
     return Object.freeze({
+      id: attachment.id,
       displayName: attachment.displayName,
       mediaType: attachment.mediaType,
-      size: attachment.size,
+      sizeBytes: attachment.sizeBytes,
+      contentReference: attachment.contentReference,
     });
   }));
 };
@@ -148,7 +156,7 @@ export const detachChatMessage = (message: ChatMessageRecord): ChatMessageRecord
     || !(message.revision === null || typeof message.revision === "string")) {
     throw new TypeError("invalid chat message record");
   }
-  const attachments = detachAttachments(message.attachments);
+  const attachments = detachAttachments(message.attachments) ?? Object.freeze([]);
   return Object.freeze({
     id: message.id,
     text: message.text,
@@ -164,7 +172,7 @@ export const detachChatMessage = (message: ChatMessageRecord): ChatMessageRecord
     rating: message.rating,
     reported: message.reported,
     revision: message.revision,
-    ...(attachments === undefined ? {} : { attachments }),
+    attachments,
   });
 };
 

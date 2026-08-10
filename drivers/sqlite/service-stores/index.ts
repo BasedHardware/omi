@@ -18,6 +18,7 @@ import { SqliteChatMessagesStore } from "./chat-messages-store";
 import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 import { createSqliteChatAdmission } from "./chat-admission";
 import { createSqliteChatGenerationFinalization } from "./chat-generation-finalization";
+import { SqliteChatAttachmentsStore } from "./chat-attachments-store";
 
 export { SqliteAccountLifecycleStore } from "./account-lifecycle";
 export { SqliteCurrentSessionPort } from "./current-session";
@@ -37,6 +38,7 @@ export { SqliteChatMessagesStore } from "./chat-messages-store";
 export { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 export { createSqliteChatAdmission } from "./chat-admission";
 export { createSqliteChatGenerationFinalization } from "./chat-generation-finalization";
+export { SqliteChatAttachmentsStore } from "./chat-attachments-store";
 
 /** Builds all service stores and the tasks unit of work over one SQLite connection. */
 export const createSqliteLocalServiceStores = (
@@ -50,6 +52,7 @@ export const createSqliteLocalServiceStores = (
   });
   const settings = new SqliteSettingsProjectionStore(db);
   const chatMessages = new SqliteChatMessagesStore(db);
+  const chatAttachments = new SqliteChatAttachmentsStore(db);
   const chatEvents = new SqliteChatGenerationEventsStore(db);
   return Object.freeze({
     conversations,
@@ -66,8 +69,15 @@ export const createSqliteLocalServiceStores = (
     listen: new SqliteListenStore(db),
     listenSegments: createSqliteListenSegmentUnitOfWork(db),
     chatMessages,
+    chatAttachments,
     chatEvents,
-    chatAdmission: createSqliteChatAdmission(db, chatMessages, chatEvents, settings),
+    chatAdmission: createSqliteChatAdmission(
+      db,
+      chatMessages,
+      chatEvents,
+      settings,
+      chatAttachments,
+    ),
     chatFinalization: createSqliteChatGenerationFinalization(db),
   });
 };

@@ -17,6 +17,7 @@ import { createSqliteChatGenerationFinalization } from "./chat-generation-finali
 import { SqliteChatGenerationEventsStore } from "./chat-generation-events-store";
 import { SqliteChatMessagesStore } from "./chat-messages-store";
 import { SqliteSettingsProjectionStore } from "./settings-projection";
+import { SqliteChatAttachmentsStore } from "./chat-attachments-store";
 
 const message = (overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord => ({
   id: "client-1",
@@ -33,7 +34,7 @@ const message = (overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord 
   rating: null,
   reported: false,
   revision: "revision-1",
-  attachments: [{ displayName: "a.pdf", mediaType: "application/pdf", size: 42 }],
+  attachments: [],
   ...overrides,
 });
 
@@ -42,7 +43,8 @@ test("SQLite chat admission atomically records message, one quota use, and one a
   const messages = new SqliteChatMessagesStore(db);
   const events = new SqliteChatGenerationEventsStore(db);
   const settings = new SqliteSettingsProjectionStore(db);
-  const admission = createSqliteChatAdmission(db, messages, events, settings);
+  const attachments = new SqliteChatAttachmentsStore(db);
+  const admission = createSqliteChatAdmission(db, messages, events, settings, attachments);
   settings.putEntitlement("account", {
     planLabel: "Metered",
     limitKey: "chat_messages",
@@ -57,6 +59,7 @@ test("SQLite chat admission atomically records message, one quota use, and one a
     generationId: "generation-1",
     acceptedEventId: "event-1",
     admittedAt: 200,
+    attachmentIds: [],
   } as const;
 
   expect(admission.admit(input).kind).toBe("created");
@@ -67,9 +70,7 @@ test("SQLite chat admission atomically records message, one quota use, and one a
   }).kind).toBe("conflict");
   expect(settings.readEntitlement("account")?.used).toBe(1);
   expect(messages.readSnapshotSequence("account")).toBe(1);
-  expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([
-    { displayName: "a.pdf", mediaType: "application/pdf", size: 42 },
-  ]);
+  expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([]);
   expect(events.listAfter("account", "generation-1", null)?.map((event) => event.frame.kind))
     .toEqual(["accepted"]);
   db.close();
@@ -184,12 +185,15 @@ test("SQLite rolls canonical assistant persistence back when terminal append cra
   const messages = new SqliteChatMessagesStore(db);
   const events = new SqliteChatGenerationEventsStore(db);
   const settings = new SqliteSettingsProjectionStore(db);
-  expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+  expect(createSqliteChatAdmission(
+    db, messages, events, settings, new SqliteChatAttachmentsStore(db),
+  ).admit({
     accountId: "account",
     message: message(),
     generationId: "generation-1",
     acceptedEventId: "event-accepted",
     admittedAt: 200,
+    attachmentIds: [],
   }).kind).toBe("created");
   const assistant = message({
     id: "assistant-1",
@@ -230,12 +234,15 @@ test("SQLite rolls both finalization writes back when the transaction crashes af
   const messages = new SqliteChatMessagesStore(db);
   const events = new SqliteChatGenerationEventsStore(db);
   const settings = new SqliteSettingsProjectionStore(db);
-  expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+  expect(createSqliteChatAdmission(
+    db, messages, events, settings, new SqliteChatAttachmentsStore(db),
+  ).admit({
     accountId: "account",
     message: message(),
     generationId: "generation-after-append",
     acceptedEventId: "event-after-append-accepted",
     admittedAt: 200,
+    attachmentIds: [],
   }).kind).toBe("created");
   const assistant = message({
     id: "assistant-after-append",
@@ -279,12 +286,15 @@ test("SQLite chat message, quota, and event records survive adapter restart", ()
         limitReached: false,
         upgradeAvailable: true,
       });
-      expect(createSqliteChatAdmission(db, messages, events, settings).admit({
+      expect(createSqliteChatAdmission(
+        db, messages, events, settings, new SqliteChatAttachmentsStore(db),
+      ).admit({
         accountId: "account",
         message: message(),
         generationId: "generation-1",
         acceptedEventId: "event-1",
         admittedAt: 200,
+        attachmentIds: [],
       }).kind).toBe("created");
       db.close();
     }
@@ -293,9 +303,7 @@ test("SQLite chat message, quota, and event records survive adapter restart", ()
       const messages = new SqliteChatMessagesStore(db);
       const events = new SqliteChatGenerationEventsStore(db);
       const settings = new SqliteSettingsProjectionStore(db);
-      expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([
-        { displayName: "a.pdf", mediaType: "application/pdf", size: 42 },
-      ]);
+      expect(messages.readMessage("account", "client-1")?.message.attachments).toEqual([]);
       expect(settings.readEntitlement("account")?.used).toBe(1);
       expect(events.listAfter("account", "generation-1", null)?.map((event) => event.id))
         .toEqual(["event-1"]);

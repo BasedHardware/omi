@@ -4,7 +4,7 @@
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-CHAT-REV-001)
 // domain-pending(DIV-CHAT-HASH-001)
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { websocket } from "hono/bun";
@@ -66,6 +66,7 @@ import {
 } from "./chat/generation-source";
 import { createChatHistoryCursorCodec } from "./chat/history-cursor";
 import { registerChatMessagesRoutes } from "./routes/chat-messages";
+import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { registerFolderRoutes } from "./routes/folders";
@@ -119,6 +120,11 @@ import {
   type InMemoryChatMessagesStore,
   type ChatMessagesStore,
 } from "./stores/chat-messages-store";
+import {
+  createInMemoryChatAttachmentsStore,
+  type ChatAttachmentsStore,
+  type InMemoryChatAttachmentsStore,
+} from "./stores/chat-attachments-store";
 
 /**
  * Builds the complete app-facing service.
@@ -173,6 +179,10 @@ export interface LocalServiceOptions {
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
   readonly listenCredentialLeaseMilliseconds?: number;
   readonly listenCredentialNowMilliseconds?: () => number;
+  /** Deterministic attachment lifecycle seams for tests. */
+  readonly nowEpochMilliseconds?: () => number;
+  readonly attachmentId?: () => string;
+  readonly attachmentContentReference?: () => string;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -191,6 +201,7 @@ export interface LocalServiceStores {
   readonly listen: ListenStore;
   readonly listenSegments: ListenSegmentUnitOfWork;
   readonly chatMessages: ChatMessagesStore;
+  readonly chatAttachments: ChatAttachmentsStore;
   readonly chatEvents: ChatGenerationEventsStore;
   readonly chatAdmission: ChatAdmission;
   readonly chatFinalization: ChatGenerationFinalization;
@@ -199,6 +210,7 @@ export interface LocalServiceStores {
 export interface InMemoryLocalServiceStores extends LocalServiceStores {
   readonly settings: InMemorySettingsProjectionStore;
   readonly chatMessages: InMemoryChatMessagesStore;
+  readonly chatAttachments: InMemoryChatAttachmentsStore;
   readonly chatEvents: InMemoryChatGenerationEventsStore;
 }
 
@@ -276,6 +288,7 @@ export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores =
   });
   const chatMessages = createInMemoryChatMessagesStore();
   const chatEvents = createInMemoryChatGenerationEventsStore();
+  const chatAttachments = createInMemoryChatAttachmentsStore();
   return Object.freeze({
     conversations,
     folders,
@@ -291,8 +304,14 @@ export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores =
     listen,
     listenSegments,
     chatMessages,
+    chatAttachments,
     chatEvents,
-    chatAdmission: createInMemoryChatAdmission(chatMessages, chatEvents, settings),
+    chatAdmission: createInMemoryChatAdmission(
+      chatMessages,
+      chatEvents,
+      settings,
+      chatAttachments,
+    ),
     chatFinalization: createInMemoryChatGenerationFinalization(chatMessages, chatEvents),
   });
 };
@@ -329,6 +348,7 @@ export interface LocalService {
     readonly settings: SettingsProjectionStore;
     readonly listen: ListenStore;
     readonly chatMessages: ChatMessagesStore;
+    readonly chatAttachments: ChatAttachmentsStore;
     readonly chatEvents: ChatGenerationEventsStore;
     readonly chatAdmission: ChatAdmission;
   };
@@ -377,6 +397,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const folders = stores.folders;
   const folderDeletion = stores.folderDeletion;
   let nextFolderId = 1;
+  let hasSeeded = false;
   const reseed = (): void => {
     nextFolderId = 1;
     resetQaSnapshot(options.db);
@@ -408,8 +429,16 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       }
       stores.listen.reset();
       stores.chatMessages.reset();
+      stores.chatAttachments.reset();
+      stores.chatEvents.reset();
+    } else if (hasSeeded) {
+      // Persistent adapters survive composition startup. An explicit QA reset
+      // still owns the complete Chat cluster, including attachment secrets.
+      stores.chatMessages.reset();
+      stores.chatAttachments.reset();
       stores.chatEvents.reset();
     }
+    hasSeeded = true;
   };
   reseed();
 
@@ -462,13 +491,16 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     `${kind}_${createHash("sha256")
       .update(`${options.devSecretLabel}:chat:${kind}\0${parts.join("\0")}`, "utf8")
       .digest("hex")}`;
+  const chatNowEpochMilliseconds = options.nowEpochMilliseconds
+    ?? (() => anchorEpochSeconds * 1_000);
   const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
     source: options.generationSource,
     context: options.generationContext,
     messages: stores.chatMessages,
     events: stores.chatEvents,
     finalization: stores.chatFinalization,
-    nowEpochMilliseconds: () => anchorEpochSeconds * 1_000,
+    attachments: stores.chatAttachments,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
     assistantMessageId: (accountId, generationId) =>
       opaqueChatId("assistant", accountId, generationId),
     eventId: (accountId, generationId, kind, sequence) =>
@@ -652,20 +684,29 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   registerChatMessagesRoutes(app, {
     resolvePrincipal,
     messages: stores.chatMessages,
+    attachments: stores.chatAttachments,
     control: controlStore,
     admission: stores.chatAdmission,
     supervisor: chatSupervisor,
     events: stores.chatEvents,
     cursor: chatCursor,
     counter,
-    nowEpochMilliseconds: () => anchorEpochSeconds * 1_000,
-    nowEpochSeconds: () => anchorEpochSeconds,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    nowEpochSeconds: () => Math.floor(chatNowEpochMilliseconds() / 1_000),
     cursorTtlSeconds: CURSOR_TTL_SECONDS,
     generationId: (accountId, messageId) => opaqueChatId("generation", accountId, messageId),
     acceptedEventId: (accountId, generationId) =>
       opaqueChatId("event", accountId, generationId, "accepted"),
     revision: (accountId, messageId, journalRevision, payloadHash) =>
       opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
+  });
+  registerChatAttachmentsRoute(app, {
+    resolvePrincipal,
+    attachments: stores.chatAttachments,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    attachmentId: options.attachmentId ?? (() => `attachment_${randomUUID()}`),
+    contentReference: options.attachmentContentReference
+      ?? (() => `attachment-content_${randomUUID()}`),
   });
   registerCurrentSessionRoutes(app, {
     sessions: stores.currentSession,
@@ -719,6 +760,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       settings: stores.settings,
       listen: stores.listen,
       chatMessages: stores.chatMessages,
+      chatAttachments: stores.chatAttachments,
       chatEvents: stores.chatEvents,
       chatAdmission: stores.chatAdmission,
       chatFinalization: stores.chatFinalization,

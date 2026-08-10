@@ -139,6 +139,7 @@ describe("ratified /v1/chat-messages route", () => {
         base.chatMessages,
         base.chatEvents,
         crashingSettings,
+        base.chatAttachments,
       ),
     });
     const { db, local } = bootInMemory(stores);
@@ -384,7 +385,12 @@ describe("ratified /v1/chat-messages route", () => {
       ...base,
       chatMessages: messages,
       chatEvents: events,
-      chatAdmission: createInMemoryChatAdmission(messages, events, base.settings),
+      chatAdmission: createInMemoryChatAdmission(
+        messages,
+        events,
+        base.settings,
+        base.chatAttachments,
+      ),
     };
     const { db, local } = bootInMemory(stores);
 
@@ -517,7 +523,7 @@ describe("ratified /v1/chat-messages route", () => {
     db.close();
   });
 
-  test("attachment metadata round-trips while advertised attachment support stays off", async () => {
+  test("caller-authored attachment metadata is rejected and capabilities advertise enforced policy", async () => {
     const { db, local } = bootInMemory();
     const attachments = [{
       displayName: "meeting-notes.pdf",
@@ -525,9 +531,7 @@ describe("ratified /v1/chat-messages route", () => {
       size: 12_345,
     }];
     const admitted = await post(local, payload("with-metadata", 500, { attachments }));
-    expect(admitted.status).toBe(201);
-    expect((await admissionBody(admitted)).message.attachments)
-      .toEqual(attachments);
+    expect(admitted.status).toBe(422);
 
     const history = await local.app.request("/v1/chat-messages", {
       headers: AUTHORIZATION(local.devToken),
@@ -541,16 +545,19 @@ describe("ratified /v1/chat-messages route", () => {
         allowedAttachmentMimeTypes: string[];
       };
     };
-    expect(body.messages[0]?.attachments).toEqual(attachments);
+    expect(body.messages).toEqual([]);
     expect(body.capabilities).toEqual({
-      maxAttachmentsPerMessage: 0,
-      maxAttachmentBytes: 0,
-      allowedAttachmentMimeTypes: [],
+      maxAttachmentsPerMessage: 4,
+      maxAttachmentBytes: 50 * 1024 * 1024,
+      allowedAttachmentMimeTypes: [
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf", "text/plain", "text/markdown",
+      ],
     });
     db.close();
   });
 
-  test("capability zero rejects attachment ids before message, event, or quota writes", async () => {
+  test("an unknown attachment id is not-found before message, event, or quota writes", async () => {
     const stores = createInMemoryLocalServiceStores();
     stores.settings.putEntitlement(ACCOUNT, {
       planLabel: "Metered",
@@ -566,9 +573,9 @@ describe("ratified /v1/chat-messages route", () => {
       attachmentIds: ["opaque-attachment"],
     }));
 
-    expect(rejected.status).toBe(422);
+    expect(rejected.status).toBe(404);
     expect(await rejected.json()).toEqual({
-      error: { code: "validation", retryable: false, action: "edit_request" },
+      error: { code: "not_found", retryable: false, action: "edit_request" },
     });
     expect(stores.chatMessages.readSnapshotSequence(ACCOUNT)).toBe(0);
     expect(stores.chatEvents.listUnterminated()).toEqual([]);

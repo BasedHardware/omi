@@ -73,7 +73,8 @@ Example passing output:
 | `PATCH` | `/v1/conversations/{id}/folder` | Bearer | Set or clear folder with JSON `{folder_id}` |
 | `DELETE` | `/v1/conversations/{id}` | Bearer | Delete only with explicit `?cascade=false` |
 | `GET` | `/v1/chat-messages` | Bearer | Canonical Chat history and capabilities |
-| `POST` | `/v1/chat-messages` | Bearer | Idempotent send admission plus SSE generation |
+| `POST` | `/v1/chat-messages` | Bearer | Finite idempotent send admission; generation is read separately |
+| `POST` | `/v1/chat-attachments` | Bearer | Stage exactly one sniffed multipart `file` for a Chat send |
 | `GET` | `/v1/chat-generations/{generationId}/events` | Bearer | SSE reconnect from `Last-Event-ID` or a current snapshot |
 | `DELETE` | `/v1/chat-generations/{generationId}` | Bearer | Durable, idempotent generation cancellation |
 | `GET` | `/v1/qa/status` | none | Served-traffic counters and seed identity |
@@ -141,9 +142,30 @@ The dev-server terminal also prints `[served] domain-reads=N ...` whenever `doma
 
 Seeded memories are placed one per local calendar day, stepping backward from the fixed anchor `2026-08-07T12:00:00.000Z`, so day-grouping in the client matches regardless of host clock.
 
+## Chat attachments
+
+`POST /v1/chat-attachments` accepts one multipart field named `file`. The
+service normalizes its basename, detects content from bytes, and returns an
+opaque staged id; caller-provided account ids, metadata, paths, URLs and inline
+message content are not accepted. Effective policy is four attachments per
+message, 50 MiB per attachment, and the MIME list returned on every history
+page: JPEG, PNG, GIF, WebP, PDF, UTF-8 plain text, and content-detected Markdown.
+
+A message send carries only ordered `attachmentIds`. Admission binds each id
+once to that account's main Chat message in the same transaction as the human
+message, entitlement charge and durable dispatch record. Unbound staging lasts
+24 hours. Bound content lasts 30 days from admission; its opaque
+`contentReference` then becomes `null` while id, display name, media type and
+byte size remain on history permanently. QA reset clears attachment metadata,
+ownership and content together with Chat state.
+
 ## Chat generation lifecycle
 
-The initiating Chat POST and reconnect GET both use the ratified SSE frame grammar. Advisory snapshots and deltas are durable only in the generation event log; `done` always carries the complete canonical assistant message also returned by history. A socket disconnect only stops that consumer and never cancels model work.
+The initiating Chat POST is finite JSON. The generation GET uses the ratified
+SSE frame grammar. Advisory snapshots and deltas are durable only in the
+generation event log; `done` always carries the complete canonical assistant
+message also returned by history. A socket disconnect only stops that consumer
+and never cancels model work.
 
 Cancellation is a durable lifecycle transition. The supervisor stops its generation source, persists any non-empty partial assistant text as a canonical message, and emits `cancelled` with that same complete message. Cancelling a terminal generation returns `204` without adding another terminal.
 

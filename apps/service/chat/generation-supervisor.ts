@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 
 import type { ChatGenerationContextSource } from "./generation-context";
+import type { ChatAttachmentContentPort } from "./attachment-content";
 import type { ChatGenerationSource, ChatGenerationSourceRun } from "./generation-source";
 import type { ChatGenerationEvent } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
@@ -32,6 +33,7 @@ export interface ChatGenerationSupervisorDependencies {
   readonly messages: ChatMessagesStore;
   readonly events: ChatGenerationEventsStore;
   readonly finalization: ChatGenerationFinalization;
+  readonly attachments: ChatAttachmentContentPort;
   readonly nowEpochMilliseconds: () => number;
   readonly assistantMessageId: (accountId: string, generationId: string) => string;
   readonly eventId: (
@@ -122,6 +124,7 @@ export const createChatGenerationSupervisor = (
       rating: null,
       reported: false,
       revision: deps.revision(state.accountId, id, payloadHash),
+      attachments: Object.freeze([]),
     });
   };
 
@@ -237,13 +240,22 @@ export const createChatGenerationSupervisor = (
         active.delete(key);
         throw error;
       }
-      void deps.context.load({ accountId: input.accountId, admitted: input.stored })
-        .then((context) => {
+      void Promise.all([
+        deps.context.load({ accountId: input.accountId, admitted: input.stored }),
+        Promise.resolve(deps.attachments.loadForGeneration({
+          accountId: input.accountId,
+          messageId: input.stored.message.id,
+          attachments: input.stored.message.attachments ?? Object.freeze([]),
+          nowEpochMilliseconds: deps.nowEpochMilliseconds(),
+        })),
+      ])
+        .then(([context, attachments]) => {
           if (state.terminal) return;
           const run = deps.source.start({
             generationId,
             prompt: input.stored.message.text,
             context,
+            attachments,
             onDelta(text): void {
               try {
                 if (state.terminal || text.length === 0) return;

@@ -15,6 +15,14 @@ import type {
   InMemoryChatMessagesStore,
   StoredChatMessage,
 } from "./chat-messages-store";
+import {
+  ATTACHMENT_CONTENT_RETENTION_MS,
+  MAIN_CHAT_ATTACHMENT_SCOPE,
+} from "../chat/attachment-policy";
+import type {
+  ChatAttachmentsStore,
+  InMemoryChatAttachmentsStore,
+} from "./chat-attachments-store";
 
 export interface ChatAdmissionInput {
   readonly accountId: string;
@@ -22,6 +30,7 @@ export interface ChatAdmissionInput {
   readonly generationId: string;
   readonly acceptedEventId: string;
   readonly admittedAt: number;
+  readonly attachmentIds: readonly string[];
 }
 
 export type ChatAdmissionOutcome =
@@ -32,7 +41,8 @@ export type ChatAdmissionOutcome =
     }
   | { readonly kind: "replay"; readonly stored: StoredChatMessage }
   | { readonly kind: "conflict" }
-  | { readonly kind: "entitlement" };
+  | { readonly kind: "entitlement" }
+  | { readonly kind: "attachment_not_found" };
 
 export interface ChatAdmission {
   admit(input: ChatAdmissionInput): ChatAdmissionOutcome;
@@ -52,14 +62,29 @@ export const defineChatAdmission = (
   messages: ChatMessagesStore,
   events: ChatGenerationEventsStore,
   settings: SettingsProjectionStore,
+  attachments: ChatAttachmentsStore,
 ): ChatAdmission => Object.freeze({
   admit(input: ChatAdmissionInput): ChatAdmissionOutcome {
     return transaction.execute(input.accountId, () => {
+      const messageAttachmentIds = (input.message.attachments ?? []).map((attachment) => attachment.id);
+      if (messageAttachmentIds.length !== input.attachmentIds.length
+        || messageAttachmentIds.some((id, index) => id !== input.attachmentIds[index])) {
+        return { kind: "conflict" };
+      }
       const existing = messages.readMessage(input.accountId, input.message.id);
       if (existing !== null) {
         if (existing.message.payloadHash !== input.message.payloadHash) {
           return { kind: "conflict" };
         }
+        const binding = attachments.bindToMessage({
+          accountId: input.accountId,
+          scope: MAIN_CHAT_ATTACHMENT_SCOPE,
+          attachmentIds: input.attachmentIds,
+          messageId: input.message.id,
+          nowEpochMilliseconds: input.admittedAt,
+          contentExpiresAt: input.admittedAt + ATTACHMENT_CONTENT_RETENTION_MS,
+        });
+        if (binding.kind === "not_found") return { kind: "attachment_not_found" };
         const replay = messages.admitHuman(
           input.accountId,
           input.message,
@@ -76,6 +101,16 @@ export const defineChatAdmission = (
         || (entitlement.limit !== null && entitlement.used >= entitlement.limit))) {
         return { kind: "entitlement" };
       }
+
+      const binding = attachments.bindToMessage({
+        accountId: input.accountId,
+        scope: MAIN_CHAT_ATTACHMENT_SCOPE,
+        attachmentIds: input.attachmentIds,
+        messageId: input.message.id,
+        nowEpochMilliseconds: input.admittedAt,
+        contentExpiresAt: input.admittedAt + ATTACHMENT_CONTENT_RETENTION_MS,
+      });
+      if (binding.kind === "not_found") return { kind: "attachment_not_found" };
 
       const admitted = messages.admitHuman(
         input.accountId,
@@ -121,18 +156,21 @@ export const createInMemoryChatAdmission = (
   messages: InMemoryChatMessagesStore,
   events: InMemoryChatGenerationEventsStore,
   settings: InMemorySettingsProjectionStore,
+  attachments: InMemoryChatAttachmentsStore,
 ): ChatAdmission => defineChatAdmission(
   {
     execute<Result>(accountId: string, operation: () => Result): Result {
       const messagesBefore = messages.snapshotAccount(accountId);
       const eventsBefore = events.snapshotAccount(accountId);
       const settingsBefore = settings.snapshotAccount(accountId);
+      const attachmentsBefore = attachments.snapshotAccount(accountId);
       try {
         return operation();
       } catch (error) {
         events.restoreAccount(accountId, eventsBefore);
         settings.restoreAccount(accountId, settingsBefore);
         messages.restoreAccount(accountId, messagesBefore);
+        attachments.restoreAccount(accountId, attachmentsBefore);
         throw error;
       }
     },
@@ -140,4 +178,5 @@ export const createInMemoryChatAdmission = (
   messages,
   events,
   settings,
+  attachments,
 );
