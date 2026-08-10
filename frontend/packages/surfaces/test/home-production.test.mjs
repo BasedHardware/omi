@@ -16,9 +16,9 @@ const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 const refresh = (phase, hasSavedData) => ({ phase, hasSavedData });
 
-function present(phase, hasSavedData, rowCount) {
+function present(phase, hasSavedData, rowCount, filtering = false) {
   const status = refresh(phase, hasSavedData);
-  return homeSurfacePresentation(status, rowCount, refreshPhaseNoticeKey(phase));
+  return homeSurfacePresentation(status, rowCount, refreshPhaseNoticeKey(phase), filtering);
 }
 
 test("home search reads loaded projections without claiming backend completeness", async () => {
@@ -72,6 +72,32 @@ test("home does not fabricate ask, chat, send, or mutation affordances", async (
   // claim behavior the current loaded projections do not provide.
 });
 
+test("home empty kinds distinguish true-empty from filter-miss", () => {
+  assert.equal(present("ready", false, 0, false).emptyKind, "empty-projection");
+  assert.equal(present("ready", true, 0, true).emptyKind, "filtered-out");
+  assert.equal(present("ready", true, 2, true).emptyKind, null);
+  assert.equal(present("ready", true, 2, false).emptyKind, null);
+  assert.equal(EN_MESSAGES["home.startTyping"], "Start typing to search what's saved");
+  assert.equal(EN_MESSAGES["common.noResults"], "No results");
+  // red-proof: returning one shared emptyKind for both filtering=true and
+  // filtering=false when rowCount is 0 collapses the two claims.
+});
+
+test("HomeProduction renders distinct data-empty-kind for each empty condition", async () => {
+  const source = await read("src/production/HomeProduction.tsx");
+  assert.match(source, /data-empty-kind="empty-projection"/);
+  assert.match(source, /data-empty-kind="filtered-out"/);
+  assert.match(source, /home\.startTyping/);
+  const trueEmpty = source.match(/data-empty-kind="empty-projection"[\s\S]{0,240}/)?.[0] ?? "";
+  assert.match(trueEmpty, /home\.startTyping/);
+  assert.doesNotMatch(trueEmpty, /common\.noResults/);
+  const filterMiss = source.match(/data-empty-kind="filtered-out"[\s\S]{0,240}/)?.[0] ?? "";
+  assert.match(filterMiss, /common\.noResults/);
+  assert.doesNotMatch(filterMiss, /home\.startTyping/);
+  // red-proof: dropping either data-empty-kind, or wiring both branches to
+  // common.noResults, fails the copy/kind assertions above.
+});
+
 test("home renders each of the five refresh states distinguishably", async () => {
   const source = await read("src/production/HomeProduction.tsx");
 
@@ -118,7 +144,7 @@ test("home renders each of the five refresh states distinguishably", async () =>
   // Labelled a tripwire on purpose (AGENTS.md): reading source is not behavioural
   // coverage; the behavioural half is homeSurfacePresentation above.
   const mustContain = [
-    "homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase))",
+    "homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase), filtering)",
     "{presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role=\"status\">{t(locale, presentation.noticeKey)}</div>}",
     "{presentation.showsSavedRows ? (",
     "data-surface-state={presentation.phase}",

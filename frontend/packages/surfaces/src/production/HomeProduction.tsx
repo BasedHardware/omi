@@ -135,7 +135,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
   }), [kind, locale, needle, spine]);
   const filtering = Boolean(needle) || kind !== "all";
   // Every notice / row visibility decision ships through this helper — JSX does not re-derive.
-  const presentation = homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase));
+  const presentation = homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase), filtering);
 
   return (
     <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
@@ -189,10 +189,14 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
                 </a>;
               })}
             </div>
-          ) : (
-            <div className="home-no-results">
+          ) : presentation.emptyKind === "filtered-out" ? (
+            <div className="home-no-results" data-empty-kind="filtered-out">
               <p>{t(locale, "common.noResults")}</p>
               {needle && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }}>{t(locale, "common.clearSearch")}</button>}
+            </div>
+          ) : (
+            <div className="home-no-results" data-empty-kind="empty-projection">
+              <p>{t(locale, "home.startTyping")}</p>
             </div>
           )}
         </section>
