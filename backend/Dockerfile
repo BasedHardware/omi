@@ -72,8 +72,11 @@ COPY backend/ .
 # fetches them from openaipublic.blob.core.windows.net on first use, which fails on the no-egress
 # on-prem network (build-time egress is allowed, like the helm/model pre-fetches). TIKTOKEN_CACHE_DIR
 # points the runtime at the baked cache. (D32 — on-prem chat.)
+# The download goes through scripts/prewarm_tiktoken_cache.py, which retries transient CDN failures
+# (429/5xx) with bounded backoff — its BAKED_ENCODINGS list mirrors the two encodings above and is
+# covered by the tokenizer-warmup contract test — so one flaky blob response can't fail the build.
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
-RUN /opt/venv/bin/python -c "import tiktoken; [tiktoken.get_encoding(e) for e in ('cl100k_base', 'o200k_base')]" \
+RUN /opt/venv/bin/python scripts/prewarm_tiktoken_cache.py cl100k_base o200k_base \
  && test -n "$(ls -A "$TIKTOKEN_CACHE_DIR")"
 
 # Run as a non-root user: a compromise of the app process (e.g. via a
