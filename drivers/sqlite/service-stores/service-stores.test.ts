@@ -8,6 +8,7 @@ import { createLocalService } from "../../../apps/service/app-facing";
 import type { AccountControlObservation } from "../../../core/control/account-control";
 import {
   SqliteAccountControlProjectionStore,
+  SqliteAccountLifecycleStore,
   SqliteConversationsStore,
   SqliteCurrentSessionPort,
   SqliteFoldersStore,
@@ -208,6 +209,7 @@ describe("the SQLite service-store adapters", () => {
     expect(injected.writePath.control).toBe(stores.control);
     expect(stores.settings).toBeInstanceOf(SqliteSettingsProjectionStore);
     expect(stores.currentSession).toBeInstanceOf(SqliteCurrentSessionPort);
+    expect(stores.accountLifecycle).toBeInstanceOf(SqliteAccountLifecycleStore);
     sqliteDb.close();
 
     const memoryDb = new Database(":memory:");

@@ -13,6 +13,10 @@ import {
   type DevPrincipal,
 } from "./auth/dev-token";
 import {
+  createInMemoryAccountLifecycleStore,
+  type AccountLifecycleStore,
+} from "./auth/account-lifecycle";
+import {
   createInMemoryCurrentSessionPort,
   type CurrentSessionPort,
 } from "./auth/current-session";
@@ -111,6 +115,7 @@ export interface LocalServiceStores {
   readonly control: AccountControlProjectionStore;
   readonly settings: SettingsProjectionStore;
   readonly currentSession: CurrentSessionPort;
+  readonly accountLifecycle: AccountLifecycleStore;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -177,6 +182,7 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     control: createInMemoryAccountControlProjectionStore(),
     settings: createInMemorySettingsProjectionStore(),
     currentSession: createInMemoryCurrentSessionPort(),
+    accountLifecycle: createInMemoryAccountLifecycleStore(),
   });
 };
 
@@ -261,8 +267,19 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const devToken = issuer.issue(options.ownerAccountId, anchorEpochSeconds);
   const resolveDevToken = (token: string): DevPrincipal | null =>
     issuer.resolve(token, anchorEpochSeconds);
+  // Signature, TTL, revocation, and account existence are one authentication
+  // result. Routes receive only the resolved principal/null boundary, so a
+  // later production lifecycle source is an adapter swap rather than a route
+  // retrofit.
+  const resolveActiveDevToken = (token: string): DevPrincipal | null => {
+    const principal = resolveDevToken(token);
+    if (principal === null) return null;
+    return stores.accountLifecycle.readLifecycle(principal.uid) === "active"
+      ? principal
+      : null;
+  };
   const resolvePrincipal = (token: string): DevPrincipal | null =>
-    stores.currentSession.authenticate(token, resolveDevToken);
+    stores.currentSession.authenticate(token, resolveActiveDevToken);
 
   const codecRootSecret = derive32(`${options.devSecretLabel}:codec-root`);
   const cursorSigningKeyset = {
@@ -426,7 +443,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   });
   registerCurrentSessionRoutes(app, {
     sessions: stores.currentSession,
-    resolveDevToken,
+    resolveDevToken: resolveActiveDevToken,
   });
   registerQaControlRoutes(app, {
     resolvePrincipal,

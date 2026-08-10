@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 
 import type { LocalServiceStores } from "../../../apps/service/app-facing";
+import { SqliteAccountLifecycleStore } from "./account-lifecycle";
 import { SqliteConversationsStore } from "./conversations-store";
 import { SqliteCurrentSessionPort } from "./current-session";
 import { createSqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
@@ -12,6 +13,7 @@ import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
 
+export { SqliteAccountLifecycleStore } from "./account-lifecycle";
 export { SqliteCurrentSessionPort } from "./current-session";
 export { SqliteSettingsProjectionStore } from "./settings-projection";
 
@@ -45,5 +47,6 @@ export const createSqliteLocalServiceStores = (
     control: new SqliteAccountControlProjectionStore(db),
     settings: new SqliteSettingsProjectionStore(db),
     currentSession: new SqliteCurrentSessionPort(db),
+    accountLifecycle: new SqliteAccountLifecycleStore(db),
   });
 };
