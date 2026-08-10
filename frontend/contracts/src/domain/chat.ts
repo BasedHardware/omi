@@ -246,12 +246,11 @@ export interface ChatErrorEnvelope {
   };
 }
 
-/** Send admission is the first event and echoes the canonical human record. */
-export type ChatAcceptedFrame = {
-  kind: "accepted";
+/** Plain-JSON POST admission echoing the canonical human record and generation. */
+export interface ChatAdmissionEnvelope {
   message: ChatHumanMessage;
   generation: { id: string };
-};
+}
 
 /** Advisory frames never become canonical records. */
 export type ChatAdvisoryFrame =
@@ -273,7 +272,7 @@ export type ChatTerminalFrame =
   | { kind: "cancelled"; message: ChatCancelledAssistantMessage };
 
 /** Complete ratified SSE data-frame grammar. Heartbeat comments are not frames. */
-export type ChatGenerationFrame = ChatAcceptedFrame | ChatAdvisoryFrame | ChatTerminalFrame;
+export type ChatGenerationFrame = ChatAdvisoryFrame | ChatTerminalFrame;
 
 /** DELETE /v1/chat-generations/{id} accepted response. */
 export type ChatCancellationEnvelope = { cancellation: { state: "accepted" } };
