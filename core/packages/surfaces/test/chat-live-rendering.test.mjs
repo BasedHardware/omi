@@ -362,6 +362,41 @@ test("two concurrent Attach clicks at cap one select exactly one unique descript
   }
 });
 
+test("two sequential native picks with the same staged id leave one descriptor", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  const duplicate = {
+    id: "opaque-duplicate",
+    mimeType: "application/pdf",
+    sizeBytes: 100,
+    expiresAt: "2026-08-11T12:00:00.000Z",
+    state: "staged",
+  };
+  const staging = {
+    isAvailable: () => true,
+    async pickAndStage() { return duplicate; },
+  };
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain, staging),
+  });
+  try {
+    const attach = rendered.container.querySelector("button.chat-attach");
+    await click(rendered, attach);
+    await click(rendered, attach);
+    assert.equal(
+      rendered.container.querySelectorAll(".chat-attachments li").length,
+      1,
+      "a repeated opaque staged id cannot enter the selected set twice",
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("canonical and expired attachment metadata render in newest and older messages", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(
