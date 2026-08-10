@@ -457,8 +457,9 @@ final class SBOnboardingModel: ObservableObject {
     showWidget = false
     typing = true
     let full = message(for: step)
+    let sleep = streamSleeper
     streamTask = Task { [weak self] in
-      await self.streamSleeper(700_000_000)
+      await sleep(700_000_000)
       guard let self, !Task.isCancelled else { return }
       self.typing = false
       // Reveal the reply incrementally: assigning the full string at once
@@ -470,7 +471,7 @@ final class SBOnboardingModel: ObservableObject {
         let revealStep = SmoothStreamReveal.step(remaining: full.count - revealed, elapsedMs: 40)
         revealed = min(full.count, revealed + max(1, revealStep))
         self.streamingText = String(full.prefix(revealed))
-        await self.streamSleeper(40_000_000)
+        await sleep(40_000_000)
       }
       guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))

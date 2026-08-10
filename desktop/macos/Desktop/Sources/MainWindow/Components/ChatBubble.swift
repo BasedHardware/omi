@@ -205,7 +205,8 @@ struct ChatBubble: View {
         groupView(group)
       }
       if message.isStreaming, app != nil {
-        if case .toolCalls(_, let calls) = groupedBlocks.last,
+        if let lastGroup = groupedBlocks.last,
+          case .toolCalls(_, let calls) = lastGroup,
           calls.contains(where: { block in
             if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
             return false
@@ -270,12 +271,7 @@ struct ChatBubble: View {
             )
           } else if message.isStreaming {
             StreamingAssistantText(displayText, isStreaming: true, sender: message.sender)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .background(
-                message.sender == .user
-                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
-              )
+              .chatMessageBlock(filled: presentation.isFilled)
           } else {
             messageTextBubble(displayText)
           }

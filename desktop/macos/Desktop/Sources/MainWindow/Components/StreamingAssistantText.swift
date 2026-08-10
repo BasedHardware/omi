@@ -23,7 +23,7 @@ struct StreamingAssistantText: View {
     if sender == .ai && isStreaming && OmiMarkdown.isPlainText(displayedText) {
       TokenizedText(displayedText, separator: .diff, animation: .fadeIn, animationDuration: 0.18)
         .font(.system(size: round(14 * fontScale)))
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .textSelection(.disabled)
     } else {
       OmiMarkdown(text: displayedText, sender: sender)

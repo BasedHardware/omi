@@ -5038,7 +5038,7 @@ class ChatProvider: ObservableObject {
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
-        pendingSpawnMaterializations.removeAll { $0.messageID == aiMessageId }
+        pendingSpawnMaterializations = pendingSpawnMaterializations.filter { $0.messageID != aiMessageId }
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -5344,7 +5344,7 @@ class ChatProvider: ObservableObject {
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
         streamingBuffer.discardPendingSegments(messageId: aiMessageId)
-        pendingSpawnMaterializations.removeAll { $0.messageID == aiMessageId }
+        pendingSpawnMaterializations = pendingSpawnMaterializations.filter { $0.messageID != aiMessageId }
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout

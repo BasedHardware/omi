@@ -246,9 +246,7 @@ struct SBOnboardingView: View {
       HStack(alignment: .top, spacing: 10) {
         SBLogo(size: 16, opacity: 0.9)
         TokenizedText(text, separator: .diff, animation: .fadeIn, animationDuration: 0.18)
-          .geist(size: 15.5)
-          .foregroundStyle(sb.ink(.w88))
-          .lineSpacing(3)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .frame(maxWidth: 380, alignment: .leading)
           .textSelection(.disabled)
         Spacer(minLength: 0)
