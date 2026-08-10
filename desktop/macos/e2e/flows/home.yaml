@@ -1,7 +1,7 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — the query bar, the results panel and its header controls, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
@@ -20,11 +21,11 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app opens on the search surface. The top bar shows the Omi mark, Library and Apps on the left and three wordless icons (microphone, screen capture, settings) on the right. Below it, a query bar with the placeholder 'Search what you've seen and heard…' sits above a separate results panel with a visible gap between them."
+    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask a follow-up…') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Home
+        - Chat
 
   - id: S2
     name: Verify the query bar is a composer

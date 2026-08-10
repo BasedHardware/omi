@@ -1,9 +1,9 @@
 //
 //  ShellSummon.swift — where the shell lands when you call it, and where it goes when you don't.
 //
-//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, and floating in front of
-//  whatever else is on screen until you put it away. This says *where*, and it is a separate file
-//  because "where" is the half that is per-display state rather than per-window properties.
+//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, floating, hiding itself the
+//  moment it loses focus. This says *where*, and it is a separate file because "where" is the half
+//  that is per-display state rather than per-window properties.
 //
 //  ## Why per-display, and not one remembered frame
 //
@@ -28,12 +28,8 @@
 //
 //  ## Dismissal
 //
-//  Always asked for, never a side effect of looking at something else. The shell does not hide itself
-//  when another app takes focus — `ShellWindowChrome`'s header carries that argument, and the placement
-//  rule below is half of it: a hidden window reports `isVisible == false`, so auto-hiding turned every
-//  click into another app into a re-landing of the panel the user had positioned. Putting it away is
-//  `⌘W`, the menu bar item, or Escape.
-//
+//  The signed-in shell dismisses when AppKit deactivates it, so clicking the desktop or another app
+//  returns the user to their work. `⌘O` toggles it directly; `⌘W` and Escape are explicit alternatives.
 //  Escape is `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
 //  after every modal, editor, page and navigation handler has declined it. Escape on a page still goes
 //  Home; Escape on Home, where nothing else wants it, puts the shell away.
@@ -75,17 +71,24 @@ enum ShellSummonPlacement {
   /// Whether this summon should place the window at all.
   ///
   /// `false` is the interesting answer: a shell already up on the display you are on is a shell you
-  /// are already using, and moving it would be the app fighting the user.
-  ///
-  /// `isVisible` only carries that meaning because nothing hides the shell behind the user's back any
-  /// more. While `hidesOnDeactivate` was on, clicking into another app made this read `false` for a
-  /// window the user had deliberately placed, so coming back re-landed it — the panel jumped to the
-  /// centre of the screen for having looked at a browser. Anything that orders the shell out without
-  /// the user asking reintroduces that, whatever it is called.
+  /// are already using, and moving it would be the app fighting the user. A hidden window normally
+  /// needs placement; the click-away return seam below preserves its frame on the same display.
   static func shouldReposition(isVisible: Bool, windowDisplayKey: String?, cursorDisplayKey: String?) -> Bool {
     guard isVisible else { return true }
     guard let cursorDisplayKey, let windowDisplayKey else { return false }
     return windowDisplayKey != cursorDisplayKey
+  }
+
+  /// A passive click-away is not a request to move the shell. Preserve its exact frame when it is
+  /// summoned back onto the same display; a summon from another display still lands under the user.
+  static func frameAfterClickAway(
+    previousFrame: NSRect,
+    previousDisplayKey: String?,
+    landingDisplayKey: String?,
+    landingVisibleFrame: NSRect
+  ) -> NSRect? {
+    guard let previousDisplayKey, previousDisplayKey == landingDisplayKey else { return nil }
+    return frame(remembered: previousFrame, visibleFrame: landingVisibleFrame)
   }
 
   /// The stable per-display identity frames are filed under.
@@ -141,6 +144,30 @@ enum ShellFrameMemory {
   }
 }
 
+/// The one-shot placement state created by passive AppKit deactivation. Keeping record, clear, and
+/// consume together prevents an explicit dismissal from being mistaken for a click-away return.
+struct ShellClickAwayReturn {
+  private var snapshot: (frame: NSRect, displayKey: String?)?
+
+  mutating func record(frame: NSRect, displayKey: String?) {
+    snapshot = (frame, displayKey)
+  }
+
+  mutating func clear() {
+    snapshot = nil
+  }
+
+  mutating func consume(landingDisplayKey: String?, landingVisibleFrame: NSRect) -> NSRect? {
+    guard let snapshot else { return nil }
+    self.snapshot = nil
+    return ShellSummonPlacement.frameAfterClickAway(
+      previousFrame: snapshot.frame,
+      previousDisplayKey: snapshot.displayKey,
+      landingDisplayKey: landingDisplayKey,
+      landingVisibleFrame: landingVisibleFrame)
+  }
+}
+
 /// Summoning, dismissing, and remembering — the live half, which owns the one shell window.
 @MainActor
 enum ShellSummon {
@@ -161,6 +188,9 @@ enum ShellSummon {
   /// attention. This is deliberately separate from ordinary dismissal: returning from a permission
   /// flow must restore the exact panel the user was looking at, not re-land it under the cursor.
   private static var permissionSuspendedFrame: NSRect?
+  /// The frame AppKit is about to hide because the user clicked away. Unlike Escape or Command-O,
+  /// this passive dismissal must not re-center a window the user deliberately placed.
+  private static var clickAwayReturn = ShellClickAwayReturn()
   /// Which window the Escape route and the frame observers are currently bound to.
   ///
   /// Both are per-window — `WindowEscapeKeyMonitor` matches on window identity and the notification
@@ -193,7 +223,10 @@ enum ShellSummon {
   /// The global launch shortcut is the one summon route that doubles as a dismissal gesture.
   /// Miniaturised windows are not visible to the user, so the shortcut must restore them rather
   /// than treat them as an already-open shell and order them out.
-  static func toggleAction(for window: NSWindow?) -> ToggleAction {
+  static func toggleAction(
+    for window: NSWindow?, presentation: ShellWindowChrome.Presentation = .summoned
+  ) -> ToggleAction {
+    guard presentation == .summoned else { return .summon }
     guard let window, window.isVisible, !window.isMiniaturized else { return .summon }
     return .dismiss
   }
@@ -218,6 +251,7 @@ enum ShellSummon {
     if presentation == .summoned {
       registerEscapeRoute(on: window)
     } else {
+      clickAwayReturn.clear()
       unregisterEscapeRoute()
     }
   }
@@ -235,6 +269,7 @@ enum ShellSummon {
   @discardableResult
   static func summon(alwaysPlace: Bool = false) -> Bool {
     guard let window = shellWindow() else { return false }
+    let wasVisible = window.isVisible
     applyPresentation(to: window)
     if window.isMiniaturized { window.deminiaturize(nil) }
 
@@ -249,13 +284,20 @@ enum ShellSummon {
         cursorDisplayKey: landingScreen.flatMap(ShellSummonPlacement.displayKey(for:)))
 
     if appliedPresentation == .summoned, repositions, let screen = landingScreen ?? window.screen {
-      window.setFrame(landingFrame(on: screen), display: true)
+      let preservedClickAwayFrame =
+        wasVisible
+        ? nil
+        : clickAwayReturn.consume(
+          landingDisplayKey: ShellSummonPlacement.displayKey(for: screen),
+          landingVisibleFrame: screen.visibleFrame)
+      window.setFrame(preservedClickAwayFrame ?? landingFrame(on: screen), display: true)
     } else if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
       // Anchored, or nothing to land on: the window may still be stranded on a display that went away.
       window.center()
     }
 
     window.makeKeyAndOrderFront(nil)
+    clickAwayReturn.clear()
     hasBeenShown = true
     return true
   }
@@ -287,6 +329,7 @@ enum ShellSummon {
       permissionSuspendedFrame = window.frame
       rememberFrame(of: window)
     }
+    clickAwayReturn.clear()
     window.orderOut(nil)
     return true
   }
@@ -301,6 +344,11 @@ enum ShellSummon {
     applyPresentation(to: window)
     window.setFrame(frame, display: true)
     window.makeKeyAndOrderFront(nil)
+    // Order-in can re-constrain a frame in some sessions (space restore, display re-layout);
+    // re-asserting after it keeps "permission UI must not re-center the shell" true everywhere.
+    if window.frame != frame {
+      window.setFrame(frame, display: true)
+    }
     hasBeenShown = true
   }
 
@@ -311,6 +359,7 @@ enum ShellSummon {
   /// one of them because the shell closed would be a bug of its own.
   static func dismiss() {
     guard let window = shellWindow(), window.isVisible else { return }
+    clickAwayReturn.clear()
     rememberFrame(of: window)
     window.orderOut(nil)
     let othersVisible = NSApp.windows.contains { other in
@@ -363,6 +412,21 @@ enum ShellSummon {
           }
         })
     }
+    observers.append(
+      center.addObserver(forName: NSApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
+        MainActor.assumeIsolated {
+          guard
+            presentation() == .summoned,
+            let shell = shellWindow(),
+            shell.isVisible,
+            shell.hidesOnDeactivate
+          else { return }
+          clickAwayReturn.record(
+            frame: shell.frame,
+            displayKey: shell.screen.flatMap(ShellSummonPlacement.displayKey(for:)))
+          rememberFrame(of: shell)
+        }
+      })
     // Onboarding completion and sign-out are both `UserDefaults` writes, so this is the one signal
     // that covers the switch in either direction. Re-dressing only on a real change keeps it off the
     // hot path of every other `@AppStorage` write in the app.

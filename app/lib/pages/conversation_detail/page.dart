@@ -213,16 +213,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        final date = provider.selectedDate;
-        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
-        if (idx != -1) {
+        final conversationId = provider.conversation.id;
+        if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
           // The initial list payload is enough to render the detail page. Fill
           // in omitted app results after the first usable frame instead of
-          // holding the destination's startup sequence on this request.
+          // holding the destination's startup sequence on this request. The
+          // provider re-locates the conversation by ID after the await because
+          // refreshes can reorder or replace the grouped list meanwhile.
           unawaited(
-            conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx).then((_) {
-              if (!mounted || provider.conversationOrNull?.id != widget.conversation.id) return;
-              provider.updateConversation(widget.conversation.id, date);
+            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
+              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+              provider.updateConversation(conversationId, provider.selectedDate);
             }),
           );
         } else {

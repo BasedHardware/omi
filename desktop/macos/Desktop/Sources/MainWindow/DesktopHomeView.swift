@@ -451,7 +451,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
+      if topBarNewSinceRaw.isZero { topBarNewSinceRaw = Date().timeIntervalSince1970 }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -1504,7 +1504,8 @@ private struct PageContentView: View {
         ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoryDestinationRawValue: $memoryDestinationRawValue
+          memoryDestinationRawValue: $memoryDestinationRawValue,
+          onOpenRewind: { selectedTabIndex = SidebarNavItem.rewind.rawValue }
         )
       case 3:
         // Same rule as the hub's Memories destination: the readable-width

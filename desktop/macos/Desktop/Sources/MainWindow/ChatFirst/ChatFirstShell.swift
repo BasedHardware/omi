@@ -190,7 +190,10 @@ struct ChatFirstShell: View {
         viewModelContainer: viewModelContainer,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
-        onSelectDestination: selectHubDestination
+        onSelectDestination: selectHubDestination,
+        // The Activity spine's screenshot rows leave for Rewind through the
+        // shell that owns the route — without this the rows are inert here.
+        onOpenRewind: { navigation.selectMore(.rewind) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }

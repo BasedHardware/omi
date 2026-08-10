@@ -1066,17 +1066,18 @@ def test_all_callsites_use_get_llm():
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
 
-    # memories.py: 5 callsites (memories x2, learnings x1, memory_category x1, memory_conflict x1)
+    # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
+    # memory_category x1, memory_conflict x1)
     mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
     mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
-    assert mem_calls.count('memories') == 2, f"Expected 2 get_llm('memories') calls, got {mem_calls.count('memories')}"
+    assert mem_calls.count('memories') == 3, f"Expected 3 get_llm('memories') calls, got {mem_calls.count('memories')}"
     assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 9 + 2 + 5 = 16 callsites
+    # Total: 9 + 2 + 6 = 17 callsites
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 16, f"Expected 16 total get_llm() callsites, got {total}"
+    assert total == 17, f"Expected 17 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

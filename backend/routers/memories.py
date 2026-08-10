@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -462,6 +462,63 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> Mem
             raise HTTPException(status_code=404, detail='Memory not found')
         return memory_item_to_memorydb(item).dict()
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
+
+
+# Matches the helper's own truncation budget so a caller cannot send text whose tail
+# the extractor would silently drop.
+MAX_EXTRACT_TEXT_CHARS = 40_000
+MAX_EXISTING_MEMORY_CHARS = 1_000
+
+
+class ExtractMemoryLogRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    text: str = Field(..., min_length=1, max_length=MAX_EXTRACT_TEXT_CHARS)
+    text_source: str = Field(default="memory_log", min_length=1, max_length=64)
+    existing_memories: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ExtractMemoryLogResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str]
+    profile: str = ""
+
+
+@router.post('/v1/memories/extract', tags=['memories'], response_model=ExtractMemoryLogResponse)
+async def extract_memory_log(
+    body: ExtractMemoryLogRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
+    ),
+):
+    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+
+    Does not write Firestore. Desktop onboarding/import should call this instead of inventing
+    memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
+    """
+    # Deferred with the LLM helper: this router is covered by a module-isolation test
+    # that stubs a minimal dependency graph, and utils.subscription pulls database.users
+    # in at import time.
+    from utils.llm import memories as memories_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    source = (body.text_source or "memory_log").strip() or "memory_log"
+    existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in body.existing_memories if m.strip()][:200]
+    extraction = await run_blocking(
+        llm_executor,
+        lambda: memories_llm.extract_memory_log_from_text(
+            uid,
+            body.text,
+            text_source=source,
+            existing_memories=existing,
+        ),
+    )
+    if extraction is None:
+        raise HTTPException(status_code=502, detail="memories_extract_failed")
+    return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)

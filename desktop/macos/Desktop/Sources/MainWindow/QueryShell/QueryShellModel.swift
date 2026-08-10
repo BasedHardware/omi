@@ -134,6 +134,11 @@ extension QueryShellRequest {
 enum QueryShellMode: Equatable, Sendable {
   case results
   case answer
+
+  /// What Home is when it first appears: the conversation. Opening the app is opening a chat with
+  /// Omi; the spine/search surface stays one `esc` (or `‹ Results`) away rather than being the
+  /// landing page.
+  static let homeDefault: QueryShellMode = .answer
 }
 
 /// **Where the one composer is standing.**

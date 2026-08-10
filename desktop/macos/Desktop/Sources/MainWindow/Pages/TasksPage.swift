@@ -12,6 +12,10 @@ enum TaskCategory: String, CaseIterable {
   case tomorrow = "Tomorrow"
   case later = "Later"
   case noDeadline = "No Deadline"
+  /// AI-captured tasks the user has not accepted yet. Renders last and collapsed
+  /// by default so automatic captures never interrupt attention; Accept moves a
+  /// task into the due-date categories above.
+  case suggestions = "Suggestions"
 
   var icon: String {
     switch self {
@@ -19,6 +23,7 @@ enum TaskCategory: String, CaseIterable {
     case .tomorrow: return "sunrise.fill"
     case .later: return "calendar"
     case .noDeadline: return "tray.fill"
+    case .suggestions: return "sparkles"
     }
   }
 
@@ -28,6 +33,7 @@ enum TaskCategory: String, CaseIterable {
     case .tomorrow: return Ink.secondary
     case .later: return Ink.secondary
     case .noDeadline: return Ink.secondary
+    case .suggestions: return Ink.secondary
     }
   }
 }
@@ -481,10 +487,23 @@ class TasksViewModel: ObservableObject {
   var lastEnterPressTime: Date?
   var scrollProxy: ScrollViewProxy?
 
+  /// Mirrors the view's `@AppStorage("tasksSuggestionsSectionExpanded")` toggle. Collapsed
+  /// suggestions render no rows, so they must not be reachable by keyboard navigation or
+  /// select-all either — an invisible focused row scrolls to nothing and bulk operations
+  /// would silently hit tasks the user cannot see.
+  var suggestionsSectionExpandedForNavigation: Bool {
+    UserDefaults.standard.bool(forKey: DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
+  }
+
+  /// The categories whose rows are actually rendered in the categorized list.
+  private var renderedCategories: [TaskCategory] {
+    TaskCategory.allCases.filter { $0 != .suggestions || suggestionsSectionExpandedForNavigation }
+  }
+
   /// Flat task list matching visual order (for arrow key navigation)
   var navigationOrder: [TaskActionItem] {
     if !showCompleted && !isMultiSelectMode {
-      return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0) }
+      return renderedCategories.flatMap { getOrderedTasks(for: $0) }
     } else {
       return displayTasks
     }
@@ -509,7 +528,7 @@ class TasksViewModel: ObservableObject {
   var selectedTaskIds: Set<String> { multiSelection.selectedIDs }
   var visibleTaskIDsForSelection: [String] {
     if !showCompleted && !isMultiSelectMode {
-      return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0).map(\.id) }
+      return renderedCategories.flatMap { getOrderedTasks(for: $0).map(\.id) }
     }
     return displayTasks.map(\.id)
   }
@@ -2464,6 +2483,11 @@ class TasksViewModel: ObservableObject {
   // MARK: - Category Helpers
 
   private func categoryFor(task: TaskActionItem, startOfTomorrow: Date, startOfDayAfterTomorrow: Date) -> TaskCategory {
+    // Unaccepted AI captures never enter the due-date categories, whatever their
+    // due date — auto-added work goes to Suggestions until the user accepts it.
+    if task.isPendingSuggestion {
+      return .suggestions
+    }
     guard let dueAt = task.dueAt else {
       return .noDeadline
     }
@@ -3106,6 +3130,7 @@ class TasksViewModel: ObservableObject {
     case "tomorrow": return .tomorrow
     case "later": return .later
     case "nodeadline", "no_deadline", "none": return .noDeadline
+    case "suggestions": return .suggestions
     default: return nil
     }
   }
@@ -3142,6 +3167,15 @@ class TasksViewModel: ObservableObject {
       if clearDueAt && updated.dueAt != nil {
         return
       }
+      updateInDisplay(updated)
+    }
+  }
+
+  /// Accept an AI-suggested task into the normal due-date categories.
+  func acceptSuggestedTask(_ task: TaskActionItem) async {
+    await store.acceptSuggestedTask(task)
+    // Surgical display update, mirroring updateTaskDetails.
+    if let updated = store.tasks.first(where: { $0.id == task.id }) {
       updateInDisplay(updated)
     }
   }
@@ -3257,7 +3291,7 @@ class TasksViewModel: ObservableObject {
     case .today: return cal.date(bySettingHour: 23, minute: 59, second: 0, of: Date())
     case .tomorrow: return cal.date(byAdding: .day, value: 1, to: startOfToday)
     case .later: return cal.date(byAdding: .day, value: 7, to: startOfToday)
-    case .noDeadline: return nil
+    case .noDeadline, .suggestions: return nil
     }
   }
 
@@ -3324,6 +3358,11 @@ struct TasksPage: View {
   /// Board (Notion-style status columns) vs the classic grouped list. Board is
   /// the default hero view; the list stays for fast keyboard-driven triage.
   @AppStorage("tasksViewIsBoard") private var tasksViewIsBoard = true
+
+  /// Suggestions stay collapsed until the user opens them — AI captures must not
+  /// interrupt attention. Persisted so the choice survives relaunch.
+  @AppStorage(DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
+  private var suggestionsSectionExpanded = false
 
   // Keyboard navigation state
   @State private var inlineCreateText = ""
@@ -3852,7 +3891,11 @@ struct TasksPage: View {
     ScrollView(.vertical, showsIndicators: false) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         ForEach(TaskCategory.allCases, id: \.self) { category in
-          boardColumn(category)
+          // An empty Suggestions column is noise on a planning board; the other
+          // columns keep their "Nothing here" placeholders as drop targets.
+          if category != .suggestions || !(viewModel.categorizedTasks[.suggestions] ?? []).isEmpty {
+            boardColumn(category)
+          }
         }
       }
       .padding(.horizontal, OmiSpacing.lg)
@@ -3864,6 +3907,9 @@ struct TasksPage: View {
 
   private func boardColumn(_ category: TaskCategory) -> some View {
     let tasks = viewModel.categorizedTasks[category] ?? []
+    // Same collapsed-by-default contract as the list view, sharing the same
+    // persisted flag: AI captures never spread across the board uninvited.
+    let isCollapsedSuggestions = category == .suggestions && !suggestionsSectionExpanded
     return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: category.icon)
@@ -3872,6 +3918,11 @@ struct TasksPage: View {
         Text(category.rawValue)
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundColor(Ink.secondary)
+        if category == .suggestions {
+          Image(systemName: isCollapsedSuggestions ? "chevron.right" : "chevron.down")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
         Text("\(tasks.count)")
           .scaledFont(size: OmiType.micro, weight: .semibold)
           .foregroundColor(Ink.secondary)
@@ -3882,8 +3933,23 @@ struct TasksPage: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.bottom, OmiSpacing.xxs)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        if category == .suggestions { suggestionsSectionExpanded.toggle() }
+      }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(category == .suggestions ? .isButton : [])
+      .accessibilityAction {
+        if category == .suggestions { suggestionsSectionExpanded.toggle() }
+      }
+      .accessibilityIdentifier(
+        category == .suggestions
+          ? "task-board-toggle-\(category.rawValue)" : "task-board-header-\(category.rawValue)"
+      )
 
-      if tasks.isEmpty {
+      if isCollapsedSuggestions {
+        EmptyView()
+      } else if tasks.isEmpty {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .stroke(Ink.rowFillHover.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
           .frame(height: 44)
@@ -3899,6 +3965,23 @@ struct TasksPage: View {
             onToggle: { await viewModel.toggleTask(task) },
             onOpen: { selectTask(task) }
           )
+          .overlay(alignment: .bottomTrailing) {
+            if category == .suggestions {
+              Button {
+                Task { await viewModel.acceptSuggestedTask(task) }
+              } label: {
+                Text("Accept")
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+                  .foregroundColor(Ink.primary)
+                  .padding(.horizontal, OmiSpacing.xs)
+                  .padding(.vertical, 2)
+                  .background(Capsule().fill(Ink.rowFillHover))
+              }
+              .buttonStyle(.plain)
+              .padding(OmiSpacing.xxs)
+              .accessibilityIdentifier("task-board-accept-\(task.id)")
+            }
+          }
         }
       }
     }
@@ -4220,6 +4303,11 @@ struct TasksPage: View {
                 TaskCategorySection(
                   category: category,
                   orderedTasks: orderedTasks,
+                  isCollapsed: category == .suggestions && !suggestionsSectionExpanded,
+                  onToggleCollapse: category == .suggestions
+                    ? { suggestionsSectionExpanded.toggle() } : nil,
+                  onAccept: category == .suggestions
+                    ? { task in await viewModel.acceptSuggestedTask(task) } : nil,
                   isMultiSelectMode: viewModel.isMultiSelectMode,
                   indentLevelFor: { viewModel.getIndentLevel(for: $0) },
                   isSelectedFor: { viewModel.multiSelection.selectedIDs.contains($0) },
@@ -4496,6 +4584,13 @@ private struct TaskChatSidePanelView: View {
 struct TaskCategorySection: View {
   let category: TaskCategory
   let orderedTasks: [TaskActionItem]
+  /// Collapsed sections render only their header row (used by Suggestions).
+  var isCollapsed: Bool = false
+  /// Present only on collapsible sections; makes the header a disclosure toggle.
+  var onToggleCollapse: (() -> Void)?
+  /// Present only on the Suggestions section; accepts an AI-captured task into
+  /// the normal due-date categories.
+  var onAccept: ((TaskActionItem) async -> Void)?
   var isMultiSelectMode: Bool = false
 
   // Callbacks for row data and actions (passed through to TaskRow)
@@ -4570,6 +4665,12 @@ struct TaskCategorySection: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
+        if onToggleCollapse != nil {
+          Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+
         Spacer()
 
         if category == .today {
@@ -4598,9 +4699,21 @@ struct TaskCategorySection: View {
 
       }
       .padding(.horizontal, OmiSpacing.xxs)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        onToggleCollapse?()
+      }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(onToggleCollapse != nil ? .isButton : [])
+      .accessibilityAction {
+        onToggleCollapse?()
+      }
+      .accessibilityIdentifier(
+        onToggleCollapse != nil ? "task-section-toggle-\(category.rawValue)" : "task-section-\(category.rawValue)"
+      )
 
       // Drop zone at top of category (for dropping at position 0)
-      if !isMultiSelectMode {
+      if !isMultiSelectMode && !isCollapsed {
         Color.clear
           .frame(height: isTopDropTargeted ? 4 : 2)
           .overlay {
@@ -4638,41 +4751,58 @@ struct TaskCategorySection: View {
       }
 
       // Tasks in category with drag-and-drop reordering
-      if !isMultiSelectMode {
+      if !isMultiSelectMode && !isCollapsed {
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
-              TaskRow(
-                task: task,
-                category: category,
-                indentLevel: indentLevelFor?(task.id) ?? 0,
-                isMultiSelectMode: isMultiSelectMode,
-                isSelected: isSelectedFor?(task.id) ?? false,
-                isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
-                onToggle: onToggle,
-                onDelete: onDelete,
-                onToggleSelection: onToggleSelection,
-                onUpdateDetails: onUpdateDetails,
-                onUpdateTags: onUpdateTags,
-                onIncrementIndent: onIncrementIndent,
-                onDecrementIndent: onDecrementIndent,
-                onOpenChat: onOpenChat,
-                onInvestigate: onInvestigate,
-                onSelect: onSelect,
-                onOpenDetails: onOpenDetails,
-                onHover: onHover,
-                isTaskDetailPanelActive: isTaskDetailPanelActive,
-                onDragStarted: onDragStarted,
-                onDragEnded: onDragEnded,
-                isBeingDragged: draggedTaskId == task.id,
-                isChatActive: isChatActive,
-                activeChatTaskId: activeChatTaskId,
-                chatCoordinator: chatCoordinator,
-                editingTaskId: editingTaskId,
-                onEditingChanged: onEditingChanged,
-                onStartEditing: onStartEditing,
-                animateToggleTaskId: animateToggleTaskId
-              )
+              HStack(spacing: OmiSpacing.sm) {
+                TaskRow(
+                  task: task,
+                  category: category,
+                  indentLevel: indentLevelFor?(task.id) ?? 0,
+                  isMultiSelectMode: isMultiSelectMode,
+                  isSelected: isSelectedFor?(task.id) ?? false,
+                  isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
+                  onToggle: onToggle,
+                  onDelete: onDelete,
+                  onToggleSelection: onToggleSelection,
+                  onUpdateDetails: onUpdateDetails,
+                  onUpdateTags: onUpdateTags,
+                  onIncrementIndent: onIncrementIndent,
+                  onDecrementIndent: onDecrementIndent,
+                  onOpenChat: onOpenChat,
+                  onInvestigate: onInvestigate,
+                  onSelect: onSelect,
+                  onOpenDetails: onOpenDetails,
+                  onHover: onHover,
+                  isTaskDetailPanelActive: isTaskDetailPanelActive,
+                  onDragStarted: onDragStarted,
+                  onDragEnded: onDragEnded,
+                  isBeingDragged: draggedTaskId == task.id,
+                  isChatActive: isChatActive,
+                  activeChatTaskId: activeChatTaskId,
+                  chatCoordinator: chatCoordinator,
+                  editingTaskId: editingTaskId,
+                  onEditingChanged: onEditingChanged,
+                  onStartEditing: onStartEditing,
+                  animateToggleTaskId: animateToggleTaskId
+                )
+                if let onAccept {
+                  Button {
+                    Task { await onAccept(task) }
+                  } label: {
+                    Text("Accept")
+                      .scaledFont(size: OmiType.caption, weight: .semibold)
+                      .foregroundColor(Ink.primary)
+                      .padding(.horizontal, OmiSpacing.sm)
+                      .padding(.vertical, 3)
+                      .background(Capsule().fill(Ink.rowFillHover))
+                  }
+                  .buttonStyle(.plain)
+                  .padding(.trailing, OmiSpacing.xs)
+                  .accessibilityIdentifier("task-accept-\(task.id)")
+                }
+              }
               .id(task.id)
               .modifier(
                 TaskDragDropModifier(

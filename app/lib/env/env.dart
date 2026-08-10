@@ -41,8 +41,6 @@ abstract class Env {
     _agentProxyWsUrlOverride = url;
   }
 
-  static String? get openAIAPIKey => _instance.openAIAPIKey;
-
   static String? get posthogApiKey => _instance.posthogApiKey;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
@@ -61,6 +59,20 @@ abstract class Env {
   static String get authCallbackScheme => profile.authCallbackScheme;
 
   static String get authRedirectUri => '$authCallbackScheme://auth/callback';
+
+  /// OAuth remains on the production identity plane even when mobile Beta
+  /// uses the development serving API for product traffic.
+  static String get authApiBaseUrl => authApiBaseUrlForProfile(profile, servingApiBaseUrl: apiBaseUrl);
+
+  static String authApiBaseUrlForProfile(
+    AppEnvironmentProfile configuredProfile, {
+    String? servingApiBaseUrl,
+  }) {
+    if (configuredProfile == AppEnvironmentProfile.mobileBeta) {
+      return productionApiBaseUrl;
+    }
+    return servingApiBaseUrl ?? configuredProfile.defaultApiBaseUrl;
+  }
 
   static void validateProfilePairing() {
     final productionFlavor = F.env == Environment.prod;
@@ -179,8 +191,6 @@ abstract class Env {
 }
 
 abstract class EnvFields {
-  String? get openAIAPIKey;
-
   String? get posthogApiKey;
 
   String? get apiBaseUrl;

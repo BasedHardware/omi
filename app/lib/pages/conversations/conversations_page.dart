@@ -55,6 +55,9 @@ List<_ConversationListRow> _buildConversationListRows({
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
+    final conversationIndexes = <String, int>{
+      for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
+    };
     if (entries.isEmpty) continue;
 
     if (!hasRenderedDate) {
@@ -86,7 +89,7 @@ List<_ConversationListRow> _buildConversationListRows({
           isFirst: false,
           conversation: conversation,
           recording: null,
-          conversationIndex: conversations.indexOf(conversation),
+          conversationIndex: conversationIndexes[conversation.id] ?? -1,
         ));
       } else {
         rows.add((

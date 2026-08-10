@@ -108,6 +108,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
 
             final searchQuery = provider.previousQuery;
+            final hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
             final resultFuture = routeToPage(
               context,
               ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
@@ -128,7 +129,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
                       conversation: widget.conversation,
                       conversationIndex: widget.conversationIdx,
-                      hoursSinceConversation: DateTime.now().difference(widget.conversation.createdAt).inHours,
+                      hoursSinceConversation: hoursSinceConversation,
                     );
                   }
                 }, Priority.idle),

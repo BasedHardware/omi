@@ -10,8 +10,6 @@ import 'dart:io';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
@@ -67,6 +65,16 @@ void main() {
       expect(AppEnvironmentProfile.mobileBeta.usesFirebaseAuthEmulator, isFalse);
       expect(AppEnvironmentProfile.mobileBeta.allowsProductionData, isTrue);
       expect(AppEnvironmentProfile.mobileBeta.authCallbackScheme, 'omi-beta');
+    });
+
+    test('mobile beta keeps OAuth on the production identity plane', () {
+      expect(
+        Env.authApiBaseUrlForProfile(
+          AppEnvironmentProfile.mobileBeta,
+          servingApiBaseUrl: 'https://api.omiapi.com/',
+        ),
+        Env.productionApiBaseUrl,
+      );
     });
 
     test('local profile rejects a production Firebase project', () {
