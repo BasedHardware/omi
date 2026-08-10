@@ -1023,23 +1023,38 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     guard notchModeEnabled else { return true }
-    guard !state.showingAIConversation,
-      state.currentNotification == nil
-    else { return true }
-
-    // Content-derived hit region: the fixed window is larger than the
-    // visible chrome/menu, and its transparent margins must keep passing
-    // clicks through to windows below (hitTest returns nil outside this).
-    let chromeHeight =
-      state.isNotchHoverMenuVisible
-      ? max(Self.notchActivationHeight, notchVisibleContentHeight)
-      : notchChromeHeightForCurrentScreen
-    return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
-      localPoint: point,
-      windowSize: frame.size,
-      chromeHeight: chromeHeight,
-      horizontalOutset: notchVisibleContentHorizontalOutset
-    )
+    // Only content that visibly fills the fixed window may own the whole frame: an expanded
+    // response panel or a notification card. A conversation that is merely open (ask input,
+    // "thinking" shimmer) draws chrome plus at most the input panel — treating it as
+    // whole-window turned the 430×527 fixed frame into an invisible click sink that reached
+    // down over the main window's top navigation (dead Tasks/Rewind/Apps pills).
+    guard
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: state.showingAIConversation,
+        showingAIResponse: state.showingAIResponse,
+        hasNotification: state.currentNotification != nil)
+    else {
+      // Content-derived hit region: the fixed window is larger than the
+      // visible chrome/menu, and its transparent margins must keep passing
+      // clicks through to windows below (hitTest returns nil outside this).
+      var chromeHeight =
+        state.isNotchHoverMenuVisible
+        ? max(Self.notchActivationHeight, notchVisibleContentHeight)
+        : notchChromeHeightForCurrentScreen
+      var horizontalOutset = notchVisibleContentHorizontalOutset
+      if state.showingAIConversation {
+        // Conversation without an expanded response: chrome plus the ask-input panel.
+        chromeHeight = max(chromeHeight, notchChromeHeightForCurrentScreen + inputPanelHeight)
+        horizontalOutset = Self.notchGlowOutsetX
+      }
+      return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+        localPoint: point,
+        windowSize: frame.size,
+        chromeHeight: chromeHeight,
+        horizontalOutset: horizontalOutset
+      )
+    }
+    return true
   }
 
   private func observeNotchAgentPills() {
