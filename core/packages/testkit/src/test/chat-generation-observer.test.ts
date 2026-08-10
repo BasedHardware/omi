@@ -10,7 +10,9 @@ import type {
 import {
   IncrementalChatGenerationParser,
   observeChatGeneration,
+  type ChatGenerationObservationEvent,
 } from "@omi-core/adapters-platform";
+import { ManualEnv } from "../fakes.js";
 
 function assistant(id: string, text: string): ChatMessage {
   return {
@@ -126,9 +128,15 @@ test("disconnect reconnects after the exact opaque id without duplicate events",
       event("event-terminal", "done", JSON.stringify(done)),
     ],
   ]);
-  const observation = observeChatGeneration(port, "generation/reconnect");
-  const observed = [];
-  for await (const item of observation.events) observed.push(item);
+  const env = new ManualEnv();
+  const observation = observeChatGeneration(port, "generation/reconnect", env);
+  const observed: ChatGenerationObservationEvent[] = [];
+  const consume = (async () => {
+    for await (const item of observation.events) observed.push(item);
+  })();
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+  await env.advance(250);
+  await consume;
 
   assert.deepEqual(port.opens, [
     {
@@ -161,11 +169,57 @@ test("missing snapshot and malformed SSE expose an error instead of advisory tex
   const port = new ScriptedStreamPort([
     [event("event-delta", "delta", '{"kind":"delta","text":"must not render"}')],
   ]);
-  const observation = observeChatGeneration(port, "generation-invalid");
+  const observation = observeChatGeneration(port, "generation-invalid", new ManualEnv());
   const observed = [];
   for await (const item of observation.events) observed.push(item);
   assert.equal(observed.length, 1);
   assert.equal(observed[0]?.kind, "error");
   assert.match(observed[0]?.kind === "error" ? observed[0].failure : "", /leading snapshot/);
   assert.equal(port.streams[0]?.cancelled, true);
+});
+
+test("clean EOF waits on injected bounded backoff and preserves the exact cursor", async () => {
+  const scripts = Array.from({ length: 51 }, () => [
+    event("event-snapshot", "snapshot", '{"kind":"snapshot","text":"Saved"}'),
+  ]);
+  const port = new ScriptedStreamPort(scripts);
+  const env = new ManualEnv();
+  const delayed: number[] = [];
+  const originalDelay = env.delay.bind(env);
+  env.delay = (ms, fn) => {
+    delayed.push(ms);
+    return originalDelay(ms, fn);
+  };
+  const observation = observeChatGeneration(port, "generation-backoff", env);
+  const iterator = observation.events[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), {
+    value: { kind: "snapshot", id: "event-snapshot", text: "Saved" },
+    done: false,
+  });
+
+  let settled = false;
+  const terminal = iterator.next().then((value) => {
+    settled = true;
+    return value;
+  });
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+  assert.equal(port.opens.length, 1, "clean EOF cannot spin open in microtasks");
+  assert.deepEqual(delayed, [250], "the first reconnect delay is nonzero and injected");
+  assert.equal(settled, false);
+
+  for (const delay of [250, 500, 1_000, 2_000, 4_000]) {
+    await env.advance(delay);
+  }
+  const result = await terminal;
+  assert.equal(result.done, false);
+  assert.equal(result.value?.kind, "error");
+  assert.match(result.value?.kind === "error" ? result.value.failure : "", /reconnect limit/);
+  assert.equal(port.opens.length, 6, "initial open plus five retries is the hard bound");
+  assert.deepEqual(delayed, [250, 500, 1_000, 2_000, 4_000]);
+  for (const request of port.opens.slice(1)) {
+    assert.equal(
+      request.params,
+      '{"generationId":"generation-backoff","lastEventId":"event-snapshot"}',
+    );
+  }
 });
