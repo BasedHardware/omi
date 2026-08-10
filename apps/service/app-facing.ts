@@ -31,10 +31,14 @@ import { registerTasksReadRoutes } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
 import {
   createInMemoryConversationsStore,
-  type ConversationFolderReferenceLookup,
   type ConversationRecord,
   type ConversationsStore,
 } from "./stores/conversations-store";
+import {
+  createInMemoryFoldersStore,
+  type FolderRecord,
+  type FoldersStore,
+} from "./stores/folders-store";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
@@ -83,6 +87,7 @@ export interface LocalServiceOptions {
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
 export interface LocalServiceStores {
   readonly conversations: ConversationsStore;
+  readonly folders: FoldersStore;
   readonly tasks: TasksStore;
   readonly registry: WriteIdRegistry;
   readonly unitOfWork: WriteUnitOfWork;
@@ -90,10 +95,32 @@ export interface LocalServiceStores {
   readonly control: AccountControlProjectionStore;
 }
 
-const QA_CONVERSATION_FOLDER_IDS = new Set(["default-folder-qa", "work-folder-qa"]);
-const QA_CONVERSATION_FOLDERS: ConversationFolderReferenceLookup = Object.freeze({
-  hasFolder: (_accountId, folderId) => QA_CONVERSATION_FOLDER_IDS.has(folderId),
-});
+const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
+  Object.freeze({
+    id: "default-folder-qa",
+    name: "Other",
+    description: null,
+    color: "#6B7280",
+    icon: "folder",
+    created_at: "2026-08-03T12:00:00.000Z",
+    updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+    order: 0,
+    is_default: true,
+    is_system: true,
+  }),
+  Object.freeze({
+    id: "work-folder-qa",
+    name: "Work",
+    description: "QA work items",
+    color: "#007AFF",
+    icon: "briefcase",
+    created_at: "2026-08-03T12:00:00.000Z",
+    updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+    order: 1,
+    is_default: false,
+    is_system: false,
+  }),
+]);
 
 const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
   id: "quiet-chat-qa",
@@ -114,13 +141,17 @@ const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
   folder_id: "work-folder-qa",
 });
 
-export const createInMemoryLocalServiceStores = (
-  conversationFolders: ConversationFolderReferenceLookup = QA_CONVERSATION_FOLDERS,
-): LocalServiceStores => {
+export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
   const tasks = createInMemoryTasksStore();
   const registry = createInMemoryWriteIdRegistry();
+  let folders: FoldersStore | undefined;
+  const conversations = createInMemoryConversationsStore({
+    hasFolder: (accountId, folderId) => folders?.hasFolder(accountId, folderId) ?? false,
+  });
+  folders = createInMemoryFoldersStore(conversations);
   return Object.freeze({
-    conversations: createInMemoryConversationsStore(conversationFolders),
+    conversations,
+    folders,
     tasks,
     registry,
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
@@ -146,6 +177,7 @@ export interface LocalService {
    */
   readonly writePath: {
     readonly conversations: ConversationsStore;
+    readonly folders: FoldersStore;
     readonly tasks: TasksStore;
     readonly tasksRead: TasksReadStore;
     readonly registry: WriteIdRegistry;
@@ -161,6 +193,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const ownsStores = options.stores === undefined;
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const conversations = stores.conversations;
+  const folders = stores.folders;
   const reseed = (): void => {
     resetQaSnapshot(options.db);
     seedQaSnapshot(options.db, {
@@ -169,7 +202,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       account_timezone: options.accountTimezone,
     });
     if (ownsStores) {
+      folders.reset();
       conversations.reset();
+      for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
       const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
       if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
     }
@@ -374,6 +409,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     seedIdentity,
     writePath: Object.freeze({
       conversations,
+      folders,
       tasks,
       tasksRead: tasks,
       registry: writeIdRegistry,

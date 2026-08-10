@@ -9,6 +9,7 @@ import type { AccountControlObservation } from "../../../core/control/account-co
 import {
   SqliteAccountControlProjectionStore,
   SqliteConversationsStore,
+  SqliteFoldersStore,
   SqliteStragglerTable,
   SqliteTasksStore,
   SqliteWriteIdRegistry,
@@ -195,6 +196,8 @@ describe("the SQLite service-store adapters", () => {
     expect(injected.writePath.conversations).toBe(stores.conversations);
     expect(injected.writePath.tasks).toBe(stores.tasks);
     expect(stores.conversations).toBeInstanceOf(SqliteConversationsStore);
+    expect(injected.writePath.folders).toBe(stores.folders);
+    expect(stores.folders).toBeInstanceOf(SqliteFoldersStore);
     expect(injected.writePath.registry).toBe(stores.registry);
     expect(injected.writePath.unitOfWork).toBe(stores.unitOfWork);
     expect(stores.unitOfWork).toBeInstanceOf(SqliteWriteUnitOfWork);

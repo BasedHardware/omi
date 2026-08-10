@@ -36,6 +36,18 @@ const row = (
 const boot = () => {
   const db = new Database(":memory:");
   const stores = createInMemoryLocalServiceStores();
+  stores.folders.upsert(OWNER, {
+    id: "work-folder-qa",
+    name: "Work",
+    description: "QA work items",
+    color: "#007AFF",
+    icon: "briefcase",
+    created_at: CREATED,
+    updated_at: MUTATED,
+    order: 0,
+    is_default: false,
+    is_system: false,
+  });
   stores.conversations.upsert(OWNER, row("conversation-a"));
   stores.conversations.upsert(OWNER, row("conversation-b"));
   const service = createLocalService({

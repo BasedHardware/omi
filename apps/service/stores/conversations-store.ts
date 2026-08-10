@@ -68,7 +68,21 @@ export type ConversationDeleteOutcome =
   | { readonly deleted: true; readonly state_revision: number }
   | { readonly deleted: false; readonly reason: "not_found" };
 
-export interface ConversationsStore {
+export interface ConversationFolderReassignmentOutcome {
+  readonly reassigned: number;
+  readonly state_revision: number | null;
+}
+
+/** Narrow write seam used by a folder deletion's enclosing unit of work. */
+export interface ConversationFolderReassignment {
+  reassignFolderReferences(
+    accountId: string,
+    fromFolderId: string,
+    toFolderId: string,
+  ): ConversationFolderReassignmentOutcome;
+}
+
+export interface ConversationsStore extends ConversationFolderReassignment {
   /** Stable insertion order, matching the legacy collection's array order. */
   listRecords(accountId: string): readonly ConversationRecord[];
   readRecord(accountId: string, recordId: string): ConversationRecord | null;
@@ -198,6 +212,25 @@ export const createInMemoryConversationsStore = (
         return { deleted: false, reason: "not_found" };
       }
       return { deleted: true, state_revision: bumpRevision(accountId) };
+    },
+
+    reassignFolderReferences(
+      accountId: string,
+      fromFolderId: string,
+      toFolderId: string,
+    ): ConversationFolderReassignmentOutcome {
+      const records = accounts.get(accountId);
+      if (records === undefined) return { reassigned: 0, state_revision: null };
+      let reassigned = 0;
+      for (const [recordId, record] of records) {
+        if (record.folder_id !== fromFolderId) continue;
+        records.set(recordId, freezeRecord({ ...record, folder_id: toFolderId }));
+        reassigned += 1;
+      }
+      return {
+        reassigned,
+        state_revision: reassigned === 0 ? null : bumpRevision(accountId),
+      };
     },
 
     readStateRevision(accountId: string): number {
