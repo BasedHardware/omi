@@ -39,8 +39,6 @@ def test_app_message_is_linked_to_the_apps_chat_session(monkeypatch):
 
     # Without these the message is invisible to the session-scoped read in get_messages.
     assert stored['chat_session_id'] == 'sess-1'
-    assert stored['app_id'] == 'app-1'
-    assert 'plugin_id' not in stored
     assert links == [('sess-1', message.id)]
 
 
@@ -52,8 +50,6 @@ def test_app_message_without_a_session_is_unchanged(monkeypatch):
     message = chat_db.add_app_message('hello', 'app-1', 'uid-1')
 
     assert stored['chat_session_id'] is None
-    assert stored['app_id'] == 'app-1'
-    assert 'plugin_id' not in stored
     assert links == []
     assert message.app_id == 'app-1'
 

@@ -28,6 +28,7 @@ class ChatSessionResponse(BaseModel):
     created_at: datetime = Field(description='Session creation timestamp (UTC).')
     updated_at: datetime = Field(description='Last update timestamp (UTC).')
     app_id: Optional[str] = Field(default=None, description='App/plugin the session belongs to; null for main chat.')
+    plugin_id: Optional[str] = Field(default=None, description='Mirrors app_id for cross-platform query compatibility.')
     message_count: int = Field(description='Number of messages in the session.')
     starred: bool = Field(description='Whether the user starred the session.')
 
@@ -36,6 +37,13 @@ class ChatSessionResponse(BaseModel):
     def _repair_legacy_session_shape(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
+
+        app_id_val = data.get('app_id')
+        plugin_id_val = data.get('plugin_id')
+        if app_id_val is not None:
+            data['plugin_id'] = app_id_val
+        elif plugin_id_val is not None:
+            data['app_id'] = plugin_id_val
 
         if not data.get('title'):
             data['title'] = 'New Chat'
