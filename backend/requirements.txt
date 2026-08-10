@@ -116,7 +116,6 @@ MarkupSafe==2.1.5
 marshmallow==3.26.2
 matplotlib-inline==0.1.7
 mdurl==0.1.2
-mongomock==4.3.0
 monotonic==1.6
 more-itertools==10.5.0
 mplcursors==0.5.3
