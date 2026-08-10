@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from collections.abc import Mapping
@@ -15,6 +16,7 @@ from llm_gateway.gateway.lane_catalog import (
 )
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm.gateway_client import feature_auto_lane_id
+from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
     get_all_configured_features,
     get_model,
@@ -26,11 +28,21 @@ from utils.llm.model_config import (
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
 GENERATED_ROUTE_OVERRIDES_FILE = 'generated_route_overrides.yaml'
+# Opt-in serving restriction. Unset (the default) serves every lane the config
+# generates, exactly as if this mechanism did not exist.
+SERVING_LANE_ALLOWLIST_ENV_VAR = 'OMI_LLM_GATEWAY_SERVING_LANES'
+SERVING_LANE_DROP_CONFIRM_ENV_VAR = 'OMI_LLM_GATEWAY_SERVING_LANES_DROP_CONFIRM'
 ConfigItem: TypeAlias = dict[str, Any]
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigValidationError(ValueError):
     pass
+
+
+class ServingLaneAllowlistError(ConfigValidationError):
+    """The opt-in serving allowlist would drop lanes without explicit confirmation."""
 
 
 class GatewayConfig(BaseModel):
@@ -51,6 +63,8 @@ def load_gateway_config(
     prod_mode: bool | None = None,
     required_lane_ids: Iterable[str] | None = None,
     catalog: "LaneCatalog | None" = None,
+    serving_lane_allowlist: Iterable[str] | str | None = None,
+    serving_lane_drop_confirm: Iterable[str] | str | None = None,
 ) -> GatewayConfig:
     resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
     resolved_prod_mode = _resolve_prod_mode(prod_mode)
@@ -85,6 +99,19 @@ def load_gateway_config(
     feature_bundles = _parse_feature_bundles(generated_bundle_items)
     feature_bundles.update(_parse_feature_bundles(bundle_items))
 
+    served_lane_ids = resolve_served_lane_ids(
+        lanes.keys(),
+        allowlist=serving_lane_allowlist,
+        drop_confirm=serving_lane_drop_confirm,
+    )
+    if served_lane_ids != set(lanes):
+        lanes = {lane_id: lane for lane_id, lane in lanes.items() if lane_id in served_lane_ids}
+        route_artifacts = {art_id: art for art_id, art in route_artifacts.items() if art.lane_id in served_lane_ids}
+        feature_bundles = {
+            feature: bundle for feature, bundle in feature_bundles.items() if bundle.lane_id in served_lane_ids
+        }
+        generated_lane_ids = generated_lane_ids & served_lane_ids
+
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
     if required_lane_ids is not None:
@@ -99,6 +126,70 @@ def load_gateway_config(
     if catalog is not None:
         validate_serving_config(catalog, gateway_cfg)
     return gateway_cfg
+
+
+def _parse_lane_id_set(env_var: str, override: Iterable[str] | str | None) -> set[str]:
+    if override is None:
+        raw: str = os.getenv(env_var, '')
+    elif isinstance(override, str):
+        raw = override
+    else:
+        return {str(lane_id).strip() for lane_id in override if str(lane_id).strip()}
+    return {part.strip() for part in raw.split(',') if part.strip()}
+
+
+def resolve_served_lane_ids(
+    candidate_lane_ids: Iterable[str],
+    *,
+    allowlist: Iterable[str] | str | None = None,
+    drop_confirm: Iterable[str] | str | None = None,
+) -> frozenset[str]:
+    """Resolve which of `candidate_lane_ids` the gateway actually serves.
+
+    Default (no allowlist configured): every candidate lane is served. This is
+    the only path taken unless an operator opts in, so the served set is
+    byte-for-byte what it was before this mechanism existed.
+
+    Opt-in: `OMI_LLM_GATEWAY_SERVING_LANES` names the lane set to serve. Because
+    silently disabling production lanes is the exact failure this guards, an
+    allowlist that would drop any currently-served lane refuses to start unless
+    `OMI_LLM_GATEWAY_SERVING_LANES_DROP_CONFIRM` names exactly the dropped set.
+    """
+    candidates = {str(lane_id) for lane_id in candidate_lane_ids}
+    allow = _parse_lane_id_set(SERVING_LANE_ALLOWLIST_ENV_VAR, allowlist)
+    if not allow:
+        return frozenset(candidates)
+
+    unknown = sorted(allow - candidates)
+    if unknown:
+        raise ServingLaneAllowlistError(
+            f'{SERVING_LANE_ALLOWLIST_ENV_VAR} names lanes that this config does not generate: '
+            f'{unknown}. Remove them or fix the lane ids.'
+        )
+
+    dropped = candidates - allow
+    if not dropped:
+        return frozenset(candidates)
+
+    confirmed = _parse_lane_id_set(SERVING_LANE_DROP_CONFIRM_ENV_VAR, drop_confirm)
+    if confirmed != dropped:
+        raise ServingLaneAllowlistError(
+            f'refusing to start: {SERVING_LANE_ALLOWLIST_ENV_VAR} would stop serving '
+            f'{len(dropped)} currently-served lane(s): {sorted(dropped)}. '
+            f'Disabling production lanes is never silent — set '
+            f'{SERVING_LANE_DROP_CONFIRM_ENV_VAR} to exactly that list to confirm, '
+            f'or widen the allowlist.'
+        )
+
+    record_fallback(
+        component='llm_gateway',
+        from_mode='all_generated_lanes',
+        to_mode='allowlisted_lanes',
+        reason='policy',
+        outcome='degraded',
+        log=logger,
+    )
+    return frozenset(allow)
 
 
 def load_generated_route_overrides(
