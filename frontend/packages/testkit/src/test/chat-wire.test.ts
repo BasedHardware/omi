@@ -302,3 +302,72 @@ test("adapter emits the ratified paths, envelope, keyset cursor, and canonical t
     path: "/v1/chat-generations/generation%2F01",
   });
 });
+
+test("a disconnected initiating stream reconnects by generation and Last-Event-ID", async () => {
+  // red-proof: remove the reconnect branch from sendChatMessageOp. The call
+  // either cannot accept the reconnect transport or returns malformed success
+  // without issuing the ratified GET carrying the last observed event cursor.
+  const human = canonicalMessage("client-message-reconnect", "human", "Keep going");
+  const assistant = canonicalMessage("assistant-message-reconnect", "ai", "Recovered answer");
+  const http = new ScriptedHttp();
+  http.respond({
+    status: 201,
+    json: null,
+    text: [
+      "event: accepted",
+      "id: event-accepted",
+      `data: ${JSON.stringify({ kind: "accepted", message: human, generation: { id: "generation-reconnect" } })}`,
+      "",
+      "event: delta",
+      "id: event-delta",
+      `data: ${JSON.stringify({ kind: "delta", text: "Recovered" })}`,
+      "",
+      "",
+    ].join("\n"),
+  });
+  const requests: Array<{
+    method: "GET";
+    path: string;
+    headers: { "Last-Event-ID": string };
+  }> = [];
+  const reconnect = {
+    async request(request: (typeof requests)[number]) {
+      requests.push(request);
+      return {
+        status: 200,
+        json: null,
+        text: [
+          "event: snapshot",
+          "id: event-snapshot",
+          `data: ${JSON.stringify({ kind: "snapshot", text: "Recovered" })}`,
+          "",
+          "event: done",
+          "id: event-done",
+          `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
+          "",
+          "",
+        ].join("\n"),
+      };
+    },
+  };
+  const op: Extract<ChatMessageOp, { op: "create" }> = {
+    op: "create",
+    opId: "outbox-op-reconnect",
+    id: "client-message-reconnect" as RecordId,
+    at: 1_786_352_400_000,
+    text: "Keep going",
+    sender: "human",
+    journalRevision: 1,
+    attachmentIds: [],
+  };
+
+  const sent = await sendChatMessageOp(http, op, reconnect);
+  assert.equal(sent.ok, true);
+  if (!sent.ok) return;
+  assert.equal(sent.terminal.kind, "done");
+  assert.deepEqual(requests, [{
+    method: "GET",
+    path: "/v1/chat-generations/generation-reconnect/events",
+    headers: { "Last-Event-ID": "event-delta" },
+  }]);
+});
