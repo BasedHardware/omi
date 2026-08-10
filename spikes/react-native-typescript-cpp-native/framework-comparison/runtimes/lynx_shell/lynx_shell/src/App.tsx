@@ -4,26 +4,9 @@ import './App.css';
 import arrow from './assets/arrow.png';
 import lynxLogo from './assets/lynx-logo.png';
 import reactLynxLogo from './assets/react-logo.png';
+import { getNativeCapabilities, normalizePacket } from './native/omiNative';
 
 const relayContract = 'omi-relay-contract:v1|native-seam:lynx-module|payload:bounded|gap:explicit';
-
-type OmiNativeModule = {
-  getNativeCapabilities?: () => string;
-  normalizePacket?: (rawBase64: string) => string;
-};
-
-function readNativeModule(): OmiNativeModule | undefined {
-  if (typeof NativeModules === 'undefined') return undefined;
-  return (NativeModules as { OmiNativeModule?: OmiNativeModule }).OmiNativeModule;
-}
-
-function readNativeCapabilities(): string {
-  return readNativeModule()?.getNativeCapabilities?.() ?? 'NATIVE_ADAPTER_UNAVAILABLE';
-}
-
-function readNativePacketStatus(): string {
-  return readNativeModule()?.normalizePacket?.('') ?? 'NATIVE_ADAPTER_UNAVAILABLE';
-}
 
 export function App(props: { onRender?: () => void }) {
   const [alterLogo, setAlterLogo] = useState(false);
@@ -32,8 +15,8 @@ export function App(props: { onRender?: () => void }) {
 
   useEffect(() => {
     console.info('Hello, ReactLynx');
-    setNativeCapabilities(readNativeCapabilities());
-    setNativePacketStatus(readNativePacketStatus());
+    setNativeCapabilities(getNativeCapabilities());
+    setNativePacketStatus(normalizePacket(''));
   }, []);
   props.onRender?.();
 
