@@ -8,17 +8,17 @@ import 'bridge_http_host.dart';
 
 /// One shell-owned authority composes both privileged transports.
 class ShellTransportAuthority {
-  const ShellTransportAuthority({required this.baseUrl, required this.token});
+  ShellTransportAuthority({required this.baseUrl, required String? token}) : custody = ShellCredentialCustody(token);
 
   final Uri baseUrl;
-  final String? token;
+  final ShellCredentialCustody custody;
 
-  BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, token: token);
+  BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody);
 
-  ListenSocketHost makeListenHost() => ListenSocketHost(baseUrl: baseUrl, token: token);
+  ListenSocketHost makeListenHost() => ListenSocketHost(baseUrl: baseUrl, custody: custody);
 
   ListenSocketPolicyResult prepareListen(String path) =>
-      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: token);
+      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
 }
 
 class ListenSocketPreparedRequest {
@@ -68,13 +68,16 @@ class ListenSocketHostPolicy {
 }
 
 class ListenSocketHost {
-  ListenSocketHost({required this.baseUrl, required this.token});
+  ListenSocketHost({required this.baseUrl, required this.custody});
 
   static const channel = 'omiListenSocket';
 
   final Uri baseUrl;
-  final String? token;
+  final ShellCredentialCustody custody;
   final Map<String, WebSocket> _sockets = <String, WebSocket>{};
+
+  ListenSocketPolicyResult prepareUsingCurrentCustodyForConformance(String path) =>
+      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
 
   Future<void> register(WebViewController controller) {
     return controller.addJavaScriptChannel(
@@ -99,7 +102,7 @@ class ListenSocketHost {
     }
     final path = decoded['path'];
     if (action != 'open' || path is! String) return;
-    final decision = ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: token);
+    final decision = ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
     final prepared = decision.request;
     if (prepared == null) {
       await _emit(controller, id, const <String, Object>{'type': 'error'});

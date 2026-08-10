@@ -11,7 +11,8 @@
 // are never sent to JS. The surface sends only a method, an origin-relative
 // path, and a JSON body string. Responses carry status + body text only — no
 // response headers, so `set-cookie` / `www-authenticate` cannot leak into the
-// page. Dev-grade custody this wave (env vars); Keychain custody is owed.
+// page. SessionBootstrap resolves environment/dev credentials into origin-scoped
+// Keychain custody, while this file owns the current process's mutable authority.
 //
 // The security-bearing constants are NOT hand-copied: channel name, forbidden
 // headers, and failure reasons all come from BridgeHttpContract.generated.swift,
@@ -201,19 +202,27 @@ enum BridgeHttpPolicy {
   }
 }
 
-/// Mutable in-process bearer custody for the privileged HTTP host.
+/// Mutable in-process bearer custody shared by every privileged host for one
+/// shell origin.
 ///
 /// The environment remains immutable, so an explicit environment token may be
 /// loaded again after restart. Clearing this object still guarantees the
 /// current process cannot present a token whose exact session DELETE already
 /// succeeded. Persistent macOS deletion is injected and runs at the same gate.
-final class BridgeHttpCredentialCustody {
-  private(set) var token: String?
+final class ShellCredentialCustody: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedToken: String?
   private let onSuccessfulSignOut: () -> Void
 
   init(token: String?, onSuccessfulSignOut: @escaping () -> Void = {}) {
-    self.token = (token?.isEmpty ?? true) ? nil : token
+    self.storedToken = (token?.isEmpty ?? true) ? nil : token
     self.onSuccessfulSignOut = onSuccessfulSignOut
+  }
+
+  func currentToken() -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return storedToken
   }
 
   func prepare(
@@ -227,15 +236,22 @@ final class BridgeHttpCredentialCustody {
   ) -> BridgeHttpPolicyDecision {
     BridgeHttpPolicy.prepare(
       id: id, method: method, path: path, headers: headers, body: body,
-      baseURL: baseURL, token: token, clientId: clientId)
+      baseURL: baseURL, token: currentToken(), clientId: clientId)
   }
 
   /// Exact success only. Every near miss deliberately retains custody.
   func observe(method: String, path: String, status: Int) {
-    guard method == "DELETE", path == "/v1/session/current", status == 204,
-      token != nil
-    else { return }
-    token = nil
+    guard method == "DELETE", path == "/v1/session/current", status == 204 else { return }
+    lock.lock()
+    guard storedToken != nil else {
+      lock.unlock()
+      return
+    }
+    storedToken = nil
+    lock.unlock()
+    // Persistent deletion happens only after in-process authority is gone. Its
+    // production callback logs and absorbs Keychain failures, so it cannot
+    // resurrect custody or turn the server's successful sign-out into failure.
     onSuccessfulSignOut()
   }
 }
@@ -261,7 +277,7 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
   static let channel = BridgeHttpContract.channel
 
   private let baseURL: URL
-  private let custody: BridgeHttpCredentialCustody
+  private let custody: ShellCredentialCustody
   /// Per-run client identity (`OMI_RUN_CLIENT_ID`), threaded in at init so
   /// `BridgeHttpPolicy.prepare` stays a pure function the generated
   /// host-conformance runner can call without reading the environment itself.
@@ -296,25 +312,29 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
     return out
   }
 
-  convenience init(baseURL: URL, token: String?, clientId: String? = nil) {
-    self.init(baseURL: baseURL, token: token, clientId: clientId, onSuccessfulSignOut: {})
-  }
-
   init(
     baseURL: URL,
-    token: String?,
-    clientId: String? = nil,
-    onSuccessfulSignOut: @escaping () -> Void
+    custody: ShellCredentialCustody,
+    clientId: String? = nil
   ) {
     self.baseURL = baseURL
-    self.custody = BridgeHttpCredentialCustody(
-      token: token, onSuccessfulSignOut: onSuccessfulSignOut)
+    self.custody = custody
     self.clientId = (clientId?.isEmpty ?? true) ? nil : clientId
     let cfg = BridgeHttpPolicy.sessionConfiguration()
     let sessionDelegate = BridgeHttpURLSessionDelegate()
     self.sessionDelegate = sessionDelegate
     self.session = URLSession(configuration: cfg, delegate: sessionDelegate, delegateQueue: nil)
     super.init()
+  }
+
+  func prepareUsingCurrentCustodyForConformance(_ id: String) -> BridgeHttpPolicyDecision {
+    custody.prepare(
+      id: id, method: "GET", path: "/v1/settings", headers: [:], body: nil,
+      baseURL: baseURL, clientId: clientId)
+  }
+
+  func observeResponseForConformance(method: String, path: String, status: Int) {
+    custody.observe(method: method, path: path, status: status)
   }
 
   private func failure(

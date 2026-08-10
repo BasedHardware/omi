@@ -397,10 +397,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var httpHandler: BridgeHttpHandler?
     var listenSocketHandler: ListenSocketHandler?
     if let base = session.baseURL {
-      let authority = ShellTransportAuthority(baseURL: base, token: session.token)
       let keychain = KeychainCredentialStore()
-      httpHandler = authority.makeHTTPHandler(
-        clientId: runClientId,
+      let authority = ShellTransportAuthority(
+        baseURL: base, token: session.token,
         onSuccessfulSignOut: {
           do {
             try SessionBootstrap.deleteCredential(for: base, from: keychain)
@@ -409,6 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               Data("bridge-http: origin-scoped credential delete failed\n".utf8))
           }
         })
+      httpHandler = authority.makeHTTPHandler(clientId: runClientId)
       listenSocketHandler = authority.makeListenHandler()
       FileHandle.standardError.write(
         Data(

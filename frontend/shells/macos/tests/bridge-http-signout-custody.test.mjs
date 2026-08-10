@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -17,12 +17,18 @@ function hasSwiftc() {
 const HARNESS = String.raw`
 import Foundation
 
+enum FakeDeleteError: Error { case refused }
+
 final class FakeCredentialStore: CredentialStore, @unchecked Sendable {
   var deleted: [String] = []
+  var deleteFails = false
   var logDescription: String { "fake" }
   func read(account: String) throws -> String? { nil }
   func write(account: String, token: String) throws {}
-  func delete(account: String) throws { deleted.append(account) }
+  func delete(account: String) throws {
+    if deleteFails { throw FakeDeleteError.refused }
+    deleted.append(account)
+  }
 }
 
 var failed = false
@@ -31,45 +37,98 @@ func check(_ name: String, _ condition: Bool) {
   if !condition { failed = true }
 }
 
+MainActor.assumeIsolated {
 let base = URL(string: "https://settings.example.test:8443")!
 let keychain = FakeCredentialStore()
-let custody = BridgeHttpCredentialCustody(token: "environment-token") {
-  try? SessionBootstrap.deleteCredential(for: base, from: keychain)
+var deleteFailureLogs = 0
+let authority = ShellTransportAuthority(
+  baseURL: base, token: "environment-token",
+  onSuccessfulSignOut: {
+    do {
+      try SessionBootstrap.deleteCredential(for: base, from: keychain)
+    } catch {
+      deleteFailureLogs += 1
+    }
+  })
+let http = authority.makeHTTPHandler(clientId: nil)
+let listen = authority.makeListenHandler()
+
+@MainActor func prepareHTTP(_ id: String = "read") -> BridgeHttpPolicyDecision {
+  http.prepareUsingCurrentCustodyForConformance(id)
 }
 
-func prepare(_ id: String = "read") -> BridgeHttpPolicyDecision {
-  custody.prepare(
-    id: id, method: "GET", path: "/v1/settings", headers: [:], body: nil,
-    baseURL: base, clientId: nil)
+func prepareListen(_ id: String = "listen") -> ListenSocketPolicyDecision {
+  listen.prepareUsingCurrentCustodyForConformance(id: id, path: "/v4/listen")
 }
 
-if case .dispatch = prepare("before") { check("credential-used-before-signout", true) }
-else { check("credential-used-before-signout", false) }
+if case .dispatch = prepareHTTP("http-before") { check("http-used-before-signout", true) }
+else { check("http-used-before-signout", false) }
+if case .dispatch = prepareListen("listen-before") { check("listen-used-before-signout", true) }
+else { check("listen-used-before-signout", false) }
 
-custody.observe(method: "DELETE", path: "/v1/session/current", status: 503)
-if case .dispatch = prepare("after-failed") { check("failed-delete-keeps-token", true) }
-else { check("failed-delete-keeps-token", false) }
+http.observeResponseForConformance(method: "DELETE", path: "/v1/session/current", status: 503)
+if case .dispatch = prepareHTTP("http-after-status") { check("near-miss-status-keeps-http", true) }
+else { check("near-miss-status-keeps-http", false) }
+if case .dispatch = prepareListen("listen-after-status") { check("near-miss-status-keeps-listen", true) }
+else { check("near-miss-status-keeps-listen", false) }
 
-for (method, path, status) in [
-  ("GET", "/v1/session/current", 204),
-  ("DELETE", "/v1/session/current?all=true", 204),
-  ("DELETE", "/v1/session/other", 204),
-  ("DELETE", "/v1/session/current", 200),
-] {
-  custody.observe(method: method, path: path, status: status)
-}
-if case .dispatch = prepare("after-near-misses") { check("near-misses-keep-token", true) }
-else { check("near-misses-keep-token", false) }
+http.observeResponseForConformance(method: "DELETE", path: "/v1/session/other", status: 204)
+if case .dispatch = prepareHTTP("http-after-route") { check("near-miss-route-keeps-http", true) }
+else { check("near-miss-route-keeps-http", false) }
+if case .dispatch = prepareListen("listen-after-route") { check("near-miss-route-keeps-listen", true) }
+else { check("near-miss-route-keeps-listen", false) }
 
-custody.observe(method: "DELETE", path: "/v1/session/current", status: 204)
-if case let .failure(reason, _) = prepare("after-success") {
-  check("next-settings-read-is-credential-free", reason == .notAuthenticated)
+let timeout = BridgeHttpPolicy.transportFailure(id: "timeout", name: "timeout")
+check("timeout-classified-without-clearing", timeout.reason == .timeout)
+if case .dispatch = prepareHTTP("http-after-timeout") { check("timeout-keeps-http", true) }
+else { check("timeout-keeps-http", false) }
+if case .dispatch = prepareListen("listen-after-timeout") { check("timeout-keeps-listen", true) }
+else { check("timeout-keeps-listen", false) }
+
+http.observeResponseForConformance(method: "DELETE", path: "/v1/session/current", status: 204)
+if case let .failure(reason, _) = prepareHTTP("http-after-success") {
+  check("next-http-request-is-credential-free", reason == .notAuthenticated)
 } else {
-  check("next-settings-read-is-credential-free", false)
+  check("next-http-request-is-credential-free", false)
+}
+if case .failure = prepareListen("listen-after-success") {
+  check("next-listen-open-is-credential-free", true)
+} else {
+  check("next-listen-open-is-credential-free", false)
 }
 check("origin-scoped-keychain-item-deleted", keychain.deleted == ["api@https://settings.example.test:8443"])
 
+let failingKeychain = FakeCredentialStore()
+failingKeychain.deleteFails = true
+let failingAuthority = ShellTransportAuthority(
+  baseURL: base, token: "second-environment-token",
+  onSuccessfulSignOut: {
+    do {
+      try SessionBootstrap.deleteCredential(for: base, from: failingKeychain)
+    } catch {
+      deleteFailureLogs += 1
+    }
+  })
+let failingHTTP = failingAuthority.makeHTTPHandler(clientId: nil)
+let failingListen = failingAuthority.makeListenHandler()
+failingHTTP.observeResponseForConformance(
+  method: "DELETE", path: "/v1/session/current", status: 204)
+if case let .failure(reason, _) = failingHTTP.prepareUsingCurrentCustodyForConformance("http-after-delete-error") {
+  check("keychain-failure-cannot-resurrect-http", reason == .notAuthenticated)
+} else {
+  check("keychain-failure-cannot-resurrect-http", false)
+}
+if case .failure = failingListen.prepareUsingCurrentCustodyForConformance(
+  id: "listen-after-delete-error", path: "/v4/listen")
+{
+  check("keychain-failure-cannot-resurrect-listen", true)
+} else {
+  check("keychain-failure-cannot-resurrect-listen", false)
+}
+check("keychain-deletion-failure-logged", deleteFailureLogs == 1)
+
 exit(failed ? 1 : 0)
+}
 `;
 
 test(
@@ -85,6 +144,7 @@ test(
         "-o", binary,
         join(sources, "BridgeHttpContract.generated.swift"),
         join(sources, "BridgeHttp.swift"),
+        join(sources, "ListenSocket.swift"),
         join(sources, "Credentials.swift"),
         main,
         "-framework", "Foundation",
@@ -94,13 +154,15 @@ test(
       ], {
         env: { ...process.env, CLANG_MODULE_CACHE_PATH: join(scratch, "module-cache") },
       });
-      const output = execFileSync(binary, { encoding: "utf8" });
+      const result = spawnSync(binary, { encoding: "utf8" });
+      assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+      const output = result.stdout;
       for (const line of output.trim().split("\n")) {
         assert.match(line, /^OK:/, output);
       }
-      // red-proof: remove the live custody observe call, widen any exact
-      // method/path/status predicate, or remove SessionBootstrap's scoped
-      // deletion and the named behavioral check above fails.
+      // red-proof: make either handler retain a copied token, remove the live
+      // custody observe call, widen its exact predicate, or remove the scoped
+      // deletion and a named cross-transport/near-miss assertion fails.
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
