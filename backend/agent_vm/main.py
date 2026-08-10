@@ -495,9 +495,18 @@ def execute_sql(query: str) -> str:
     if not re.search(r"\bLIMIT\b", query, re.I):
         query = query.rstrip().rstrip(";") + " LIMIT 200"
     try:
+        def authorizer(action: int, arg1: str | None, arg2: str | None, dbname: str | None, source: str | None) -> int:
+            if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION):
+                return sqlite3.SQLITE_OK
+            return sqlite3.SQLITE_DENY
+
         with runtime.lock:
-            cursor = runtime.db.execute(query)
-            rows = [dict(row) for row in cursor.fetchall()]
+            try:
+                runtime.db.set_authorizer(authorizer)
+                cursor = runtime.db.execute(query)
+                rows = [dict(row) for row in cursor.fetchall()]
+            finally:
+                runtime.db.set_authorizer(None)
         return json.dumps({"rows": rows, "count": len(rows)}, default=str)
     except sqlite3.Error as exc:
         return json.dumps({"error": str(exc)})
