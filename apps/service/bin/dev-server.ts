@@ -1,9 +1,13 @@
 // domain-pending(DIV-DOMCORE-001)
 import { Database } from "bun:sqlite";
+import { writeFileSync } from "node:fs";
 
 import { createLocalDevService } from "../app-facing";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
+import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
+import { QA_EVIDENCE_PATH } from "../routes/qa-evidence";
+import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
 
 /**
  * One-command local backend for testing a real macOS/iOS app against the new
@@ -56,6 +60,8 @@ interface BootConfig {
   readonly accountTimezone: string;
   readonly databasePath: string;
   readonly devSecretLabel: string;
+  readonly runId: string | null;
+  readonly readyRecordPath: string | null;
 }
 
 const readConfig = (): BootConfig => {
@@ -69,7 +75,7 @@ const readConfig = (): BootConfig => {
     assertPortInRange(port);
   } catch {
     fail(
-      `port ${port} is not allocated to this service. Use 4851, the one app-facing door.`,
+      `port ${port} is not allocated to this service. Use one bounded app-facing port.`,
     );
   }
 
@@ -91,6 +97,18 @@ const readConfig = (): BootConfig => {
     );
   }
 
+  const rawRunId = process.env.OMI_RUN_ID;
+  const rawReadyRecordPath = process.env.OMI_DEV_READY_RECORD;
+  if ((rawRunId === undefined) !== (rawReadyRecordPath === undefined)) {
+    fail("OMI_RUN_ID and OMI_DEV_READY_RECORD must be supplied together.");
+  }
+  if (rawRunId !== undefined && !isQaEvidenceRunId(rawRunId)) {
+    fail("OMI_RUN_ID must be a bounded, non-reserved QA run id.");
+  }
+  if (rawReadyRecordPath !== undefined && rawReadyRecordPath.length === 0) {
+    fail("OMI_DEV_READY_RECORD must be a non-empty host-owned path.");
+  }
+
   return Object.freeze({
     port,
     ownerAccountId: process.env.OMI_SEED_OWNER || DEFAULT_OWNER,
@@ -100,6 +118,8 @@ const readConfig = (): BootConfig => {
     // and no cleanup, and so every boot is byte-identical.
     databasePath: process.env.OMI_QA_DB || ":memory:",
     devSecretLabel: process.env.OMI_DEV_TOKEN_SECRET || DEV_KEY_MATERIAL_LABEL,
+    runId: rawRunId ?? null,
+    readyRecordPath: rawReadyRecordPath ?? null,
   });
 };
 
@@ -119,11 +139,14 @@ const openDatabase = (path: string): Database => {
 const main = (): void => {
   const config = readConfig();
   const db = openDatabase(config.databasePath);
+  const stores = createSqliteLocalServiceStores(db);
 
   let service: ReturnType<typeof createLocalDevService>;
   try {
     service = createLocalDevService({
       db,
+      stores,
+      persistentQaStores: true,
       ownerAccountId: config.ownerAccountId,
       memoryCount: config.memoryCount,
       accountTimezone: config.accountTimezone,
@@ -159,6 +182,25 @@ const main = (): void => {
   }
 
   const baseUrl = `http://${LOOPBACK_HOST}:${config.port}`;
+  if (config.readyRecordPath !== null && config.runId !== null) {
+    try {
+      writeFileSync(config.readyRecordPath, `${JSON.stringify({
+        schema: "omi.dev-service-readiness.v1",
+        runId: config.runId,
+        executable: "apps/service/bin/dev-server.ts",
+        baseUrl,
+        databasePath: config.databasePath,
+        pid: process.pid,
+        evidencePath: QA_EVIDENCE_PATH,
+        devToken: service.devToken,
+        ownerAccountId: config.ownerAccountId,
+      })}\n`, { encoding: "utf8", mode: 0o600 });
+    } catch {
+      server.stop(true);
+      db.close();
+      return fail("could not write the host-owned readiness record.");
+    }
+  }
   process.stdout.write(
     `\nomi local backend is up\n\n`
     + `  base URL      ${baseUrl}\n`
@@ -195,6 +237,7 @@ const main = (): void => {
   const shutdown = (): void => {
     clearInterval(heartbeat);
     server.stop(true);
+    db.close();
     process.stdout.write("\nomi dev-server: stopped\n");
     process.exit(0);
   };

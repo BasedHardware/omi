@@ -9,6 +9,8 @@ export interface AccountLifecyclePort {
 /** Writable adapter seam for source ingestion and hermetic tests. */
 export interface AccountLifecycleStore extends AccountLifecyclePort {
   setLifecycle(accountId: string, state: AccountLifecycleState): void;
+  /** Clears QA-local lifecycle overrides; missing rows resolve to active. */
+  reset(): void;
 }
 
 const STATES: ReadonlySet<AccountLifecycleState> = new Set([
@@ -36,6 +38,10 @@ export const createInMemoryAccountLifecycleStore = (): AccountLifecycleStore => 
 
     setLifecycle(accountId: string, state: AccountLifecycleState): void {
       states.set(accountId, assertAccountLifecycleState(state));
+    },
+
+    reset(): void {
+      states.clear();
     },
   });
 };

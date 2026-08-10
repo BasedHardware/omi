@@ -13,7 +13,7 @@ const JSON_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8",
 });
 const EMPTY_HEADERS = Object.freeze({ "cache-control": "no-store" });
-const FOLDERS_PATH = "/v1/folders";
+export const FOLDERS_PATH = "/v1/folders";
 const FOLDER_PREFIX = `${FOLDERS_PATH}/`;
 
 export interface FolderRouteDependencies {

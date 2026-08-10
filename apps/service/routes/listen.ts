@@ -22,6 +22,7 @@ import type {
   ListenTranscriptSegment,
 } from "../stores/listen-store";
 import type { ListenSegmentUnitOfWork } from "../stores/listen-segment-unit-of-work";
+import type { QaEvidenceIdentity } from "../observability/producer-evidence";
 
 export const LISTEN_PATH = "/v4/listen";
 export const LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION = 4020;
@@ -86,6 +87,15 @@ export interface ListenRouteDependencies {
   readonly credentialLeaseMilliseconds: number;
   readonly credentialNowMilliseconds: () => number;
   readonly createId?: () => string;
+  readonly resolveEvidenceIdentity: (headers: {
+    readonly clientId: string | null | undefined;
+    readonly runId: string | null | undefined;
+  }) => QaEvidenceIdentity | null;
+  readonly recordProtocolReady: (identity: QaEvidenceIdentity | null) => void;
+  readonly recordAcceptedBinary: (
+    identity: QaEvidenceIdentity | null,
+    byteLength: number,
+  ) => void;
 }
 
 const response = (body: Readonly<Record<string, string>>, status: number): Response =>
@@ -163,6 +173,8 @@ const eventsForRejectedFormat = (): WSEvents => ({
 });
 
 const eventsForExhaustedEntitlement = (
+  deps: ListenRouteDependencies,
+  evidenceIdentity: QaEvidenceIdentity | null,
   projection: SettingsEntitlementProjection,
   session: ListenSessionRecord | null = null,
   replaySegments: readonly ListenTranscriptSegment[] = Object.freeze([]),
@@ -176,6 +188,7 @@ const eventsForExhaustedEntitlement = (
         recording_session_id: session.id,
       }));
       sendJson(socket, serviceStatus("ready"));
+      deps.recordProtocolReady(evidenceIdentity);
       sendJson(socket, transcriptBatch(replaySegments));
     }
     sendJson(socket, createEntitlementFrame(projection));
@@ -190,6 +203,7 @@ const eventsForSession = (
   session: ListenSessionRecord,
   pendingSegments: readonly ListenTranscriptSegment[],
   handshake: ListenHandshake,
+  evidenceIdentity: QaEvidenceIdentity | null,
   registerActive: (accountId: string, stream: ActiveListenStream) => () => void,
   exhaustAccount: (accountId: string, projection: SettingsEntitlementProjection) => void,
 ): WSEvents => {
@@ -324,6 +338,7 @@ const eventsForSession = (
       }));
       sendJson(openedSocket, serviceStatus("stt_initiating"));
       sendJson(openedSocket, serviceStatus("ready"));
+      deps.recordProtocolReady(evidenceIdentity);
       if (pendingSegments.length > 0) {
         sendJson(openedSocket, transcriptBatch(pendingSegments));
       }
@@ -333,12 +348,17 @@ const eventsForSession = (
       if (terminal || typeof event.data === "string") return;
       if (event.data instanceof Blob) {
         void event.data.arrayBuffer().then((data) => {
-          if (credentialIsValid()) transcription.writeAudio(new Uint8Array(data));
+          if (!credentialIsValid()) return;
+          const audio = new Uint8Array(data);
+          transcription.writeAudio(audio);
+          deps.recordAcceptedBinary(evidenceIdentity, audio.byteLength);
         });
         return;
       }
       if (!credentialIsValid()) return;
-      transcription.writeAudio(new Uint8Array(event.data as ArrayBufferLike));
+      const audio = new Uint8Array(event.data as ArrayBufferLike);
+      transcription.writeAudio(audio);
+      deps.recordAcceptedBinary(evidenceIdentity, audio.byteLength);
     },
 
     onClose(event) {
@@ -400,11 +420,18 @@ export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): 
       return upgradeWebSocket(context, eventsForRejectedFormat());
     }
 
+    const evidenceIdentity = deps.resolveEvidenceIdentity({
+      clientId: context.req.header("x-omi-client-id"),
+      runId: context.req.header("x-omi-run-id"),
+    });
+
     const id = handshake.clientConversationId ?? (deps.createId ?? randomUUID)();
     const entitlement = deps.entitlement.readEntitlement(principal.uid);
     if (entitlement?.limitReached === true) {
       const existing = deps.store.readSession(principal.uid, id);
       return upgradeWebSocket(context, eventsForExhaustedEntitlement(
+        deps,
+        evidenceIdentity,
         entitlement,
         existing,
         existing === null ? Object.freeze([]) : deps.store.listSegments(principal.uid, id),
@@ -429,6 +456,7 @@ export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): 
       opened.session,
       opened.pendingSegments,
       handshake,
+      evidenceIdentity,
       registerActive,
       exhaustAccount,
     ));

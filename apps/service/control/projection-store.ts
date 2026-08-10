@@ -60,6 +60,8 @@ export interface AccountControlProjectionStore {
    * "reset something" from "reset nothing".
    */
   forget(accountId: string): boolean;
+  /** Clears every QA-local control projection, restoring fail-closed absence. */
+  reset(): void;
   /** The only exit from a poisoned projection; requires a stated operator reason. */
   reconcile(observation: AccountControlObservation, operator: { readonly reason: string }): AdmitObservationResult;
 }
@@ -108,6 +110,10 @@ export const createInMemoryAccountControlProjectionStore = (): AccountControlPro
 
     forget(accountId: string): boolean {
       return rows.delete(accountId);
+    },
+
+    reset(): void {
+      rows.clear();
     },
 
     reconcile(

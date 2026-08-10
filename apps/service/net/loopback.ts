@@ -2,7 +2,7 @@ import { networkInterfaces } from "node:os";
 
 export const LOOPBACK_HOST = "127.0.0.1";
 
-const ALLOWED_PORTS = new Set([4851]);
+const ALLOWED_PORTS = new Set([4851, 5290]);
 
 export type LsofListenVerdict = {
   readonly pass: boolean;

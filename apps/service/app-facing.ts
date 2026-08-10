@@ -51,7 +51,14 @@ import {
   READ_CLIENT_ID_HEADER,
 } from "./observability/served-read-attribution";
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
-import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
+import {
+  createQaProducerEvidence,
+  QA_CLIENT_ID_HEADER,
+  QA_RUN_ID_HEADER,
+  type QaEvidenceDomain,
+  type QaProducerEvidence,
+} from "./observability/producer-evidence";
+import { QA_FIXTURE_TIME_ANCHOR_UTC, seedQaSnapshot } from "./qa/seed";
 import {
   createChatGenerationSupervisor,
   type ChatGenerationSupervisor,
@@ -65,21 +72,29 @@ import {
   type ChatGenerationSource,
 } from "./chat/generation-source";
 import { createChatHistoryCursorCodec } from "./chat/history-cursor";
-import { registerChatMessagesRoutes } from "./routes/chat-messages";
+import {
+  CHAT_MESSAGES_PATH,
+  registerChatMessagesRoutes,
+} from "./routes/chat-messages";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
-import { registerConversationRoutes } from "./routes/conversations";
+import { CONVERSATIONS_PATH, registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
-import { registerFolderRoutes } from "./routes/folders";
-import { registerMemoryRoutes } from "./routes/memories";
+import { FOLDERS_PATH, registerFolderRoutes } from "./routes/folders";
+import {
+  MEMORY_READ_PATH,
+  MEMORY_READ_TRANSITIONAL_ALIAS_PATH,
+  registerMemoryRoutes,
+} from "./routes/memories";
 import {
   LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
   registerListenRoutes,
 } from "./routes/listen";
 import { registerQaRoutes } from "./routes/qa";
+import { registerQaEvidenceRoutes } from "./routes/qa-evidence";
 import { registerQaControlRoutes } from "./routes/qa-control";
-import { registerSettingsRoutes } from "./routes/settings";
-import { registerTasksOpsRoutes } from "./routes/tasks-ops";
-import { registerTasksReadRoutes } from "./routes/tasks-read";
+import { registerSettingsRoutes, SETTINGS_PATH } from "./routes/settings";
+import { registerTasksOpsRoutes, TASKS_OPS_PATH } from "./routes/tasks-ops";
+import { registerTasksReadRoutes, TASKS_READ_PATH } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
 import {
   createInMemoryConversationsStore,
@@ -164,6 +179,11 @@ export interface LocalServiceOptions {
    * The caller owns their lifecycle, including any SQLite Database handle.
    */
   readonly stores?: LocalServiceStores;
+  /**
+   * Dev-server mode: preserve an already initialized external store set across
+   * process restart, while seeding a brand-new set exactly once.
+   */
+  readonly persistentQaStores?: boolean;
   /** Required fail-closed adapter for production-shaped composition. */
   readonly transcriptionSource: TranscriptionSource;
   /** Required downstream processing adapter factory, bound to this composition's store. */
@@ -322,6 +342,7 @@ export interface LocalService {
   readonly websocket: typeof websocket;
   readonly devToken: string;
   readonly counter: ServedCounter;
+  readonly evidence: QaProducerEvidence;
   readonly reseed: () => void;
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
   /**
@@ -378,6 +399,31 @@ export const createLocalDevService = (options: LocalDevServiceOptions): LocalSer
     generationContext: options.generationContext ?? createEmptyChatGenerationContextSource(),
   });
 
+type HttpEvidenceDomain = Exclude<QaEvidenceDomain, "listen">;
+
+const successfulHttpDomain = (
+  method: string,
+  path: string,
+  status: number,
+): HttpEvidenceDomain | null => {
+  if (status < 200 || status >= 300) return null;
+  if (method === "GET"
+    && (path === MEMORY_READ_PATH || path === MEMORY_READ_TRANSITIONAL_ALIAS_PATH)) {
+    return "memories";
+  }
+  if ((method === "GET" && path === TASKS_READ_PATH)
+    || (method === "POST" && path === TASKS_OPS_PATH)) return "tasks";
+  if (["GET", "PATCH", "DELETE"].includes(method)
+    && (path === CONVERSATIONS_PATH || path.startsWith(`${CONVERSATIONS_PATH}/`))) {
+    return "conversations";
+  }
+  if (["GET", "POST", "PATCH", "DELETE"].includes(method)
+    && (path === FOLDERS_PATH || path.startsWith(`${FOLDERS_PATH}/`))) return "folders";
+  if (method === "GET" && path === SETTINGS_PATH) return "settings";
+  if (method === "POST" && path === CHAT_MESSAGES_PATH) return "chat";
+  return null;
+};
+
 export const createLocalService = (options: LocalServiceOptions): LocalService => {
   if (options.transcriptionSource === undefined) {
     throw new TypeError("transcriptionSource is required");
@@ -392,55 +438,86 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     throw new TypeError("generationContext is required");
   }
   const ownsStores = options.stores === undefined;
+  if (options.persistentQaStores === true && ownsStores) {
+    throw new TypeError("persistentQaStores requires an externally owned store set");
+  }
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const conversations = stores.conversations;
   const folders = stores.folders;
   const folderDeletion = stores.folderDeletion;
+  const producerEvidence = createQaProducerEvidence();
   let nextFolderId = 1;
-  let hasSeeded = false;
+
+  const resetServiceStores = (): void => {
+    stores.chatEvents.reset();
+    stores.chatAttachments.reset();
+    stores.chatMessages.reset();
+    stores.listen.reset();
+    conversations.reset();
+    folders.reset();
+    stores.tasks.reset();
+    stores.registry.reset();
+    stores.stragglers.reset();
+    stores.control.reset();
+    stores.settings.reset();
+    stores.currentSession.reset();
+    stores.accountLifecycle.reset();
+  };
+
+  const seedServiceStores = (): void => {
+    for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
+    const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
+    if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
+    stores.settings.putIdentity(options.ownerAccountId, {
+      displayName: options.ownerAccountId,
+      email: "",
+    });
+    stores.settings.putEntitlement(options.ownerAccountId, null);
+    if (options.listenDefaultUnmetered === true) {
+      stores.settings.putEntitlement(options.ownerAccountId, {
+        planLabel: "Omi Plus",
+        limitKey: "transcription_seconds",
+        used: 0,
+        limit: null,
+        limitReached: false,
+        upgradeAvailable: false,
+      });
+    }
+  };
+
   const reseed = (): void => {
     nextFolderId = 1;
-    resetQaSnapshot(options.db);
+    resetServiceStores();
     seedQaSnapshot(options.db, {
       owner_account_id: options.ownerAccountId,
       memory_count: options.memoryCount,
       account_timezone: options.accountTimezone,
     });
-    if (ownsStores) {
-      folders.reset();
-      conversations.reset();
-      for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
-      const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
-      if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
-      stores.settings.putIdentity(options.ownerAccountId, {
-        displayName: options.ownerAccountId,
-        email: "",
-      });
-      stores.settings.putEntitlement(options.ownerAccountId, null);
-      if (options.listenDefaultUnmetered === true) {
-        stores.settings.putEntitlement(options.ownerAccountId, {
-          planLabel: "Omi Plus",
-          limitKey: "transcription_seconds",
-          used: 0,
-          limit: null,
-          limitReached: false,
-          upgradeAvailable: false,
-        });
-      }
-      stores.listen.reset();
-      stores.chatMessages.reset();
-      stores.chatAttachments.reset();
-      stores.chatEvents.reset();
-    } else if (hasSeeded) {
-      // Persistent adapters survive composition startup. An explicit QA reset
-      // still owns the complete Chat cluster, including attachment secrets.
-      stores.chatMessages.reset();
-      stores.chatAttachments.reset();
-      stores.chatEvents.reset();
-    }
-    hasSeeded = true;
+    seedServiceStores();
+    producerEvidence.reset();
   };
-  reseed();
+
+  if (ownsStores) {
+    reseed();
+  } else if (options.persistentQaStores === true) {
+    if (stores.settings.readSettings(options.ownerAccountId).status === "unavailable") {
+      reseed();
+    } else {
+      const createdIds = folders.listFolders(options.ownerAccountId)
+        .map((folder) => /^qa-folder-created-([0-9]+)$/.exec(folder.id)?.[1])
+        .filter((value): value is string => value !== undefined)
+        .map(Number);
+      nextFolderId = Math.max(0, ...createdIds) + 1;
+    }
+  } else {
+    // Historical injected-store tests own their starting rows. Only the recall
+    // fixture is initialized on composition; explicit QA reset is still total.
+    seedQaSnapshot(options.db, {
+      owner_account_id: options.ownerAccountId,
+      memory_count: options.memoryCount,
+      account_timezone: options.accountTimezone,
+    });
+  }
 
   const tasks = stores.tasks;
   const writeIdRegistry = stores.registry;
@@ -617,8 +694,14 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const opsCounter = createWriteOpsCounter();
 
   const app = new Hono({ strict: true });
-  app.use("*", (context, next) =>
-    readAttribution.withRun(context.req.header(READ_CLIENT_ID_HEADER), next));
+  app.use("*", (context, next) => producerEvidence.withRequestIdentity({
+    clientId: context.req.header(QA_CLIENT_ID_HEADER),
+    runId: context.req.header(QA_RUN_ID_HEADER),
+  }, async () => {
+    await readAttribution.withRun(context.req.header(READ_CLIENT_ID_HEADER), next);
+    const domain = successfulHttpDomain(context.req.method, context.req.path, context.res.status);
+    if (domain !== null) producerEvidence.recordHttpSuccess(domain);
+  }));
   app.get("/health", () => {
     counter.recordNonDomainRequest();
     return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: JSON_HEADERS });
@@ -680,6 +763,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds
       ?? LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
     credentialNowMilliseconds: options.listenCredentialNowMilliseconds ?? Date.now,
+    resolveEvidenceIdentity: producerEvidence.resolveIdentity,
+    recordProtocolReady: producerEvidence.recordProtocolReady,
+    recordAcceptedBinary: producerEvidence.recordAcceptedBinary,
   });
   registerChatMessagesRoutes(app, {
     resolvePrincipal,
@@ -697,6 +783,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     generationId: (accountId, messageId) => opaqueChatId("generation", accountId, messageId),
     acceptedEventId: (accountId, generationId) =>
       opaqueChatId("event", accountId, generationId, "accepted"),
+    recordAcceptedAdmission: producerEvidence.recordAcceptedAdmission,
     revision: (accountId, messageId, journalRevision, payloadHash) =>
       opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
   });
@@ -733,6 +820,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
     seedIdentity,
   });
+  registerQaEvidenceRoutes(app, {
+    evidence: producerEvidence,
+    isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
+  });
   app.notFound(() => {
     counter.recordNonDomainRequest();
     return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: JSON_HEADERS });
@@ -743,6 +834,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     websocket,
     devToken,
     counter,
+    evidence: producerEvidence,
     reseed,
     seedIdentity,
     writePath: Object.freeze({

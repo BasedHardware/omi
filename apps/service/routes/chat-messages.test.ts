@@ -131,6 +131,7 @@ describe("ratified /v1/chat-messages route", () => {
       readSettings: base.settings.readSettings,
       snapshotAccount: base.settings.snapshotAccount,
       restoreAccount: base.settings.restoreAccount,
+      reset: base.settings.reset,
     });
     const stores: LocalServiceStores = Object.freeze({
       ...base,

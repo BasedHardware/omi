@@ -19,6 +19,8 @@ export type CurrentSessionRevocation =
 export interface CurrentSessionPort {
   authenticate(token: string, resolveDevToken: DevTokenResolver): DevPrincipal | null;
   revoke(token: string, resolveDevToken: DevTokenResolver): CurrentSessionRevocation;
+  /** Clears QA-local revocations without retaining or minting a credential. */
+  reset(): void;
 }
 
 export const digestSessionHandle = (token: string): string =>
@@ -40,6 +42,10 @@ export const createInMemoryCurrentSessionPort = (): CurrentSessionPort => {
       if (resolveDevToken(token) === null) return Object.freeze({ status: "unrecognized" });
       revokedHandles.add(digest);
       return Object.freeze({ status: "revoked" });
+    },
+
+    reset(): void {
+      revokedHandles.clear();
     },
   });
 };

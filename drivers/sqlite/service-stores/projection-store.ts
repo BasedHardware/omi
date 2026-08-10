@@ -87,6 +87,10 @@ export class SqliteAccountControlProjectionStore implements AccountControlProjec
     `).run(accountId).changes > 0;
   }
 
+  reset(): void {
+    this.db.exec("DELETE FROM service_account_control_projections;");
+  }
+
   reconcile(
     observation: AccountControlObservation,
     operator: { readonly reason: string },
@@ -112,4 +116,3 @@ export class SqliteAccountControlProjectionStore implements AccountControlProjec
     `).run(projection.account_id, JSON.stringify(projection));
   }
 }
-

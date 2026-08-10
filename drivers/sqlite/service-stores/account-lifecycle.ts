@@ -38,4 +38,8 @@ export class SqliteAccountLifecycleStore implements AccountLifecycleStore {
         lifecycle_state = excluded.lifecycle_state
     `).run(accountId, lifecycle);
   }
+
+  reset(): void {
+    this.db.exec("DELETE FROM service_account_lifecycle;");
+  }
 }

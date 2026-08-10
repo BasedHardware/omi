@@ -12,7 +12,11 @@ From the repo root:
 bun run apps/service/bin/dev-server.ts
 ```
 
-Zero environment variables are required. On success the server prints:
+Zero environment variables are required. Supplying `OMI_QA_DB` switches the
+entire registered service—not only Memories—to one file-backed SQLite
+connection. Rebooting with the same file preserves service state; only the
+explicit reset route restores the deterministic seed. On success the server
+prints:
 
 ```
 omi local backend is up
@@ -79,6 +83,7 @@ Example passing output:
 | `DELETE` | `/v1/chat-generations/{generationId}` | Bearer | Durable, idempotent generation cancellation |
 | `GET` | `/v1/qa/status` | none | Served-traffic counters and seed identity |
 | `POST` | `/v1/qa/reset` | Bearer (dev token) | Total deterministic reseed |
+| `GET` | `/v1/qa/evidence?run={run}` | Bearer (dev token) | Counts-only producer matrix for an exact host-owned run |
 
 ## curl examples
 
@@ -134,13 +139,36 @@ The dev-server terminal also prints `[served] domain-reads=N ...` whenever `doma
 
 ## Reset and reseed
 
-`POST /v1/qa/reset` with the dev token clears and repopulates the owned in-memory QA stores and SQLite recall snapshot to the same deterministic state as a fresh boot, including the seeded conversation. The response includes the seed identity:
+`POST /v1/qa/reset` with the dev token clears and repopulates every supplied
+store to the same deterministic state as a fresh boot: Memories,
+Conversations/Folders, Tasks and write ids/stragglers, Settings and account
+control/session/lifecycle, Listen sessions/segments, Chat messages,
+attachments/content and generation events. It also clears all producer
+evidence. The response includes the seed identity:
 
 ```json
 {"version":"qa-reset-v1","status":"reset","seed":{"owner_account_id":"local-dev-user","memory_count":12,"account_timezone":"America/Los_Angeles","fixture_time_anchor_utc":"2026-08-07T12:00:00.000Z"}}
 ```
 
 Seeded memories are placed one per local calendar day, stepping backward from the fixed anchor `2026-08-07T12:00:00.000Z`, so day-grouping in the client matches regardless of host clock.
+
+## Verdict-grade producer evidence
+
+Native hosts attribute requests with either the existing combined
+`x-omi-client-id: <run>::<shell>` form or the explicit pair
+`x-omi-run-id: <run>` plus `x-omi-client-id: <shell>`. Shell is exactly
+`macos|ios`; run ids are bounded ASCII and reserved/normalized buckets are
+rejected. The registered route, not request JSON or query input, resolves the
+domain.
+
+`GET /v1/qa/evidence?run=<run>` returns `omi.producer-evidence.v1` with exactly
+the 14 `shell x domain` coordinates. Regular HTTP domains expose only a
+successful response count. Chat adds `acceptedAdmission`, counted only after
+the atomic human-message plus accepted-generation commit and never again for a
+replay. Listen adds `protocolReady`, `acceptedBinary`, and
+`acceptedBinaryBytes`; an upgrade or ready frame without non-empty audio leaves
+the binary counts at zero. The document contains no token, account id, prompt,
+transcript, attachment metadata, or other user/fixture content.
 
 ## Chat attachments
 
@@ -181,12 +209,14 @@ All are optional.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OMI_PORT` | `4851` | The one app-facing listen port; other values are refused. |
+| `OMI_PORT` | `4851` | The one app-facing listen port; bounded QA choices are `4851` and caller-selected `5290`. |
 | `OMI_SEED_OWNER` | `local-dev-user` | Owner account id written into the QA seed. |
 | `OMI_SEED_MEMORIES` | `12` | Number of visible seeded memories. |
 | `OMI_ACCOUNT_TIMEZONE` | `America/Los_Angeles` | IANA timezone for local-day grouping in the seed and read path. |
 | `OMI_QA_DB` | `:memory:` | SQLite path, or `:memory:` for an ephemeral DB (recommended for cold checkout). |
 | `OMI_DEV_TOKEN_SECRET` | `omi-local-dev-token-not-a-secret-v1` | Label hashed into the dev signing key. Change only if you need a different stable token across restarts. |
+| `OMI_RUN_ID` | unset | Host-owned run id; requires `OMI_DEV_READY_RECORD`. |
+| `OMI_DEV_READY_RECORD` | unset | Host-owned path for the versioned subprocess readiness record. |
 
 ## Troubleshooting
 
@@ -227,7 +257,7 @@ omi dev-server: cannot open the QA database at "/nonexistent/path/qa.db". Check 
 ### Port out of registry range
 
 ```
-omi dev-server: port 9999 is not allocated to this service. Use 4851, the one app-facing door.
+omi dev-server: port 9999 is not allocated to this service. Use one bounded app-facing port.
 ```
 
 ### 401 on memory reads

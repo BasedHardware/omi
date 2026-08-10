@@ -72,6 +72,8 @@ export interface ChatMessagesRouteDependencies {
   readonly cursorTtlSeconds: number;
   readonly generationId: (accountId: string, messageId: string) => string;
   readonly acceptedEventId: (accountId: string, generationId: string) => string;
+  /** Counts only a newly committed message + accepted-generation admission. */
+  readonly recordAcceptedAdmission: () => void;
   readonly revision: (
     accountId: string,
     messageId: string,
@@ -522,6 +524,7 @@ export const registerChatMessagesRoutes = (
       if (acceptedEvent === undefined) {
         throw new TypeError("admitted chat generation has no accepted event");
       }
+      if (admission.kind === "created") deps.recordAcceptedAdmission();
       // The accepted event is the durable dispatch record. Every replay offers
       // it back to the idempotent supervisor so a synchronous dispatch failure
       // is recoverable without waiting for a process restart.

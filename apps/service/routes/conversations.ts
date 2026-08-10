@@ -16,7 +16,7 @@ const JSON_HEADERS = Object.freeze({
 });
 const EMPTY_HEADERS = Object.freeze({ "cache-control": "no-store" });
 
-const CONVERSATIONS_PATH = "/v1/conversations";
+export const CONVERSATIONS_PATH = "/v1/conversations";
 const CONVERSATION_PREFIX = `${CONVERSATIONS_PATH}/`;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5_000;

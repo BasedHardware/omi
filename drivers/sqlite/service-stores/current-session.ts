@@ -42,4 +42,8 @@ export class SqliteCurrentSessionPort implements CurrentSessionPort {
     });
     return revoke.immediate();
   }
+
+  reset(): void {
+    this.db.exec("DELETE FROM service_dev_token_revocations;");
+  }
 }

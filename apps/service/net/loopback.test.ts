@@ -14,7 +14,7 @@ describe("loopbackServeOptions", () => {
     expect(options).toEqual({ hostname: LOOPBACK_HOST, port: 4851 });
   });
 
-  test("accepts the one app-facing service door", () => {
+  test("accepts the default app-facing service port", () => {
     expect(loopbackServeOptions(4851).port).toBe(4851);
   });
 });
@@ -23,6 +23,10 @@ describe("assertPortInRange", () => {
   test("allows port 4851", () => {
     // red-proof: widen the allowed set to include 8080 and this test no longer guards squatting
     expect(() => assertPortInRange(4851)).not.toThrow();
+  });
+
+  test("allows the caller-selected fixed 5290 QA port", () => {
+    expect(() => assertPortInRange(5290)).not.toThrow();
   });
 
   test("rejects ports outside the BE-SURFACE agent range with TypeError", () => {

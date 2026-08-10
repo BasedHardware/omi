@@ -152,4 +152,11 @@ export class SqliteSettingsProjectionStore implements SettingsProjectionStore {
     });
     return read.deferred();
   }
+
+  reset(): void {
+    this.db.transaction(() => {
+      this.db.exec("DELETE FROM service_settings_entitlement_projections;");
+      this.db.exec("DELETE FROM service_settings_identity_projections;");
+    }).immediate();
+  }
 }

@@ -51,6 +51,8 @@ export interface SettingsProjectionReader extends EntitlementProjectionReader {
 export interface SettingsProjectionStore extends SettingsProjectionReader {
   putIdentity(accountId: string, projection: SettingsIdentityProjection): void;
   putEntitlement(accountId: string, projection: SettingsEntitlementProjection | null): void;
+  /** Clears every QA-local identity, entitlement and consumed-usage row. */
+  reset(): void;
   /**
    * Adds real consumed transcription seconds to this same projection.
    *
@@ -177,6 +179,11 @@ export const createInMemorySettingsProjectionStore = (): InMemorySettingsProject
       else identities.set(accountId, snapshot.identity);
       if (snapshot.entitlement === null) entitlements.delete(accountId);
       else entitlements.set(accountId, snapshot.entitlement);
+    },
+
+    reset(): void {
+      identities.clear();
+      entitlements.clear();
     },
   });
 };
