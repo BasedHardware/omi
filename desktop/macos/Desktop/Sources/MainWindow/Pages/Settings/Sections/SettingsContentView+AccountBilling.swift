@@ -12,15 +12,15 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "message.and.waveform")
             .scaledFont(size: OmiType.title)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Messaging channels")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             Text("Use the same Omi core chat from Telegram, iMessage, or SMS.")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
         }
@@ -30,13 +30,13 @@ extension SettingsContentView {
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(channel == "imessage" ? "iMessage" : channel.capitalized)
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
               Text(
                 channelStatus?.bindings.contains(where: { $0.channel == channel }) == true
                   ? "Connected" : "Not connected"
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -50,14 +50,14 @@ extension SettingsContentView {
         }
 
         if let channelLink {
-          Divider().overlay(OmiColors.backgroundQuaternary)
+          Divider().overlay(Ink.separator)
           Text(channelLink.instructions)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           HStack(spacing: OmiSpacing.md) {
             Text(channelLink.code)
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .textSelection(.enabled)
             Spacer()
             Button {
@@ -73,7 +73,7 @@ extension SettingsContentView {
         if let channelLinkError {
           Text(channelLinkError)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(SettingsInk.notice)
         }
       }
     }
