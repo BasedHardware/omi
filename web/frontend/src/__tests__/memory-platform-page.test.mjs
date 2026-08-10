@@ -28,4 +28,26 @@ describe('memory platform website contract', () => {
     assert.match(embed, /postMessage/);
     assert.match(embed, /sandbox/);
   });
+
+  it('quotes the same search limit the backend router enforces', async () => {
+    const readService = await readFile(
+      new URL(
+        '../../../../backend/utils/memory/product_memory_read_service.py',
+        `file://${frontendRoot}/`,
+      ),
+      'utf8',
+    );
+    const backendLimit = /MAX_PRODUCT_MEMORY_READ_LIMIT = (\d+)/.exec(readService)?.[1];
+    assert.ok(backendLimit, 'backend must define MAX_PRODUCT_MEMORY_READ_LIMIT');
+
+    const docs = await read('app/memory-platform/docs/page.tsx');
+    assert.match(docs, new RegExp(`limit 1–${backendLimit}\\b`));
+  });
+
+  it('proxies through a server-owned token instead of the caller header', async () => {
+    const embed = await read('app/memory-platform/embed/page.tsx');
+
+    assert.match(embed, /getOmiTokenForTenant/);
+    assert.doesNotMatch(embed, /request\.headers\.get\("Authorization"\)/);
+  });
 });

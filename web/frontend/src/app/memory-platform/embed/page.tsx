@@ -16,15 +16,30 @@ const iframeExample = `<iframe
 ></iframe>`;
 
 const proxyExample = `export async function GET(request: Request) {
+  // 1. Authenticate the visitor against your own session, never the client header.
+  const session = await getSession(request);
+  if (!session) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // 2. Resolve the Omi session token for that tenant from your server-side store.
+  const omiToken = await getOmiTokenForTenant(session.tenantId);
+  if (!omiToken) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // 3. Forward only bounded parameters you validated yourself.
+  const params = new URL(request.url).searchParams;
+  const query = (params.get("q") ?? "").slice(0, 500);
+  const limit = Math.min(Math.max(Number(params.get("limit") ?? 20), 1), 500);
+
   const upstream = await fetch(
-    "https://api.omi.me/v1/memory/platform/search?query=" +
-      encodeURIComponent(new URL(request.url).searchParams.get("q") ?? ""),
-    { headers: { Authorization: request.headers.get("Authorization") ?? "" } },
+    "https://api.omi.me/v1/memory/platform/search?" +
+      new URLSearchParams({ query, limit: String(limit) }),
+    { headers: { Authorization: \`Bearer \${omiToken}\` } },
   );
-  return new Response(await upstream.text(), {
-    status: upstream.status,
-    headers: { "content-type": "application/json" },
-  });
+
+  return Response.json(await upstream.json(), { status: upstream.status });
 }`;
 
 export default function MemoryPlatformEmbedPage() {
@@ -106,8 +121,10 @@ export default function MemoryPlatformEmbedPage() {
             Keep Omi behind your origin
           </h2>
           <p className="mt-4 max-w-2xl leading-7 text-[#f4f1e8]/60">
-            Your server validates the visitor, forwards only bounded search parameters,
-            and passes through the response. Apply your own tenant checks before
+            Your server validates the visitor&apos;s session, resolves that tenant&apos;s
+            Omi token from your own server-side store, forwards only bounded search
+            parameters, and returns the response. Never forward the caller&apos;s
+            Authorization header upstream, and apply the same tenant checks before
             forwarding any write.
           </p>
           <pre className="mt-6 overflow-x-auto border-l-4 border-[#a7d8ff] bg-[#111715] p-5 text-sm leading-7 text-[#f4f1e8]/85">
