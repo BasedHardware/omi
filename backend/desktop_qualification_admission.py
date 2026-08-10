@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any
 
 _production_source = Path(__file__).with_name("desktop_qualification_admission_contract.py")
 _source = (
