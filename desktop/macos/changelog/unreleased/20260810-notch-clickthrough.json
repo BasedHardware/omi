@@ -1,3 +1,0 @@
-{
-  "change": "Fixed invisible dead zones: the notch overlay no longer swallows clicks meant for windows beneath it (including Omi's own top navigation)"
-}
