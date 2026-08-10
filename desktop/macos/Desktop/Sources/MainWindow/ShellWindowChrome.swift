@@ -39,31 +39,15 @@
 //  ## The two presentations, and why there are two
 //
 //  A surface with no visible chrome is not a conventional managed application window any more; it is a
-//  thing you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you were
-//  reading and *stays* in front of it. `ShellSummon` owns where it lands.
+//  thing you summon. `.summoned` says so to AppKit — floating level, so it comes up over whatever you
+//  were reading until focus moves elsewhere. `ShellSummon` owns where it lands.
 //
-//  ## Why it does not hide itself when it loses focus
+//  ## Click-away dismissal
 //
-//  It used to. `hidesOnDeactivate` is genuinely half of what makes a spotlight-style panel feel like
-//  one — you press a chord, it appears; you click away, it is gone and you are back in your work — and
-//  click-outside dismissal came free with it, with no click monitor to maintain.
-//
-//  It is the wrong half for this surface, because this shell is somewhere you *work*, not a launcher
-//  you fire and forget. An answer streams into it, you go to the browser to check the thing it just
-//  told you, you come back. With auto-hide, every one of those round trips deleted the window
-//  mid-answer: click a browser, get a notification, switch to a terminal, and the panel evaporates.
-//
-//  And it did not merely disappear — it moved. A hidden window reports `isVisible == false`, which is
-//  the exact input `ShellSummonPlacement.shouldReposition` reads to decide whether a summon should
-//  re-land the shell. So the click that brought it back re-landed it, and a panel the user had dragged
-//  somewhere snapped to the middle of the screen. Whether it did depended on whether AppKit had
-//  finished restoring the window before `applicationDidBecomeActive` ran, so the same gesture moved the
-//  window sometimes and not others. Non-deterministic placement is worse than either placement.
-//
-//  So `dress` writes `hidesOnDeactivate = false` in **both** presentations, and writes it rather than
-//  leaving the property alone: this runs repeatedly on a window an earlier pass may already have hidden,
-//  and a shell that vanishes mid-answer has no runtime signal whatsoever. Dismissal is explicit now —
-//  `⌘W`, the menu bar item, or Escape (`ShellSummon`'s header has that route).
+//  A signed-in shell is a transient summoned surface: press the Open Omi chord, work in it, then click
+//  the desktop or another app to put it away. AppKit already owns that contract through
+//  `hidesOnDeactivate`; using the native property avoids a global mouse monitor or an Accessibility
+//  permission dependency.
 //
 //  `.anchored` is the same window before the user has an account and a completed setup, and what
 //  separates it is still behavioural rather than cosmetic. A first run sends people to System Settings
@@ -88,7 +72,7 @@ enum ShellWindowChrome {
   /// Behavioural, not cosmetic — the two differ only in the AppKit properties that decide whether the
   /// window survives losing focus. See this file's header for why a first run needs the second.
   enum Presentation: Equatable, CaseIterable, Sendable {
-    /// Steady state: floats over other apps and stays there until you put it away.
+    /// Steady state: floats over other apps and hides when another app or the desktop takes focus.
     case summoned
     /// Onboarding, sign-in and permission-granting: an ordinary window that keeps out of System
     /// Settings' way and can take a Space of its own.
@@ -164,10 +148,9 @@ enum ShellWindowChrome {
     // ordinary clicks into window drags. `ShellWindowDragSurface` keeps that ownership in SwiftUI.
     window.isMovableByWindowBackground = false
     window.level = presentation == .summoned ? .floating : .normal
-    // Always `false`, in both presentations, and asserted rather than omitted — see this file's
-    // header. A shell that ordered itself out whenever another app took focus deleted the window
-    // mid-answer and re-landed it on the way back; neither failure has any runtime signal.
-    window.hidesOnDeactivate = false
+    // Onboarding and sign-in must survive trips to a browser or System Settings. Once the shell is a
+    // summoned surface, AppKit owns click-away dismissal without an event monitor.
+    window.hidesOnDeactivate = presentation == .summoned
     window.collectionBehavior = collectionBehavior(for: presentation, current: window.collectionBehavior)
   }
 
@@ -211,7 +194,7 @@ enum ShellWindowChrome {
       && buttonsAreHidden
       && !window.isMovableByWindowBackground
       && window.level == (presentation == .summoned ? .floating : .normal)
-      && !window.hidesOnDeactivate
+      && window.hidesOnDeactivate == (presentation == .summoned)
       && window.collectionBehavior.contains(.moveToActiveSpace)
       && hasExpectedSpaceBehavior
   }

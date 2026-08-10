@@ -136,42 +136,34 @@ final class ShellWindowChromeTests: XCTestCase {
 
   // MARK: - Summoned vs anchored
 
-  /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and it
-  /// is **still there** when you go back to that. Floating level is the half the user asked for by
-  /// name — in front of whatever is behind it — and it is worth nothing on its own if the window
-  /// deletes itself the moment the thing behind it takes focus.
-  func testASummonedShellFloatsOverOtherAppsAndStaysThereWhenOneTakesFocus() {
+  /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and
+  /// clicking outside puts it away. `hidesOnDeactivate` is the native AppKit ownership boundary for
+  /// that behavior, so no global mouse monitor or Accessibility permission is involved.
+  func testASummonedShellFloatsOverOtherAppsAndPutsItselfAwayWhenYouClickOutside() {
     let window = makeWindow()
 
     ShellWindowChrome.dress(window, as: .summoned)
 
     XCTAssertEqual(window.level, .floating, "a summoned surface that sinks behind the app you called it over")
-    XCTAssertFalse(
-      window.hidesOnDeactivate,
-      "clicking a browser, or a notification stealing focus, wipes the shell out mid-answer")
+    XCTAssertTrue(window.hidesOnDeactivate, "clicking outside must dismiss the summoned shell")
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
     XCTAssertTrue(window.collectionBehavior.contains(.moveToActiveSpace))
   }
 
-  /// **The regression guard.** `hidesOnDeactivate` shipped with the summon conversion, and every route
-  /// into `dress` runs on a window an earlier pass may already have set it on — launch dresses the
-  /// window, a summon re-dresses it, finishing onboarding re-dresses it again. So the property is
-  /// *written* `false` rather than left alone: a `dress` that only ever set it in one direction would
-  /// leave a hidden shell hidden, and a shell that vanishes when you glance at another app produces no
-  /// log line, no crash and no failing build — the user just finds an empty desktop where their answer
-  /// was.
-  func testDressingAWindowThatHidesItselfClearsThatInEitherPresentation() {
-    for presentation in ShellWindowChrome.Presentation.allCases {
-      let window = makeWindow()
-      // The shape the previous build produced, and the shape a stale re-dress could hand back.
-      window.hidesOnDeactivate = true
+  /// `dress` runs repeatedly as auth/onboarding changes presentation. It must write both directions:
+  /// a signed-in shell dismisses on click-away, while sign-in and onboarding survive browser and
+  /// System Settings trips.
+  func testDressingReconcilesClickAwayBehaviorForEachPresentation() {
+    let window = makeWindow()
 
-      ShellWindowChrome.dress(window, as: presentation)
+    ShellWindowChrome.dress(window, as: .summoned)
+    XCTAssertTrue(window.hidesOnDeactivate)
 
-      XCTAssertFalse(
-        window.hidesOnDeactivate,
-        "\(presentation) still orders itself out whenever another app takes focus")
-    }
+    ShellWindowChrome.dress(window, as: .anchored)
+    XCTAssertFalse(window.hidesOnDeactivate)
+
+    ShellWindowChrome.dress(window, as: .summoned)
+    XCTAssertTrue(window.hidesOnDeactivate)
   }
 
   /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
