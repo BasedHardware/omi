@@ -5,9 +5,6 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-# App display names are resolved by an injected callable, never by importing the database
-# layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
-# client into every import graph that touches a chat message.
 AppNameResolver = Callable[[str], Optional[str]]
 
 

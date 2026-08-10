@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
       // Only AI-sent messages
       if (data.sender && data.sender !== 'ai') continue;
       // Must have an app/plugin source (skip desktop chat messages which have null plugin_id)
-      if (!data.plugin_id && !data.app_id) continue;
+      if (!data.app_id) continue;
       for (const memId of data.memories_id || []) {
         conversationIds.add(memId);
       }
@@ -257,7 +257,7 @@ export async function GET(request: NextRequest) {
         text,
         created_at: createdAt.toISOString(),
         sender: msg.sender || 'ai',
-        plugin_id: msg.plugin_id || msg.app_id || null,
+        plugin_id: msg.app_id || null,
         conversation_context: linkedConversations,
       };
     });
