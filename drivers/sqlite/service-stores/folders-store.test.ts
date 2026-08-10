@@ -6,7 +6,7 @@ import type { ConversationRecord } from "../../../apps/service/stores/conversati
 import type { FolderRecord } from "../../../apps/service/stores/folders-store";
 import {
   createSqliteLocalServiceStores,
-  SqliteFolderDeletionUnitOfWork,
+  createSqliteFolderDeletionUnitOfWork,
   SqliteFoldersStore,
 } from "./index";
 
@@ -86,7 +86,7 @@ describe("SQLite folders store", () => {
     const competitorFolders = new SqliteFoldersStore(competitorDb);
     competitorDb.exec("PRAGMA busy_timeout = 1;");
     let competitorError: unknown;
-    const deletion = new SqliteFolderDeletionUnitOfWork(db, {
+    const deletion = createSqliteFolderDeletionUnitOfWork(db, {
       afterConversationReassignment() {
         try {
           competitorDb.query(`

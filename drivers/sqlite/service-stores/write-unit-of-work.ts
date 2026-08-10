@@ -5,34 +5,58 @@
 import type { Database } from "bun:sqlite";
 
 import {
-  executeWriteUnit,
+  defineWriteUnitOfWork,
   type WriteUnitOfWork,
   type WriteUnitOfWorkInput,
-  type WriteUnitOfWorkOutcome,
 } from "../../../apps/service/stores/write-unit-of-work";
-import type { TasksStore } from "../../../apps/service/stores/tasks-store";
-import type { WriteIdRegistry } from "../../../apps/service/stores/write-id-registry";
+import {
+  createUnitOfWorkContext,
+  type UnitOfWorkContext,
+} from "../../../apps/service/stores/unit-of-work-context";
 import { configureServiceStoreConnection } from "./connection";
+import { SqliteTasksStore } from "./tasks-store";
+import { SqliteWriteIdRegistry } from "./write-id-registry";
+
+export interface SqliteWriteUnitOfWorkFaults {
+  /** Crash-proof seam after task apply and immediately before registry record. */
+  readonly beforeRegistryRecord?: () => void;
+}
 
 /**
- * SQLite's write unit of work. The task and registry adapters passed here must
- * be bound to `db`; the composition factory is the authority that constructs
- * that exact bundle. `BEGIN IMMEDIATE` serializes fresh-key lookup with other
- * writers and SQLite rolls the task change back if the registry record is not
- * reached before process death.
+ * SQLite's write unit. The participating adapters are constructed here from
+ * the same `db`; callers cannot supply independently bound stores. Every
+ * operation additionally passes the runtime identity check before delegating.
  */
-export class SqliteWriteUnitOfWork implements WriteUnitOfWork {
-  constructor(
-    private readonly db: Database,
-    private readonly tasks: TasksStore,
-    private readonly registry: WriteIdRegistry,
-  ) {
-    configureServiceStoreConnection(db);
-  }
-
-  execute(input: WriteUnitOfWorkInput): Promise<WriteUnitOfWorkOutcome> {
-    const transaction = this.db.transaction(() =>
-      executeWriteUnit(this.tasks, this.registry, input));
-    return Promise.resolve(transaction.immediate());
-  }
-}
+export const createSqliteWriteUnitOfWork = (
+  db: Database,
+  faults: SqliteWriteUnitOfWorkFaults = {},
+): WriteUnitOfWork => {
+  configureServiceStoreConnection(db);
+  const tasks = new SqliteTasksStore(db);
+  const registry = new SqliteWriteIdRegistry(db);
+  const context = createUnitOfWorkContext(db);
+  return defineWriteUnitOfWork({
+    execute<Result>(
+      _input: WriteUnitOfWorkInput,
+      operation: (context: UnitOfWorkContext<Database>) => Result,
+    ): Promise<Result> {
+      const transaction = db.transaction(() => operation(context));
+      return Promise.resolve(transaction.immediate());
+    },
+  }, {
+    lookup: (workContext, input) => workContext.perform(db, () =>
+      registry.lookup(input.accountId, input.writeId, input.fingerprintOf)),
+    apply: (workContext, input) => workContext.perform(db, () =>
+      tasks.apply(input.accountId, input.op)),
+    record: (workContext, input, outcome) => workContext.perform(db, () => {
+      faults.beforeRegistryRecord?.();
+      registry.record({
+        accountId: input.accountId,
+        writeId: input.writeId,
+        fingerprintOf: input.fingerprintOf,
+        accountEpoch: input.accountEpoch,
+        outcome,
+      });
+    }),
+  });
+};

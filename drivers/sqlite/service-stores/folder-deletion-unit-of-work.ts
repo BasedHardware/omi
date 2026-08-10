@@ -1,10 +1,14 @@
 import type { Database } from "bun:sqlite";
 
-import type {
-  FolderDeletionInput,
-  FolderDeletionOutcome,
-  FolderDeletionUnitOfWork,
+import {
+  defineFolderDeletionUnitOfWork,
+  type FolderDeletionInput,
+  type FolderDeletionUnitOfWork,
 } from "../../../apps/service/stores/folder-deletion-unit-of-work";
+import {
+  createUnitOfWorkContext,
+  type UnitOfWorkContext,
+} from "../../../apps/service/stores/unit-of-work-context";
 import { configureServiceStoreConnection } from "./connection";
 
 interface StoredFolderFlags {
@@ -21,77 +25,76 @@ export interface SqliteFolderDeletionFaults {
 }
 
 /**
- * SQLite's folder deletion unit. All reads and writes are issued directly on
- * `db`; no participating store can start a nested transaction or choose a
- * different connection. BEGIN IMMEDIATE also excludes a target deletion between
- * validation and reassignment.
+ * SQLite's folder deletion unit. Every operation receives the one context
+ * created for `db`; the context rejects a different Database instance before
+ * it can issue SQL. BEGIN IMMEDIATE excludes target deletion between validation
+ * and reassignment.
  */
-export class SqliteFolderDeletionUnitOfWork implements FolderDeletionUnitOfWork {
-  constructor(
-    private readonly db: Database,
-    private readonly faults: SqliteFolderDeletionFaults = {},
-  ) {
-    configureServiceStoreConnection(db);
-  }
-
-  execute(input: FolderDeletionInput): Promise<FolderDeletionOutcome> {
-    const write = this.db.transaction((): FolderDeletionOutcome => {
-      const current = this.db.query(`
+export const createSqliteFolderDeletionUnitOfWork = (
+  db: Database,
+  faults: SqliteFolderDeletionFaults = {},
+): FolderDeletionUnitOfWork => {
+  configureServiceStoreConnection(db);
+  const context = createUnitOfWorkContext(db);
+  return defineFolderDeletionUnitOfWork({
+    execute<Result>(
+      _input: FolderDeletionInput,
+      operation: (
+        context: UnitOfWorkContext<Database>,
+        checkpointBeforeFirstWrite: () => void,
+      ) => Result,
+    ): Promise<Result> {
+      const write = db.transaction(() => operation(context, () => {}));
+      return Promise.resolve(write.immediate());
+    },
+  }, {
+    readCurrent: (workContext, input) => workContext.perform(db, (connection) => {
+      const current = connection.query(`
         SELECT is_system
         FROM service_folder_records
         WHERE account_id = ? AND id = ?
       `).get(input.accountId, input.folderId) as StoredFolderFlags | null;
-      if (current === null) return { deleted: false, reason: "not_found" };
-      if (current.is_system === 1) return { deleted: false, reason: "system_folder" };
-      if (input.requestedTarget === input.folderId) {
-        return { deleted: false, reason: "self_move" };
-      }
-
-      let target: string | null;
-      if (input.requestedTarget !== null) {
-        const selected = this.db.query(`
+      return current === null ? null : { isSystem: current.is_system === 1 };
+    }),
+    targetExists: (workContext, input, targetFolderId) =>
+      workContext.perform(db, (connection) => {
+        const selected = connection.query(`
           SELECT id
           FROM service_folder_records
           WHERE account_id = ? AND id = ?
-        `).get(input.accountId, input.requestedTarget) as StoredFolderId | null;
-        if (selected === null) return { deleted: false, reason: "target_not_found" };
-        target = selected.id;
-      } else {
-        const selected = this.db.query(`
-          SELECT id
-          FROM service_folder_records
-          WHERE account_id = ? AND is_default = 1
-          ORDER BY sequence ASC
-          LIMIT 1
-        `).get(input.accountId) as StoredFolderId | null;
-        target = selected?.id ?? null;
-      }
-
-      if (target !== null) {
-        const reassigned = this.db.query(`
+        `).get(input.accountId, targetFolderId) as StoredFolderId | null;
+        return selected !== null;
+      }),
+    findDefaultTarget: (workContext, input) => workContext.perform(db, (connection) => {
+      const selected = connection.query(`
+        SELECT id
+        FROM service_folder_records
+        WHERE account_id = ? AND is_default = 1
+        ORDER BY sequence ASC
+        LIMIT 1
+      `).get(input.accountId) as StoredFolderId | null;
+      return selected?.id ?? null;
+    }),
+    reassignConversations: (workContext, input, targetFolderId) =>
+      workContext.perform(db, (connection) => {
+        const reassigned = connection.query(`
           UPDATE service_conversation_records
           SET folder_id = ?
           WHERE account_id = ? AND folder_id = ?
-        `).run(target, input.accountId, input.folderId);
+        `).run(targetFolderId, input.accountId, input.folderId);
         if (reassigned.changes > 0) {
-          this.db.query(`
+          connection.query(`
             INSERT INTO service_conversation_account_state (account_id, revision)
             VALUES (?, 1)
             ON CONFLICT (account_id) DO UPDATE SET revision = revision + 1
           `).run(input.accountId);
         }
-        this.faults.afterConversationReassignment?.();
-      }
-
-      const deleted = this.db.query(`
+        faults.afterConversationReassignment?.();
+      }),
+    deleteFolder: (workContext, input) => workContext.perform(db, (connection) =>
+      connection.query(`
         DELETE FROM service_folder_records
         WHERE account_id = ? AND id = ?
-      `).run(input.accountId, input.folderId);
-      if (deleted.changes !== 1) {
-        throw new Error("folder disappeared inside SQLite deletion unit");
-      }
-      return { deleted: true, moved_to_folder_id: target };
-    });
-    return Promise.resolve(write.immediate());
-  }
-}
+      `).run(input.accountId, input.folderId).changes === 1),
+  });
+};

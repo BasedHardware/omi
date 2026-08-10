@@ -182,7 +182,7 @@ export const createInMemoryWriteIdRegistry = (): WriteIdRegistry => {
         : { kind: "reuse" };
     },
 
-    record(input): void {
+    record(input: Parameters<WriteIdRegistry["record"]>[0]): void {
       const key = keyOf(input.accountId, input.writeId);
       rows.set(key, {
         fingerprint: fingerprint(input.fingerprintOf),

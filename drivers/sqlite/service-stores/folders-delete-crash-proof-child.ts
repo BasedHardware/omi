@@ -6,7 +6,7 @@ import type { FolderRecord } from "../../../apps/service/stores/folders-store";
 import type { LocalServiceStores } from "../../../apps/service/app-facing";
 import {
   createSqliteLocalServiceStores,
-  SqliteFolderDeletionUnitOfWork,
+  createSqliteFolderDeletionUnitOfWork,
 } from "./index";
 
 const ACCOUNT = "acct-folder-atomicity";
@@ -54,7 +54,7 @@ try {
   let stores: LocalServiceStores;
   if (phase === "crash") {
     const regular = createSqliteLocalServiceStores(db);
-    const folderDeletion = new SqliteFolderDeletionUnitOfWork(db, {
+    const folderDeletion = createSqliteFolderDeletionUnitOfWork(db, {
       afterConversationReassignment() {
         writeFileSync(markerPath, "conversation-reassigned-folder-not-deleted\n", "utf8");
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);

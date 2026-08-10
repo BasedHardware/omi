@@ -2,8 +2,19 @@
 // domain-pending(DIV-DOMTASK-002)
 // domain-pending(FC-DOMTASK-001)
 
-import type { TasksStore, TasksWriteOp } from "./tasks-store";
-import type { RecordedWriteOutcome, WriteIdRegistry } from "./write-id-registry";
+import type { TasksApplyOutcome, TasksStore, TasksWriteOp } from "./tasks-store";
+import type {
+  RecordedWriteOutcome,
+  WriteIdLookup,
+  WriteIdRegistry,
+} from "./write-id-registry";
+import {
+  createUnitOfWorkContext,
+  type UnitOfWorkContext,
+  type UnitOfWorkEffect,
+} from "./unit-of-work-context";
+
+const WRITE_UNIT_OF_WORK_PORT: unique symbol = Symbol("write-unit-of-work");
 
 /** Everything the write door has already authenticated, validated, and fenced. */
 export interface WriteUnitOfWorkInput {
@@ -22,64 +33,108 @@ export type WriteUnitOfWorkOutcome =
   | { readonly kind: "applied"; readonly outcome: RecordedWriteOutcome };
 
 /**
- * The atomic boundary behind one accepted write attempt.
+ * The sealed atomic boundary behind one accepted write attempt.
  *
- * This is deliberately a semantic operation rather than `transaction(callback)`.
- * A callback over independently pooled stores would let a future Postgres adapter
- * begin a transaction on one connection while lookup/apply/record silently ran on
- * others. An implementation of this port owns all three operations and must not
- * resolve until their transaction commits or rolls back.
+ * Adapters must use `defineWriteUnitOfWork`; direct structural implementations
+ * cannot satisfy the private port brand. The same invariant context and opaque
+ * effect mechanism used by folder deletion carries lookup, apply, and record.
+ * Independently branded contexts fail to type-check, while different runtime
+ * instances of the same client class are rejected by identity checks.
  *
- * SQLite implements it with one immediate transaction on one `Database`. A
- * Postgres implementation must check out one pool client, execute every operation
- * through that client under SERIALIZABLE (or REPEATABLE READ plus explicit
- * write-id reservation/locking), and retry the complete unit on serialization
- * failure. Merely issuing BEGIN through a pool is not an implementation.
+ * A Postgres adapter must check out one client, create one context for it, and
+ * perform every operation through `context.perform` under SERIALIZABLE (or
+ * REPEATABLE READ plus explicit write-id reservation/locking). Merely issuing
+ * BEGIN through a pool is invalid.
  */
 export interface WriteUnitOfWork {
+  readonly [WRITE_UNIT_OF_WORK_PORT]: true;
   execute(input: WriteUnitOfWorkInput): Promise<WriteUnitOfWorkOutcome>;
 }
 
-/**
- * Storage-independent ordering shared by adapters. The caller supplies the
- * transaction boundary; this function contains no suspension point.
- */
-export const executeWriteUnit = (
-  tasks: TasksStore,
-  registry: WriteIdRegistry,
-  input: WriteUnitOfWorkInput,
-): WriteUnitOfWorkOutcome => {
-  const seen = registry.lookup(input.accountId, input.writeId, input.fingerprintOf);
-  if (seen.kind === "reuse") return { kind: "reuse" };
-  if (seen.kind === "replay") return { kind: "replay", outcome: seen.outcome };
+export interface WriteUnitOfWorkTransaction<Connection extends object> {
+  execute<Result>(
+    input: WriteUnitOfWorkInput,
+    operation: (context: UnitOfWorkContext<Connection>) => Result,
+  ): Promise<Result>;
+}
 
-  const applied = tasks.apply(input.accountId, input.op);
-  if (!applied.applied) return { kind: "conflict" };
+export interface WriteUnitOfWorkOperations<Connection extends object> {
+  lookup(
+    context: UnitOfWorkContext<Connection>,
+    input: WriteUnitOfWorkInput,
+  ): UnitOfWorkEffect<Connection, WriteIdLookup>;
+  apply(
+    context: UnitOfWorkContext<Connection>,
+    input: WriteUnitOfWorkInput,
+  ): UnitOfWorkEffect<Connection, TasksApplyOutcome>;
+  record(
+    context: UnitOfWorkContext<Connection>,
+    input: WriteUnitOfWorkInput,
+    outcome: RecordedWriteOutcome,
+  ): UnitOfWorkEffect<Connection, void>;
+}
 
-  const outcome = Object.freeze({
-    record_id: applied.record_id,
-    revision: applied.revision,
-  });
-  registry.record({
-    accountId: input.accountId,
-    writeId: input.writeId,
-    fingerprintOf: input.fingerprintOf,
-    accountEpoch: input.accountEpoch,
-    outcome,
-  });
-  return { kind: "applied", outcome };
-};
+/** The only constructor for the sealed tasks write port. */
+export const defineWriteUnitOfWork = <Connection extends object>(
+  transaction: WriteUnitOfWorkTransaction<Connection>,
+  operations: WriteUnitOfWorkOperations<NoInfer<Connection>>,
+): WriteUnitOfWork => Object.freeze({
+  [WRITE_UNIT_OF_WORK_PORT]: true as const,
+  execute(input: WriteUnitOfWorkInput): Promise<WriteUnitOfWorkOutcome> {
+    return transaction.execute(input, (context) => {
+      const seen = context.resolve(operations.lookup(context, input));
+      if (seen.kind === "reuse") return { kind: "reuse" };
+      if (seen.kind === "replay") return { kind: "replay", outcome: seen.outcome };
+
+      const applied = context.resolve(operations.apply(context, input));
+      if (!applied.applied) return { kind: "conflict" };
+
+      const outcome = Object.freeze({
+        record_id: applied.record_id,
+        revision: applied.revision,
+      });
+      context.resolve(operations.record(context, input, outcome));
+      return { kind: "applied", outcome };
+    });
+  },
+});
+
+interface InMemoryWriteConnection {
+  readonly tasks: TasksStore;
+  readonly registry: WriteIdRegistry;
+}
 
 /**
  * Process-local implementation. The operation has no `await`, so no observer
  * can interleave between lookup, apply, and record. If the process is killed,
- * all three in-memory stores disappear together; there is no durable half-state.
+ * both in-memory stores disappear together; there is no durable half-state.
  */
 export const createInMemoryWriteUnitOfWork = (
   tasks: TasksStore,
   registry: WriteIdRegistry,
-): WriteUnitOfWork => Object.freeze({
-  execute(input: WriteUnitOfWorkInput): Promise<WriteUnitOfWorkOutcome> {
-    return Promise.resolve(executeWriteUnit(tasks, registry, input));
-  },
-});
+): WriteUnitOfWork => {
+  const connection = Object.freeze({ tasks, registry });
+  const context = createUnitOfWorkContext(connection);
+  return defineWriteUnitOfWork({
+    execute<Result>(
+      _input: WriteUnitOfWorkInput,
+      operation: (context: UnitOfWorkContext<InMemoryWriteConnection>) => Result,
+    ): Promise<Result> {
+      return Promise.resolve(operation(context));
+    },
+  }, {
+    lookup: (workContext, input) => workContext.perform(connection, ({ registry }) =>
+      registry.lookup(input.accountId, input.writeId, input.fingerprintOf)),
+    apply: (workContext, input) => workContext.perform(connection, ({ tasks }) =>
+      tasks.apply(input.accountId, input.op)),
+    record: (workContext, input, outcome) => workContext.perform(connection, ({ registry }) => {
+      registry.record({
+        accountId: input.accountId,
+        writeId: input.writeId,
+        fingerprintOf: input.fingerprintOf,
+        accountEpoch: input.accountEpoch,
+        outcome,
+      });
+    }),
+  });
+};

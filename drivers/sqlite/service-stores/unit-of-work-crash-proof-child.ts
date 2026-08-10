@@ -6,8 +6,7 @@ import { writeFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
 
 import { createLocalService } from "../../../apps/service/app-facing";
-import type { WriteIdRegistry } from "../../../apps/service/stores/write-id-registry";
-import { createSqliteLocalServiceStores, SqliteWriteUnitOfWork } from "./index";
+import { createSqliteLocalServiceStores, createSqliteWriteUnitOfWork } from "./index";
 
 const OWNER = "acct-i7-crash-proof";
 const EPOCH = 7;
@@ -107,22 +106,18 @@ const main = async (): Promise<void> => {
   try {
     const stores = createSqliteLocalServiceStores(db);
     if (phase === "crash") {
-      const blockingRegistry: WriteIdRegistry = Object.freeze({
-        lookup: stores.registry.lookup.bind(stores.registry),
-        record(): never {
+      const unitOfWork = createSqliteWriteUnitOfWork(db, {
+        beforeRegistryRecord(): never {
           // This call begins only after `tasks.apply` has returned. The parent
-          // observes the marker, sends SIGKILL, and never lets record delegate.
+          // observes the marker, sends SIGKILL, and never lets record execute.
           writeFileSync(markerPath, "task-applied-registry-not-recorded\n", "utf8");
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
           throw new Error("unreachable");
         },
-        collectBelowEpoch: stores.registry.collectBelowEpoch.bind(stores.registry),
-        size: stores.registry.size.bind(stores.registry),
-        reset: stores.registry.reset.bind(stores.registry),
       });
       const crashStores = Object.freeze({
         ...stores,
-        unitOfWork: new SqliteWriteUnitOfWork(db, stores.tasks, blockingRegistry),
+        unitOfWork,
       });
       const service = createLocalService({
         db,

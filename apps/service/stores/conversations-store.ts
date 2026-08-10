@@ -209,22 +209,42 @@ export const createInMemoryConversationsStore = (
       return { stored: true, record: stored };
     },
 
-    updateTitle(accountId, recordId, title, updatedAt): ConversationPatchOutcome {
+    updateTitle(
+      accountId: string,
+      recordId: string,
+      title: string,
+      updatedAt: string,
+    ): ConversationPatchOutcome {
       return update(accountId, recordId, updatedAt, (record) => ({
         ...record,
         structured: { ...record.structured, title },
       }));
     },
 
-    updateStarred(accountId, recordId, starred, updatedAt): ConversationPatchOutcome {
+    updateStarred(
+      accountId: string,
+      recordId: string,
+      starred: boolean,
+      updatedAt: string,
+    ): ConversationPatchOutcome {
       return update(accountId, recordId, updatedAt, (record) => ({ ...record, starred }));
     },
 
-    updateVisibility(accountId, recordId, visibility, updatedAt): ConversationPatchOutcome {
+    updateVisibility(
+      accountId: string,
+      recordId: string,
+      visibility: ConversationVisibility,
+      updatedAt: string,
+    ): ConversationPatchOutcome {
       return update(accountId, recordId, updatedAt, (record) => ({ ...record, visibility }));
     },
 
-    updateFolder(accountId, recordId, folderId, updatedAt): ConversationPatchOutcome {
+    updateFolder(
+      accountId: string,
+      recordId: string,
+      folderId: string | null,
+      updatedAt: string,
+    ): ConversationPatchOutcome {
       const current = accounts.get(accountId)?.get(recordId);
       if (current === undefined) return { updated: false, reason: "not_found" };
       if (folderId !== null && !folders.hasFolder(accountId, folderId)) {

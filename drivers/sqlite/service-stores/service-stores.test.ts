@@ -10,13 +10,11 @@ import {
   SqliteAccountControlProjectionStore,
   SqliteConversationsStore,
   SqliteCurrentSessionPort,
-  SqliteFolderDeletionUnitOfWork,
   SqliteFoldersStore,
   SqliteSettingsProjectionStore,
   SqliteStragglerTable,
   SqliteTasksStore,
   SqliteWriteIdRegistry,
-  SqliteWriteUnitOfWork,
   createSqliteLocalServiceStores,
 } from "./index";
 
@@ -202,10 +200,10 @@ describe("the SQLite service-store adapters", () => {
     expect(injected.writePath.folders).toBe(stores.folders);
     expect(stores.folders).toBeInstanceOf(SqliteFoldersStore);
     expect(injected.writePath.folderDeletion).toBe(stores.folderDeletion);
-    expect(stores.folderDeletion).toBeInstanceOf(SqliteFolderDeletionUnitOfWork);
+    expect(typeof stores.folderDeletion.execute).toBe("function");
     expect(injected.writePath.registry).toBe(stores.registry);
     expect(injected.writePath.unitOfWork).toBe(stores.unitOfWork);
-    expect(stores.unitOfWork).toBeInstanceOf(SqliteWriteUnitOfWork);
+    expect(typeof stores.unitOfWork.execute).toBe("function");
     expect(injected.writePath.stragglers).toBe(stores.stragglers);
     expect(injected.writePath.control).toBe(stores.control);
     expect(stores.settings).toBeInstanceOf(SqliteSettingsProjectionStore);

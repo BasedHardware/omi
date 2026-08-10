@@ -130,7 +130,12 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
       return { created: true, record };
     },
 
-    patchFolder(accountId, folderId, patch, updatedAt): FolderPatchOutcome {
+    patchFolder(
+      accountId: string,
+      folderId: string,
+      patch: FolderPatch,
+      updatedAt: string,
+    ): FolderPatchOutcome {
       const folders = accounts.get(accountId);
       const current = folders?.get(folderId);
       if (folders === undefined || current === undefined) {
