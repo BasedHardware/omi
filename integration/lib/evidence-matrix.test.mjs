@@ -122,6 +122,54 @@ test("RED-PROOF fixture fallback never counts as live consumer evidence", () => 
   mustFail(verdict({ consumer }), /fixture-backed/);
 });
 
+test("RED-PROOF consumer evidence rejects and cannot serialize non-schema content", () => {
+  const injections = [
+    ["token", "consumer-secret-marker"],
+    ["baseUrl", "http://consumer-base-marker.invalid"],
+    ["prompt", "consumer-prompt-marker"],
+    ["attachment", { name: "consumer-attachment-marker.txt" }],
+    ["content", "consumer-arbitrary-content-marker"],
+  ];
+  for (const [field, value] of injections) {
+    for (const location of ["document", "row", "observation"]) {
+      const consumer = healthyConsumer();
+      const row = consumer.rows.find((candidate) => candidate.shell === "ios" && candidate.domain === "memories");
+      const targets = { document: consumer, row, observation: row.observation };
+      targets[location][field] = value;
+      const result = verdict({ consumer });
+      mustFail(result, new RegExp(`non-schema field.*${field}`));
+      const normalized = result.rows.find((candidate) => candidate.shell === "ios" && candidate.domain === "memories").consumer;
+      assert.deepEqual(Object.keys(normalized).sort(), [
+        "domain",
+        "evidence",
+        "fixture",
+        "observation",
+        "runId",
+        "shell",
+        "shellTreeHash",
+        "surfaceTreeHash",
+      ]);
+      assert.deepEqual(Object.keys(normalized.observation).sort(), ["route", "semantic", "state"]);
+      const serializedRows = JSON.stringify(result.rows);
+      assert.doesNotMatch(
+        serializedRows,
+        /consumer-secret-marker|consumer-base-marker|consumer-prompt-marker|consumer-attachment-marker|consumer-arbitrary-content-marker/,
+      );
+    }
+  }
+});
+
+test("RED-PROOF transcript is consumer evidence only for Listen", () => {
+  const consumer = healthyConsumer();
+  const memories = consumer.rows.find((row) => row.shell === "macos" && row.domain === "memories");
+  memories.observation.transcript = "non-listen-transcript-marker";
+  const result = verdict({ consumer });
+  mustFail(result, /macos\/memories observation has non-schema field.*transcript/);
+  const normalized = result.rows.find((row) => row.shell === "macos" && row.domain === "memories").consumer;
+  assert.deepEqual(Object.keys(normalized.observation).sort(), ["route", "semantic", "state"]);
+  assert.doesNotMatch(JSON.stringify(result.rows), /non-listen-transcript-marker/);
+});
+
 test("RED-PROOF stale shell or surface tree hashes fail the coordinate", () => {
   const consumer = healthyConsumer();
   consumer.rows[0] = { ...consumer.rows[0], shellTreeHash: "3".repeat(40) };

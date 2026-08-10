@@ -101,9 +101,13 @@ exactly seven rows. Every row includes:
 }
 ```
 
-The consumer Listen row additionally carries a non-empty rendered `observation.transcript`.
-Producer evidence contains no transcript to compare against. The launcher adds its actual exit
-code after collection; the app cannot self-award launcher success.
+The consumer document has exactly `schema`, `runId`, and `rows`. Rows have exactly the fields
+shown above; observations have exactly `route`, `state`, and `semantic`, plus `transcript` only
+for Listen. The arbiter rejects any extra field and rebuilds each consumer report row from these
+allowed fields so rejected input cannot leak into a report or receipt. The consumer Listen row
+carries a non-empty rendered `observation.transcript`; every other domain must omit it. Producer
+evidence contains no transcript to compare against. The launcher adds its actual exit code after
+collection; the app cannot self-award launcher success.
 
 The final `omi.shell-domain-matrix.v1` report and receipt contain the 14 joined producer and
 consumer rows. Missing, duplicate, wrong-run, wrong-shell, fixture, stale-tree, aggregate,
