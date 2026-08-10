@@ -30,16 +30,45 @@ core="$(cd "$here/../.." && pwd)"
 api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4801}"
 accept=0
 route="home"
+evidence_out=""
+run_id_arg=""
 
 while (( $# )); do
   case "$1" in
     --api) api_base="${2:?--api needs a URL}"; shift 2 ;;
     --route) route="${2:?--route needs a name}"; shift 2 ;;
     --accept) accept=1; shift ;;
+    --evidence-out) evidence_out="${2:?--evidence-out needs a path}"; shift 2 ;;
+    --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+# Remove any prior host success before route, origin, URL, credential, backend,
+# build, or launch gates can fail.
+if [[ -n "$evidence_out" ]]; then
+  if [[ -d "$evidence_out" ]]; then
+    echo "ERROR: --evidence-out must name a file, not a directory." >&2
+    exit 2
+  fi
+  rm -f -- "$evidence_out"
+  [[ -d "$(dirname "$evidence_out")" ]] || {
+    echo "ERROR: --evidence-out parent directory does not exist." >&2
+    exit 2
+  }
+fi
+if [[ -n "$evidence_out" && -z "$run_id_arg" ]] || [[ -z "$evidence_out" && -n "$run_id_arg" ]]; then
+  echo "ERROR: --evidence-out and --run-id must be supplied together." >&2
+  exit 2
+fi
+if [[ -n "$run_id_arg" ]]; then
+  if [[ ! "$run_id_arg" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+     [[ "$run_id_arg" == anonymous || "$run_id_arg" == overflow || "$run_id_arg" == __* || "$run_id_arg" == *::macos ]]; then
+    echo "ERROR: --run-id must be a raw bounded producer-evidence id." >&2
+    exit 2
+  fi
+fi
 
 case "$route" in
   home|memories|conversations|tasks|folders|chat|settings|listen) ;;
@@ -155,6 +184,18 @@ if (( accept )); then
   # Too short a bound turns a slow-but-passing run into a timeout, which is the
   # kind of flake that gets a real gate disabled.
   export OMI_ACCEPTANCE_WAIT_SECONDS="${OMI_ACCEPTANCE_WAIT_SECONDS:-45}"
+fi
+
+if [[ -n "$evidence_out" ]]; then
+  export OMI_RUN_CLIENT_ID="$run_id_arg"
+  export OMI_CONSUMER_EVIDENCE_PATH="$evidence_out"
+  export OMI_CONSUMER_EVIDENCE_EXIT=1
+  export OMI_ACCEPTANCE_WAIT_SECONDS="${OMI_CONSUMER_EVIDENCE_WAIT_SECONDS:-180}"
+  "$here/scripts/run-shell.sh"
+  node "$core/shells/tools/validate-consumer-evidence.mjs" \
+    --file "$evidence_out" --run-id "$run_id_arg" --shell macos
+  echo "EVIDENCE: native macOS consumer document collected at $evidence_out"
+  exit 0
 fi
 
 exec "$here/scripts/run-shell.sh"

@@ -302,9 +302,12 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
       : capabilities.maxAttachmentsPerMessage !== null
         ? t(locale, "chat.attachmentLimit", { count: capabilities.maxAttachmentsPerMessage })
         : null;
+  const admittedUserMessages = messages.filter(
+    (message) => message.role === "user" && message.delivery.kind === "canonical",
+  ).length;
 
   return (
-    <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`chat:messages:${messages.length}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
+    <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-chat-admission-count={admittedUserMessages} data-consumer-semantic={`chat:messages:${messages.length}:admitted:${admittedUserMessages}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
       <ProductionChrome locale={locale} active="chat" placement="top" />
       <section className="desktop-page-panel">
         <header className="production-header chat-header">

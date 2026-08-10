@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,22 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "shell/Sources/OmiShell/ConsumerEvidence.swift");
+
+test("macOS evidence driver authors through the rendered composer and waits for canonical admission", () => {
+  // red-proof: restore the visit-only Chat branch; one of the author, submit,
+  // or rendered admission-baseline assertions disappears.
+  const driver = readFileSync(
+    join(root, "shell/Sources/OmiShell/ConsumerEvidenceDriver.swift"),
+    "utf8",
+  );
+  assert.match(driver, /C3b3 deterministic synthetic Chat evidence\./);
+  assert.match(driver, /textarea\.chat-draft/);
+  assert.match(driver, /button\.chat-send/);
+  assert.match(driver, /consumerChatAdmissionCount/);
+  assert.ok(driver.includes("admitted <= \\#(baseline)"));
+  assert.match(driver, /chatAdmissionBaseline = number\.intValue/);
+  assert.match(driver, /chatSubmitted = value as\? Bool == true/);
+});
 
 function hasSwiftc() {
   try { execFileSync("swiftc", ["--version"], { stdio: "ignore" }); return true; }

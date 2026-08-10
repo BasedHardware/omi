@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -31,8 +32,12 @@ class ShellTransportAuthority {
 
   BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
 
-  ListenSocketHost makeListenHost() =>
-      ListenSocketHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
+  ListenSocketHost makeListenHost({bool evidenceAudioEnabled = false}) => ListenSocketHost(
+    baseUrl: baseUrl,
+    custody: custody,
+    clientIdentity: clientIdentity,
+    evidenceAudioEnabled: evidenceAudioEnabled,
+  );
 
   ListenSocketPolicyResult prepareListen(String path) => ListenSocketHostPolicy.prepare(
     path: path,
@@ -40,6 +45,35 @@ class ShellTransportAuthority {
     token: custody.currentToken,
     clientIdentity: clientIdentity,
   );
+}
+
+Uint8List deterministicListenEvidenceAudio() {
+  final bytes = Uint8List(3200);
+  final data = ByteData.sublistView(bytes);
+  for (var sample = 0; sample < 1600; sample++) {
+    final value = ((sample * 257) % 24001) - 12000;
+    data.setInt16(sample * 2, value, Endian.little);
+  }
+  return bytes;
+}
+
+bool isListenProtocolReady(String text) {
+  try {
+    final decoded = jsonDecode(text);
+    return decoded is Map<String, dynamic> && decoded['type'] == 'service_status' && decoded['status'] == 'ready';
+  } on FormatException {
+    return false;
+  }
+}
+
+final class NativeListenEvidenceGate {
+  bool _sent = false;
+
+  Uint8List? acceptServiceFrame(String text) {
+    if (_sent || !isListenProtocolReady(text)) return null;
+    _sent = true;
+    return deterministicListenEvidenceAudio();
+  }
 }
 
 class ListenSocketPreparedRequest {
@@ -87,32 +121,35 @@ class ListenSocketHostPolicy {
     return ListenSocketPolicyResult.dispatch(
       ListenSocketPreparedRequest(
         url: url,
-        headers: <String, String>{
-          HttpHeaders.authorizationHeader: 'Bearer $token',
-          'x-omi-client-id': clientIdentity,
-        },
+        headers: <String, String>{HttpHeaders.authorizationHeader: 'Bearer $token', 'x-omi-client-id': clientIdentity},
       ),
     );
   }
 }
 
 class ListenSocketHost {
-  ListenSocketHost({required this.baseUrl, required this.custody, required this.clientIdentity});
+  ListenSocketHost({
+    required this.baseUrl,
+    required this.custody,
+    required this.clientIdentity,
+    this.evidenceAudioEnabled = false,
+  });
 
   static const channel = 'omiListenSocket';
 
   final Uri baseUrl;
   final ShellCredentialCustody custody;
   final String clientIdentity;
+  final bool evidenceAudioEnabled;
   final Map<String, WebSocket> _sockets = <String, WebSocket>{};
+  final Map<String, NativeListenEvidenceGate> _evidenceGates = <String, NativeListenEvidenceGate>{};
 
-  ListenSocketPolicyResult prepareUsingCurrentCustodyForConformance(String path) =>
-      ListenSocketHostPolicy.prepare(
-        path: path,
-        baseUrl: baseUrl,
-        token: custody.currentToken,
-        clientIdentity: clientIdentity,
-      );
+  ListenSocketPolicyResult prepareUsingCurrentCustodyForConformance(String path) => ListenSocketHostPolicy.prepare(
+    path: path,
+    baseUrl: baseUrl,
+    token: custody.currentToken,
+    clientIdentity: clientIdentity,
+  );
 
   Future<void> register(WebViewController controller) {
     return controller.addJavaScriptChannel(
@@ -156,6 +193,12 @@ class ListenSocketHost {
       socket.listen(
         (dynamic data) {
           if (data is String) {
+            final audio = evidenceAudioEnabled
+                ? _evidenceGates.putIfAbsent(id, NativeListenEvidenceGate.new).acceptServiceFrame(data)
+                : null;
+            if (audio != null) {
+              socket.add(audio);
+            }
             unawaited(_emit(controller, id, <String, Object>{'type': 'message', 'data': data}));
           } else {
             unawaited(_emit(controller, id, const <String, Object>{'type': 'error'}));
@@ -166,6 +209,7 @@ class ListenSocketHost {
         },
         onDone: () {
           _sockets.remove(id);
+          _evidenceGates.remove(id);
           unawaited(_emit(controller, id, <String, Object>{'type': 'close', 'code': socket.closeCode ?? 1006}));
         },
         cancelOnError: false,
@@ -187,6 +231,7 @@ class ListenSocketHost {
   Future<void> _closeAll(String reason) async {
     final sockets = _sockets.values.toList(growable: false);
     _sockets.clear();
+    _evidenceGates.clear();
     await Future.wait(sockets.map((socket) => socket.close(WebSocketStatus.goingAway, reason)));
   }
 }

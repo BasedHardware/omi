@@ -47,9 +47,9 @@ const String _apiToken = String.fromEnvironment('OMI_API_TOKEN', defaultValue: '
 // Per-run QA identity. The shell appends its fixed `ios` identity natively;
 // neither value is placed in the surface URL or JavaScript state.
 const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultValue: '');
-// Launcher-owned native result path. It is never placed in the surface URL or
-// JavaScript state, and an existing file is removed before any route is driven.
-const String _consumerEvidencePath = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_PATH', defaultValue: '');
+// Launcher-owned safe basename for a Documents-local native result. Host paths
+// never cross into the simulator process or JavaScript state.
+const String _consumerEvidenceFilename = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_FILENAME', defaultValue: '');
 // Optional scheme query/profile namespace. Values are appended to the local
 // scheme URL, never interpolated into page JavaScript or logs.
 const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
@@ -90,6 +90,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   ChatStreamHost? _chatStream;
   ChatAttachmentStagingHost? _chatStaging;
   ConsumerEvidenceDriver? _consumerEvidence;
+  String? _consumerEvidenceResultPath;
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
@@ -167,7 +168,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     if (_apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
       final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
       _http = authority.makeHttpHost();
-      _listen = authority.makeListenHost();
+      _listen = authority.makeListenHost(evidenceAudioEnabled: _consumerEvidenceFilename.isNotEmpty);
       final sink = ChatBridgeJavaScriptSink(
         (source) => _controller.runJavaScript(source),
         documentInitiallyActive: false,
@@ -237,7 +238,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     if (_consumerEvidence != null) {
       try {
         await _consumerEvidence!.pageFinished();
-        if (_consumerEvidenceExit && await File(_consumerEvidencePath).exists()) {
+        final resultPath = _consumerEvidenceResultPath;
+        if (_consumerEvidenceExit && resultPath != null && await File(resultPath).exists()) {
           exit(0);
         }
       } catch (error) {
@@ -302,7 +304,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         );
         // Probe phase machine only for the original v1/v2/v3 suite.
         _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
-        if (_consumerEvidencePath.isNotEmpty) {
+        if (_consumerEvidenceFilename.isNotEmpty) {
+          if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,191}\.json$').hasMatch(_consumerEvidenceFilename)) {
+            throw StateError('consumer evidence filename is not a safe basename');
+          }
+          _consumerEvidenceResultPath = '${_scheme!.docsDir}/$_consumerEvidenceFilename';
           await _startConsumerEvidence();
         } else {
           await _mountBundle(_schemeBundle);
@@ -314,7 +320,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   }
 
   Future<void> _startConsumerEvidence() async {
-    final result = File(_consumerEvidencePath);
+    final resultPath = _consumerEvidenceResultPath;
+    if (resultPath == null) {
+      throw StateError('consumer evidence result path was not initialized');
+    }
+    final result = File(resultPath);
     if (await result.exists()) {
       await result.delete();
     }
@@ -326,12 +336,16 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       throw StateError('consumer evidence bundle failed the native contract gate');
     }
     await _scheme!.setActiveBundle('surfaces');
-    final hashes = ConsumerEvidenceTreeHashes.fromAssetJson(shellStamp: await rootBundle.loadString('assets/surfaces/omi-ios-shell-build-stamp.json'), surfaceStamp: await rootBundle.loadString('assets/surfaces/omi-build-stamp.json'));
-    final collector = ConsumerEvidenceCollector(resultPath: _consumerEvidencePath, runId: _runClientId, hashes: hashes);
+    final hashes = ConsumerEvidenceTreeHashes.fromAssetJson(
+      shellStamp: await rootBundle.loadString('assets/surfaces/omi-ios-shell-build-stamp.json'),
+      surfaceStamp: await rootBundle.loadString('assets/surfaces/omi-build-stamp.json'),
+    );
+    final collector = ConsumerEvidenceCollector(resultPath: resultPath, runId: _runClientId, hashes: hashes);
     await collector.prepare();
     _consumerEvidence = ConsumerEvidenceDriver(
       collector: collector,
-      navigate: (route) => _controller.loadRequest(Uri.parse('omi-ui://local/index.html?route=${route.wireName}&platform=mobile')),
+      navigate: (route) =>
+          _controller.loadRequest(Uri.parse('omi-ui://local/index.html?route=${route.wireName}&platform=mobile')),
       observe: () async {
         final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
         if (result is String) return result;
@@ -340,6 +354,23 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       startListen: () async {
         final result = await _controller.runJavaScriptReturningResult(startListenConsumerEvidenceJavaScript);
         return result == true || result.toString() == 'true';
+      },
+      authorChat: () async {
+        final result = await _controller.runJavaScriptReturningResult(authorChatConsumerEvidenceJavaScript);
+        if (result is int) return result;
+        if (result is double && result.isFinite && result == result.round()) {
+          return result.toInt();
+        }
+        return null;
+      },
+      submitChat: () async {
+        final result = await _controller.runJavaScriptReturningResult(submitChatConsumerEvidenceJavaScript);
+        return result == true || result.toString() == 'true';
+      },
+      observeChatAfterAdmission: (baseline) async {
+        final result = await _controller.runJavaScriptReturningResult(renderedChatObservationJavaScript(baseline));
+        if (result is String) return result;
+        return result.toString() == 'null' ? null : result.toString();
       },
     );
     await _consumerEvidence!.start();

@@ -474,7 +474,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           }
         })
       httpHandler = authority.makeHTTPHandler(clientId: runClientId)
-      listenSocketHandler = authority.makeListenHandler(clientId: runClientId)
+      listenSocketHandler = authority.makeListenHandler(
+        clientId: runClientId,
+        evidenceAudioEnabled: env["OMI_CONSUMER_EVIDENCE_PATH"]?.isEmpty == false)
       chatStreamHandler = ChatStreamHandler(
         baseURL: base, custody: authority.custody, runId: runClientId)
       chatAttachmentStagingHandler = ChatAttachmentStagingHandler(
