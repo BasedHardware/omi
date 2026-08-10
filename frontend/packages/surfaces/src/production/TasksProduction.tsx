@@ -7,6 +7,7 @@ import { deadLetterView } from "./dead-letter-presentation.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionSearchField } from "./ProductionPrimitives.js";
+import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
@@ -297,6 +298,14 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const notice = phaseLabel(status, translate);
   const groups: GroupKey[] = ["today", "tomorrow", "later"];
   const selectedTask = selectedTaskId ? rows.find((task) => task.id === selectedTaskId) : undefined;
+  const filtering = query.trim().length > 0;
+  const visibleCount = groups.reduce((count, group) => count + grouped[group].length, 0);
+  const emptyKind = tasksEmptyKind({
+    phase: status.refresh.phase,
+    rowCount: rows.length,
+    visibleCount,
+    filtering,
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -384,9 +393,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       {status.refresh.phase === "initial-loading" ? (
         <p className="tasks-empty-state">{translate("common.loading")}</p>
       ) : status.refresh.phase === "ready" && rows.length === 0 ? (
-        <div className="tasks-empty-state"><strong>{translate("tasks.emptyTitle")}</strong><p>{translate("tasks.emptyBody")}</p></div>
+        <div className="tasks-empty-state" data-empty-kind="empty-projection"><strong>{translate("tasks.emptyTitle")}</strong><p>{translate("tasks.emptyBody")}</p></div>
       ) : status.refresh.phase === "unavailable" && rows.length === 0 ? (
         <p className="tasks-empty-state">{translate("lifecycle.unavailable")}</p>
+      ) : emptyKind === "filtered-out" ? (
+        <p className="tasks-empty-state" data-empty-kind="filtered-out">{translate("common.noResults")}</p>
       ) : (
         <section className="tasks-groups" aria-label={translate("tasks.title")}>
           {groups.map((group) => (
