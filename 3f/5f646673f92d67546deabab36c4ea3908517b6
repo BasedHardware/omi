@@ -1,0 +1,29 @@
+desktop/macos/changelog/unreleased/20260810-tool-activity-timeline.json
+  s_deed0049c38ffc::t_71899f4bf04316 1-3
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_deed0049c38ffc::t_71899f4bf04316 3
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_deed0049c38ffc::t_71899f4bf04316 843-844,1599,1604-1608,1610
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_deed0049c38ffc::t_5f68ab75916b5f 1287-1344,1348-1349,1387-1388,1392,1397-1399,1405-1406,1410-1415,1419-1422,1424-1426,1437,1446-1457,1485-1505,1508-1518,1522-1526,1528-1529,1532-1547,1549-1555,1557-1564,1566-1572,1574-1576,1578-1579,1581-1584,1587,1589-1620,1782,1785,1801,1803,1805,1811-1828
+desktop/macos/Desktop/Tests/ChatWorkingIndicatorTests.swift
+  s_deed0049c38ffc::t_37bc4ab7c87e21 80,104,107-110
+desktop/macos/Desktop/Tests/ToolCallStatusTests.swift
+  s_deed0049c38ffc::t_a6ca8eeacec400 32,34-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3f5f646673f92d67546deabab36c4ea3908517b6",
+  "prompts": {},
+  "sessions": {
+    "s_deed0049c38ffc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec71-d01e-72b0-9157-c2c4f4c67cd4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
