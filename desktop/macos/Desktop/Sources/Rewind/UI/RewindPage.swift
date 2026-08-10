@@ -21,10 +21,8 @@ struct RewindPage: View {
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isPageFocused: Bool
 
-  // Monitoring toggle state
-  @State var isMonitoring = false
+  // Monitoring status is owned by the global top-bar Capture control.
   @State var screenCaptureHealth: ScreenCaptureHealth = .stopped
-  @State var isTogglingMonitoring = false
   @AppStorage("screenAnalysisEnabled") var screenAnalysisEnabled = true
 
   // Recording animation state
@@ -138,7 +136,6 @@ struct RewindPage: View {
       await viewModel.loadInitialData()
     }
     .onAppear {
-      isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
       isPageFocused = true
     }
@@ -148,7 +145,6 @@ struct RewindPage: View {
         captureEnabled: screenAnalysisEnabled,
         monitoring: pluginState
       )
-      isMonitoring = state.isMonitoring
       screenAnalysisEnabled = state.captureEnabled
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
@@ -362,7 +358,7 @@ struct RewindPage: View {
       }
 
       // Search field + date picker - always present
-      searchField(showResultsCount: isInSearchMode)
+      searchField
       datePickerControls
 
       // Right side controls depend on mode
@@ -435,7 +431,6 @@ struct RewindPage: View {
           .cornerRadius(OmiChrome.stripRadius)
           .help(screenCaptureHealth.statusText)
       }
-      rewindToggle
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
@@ -548,60 +543,14 @@ struct RewindPage: View {
 
   // MARK: - Unified Search Field
 
-  private func searchField(showResultsCount: Bool = false) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : .white.opacity(0.5))
-
-      TextField("Search your screen history...", text: $viewModel.searchQuery)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(.white)
-        .focused($isSearchFocused)
-
-      if viewModel.isSearching {
-        ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(0.6)
-          .tint(.white)
-      } else if showResultsCount && !viewModel.searchQuery.isEmpty && viewModel.activeSearchQuery != nil {
-        let groups = viewModel.groupedSearchResults
-        let total = viewModel.totalScreenshotCount
-        if groups.count == total {
-          Text("\(total) results")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
-        } else {
-          Text("\(groups.count) groups (\(total) total)")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
-        }
-      }
-
-      if !viewModel.searchQuery.isEmpty {
-        Button {
-          viewModel.searchQuery = ""
-          searchViewMode = nil
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
-        }
-        .buttonStyle(.plain)
-      }
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
-    .frame(maxWidth: 400)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Color.white.opacity(0.1))
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
-        )
+  private var searchField: some View {
+    OmiSearchField(
+      placeholder: "Search your screen history...",
+      text: $viewModel.searchQuery,
+      isLoading: viewModel.isSearching,
+      focus: $isSearchFocused
     )
+    .frame(maxWidth: 400)
   }
 
   // MARK: - Date Picker Controls
