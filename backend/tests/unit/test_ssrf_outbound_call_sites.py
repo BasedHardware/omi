@@ -53,9 +53,6 @@ def _load_app_tools_module():
         )
 
 
-_APP_TOOLS = _load_app_tools_module()
-
-
 # ---------------------------------------------------------------------------
 # set_user_webhook_endpoint — private URL -> HTTP 400
 # ---------------------------------------------------------------------------
@@ -139,30 +136,35 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
-# Import routers.users under a stub finder (heavy graph). Keep real utils modules
-# already imported above; restore them after the stub dance.
-_finder = _Finder()
-_snap = _snapshot_stubbed_modules()
-_kept_real = {
-    name: sys.modules[name]
-    for name in list(sys.modules)
-    if name == 'utils' or name.startswith('utils.') or name == 'database' or name.startswith('database.')
-}
-_clear_stubbed_modules()
-_rm_mp = _install_python_multipart_stub()
-sys.meta_path.insert(0, _finder)
-try:
-    from routers import users as users_mod
-    from routers.users import SetUserWebhookUrlRequest
-finally:
-    sys.meta_path.remove(_finder)
-    _restore_stubbed_modules(_snap)
-    sys.modules.update(_kept_real)
-    if _rm_mp:
-        sys.modules.pop('python_multipart', None)
+def _load_users_router():
+    """Import routers.users under a stub finder (heavy graph). Function-scoped
+    so the module-isolation scanner does not see sys.modules mutations at
+    import time."""
+    finder = _Finder()
+    snap = _snapshot_stubbed_modules()
+    kept_real = {
+        name: sys.modules[name]
+        for name in list(sys.modules)
+        if name == 'utils' or name.startswith('utils.') or name == 'database' or name.startswith('database.')
+    }
+    _clear_stubbed_modules()
+    rm_mp = _install_python_multipart_stub()
+    sys.meta_path.insert(0, finder)
+    try:
+        from routers import users as users_mod
+        from routers.users import SetUserWebhookUrlRequest
+
+        return users_mod, SetUserWebhookUrlRequest
+    finally:
+        sys.meta_path.remove(finder)
+        _restore_stubbed_modules(snap)
+        sys.modules.update(kept_real)
+        if rm_mp:
+            sys.modules.pop('python_multipart', None)
 
 
 def test_set_user_webhook_rejects_private_url():
+    users_mod, SetUserWebhookUrlRequest = _load_users_router()
     # Stubbed import graph turns utils.http_client symbols into MagicMocks;
     # restore the real exception type so `except UnsafeWebhookURLError` works.
     users_mod.UnsafeWebhookURLError = UnsafeWebhookURLError
@@ -184,6 +186,7 @@ def test_set_user_webhook_rejects_private_url():
 
 
 def test_set_user_webhook_empty_url_skips_ssrf_check():
+    users_mod, SetUserWebhookUrlRequest = _load_users_router()
     users_mod.UnsafeWebhookURLError = UnsafeWebhookURLError
     users_mod.assert_public_http_url = MagicMock(side_effect=AssertionError('should not validate empty'))
     with (
@@ -319,16 +322,17 @@ def test_reenable_health_check_rejects_non_public_url(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_call_tool_endpoint_rejects_non_public():
+    app_tools = _load_app_tools_module()
     tool = ChatTool(name='secret_tool', description='d', endpoint='http://127.0.0.1/tool', method='POST')
     config = {'configurable': {'user_id': 'uid-1'}}
 
     with (
-        patch.object(_APP_TOOLS, 'is_app_webhook_disabled', return_value=False),
-        patch.object(_APP_TOOLS, 'safe_request_target', side_effect=UnsafeWebhookURLError('private')),
-        patch.object(_APP_TOOLS, 'get_webhook_circuit_breaker') as mock_cb_factory,
+        patch.object(app_tools, 'is_app_webhook_disabled', return_value=False),
+        patch.object(app_tools, 'safe_request_target', side_effect=UnsafeWebhookURLError('private')),
+        patch.object(app_tools, 'get_webhook_circuit_breaker') as mock_cb_factory,
         patch('httpx.AsyncClient') as mock_client_cls,
     ):
-        result = await _APP_TOOLS._call_tool_endpoint({}, config, tool, 'app-1')
+        result = await app_tools._call_tool_endpoint({}, config, tool, 'app-1')
 
     assert 'invalid or unavailable' in result
     assert '127.0.0.1' not in result
