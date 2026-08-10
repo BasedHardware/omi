@@ -6,6 +6,7 @@ import { SqliteFolderDeletionUnitOfWork } from "./folder-deletion-unit-of-work";
 import { SqliteFoldersStore } from "./folders-store";
 import { SqliteAccountControlProjectionStore } from "./projection-store";
 import { SqliteStragglerTable } from "./straggler-table";
+import { SqliteSettingsProjectionStore } from "./settings-projection";
 import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { SqliteWriteUnitOfWork } from "./write-unit-of-work";
@@ -41,5 +42,6 @@ export const createSqliteLocalServiceStores = (
     unitOfWork: new SqliteWriteUnitOfWork(db, tasks, registry),
     stragglers: new SqliteStragglerTable(db),
     control: new SqliteAccountControlProjectionStore(db),
+    settings: new SqliteSettingsProjectionStore(db),
   });
 };

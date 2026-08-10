@@ -18,6 +18,10 @@ import {
   createInMemoryAccountControlProjectionStore,
   type AccountControlProjectionStore,
 } from "./control/projection-store";
+import {
+  createInMemorySettingsProjectionStore,
+  type SettingsProjectionStore,
+} from "./control/settings-projection";
 import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
@@ -27,6 +31,7 @@ import { registerFolderRoutes } from "./routes/folders";
 import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
+import { registerSettingsRoutes } from "./routes/settings";
 import { registerTasksOpsRoutes } from "./routes/tasks-ops";
 import { registerTasksReadRoutes } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
@@ -99,6 +104,7 @@ export interface LocalServiceStores {
   readonly unitOfWork: WriteUnitOfWork;
   readonly stragglers: StragglerTable;
   readonly control: AccountControlProjectionStore;
+  readonly settings: SettingsProjectionStore;
 }
 
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
@@ -163,6 +169,7 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
     stragglers: createInMemoryStragglerTable(),
     control: createInMemoryAccountControlProjectionStore(),
+    settings: createInMemorySettingsProjectionStore(),
   });
 };
 
@@ -217,6 +224,11 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
       const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
       if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
+      stores.settings.putIdentity(options.ownerAccountId, {
+        displayName: options.ownerAccountId,
+        email: "",
+      });
+      stores.settings.putEntitlement(options.ownerAccountId, null);
     }
   };
   reseed();
@@ -392,6 +404,11 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     prepareRead: prepareTasksReadFor,
     fence: { store: controlStore },
+    counter,
+  });
+  registerSettingsRoutes(app, {
+    resolvePrincipal,
+    projections: stores.settings,
     counter,
   });
   registerQaControlRoutes(app, {

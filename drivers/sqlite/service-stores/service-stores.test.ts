@@ -11,6 +11,7 @@ import {
   SqliteConversationsStore,
   SqliteFolderDeletionUnitOfWork,
   SqliteFoldersStore,
+  SqliteSettingsProjectionStore,
   SqliteStragglerTable,
   SqliteTasksStore,
   SqliteWriteIdRegistry,
@@ -206,6 +207,7 @@ describe("the SQLite service-store adapters", () => {
     expect(stores.unitOfWork).toBeInstanceOf(SqliteWriteUnitOfWork);
     expect(injected.writePath.stragglers).toBe(stores.stragglers);
     expect(injected.writePath.control).toBe(stores.control);
+    expect(stores.settings).toBeInstanceOf(SqliteSettingsProjectionStore);
     sqliteDb.close();
 
     const memoryDb = new Database(":memory:");
