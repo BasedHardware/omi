@@ -195,7 +195,7 @@ export function wireToChatHistoryEnvelope(raw: unknown): ChatHistoryEnvelope | n
   for (const rawMessage of raw["messages"]) {
     const message = wireToChatMessage(rawMessage);
     if (message === null) return null;
-    if (seen.has(message.id)) continue;
+    if (seen.has(message.id)) return null;
     seen.add(message.id);
     messages.push(message);
   }
