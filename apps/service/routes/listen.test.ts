@@ -11,6 +11,10 @@ import {
   type LocalService,
 } from "../app-facing";
 import { createScriptedTranscriptionSource } from "../listen/transcription-source";
+import {
+  createSqliteListenSegmentUnitOfWork,
+  createSqliteLocalServiceStores,
+} from "../../../drivers/sqlite/service-stores";
 import { createEntitlementFrame } from "./listen";
 
 const ACCOUNT = "listen-account";
@@ -188,6 +192,76 @@ const rawUpgradeResponse = async (
 });
 
 describe("GET /v4/listen WebSocket", () => {
+  test("a crash between transcript durability and usage rolls both back before retry", async () => {
+    const db = new Database(":memory:");
+    const baseStores = createSqliteLocalServiceStores(db);
+    baseStores.settings.putIdentity(ACCOUNT, {
+      displayName: "Listen fixture",
+      email: "listen@example.invalid",
+    });
+    baseStores.settings.putEntitlement(ACCOUNT, {
+      planLabel: "Omi Free",
+      limitKey: "transcription_seconds",
+      used: 0,
+      limit: 10,
+      limitReached: false,
+      upgradeAvailable: true,
+    });
+    let injectCrash = true;
+    const stores = Object.freeze({
+      ...baseStores,
+      listenSegments: createSqliteListenSegmentUnitOfWork(db, {
+        afterSegmentAppend: () => {
+          if (!injectCrash) return;
+          injectCrash = false;
+          throw new Error("injected crash after transcript write");
+        },
+      }),
+    });
+    const service = createLocalService({
+      db: new Database(":memory:"),
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "listen-atomic-crash",
+      stores,
+      transcriptionSource: createScriptedTranscriptionSource([
+        { delayMs: 0, text: "rolled back", start: 0, end: 1, consumedSeconds: 1 },
+        { delayMs: 0, text: "retry accepted", start: 1, end: 2, consumedSeconds: 1 },
+      ]),
+    });
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: service.app.fetch,
+      websocket: service.websocket,
+    });
+    openServers.push(server);
+    const baseUrl = `ws://127.0.0.1:${server.port}`;
+
+    const first = await observedSocket(service, baseUrl);
+    await first.waitFor(isReady);
+    first.socket.send(new Uint8Array([1, 2, 3]));
+    expect((await first.closed).code).toBe(1011);
+    expect(stores.listen.listSegments(ACCOUNT, SESSION)).toEqual([]);
+    const afterCrash = await service.app.request("/v1/settings", {
+      headers: { authorization: `Bearer ${service.devToken}` },
+    });
+    expect((await afterCrash.json() as {
+      readonly entitlement: { readonly used: number };
+    }).entitlement.used).toBe(0);
+
+    const retry = await observedSocket(service, baseUrl);
+    await retry.waitFor(isReady);
+    retry.socket.send(new Uint8Array([1, 2, 3]));
+    await retry.waitFor(isTranscript);
+    expect(stores.listen.listSegments(ACCOUNT, SESSION)).toHaveLength(1);
+    expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1);
+    retry.socket.close(1000, "done");
+    await retry.closed;
+    await waitUntil(() => stores.listen.readSession(ACCOUNT, SESSION)?.status === "completed");
+  });
+
   test("every emitted frame type validates against the vendored schema and timing is real", async () => {
     const { service, stores, baseUrl } = boot({ used: 7, limit: null, delayMs: 40 });
     const observed = await observedSocket(service, baseUrl);

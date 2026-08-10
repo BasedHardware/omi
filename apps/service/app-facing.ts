@@ -75,6 +75,11 @@ import {
 } from "./stores/folder-deletion-unit-of-work";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryListenStore, type ListenStore } from "./stores/listen-store";
+import {
+  defineListenSegmentUnitOfWork,
+  type ListenSegmentUnitOfWork,
+} from "./stores/listen-segment-unit-of-work";
+import { createUnitOfWorkContext, type UnitOfWorkContext } from "./stores/unit-of-work-context";
 import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
 import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
 import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
@@ -148,6 +153,7 @@ export interface LocalServiceStores {
   readonly currentSession: CurrentSessionPort;
   readonly accountLifecycle: AccountLifecycleStore;
   readonly listen: ListenStore;
+  readonly listenSegments: ListenSegmentUnitOfWork;
   readonly chatMessages: ChatMessagesStore;
   readonly chatEvents: ChatGenerationEventsStore;
   readonly chatAdmission: ChatAdmission;
@@ -206,7 +212,25 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
   const conversations = createInMemoryConversationsStore({
     hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
+  const listen = createInMemoryListenStore();
   const settings = createInMemorySettingsProjectionStore();
+  const listenConnection = Object.freeze({ listen, settings });
+  const listenContext = createUnitOfWorkContext(listenConnection);
+  const listenSegments = defineListenSegmentUnitOfWork({
+    execute<Result>(
+      _input,
+      operation: (context: UnitOfWorkContext<typeof listenConnection>) => Result,
+    ): Promise<Result> {
+      return Promise.resolve(operation(listenContext));
+    },
+  }, {
+    readEntitlement: (context, input) => context.perform(listenConnection, ({ settings }) =>
+      settings.readEntitlement(input.accountId)),
+    appendSegment: (context, input) => context.perform(listenConnection, ({ listen }) =>
+      listen.appendSegment(input.accountId, input.sessionId, input.segment, input.at)),
+    consumeTranscriptionSeconds: (context, input) => context.perform(listenConnection, ({ settings }) =>
+      settings.consumeTranscriptionSeconds(input.accountId, input.consumedSeconds)),
+  });
   const chatMessages = createInMemoryChatMessagesStore();
   const chatEvents = createInMemoryChatGenerationEventsStore();
   return Object.freeze({
@@ -221,7 +245,8 @@ export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
     settings,
     currentSession: createInMemoryCurrentSessionPort(),
     accountLifecycle: createInMemoryAccountLifecycleStore(),
-    listen: createInMemoryListenStore(),
+    listen,
+    listenSegments,
     chatMessages,
     chatEvents,
     chatAdmission: createInMemoryChatAdmission(chatMessages, chatEvents, settings),
@@ -515,6 +540,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resolvePrincipal,
     entitlement: stores.settings,
     store: stores.listen,
+    segments: stores.listenSegments,
     transcription: options.transcriptionSource ?? createScriptedTranscriptionSource(),
     conversations: createListenConversationFinalizer(conversations),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,

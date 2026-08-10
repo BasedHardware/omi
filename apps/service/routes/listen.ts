@@ -21,6 +21,7 @@ import type {
   ListenStore,
   ListenTranscriptSegment,
 } from "../stores/listen-store";
+import type { ListenSegmentUnitOfWork } from "../stores/listen-segment-unit-of-work";
 
 export const LISTEN_PATH = "/v4/listen";
 export const LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION = 4020;
@@ -73,6 +74,7 @@ export interface ListenRouteDependencies {
   /** Read and consumed-usage write are the same Settings/fence projection. */
   readonly entitlement: SettingsProjectionStore;
   readonly store: ListenStore;
+  readonly segments: ListenSegmentUnitOfWork;
   readonly transcription: TranscriptionSource;
   readonly conversations: ListenConversationFinalizer;
   readonly now: () => string;
@@ -196,15 +198,15 @@ const eventsForSession = (
 
   const handleEmission = async (emission: TranscriptionEmission): Promise<void> => {
     if (terminal) return;
-    const appended = deps.store.appendSegment(
-      principal.uid,
-      session.id,
-      emission.segment,
-      deps.now(),
-    );
-    const projection = appended.inserted
-      ? deps.entitlement.consumeTranscriptionSeconds(principal.uid, emission.consumedSeconds)
-      : deps.entitlement.readEntitlement(principal.uid);
+    const reservation = await deps.segments.reserve({
+      accountId: principal.uid,
+      sessionId: session.id,
+      segment: emission.segment,
+      consumedSeconds: emission.consumedSeconds,
+      at: deps.now(),
+    });
+    const appended = reservation;
+    const projection = reservation.entitlement;
 
     const activeSocket = socket;
     if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
