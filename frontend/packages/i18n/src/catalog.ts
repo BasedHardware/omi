@@ -272,6 +272,8 @@ export const EN_MESSAGES = {
   "listen.start": "Start capture",
   "listen.stop": "Stop capture",
   "listen.stateLabel": "Capture state",
+  "listen.stateLoading": "Checking capture status",
+  "listen.stateLoadingBody": "Omi is checking whether capture is active.",
   "listen.stateIdle": "Not capturing",
   "listen.stateIdleBody": "Start capture when you want Omi to listen.",
   "listen.stateCapturing": "Capturing",
@@ -286,6 +288,8 @@ export const EN_MESSAGES = {
   "listen.backlogHours": "{hours} hours awaiting transcription",
   "listen.backlogNone": "Nothing is waiting to be transcribed.",
   "listen.elapsed": "Elapsed {duration}",
+  "listen.buffered": "Buffered {duration}",
+  "listen.usageUnknownLimit": "{used} used; plan limit unavailable",
   "listen.errorTitle": "Capture error",
 
   // Where the rows on screen came from. Rendered at every width, on purpose: a QA label

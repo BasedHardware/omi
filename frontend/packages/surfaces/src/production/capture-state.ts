@@ -4,6 +4,7 @@
  * re-exports the type.
  */
 export type CaptureState =
+  | { readonly kind: "loading" }
   | { readonly kind: "idle" }
   | { readonly kind: "capturing"; readonly elapsedSeconds: number }
   | {
@@ -18,10 +19,15 @@ export type CaptureState =
       readonly untranscribedSeconds: number;
     }
   | { readonly kind: "stopped-at-ceiling"; readonly untranscribedSeconds: number }
-  | { readonly kind: "error"; readonly retryable: boolean };
+  | {
+      readonly kind: "error";
+      readonly retryable: boolean;
+      readonly untranscribedSeconds: number;
+    };
 
 /** Title keys used by describeCapture — all are zero-argument catalog entries. */
 export type CaptureTitleKey =
+  | "listen.stateLoading"
   | "listen.stateIdle"
   | "listen.stateCapturing"
   | "listen.statePausedEntitlement"
@@ -31,6 +37,7 @@ export type CaptureTitleKey =
 
 /** Body keys used by describeCapture — all are zero-argument catalog entries. */
 export type CaptureBodyKey =
+  | "listen.stateLoadingBody"
   | "listen.stateIdleBody"
   | "listen.stateCapturingBody"
   | "listen.statePausedEntitlementBody"
@@ -61,6 +68,16 @@ export type CaptureDescription = {
  */
 export function describeCapture(state: CaptureState): CaptureDescription {
   switch (state.kind) {
+    case "loading":
+      return {
+        titleKey: "listen.stateLoading",
+        bodyKey: "listen.stateLoadingBody",
+        capturing: false,
+        loud: false,
+        backlogSeconds: 0,
+        canStart: false,
+        canStop: false,
+      };
     case "idle":
       return {
         titleKey: "listen.stateIdle",
@@ -118,7 +135,7 @@ export function describeCapture(state: CaptureState): CaptureDescription {
         bodyKey: "common.unknownError",
         capturing: false,
         loud: !state.retryable,
-        backlogSeconds: 0,
+        backlogSeconds: state.untranscribedSeconds,
         canStart: state.retryable,
         canStop: false,
       };

@@ -28,6 +28,10 @@ function elapsedSeconds(state: CaptureState): number | null {
   }
 }
 
+function bufferedSeconds(state: CaptureState): number | null {
+  return state.kind === "offline-buffering" ? state.bufferedSeconds : null;
+}
+
 function entitlementUsageLabel(
   entitlement: ListenEntitlementSnapshot | null,
   locale: Locale,
@@ -41,8 +45,9 @@ function entitlementUsageLabel(
         limit: formatDuration(entitlement.limit.amount, locale),
       });
     case "unmetered":
-    case "unknown":
       return t(locale, "settings.usageUnmetered", { used });
+    case "unknown":
+      return t(locale, "listen.usageUnknownLimit", { used });
     default: {
       const _exhaustive: never = entitlement.limit;
       throw new Error(`unhandled entitlement limit: ${JSON.stringify(_exhaustive)}`);
@@ -125,10 +130,20 @@ export function ListenProduction({ store, locale = "en", onReady }: {
     return t(locale, "queue.queuedCount", { count });
   }, [locale, status]);
 
-  const description = describeCapture(capture);
-  const elapsed = elapsedSeconds(capture);
+  const presentedCapture: CaptureState =
+    (status.refresh.phase === "initial-loading" || status.refresh.phase === "refreshing")
+    && capture.kind === "idle"
+      ? { kind: "loading" }
+      : capture;
+  const description = describeCapture(presentedCapture);
+  const elapsed = elapsedSeconds(presentedCapture);
+  const buffered = bufferedSeconds(presentedCapture);
   const hours = backlogHours(description.backlogSeconds);
   const usageLabel = entitlementUsageLabel(entitlement, locale);
+  const canRetryRefresh = !(
+    presentedCapture.kind === "stopped-at-ceiling"
+    || (presentedCapture.kind === "error" && !presentedCapture.retryable)
+  );
 
   return (
     <main
@@ -136,7 +151,7 @@ export function ListenProduction({ store, locale = "en", onReady }: {
       data-production-shell="true"
       data-route="listen"
       data-surface-state={status.refresh.phase}
-      data-capture-kind={capture.kind}
+      data-capture-kind={presentedCapture.kind}
     >
       <ProductionChrome locale={locale} active="listen" placement="top" />
       <section className="desktop-page-panel">
@@ -147,7 +162,7 @@ export function ListenProduction({ store, locale = "en", onReady }: {
             <p>{t(locale, "listen.subtitle")}</p>
           </div>
           <div className="header-actions">
-            {status.refresh.phase !== "ready" && (
+            {status.refresh.phase !== "ready" && canRetryRefresh && (
               <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>
                 {t(locale, "common.retry")}
               </button>
@@ -164,10 +179,10 @@ export function ListenProduction({ store, locale = "en", onReady }: {
           aria-label={t(locale, "listen.stateLabel")}
           data-loud={description.loud ? "true" : "false"}
           data-capturing={description.capturing ? "true" : "false"}
-          data-presentation={capture.kind}
+          data-presentation={presentedCapture.kind}
           role={description.loud ? "alert" : "status"}
         >
-          <div className={`listen-state-glyph is-${capture.kind}`} aria-hidden="true">
+          <div className={`listen-state-glyph is-${presentedCapture.kind}`} aria-hidden="true">
             <span className="listen-state-glyph-core" />
             <span className="listen-state-glyph-ring" />
           </div>
@@ -176,6 +191,9 @@ export function ListenProduction({ store, locale = "en", onReady }: {
             <p className="listen-state-body">{t(locale, description.bodyKey)}</p>
             {elapsed !== null && (
               <p className="listen-elapsed">{t(locale, "listen.elapsed", { duration: formatDuration(elapsed, locale) })}</p>
+            )}
+            {buffered !== null && (
+              <p className="listen-buffered">{t(locale, "listen.buffered", { duration: formatDuration(buffered, locale) })}</p>
             )}
             {usageLabel && <p className="listen-entitlement-usage">{usageLabel}</p>}
           </div>

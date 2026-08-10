@@ -51,6 +51,10 @@
   border-radius: 999px;
 }
 
+.listen-state-glyph.is-loading .listen-state-glyph-ring {
+  border-style: dotted;
+}
+
 .listen-state-glyph-core {
   width: var(--space-md);
   height: var(--space-md);
@@ -123,6 +127,7 @@
 
 .listen-state-body,
 .listen-elapsed,
+.listen-buffered,
 .listen-entitlement-usage {
   margin: 0;
   color: var(--content-secondary);
