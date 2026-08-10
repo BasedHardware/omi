@@ -91,6 +91,7 @@ class Message(BaseModel):
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
+
     @classmethod
     def deserialize_many_safe(cls, records, on_error=None) -> List['Message']:
         """Build Message objects from raw stored records, skipping any that fail
@@ -226,6 +227,7 @@ class ChatSession(BaseModel):
     created_at: datetime
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
+
     def add_file_ids(self, new_file_ids: List[str]):
         if self.file_ids is None:
             self.file_ids = []

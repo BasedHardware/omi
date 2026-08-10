@@ -31,9 +31,17 @@ def test_plugin_id_survives_payload_but_unknown_app_id_is_dropped():
 
     # The old wrong key is silently ignored by pydantic, so plugin_id stays None and
     # get_message_as_dict strips it, leaving no app attribution for the client.
+    # Note: To simulate the dropping behavior without raising a pyright error on the unexpected argument,
+    # we unpack a dictionary containing 'app_id'.
     dropped = nm.NotificationMessage.get_message_as_dict(
         nm.NotificationMessage(
-            text='hi', app_id='app123', from_integration='true', type='text', notification_type='plugin'
+            **{
+                'text': 'hi',
+                'app_id': 'app123',
+                'from_integration': 'true',
+                'type': 'text',
+                'notification_type': 'plugin',
+            }
         )
     )
     assert 'plugin_id' not in dropped
