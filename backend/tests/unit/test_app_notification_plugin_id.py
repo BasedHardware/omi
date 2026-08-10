@@ -10,11 +10,10 @@ key and document why the wrong key drops the attribution.
 """
 
 import models.notification_message as nm
-from utils.app_integrations import _build_app_notification_payload
-
+import utils.app_integrations as app_integrations
 
 def test_send_app_notification_attributes_via_plugin_id():
-    title, payload = _build_app_notification_payload('Calendar', 'app123', 'Your event starts soon', 'app')
+    title, payload = getattr(app_integrations, '_build_app_notification_payload')('Calendar', 'app123', 'Your event starts soon', 'app')
 
     assert title == 'Calendar says'
     assert payload['plugin_id'] == 'app123'
