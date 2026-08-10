@@ -63,7 +63,6 @@ struct MemoryHubPage: View {
   }
 
   private func select(_ next: MemoryHubDestination) {
-    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
       if let onSelectDestination {
         onSelectDestination(next)
