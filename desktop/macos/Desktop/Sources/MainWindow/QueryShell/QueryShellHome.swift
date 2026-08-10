@@ -472,7 +472,6 @@ struct QueryShellHome: View {
   /// The one send. `Try again` on a failed turn enters here too, so a retry is the same turn through
   /// the same provider and never a second send path (INV-6).
   private func send(_ question: String) {
-    OmiUISound.play(.commit)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
     chatProvider.dismissOnboardingOpener()
@@ -545,7 +544,6 @@ struct QueryShellHome: View {
     if let hubView = route.memoryDestination {
       memoryDestinationRawValue = hubView.rawValue
     }
-    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = route.navItem.rawValue }
   }
 
