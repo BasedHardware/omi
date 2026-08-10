@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -8,6 +8,10 @@ import { defineConfig, type Plugin } from "vite";
 // mobile, loopback on macOS) — relative base so assets resolve anywhere.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const LISTEN_PROTOCOL_SCHEMA = readFileSync(
+  join(HERE, "../../contracts/wire/listen/listen-protocol.schema.json"),
+  "utf8",
+);
 
 /**
  * Stamps this build with the source tree it was built from (integration/lib/provenance.mjs).
@@ -78,5 +82,8 @@ function buildProvenancePlugin(): Plugin {
 export default defineConfig({
   base: "./",
   plugins: [react(), buildProvenancePlugin()],
+  define: {
+    __OMI_LISTEN_PROTOCOL_SCHEMA__: JSON.stringify(LISTEN_PROTOCOL_SCHEMA),
+  },
   build: { outDir: "dist", sourcemap: true },
 });

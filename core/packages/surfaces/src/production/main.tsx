@@ -5,7 +5,15 @@ import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-cor
 import { realEnv } from "@omi-core/kernel";
 import { openOnDiskFallbackSink } from "@omi-core/sync";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
+import {
+  createPlatformListenBrowserSocketFactory,
+  createPlatformListenCaptureClient,
+  type PlatformListenSocketFactory,
+  type PlatformListenWebSocketConstructor,
+} from "@omi-core/adapters-platform";
+import type { SchemaDocument } from "@omi-core/wire-listen";
 import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
+import { createPlatformProductionListenStore } from "./createPlatformListenStore.js";
 import { generationMismatch, resolveProductionRoute } from "./production-routing.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
@@ -19,7 +27,6 @@ import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
-import { LISTEN_FIXTURE_STATES, fixtureListenStore, type ListenFixtureState } from "./listen-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
 import "./styles.css";
@@ -48,6 +55,8 @@ const requestedQa = query.get("qa");
 type OmiHostConfig = {
   readonly generations?: unknown;
   readonly platformOriginLabel?: string;
+  /** Native hosts attach auth while keeping credentials out of JS-visible state. */
+  readonly listenSocketFactory?: PlatformListenSocketFactory;
 };
 const hostConfig: OmiHostConfig =
   (globalThis as { __OMI_HOST_CONFIG__?: OmiHostConfig }).__OMI_HOST_CONFIG__ ?? {};
@@ -69,6 +78,7 @@ const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
   : matchMedia("(min-width: 760px)").matches ? "desktop" : "mobile";
+const listenSource = platform;
 type ThemeSelection = "default" | "system" | ColorMode;
 const requestedTheme = query.get("theme");
 const themeSelection: ThemeSelection = requestedTheme === "dark" || requestedTheme === "light" || requestedTheme === "system"
@@ -233,17 +243,13 @@ if (query.get("lab") === "1") {
   const propositionFixture = requestedQa === "memories-platform" && PROPOSITION_FIXTURE_STATES.includes(fixtureValue as PropositionFixtureState)
     ? fixtureValue as PropositionFixtureState
     : undefined;
-  // Chat, Settings and Listen are fixture-only tonight: board ruling PR-7 sanctions
-  // building them against ports, and no ratified backend serves them. Each renders the
-  // data-source badge, so a reviewer can never mistake one for live account data.
+  // Chat and Settings remain fixture-only tonight. Listen graduated to the
+  // ratified platform wire and is composed only in the live branch below.
   const chatFixture = requestedQa === "chat" && CHAT_FIXTURE_STATES.includes(fixtureValue as ChatFixtureState)
     ? fixtureValue as ChatFixtureState
     : undefined;
   const settingsFixture = requestedQa === "settings" && SETTINGS_FIXTURE_STATES.includes(fixtureValue as SettingsFixtureState)
     ? fixtureValue as SettingsFixtureState
-    : undefined;
-  const listenFixture = requestedQa === "listen" && LISTEN_FIXTURE_STATES.includes(fixtureValue as ListenFixtureState)
-    ? fixtureValue as ListenFixtureState
     : undefined;
   const homeFixture = requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
@@ -255,8 +261,6 @@ if (query.get("lab") === "1") {
     root.render(<StrictMode><ChatProduction store={fixtureChatStore(chatFixture)} fixture={chatFixture} locale={locale} onReady={() => emitReady(`fixture:${chatFixture}`)} /></StrictMode>);
   } else if (settingsFixture) {
     root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
-  } else if (listenFixture) {
-    root.render(<StrictMode><ListenProduction store={fixtureListenStore(listenFixture)} fixture={listenFixture} locale={locale} onReady={() => emitReady(`fixture:${listenFixture}`)} /></StrictMode>);
   } else if (homeFixture) {
     root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {
@@ -318,6 +322,23 @@ if (query.get("lab") === "1") {
           ]);
           markRendered("conversations", "legacy");
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+        } else if (route === "listen") {
+          const openSocket = hostConfig.listenSocketFactory
+            ?? createPlatformListenBrowserSocketFactory(
+              location.origin,
+              WebSocket as unknown as PlatformListenWebSocketConstructor,
+            );
+          const schema = JSON.parse(__OMI_LISTEN_PROTOCOL_SCHEMA__) as SchemaDocument;
+          const client = createPlatformListenCaptureClient({
+            env,
+            schema,
+            openSocket,
+            generation: "platform",
+            handshake: { language: locale, source: listenSource },
+          });
+          const store = createPlatformProductionListenStore(client, env);
+          markRendered("listen", "legacy");
+          root.render(<StrictMode><ListenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-listen")} /></StrictMode>);
         } else {
           const store = await stores.openMemories();
           markRendered("memories-legacy", "legacy");

@@ -38,6 +38,7 @@ test("an explicit route always beats the platform default", () => {
   assert.equal(route("home", null, "platform"), "home");
   assert.equal(route("tasks", null, "platform"), "tasks");
   assert.equal(route("conversations", null, "platform"), "conversations");
+  assert.equal(route("listen", null, "platform"), "listen");
   // red-proof: dropping the "host named nothing" guard makes the first case return
   // "memories". I shipped exactly that for one build: `?generation=platform&route=home`
   // served 2 platform reads instead of 0, i.e. a host that asked for Home silently got
@@ -58,6 +59,7 @@ test("every explicit destination resolves the same whatever the generation is", 
     assert.equal(route("memories", null, generation), "memories");
     assert.equal(route("conversations", null, generation), "conversations");
     assert.equal(route("home", null, generation), "home");
+    assert.equal(route("listen", null, generation), "listen");
   }
   // red-proof: making any explicit branch depend on the generation reintroduces a
   // route that changes under the host's feet.
@@ -126,6 +128,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
     'markRendered("home", "legacy")',
     'markRendered("tasks", "legacy")',
     'markRendered("conversations", "legacy")',
+    'markRendered("listen", "legacy")',
     'markRendered("memories-legacy", "legacy")',
   ]) {
     assert.ok(main.includes(marker), `bootstrap does not record ${marker}`);

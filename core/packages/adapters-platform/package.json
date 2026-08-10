@@ -15,7 +15,8 @@
     "@omi-core/contracts": "workspace:*",
     "@omi-core/kernel": "workspace:*",
     "@omi-core/ratified-contracts": "workspace:*",
-    "@omi-core/sync": "workspace:*"
+    "@omi-core/sync": "workspace:*",
+    "@omi-core/wire-listen": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

@@ -26,12 +26,77 @@
 
 .listen-state-panel {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-sm);
   margin: var(--space-lg) 0;
   padding: var(--space-xl);
   border: 1px solid var(--border);
   border-radius: var(--radius-section);
   background: var(--surface-raised);
+}
+
+.listen-state-glyph {
+  position: relative;
+  width: calc(var(--min-tap-target) + var(--space-sm));
+  height: calc(var(--min-tap-target) + var(--space-sm));
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  color: var(--content-tertiary);
+}
+
+.listen-state-glyph-core,
+.listen-state-glyph-ring {
+  position: absolute;
+  border-radius: 999px;
+}
+
+.listen-state-glyph-core {
+  width: var(--space-md);
+  height: var(--space-md);
+  background: currentColor;
+}
+
+.listen-state-glyph-ring {
+  inset: var(--space-sm);
+  border: 2px solid currentColor;
+  opacity: 0.45;
+}
+
+.listen-state-glyph.is-capturing,
+.listen-state-glyph.is-paused-for-entitlement,
+.listen-state-glyph.is-offline-buffering {
+  color: var(--warning);
+}
+
+.listen-state-glyph.is-capturing .listen-state-glyph-ring {
+  box-shadow: 0 0 0 var(--space-xs) color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.listen-state-glyph.is-paused-for-entitlement .listen-state-glyph-core {
+  width: var(--space-xs);
+  border-radius: var(--radius-control);
+  box-shadow: var(--space-sm) 0 0 currentColor;
+  transform: translateX(calc(var(--space-xs) * -1));
+}
+
+.listen-state-glyph.is-offline-buffering .listen-state-glyph-ring {
+  border-style: dashed;
+}
+
+.listen-state-glyph.is-stopped-at-ceiling,
+.listen-state-glyph.is-error {
+  color: var(--danger);
+}
+
+.listen-state-glyph.is-stopped-at-ceiling .listen-state-glyph-core,
+.listen-state-glyph.is-error .listen-state-glyph-core {
+  border-radius: var(--radius-control);
+  transform: rotate(45deg);
+}
+
+.listen-state-copy {
+  min-width: 0;
 }
 
 .listen-state-panel.is-capturing {
@@ -57,7 +122,8 @@
 }
 
 .listen-state-body,
-.listen-elapsed {
+.listen-elapsed,
+.listen-entitlement-usage {
   margin: 0;
   color: var(--content-secondary);
   line-height: var(--type-body-line);
@@ -68,11 +134,46 @@
 }
 
 .listen-backlog {
+  grid-column: 1 / -1;
   display: grid;
   gap: var(--space-xs);
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border);
+}
+
+.listen-transcript {
+  display: grid;
+  gap: var(--space-sm);
+  margin: var(--space-lg) 0;
+}
+
+.listen-transcript-row {
+  width: min(88%, 620px);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-raised);
+}
+
+.listen-transcript-row.is-user {
+  justify-self: end;
+  background: var(--surface-elevated);
+}
+
+.listen-transcript-speaker {
+  margin: 0 0 var(--space-xs);
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+}
+
+.listen-transcript-text {
+  margin: 0;
+  color: var(--content-primary);
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
 }
 
 .listen-backlog-label {
@@ -128,6 +229,19 @@ html[data-platform="mobile"] .listen-production-shell {
 
 html[data-platform="mobile"] .listen-header {
   margin: 0 0 var(--space-md);
+}
+
+html[data-platform="mobile"] .listen-state-panel {
+  grid-template-columns: 1fr;
+  padding: var(--space-lg);
+}
+
+html[data-platform="mobile"] .listen-state-glyph {
+  grid-row: auto;
+}
+
+html[data-platform="mobile"] .listen-transcript-row {
+  width: min(90%, 560px);
 }
 
 html[data-platform="mobile"] .listen-controls {
