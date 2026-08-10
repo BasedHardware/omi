@@ -4,6 +4,26 @@ import {
   createUnitOfWorkContext,
   UnitOfWorkConnectionMismatchError,
 } from "./unit-of-work-context";
+
+import {
+  FOLDER_DELETION_REPLAY_SEMANTICS,
+  FOLDER_DELETION_RETRY_POLICY,
+  FolderDeletionRetryExhaustedError,
+} from "./folder-deletion-unit-of-work";
+
+test("folder deletion pins retry exhaustion and non-idempotent replay", () => {
+  expect(FOLDER_DELETION_RETRY_POLICY).toEqual({
+    maximumAttempts: 3,
+    backoffMilliseconds: [25, 100],
+  });
+  expect(FOLDER_DELETION_REPLAY_SEMANTICS).toBe("non_idempotent");
+  const cause = new Error("serialization failure");
+  const exhausted = new FolderDeletionRetryExhaustedError(cause);
+  expect(exhausted.attempts).toBe(3);
+  expect(exhausted.lastCause).toBe(cause);
+  expect(exhausted.cause).toBe(cause);
+});
+
 test("rejects two same-typed runtime connection instances", () => {
   interface Connection {
     readonly label: string;

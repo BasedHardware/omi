@@ -27,6 +27,29 @@ export type FolderDeletionOutcome =
       readonly reason: "not_found" | "system_folder" | "self_move" | "target_not_found";
     };
 
+/** The mandatory retry envelope for a future transactional adapter. */
+export const FOLDER_DELETION_RETRY_POLICY = Object.freeze({
+  maximumAttempts: 3,
+  /** Delay before attempts two and three. The initial attempt has no delay. */
+  backoffMilliseconds: Object.freeze([25, 100] as const),
+});
+
+/**
+ * There is no request identity or deletion tombstone in the adopted contract,
+ * so an ambiguous-commit replay cannot be distinguished from a first request
+ * for a folder that never existed.
+ */
+export const FOLDER_DELETION_REPLAY_SEMANTICS = "non_idempotent" as const;
+
+export class FolderDeletionRetryExhaustedError extends Error {
+  readonly attempts = FOLDER_DELETION_RETRY_POLICY.maximumAttempts;
+
+  constructor(readonly lastCause: unknown) {
+    super("folder deletion retry attempts exhausted", { cause: lastCause });
+    this.name = "FolderDeletionRetryExhaustedError";
+  }
+}
+
 /**
  * The sealed atomic boundary behind one folder deletion.
  *
@@ -44,6 +67,21 @@ export type FolderDeletionOutcome =
  * must keep the chosen target live through commit with a row lock or equivalent
  * constraint compatible with the deliberate no-target dangling-reference
  * behavior. Issuing BEGIN through a pool is invalid.
+ *
+ * A serialization or deadlock failure retries the complete operation from
+ * source validation through commit, using `FOLDER_DELETION_RETRY_POLICY`.
+ * Nothing else is retryable. Exhausting attempt three rejects with
+ * `FolderDeletionRetryExhaustedError`, preserving the final database error as
+ * `lastCause`; it never returns a semantic deletion outcome for an uncommitted
+ * operation.
+ *
+ * Replay after an ambiguous COMMIT is explicitly NON-IDEMPOTENT. The adapter
+ * must surface the ambiguous connection/commit error and must not retry COMMIT
+ * or reinterpret a later absence as success. A caller that replays may receive
+ * `{ deleted: false, reason: "not_found" }` even when the first attempt committed
+ * and must reconcile by reading current state. Making replay idempotent requires
+ * a durable request identity/tombstone or changing absent-delete wire behavior;
+ * neither exists in this contract, so an adapter must not invent one.
  */
 export interface FolderDeletionUnitOfWork {
   readonly [FOLDER_DELETION_PORT]: true;
