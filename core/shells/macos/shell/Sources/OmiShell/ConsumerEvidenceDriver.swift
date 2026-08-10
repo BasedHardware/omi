@@ -12,6 +12,8 @@ final class ConsumerEvidenceDriver {
   private var pollTimer: Timer?
   private var pollCount = 0
   private var listenStartRequested = false
+  private var chatAdmissionBaseline: Int?
+  private var chatSubmitted = false
   private(set) var failed = false
 
   init(collector: ConsumerEvidenceCollector, baseURL: URL) {
@@ -28,6 +30,8 @@ final class ConsumerEvidenceDriver {
     guard !failed, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
     pollCount = 0
     listenStartRequested = false
+    chatAdmissionBaseline = nil
+    chatSubmitted = false
     schedulePoll()
   }
 
@@ -68,7 +72,8 @@ final class ConsumerEvidenceDriver {
     guard let controller, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
     pollCount += 1
     if pollCount > 200 {
-      fail("timed out waiting for rendered semantic observation")
+      let route = ConsumerEvidenceRoute.allCases[routeIndex].rawValue
+      fail("timed out waiting for rendered semantic observation on \(route)")
       return
     }
     let expected = ConsumerEvidenceRoute.allCases[routeIndex]
@@ -84,7 +89,32 @@ final class ConsumerEvidenceDriver {
       }
       return
     }
-    controller.webView.evaluateJavaScript(Self.renderedObservationScript) { [weak self] value, error in
+    if expected == .chat && chatAdmissionBaseline == nil {
+      controller.webView.evaluateJavaScript(Self.authorChatScript) { [weak self] value, _ in
+        MainActor.assumeIsolated {
+          guard let self, !self.failed else { return }
+          if let number = value as? NSNumber {
+            self.chatAdmissionBaseline = number.intValue
+          }
+          self.schedulePoll()
+        }
+      }
+      return
+    }
+    if expected == .chat && !chatSubmitted {
+      controller.webView.evaluateJavaScript(Self.submitChatScript) { [weak self] value, _ in
+        MainActor.assumeIsolated {
+          guard let self, !self.failed else { return }
+          self.chatSubmitted = value as? Bool == true
+          self.schedulePoll()
+        }
+      }
+      return
+    }
+    let observationScript = expected == .chat
+      ? Self.renderedChatObservationScript(after: chatAdmissionBaseline ?? Int.max)
+      : Self.renderedObservationScript
+    controller.webView.evaluateJavaScript(observationScript) { [weak self] value, error in
       MainActor.assumeIsolated {
         guard let self, !self.failed else { return }
         if error != nil || value is NSNull || value == nil {
@@ -155,4 +185,48 @@ final class ConsumerEvidenceDriver {
       return true;
     })()
     """#
+
+  /// The message is fixed and bounded in native source. The baseline comes
+  /// from the rendered Chat root, never from launcher intent or a dispatch
+  /// counter. React's native value setter is used so the production controlled
+  /// composer receives the same input transition as a person typing.
+  private static let authorChatScript = #"""
+    (() => {
+      const root = document.querySelector("main[data-production-shell='true'][data-route='chat'][data-surface-state='ready'][data-qa-fixture='none']");
+      if (!root) return null;
+      const baseline = Number(root.dataset.consumerChatAdmissionCount);
+      const draft = root.querySelector('textarea.chat-draft');
+      if (!Number.isSafeInteger(baseline) || baseline < 0 || !draft) return null;
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      if (!setter) return null;
+      setter.call(draft, 'C3b3 deterministic synthetic Chat evidence.');
+      draft.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText'}));
+      return baseline;
+    })()
+    """#
+
+  private static let submitChatScript = #"""
+    (() => {
+      const root = document.querySelector("main[data-production-shell='true'][data-route='chat'][data-surface-state='ready'][data-qa-fixture='none']");
+      const button = root?.querySelector('button.chat-send');
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()
+    """#
+
+  private static func renderedChatObservationScript(after baseline: Int) -> String {
+    #"""
+    (() => {
+      const e = document.querySelector("main[data-production-shell='true'][data-route='chat']");
+      if (!e || e.dataset.surfaceState !== 'ready' || e.dataset.qaFixture !== 'none') return null;
+      const admitted = Number(e.dataset.consumerChatAdmissionCount);
+      if (!Number.isSafeInteger(admitted) || admitted <= \#(baseline)) return null;
+      const semantic = e.dataset.consumerSemantic;
+      if (typeof semantic !== 'string' || semantic.trim() === '' || new TextEncoder().encode(semantic).length > 256) return null;
+      if (e.dataset.consumerTranscript !== undefined) return null;
+      return JSON.stringify({route:'chat', state:'ready', semantic});
+    })()
+    """#
+  }
 }

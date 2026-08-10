@@ -4,37 +4,21 @@ import 'dart:io';
 
 const consumerEvidenceSchema = 'omi.consumer-evidence.v1';
 
-enum ConsumerEvidenceRoute {
-  memories,
-  tasks,
-  conversations,
-  folders,
-  listen,
-  chat,
-  settings,
-}
+enum ConsumerEvidenceRoute { memories, tasks, conversations, folders, listen, chat, settings }
 
 extension ConsumerEvidenceRouteName on ConsumerEvidenceRoute {
   String get wireName => name;
 }
 
 final class RenderedConsumerObservation {
-  const RenderedConsumerObservation({
-    required this.route,
-    required this.semantic,
-    this.transcript,
-  });
+  const RenderedConsumerObservation({required this.route, required this.semantic, this.transcript});
 
   final ConsumerEvidenceRoute route;
   final String semantic;
   final String? transcript;
 
   Map<String, Object> toJson() {
-    final value = <String, Object>{
-      'route': route.wireName,
-      'state': 'ready',
-      'semantic': semantic,
-    };
+    final value = <String, Object>{'route': route.wireName, 'state': 'ready', 'semantic': semantic};
     if (transcript case final transcript?) {
       value['transcript'] = transcript;
     }
@@ -47,9 +31,7 @@ final class RenderedConsumerObservation {
       throw const FormatException('observation is not an object');
     }
     final routeName = decoded['route'];
-    final route = ConsumerEvidenceRoute.values
-        .where((value) => value.wireName == routeName)
-        .firstOrNull;
+    final route = ConsumerEvidenceRoute.values.where((value) => value.wireName == routeName).firstOrNull;
     final expectedKeys = route == ConsumerEvidenceRoute.listen
         ? const {'route', 'state', 'semantic', 'transcript'}
         : const {'route', 'state', 'semantic'};
@@ -67,35 +49,23 @@ final class RenderedConsumerObservation {
     }
     final transcript = decoded['transcript'];
     if (route == ConsumerEvidenceRoute.listen) {
-      if (transcript is! String ||
-          transcript.trim().isEmpty ||
-          utf8.encode(transcript).length > 1024) {
+      if (transcript is! String || transcript.trim().isEmpty || utf8.encode(transcript).length > 1024) {
         throw const FormatException('Listen needs a bounded transcript');
       }
     } else if (transcript != null) {
       throw const FormatException('non-Listen transcript leaked');
     }
-    return RenderedConsumerObservation(
-      route: route,
-      semantic: semantic,
-      transcript: transcript as String?,
-    );
+    return RenderedConsumerObservation(route: route, semantic: semantic, transcript: transcript as String?);
   }
 }
 
 final class ConsumerEvidenceTreeHashes {
-  const ConsumerEvidenceTreeHashes({
-    required this.shell,
-    required this.surface,
-  });
+  const ConsumerEvidenceTreeHashes({required this.shell, required this.surface});
 
   final String shell;
   final String surface;
 
-  factory ConsumerEvidenceTreeHashes.fromAssetJson({
-    required String shellStamp,
-    required String surfaceStamp,
-  }) {
+  factory ConsumerEvidenceTreeHashes.fromAssetJson({required String shellStamp, required String surfaceStamp}) {
     String read(String encoded, String artifact) {
       final decoded = jsonDecode(encoded);
       if (decoded is! Map<String, dynamic> ||
@@ -116,12 +86,7 @@ final class ConsumerEvidenceTreeHashes {
 }
 
 final class ConsumerEvidenceCollector {
-  ConsumerEvidenceCollector({
-    required this.resultPath,
-    required this.runId,
-    required this.hashes,
-    this.shell = 'ios',
-  }) {
+  ConsumerEvidenceCollector({required this.resultPath, required this.runId, required this.hashes, this.shell = 'ios'}) {
     if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$').hasMatch(runId) ||
         runId == 'anonymous' ||
         runId == 'overflow' ||
@@ -143,10 +108,7 @@ final class ConsumerEvidenceCollector {
     if (await result.exists()) await result.delete();
   }
 
-  void accept(
-    RenderedConsumerObservation observation,
-    ConsumerEvidenceRoute expected,
-  ) {
+  void accept(RenderedConsumerObservation observation, ConsumerEvidenceRoute expected) {
     if (observation.semantic.trim().isEmpty ||
         utf8.encode(observation.semantic).length > 256 ||
         (expected == ConsumerEvidenceRoute.listen
@@ -157,9 +119,7 @@ final class ConsumerEvidenceCollector {
       throw const FormatException('observation is not rendered-ready');
     }
     if (observation.route != expected) {
-      throw StateError(
-        'expected rendered route ${expected.wireName}, got ${observation.route.wireName}',
-      );
+      throw StateError('expected rendered route ${expected.wireName}, got ${observation.route.wireName}');
     }
     if (_rows.containsKey(expected)) {
       throw StateError('duplicate rendered route ${expected.wireName}');
@@ -191,9 +151,7 @@ final class ConsumerEvidenceCollector {
         .toList(growable: false);
     final result = File(resultPath);
     await result.parent.create(recursive: true);
-    final temporary = File(
-      '$resultPath.$pid.${DateTime.now().microsecondsSinceEpoch}.tmp',
-    );
+    final temporary = File('$resultPath.$pid.${DateTime.now().microsecondsSinceEpoch}.tmp');
     try {
       await temporary.writeAsString(
         '${const JsonEncoder.withIndent('  ').convert({'schema': consumerEvidenceSchema, 'runId': runId, 'rows': rows})}\n',
@@ -216,6 +174,9 @@ final class ConsumerEvidenceCollector {
 typedef EvidenceNavigate = Future<void> Function(ConsumerEvidenceRoute route);
 typedef EvidenceObserve = Future<String?> Function();
 typedef EvidenceStartListen = Future<bool> Function();
+typedef EvidenceAuthorChat = Future<int?> Function();
+typedef EvidenceSubmitChat = Future<bool> Function();
+typedef EvidenceObserveChatAfterAdmission = Future<String?> Function(int baseline);
 
 final class ConsumerEvidenceDriver {
   ConsumerEvidenceDriver({
@@ -223,6 +184,9 @@ final class ConsumerEvidenceDriver {
     required this.navigate,
     required this.observe,
     required this.startListen,
+    required this.authorChat,
+    required this.submitChat,
+    required this.observeChatAfterAdmission,
     this.delay = _defaultDelay,
     this.maxPolls = 200,
   });
@@ -231,27 +195,29 @@ final class ConsumerEvidenceDriver {
   final EvidenceNavigate navigate;
   final EvidenceObserve observe;
   final EvidenceStartListen startListen;
+  final EvidenceAuthorChat authorChat;
+  final EvidenceSubmitChat submitChat;
+  final EvidenceObserveChatAfterAdmission observeChatAfterAdmission;
   final Future<void> Function(Duration duration) delay;
   final int maxPolls;
   int _routeIndex = 0;
   bool _polling = false;
   bool _closed = false;
 
-  static Future<void> _defaultDelay(Duration duration) =>
-      Future<void>.delayed(duration);
+  static Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
 
   Future<void> start() async => navigate(ConsumerEvidenceRoute.values.first);
 
   Future<void> pageFinished() async {
-    if (_closed ||
-        _polling ||
-        _routeIndex >= ConsumerEvidenceRoute.values.length) {
+    if (_closed || _polling || _routeIndex >= ConsumerEvidenceRoute.values.length) {
       return;
     }
     _polling = true;
     try {
       final expected = ConsumerEvidenceRoute.values[_routeIndex];
       var listenStarted = false;
+      int? chatAdmissionBaseline;
+      var chatSubmitted = false;
       for (var attempt = 0; attempt < maxPolls; attempt++) {
         if (expected == ConsumerEvidenceRoute.listen && !listenStarted) {
           listenStarted = await startListen();
@@ -260,11 +226,25 @@ final class ConsumerEvidenceDriver {
             continue;
           }
         }
-        final encoded = await observe();
+        if (expected == ConsumerEvidenceRoute.chat && chatAdmissionBaseline == null) {
+          chatAdmissionBaseline = await authorChat();
+          if (chatAdmissionBaseline == null) {
+            await delay(const Duration(milliseconds: 150));
+            continue;
+          }
+        }
+        if (expected == ConsumerEvidenceRoute.chat && !chatSubmitted) {
+          chatSubmitted = await submitChat();
+          if (!chatSubmitted) {
+            await delay(const Duration(milliseconds: 150));
+            continue;
+          }
+        }
+        final encoded = expected == ConsumerEvidenceRoute.chat
+            ? await observeChatAfterAdmission(chatAdmissionBaseline!)
+            : await observe();
         if (encoded != null && encoded != 'null') {
-          final observation = RenderedConsumerObservation.decodeRenderedJson(
-            encoded,
-          );
+          final observation = RenderedConsumerObservation.decodeRenderedJson(encoded);
           collector.accept(observation, expected);
           _routeIndex++;
           if (_routeIndex == ConsumerEvidenceRoute.values.length) {
@@ -277,7 +257,7 @@ final class ConsumerEvidenceDriver {
         }
         await delay(const Duration(milliseconds: 150));
       }
-      throw StateError('timed out waiting for rendered semantic observation');
+      throw StateError('timed out waiting for rendered semantic observation on ${expected.wireName}');
     } catch (_) {
       _closed = true;
       await collector.teardown();
@@ -317,5 +297,44 @@ const startListenConsumerEvidenceJavaScript = r'''
   if (!button) return false;
   button.click();
   return true;
+})()
+''';
+
+const authorChatConsumerEvidenceJavaScript = r'''
+(() => {
+  const root = document.querySelector("main[data-production-shell='true'][data-route='chat'][data-surface-state='ready'][data-qa-fixture='none']");
+  if (!root) return null;
+  const baseline = Number(root.dataset.consumerChatAdmissionCount);
+  const draft = root.querySelector('textarea.chat-draft');
+  if (!Number.isSafeInteger(baseline) || baseline < 0 || !draft) return null;
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  if (!setter) return null;
+  setter.call(draft, 'C3b3 deterministic synthetic Chat evidence.');
+  draft.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText'}));
+  return baseline;
+})()
+''';
+
+const submitChatConsumerEvidenceJavaScript = r'''
+(() => {
+  const root = document.querySelector("main[data-production-shell='true'][data-route='chat'][data-surface-state='ready'][data-qa-fixture='none']");
+  const button = root?.querySelector('button.chat-send');
+  if (!button || button.disabled) return false;
+  button.click();
+  return true;
+})()
+''';
+
+String renderedChatObservationJavaScript(int baseline) =>
+    '''
+(() => {
+  const e = document.querySelector("main[data-production-shell='true'][data-route='chat']");
+  if (!e || e.dataset.surfaceState !== 'ready' || e.dataset.qaFixture !== 'none') return null;
+  const admitted = Number(e.dataset.consumerChatAdmissionCount);
+  if (!Number.isSafeInteger(admitted) || admitted <= $baseline) return null;
+  const semantic = e.dataset.consumerSemantic;
+  if (typeof semantic !== 'string' || semantic.trim() === '' || new TextEncoder().encode(semantic).length > 256) return null;
+  if (e.dataset.consumerTranscript !== undefined) return null;
+  return JSON.stringify({route:'chat', state:'ready', semantic});
 })()
 ''';

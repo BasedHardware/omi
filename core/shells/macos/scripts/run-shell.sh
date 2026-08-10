@@ -23,8 +23,8 @@ if [[ ! "$ready_timeout" =~ ^[0-9]+$ ]] || (( ready_timeout < 1 || ready_timeout
   exit 1
 fi
 acceptance_wait_timeout="${OMI_ACCEPTANCE_WAIT_SECONDS:-15}"
-if [[ ! "$acceptance_wait_timeout" =~ ^[0-9]+$ ]] || (( acceptance_wait_timeout < 1 || acceptance_wait_timeout > 120 )); then
-  echo "ERROR: OMI_ACCEPTANCE_WAIT_SECONDS must be an integer from 1 to 120 (got '$acceptance_wait_timeout')" >&2
+if [[ ! "$acceptance_wait_timeout" =~ ^[0-9]+$ ]] || (( acceptance_wait_timeout < 1 || acceptance_wait_timeout > 300 )); then
+  echo "ERROR: OMI_ACCEPTANCE_WAIT_SECONDS must be an integer from 1 to 300 (got '$acceptance_wait_timeout')" >&2
   exit 1
 fi
 app="$out/${app_name}.app"
@@ -84,7 +84,7 @@ for ((i = 1; i <= ready_timeout; i++)); do
   # In acceptance-exit mode, preserve a child that fails before readiness as
   # the authoritative exit status rather than turning it into a generic curl
   # timeout. A zombie is still waitable, so inspect its process state first.
-  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" ]]; then
+  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
     child_state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
     if [[ -z "$child_state" || "$child_state" == Z* ]]; then
       set +e
@@ -98,7 +98,7 @@ for ((i = 1; i <= ready_timeout; i++)); do
   sleep 1
 done
 if (( ready == 0 )); then
-  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" ]]; then
+  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
     child_state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
     if [[ -z "$child_state" || "$child_state" == Z* ]]; then
       set +e
@@ -126,7 +126,7 @@ fi
 # mode is different: the app emits its host-observed verdict and exits itself;
 # wait for that exact child status, but bound the wait so a wedged probe cannot
 # leave CI hanging. The watchdog targets only this PID and is reaped below.
-if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" ]]; then
+if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
   timeout_marker="$out/${app_name}.acceptance-timeout.$$"
   rm -f "$timeout_marker"
   (
@@ -157,5 +157,9 @@ if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" ]]; then
     exit 124
   fi
   rm -f "$timeout_marker"
+  if [[ -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" && ! -s "${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
+    echo "ERROR: native consumer evidence result is missing or empty" >&2
+    exit 1
+  fi
   exit "$child_status"
 fi
