@@ -168,6 +168,7 @@ class ChatStreamHost {
       credit: frame['credit'] as int,
       token: token,
       epoch: _documentEpoch,
+      documentGeneration: sink.generation,
     );
     _sessions[id] = session;
     unawaited(session.start());
@@ -193,7 +194,7 @@ class ChatStreamHost {
       'id': session.id,
       'channel': BridgeStreamContract.chatGenerationChannel,
       'payload': payload,
-    });
+    }, generation: session.documentGeneration);
   }
 
   Future<void> _emitEnd(_ChatStreamSession session) async {
@@ -202,7 +203,7 @@ class ChatStreamHost {
       't': BridgeStreamContract.endMessage,
       'id': session.id,
       'channel': BridgeStreamContract.chatGenerationChannel,
-    });
+    }, generation: session.documentGeneration);
   }
 
   Future<void> _emitError(
@@ -210,6 +211,7 @@ class ChatStreamHost {
     String failure,
     int epoch, {
     String? channel,
+    int? documentGeneration,
   }) async {
     if (_closed || epoch != _documentEpoch) return;
     await sink.streamFrame(<String, Object>{
@@ -217,10 +219,11 @@ class ChatStreamHost {
       'id': id,
       'channel': channel ?? BridgeStreamContract.chatGenerationChannel,
       'failure': failure,
-    });
+    }, generation: documentGeneration ?? sink.generation);
   }
 
   Future<void> resetForNavigation() async {
+    sink.resetForNavigation();
     _documentEpoch += 1;
     final sessions = _sessions.values.toList(growable: false);
     _sessions.clear();
@@ -230,6 +233,7 @@ class ChatStreamHost {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    sink.close();
     _documentEpoch += 1;
     final sessions = _sessions.values.toList(growable: false);
     _sessions.clear();
@@ -247,6 +251,7 @@ class _ChatStreamSession {
     required this.credit,
     required this.token,
     required this.epoch,
+    required this.documentGeneration,
   });
 
   final ChatStreamHost host;
@@ -255,6 +260,7 @@ class _ChatStreamSession {
   final String? lastEventId;
   final String token;
   final int epoch;
+  final int documentGeneration;
   int credit;
 
   ChatNativeHttpRequest? _request;
@@ -296,6 +302,11 @@ class _ChatStreamSession {
       if (response.isRedirect || response.statusCode != HttpStatus.ok) {
         await response.bytes.listen(null).cancel();
         await fail('http-status');
+        return;
+      }
+      if (!responseHasMediaType(response.contentType, 'text/event-stream')) {
+        await response.bytes.listen(null).cancel();
+        await fail('transport-error');
         return;
       }
       late final StreamSubscription<String> subscription;
@@ -364,7 +375,12 @@ class _ChatStreamSession {
     host._retire(this);
     _request?.abort();
     await _subscription?.cancel();
-    await host._emitError(id, failure, epoch);
+    await host._emitError(
+      id,
+      failure,
+      epoch,
+      documentGeneration: documentGeneration,
+    );
   }
 
   Future<void> cancel() async {

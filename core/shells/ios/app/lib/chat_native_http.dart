@@ -1,5 +1,15 @@
 import 'dart:io';
 
+bool responseHasMediaType(String? raw, String expected) {
+  if (raw == null) return false;
+  try {
+    return ContentType.parse(raw).mimeType.toLowerCase() ==
+        expected.toLowerCase();
+  } on FormatException {
+    return false;
+  }
+}
+
 abstract interface class ChatNativeHttpClient {
   Future<ChatNativeHttpRequest> openUrl(String method, Uri url);
   void close({bool force = false});
@@ -10,6 +20,7 @@ abstract interface class ChatNativeHttpRequest {
   set contentLength(int value);
   void setHeader(String name, Object value);
   void add(List<int> bytes);
+  Future<void> addStream(Stream<List<int>> stream);
   Future<ChatNativeHttpResponse> close();
   void abort([Object? exception]);
 }
@@ -17,6 +28,8 @@ abstract interface class ChatNativeHttpRequest {
 abstract interface class ChatNativeHttpResponse {
   int get statusCode;
   bool get isRedirect;
+  String? get contentType;
+  String? header(String name);
   Stream<List<int>> get bytes;
 }
 
@@ -56,6 +69,10 @@ class DartIoChatNativeHttpRequest implements ChatNativeHttpRequest {
   void add(List<int> bytes) => _request.add(bytes);
 
   @override
+  Future<void> addStream(Stream<List<int>> stream) =>
+      _request.addStream(stream);
+
+  @override
   Future<ChatNativeHttpResponse> close() async {
     return DartIoChatNativeHttpResponse(await _request.close());
   }
@@ -74,6 +91,13 @@ class DartIoChatNativeHttpResponse implements ChatNativeHttpResponse {
 
   @override
   bool get isRedirect => _response.isRedirect;
+
+  @override
+  String? get contentType =>
+      _response.headers.value(HttpHeaders.contentTypeHeader);
+
+  @override
+  String? header(String name) => _response.headers.value(name);
 
   @override
   Stream<List<int>> get bytes => _response;
