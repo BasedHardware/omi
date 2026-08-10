@@ -87,7 +87,6 @@ class GeneratedMemoryDB {
   final bool kgExtracted;
   final String? layer;
   final bool manuallyAdded;
-  final String? memoryId;
   final String? memoryTier;
   final List<String>? objectEntityIds;
   final String? predicate;
@@ -128,7 +127,6 @@ class GeneratedMemoryDB {
     this.kgExtracted = false,
     required this.layer,
     this.manuallyAdded = false,
-    this.memoryId,
     this.memoryTier,
     this.objectEntityIds,
     this.predicate,
@@ -171,7 +169,6 @@ class GeneratedMemoryDB {
       kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
       layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
       manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
-      memoryId: _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: false, nullable: true),
       memoryTier: _readFieldValue<String>(_readField(json, const ["memory_tier"]), "memory_tier", _readString, requiredField: false, nullable: true),
       objectEntityIds: _readFieldValue<List<String>>(_readField(json, const ["object_entity_ids"]), "object_entity_ids", _readStringList, requiredField: false, nullable: true),
       predicate: _readFieldValue<String>(_readField(json, const ["predicate"]), "predicate", _readString, requiredField: false, nullable: true),
@@ -215,7 +212,6 @@ class GeneratedMemoryDB {
       'kg_extracted': kgExtracted,
       'layer': layer,
       'manually_added': manuallyAdded,
-      'memory_id': memoryId,
       'memory_tier': memoryTier,
       'object_entity_ids': objectEntityIds,
       'predicate': predicate,
