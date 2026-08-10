@@ -1,0 +1,77 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "omi-spike-desktop",
+      "dependencies": {
+        "@tschk/moonshine": "0.3.7",
+        "@tschk/moonshine-cli": "0.3.7",
+        "@tschk/moonshine-compiler": "0.3.7",
+        "@tschk/moonshine-react": "0.3.7",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+      },
+      "devDependencies": {
+        "@types/react": "^19.1.0",
+        "@types/react-dom": "^19.1.0",
+        "typescript": "5.8.2",
+      },
+    },
+  },
+  "packages": {
+    "@tschk/crepus-moonshine": ["@tschk/crepus-moonshine@0.3.7", "", { "dependencies": { "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-EjFyuVVdbTjfa2PT/i+3jG7P7AfWb5XhrKNVC0OOUhMBJbYPqc5DqlT641B9MR1xKCGzjwOhabD2w0Rr2QK37g=="],
+
+    "@tschk/crepuscularity-wasm": ["@tschk/crepuscularity-wasm@0.1.3", "", {}, "sha512-oaiTeb5mQQX/oX+pRZJiHL0bVvZ8R6TMRbVY52a6bjjAPjibuchmWIq4H4gqBI6wE/20sPn03nqosIkSykAf5g=="],
+
+    "@tschk/moonshine": ["@tschk/moonshine@0.3.7", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-router": "^0.3.6", "@tschk/moonshine-server": "^0.3.6", "@tschk/moonshine-shaders": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-4aWv+nBC6sQpSd2MAuiyFxntzXNeop7zy0qOfvcncnVk7CRLfItuuf/E8fRoZeHqDNpiNSKRW9T9EA6euLjTug=="],
+
+    "@tschk/moonshine-adapter-conformance": ["@tschk/moonshine-adapter-conformance@0.3.7", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-server": "^0.3.6", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-n+yh1bjxB4Xsqgiing9FtMLWFCExX5fD3iujqKvTWROYGz5+RSWOCYgk20QsoFs4aAvbVtYo2EHBPZqGTHfQJg=="],
+
+    "@tschk/moonshine-cli": ["@tschk/moonshine-cli@0.3.7", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.6", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine-compiler": "^0.3.6", "@tschk/moonshine-deploy-bun": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-next": "^0.3.6", "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-react-router": "^0.3.6", "@tschk/moonshine-server": "^0.3.6", "@tschk/moonshine-tanstack": "^0.3.6", "@tschk/moonshine-waku": "^0.3.6" }, "optionalDependencies": { "@tschk/moonshine-solid": "^0.3.6" }, "bin": { "moonshine": "bin/moonshine.ts" } }, "sha512-Zv5hSWp/v9ridXYvEoVxzsC8Erseyu7HqJei2WoxIUFRz14/NHZqOitZFHTsZcFjZlVUOdgm51aKoVn3QmnEzg=="],
+
+    "@tschk/moonshine-compiler": ["@tschk/moonshine-compiler@0.3.7", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" } }, "sha512-tH2ArGs4ZQoviU6eurLm6WNAe/LZwHLy9De95u3Hengy6oeq7ahEiGJgnt06kORkRMzLi6vWhBZV2iXfZWaoZw=="],
+
+    "@tschk/moonshine-deploy-bun": ["@tschk/moonshine-deploy-bun@0.3.7", "", { "dependencies": { "@tschk/moonshine-adapter-conformance": "^0.3.6", "@tschk/moonshine-compiler": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-server": "^0.3.6" } }, "sha512-s/pbDqS6x4f/ky1J5ztyndNqxKVKfHZkOtdD2j8nfS8B0jfx+Ebrln0zOHWnmk2H1JbmzAE8EbnNzHhK2yVjQw=="],
+
+    "@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6" } }, "sha512-RubVUh52g0WpTLCYXqVkGnfWBRhPbfEwp/tdULDi9GEpHsZ+Vc/dYG0uP0cBv7R71UZLWCOUQpdt8JFwvx+Xwg=="],
+
+    "@tschk/moonshine-next": ["@tschk/moonshine-next@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6", "@tschk/moonshine-shaders": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-CrU2flp1KE/ft4VDCd9V3KBvTbM6jukIYGUfCElFOiunc2m/iaJkFLnha8r4xS2wtN7QlR3wX9o4t5GWy5Ncsw=="],
+
+    "@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-9MvW4Vojff9+epHLet7HrLByEdEiWNdT6DbA53FKaAAPCJjJGL2Y+VKhuh3DkMZx8dwMKIqaZI28QabMUqR8vw=="],
+
+    "@tschk/moonshine-react-router": ["@tschk/moonshine-react-router@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-jKfCG2WDNul0/M1WsvM+Qv1RhABkWyfr3plNnZBsa1P272cQPyDAKmTetoUTz6DskXR22WsWUpgt176quF+V7A=="],
+
+    "@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-2ZLbmeaJEiJgYf7Jth7KRHqdI7YVOPMgN2iETL3q0kMO6tdhR0KAnR+rxwgJT865UuBVLJh1yvzISzJV9rMdvQ=="],
+
+    "@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.7", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" } }, "sha512-noI+xdWtLKnekAOloxxsyTnoLq3iqUqhWTTcxFD2r2ZzH0aFItvD8lnjnXDkRA3dtIj6RdVCEuv69bzli24DOA=="],
+
+    "@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.7", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-wNnDY48yLUdnqCBuQvB7ojxYOC2HuQl/EwfyqWSIGczUwATmTVGQQKdIzZ+ahgl7/XpHkNIodhTjkI04F9ufaw=="],
+
+    "@tschk/moonshine-solid": ["@tschk/moonshine-solid@0.3.7", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.6", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "solid-js": ">=1.8" } }, "sha512-nAQ8VV2D6x4p0a7F8U9qkik24Ql70M1UCZLfaMf03r+mIyHEU6UV+x8PxOJ+ZzQR8NAwER6v0/PMpUO9SI3oJQ=="],
+
+    "@tschk/moonshine-tanstack": ["@tschk/moonshine-tanstack@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-ZxMCoFLhoD2/2wN1q1NE0+TGAy5E/TmjWi5J8o5qLEagaG6h4d37qIkb3iosciikgYDdOvdlLSoDaMdQscmgAA=="],
+
+    "@tschk/moonshine-waku": ["@tschk/moonshine-waku@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-6PAEjqXF2EOaIosE9xMPD3tvpMvQirLegvHOF+Gb1BKpz7HUmZGkmb3K6eQw9MihNuJ6s92ZFV9A63GLMjzLRQ=="],
+
+    "@types/react": ["@types/react@19.2.18", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w=="],
+
+    "@types/react-dom": ["@types/react-dom@19.2.4", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-Bsc+QHgp+P/F02XDzNCY9jnZNCUuLki36KT7VKrTXXLdHf+vHMNZnW1rVu5DNW/rCK+fya3DATySbLM4yhtKUw=="],
+
+    "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
+
+    "react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
+
+    "react-dom": ["react-dom@19.1.0", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.0" } }, "sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g=="],
+
+    "scheduler": ["scheduler@0.26.0", "", {}, "sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA=="],
+
+    "seroval": ["seroval@1.5.6", "", {}, "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA=="],
+
+    "seroval-plugins": ["seroval-plugins@1.5.6", "", { "peerDependencies": { "seroval": "^1.0" } }, "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ=="],
+
+    "solid-js": ["solid-js@1.9.14", "", { "dependencies": { "csstype": "^3.1.0", "seroval": "~1.5.4", "seroval-plugins": "~1.5.4" } }, "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ=="],
+
+    "typescript": ["typescript@5.8.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-aJn6wq13/afZp/jT9QZmwEjDqqvSGp1VT5GVg+f/t6/oVyrgXM6BY1h9BRh/O5p3PlUPAe+WuiEZOmb/49RqoQ=="],
+  }
+}

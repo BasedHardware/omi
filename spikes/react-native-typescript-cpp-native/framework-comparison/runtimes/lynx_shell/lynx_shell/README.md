@@ -1,3 +1,39 @@
-# Lynx Template
+# Lynx Omi relay spike
 
-This repository includes empty project templates for Android, iOS using Lynx.
+A small Lynx mobile shell with a separate Moonshine desktop surface. This is a feasibility spike, not a BLE implementation.
+
+## Ownership
+
+- **Lynx:** UI, layout, scroll behavior, native-module dispatch, and template loading.
+- **Android/iOS shell:** lifecycle, template provider, bundle packaging, permissions, and future BLE/audio adapters.
+- **Shared C++:** packet normalization and bounded protocol operations.
+- **TypeScript:** UI and the typed native facade; it does not own BLE or recording lifetime.
+
+The UI intentionally shows `Bluetooth is not connected`. No fake devices, recordings, transcripts, or packet controls are exposed.
+
+## Lynx documentation audit
+
+Audited against the current Lynx website source at commit `221d32bcb6296eb765bca0ea313592cc21e79ee5`.
+
+- Scrolling uses the documented `<scroll-view>` container. Lynx documentation explicitly says `view` does not scroll.
+- The page uses `scroll-orientation="vertical"`, the documented replacement for `scroll-y`/`scroll-x`.
+- The header uses documented `sticky` behavior as a direct child of `scroll-view`, with `flatten: false` for Android.
+- The app keeps one child layout model and avoids `<list>` because this page is a short, bounded surface. Lynx recommends `<list>` only for large or virtualized data.
+- Template provider registration and one packaged `main.lynx.bundle` path are wired on Android and iOS.
+- The native packet seam uses a byte-safe base64 contract; BLE and lifecycle remain unimplemented rather than simulated.
+
+The installed Lynx TypeScript declarations do not currently type the documented `sticky` attribute, so the two documented runtime attributes are passed through a narrow local attribute spread. This keeps the rest of the app type-safe and records the version mismatch explicitly.
+
+## Verification
+
+```sh
+bun run test
+bun run build
+
+cd desktop
+bun install
+bun run typecheck
+bun run build
+```
+
+The desktop surface uses the published `@tschk/moonshine` 0.3.7 packages and pins TypeScript to 5.8.2, which is the compiler version declared by Moonshine.

@@ -1,119 +1,87 @@
 :root {
-  background-color: #000;
-  --color-text: #fff;
+  background: #ffffff;
+  --ink: #111111;
+  --soft: #666666;
+  --line: #e5e5e5;
+  --panel: #f7f7f7;
 }
 
-.Background {
-  position: fixed;
-  background: radial-gradient(
-    71.43% 62.3% at 46.43% 36.43%,
-    rgba(18, 229, 229, 0) 15%,
-    rgba(239, 155, 255, 0.3) 56.35%,
-    #ff6448 100%
-  );
-  box-shadow: 0px 12.93px 28.74px 0px #ffd28db2 inset;
+text { color: var(--ink); }
+
+.Page {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 28px 24px 72px;
+  background: #fff;
+}
+
+.TopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 640px;
+  padding: 12px 0;
+  background: #fff;
+  z-index: 2;
+}
+.Wordmark { font-size: 25px; font-weight: 900; letter-spacing: -1px; }
+.SmallLink { color: var(--soft); font-size: 12px; }
+
+.Hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 58px 0 42px;
+  text-align: center;
+}
+.Greeting { font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+.Subtitle { max-width: 280px; margin-top: 12px; color: var(--soft); font-size: 15px; line-height: 1.4; }
+.Connection { display: flex; align-items: center; gap: 8px; margin-top: 20px; color: var(--soft); font-size: 13px; }
+.Dot { width: 8px; height: 8px; border-radius: 50%; background: #aaa; }
+
+.ListenButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 188px;
+  height: 188px;
+  margin-top: 30px;
+  border: 2px solid var(--line);
   border-radius: 50%;
-  width: 200vw;
-  height: 200vw;
-  top: -60vw;
-  left: -14.27vw;
-  transform: rotate(15.25deg);
+  background: var(--panel);
 }
+.ListenButton--disabled { opacity: .72; }
+.ListenIcon { color: var(--soft); font-size: 30px; line-height: 1; }
+.ListenLabel { margin-top: 12px; color: var(--soft); font-size: 18px; font-weight: 800; }
+.ListenHint { max-width: 110px; margin-top: 7px; color: var(--soft); font-size: 12px; line-height: 1.3; }
 
-.App {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.TodayCard, .DeviceCard, .NativeCard {
+  width: 100%;
+  max-width: 640px;
+  box-sizing: border-box;
+  margin: 0 auto 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
 }
+.CardTitle { display: block; font-size: 17px; font-weight: 800; }
+.CardNote { display: block; margin-top: 9px; color: var(--soft); font-size: 13px; line-height: 1.4; }
+.EmptyState { display: flex; align-items: center; gap: 16px; margin-top: 17px; }
+.EmptyNumber { font-size: 30px; font-weight: 800; }
+.EmptyState .CardNote { margin-top: 0; }
 
-text {
-  color: var(--color-text);
-}
+.DeviceRow { display: flex; align-items: center; margin-top: 17px; }
+.DeviceCircle { display: flex; align-items: center; justify-content: center; width: 50px; height: 50px; border: 1px solid var(--ink); border-radius: 50%; }
+.DeviceCircle text { font-size: 11px; font-weight: 900; }
+.DeviceWords { flex: 1; margin-left: 13px; }
+.DeviceName { display: block; font-size: 16px; font-weight: 800; }
+.DeviceDetail { display: block; margin-top: 5px; color: var(--soft); font-size: 13px; line-height: 1.3; }
 
-.Banner {
-  flex: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.Logo {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-}
-
-.Logo--react {
-  width: 100px;
-  height: 100px;
-  animation: Logo--spin infinite 20s linear;
-}
-
-.Logo--lynx {
-  width: 100px;
-  height: 100px;
-  animation: Logo--shake infinite 0.5s ease;
-}
-
-@keyframes Logo--spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes Logo--shake {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.Content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.Arrow {
-  width: 24px;
-  height: 24px;
-}
-
-.Title {
-  font-size: 36px;
-  font-weight: 700;
-}
-
-.Subtitle {
-  font-style: italic;
-  font-size: 22px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.Description {
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.85);
-  margin: 15rpx;
-}
-
-.Hint {
-  font-size: 12px;
-  margin: 5px;
-  color: rgba(255, 255, 255, 0.65);
-}
+.NativeCard { border-style: dashed; }
+.Footer { display: block; max-width: 560px; margin: 28px auto 0; color: var(--soft); font-size: 11px; line-height: 1.4; text-align: center; }

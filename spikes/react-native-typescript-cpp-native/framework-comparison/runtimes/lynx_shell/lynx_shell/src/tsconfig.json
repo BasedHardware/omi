@@ -2,14 +2,15 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "composite": true,
-
     "jsx": "react-jsx",
     "jsxImportSource": "@lynx-js/react",
-
     "module": "ESNext",
     "moduleResolution": "Bundler",
-
-    "noEmit": true,
+    "noEmit": true
   },
-  "include": ["./**/*.ts", "./**/*.tsx"],
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx",
+    "../../../../../ts/omi-parity/**/*.ts"
+  ]
 }
