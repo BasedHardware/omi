@@ -23,8 +23,8 @@ function wireMessage(
     sender: string;
     rating: number | null;
     reported: boolean;
-    journal_revision: number;
-    client_message_payload_hash: string;
+    journalRevision: number;
+    payloadHash: string;
   }> = {},
 ): Record<string, unknown> {
   return {
@@ -32,11 +32,11 @@ function wireMessage(
     text,
     sender: extras.sender ?? "human",
     type: "text",
-    created_at: "2024-01-01T00:00:00.000Z",
-    updated_at: "2024-01-01T00:00:00.000Z",
-    journal_revision: extras.journal_revision ?? 1,
-    client_message_payload_hash:
-      extras.client_message_payload_hash ??
+    createdAt: 1_704_067_200_000,
+    updatedAt: 1_704_067_200_000,
+    journalRevision: extras.journalRevision ?? 1,
+    payloadHash:
+      extras.payloadHash ??
       chatMessagePayloadHash({
         text,
         sender: extras.sender ?? "human",
@@ -44,12 +44,51 @@ function wireMessage(
         sessionId: null,
         metadata: null,
         messageSource: "desktop_chat",
+        attachmentIds: [],
       }),
-    message_source: "desktop_chat",
+    messageSource: "desktop_chat",
     rating: extras.rating === undefined ? null : extras.rating,
     reported: extras.reported ?? false,
-    app_id: null,
-    chat_session_id: null,
+    generationOutcome: extras.sender === "ai" ? "completed" : null,
+    appId: null,
+    chatSessionId: null,
+    revision: `revision-${id}`,
+    attachments: [],
+  };
+}
+
+function historyEnvelope(
+  messages: readonly Record<string, unknown>[],
+  olderCursor: string | null = null,
+): Record<string, unknown> {
+  return {
+    messages,
+    page: { olderCursor, hasOlder: olderCursor !== null },
+    capabilities: {
+      maxAttachmentsPerMessage: 4,
+      maxAttachmentBytes: 50_000_000,
+      allowedAttachmentMimeTypes: ["application/pdf"],
+    },
+  };
+}
+
+function successfulSend(id: string, text: string): { status: number; json: null; text: string } {
+  const human = wireMessage(id, text);
+  const assistant = wireMessage(`assistant-${id}`, "Canonical answer", { sender: "ai" });
+  return {
+    status: 201,
+    json: null,
+    text: [
+      "event: accepted",
+      "id: event-accepted",
+      `data: ${JSON.stringify({ kind: "accepted", message: human, generation: { id: `generation-${id}` } })}`,
+      "",
+      "event: done",
+      "id: event-done",
+      `data: ${JSON.stringify({ kind: "done", message: assistant })}`,
+      "",
+      "",
+    ].join("\n"),
   };
 }
 
@@ -81,41 +120,51 @@ test("409 identity conflict dead-letters and is never retried", async () => {
 });
 
 test("the same op replayed produces the same payload hash and does not duplicate a message", async () => {
-  // red-proof: in packages/adapters-platform/src/chat.ts create body, change
-  // `client_message_payload_hash: payloadHash` to
-  // `client_message_payload_hash: payloadHash + ":" + String(Math.random())`
-  // — the two POST bodies then disagree on the hash field.
-  // APPLIED 2026-08-08: observed
-  //   AssertionError: identical create payload must hash identically across retries
-  //   + 'sha256:…:0.219…' - 'sha256:…:0.441…'
+  // red-proof: rebuild attachmentIds instead of replaying the journaled op.
+  // The whole-body equality and derived hash equality below both fail.
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
   const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
 
+  await store.send("hello once", ["attachment-1"]);
+  const localId = (await store.list())[0]!.id;
   // First attempt fails retryably so the SAME pending op is resent.
   http.respond({ status: 503, json: null });
-  http.respond({ status: 200, json: {} });
-
-  await store.send("hello once");
-  const localId = (await store.list())[0]!.id;
+  http.respond(successfulSend(localId, "hello once"));
   await env.advance(10_000); // first send (503) + backoff + retry (200)
 
   const posts = http.calls.filter((c) => c.method === "POST");
   assert.equal(posts.length, 2, "retryable failure causes a second send of the same op");
-  const hash1 = (posts[0]!.body as { client_message_payload_hash: string }).client_message_payload_hash;
-  const hash2 = (posts[1]!.body as { client_message_payload_hash: string }).client_message_payload_hash;
+  assert.deepEqual(posts[0]!.body, posts[1]!.body, "retry replays the exact authored operation");
+  const body1 = posts[0]!.body as Extract<import("@omi-core/contracts").ChatMessageOp, { op: "create" }>;
+  const body2 = posts[1]!.body as Extract<import("@omi-core/contracts").ChatMessageOp, { op: "create" }>;
+  const hash1 = chatMessagePayloadHash({
+    text: body1.text,
+    sender: body1.sender,
+    appId: body1.appId ?? null,
+    sessionId: body1.chatSessionId ?? null,
+    metadata: body1.metadata ?? null,
+    messageSource: body1.messageSource ?? "desktop_chat",
+    attachmentIds: body1.attachmentIds,
+  });
+  const hash2 = chatMessagePayloadHash({
+    text: body2.text,
+    sender: body2.sender,
+    appId: body2.appId ?? null,
+    sessionId: body2.chatSessionId ?? null,
+    metadata: body2.metadata ?? null,
+    messageSource: body2.messageSource ?? "desktop_chat",
+    attachmentIds: body2.attachmentIds,
+  });
   assert.equal(hash1, hash2, "identical create payload must hash identically across retries");
   assert.match(hash1, /^sha256:[a-f0-9]{64}$/);
 
-  const id1 = (posts[0]!.body as { client_message_id: string }).client_message_id;
-  const id2 = (posts[1]!.body as { client_message_id: string }).client_message_id;
-  assert.equal(id1, id2, "client_message_id is stable across retries");
-  assert.equal(id1, localId, "wire client_message_id IS the local record id");
+  assert.equal(body1.id, body2.id, "client message id is stable across retries");
+  assert.equal(body1.id, localId, "wire id IS the local record id");
+  assert.deepEqual(body1.attachmentIds, ["attachment-1"]);
 
-  const rev1 = (posts[0]!.body as { journal_revision: number }).journal_revision;
-  const rev2 = (posts[1]!.body as { journal_revision: number }).journal_revision;
-  assert.equal(rev1, rev2, "journal_revision is part of the durable op, not regenerated");
+  assert.equal(body1.journalRevision, body2.journalRevision, "journal revision is durable");
 
   // Content, not row count: one local identity, one text — replay must not mint a second row.
   const rows = await store.list();
@@ -123,14 +172,9 @@ test("the same op replayed produces the same payload hash and does not duplicate
   assert.equal(rows.map((r) => r.text).join(","), "hello once");
 });
 
-test("a keyed rating patch leaves other fields untouched", async () => {
-  // red-proof: in packages/domain/src/chat-codec.ts patch branch, replace the
-  // keyed `if (p.rating !== undefined) next.rating = p.rating` with
-  // setdefaults `next.rating = p.rating ?? null; next.text = ""; next.reported = false`
-  // — fails with `absent keys must not clear text` ("" !== "keep this text").
-  // APPLIED 2026-08-08: observed
-  //   AssertionError: absent keys must not clear text
-  //   + '' - 'keep this text'
+test("the adapter never invents an unratified rating route", async () => {
+  // red-proof: restore the provisional per-message PATCH. A PATCH appears in
+  // the call log and the dead-letter assertion fails.
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
@@ -139,38 +183,20 @@ test("a keyed rating patch leaves other fields untouched", async () => {
   const id = "amber-fox-ridge" as RecordId;
   http.respond({
     status: 200,
-    json: {
-      messages: [wireMessage(id, "keep this text", { sender: "ai", rating: null, reported: true })],
-      next_cursor: null,
-      has_more: false,
-    },
+    json: historyEnvelope([wireMessage(id, "keep this text", { sender: "ai", reported: true })]),
   });
   http.respond({
     status: 200,
-    json: {
-      messages: [wireMessage(id, "keep this text", { sender: "ai", rating: null, reported: true })],
-      next_cursor: null,
-      has_more: false,
-    },
+    json: historyEnvelope([wireMessage(id, "keep this text", { sender: "ai", reported: true })]),
   });
   await store.refresh();
 
-  http.respond({ status: 200, json: { status: "ok" } });
   await store.rate(id, 1);
-  const optimistic = await store.list();
-  assert.equal(optimistic.length, 1);
-  assert.equal(optimistic[0]!.text, "keep this text", "absent keys must not clear text");
-  assert.equal(optimistic[0]!.reported, true, "absent keys must not clear reported");
-  assert.equal(optimistic[0]!.rating, 1, "rating is the only field the patch may change");
-  assert.equal(optimistic[0]!.sender, "ai");
-
   await env.advance(10);
-  const patchCall = http.calls.find((c) => c.method === "PATCH")!;
-  assert.deepEqual(patchCall.body, { rating: 1 }, "wire body is keyed — no smuggled defaults");
-  assert.ok(
-    patchCall.path.endsWith(`/${id}/rating`),
-    `rating patch hits the rating endpoint, got ${patchCall.path}`,
-  );
+  assert.equal(http.calls.some((call) => call.method === "PATCH"), false);
+  const dead = await store.deadLetters();
+  assert.equal(dead.length, 1);
+  assert.match(dead[0]!.failure.detail, /does not define patch/);
 });
 
 test("reconcile never deletes a local row against a complete:false snapshot", async () => {
@@ -186,27 +212,19 @@ test("reconcile never deletes a local row against a complete:false snapshot", as
   const http = new ScriptedHttp();
   const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
 
-  http.respond({ status: 200, json: { id: "will-be-same" } });
   await store.send("local only survivor");
-  await env.advance(10);
   const localId = (await store.list())[0]!.id;
+  http.respond(successfulSend(localId, "local only survivor"));
+  await env.advance(10);
 
   // Server page omits our message — complete:false must not delete it.
   http.respond({
     status: 200,
-    json: {
-      messages: [wireMessage("other-server-msg", "someone else")],
-      next_cursor: null,
-      has_more: false,
-    },
+    json: historyEnvelope([wireMessage("other-server-msg", "someone else")]),
   });
   http.respond({
     status: 200,
-    json: {
-      messages: [wireMessage("other-server-msg", "someone else")],
-      next_cursor: null,
-      has_more: false,
-    },
+    json: historyEnvelope([wireMessage("other-server-msg", "someone else")]),
   });
   await store.refresh();
 
@@ -227,10 +245,10 @@ test("junk or non-200 reconcile body yields null snapshot — never an empty com
   const http = new ScriptedHttp();
   const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
 
-  http.respond({ status: 200, json: {} });
   await store.send("must survive junk snapshot");
-  await env.advance(10);
   const localId = (await store.list())[0]!.id;
+  http.respond(successfulSend(localId, "must survive junk snapshot"));
+  await env.advance(10);
 
   http.respond({ status: 200, json: { unexpected: true } }); // rows fetch junk → null
   http.respond({ status: 200, json: null }); // snapshot path junk → null
@@ -241,33 +259,25 @@ test("junk or non-200 reconcile body yields null snapshot — never an empty com
   assert.equal(rows[0]!.text, "must survive junk snapshot");
 });
 
-test("ADR-005 create wire shape carries client_message_id, journal_revision, and payload hash", async () => {
-  // red-proof: omit `client_message_id` from the create body — assertion on
-  // body.client_message_id fails.
+test("ratified create envelope carries the full authored operation", async () => {
+  // red-proof: translate the ratified body back to snake_case or omit the
+  // attachment list. The assertions below fail.
   const disk = new MemoryStore();
   const env = new ManualEnv();
   const http = new ScriptedHttp();
   const store = await ChatMessagesStore.open(disk.openBridge("u"), env, http);
 
-  http.respond({ status: 200, json: {} });
-  await store.send("wire contract");
+  await store.send("wire contract", ["attachment-1"]);
   const localId = (await store.list())[0]!.id;
+  http.respond(successfulSend(localId, "wire contract"));
   await env.advance(10);
 
   const body = http.calls.find((c) => c.method === "POST")!.body as Record<string, unknown>;
-  assert.equal(body["client_message_id"], localId);
-  assert.equal(body["journal_revision"], 1);
-  assert.equal(
-    body["client_message_payload_hash"],
-    chatMessagePayloadHash({
-      text: "wire contract",
-      sender: "human",
-      appId: null,
-      sessionId: null,
-      metadata: null,
-      messageSource: "desktop_chat",
-    }),
-  );
+  assert.equal(body["id"], localId);
+  assert.equal(body["journalRevision"], 1);
+  assert.deepEqual(body["attachmentIds"], ["attachment-1"]);
+  assert.equal(body["client_message_id"], undefined);
+  assert.equal(body["client_message_payload_hash"], undefined);
   assert.equal(body["sender"], "human");
   assert.equal(body["text"], "wire contract");
 });
@@ -289,6 +299,8 @@ test("codec keyed patch: rating-only overlay preserves text and reported", () =>
     messageSource: "desktop_chat",
     rating: null,
     reported: true,
+    generationOutcome: "completed",
+    attachments: [],
     revision: null,
   };
   const next = chatMessagesCodec.applyOp(

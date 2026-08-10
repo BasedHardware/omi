@@ -1,3 +1,5 @@
+import type { ChatAttachment as DomainChatAttachment } from "@omi-core/contracts";
+
 /**
  * Pure chat mirror logic (ADR-005). Self-contained: no relative imports so
  * Node can execute this module directly from hermetic tests.
@@ -5,9 +7,18 @@
 
 export type ChatRole = "user" | "assistant";
 
+export type ChatAttachment = DomainChatAttachment;
+
 /** Delivery is a closed union. Every message reaches a terminal outcome. */
 export type ChatDelivery =
-  | { readonly kind: "canonical"; readonly serverId: string; readonly clientMessageId: string | null }
+  | {
+      readonly kind: "canonical";
+      readonly serverId: string;
+      readonly clientMessageId: string | null;
+      /** null for human rows; assistant terminals state how generation ended. */
+      readonly generationOutcome: "completed" | "cancelled" | null;
+    }
+  | { readonly kind: "streaming"; readonly generationId: string }
   | { readonly kind: "echo"; readonly clientMessageId: string }
   | { readonly kind: "failed"; readonly clientMessageId: string; readonly retryable: boolean };
 
@@ -15,7 +26,7 @@ export type ChatMessage = {
   readonly role: ChatRole;
   readonly text: string;
   readonly delivery: ChatDelivery;
-  readonly streaming?: boolean;
+  readonly attachments: readonly ChatAttachment[];
 };
 
 export type ChatHistoryPage = {
@@ -32,6 +43,7 @@ export type ChatCapabilities = {
 
 function clientMessageIdOf(message: ChatMessage): string | null {
   if (message.delivery.kind === "canonical") return message.delivery.clientMessageId;
+  if (message.delivery.kind === "streaming") return null;
   return message.delivery.clientMessageId;
 }
 
@@ -43,6 +55,7 @@ export function messageKey(message: ChatMessage): string {
   const clientMessageId = clientMessageIdOf(message);
   if (clientMessageId !== null) return `cid:${clientMessageId}`;
   if (message.delivery.kind === "canonical") return `server:${message.delivery.serverId}`;
+  if (message.delivery.kind === "streaming") return `generation:${message.delivery.generationId}`;
   return `cid:${message.delivery.clientMessageId}`;
 }
 

@@ -7,16 +7,14 @@
  * Mirrors tasks-codec.ts / memories-codec.ts over the chat contract (ADR-005).
  *
  * Payload hash is a PURE function of the caller-controlled immutable fields —
- * no Env clock, no Math.random — matching
- * `backend/database/chat.py::_message_idempotency_payload_hash` so client and
- * server agree on identity-conflict detection.
+ * no Env clock, no Math.random — including the ratified ordered attachment id
+ * list so client and server agree on identity-conflict detection.
  */
 
 export { chatMessagePayloadHash, type ChatMessageHashPayload } from "@omi-core/kernel";
 
 import type {
   ChatIdentityConflictFailure,
-  ChatMessageAuthoredSender,
   ChatMessage,
   ChatMessageOp,
   ChatMessagePatch,
@@ -33,13 +31,13 @@ export function buildCreateChatMessage(
   env: Env,
   text: string,
   opts?: {
-    sender?: ChatMessageAuthoredSender;
     type?: ChatMessageType;
     journalRevision?: number;
     appId?: string | null;
     chatSessionId?: string | null;
     messageSource?: string;
     metadata?: string | null;
+    attachmentIds?: readonly string[];
   },
 ): ChatMessageOp {
   const id = generateSlug(() => env.random());
@@ -49,8 +47,9 @@ export function buildCreateChatMessage(
     id,
     at: env.now(),
     text,
-    sender: opts?.sender ?? "human",
+    sender: "human" as const,
     journalRevision: opts?.journalRevision ?? 1,
+    attachmentIds: opts?.attachmentIds ?? [],
   };
   return {
     ...base,
@@ -136,10 +135,15 @@ export const chatMessagesCodec: ProjectionCodec<ChatMessage> = {
             sessionId: chatSessionId,
             metadata,
             messageSource,
+            attachmentIds: op.attachmentIds,
           }),
           messageSource,
           rating: null,
           reported: false,
+          generationOutcome: null,
+          // Optimistic rows know staged ids but not canonical durable metadata.
+          // The next server reconcile replaces this with the authoritative list.
+          attachments: [],
           revision: null,
         };
       }

@@ -25,9 +25,10 @@ const BASE_HASH_PAYLOAD = {
   sessionId: null as string | null,
   metadata: null as string | null,
   messageSource: "desktop_chat",
+  attachmentIds: [] as readonly string[],
 };
 
-test("payload-hash is deterministic and matches the desktop write-path digest", () => {
+test("payload-hash is deterministic and matches the ratified empty-attachment digest", () => {
   // red-proof: change chatMessagePayloadHash to append String(Math.random())
   // to the canonical string before hashing — the two calls diverge
   // (`identical payloads must hash identically`).
@@ -36,8 +37,8 @@ test("payload-hash is deterministic and matches the desktop write-path digest", 
   assert.equal(a, b, "identical payloads must hash identically");
   assert.equal(
     a,
-    "sha256:1ebd1f3fef3a402694dfcee66f345768a37a15f0c22c9470f07ab57b2761d18b",
-    "digest must match backend _message_idempotency_payload_hash for this fixture",
+    "sha256:c7263e3b6ad0b0003659cb6c2d73a46e36cb1d2063dbc18e54707c2bfd369100",
+    "digest must match the ratified canonical payload for this fixture",
   );
   const altered = chatMessagePayloadHash({ ...BASE_HASH_PAYLOAD, text: "hi!" });
   assert.notEqual(altered, a, "text is part of the identity payload");
@@ -68,17 +69,17 @@ test("payload-hash is deterministic and matches the desktop write-path digest", 
  * // and escape cases at all.
  */
 test("the hand-rolled SHA-256 agrees with node:crypto, including at block boundaries", () => {
-  const cases: readonly { text: string; sender: "human" | "ai"; appId: string | null; sessionId: string | null; metadata: string | null; messageSource: string }[] = [
-    { text: "hi", sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "desktop_chat" },
-    { text: "", sender: "ai", appId: "app-1", sessionId: "s-1", metadata: "{}", messageSource: "desktop_chat" },
+  const cases: readonly { text: string; sender: "human" | "ai"; appId: string | null; sessionId: string | null; metadata: string | null; messageSource: string; attachmentIds: readonly string[] }[] = [
+    { text: "hi", sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "desktop_chat", attachmentIds: [] },
+    { text: "", sender: "ai", appId: "app-1", sessionId: "s-1", metadata: "{}", messageSource: "desktop_chat", attachmentIds: ["attachment-1"] },
     // Multi-byte and astral-plane: UTF-8 length differs from UTF-16 length.
-    { text: "é中文 emoji 🚀", sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "x" },
+    { text: "é中文 emoji 🚀", sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "x", attachmentIds: [] },
     // The message-padding block boundaries, where a wrong implementation breaks.
-    { text: "a".repeat(55), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d" },
-    { text: "a".repeat(56), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d" },
-    { text: "a".repeat(64), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d" },
-    { text: "a".repeat(5000), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d" },
-    { text: 'quote " back\\slash \n newline \t tab', sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d" },
+    { text: "a".repeat(55), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d", attachmentIds: [] },
+    { text: "a".repeat(56), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d", attachmentIds: [] },
+    { text: "a".repeat(64), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d", attachmentIds: [] },
+    { text: "a".repeat(5000), sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d", attachmentIds: [] },
+    { text: 'quote " back\\slash \n newline \t tab', sender: "human", appId: null, sessionId: null, metadata: null, messageSource: "d", attachmentIds: ["a", "b"] },
   ];
 
   const mismatches: string[] = [];
@@ -86,6 +87,7 @@ test("the hand-rolled SHA-256 agrees with node:crypto, including at block bounda
     // The exact canonical encoding the backend uses:
     // json.dumps(..., ensure_ascii=False, separators=(',', ':'), sort_keys=True)
     const wire = {
+      attachment_ids: c.attachmentIds,
       app_id: c.appId,
       message_source: c.messageSource,
       metadata: c.metadata,
@@ -102,19 +104,17 @@ test("the hand-rolled SHA-256 agrees with node:crypto, including at block bounda
 });
 
 /**
- * VERIFIED AGAINST THE REAL BACKEND, not against our own reimplementation.
- * `backend/database/chat.py::_message_idempotency_payload_hash` at baseline
- * was executed directly with this fixture payload:
+ * The pre-ratification backend digest was executed directly for the payload
+ * below. The ratified payload deliberately differs by adding
+ * `"attachment_ids":[]`; the node:crypto cross-check above is now the
+ * independent executable oracle until the parallel service lane lands:
  *
- *   canonical: {"app_id":null,"message_source":"desktop_chat","metadata":null,
+ *   canonical: {"app_id":null,"attachment_ids":[],"message_source":"desktop_chat","metadata":null,
  *               "sender":"human","session_id":null,"text":"hi"}
- *   sha256:1ebd1f3fef3a402694dfcee66f345768a37a15f0c22c9470f07ab57b2761d18b
- *
- * which is byte-identical to the digest asserted above. The field set, the key
- * sort, `ensure_ascii=False` and the `(',', ':')` separators all agree.
+ * The fixed digest asserted above pins that exact canonical payload.
  */
 
-test("a client can never author an unknown sender", () => {
+test("a client can author only the human sender on the ratified send route", () => {
   // red-proof: widen `ChatMessageOp`'s create arm back to `ChatMessageSender`.
   // The @ts-expect-error below becomes an unused-directive ERROR and the build
   // fails, which is the point: the narrowing is enforced by the compiler, not
@@ -128,8 +128,12 @@ test("a client can never author an unknown sender", () => {
   const bad = () => buildCreateChatMessage(env, "x", { sender: "unknown" });
   assert.equal(typeof bad, "function");
 
-  const good = buildCreateChatMessage(env, "x", { sender: "ai" });
-  assert.equal(good.op === "create" && good.sender, "ai");
+  // @ts-expect-error AI messages are server-authored, never sent by this route
+  const serverAuthored = () => buildCreateChatMessage(env, "x", { sender: "ai" });
+  assert.equal(typeof serverAuthored, "function");
+
+  const good = buildCreateChatMessage(env, "x");
+  assert.equal(good.op === "create" && good.sender, "human");
 });
 
 test("keyed patch: absent keys leave the projected row untouched", () => {
@@ -138,10 +142,16 @@ test("keyed patch: absent keys leave the projected row untouched", () => {
   // `rating: op.patch.rating ?? null`, `text: ""`, `reported: false` —
   // fails with `absent rating must not clear a set thumb` (`null !== 1`).
   const env = new ManualEnv();
-  const create = buildCreateChatMessage(env, "keep this text", { sender: "ai" });
+  const create = buildCreateChatMessage(env, "keep this text");
   const created = chatMessagesCodec.applyOp(JSON.stringify(create), null);
   assert.ok(created);
-  const seeded: ChatMessage = { ...created, rating: 1, reported: true };
+  const seeded: ChatMessage = {
+    ...created,
+    sender: "ai",
+    rating: 1,
+    reported: true,
+    generationOutcome: "completed",
+  };
 
   const patchOp: ChatMessageOp = {
     op: "patch",
@@ -212,6 +222,7 @@ test("create overlay stamps journalRevision + payloadHash from the op payload", 
       sessionId: "sess-9",
       metadata: null,
       messageSource: "desktop_chat",
+      attachmentIds: [],
     }),
   );
 });
