@@ -328,7 +328,11 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    if releasable_desktop and (event == "push" or package_changed):
+        # Release compile runs on PRs too, not just pushes: strict-concurrency
+        # errors that only manifest under whole-module release optimization
+        # otherwise land on main and wedge the release train (#11373/#11374 —
+        # the KG ResolveOutcome Sendable break shipped through a PR whose debug
+        # lane stayed green and blocked every candidate for three merges).
         selected.add("desktop-swift-release-compile")
 
     return ImpactPlan(frozenset(selected))
