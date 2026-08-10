@@ -7,7 +7,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'delete_confirmation.dart';
 
-
 void showMemoryQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
   showModalBottomSheet(
     context: context,
