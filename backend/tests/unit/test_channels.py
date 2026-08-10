@@ -570,9 +570,7 @@ def test_a_legacy_claim_is_dated_by_received_at_not_treated_as_expired():
 
     # Still inside the window the lease would have covered: leave it alone.
     fresh = now + channels_db.WEBHOOK_PROCESSING_LEASE / 2
-    created, existing = channels_db.claim_webhook_event(
-        'telegram', 'legacy-1', now=fresh, firestore_client=client
-    )
+    created, existing = channels_db.claim_webhook_event('telegram', 'legacy-1', now=fresh, firestore_client=client)
     assert not created
     assert existing['status'] == 'processing'
 
