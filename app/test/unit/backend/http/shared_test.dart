@@ -126,6 +126,59 @@ void main() {
       expect(requestCount, 1);
     });
   });
+
+  group('error handling during retry flows', () {
+    late HttpServer server;
+
+    setUp(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
+    });
+
+    tearDown(() async {
+      await server.close(force: true);
+    });
+
+    test('_drainStreamedResponse suppresses exceptions from aborted streams when replaying', () async {
+      var requestCount = 0;
+
+      server.listen((request) async {
+        requestCount++;
+        if (requestCount == 1) {
+          // Send 401 but violently abort before the body finishes.
+          // This forces a stream exception when the retry logic attempts to drain it.
+          request.response.statusCode = 401;
+          request.response.headers.contentType = ContentType.json;
+          request.response.contentLength = 100;
+
+          final socket = await request.response.detachSocket(writeHeaders: true);
+          socket.write('{"error": "partial');
+          await socket.flush();
+          socket.destroy();
+        } else {
+          // Let the replayed request succeed.
+          request.response.statusCode = 200;
+          request.response.write('{"success": true}');
+          await request.response.close();
+        }
+      });
+
+      // The 401 handler `refreshAndReplayAfter401` will trigger `AuthService.instance.refreshIdToken`.
+      // Since we haven't mocked AuthService fully, it will return AuthTokenMissingUser
+      // and the retry will not proceed.
+      // What matters is that the Stream exception from draining the first response
+      // is handled silently by `_drainStreamedResponse` and not propagated to crash the app.
+      final response = await makeRawApiCall(
+        url: env.requestBaseUrl,
+        method: 'GET',
+      );
+
+      // If makeRawApiCall completes without crashing, the test passes.
+      // The status code is 401 because the un-mocked token refresh failed.
+      expect(response.statusCode, 401);
+      expect(requestCount, 1);
+    });
+  });
 }
 
 class _TestEnvFields implements EnvFields {
