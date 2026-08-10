@@ -332,6 +332,7 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
   if (!entitlementDef) throw new Error("schema missing EntitlementEvent $def");
 
   let connection: ListenStreamConnectionState = { status: "idle" };
+  let protocolReady = false;
   let entitlement: ListenEntitlementSnapshot | null = null;
   let degradation: ListenCaptureDegradation | null = null;
   /** Id → segment. Last writer wins on same id (revision / reconnect redelivery). */
@@ -487,11 +488,31 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
         return;
       }
 
-      if (connection.status === "idle") setConnection({ status: "open" });
-
       if (unwrapped.kind === "heartbeat") return;
 
+      if (
+        unwrapped.kind === "event"
+        && unwrapped.event.type === "service_status"
+        && unwrapped.event.status === "ready"
+      ) {
+        protocolReady = true;
+        setConnection({ status: "open" });
+        return;
+      }
+
       if (unwrapped.kind === "transcript_batch") {
+        if (!protocolReady) {
+          recordDrop(
+            {
+              path: "listen.capture.transcript-before-ready",
+              from: "transcript_batch",
+              to: "dropped_keep_stream",
+              detail: "dropped transcript batch before service_status:ready",
+            },
+            "dropped_keep_stream",
+          );
+          return;
+        }
         for (const segment of unwrapped.segments) applySegment(segment);
         publishTranscript();
         return;
@@ -552,13 +573,21 @@ export function createListenCaptureStreamPort(deps: ListenCaptureStreamDeps): Li
       // transcript accumulation only cares about transcript_batch frames.
     },
     acceptClose(code: number) {
+      protocolReady = false;
+      if (
+        code === LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION
+        && entitlement?.captureContinuing === true
+      ) {
+        setEntitlement(null);
+      }
       setConnection({ status: "closed", code });
     },
     acceptReconnect() {
       if (connection.status !== "closed") return;
       // Transcript (and entitlement) intentionally preserved — reconnect must
       // neither lose nor double accumulated segments.
-      setConnection({ status: "open" });
+      protocolReady = false;
+      setConnection({ status: "idle" });
     },
   };
 

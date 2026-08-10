@@ -57,6 +57,10 @@ function batch(...segments: TranscriptSegment[]): string {
   return JSON.stringify(segments);
 }
 
+function acceptReady(ingest: ReturnType<typeof openPort>["ingest"]): void {
+  ingest.acceptTextFrame(JSON.stringify({ type: "service_status", status: "ready" }));
+}
+
 function textsOf(segments: readonly TranscriptSegment[]): string[] {
   return segments.map((s) => s.text);
 }
@@ -81,6 +85,7 @@ test("out-of-order segment arrival paints by content order (start), not arrival"
     snapshots.push(textsOf(segments));
   });
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "b", text: "later line", start: 4, end: 5 })));
   ingest.acceptTextFrame(batch(seg({ id: "a", text: "earlier line", start: 0, end: 1 })));
 
@@ -94,12 +99,14 @@ test("duplicate segment id after reconnect does not duplicate rendered transcrip
   // "same:hello" twice after reconnect redelivery.
   const { port, ingest } = openPort();
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "same", text: "hello", start: 0, end: 1 })));
   ingest.acceptTextFrame(batch(seg({ id: "other", text: "world", start: 2, end: 3 })));
   assert.deepEqual(idsAndTexts(port.getTranscriptSegments()), ["same:hello", "other:world"]);
 
   ingest.acceptClose(1001);
   ingest.acceptReconnect();
+  acceptReady(ingest);
   // Redeliver the same id with the same text after reconnect.
   ingest.acceptTextFrame(batch(seg({ id: "same", text: "hello", start: 0, end: 1 })));
 
@@ -114,6 +121,7 @@ test("same-id revision is last-writer-wins on rendered text", () => {
   // red-proof: skip segmentsById.set when the id is already present — text stays
   // "draft" and never becomes "final wording".
   const { port, ingest } = openPort();
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "rev", text: "draft", start: 0, end: 1 })));
   ingest.acceptTextFrame(batch(seg({ id: "rev", text: "final wording", start: 0, end: 1.5 })));
 
@@ -132,6 +140,7 @@ test("malformed frame mid-stream is dropped, stream survives, port reports degra
   assert.equal(degradations.length, 1);
   assert.equal(degradations[0], null);
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "ok", text: "before", start: 0, end: 1 })));
   ingest.acceptTextFrame("{not-json");
   ingest.acceptTextFrame(batch(seg({ id: "ok2", text: "after", start: 2, end: 3 })));
@@ -161,6 +170,7 @@ test("connection lifecycle: idle -> open -> closed(code) -> reconnect preserves 
   assert.deepEqual(port.getConnectionState(), { status: "idle" });
   assert.equal(port.getListenCaptureCloseAdvice(), null);
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "k", text: "kept", start: 0, end: 1 })));
   assert.deepEqual(port.getConnectionState(), { status: "open" });
 
@@ -176,12 +186,13 @@ test("connection lifecycle: idle -> open -> closed(code) -> reconnect preserves 
   assert.deepEqual(textsOf(port.getTranscriptSegments()), ["kept"]);
 
   ingest.acceptReconnect();
-  assert.deepEqual(port.getConnectionState(), { status: "open" });
+  assert.deepEqual(port.getConnectionState(), { status: "idle" });
   assert.deepEqual(textsOf(port.getTranscriptSegments()), ["kept"]);
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "more", text: "and more", start: 2, end: 3 })));
   assert.deepEqual(textsOf(port.getTranscriptSegments()), ["kept", "and more"]);
-  assert.deepEqual(connections, ["idle", "open", "closed:1001", "open"]);
+  assert.deepEqual(connections, ["idle", "open", "closed:1001", "idle", "open"]);
 });
 
 test("entitlement exhaustion close is distinguishable and marked do-not-retry", () => {
@@ -190,6 +201,7 @@ test("entitlement exhaustion close is distinguishable and marked do-not-retry", 
   // would then report entitlementExhaustion:true and this 4020 assertion fails
   // when compared against an ordinary 1000 close's advice.
   const { port, ingest } = openPort();
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "x", text: "hi", start: 0, end: 1 })));
   ingest.acceptClose(LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION);
 
@@ -219,6 +231,7 @@ test("entitlement state is null before any frame; paused state does not terminat
   assert.equal(entitlements.length, 1);
   assert.equal(entitlements[0], null);
 
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "t1", text: "speaking", start: 0, end: 1 })));
   ingest.acceptTextFrame(
     JSON.stringify({
@@ -248,7 +261,26 @@ test("acceptReconnect is a no-op while open or idle", () => {
   const { port, ingest } = openPort();
   ingest.acceptReconnect();
   assert.deepEqual(port.getConnectionState(), { status: "idle" });
+  acceptReady(ingest);
   ingest.acceptTextFrame(batch(seg({ id: "a", text: "x", start: 0, end: 1 })));
   ingest.acceptReconnect();
   assert.deepEqual(port.getConnectionState(), { status: "open" });
+});
+
+test("transcript content is dropped until this socket reports service_status:ready", () => {
+  const { port, ingest } = openPort();
+  ingest.acceptTextFrame(batch(seg({ id: "early", text: "unsafe", start: 0, end: 1 })));
+  assert.deepEqual(port.getTranscriptSegments(), []);
+  assert.equal(port.getConnectionState().status, "idle");
+  assert.equal(
+    port.getListenCaptureDegradation()?.path,
+    "listen.capture.transcript-before-ready",
+  );
+
+  acceptReady(ingest);
+  ingest.acceptTextFrame(batch(seg({ id: "safe", text: "accepted", start: 1, end: 2 })));
+  assert.deepEqual(textsOf(port.getTranscriptSegments()), ["accepted"]);
+  assert.equal(port.getConnectionState().status, "open");
+  // red-proof: remove the protocolReady guard from the transcript_batch branch;
+  // the first transcript assertion contains "unsafe" and the port opens early.
 });
