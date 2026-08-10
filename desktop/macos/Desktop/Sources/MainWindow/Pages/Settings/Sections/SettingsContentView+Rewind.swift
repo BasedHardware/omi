@@ -95,16 +95,16 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "point.3.connected.trianglepath.dotted")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Screen Knowledge Graph")
                 .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("Build graph entries from screen OCR after you explicitly enable this setting")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -126,18 +126,18 @@ extension SettingsContentView {
             "OCR text stays on this Mac when on-device extraction is available. Screenshots are never uploaded. If you allow cloud fallback, OCR text may be sent to Omi's Gemini proxy."
           )
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
           Text(
             "Graph entries are stored on this Mac and are kept independently of your screen history: deleting a screenshot, or letting it age out of your retention window, does not remove what was already extracted from it. Turning this off stops all further extraction but keeps existing entries — remove them from the knowledge graph to delete them."
           )
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
           HStack {
             Text("Allow cloud fallback")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             Spacer()
 
@@ -157,7 +157,7 @@ extension SettingsContentView {
             HStack {
               Text("Include screen history from before you turned this on")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
 
               Spacer()
 
@@ -175,7 +175,7 @@ extension SettingsContentView {
               "Off by default. Extraction otherwise only reads screen captures taken after you turned it on; this reaches back through screen history you recorded before then."
             )
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           }
         }
       }
