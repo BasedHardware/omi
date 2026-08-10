@@ -521,6 +521,7 @@ def main() -> int:
     errors.extend(check_python_cli_release_version_source())
     errors.extend(check_react_native_release_tags())
     errors.extend(check_firmware_release_metadata())
+    errors.extend(check_firmware_signing_key_boundary())
 
     if errors:
         for error in errors:
@@ -1186,6 +1187,86 @@ def check_react_native_release_tags() -> list[str]:
     if release_tag == "v${version}" and ':tag => "v#{s.version}"' not in podspec_text:
         return ["React Native podspec tag must match release-it tagName v${version}"]
     return []
+
+
+RETIRED_FIRMWARE_SIGNING_KEYS = ("root-rsa-2048.pem", "enc-rsa2048-priv.pem")
+PRIVATE_KEY_HEADER = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----")
+
+
+def check_firmware_signing_key_boundary() -> list[str]:
+    """The CV1 build must fail closed unless an out-of-tree signing key is injected.
+
+    The first two probes are behavioral: they execute the production build script
+    and assert it refuses to reach the toolchain. The remaining probes are static
+    tripwires over checked-in material, which is the only way to assert that no
+    private key is present at the repository tip.
+    """
+    script = ROOT / "omi/firmware/scripts/ci/build-cv1.sh"
+    if not script.exists():
+        return ["omi/firmware/scripts/ci/build-cv1.sh is missing"]
+
+    errors: list[str] = []
+    try:
+        bash = bash_executable()
+    except FileNotFoundError as exc:
+        return [f"firmware signing boundary smoke failed: {exc}"]
+
+    def _run(key_file: str | None) -> subprocess.CompletedProcess[str]:
+        env = {name: value for name, value in os.environ.items() if name != "MCUBOOT_SIGNING_KEY_FILE"}
+        if key_file is not None:
+            env["MCUBOOT_SIGNING_KEY_FILE"] = key_file
+        return subprocess.run(
+            [bash, str(script)],
+            cwd=ROOT,
+            env=env,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    unset = _run(None)
+    if unset.returncode == 0:
+        errors.append("build-cv1.sh must fail when MCUBOOT_SIGNING_KEY_FILE is unset")
+    elif "MCUBOOT_SIGNING_KEY_FILE" not in (unset.stderr or ""):
+        errors.append("build-cv1.sh must name MCUBOOT_SIGNING_KEY_FILE when it refuses to build")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        missing = _run(str(Path(temp_dir) / "absent-signing-key.pem"))
+    if missing.returncode == 0:
+        errors.append("build-cv1.sh must fail when MCUBOOT_SIGNING_KEY_FILE does not resolve to a file")
+
+    firmware = ROOT / "omi/firmware"
+    if firmware.is_dir():
+        for name in RETIRED_FIRMWARE_SIGNING_KEYS:
+            if (firmware / "bootloader/mcuboot" / name).exists():
+                errors.append(f"retired firmware signing key {name} must not be committed")
+        for pem in firmware.rglob("*.pem"):
+            try:
+                text = pem.read_text(encoding="utf-8", errors="strict")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if PRIVATE_KEY_HEADER.search(text):
+                errors.append(f"private key material must not be committed: {pem.relative_to(ROOT).as_posix()}")
+
+    for sysbuild in sorted(firmware.rglob("sysbuild.conf")) if firmware.is_dir() else []:
+        text = sysbuild.read_text(encoding="utf-8")
+        if "SB_CONFIG_BOOT_SIGNATURE_KEY_FILE" in text:
+            errors.append(
+                f"{sysbuild.relative_to(ROOT).as_posix()} must not pin a signing key; "
+                "it is injected at build time via -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE"
+            )
+
+    workflow = ROOT / ".github/workflows/firmware_release.yml"
+    if workflow.exists():
+        workflow_text = workflow.read_text(encoding="utf-8")
+        if "secrets.MCUBOOT_SIGNING_KEY" not in workflow_text:
+            errors.append("firmware_release.yml must inject the MCUBOOT_SIGNING_KEY secret")
+        if "MCUBOOT_SIGNING_KEY_FILE=" not in workflow_text:
+            errors.append("firmware_release.yml must pass MCUBOOT_SIGNING_KEY_FILE into the build container")
+
+    return errors
 
 
 def check_firmware_release_metadata() -> list[str]:

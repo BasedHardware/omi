@@ -441,7 +441,11 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_
     dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
     dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher, "python3 .github/scripts/dispatch_mobile_internal_builds.py", "python3 .github/scripts/other_dispatcher.py")
+    _mutate(
+        dispatcher,
+        "python3 .github/scripts/dispatch_mobile_internal_builds.py",
+        "python3 .github/scripts/other_dispatcher.py",
+    )
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     errors = GUARDS.check_mobile_codemagic_release_triggers()
@@ -458,7 +462,11 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_p
     dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
     dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher_script, 'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")', 'MOBILE_WORKFLOWS = ("ios-internal-auto",)')
+    _mutate(
+        dispatcher_script,
+        'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")',
+        'MOBILE_WORKFLOWS = ("ios-internal-auto",)',
+    )
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     errors = GUARDS.check_mobile_codemagic_release_triggers()
@@ -951,3 +959,81 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
     )
 
     assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]
+
+
+def _firmware_signing_tree(tmp_path: Path, monkeypatch) -> Path:
+    script = tmp_path / "omi/firmware/scripts/ci/build-cv1.sh"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / "omi/firmware/scripts/ci/build-cv1.sh", script)
+    for relative in ("omi/firmware/omi/sysbuild.conf", "omi/firmware/test/sysbuild.conf"):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / relative, target)
+    workflow = tmp_path / ".github/workflows/firmware_release.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/firmware_release.yml", workflow)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return script
+
+
+def test_firmware_signing_boundary_accepts_current_repository():
+    assert GUARDS.check_firmware_signing_key_boundary() == []
+
+
+def test_firmware_signing_boundary_rejects_a_build_that_does_not_fail_closed(tmp_path, monkeypatch):
+    script = _firmware_signing_tree(tmp_path, monkeypatch)
+    script.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+
+    errors = GUARDS.check_firmware_signing_key_boundary()
+
+    assert any("MCUBOOT_SIGNING_KEY_FILE is unset" in error for error in errors), errors
+
+
+def test_firmware_signing_boundary_rejects_an_unvalidated_key_path(tmp_path, monkeypatch):
+    script = _firmware_signing_tree(tmp_path, monkeypatch)
+    script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        ': "${MCUBOOT_SIGNING_KEY_FILE:?MCUBOOT_SIGNING_KEY_FILE must point to an injected signing key}"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+
+    errors = GUARDS.check_firmware_signing_key_boundary()
+
+    assert any("does not resolve to a file" in error for error in errors), errors
+
+
+def test_firmware_signing_boundary_rejects_committed_private_key_material(tmp_path, monkeypatch):
+    _firmware_signing_tree(tmp_path, monkeypatch)
+    key = tmp_path / "omi/firmware/bootloader/mcuboot/root-rsa-2048.pem"
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_text("-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n", encoding="utf-8")
+
+    errors = GUARDS.check_firmware_signing_key_boundary()
+
+    assert any("retired firmware signing key root-rsa-2048.pem" in error for error in errors), errors
+    assert any("private key material must not be committed" in error for error in errors), errors
+
+
+def test_firmware_signing_boundary_rejects_a_sysbuild_pinned_key(tmp_path, monkeypatch):
+    _firmware_signing_tree(tmp_path, monkeypatch)
+    sysbuild = tmp_path / "omi/firmware/omi/sysbuild.conf"
+    sysbuild.write_text(
+        sysbuild.read_text(encoding="utf-8")
+        + 'SB_CONFIG_BOOT_SIGNATURE_KEY_FILE="${APP_DIR}/../bootloader/mcuboot/root-rsa-2048.pem"\n',
+        encoding="utf-8",
+    )
+
+    errors = GUARDS.check_firmware_signing_key_boundary()
+
+    assert any("must not pin a signing key" in error for error in errors), errors
+
+
+def test_firmware_signing_boundary_rejects_a_workflow_without_the_secret(tmp_path, monkeypatch):
+    _firmware_signing_tree(tmp_path, monkeypatch)
+    workflow = tmp_path / ".github/workflows/firmware_release.yml"
+    _mutate(workflow, "secrets.MCUBOOT_SIGNING_KEY", "secrets.SOMETHING_ELSE")
+
+    errors = GUARDS.check_firmware_signing_key_boundary()
+
+    assert any("must inject the MCUBOOT_SIGNING_KEY secret" in error for error in errors), errors
