@@ -21,6 +21,7 @@ def _source(rel_path: str) -> str:
 
 
 def test_sync_router_schedules_classifier_via_start_background_task():
+    """Static checker (source scrape), not behavioral coverage."""
     source = _source('routers/sync.py')
     assert 'start_background_task(' in source
     assert 'trigger_classifier_if_needed(uid, triggered_caps)' in source
@@ -28,6 +29,7 @@ def test_sync_router_schedules_classifier_via_start_background_task():
 
 
 def test_pipeline_schedules_classifier_via_start_background_task():
+    """Static checker (source scrape), not behavioral coverage."""
     source = _source('utils/sync/pipeline.py')
     assert 'start_background_task(' in source
     assert 'trigger_classifier_if_needed(uid, triggered_caps)' in source
