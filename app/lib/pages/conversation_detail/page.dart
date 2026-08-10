@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -199,8 +201,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       provider.setCachedConversation(widget.conversation);
       _providerInitialized = true;
 
-      conversationProvider.groupConversationsByDate();
-
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
       if (result != null) {
@@ -216,9 +216,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final date = provider.selectedDate;
         final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
         if (idx != -1) {
-          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+          // The initial list payload is enough to render the detail page. Fill
+          // in omitted app results after the first usable frame instead of
+          // holding the destination's startup sequence on this request.
+          unawaited(
+            conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx).then((_) {
+              if (!mounted || provider.conversationOrNull?.id != widget.conversation.id) return;
+              provider.updateConversation(widget.conversation.id, date);
+            }),
+          );
+        } else {
+          provider.updateConversation(provider.conversation.id, provider.selectedDate);
         }
-        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt

@@ -142,7 +142,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
-  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
@@ -152,7 +151,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
-  late final List<Widget> _pages;
+  // Keep the IndexedStack slots stable, but defer constructing non-selected
+  // tabs until the user visits them. Once created, a tab remains in the stack
+  // so its scroll position and other state are preserved.
+  final List<Widget?> _pages = List<Widget?>.filled(4, null);
 
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
@@ -161,9 +163,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
 
-  void _initiateApps() {
-    context.read<AppProvider>().getApps();
-    context.read<AppProvider>().getPopularApps();
+  void _ensurePageInitialized(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
+
+    switch (pageIndex) {
+      case 0:
+        _pages[pageIndex] = HomeContentPage(key: _homeContentPageKey);
+        break;
+      case 1:
+        _pages[pageIndex] = ConversationsPage(key: _conversationsPageKey);
+        break;
+      case 2:
+        _pages[pageIndex] = ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal);
+        break;
+      case 3:
+        _pages[pageIndex] = AppsPage(key: _appsPageKey);
+        break;
+    }
+  }
+
+  List<Widget> _buildPages(int selectedIndex) {
+    _ensurePageInitialized(selectedIndex);
+    return [for (final page in _pages) page ?? const SizedBox.shrink()];
   }
 
   void _scrollToTop(int pageIndex) {
@@ -190,11 +211,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _addGoal() {
+    _ensurePageInitialized(1);
     context.read<HomeProvider>().setIndex(1);
-    final conversationsState = _conversationsPageKey.currentState;
-    if (conversationsState != null) {
-      (conversationsState as dynamic).addGoal();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final conversationsState = _conversationsPageKey.currentState;
+      if (conversationsState != null) {
+        (conversationsState as dynamic).addGoal();
+      }
+    });
   }
 
   @override
@@ -270,12 +295,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    _pages = [
-      HomeContentPage(key: _homeContentPageKey),
-      ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
-      AppsPage(key: _appsPageKey),
-    ];
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
@@ -315,6 +334,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     // Home controller
     context.read<HomeProvider>().selectedIndex = homePageIdx;
+    _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
 
     // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
@@ -329,8 +349,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initiateApps();
-
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         await ForegroundUtil.initializeForegroundService();
@@ -728,7 +746,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         // Show slim green call bar on non-home/conversations tabs when a call is active
                         if (homeProvider.selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
-                          child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
+                          child: IndexedStack(
+                            index: homeProvider.selectedIndex,
+                            children: _buildPages(homeProvider.selectedIndex),
+                          ),
                         ),
                       ],
                     ),
@@ -752,6 +773,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     final cp = context.read<ConversationProvider>();
                                     if (cp.showDailySummaries) cp.toggleDailySummaries();
                                   }
+                                  _ensurePageInitialized(index);
                                   home.setIndex(index);
                                 }
                               },

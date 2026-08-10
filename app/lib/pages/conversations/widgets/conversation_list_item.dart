@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -103,35 +104,38 @@ class _ConversationListItemState extends State<ConversationListItem> {
               routeToPage(context, const UsagePage(showUpgradeDialog: true));
               return;
             }
-            // Calculate time difference
-            int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
-
-            // Check if user is searching
-            String searchQuery = provider.previousQuery;
-            if (searchQuery.isNotEmpty) {
-              // Track conversation opened from search
-              PlatformManager.instance.analytics.conversationOpenedFromSearch(
-                conversation: widget.conversation,
-                searchQuery: searchQuery,
-                conversationIndexInResults: widget.conversationIdx,
-              );
-            } else {
-              // Track normal conversation list item click with time difference
-              PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
-                conversation: widget.conversation,
-                conversationIndex: widget.conversationIdx,
-                hoursSinceConversation: hoursSinceConversation,
-              );
-            }
-
             context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
             String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-            provider.onConversationTap(widget.conversation.id);
 
-            var result = await routeToPage(
+            final searchQuery = provider.previousQuery;
+            final resultFuture = routeToPage(
               context,
               ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
             );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              provider.onConversationTap(widget.conversation.id);
+              unawaited(
+                SchedulerBinding.instance.scheduleTask<void>(() {
+                  if (!mounted) return;
+                  if (searchQuery.isNotEmpty) {
+                    PlatformManager.instance.analytics.conversationOpenedFromSearch(
+                      conversation: widget.conversation,
+                      searchQuery: searchQuery,
+                      conversationIndexInResults: widget.conversationIdx,
+                    );
+                  } else {
+                    PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
+                      conversation: widget.conversation,
+                      conversationIndex: widget.conversationIdx,
+                      hoursSinceConversation: DateTime.now().difference(widget.conversation.createdAt).inHours,
+                    );
+                  }
+                }, Priority.idle),
+              );
+            });
+
+            var result = await resultFuture;
             if (context.mounted) {
               // Don't upsert if the conversation was deleted while on the detail page
               if (result is Map && result['deleted'] == true) return;

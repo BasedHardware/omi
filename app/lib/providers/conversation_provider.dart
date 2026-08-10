@@ -266,7 +266,10 @@ class ConversationProvider extends ChangeNotifier {
     if (idx == -1) return;
     if (conversations[idx].isNew) {
       conversations[idx].isNew = false;
-      groupConversationsByDate();
+      // The grouped lists contain the same conversation objects. Rebuilding
+      // and sorting every date here makes a tap pay the full list cost even
+      // though only this item's badge changed.
+      notifyListeners();
     }
   }
 

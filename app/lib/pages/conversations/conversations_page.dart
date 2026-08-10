@@ -26,7 +26,93 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/conversation_list_item.dart';
+import 'widgets/date_list_item.dart';
 import 'widgets/empty_conversations.dart';
+import 'widgets/recording_list_item.dart';
+
+enum _ConversationListRowKind { topSpacer, dateHeader, conversation, recording, groupSpacer }
+
+typedef _ConversationListRow = ({
+  _ConversationListRowKind kind,
+  DateTime date,
+  bool isFirst,
+  ServerConversation? conversation,
+  LocalRecording? recording,
+  int conversationIndex,
+});
+
+List<_ConversationListRow> _buildConversationListRows({
+  required List<DateTime> dates,
+  required Map<DateTime, List<ServerConversation>> conversationsByDate,
+  required Map<DateTime, List<LocalRecording>> recordingsByDate,
+}) {
+  final rows = <_ConversationListRow>[];
+  var hasRenderedDate = false;
+
+  for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
+    final date = dates[dateIndex];
+    final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
+    final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
+    final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
+    if (entries.isEmpty) continue;
+
+    if (!hasRenderedDate) {
+      rows.add((
+        kind: _ConversationListRowKind.topSpacer,
+        date: date,
+        isFirst: true,
+        conversation: null,
+        recording: null,
+        conversationIndex: -1,
+      ));
+    }
+    rows.add((
+      kind: _ConversationListRowKind.dateHeader,
+      date: date,
+      isFirst: !hasRenderedDate,
+      conversation: null,
+      recording: null,
+      conversationIndex: -1,
+    ));
+
+    for (final entry in entries) {
+      final conversation = entry.conversation;
+      final recording = entry.recording;
+      if (conversation != null) {
+        rows.add((
+          kind: _ConversationListRowKind.conversation,
+          date: date,
+          isFirst: false,
+          conversation: conversation,
+          recording: null,
+          conversationIndex: conversations.indexOf(conversation),
+        ));
+      } else {
+        rows.add((
+          kind: _ConversationListRowKind.recording,
+          date: date,
+          isFirst: false,
+          conversation: null,
+          recording: recording,
+          conversationIndex: -1,
+        ));
+      }
+    }
+
+    rows.add((
+      kind: _ConversationListRowKind.groupSpacer,
+      date: date,
+      isFirst: false,
+      conversation: null,
+      recording: null,
+      conversationIndex: -1,
+    ));
+    hasRenderedDate = true;
+  }
+
+  return rows;
+}
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -264,6 +350,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
           ..sort((a, b) => b.compareTo(a));
+        final conversationRows = _buildConversationListRows(
+          dates: mergedDates,
+          conversationsByDate: convoProvider.groupedConversations,
+          recordingsByDate: recordingsByDate,
+        );
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -412,8 +503,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 _buildLoadingShimmer()
               else
                 SliverList(
-                  delegate: SliverChildBuilderDelegate(childCount: mergedDates.length + 1, (context, index) {
-                    if (index == mergedDates.length) {
+                  delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
+                    if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
@@ -437,24 +528,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
                       );
-                    } else {
-                      var date = mergedDates[index];
-                      List<ServerConversation> memoriesForDate =
-                          convoProvider.groupedConversations[date] ?? const <ServerConversation>[];
-                      List<LocalRecording> recordingsForDate = recordingsByDate[date] ?? const <LocalRecording>[];
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (index == 0) const SizedBox(height: 10),
-                          ConversationsGroupWidget(
-                            key: ValueKey(date),
-                            isFirst: index == 0,
-                            conversations: memoriesForDate,
-                            recordings: recordingsForDate,
-                            date: date,
-                          ),
-                        ],
-                      );
+                    }
+
+                    final row = conversationRows[index];
+                    switch (row.kind) {
+                      case _ConversationListRowKind.topSpacer:
+                        return const SizedBox(height: 10);
+                      case _ConversationListRowKind.dateHeader:
+                        return DateListItem(
+                          key: ValueKey('date_${row.date.toIso8601String()}'),
+                          date: row.date,
+                          isFirst: row.isFirst,
+                        );
+                      case _ConversationListRowKind.conversation:
+                        return ConversationListItem(
+                          key: ValueKey(row.conversation!.id),
+                          conversation: row.conversation!,
+                          conversationIdx: row.conversationIndex,
+                          date: row.date,
+                        );
+                      case _ConversationListRowKind.recording:
+                        return RecordingListItem(
+                          key: ValueKey('rec_${row.recording!.id}'),
+                          recording: row.recording!,
+                        );
+                      case _ConversationListRowKind.groupSpacer:
+                        return const SizedBox(height: 10);
                     }
                   }),
                 ),
