@@ -1,12 +1,17 @@
 import Foundation
 
 enum KnowledgeGraphToolSupport {
-  struct ClientGraph {
+  /// The dictionaries are `[String: Any]` because the tool plumbing consumes heterogeneous
+  /// JSON-shaped values, but every value put in them here is an immutable `String` or `[String]`
+  /// built locally in `resolveDiscoveryText` — nothing shared or mutable crosses the boundary.
+  /// `@unchecked` because `Any` erases what the initializer guarantees; the release
+  /// (whole-module) compile otherwise rejects returning this across the async seam.
+  struct ClientGraph: @unchecked Sendable {
     let nodes: [[String: Any]]
     let edges: [[String: Any]]
   }
 
-  enum ResolveOutcome {
+  enum ResolveOutcome: Sendable {
     case success(ClientGraph)
     case failure(String)
   }
