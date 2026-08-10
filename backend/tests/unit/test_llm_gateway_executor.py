@@ -49,21 +49,21 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.response['model'] == LANE_ID
     assert result.response['choices'][0]['message']['content'] == '{"answer":"primary"}'
     assert result.selected_route_artifact_id == ACTIVE_ROUTE
-    assert result.selected_provider == 'openrouter'
-    assert result.selected_model == 'openai/gpt-5.6-luna'
+    assert result.selected_provider == 'openai'
+    assert result.selected_model == 'gpt-5.6-luna'
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert not result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTIVE
-    assert provider.calls[0].request['model'] == 'openai/gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert provider.calls[0].request['stream'] is False
 
 
@@ -79,10 +79,10 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
     await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
-    assert provider.calls[0].request['model'] == 'openai/gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert 'response_format' not in provider.calls[0].request
 
 
@@ -156,9 +156,7 @@ def test_chat_agent_tools_force_reasoning_effort_none_for_luna_chat_completions(
 
     provider_request = provider_request_for(resolved, resolved.active_route.primary)
 
-    # chat_agent is served through OpenRouter's openai/ namespace; the sanitizer follows
-    # the upstream model, so the tools and temperature 400s stay guarded either way.
-    assert provider_request['model'] == 'openai/gpt-5.6-luna'
+    assert provider_request['model'] == 'gpt-5.6-luna'
     assert provider_request['tools']
     assert provider_request.get('reasoning_effort') == 'none'
     assert 'temperature' not in provider_request
@@ -235,7 +233,7 @@ async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
     await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert provider.calls[0].request['temperature'] == 0.1
@@ -251,7 +249,7 @@ async def test_executor_maps_gemini_thinking_budget_before_provider_call():
     await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert provider.calls[0].request['reasoning_effort'] == 'none'
@@ -281,16 +279,11 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     # Primary tried 3 times (max_attempts), then fallback once
-    assert [call.model for call in provider.calls] == [
-        'openai/gpt-5.6-luna',
-        'openai/gpt-5.6-luna',
-        'openai/gpt-5.6-luna',
-        'gpt-4o-mini',
-    ]
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-4o-mini']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
 
 
@@ -313,9 +306,7 @@ async def test_executor_retries_with_only_the_remaining_request_deadline(monkeyp
         ]
     )
 
-    await execute_chat_completion(
-        resolved, omi_credentials(), ProviderRegistry({'openrouter': provider, 'openai': provider})
-    )
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
 
     assert [call.timeout_ms for call in provider.calls] == [100, 25]
 
@@ -336,7 +327,7 @@ async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
     trace = AttemptTrace()
 
     await execute_chat_completion(
-        resolved, omi_credentials(), ProviderRegistry({'openrouter': provider, 'openai': provider}), attempt_trace=trace
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
     )
 
     assert [attempt.outcome for attempt in trace.attempts] == ['error', 'error', 'success']
@@ -370,7 +361,7 @@ async def test_executor_does_not_retry_terminal_provider_failures(failure_class,
         await execute_chat_completion(
             resolved,
             omi_credentials(),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert len(provider.calls) == 1
@@ -399,7 +390,7 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.response['model'] == LANE_ID
@@ -412,7 +403,7 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     assert result.fallback_to_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
-    assert [call.model for call in provider.calls] == ['openai/gpt-5.6-luna', 'gpt-4o-mini']
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-4o-mini']
 
 
 @pytest.mark.asyncio
@@ -421,7 +412,7 @@ async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
     distinct provider/route failover, and must not be classified as
     ACTUAL_FALLBACK — per the PR behavioral contract that actual fallback
     requires a *subsequent provider/route* success."""
-    identical_ref = ProviderRef(provider='openrouter', model='openai/gpt-5.6-luna')
+    identical_ref = ProviderRef(provider='openai', model='gpt-5.6-luna')
     config = config_with_active_route(active_route_with_fallbacks([identical_ref]))
     resolved = resolve_chat_completion_route(config, valid_request())
     provider = FakeChatCompletionProvider(
@@ -434,16 +425,16 @@ async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
-    assert result.selected_model == 'openai/gpt-5.6-luna'
+    assert result.selected_model == 'gpt-5.6-luna'
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert result.route_serving_class == RouteServingClass.ACTIVE
-    assert [call.model for call in provider.calls] == ['openai/gpt-5.6-luna', 'openai/gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
 @pytest.mark.asyncio
@@ -469,7 +460,7 @@ async def test_executor_does_not_fallback_for_non_eligible_failures(failure_clas
         await execute_chat_completion(
             resolved,
             omi_credentials(),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert exc_info.value.failure_class == failure_class
@@ -490,19 +481,19 @@ async def test_executor_uses_lkg_only_when_active_route_policy_allows():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.response['model'] == LANE_ID
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'openai/gpt-5.6-luna'
+    assert result.selected_model == 'gpt-5.6-luna'
     assert result.fallback_used
     assert result.fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT
     assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
     assert result.fallback_to_route_artifact_id == LKG_ROUTE
     assert result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
-    assert [call.model for call in provider.calls] == ['openai/gpt-5.6-luna', 'openai/gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
 @pytest.mark.asyncio
@@ -524,7 +515,7 @@ async def test_executor_does_not_use_lkg_when_active_route_policy_rejects_failur
         await execute_chat_completion(
             resolved,
             omi_credentials(),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert exc_info.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
@@ -546,11 +537,11 @@ async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
         await execute_chat_completion(
             resolved,
             omi_credentials(),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert exc_info.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
-    assert [call.model for call in provider.calls] == ['openai/gpt-5.6-luna', 'openai/gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
 @pytest.mark.asyncio
@@ -566,7 +557,7 @@ async def test_unsupported_omi_paid_provider_is_visible_and_does_not_fallback():
         await execute_chat_completion(
             resolved,
             omi_credentials(),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert exc_info.value.failure_class == FailureClass.INVALID_CONFIG
@@ -589,7 +580,7 @@ async def test_byok_missing_key_and_unsupported_provider_fail_without_fallback_o
         await execute_chat_completion(
             resolved,
             build_byok_credential_context(ServiceCaller(name='backend'), {'openai': ''}),
-            ProviderRegistry({'openrouter': FakeChatCompletionProvider(), 'openai': FakeChatCompletionProvider()}),
+            ProviderRegistry({'openai': FakeChatCompletionProvider()}),
         )
 
     assert exc_info.value.failure_class == FailureClass.BYOK_UNSUPPORTED_PROVIDER
@@ -600,7 +591,7 @@ async def test_byok_missing_key_and_unsupported_provider_fail_without_fallback_o
         await execute_chat_completion(
             resolved,
             build_byok_credential_context(ServiceCaller(name='backend'), {'openai': ''}),
-            ProviderRegistry({'openrouter': FakeChatCompletionProvider(), 'openai': FakeChatCompletionProvider()}),
+            ProviderRegistry({'openai': FakeChatCompletionProvider()}),
         )
 
     assert missing_key_info.value.failure_class == FailureClass.MISSING_BYOK_KEY
@@ -620,8 +611,8 @@ async def test_raw_byok_key_is_not_in_provider_error_repr_or_dump():
     with pytest.raises(GatewayCredentialFailureError) as exc_info:
         await execute_chat_completion(
             resolved,
-            build_byok_credential_context(ServiceCaller(name='backend'), {'openrouter': raw_key}),
-            ProviderRegistry({'openrouter': provider, 'openai': provider}),
+            build_byok_credential_context(ServiceCaller(name='backend'), {'openai': raw_key}),
+            ProviderRegistry({'openai': provider}),
         )
 
     assert raw_key not in repr(exc_info.value)
@@ -649,18 +640,18 @@ async def test_shadow_active_route_serves_lkg_not_active():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'openai/gpt-5.6-luna'
+    assert result.selected_model == 'gpt-5.6-luna'
     assert result.used_lkg
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert result.route_serving_class == RouteServingClass.LKG
-    assert provider.calls[0].request['model'] == 'openai/gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
 
@@ -681,11 +672,11 @@ async def test_disabled_active_route_serves_lkg_not_active():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'openai/gpt-5.6-luna'
+    assert result.selected_model == 'gpt-5.6-luna'
     assert result.used_lkg
 
 
@@ -705,7 +696,7 @@ async def test_canary_active_route_with_percent_zero_serves_lkg():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
@@ -768,7 +759,7 @@ async def test_canary_route_at_100_percent_serves_active():
     result = await execute_chat_completion(
         resolved,
         omi_credentials(),
-        ProviderRegistry({'openrouter': provider, 'openai': provider}),
+        ProviderRegistry({'openai': provider}),
     )
 
     assert result.selected_route_artifact_id == ACTIVE_ROUTE

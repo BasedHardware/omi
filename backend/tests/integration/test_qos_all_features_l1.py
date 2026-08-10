@@ -25,12 +25,13 @@ from utils.llm.clients import (
     get_llm,
     get_provider,
     _active_profile_name,
+    anthropic_client,
 )
 
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
 
 # Features that can't use get_llm() — need their own client
-_ANTHROPIC_FEATURES = set()
+_ANTHROPIC_FEATURES = {'chat_agent'}
 _PERPLEXITY_FEATURES = {'web_search'}
 _SKIP_GET_LLM = _ANTHROPIC_FEATURES | _PERPLEXITY_FEATURES
 
@@ -72,6 +73,21 @@ class TestPremiumAllFeatures:
         text = response.content.strip() if hasattr(response, 'content') else str(response).strip()
         assert text, f"FAIL {feature} ({model}/{provider}) returned empty"
         print(f"  PASS {feature}: {model} [{provider}] -> {text[:60]}")
+
+    @pytest.mark.asyncio
+    async def test_premium_chat_agent(self):
+        """Test chat_agent via Anthropic client."""
+        if _active_profile_name != 'premium':
+            pytest.skip("MODEL_QOS is not premium")
+        model = get_model('chat_agent')
+        response = await anthropic_client.messages.create(
+            model=model,
+            max_tokens=50,
+            messages=[{"role": "user", "content": SIMPLE_PROMPT}],
+        )
+        text = response.content[0].text.strip()
+        assert text, f"FAIL chat_agent ({model}) returned empty"
+        print(f"  PASS chat_agent: {model} [anthropic] -> {text[:60]}")
 
     def test_premium_web_search(self):
         """Test web_search via Perplexity."""

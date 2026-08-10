@@ -12,7 +12,6 @@ from typing import Any, cast
 
 from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata, UsageStatus
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
-from utils.llm.openrouter_model_names import openrouter_byok_vendor_route
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
@@ -39,7 +38,6 @@ from llm_gateway.gateway.schemas import (
     RouteServingClass,
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
-from utils.llm.openrouter_model_catalog import apply_openrouter_completion_clamp
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -255,8 +253,7 @@ async def _execute_route(
     current_fallback_reason = fallback_reason
     failed_provider_refs: list[ProviderRef] = []
 
-    for index, configured_ref in enumerate(refs):
-        provider_ref = _byok_vendor_provider_ref(configured_ref, credential_context)
+    for index, provider_ref in enumerate(refs):
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             error = _unsupported_provider_error(provider_ref, credential_context)
@@ -323,28 +320,6 @@ async def _execute_route(
     if last_error is not None:
         raise last_error
     raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
-
-
-def _byok_vendor_provider_ref(provider_ref: ProviderRef, credential_context: CredentialContext) -> ProviderRef:
-    """Serve BYOK traffic on an OpenRouter route with the vendor key the caller supplied.
-
-    An OpenRouter-hosted OpenAI-family model is billed to the user's own OpenAI key, so the
-    backend forwards ``X-Omi-Byok-OpenAI-Key`` for these lanes
-    (``utils.llm.clients._effective_byok_provider``). Checking the route's literal
-    ``openrouter`` provider would fail closed with ``missing_byok_key`` on a key the user
-    did supply, so the route follows the key to the vendor and drops the vendor prefix.
-
-    Managed (omi_paid) traffic is untouched: it keeps using Omi's OpenRouter account.
-    """
-    if credential_context.mode != CredentialMode.BYOK:
-        return provider_ref
-    vendor_route = openrouter_byok_vendor_route(provider_ref.provider, provider_ref.model)
-    if vendor_route is None:
-        return provider_ref
-    vendor_provider, vendor_model = vendor_route
-    if not credential_context.has_provider_key(vendor_provider):
-        return provider_ref
-    return ProviderRef(provider=vendor_provider, model=vendor_model)
 
 
 async def _attempt_provider(
@@ -454,17 +429,12 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    model_basename = provider_ref.model.rsplit('/', 1)[-1]
-    if not model_basename.startswith('gpt-5.6'):
+    if not provider_ref.model.startswith('gpt-5.6'):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
-    return apply_openrouter_completion_clamp(
-        provider_request,
-        provider=provider_ref.provider,
-        model=provider_ref.model,
-    )
+    return provider_request
 
 
 def _sanitize_openai_chat_completions_request(
@@ -477,16 +447,9 @@ def _sanitize_openai_chat_completions_request(
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
     Temperature must also stay at the model default (1).
     """
-    # The same upstream model is reachable directly and through OpenRouter's
-    # ``openai/`` namespace, and both raise the 400s below — so the guard follows the
-    # model, not just the direct provider.
-    model = provider_ref.model
-    if provider_ref.provider == 'openai':
-        pass
-    elif provider_ref.provider == 'openrouter' and model.startswith('openai/'):
-        model = model.split('/', 1)[1]
-    else:
+    if provider_ref.provider != 'openai':
         return
+    model = provider_ref.model
     if not model.startswith('gpt-5.6'):
         return
 
