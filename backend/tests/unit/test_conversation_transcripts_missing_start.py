@@ -42,3 +42,39 @@ def test_transcripts_tolerate_segment_missing_start(monkeypatch):
     assert result['soniox'] == result['deepgram']
     assert result['speechmatics'] == result['deepgram']
     assert result['whisperx'] == result['deepgram']
+
+
+class _CollectionPath:
+    def __init__(self, streams, name=None):
+        self._streams = streams
+        self._name = name
+
+    def collection(self, name):
+        return _CollectionPath(self._streams, name)
+
+    def document(self, _name):
+        return self
+
+    def stream(self):
+        return iter([_snap(doc) for doc in self._streams.get(self._name, [])])
+
+
+def test_transcripts_return_prerecorded_segments_sorted_by_start(monkeypatch):
+    streams = {
+        'deepgram_streaming': [{'start': 4.0, 'text': 'deepgram'}],
+        'soniox_streaming': [{'start': 3.0, 'text': 'soniox'}],
+        'speechmatics_streaming': [{'start': 2.0, 'text': 'speechmatics'}],
+        'fal_whisperx': [{'start': 5.0, 'text': 'legacy'}],
+        'prerecorded': [
+            {'start': 3.0, 'text': 'later'},
+            {'start': 1.0, 'text': 'earlier'},
+        ],
+    }
+    monkeypatch.setattr(conversations_db, 'db', _CollectionPath(streams))
+
+    result = conversations_db.get_conversation_transcripts_by_model('u1', 'c1')
+
+    assert result['prerecorded'] == [
+        {'start': 1.0, 'text': 'earlier'},
+        {'start': 3.0, 'text': 'later'},
+    ]
