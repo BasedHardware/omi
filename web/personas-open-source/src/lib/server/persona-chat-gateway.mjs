@@ -58,6 +58,13 @@ export async function resolvePersonaIdentity(
   return isAuthenticated ? { uid: user.localId } : null;
 }
 
+export function assertPersonaUidMatch(identity, requestedUid) {
+  if (!identity?.uid || !requestedUid || identity.uid !== requestedUid) {
+    throw new PersonaAuthenticationError();
+  }
+  return identity.uid;
+}
+
 export function personaLaneForIdentity(identity) {
   return identity ? AUTHENTICATED_LANE : UNAUTHENTICATED_LANE;
 }

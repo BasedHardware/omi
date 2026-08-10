@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
-import Redis from 'ioredis';
-
-// ... Redis client config ...
+import {
+  PersonaAuthenticationError,
+  PersonaGatewayUnavailableError,
+  assertPersonaUidMatch,
+  resolvePersonaIdentity,
+} from '@/lib/server/persona-chat-gateway.mjs';
 
 interface PostBody {
   uid: string;
@@ -9,15 +12,34 @@ interface PostBody {
 }
 
 export async function POST(req: Request) {
-  const connectedRedis = false;
   try {
     console.log('[store-facts] Received request');
-    const { uid, memories } = (await req.json()) as PostBody;
+    let identity;
+    try {
+      identity = await resolvePersonaIdentity(req.headers.get('authorization'));
+    } catch (error: unknown) {
+      if (error instanceof PersonaAuthenticationError) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      if (error instanceof PersonaGatewayUnavailableError) {
+        return NextResponse.json({ error: 'Auth unavailable' }, { status: 503 });
+      }
+      throw error;
+    }
+
+    const { uid: requestedUid, memories } = (await req.json()) as PostBody;
     console.log(
-      `[store-facts] Processing request for UID: ${uid}, Memories count: ${memories?.length}`,
+      `[store-facts] Processing request for UID: ${requestedUid}, Memories count: ${memories?.length}`,
     );
 
-    if (!uid || !Array.isArray(memories) || memories.length === 0) {
+    let uid: string;
+    try {
+      uid = assertPersonaUidMatch(identity, requestedUid);
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!Array.isArray(memories) || memories.length === 0) {
       console.warn('[store-facts] Invalid request body:', { uid, memories });
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
