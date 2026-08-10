@@ -42,19 +42,29 @@ while (( $# )); do
 done
 
 case "$route" in
-  home|memories|tasks|conversations|listen|chat|settings) ;;
+  home|memories|conversations|tasks|folders|chat|settings|listen) ;;
   *)
-    echo "ERROR: --route must be one of home|memories|tasks|conversations|listen|chat|settings" >&2
+    echo "ERROR: --route must be one of home|memories|conversations|tasks|folders|chat|settings|listen" >&2
     exit 2
     ;;
 esac
 
-case "$api_base" in
-  https://api.omi.me|https://api.omi.me/|https://api.omi.me/*)
-    echo "ERROR: production api.omi.me is forbidden for this QA launcher" >&2
+if normalized_api_base="$(node "$here/scripts/qa-url-policy.mjs" api "$api_base" 2>/dev/null)"; then
+  api_base="$normalized_api_base"
+else
+  echo "ERROR: API base URL is invalid or forbidden for this QA launcher." >&2
+  exit 1
+fi
+
+token_issuer="${OMI_DEV_TOKEN_ISSUER_URL:-}"
+if [[ -n "$token_issuer" ]]; then
+  if normalized_token_issuer="$(node "$here/scripts/qa-url-policy.mjs" issuer "$token_issuer" 2>/dev/null)"; then
+    token_issuer="$normalized_token_issuer"
+  else
+    echo "ERROR: dev token issuer URL is invalid or forbidden for this QA launcher." >&2
     exit 1
-    ;;
-esac
+  fi
+fi
 
 app_name="${OMI_APP_NAME:-omi-on-fe-shells}"
 # Never, ever collide with a shipping bundle. Scratch names only.
@@ -86,15 +96,18 @@ export OMI_APP_NAME="$app_name"
 export OMI_SURFACES_DIST="$dist"
 export OMI_SURFACE_PORT="$port"
 
+# Inherited overrides would let main.swift bypass the frozen candidate origin
+# or load stale/remote content. The QA launcher owns the surface selection.
+unset OMI_SURFACE_URL OMI_SURFACE_PATH
 export OMI_SURFACE_QUERY="route=${route}&platform=desktop"
 export OMI_API_BASE_URL="$api_base"
 
 token="${OMI_API_TOKEN:-}"
-if [[ -z "$token" && -n "${OMI_DEV_TOKEN_ISSUER_URL:-}" ]]; then
+if [[ -z "$token" && -n "$token_issuer" ]]; then
   echo "MODE: LIVE — no OMI_API_TOKEN set; requesting one from the dev issuer."
-  token="$(curl -fsS --max-time 5 -X POST "$OMI_DEV_TOKEN_ISSUER_URL" || true)"
+  token="$(curl -fsS --max-time 5 -X POST "$token_issuer" || true)"
   if [[ -z "$token" ]]; then
-    echo "ERROR: dev token issuer at $OMI_DEV_TOKEN_ISSUER_URL returned nothing." >&2
+    echo "ERROR: dev token issuer returned no token." >&2
     exit 1
   fi
 fi
