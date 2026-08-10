@@ -45,6 +45,17 @@ export type ChatSendResult =
     }
   | { ok: false; failure: WriteFailure };
 
+export interface ChatGenerationReconnectRequest {
+  readonly method: "GET";
+  readonly path: string;
+  readonly headers: { readonly "Last-Event-ID": string };
+}
+
+/** Auth/base URL stay host-owned; this seam makes the SSE cursor non-optional. */
+export interface ChatGenerationReconnectTransport {
+  request(request: ChatGenerationReconnectRequest): Promise<import("@omi-core/contracts").HttpResponse>;
+}
+
 /** Structural stand-in for sync PendingOp — avoids an adapters-platform→sync dep. */
 export interface ChatTransportOp {
   opId: string;
@@ -347,8 +358,13 @@ export function wireToChatGenerationFrame(raw: unknown): ChatGenerationFrame | n
  * Parse a complete SSE transcript. Every data event needs an opaque id and its
  * event name must agree with `data.kind`; comments/heartbeats are ignored.
  */
-export function parseChatGenerationEventStream(text: string): readonly ChatGenerationFrame[] | null {
-  const frames: ChatGenerationFrame[] = [];
+interface ParsedChatGenerationEvent {
+  readonly id: string;
+  readonly frame: ChatGenerationFrame;
+}
+
+function parseChatGenerationEvents(text: string): readonly ParsedChatGenerationEvent[] | null {
+  const events: ParsedChatGenerationEvent[] = [];
   const seenEventIds = new Set<string>();
   for (const block of text.replaceAll("\r\n", "\n").split("\n\n")) {
     if (block.trim() === "") continue;
@@ -373,9 +389,13 @@ export function parseChatGenerationEventStream(text: string): readonly ChatGener
     }
     const frame = wireToChatGenerationFrame(raw);
     if (frame === null || eventName !== frame.kind) return null;
-    frames.push(frame);
+    events.push({ id: eventId, frame });
   }
-  return frames;
+  return events;
+}
+
+export function parseChatGenerationEventStream(text: string): readonly ChatGenerationFrame[] | null {
+  return parseChatGenerationEvents(text)?.map((event) => event.frame) ?? null;
 }
 
 function parseChatErrorCode(raw: unknown): string | null {
@@ -406,6 +426,7 @@ function malformedSuccess(detail: string): ChatSendResult {
 export async function sendChatMessageOp(
   http: HttpClient,
   op: ChatMessageOp,
+  reconnect?: ChatGenerationReconnectTransport,
 ): Promise<ChatSendResult> {
   if (op.op !== "create") {
     return {
@@ -441,10 +462,12 @@ export async function sendChatMessageOp(
   if (response.text === undefined) {
     return malformedSuccess(`create chat message ${op.id}: successful response omitted SSE bytes`);
   }
-  const frames = parseChatGenerationEventStream(response.text);
+  const initialEvents = parseChatGenerationEvents(response.text);
+  let events = initialEvents === null ? null : [...initialEvents];
+  let frames = events?.map((event) => event.frame) ?? null;
   if (
     frames === null ||
-    frames.length < 2 ||
+    frames.length < 1 ||
     frames[0]?.kind !== "accepted" ||
     frames.slice(1).some((frame) => frame.kind === "accepted")
   ) {
@@ -461,10 +484,44 @@ export async function sendChatMessageOp(
       },
     };
   }
-  const terminal = frames.at(-1);
-  const terminalCount = frames.filter(
+  let terminal = frames.at(-1);
+  let terminalCount = frames.filter(
     (frame) => frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled",
   ).length;
+  if (
+    terminalCount === 0 &&
+    reconnect !== undefined &&
+    events !== null &&
+    events.length > 0
+  ) {
+    const resumed = await reconnect.request({
+      method: "GET",
+      path: platformChatGenerationEventsPath(accepted.generation.id),
+      headers: { "Last-Event-ID": events.at(-1)!.id },
+    });
+    if (resumed.status !== 200 || resumed.text === undefined) {
+      return malformedSuccess(
+        `create chat message ${op.id}: generation reconnect did not return SSE bytes`,
+      );
+    }
+    const resumedEvents = parseChatGenerationEvents(resumed.text);
+    if (resumedEvents === null) {
+      return malformedSuccess(`create chat message ${op.id}: malformed generation reconnect`);
+    }
+    const observedIds = new Set(events.map((event) => event.id));
+    const freshEvents = resumedEvents.filter((event) => !observedIds.has(event.id));
+    if (freshEvents[0]?.frame.kind !== "snapshot") {
+      return malformedSuccess(
+        `create chat message ${op.id}: generation reconnect omitted its leading snapshot`,
+      );
+    }
+    events = [...events, ...freshEvents];
+    frames = events.map((event) => event.frame);
+    terminal = frames.at(-1);
+    terminalCount = frames.filter(
+      (frame) => frame.kind === "done" || frame.kind === "failed" || frame.kind === "cancelled",
+    ).length;
+  }
   if (
     terminal === undefined ||
     terminalCount !== 1 ||
@@ -526,11 +583,12 @@ function contentHash(ids: readonly string[]): string {
 /** Bind the ratified create/replay operation to the sync Transport interface. */
 export function chatMessagesTransport(
   http: HttpClient,
+  reconnect?: ChatGenerationReconnectTransport,
 ): { send(op: ChatTransportOp): Promise<ChatSendResult> } {
   return {
     async send(op: ChatTransportOp): Promise<ChatSendResult> {
       const domainOp = JSON.parse(op.payload) as ChatMessageOp;
-      return sendChatMessageOp(http, domainOp);
+      return sendChatMessageOp(http, domainOp, reconnect);
     },
   };
 }
