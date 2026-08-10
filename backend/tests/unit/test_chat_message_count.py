@@ -151,6 +151,6 @@ def test_cache_aligned_history_without_session_is_scoped_to_app():
 
     scoped_filters = [call.kwargs["filter"] for call in messages_ref.where.call_args_list]
     assert [(filter_.field_path, filter_.value) for filter_ in scoped_filters] == [
-        ("app_id", "app-1"),
+        ("plugin_id", "app-1"),
         ("reported", True),
     ]

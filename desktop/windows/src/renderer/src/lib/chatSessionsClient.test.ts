@@ -32,6 +32,7 @@ const wireSession = {
   created_at: '2026-07-14T10:00:00Z',
   updated_at: '2026-07-14T12:00:00Z',
   app_id: null,
+  plugin_id: null,
   message_count: 4,
   starred: true
 }
@@ -63,7 +64,7 @@ describe('createSession', () => {
   })
 
   it('translates camelCase title/appId into the snake_case body', async () => {
-    api.post.mockResolvedValue({ data: { ...wireSession, app_id: 'app-x' } })
+    api.post.mockResolvedValue({ data: { ...wireSession, app_id: 'app-x', plugin_id: 'app-x' } })
 
     const session = await createSession({ title: 'Docs', appId: 'app-x' })
 

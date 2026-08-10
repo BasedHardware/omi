@@ -195,7 +195,7 @@ def filter_messages(messages, app_id):
     logger.info(f'filter_messages {len(messages)} {app_id}')
     collected = []
     for message in messages:
-        if message.sender == MessageSender.ai and message.app_id != app_id:
+        if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
         collected.append(message)
     logger.info(f'filter_messages output: {len(collected)}')

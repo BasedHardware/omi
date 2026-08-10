@@ -497,7 +497,7 @@ def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
         .collection('users')
         .document(uid)
         .collection('chat_sessions')
-        .where('app_id', '==', None)
+        .where('plugin_id', '==', None)
         .limit(1)
     )
     for session in session_ref.stream():
@@ -506,7 +506,7 @@ def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
     session_data: Dict[str, Any] = {
         'id': str(uuid.uuid4()),
         'created_at': datetime.now(timezone.utc),
-        'app_id': None,
+        'plugin_id': None,
         'message_ids': [],
         'file_ids': [],
     }
@@ -543,7 +543,7 @@ def _fetch_chat_history(uid: str, chat_session_id: str) -> List[Dict[str, Any]]:
         .collection('users')
         .document(uid)
         .collection('messages')
-        .where('app_id', '==', None)
+        .where('plugin_id', '==', None)
         .where('chat_session_id', '==', chat_session_id)
         .order_by('created_at', direction=Query.DESCENDING)
         .limit(HISTORY_LIMIT)
@@ -574,7 +574,7 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
         'text': store_text,
         'created_at': datetime.now(timezone.utc),
         'sender': sender,
-        'app_id': None,
+        'plugin_id': None,
         'type': 'text',
         'from_external_integration': False,
         'memories_id': [],

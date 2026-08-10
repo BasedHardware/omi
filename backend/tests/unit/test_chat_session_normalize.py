@@ -25,7 +25,7 @@ def test_normalize_fills_missing_required_fields_and_validates():
     # A doc as returned by the list query: only id + updated_at + plugin_id are
     # guaranteed present; title/created_at/message_count/starred are missing.
     now = datetime.now(timezone.utc)
-    raw = {'id': 'sess-1', 'updated_at': now, 'app_id': None}
+    raw = {'id': 'sess-1', 'updated_at': now, 'plugin_id': None}
 
     normalized = _normalize_chat_session(raw)
 
@@ -39,7 +39,7 @@ def test_normalize_fills_missing_required_fields_and_validates():
 
 
 def test_normalize_fills_missing_timestamps_with_utc_now():
-    raw = {'id': 'sess-legacy', 'app_id': None}
+    raw = {'id': 'sess-legacy', 'plugin_id': None}
 
     normalized = _normalize_chat_session(raw)
 
@@ -52,7 +52,7 @@ def test_normalize_fills_missing_timestamps_with_utc_now():
 def test_get_chat_session_by_id_injects_document_id(monkeypatch):
     session_id = 'doc-key-123'
     now = datetime.now(timezone.utc)
-    session_data = {'updated_at': now, 'app_id': None}
+    session_data = {'updated_at': now, 'plugin_id': None}
 
     mock_doc = MagicMock()
     mock_doc.exists = True

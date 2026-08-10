@@ -39,6 +39,8 @@ interface ChatSessionWire {
   created_at: string
   updated_at: string
   app_id?: string | null
+  // Backend also echoes `plugin_id` (mirror of app_id) — redundant, ignored.
+  plugin_id?: string | null
   message_count: number
   starred: boolean
 }

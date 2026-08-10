@@ -81,7 +81,7 @@ def count_memory_prompt_plugins_trigger() -> None:
         messages = chat_db.get_messages(uid, limit=1000)
         print('user', uid, 'messages', len(messages))
         for message in messages:
-            if pid := message.get('app_id'):
+            if pid := message.get('plugin_id'):
                 record_app_usage(
                     uid,
                     pid,
