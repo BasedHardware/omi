@@ -1567,7 +1567,7 @@ async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(aut
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
-    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
+    from utils.llm.app_generator import generate_app_from_prompt
 
     prompt = data.prompt.strip()
     if not prompt:

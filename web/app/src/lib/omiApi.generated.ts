@@ -639,6 +639,15 @@ export interface AuthStep {
   url: string;
 }
 
+export interface AvailableLanguage {
+  code: string;
+  name: string;
+}
+
+export interface AvailableLanguagesResponse {
+  languages: Array<AvailableLanguage>;
+}
+
 export interface AvailablePlansResponse {
   plans: Array<routers__payment__PricingOption>;
 }
@@ -4062,6 +4071,8 @@ export interface OmiApiSchemas {
   "AudioPrecacheResponse": AudioPrecacheResponse;
   "AudioUrlsResponse": AudioUrlsResponse;
   "AuthStep": AuthStep;
+  "AvailableLanguage": AvailableLanguage;
+  "AvailableLanguagesResponse": AvailableLanguagesResponse;
   "AvailablePlansResponse": AvailablePlansResponse;
   "BYOKActivateRequest": BYOKActivateRequest;
   "BYOKActiveResponse": BYOKActiveResponse;
@@ -7425,6 +7436,16 @@ export interface OmiApiPaths {
       operationId: "update_assistant_settings_v1_users_assistant_settings_patch";
       responses: {
         "200": AssistantSettingsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/available-languages": {
+    get: {
+      operationId: "get_available_languages_v1_users_available_languages_get";
+      responses: {
+        "200": AvailableLanguagesResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14104,6 +14125,25 @@ export async function update_assistant_settings_v1_users_assistant_settings_patc
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_available_languages_v1_users_available_languages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AvailableLanguagesResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/available-languages`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summaries_v1_users_daily_summaries_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummariesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries`;
@@ -16405,4 +16445,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 398 client methods generated.
+// Total: 399 client methods generated.
