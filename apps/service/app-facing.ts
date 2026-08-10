@@ -23,6 +23,7 @@ import { createServedCounter, type ServedCounter } from "./observability/served-
 import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import { registerConversationRoutes } from "./routes/conversations";
+import { registerFolderRoutes } from "./routes/folders";
 import { registerMemoryRoutes } from "./routes/memories";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaControlRoutes } from "./routes/qa-control";
@@ -194,7 +195,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const stores = options.stores ?? createInMemoryLocalServiceStores();
   const conversations = stores.conversations;
   const folders = stores.folders;
+  let nextFolderId = 1;
   const reseed = (): void => {
+    nextFolderId = 1;
     resetQaSnapshot(options.db);
     seedQaSnapshot(options.db, {
       owner_account_id: options.ownerAccountId,
@@ -360,6 +363,13 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     store: conversations,
     counter,
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+  });
+  registerFolderRoutes(app, {
+    resolvePrincipal,
+    store: folders,
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    createId: () => `qa-folder-created-${String(nextFolderId++).padStart(3, "0")}`,
   });
   registerTasksOpsRoutes(app, {
     resolvePrincipal,
