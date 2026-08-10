@@ -325,6 +325,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         apps_results=apps_results,
                         status=ConversationStatus.completed,
                         discarded=False,
+                        imported=True,
                     )
 
                     # Save directly to database (skip all AI processing)

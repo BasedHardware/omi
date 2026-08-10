@@ -1021,6 +1021,31 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_conversations_by_source(uid: str, source: str) -> int:
+    """Delete conversations matching a specific source and that were explicitly imported.
+
+    Args:
+        uid: User ID
+        source: The source to match (e.g., 'limitless')
+
+    Returns:
+        Number of conversations deleted
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    # Query for matching conversations
+    query = conversations_ref.where(filter=FieldFilter('source', '==', source))
+    query = query.where(filter=FieldFilter('imported', '==', True))
+
+    deleted_count = 0
+    for doc in query.stream():
+        delete_conversation(uid, doc.id)
+        deleted_count += 1
+
+    return deleted_count
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
