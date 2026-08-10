@@ -3,7 +3,7 @@
  * PostHog via posthogResults + Stripe via computeRevenue. No Prometheus / no M1 / no habit.
  */
 
-import { posthogResults } from "@/lib/posthog";
+import { posthogResultsFresh } from "@/lib/posthog";
 import { computeRevenue } from "@/app/api/omi/stats/revenue/route";
 import { getPayload, setPayload } from "@/lib/payload-cache";
 
@@ -141,7 +141,8 @@ export function daysUntilMillion(
   // completed-day boundary as dailyNew. If seriesTotal (persons_total_completed)
   // rejected, leave the series empty rather than falling back to the live total,
   // which includes today's partial signups and would inflate every historical point.
-  const seriesAnchor = opts.seriesTotal != null ? Math.round(opts.seriesTotal) : null;
+  const seriesAnchor =
+    opts.seriesTotal != null ? Math.round(opts.seriesTotal) : null;
   if (seriesAnchor != null && daysSorted.length) {
     let running = seriesAnchor;
     const rev: SeriesPoint[] = [];
@@ -213,8 +214,16 @@ function posthogCreds(): {
 async function ph(
   creds: { host: string; projectId: string; apiKey: string },
   query: string,
+  staleCounter: { count: number },
 ): Promise<unknown[]> {
-  return posthogResults(creds.host, creds.projectId, creds.apiKey, query);
+  const { results, stale } = await posthogResultsFresh(
+    creds.host,
+    creds.projectId,
+    creds.apiKey,
+    query,
+  );
+  if (stale) staleCounter.count++;
+  return results;
 }
 
 function emptyHours(): Record<string, number | null> {
@@ -398,6 +407,7 @@ export async function buildTvSnapshot(opts: {
   });
 
   let posthogOk = false;
+  const posthogStale = { count: 0 };
   let activity: TvSnapshot["activity"] = {
     byHours: {
       "12": { total: null, platforms: {} },
@@ -534,15 +544,15 @@ WHERE created_at >= now() - INTERVAL 30 DAY AND created_at < toStartOfDay(now())
 GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
 
     const results = await Promise.allSettled([
-      ph(creds, qActivityPlat),
-      ph(creds, qActivity10m),
-      ph(creds, qFeaturesPlat),
-      ph(creds, qFeatures10m),
-      ph(creds, qPersonsTotal),
-      ph(creds, qPersonsDaily),
-      ph(creds, qActivityTotals),
-      ph(creds, qFeaturesTotals),
-      ph(creds, qPersonsTotalCompleted),
+      ph(creds, qActivityPlat, posthogStale),
+      ph(creds, qActivity10m, posthogStale),
+      ph(creds, qFeaturesPlat, posthogStale),
+      ph(creds, qFeatures10m, posthogStale),
+      ph(creds, qPersonsTotal, posthogStale),
+      ph(creds, qPersonsDaily, posthogStale),
+      ph(creds, qActivityTotals, posthogStale),
+      ph(creds, qFeaturesTotals, posthogStale),
+      ph(creds, qPersonsTotalCompleted, posthogStale),
     ]);
 
     const labels = [
@@ -695,6 +705,11 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       results[5].status === "fulfilled" ||
       results[6].status === "fulfilled" ||
       results[7].status === "fulfilled";
+    if (posthogStale.count > 0) {
+      warnings.push(
+        `posthog: ${posthogStale.count} quer${posthogStale.count === 1 ? "y" : "ies"} served from stale cache`,
+      );
+    }
   }
 
   // Ensure Stripe has settled before evaluating sources / building the
