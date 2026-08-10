@@ -224,7 +224,7 @@ async def extract_knowledge_graph(
     )
     if extraction is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge_graph_extract_failed")
-    graph = getattr(kg_mod, "extraction_to_client_graph")(extraction)
+    graph = getattr(kg_mod, "extraction_to_client_graph")(extraction, uid=uid)
     return ExtractKnowledgeGraphResponse(nodes=graph['nodes'], edges=graph['edges'])
 
 
