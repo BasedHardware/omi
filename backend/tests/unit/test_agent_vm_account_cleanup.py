@@ -63,9 +63,7 @@ def test_owner_disk_label():
 @patch('services.users.agent_vm_account_cleanup.users_db')
 @patch('services.users.agent_vm_account_cleanup.read_agent_vm_migration_journals')
 @patch('services.users.agent_vm_account_cleanup._migration_reconcile_lease_active')
-def test_delete_agent_vm_for_account_no_vm(
-    mock_lease_active, mock_read_journals, mock_users_db
-):
+def test_delete_agent_vm_for_account_no_vm(mock_lease_active, mock_read_journals, mock_users_db):
     uid = 'test-uid'
     mock_users_db.get_agent_vm.return_value = None
     mock_users_db.get_late_agent_vm_cleanup.return_value = None
@@ -82,9 +80,7 @@ def test_delete_agent_vm_for_account_no_vm(
 @patch('services.users.agent_vm_account_cleanup.users_db')
 @patch('services.users.agent_vm_account_cleanup.read_agent_vm_migration_journals')
 @patch('services.users.agent_vm_account_cleanup._migration_reconcile_lease_active')
-def test_delete_agent_vm_for_account_lease_active(
-    mock_lease_active, mock_read_journals, mock_users_db
-):
+def test_delete_agent_vm_for_account_lease_active(mock_lease_active, mock_read_journals, mock_users_db):
     uid = 'test-uid'
     mock_users_db.get_agent_vm.return_value = {'vmName': 'test-vm'}
     mock_read_journals.return_value = []
@@ -155,14 +151,10 @@ def test_delete_agent_vm_for_account_success(
 
     headers = {'Authorization': 'Bearer test-token'}
 
-    mock_load_plans.assert_called_once_with(
-        uid, journals, vm, 'test-project', mock_client, headers
-    )
+    mock_load_plans.assert_called_once_with(uid, journals, vm, 'test-project', mock_client, headers)
 
     mock_delete_current.assert_called_once_with(
         uid, vm, mock_plans, 'test-project', mock_client, headers, legacy_late_cleanup=False
     )
 
-    mock_cleanup_migration.assert_called_once_with(
-        uid, mock_plans, 'test-project', mock_client, headers
-    )
+    mock_cleanup_migration.assert_called_once_with(uid, mock_plans, 'test-project', mock_client, headers)
