@@ -254,6 +254,7 @@ export const EN_MESSAGES = {
   "settings.entitlementAbsentBody": "Your plan information is not available right now.",
   "settings.appearanceLocalNote": "Appearance is saved on this device.",
   "settings.signingOut": "Signing out",
+  "settings.signedOutNotice": "Signed out.",
   "settings.planLabel": "Plan",
   "settings.usageLabel": "Usage",
   "settings.usageOf": "{used} of {limit}",
