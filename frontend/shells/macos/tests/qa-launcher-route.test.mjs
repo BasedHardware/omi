@@ -18,23 +18,37 @@ import test from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const launcher = resolve(root, "scripts/dev-run-macos.sh");
 const urlPolicy = resolve(root, "scripts/qa-url-policy.mjs");
+const validator = resolve(root, "../tools/validate-consumer-evidence.mjs");
 
 function fixture() {
   const scratch = mkdtempSync(join(tmpdir(), "omi-macos-launcher-"));
-  const scripts = join(scratch, "scripts");
+  const fakeRoot = join(scratch, "core/shells/macos");
+  const scripts = join(fakeRoot, "scripts");
   const bin = join(scratch, "bin");
   const dist = join(scratch, "dist");
   const actions = join(scratch, "actions.log");
   mkdirSync(scripts, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(dist, { recursive: true });
+  mkdirSync(join(scratch, "core/shells/tools"), { recursive: true });
   copyFileSync(launcher, join(scripts, "dev-run-macos.sh"));
   copyFileSync(urlPolicy, join(scripts, "qa-url-policy.mjs"));
+  copyFileSync(validator, join(scratch, "core/shells/tools/validate-consumer-evidence.mjs"));
   writeFileSync(join(dist, "index.html"), "<!doctype html>");
+  const writer = join(scratch, "write-result.mjs");
+  writeFileSync(writer, `import { writeFileSync } from "node:fs";
+const domains = ["memories","tasks","conversations","folders","listen","chat","settings"];
+const [file, runId] = process.argv.slice(2);
+const rows = domains.map((domain) => ({runId,shell:"macos",domain,fixture:"none",evidence:"rendered-semantic",observation:{route:domain,state:"ready",semantic:domain+":rendered",...(domain === "listen" ? {transcript:"Local transcription is connected."} : {})},shellTreeHash:"1".repeat(40),surfaceTreeHash:"2".repeat(40)}));
+writeFileSync(file, JSON.stringify({schema:"omi.consumer-evidence.v1",runId,rows}));
+`);
   writeFileSync(join(scripts, "run-shell.sh"), `#!/bin/bash
-printf 'launch|query=%s|surface_url=%s|surface_path=%s|api=%s\n' \
+printf 'launch|query=%s|surface_url=%s|surface_path=%s|api=%s|run=%s|result=%s\n' \
   "\${OMI_SURFACE_QUERY-}" "\${OMI_SURFACE_URL-unset}" "\${OMI_SURFACE_PATH-unset}" \
-  "\${OMI_API_BASE_URL-}" >> "\$OMI_TEST_ACTION_LOG"
+  "\${OMI_API_BASE_URL-}" "\${OMI_RUN_CLIENT_ID-}" "\${OMI_CONSUMER_EVIDENCE_PATH-}" >> "\$OMI_TEST_ACTION_LOG"
+if [[ -n "\${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
+  node "\$OMI_TEST_WRITER" "\$OMI_CONSUMER_EVIDENCE_PATH" "\$OMI_RUN_CLIENT_ID"
+fi
 `);
   writeFileSync(join(bin, "curl"), `#!/bin/bash
 printf 'curl|%s\n' "\$*" >> "\$OMI_TEST_ACTION_LOG"
@@ -56,6 +70,7 @@ if [[ "\$*" == *'-X POST'* ]]; then printf 'issued-token'; else printf '204'; fi
     OMI_APP_NAME: "omi-on-launcher-test",
     OMI_API_TOKEN: "local-test-token",
     OMI_TEST_ACTION_LOG: actions,
+    OMI_TEST_WRITER: writer,
   };
   for (const name of [
     "OMI_API_BASE_URL",
@@ -75,6 +90,8 @@ if [[ "\$*" == *'-X POST'* ]]; then printf 'issued-token'; else printf '204'; fi
 }
 
 test("macOS QA launcher freezes origin, URLs, and the seven evidence routes before actions", () => {
+  // red-proof: append ::macos in the launcher or retain a prior host result;
+  // the raw-run action log or pre-gate stale-file assertion fails.
   const source = readFileSync(launcher, "utf8");
   assert.match(source, /OMI_SURFACE_PORT:-5290/);
   assert.match(source, /home\|memories\|conversations\|tasks\|folders\|chat\|settings\|listen/);
@@ -167,6 +184,23 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     for (const line of launches.slice(-2)) {
       assert.match(line, /surface_url=unset\|surface_path=unset/);
     }
+
+    const evidence = join(run.scratch, "macos-consumer.json");
+    writeFileSync(evidence, "stale success");
+    const rejected = spawnSync(run.launcher, [
+      "--route", "not-a-route", "--evidence-out", evidence, "--run-id", "raw-macos-run",
+    ], { encoding: "utf8", env: run.environment });
+    assert.equal(rejected.status, 2);
+    assert.equal(existsSync(evidence), false, "a gate failure must remove prior host success");
+
+    const nativeEvidence = spawnSync(run.launcher, [
+      "--api", "http://127.0.0.1:4801", "--route", "chat",
+      "--evidence-out", evidence, "--run-id", "raw-macos-run",
+    ], { encoding: "utf8", env: run.environment });
+    assert.equal(nativeEvidence.status, 0, nativeEvidence.stderr || nativeEvidence.stdout);
+    assert.equal(JSON.parse(readFileSync(evidence, "utf8")).runId, "raw-macos-run");
+    assert.match(run.readActions(), /run=raw-macos-run\|result=.*macos-consumer\.json/);
+    assert.doesNotMatch(run.readActions(), /raw-macos-run::macos/);
   } finally {
     rmSync(run.scratch, { recursive: true, force: true });
   }

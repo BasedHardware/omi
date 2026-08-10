@@ -32,6 +32,20 @@ fixture=""
 device=""
 accept=0
 route="home"
+evidence_out=""
+run_id_arg=""
+launched=0
+bundle_id="me.omi.proto.omiWebviewProto"
+evidence_tmp=""
+
+cleanup() {
+  if (( launched )); then
+    xcrun simctl terminate "$device" "$bundle_id" >/dev/null 2>&1 || true
+  fi
+  [[ -n "$evidence_tmp" ]] && rm -f -- "$evidence_tmp"
+  return 0
+}
+trap cleanup EXIT
 
 while (( $# )); do
   case "$1" in
@@ -39,11 +53,29 @@ while (( $# )); do
     --fixture) fixture="${2:?--fixture needs a name}"; shift 2 ;;
     --device) device="${2:?--device needs a udid}"; shift 2 ;;
     --route) route="${2:?--route needs a production route}"; shift 2 ;;
+    --evidence-out) evidence_out="${2:?--evidence-out needs a host path}"; shift 2 ;;
+    --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
     --accept) accept=1; shift ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+# A prior host success must be gone even when a later route, URL, toolchain,
+# build, install, gate, or launch check fails.
+if [[ -n "$evidence_out" ]]; then
+  if [[ -d "$evidence_out" ]]; then
+    echo "ERROR: --evidence-out must name a file, not a directory." >&2
+    exit 2
+  fi
+  rm -f -- "$evidence_out"
+  evidence_tmp="$evidence_out.tmp.$$"
+  rm -f -- "$evidence_tmp"
+  [[ -d "$(dirname "$evidence_out")" ]] || {
+    echo "ERROR: --evidence-out parent directory does not exist." >&2
+    exit 2
+  }
+fi
 
 case "$route" in
   home|memories|conversations|tasks|folders|chat|settings|listen) ;;
@@ -103,11 +135,15 @@ defines=(
 # A qa= fixture route selects an in-page fixture store and does NOT traverse the
 # privileged HTTP bridge. It can never support a backend claim or a served count.
 if [[ -n "$fixture" ]]; then
+  if [[ -n "$evidence_out" ]]; then
+    echo "ERROR: consumer evidence requires LIVE mode; --fixture is forbidden." >&2
+    exit 2
+  fi
   defines+=( --dart-define=SURFACE_QUERY="qa=${fixture}&state=normal&platform=mobile" )
   echo "MODE: FIXTURE (qa=${fixture}) — bridge is NOT exercised; no backend traffic."
   echo "      Nothing seen in this mode is evidence about the backend."
 else
-  run_id="${OMI_RUN_CLIENT_ID:-run-ios-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+  run_id="${run_id_arg:-${OMI_RUN_CLIENT_ID:-run-ios-$(date -u +%Y%m%dT%H%M%SZ)-$$}}"
   if [[ ! "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] || [[ "$run_id" == anonymous || "$run_id" == overflow || "$run_id" == __* ]]; then
     echo "ERROR: OMI_RUN_CLIENT_ID is not a bounded producer-evidence run id." >&2
     exit 2
@@ -140,9 +176,10 @@ else
     --dart-define=OMI_API_TOKEN="$token"
     --dart-define=OMI_RUN_CLIENT_ID="$run_id"
   )
-  if [[ -n "${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
+  if [[ -n "$evidence_out" ]]; then
+    evidence_filename="omi-c3b3-consumer-${run_id}.json"
     defines+=(
-      --dart-define=OMI_CONSUMER_EVIDENCE_PATH="$OMI_CONSUMER_EVIDENCE_PATH"
+      --dart-define=OMI_CONSUMER_EVIDENCE_FILENAME="$evidence_filename"
       --dart-define=OMI_CONSUMER_EVIDENCE_EXIT=true
     )
   fi
@@ -165,4 +202,43 @@ fi
 ( cd "$here" && "$node_bin" tools/build-surfaces-bundle.mjs )
 
 cd "$app"
-exec "$flutter_bin" run -d "$device" "${defines[@]}"
+if [[ -z "$evidence_out" ]]; then
+  exec "$flutter_bin" run -d "$device" "${defines[@]}"
+fi
+
+echo "EVIDENCE: build -> install -> launch -> collect native result"
+"$flutter_bin" build ios --simulator --debug "${defines[@]}"
+app_bundle="$app/build/ios/iphonesimulator/Runner.app"
+if [[ ! -d "$app_bundle" ]]; then
+  echo "ERROR: Flutter build did not produce $app_bundle" >&2
+  exit 1
+fi
+xcrun simctl install "$device" "$app_bundle"
+container="$(xcrun simctl get_app_container "$device" "$bundle_id" data)"
+if [[ -z "$container" || ! -d "$container/Documents" ]]; then
+  echo "ERROR: could not resolve the installed app's data container." >&2
+  exit 1
+fi
+container_result="$container/Documents/$evidence_filename"
+rm -f -- "$container_result"
+xcrun simctl launch "$device" "$bundle_id" >/dev/null
+launched=1
+
+evidence_wait_seconds="${OMI_CONSUMER_EVIDENCE_WAIT_SECONDS:-180}"
+if [[ ! "$evidence_wait_seconds" =~ ^[0-9]+$ ]] || (( evidence_wait_seconds < 1 || evidence_wait_seconds > 300 )); then
+  echo "ERROR: OMI_CONSUMER_EVIDENCE_WAIT_SECONDS must be 1..300." >&2
+  exit 2
+fi
+for ((second = 0; second < evidence_wait_seconds; second++)); do
+  [[ -s "$container_result" ]] && break
+  sleep 1
+done
+if [[ ! -s "$container_result" ]]; then
+  echo "ERROR: native iOS result was not written within ${evidence_wait_seconds}s." >&2
+  exit 124
+fi
+cp "$container_result" "$evidence_tmp"
+"$node_bin" "$here/../tools/validate-consumer-evidence.mjs" \
+  --file "$evidence_tmp" --run-id "$run_id" --shell ios
+mv -f -- "$evidence_tmp" "$evidence_out"
+echo "EVIDENCE: native iOS consumer document collected at $evidence_out"

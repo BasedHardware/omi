@@ -145,6 +145,10 @@ test("rendered live Chat streams changing assistant text and converges without d
   const store = createProductionChatStore(domain);
   const rendered = await renderComponent(ChatProduction, { store });
   try {
+    // red-proof: hard-code the rendered admission count to zero; the post-send
+    // assertion fails while dispatch and generation still appear healthy.
+    const productionRoot = rendered.container.querySelector("main[data-route='chat']");
+    assert.equal(productionRoot?.dataset.consumerChatAdmissionCount, "0");
     const textarea = rendered.container.querySelector("textarea.chat-draft");
     const send = rendered.container.querySelector("button.chat-send");
     assert.ok(textarea);
@@ -155,6 +159,12 @@ test("rendered live Chat streams changing assistant text and converges without d
     let bubbles = [...rendered.container.querySelectorAll(".chat-message")];
     assert.equal(bubbles.length, 2, "canonical human plus one streaming assistant");
     assert.equal(bubbles[0].dataset.delivery, "canonical", "admission is canonical even with null revision");
+    assert.equal(
+      productionRoot.dataset.consumerChatAdmissionCount,
+      "1",
+      "rendered evidence advances only after canonical user admission",
+    );
+    assert.match(productionRoot.dataset.consumerSemantic, /:admitted:1:/);
     assert.ok(bubbles[0].textContent.includes("Question from the rendered composer"));
     assert.ok(bubbles[1].textContent.includes("First"));
     assert.equal(bubbles[1].dataset.delivery, "streaming");

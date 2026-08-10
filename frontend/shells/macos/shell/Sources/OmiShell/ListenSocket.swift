@@ -1,6 +1,28 @@
 import Foundation
 import WebKit
 
+func deterministicListenEvidenceAudio() -> Data {
+  var bytes = Data(count: 3_200)
+  bytes.withUnsafeMutableBytes { raw in
+    guard let output = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+    for sample in 0..<1_600 {
+      let value = Int16(((sample * 257) % 24_001) - 12_000)
+      let bits = UInt16(bitPattern: value)
+      output[sample * 2] = UInt8(bits & 0xff)
+      output[sample * 2 + 1] = UInt8((bits >> 8) & 0xff)
+    }
+  }
+  return bytes
+}
+
+func isListenProtocolReady(_ text: String) -> Bool {
+  guard let data = text.data(using: .utf8),
+    let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  else { return false }
+  return value["type"] as? String == "service_status"
+    && value["status"] as? String == "ready"
+}
+
 struct ListenSocketPreparedRequest {
   let id: String
   let request: URLRequest
@@ -31,8 +53,12 @@ struct ShellTransportAuthority {
     BridgeHttpHandler(baseURL: baseURL, custody: custody, clientId: clientId)
   }
 
-  func makeListenHandler(clientId: String? = nil) -> ListenSocketHandler {
-    ListenSocketHandler(baseURL: baseURL, custody: custody, clientId: clientId)
+  func makeListenHandler(
+    clientId: String? = nil, evidenceAudioEnabled: Bool = false
+  ) -> ListenSocketHandler {
+    ListenSocketHandler(
+      baseURL: baseURL, custody: custody, clientId: clientId,
+      evidenceAudioEnabled: evidenceAudioEnabled)
   }
 
   func prepareListen(id: String, path: String, clientId: String? = nil) -> ListenSocketPolicyDecision {
@@ -97,9 +123,11 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   private let baseURL: URL
   private let custody: ShellCredentialCustody
   private let clientId: String?
+  private let evidenceAudioEnabled: Bool
   private var tasksById: [String: URLSessionWebSocketTask] = [:]
   private var idsByTask: [Int: String] = [:]
   private var webViewsById: [String: WKWebView] = [:]
+  private var evidenceAudioSent = Set<String>()
   private lazy var session: URLSession = {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.httpCookieStorage = nil
@@ -107,10 +135,14 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     return URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
   }()
 
-  init(baseURL: URL, custody: ShellCredentialCustody, clientId: String? = nil) {
+  init(
+    baseURL: URL, custody: ShellCredentialCustody, clientId: String? = nil,
+    evidenceAudioEnabled: Bool = false
+  ) {
     self.baseURL = baseURL
     self.custody = custody
     self.clientId = clientId
+    self.evidenceAudioEnabled = evidenceAudioEnabled
     super.init()
   }
 
@@ -126,6 +158,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     tasksById.removeAll()
     idsByTask.removeAll()
     webViewsById.removeAll()
+    evidenceAudioSent.removeAll()
     for task in tasks {
       task.cancel(with: .goingAway, reason: nil)
     }
@@ -190,6 +223,18 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       guard let self, let task, let webView = self.webViewsById[id] else { return }
       switch result {
       case .success(.string(let text)):
+        if self.evidenceAudioEnabled && !self.evidenceAudioSent.contains(id)
+          && isListenProtocolReady(text)
+        {
+          self.evidenceAudioSent.insert(id)
+          task.send(.data(deterministicListenEvidenceAudio())) { [weak self, weak task] error in
+            guard error != nil, let self, let task,
+              let webView = self.webViewsById[id]
+            else { return }
+            self.emit(id: id, payload: ["type": "error"], webView: webView)
+            task.cancel(with: .internalServerError, reason: nil)
+          }
+        }
         self.emit(id: id, payload: ["type": "message", "data": text], webView: webView)
         self.receive(task, id: id)
       case .success(.data):
@@ -209,6 +254,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     tasksById.removeValue(forKey: id)
     idsByTask.removeValue(forKey: task.taskIdentifier)
     webViewsById.removeValue(forKey: id)
+    evidenceAudioSent.remove(id)
   }
 
   private func emit(id: String, payload: [String: Any], webView: WKWebView) {
