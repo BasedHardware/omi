@@ -64,6 +64,17 @@ export interface SettingsProjectionStore extends SettingsProjectionReader {
   ): SettingsEntitlementProjection | null;
 }
 
+export interface InMemorySettingsAccountSnapshot {
+  readonly identity: SettingsIdentityProjection | null;
+  readonly entitlement: SettingsEntitlementProjection | null;
+}
+
+/** Adapter-private capabilities owned by the in-memory chat admission unit. */
+export interface InMemorySettingsProjectionStore extends SettingsProjectionStore {
+  snapshotAccount(accountId: string): InMemorySettingsAccountSnapshot;
+  restoreAccount(accountId: string, snapshot: InMemorySettingsAccountSnapshot): void;
+}
+
 const detachedIdentity = (projection: SettingsIdentityProjection): SettingsIdentityProjection => {
   if (typeof projection.displayName !== "string" || typeof projection.email !== "string") {
     throw new TypeError("invalid settings identity projection");
@@ -104,7 +115,7 @@ const assertConsumedSeconds = (amount: number): number => {
 };
 
 /** In-memory adapter used by the hermetic local composition. */
-export const createInMemorySettingsProjectionStore = (): SettingsProjectionStore => {
+export const createInMemorySettingsProjectionStore = (): InMemorySettingsProjectionStore => {
   const identities = new Map<string, SettingsIdentityProjection>();
   const entitlements = new Map<string, SettingsEntitlementProjection>();
 
@@ -152,6 +163,20 @@ export const createInMemorySettingsProjectionStore = (): SettingsProjectionStore
           entitlement: entitlements.get(accountId) ?? null,
         }),
       });
+    },
+
+    snapshotAccount(accountId: string): InMemorySettingsAccountSnapshot {
+      return Object.freeze({
+        identity: identities.get(accountId) ?? null,
+        entitlement: entitlements.get(accountId) ?? null,
+      });
+    },
+
+    restoreAccount(accountId: string, snapshot: InMemorySettingsAccountSnapshot): void {
+      if (snapshot.identity === null) identities.delete(accountId);
+      else identities.set(accountId, snapshot.identity);
+      if (snapshot.entitlement === null) entitlements.delete(accountId);
+      else entitlements.set(accountId, snapshot.entitlement);
     },
   });
 };

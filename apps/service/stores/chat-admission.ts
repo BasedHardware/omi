@@ -1,13 +1,18 @@
 // domain-pending(DIV-CHAT-HASH-001)
 
-import type { SettingsProjectionStore } from "../control/settings-projection";
+import type {
+  InMemorySettingsProjectionStore,
+  SettingsProjectionStore,
+} from "../control/settings-projection";
 import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
+  InMemoryChatGenerationEventsStore,
 } from "./chat-generation-events-store";
 import type {
   ChatMessageRecord,
   ChatMessagesStore,
+  InMemoryChatMessagesStore,
   StoredChatMessage,
 } from "./chat-messages-store";
 
@@ -34,7 +39,7 @@ export interface ChatAdmission {
 }
 
 export interface ChatAdmissionTransaction {
-  execute<Result>(operation: () => Result): Result;
+  execute<Result>(accountId: string, operation: () => Result): Result;
 }
 
 /**
@@ -49,7 +54,7 @@ export const defineChatAdmission = (
   settings: SettingsProjectionStore,
 ): ChatAdmission => Object.freeze({
   admit(input: ChatAdmissionInput): ChatAdmissionOutcome {
-    return transaction.execute(() => {
+    return transaction.execute(input.accountId, () => {
       const existing = messages.readMessage(input.accountId, input.message.id);
       if (existing !== null) {
         if (existing.message.payloadHash !== input.message.payloadHash) {
@@ -113,11 +118,25 @@ export const defineChatAdmission = (
 });
 
 export const createInMemoryChatAdmission = (
-  messages: ChatMessagesStore,
-  events: ChatGenerationEventsStore,
-  settings: SettingsProjectionStore,
+  messages: InMemoryChatMessagesStore,
+  events: InMemoryChatGenerationEventsStore,
+  settings: InMemorySettingsProjectionStore,
 ): ChatAdmission => defineChatAdmission(
-  { execute: <Result>(operation: () => Result): Result => operation() },
+  {
+    execute<Result>(accountId: string, operation: () => Result): Result {
+      const messagesBefore = messages.snapshotAccount(accountId);
+      const eventsBefore = events.snapshotAccount(accountId);
+      const settingsBefore = settings.snapshotAccount(accountId);
+      try {
+        return operation();
+      } catch (error) {
+        events.restoreAccount(accountId, eventsBefore);
+        settings.restoreAccount(accountId, settingsBefore);
+        messages.restoreAccount(accountId, messagesBefore);
+        throw error;
+      }
+    },
+  },
   messages,
   events,
   settings,

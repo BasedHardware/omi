@@ -18,7 +18,7 @@ export const createSqliteChatAdmission = (
 ): ChatAdmission => {
   configureServiceStoreConnection(db);
   return defineChatAdmission({
-    execute<Result>(operation: () => Result): Result {
+    execute<Result>(_accountId: string, operation: () => Result): Result {
       return db.transaction(operation).immediate();
     },
   }, messages, events, settings);

@@ -61,6 +61,20 @@ export interface ChatGenerationEventsStore {
   reset(): void;
 }
 
+export interface InMemoryChatGenerationEventsAccountSnapshot {
+  readonly logs: readonly {
+    readonly generationId: string;
+    readonly events: readonly ChatGenerationEvent[];
+    readonly state: ChatGenerationLifecycle["state"];
+  }[];
+}
+
+/** Adapter-private capabilities owned by the in-memory chat admission unit. */
+export interface InMemoryChatGenerationEventsStore extends ChatGenerationEventsStore {
+  snapshotAccount(accountId: string): InMemoryChatGenerationEventsAccountSnapshot;
+  restoreAccount(accountId: string, snapshot: InMemoryChatGenerationEventsAccountSnapshot): void;
+}
+
 interface AccountGenerationLog {
   readonly accountId: string;
   readonly generationId: string;
@@ -82,7 +96,7 @@ const detachEvent = (event: ChatGenerationEvent): ChatGenerationEvent => Object.
 const keyOf = (accountId: string, generationId: string): string =>
   `${accountId.length}:${accountId}:${generationId}`;
 
-export const createInMemoryChatGenerationEventsStore = (): ChatGenerationEventsStore => {
+export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGenerationEventsStore => {
   const logs = new Map<string, AccountGenerationLog>();
 
   return Object.freeze({
@@ -164,6 +178,37 @@ export const createInMemoryChatGenerationEventsStore = (): ChatGenerationEventsS
       if (log.state === "cancellation_requested") return { kind: "already_requested" };
       log.state = "cancellation_requested";
       return { kind: "accepted" };
+    },
+
+    snapshotAccount(accountId: string): InMemoryChatGenerationEventsAccountSnapshot {
+      return Object.freeze({
+        logs: Object.freeze([...logs.values()]
+          .filter((log) => log.accountId === accountId)
+          .map((log) => Object.freeze({
+            generationId: log.generationId,
+            events: Object.freeze(log.events.map(detachEvent)),
+            state: log.state,
+          }))),
+      });
+    },
+
+    restoreAccount(
+      accountId: string,
+      snapshot: InMemoryChatGenerationEventsAccountSnapshot,
+    ): void {
+      for (const [key, log] of logs) {
+        if (log.accountId === accountId) logs.delete(key);
+      }
+      for (const log of snapshot.logs) {
+        const events = log.events.map(detachEvent);
+        logs.set(keyOf(accountId, log.generationId), {
+          accountId,
+          generationId: log.generationId,
+          events,
+          byId: new Map(events.map((event) => [event.id, event])),
+          state: log.state,
+        });
+      }
     },
 
     reset(): void {

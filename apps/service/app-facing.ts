@@ -40,6 +40,7 @@ import {
 } from "./control/projection-store";
 import {
   createInMemorySettingsProjectionStore,
+  type InMemorySettingsProjectionStore,
   type SettingsProjectionStore,
 } from "./control/settings-projection";
 import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
@@ -111,9 +112,11 @@ import {
 import {
   createInMemoryChatGenerationEventsStore,
   type ChatGenerationEventsStore,
+  type InMemoryChatGenerationEventsStore,
 } from "./stores/chat-generation-events-store";
 import {
   createInMemoryChatMessagesStore,
+  type InMemoryChatMessagesStore,
   type ChatMessagesStore,
 } from "./stores/chat-messages-store";
 
@@ -193,6 +196,12 @@ export interface LocalServiceStores {
   readonly chatFinalization: ChatGenerationFinalization;
 }
 
+export interface InMemoryLocalServiceStores extends LocalServiceStores {
+  readonly settings: InMemorySettingsProjectionStore;
+  readonly chatMessages: InMemoryChatMessagesStore;
+  readonly chatEvents: InMemoryChatGenerationEventsStore;
+}
+
 const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
   Object.freeze({
     id: "default-folder-qa",
@@ -239,7 +248,7 @@ const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
   folder_id: "work-folder-qa",
 });
 
-export const createInMemoryLocalServiceStores = (): LocalServiceStores => {
+export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores => {
   const tasks = createInMemoryTasksStore();
   const registry = createInMemoryWriteIdRegistry();
   const folders = createInMemoryFoldersStore();

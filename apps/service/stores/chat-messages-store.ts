@@ -95,6 +95,20 @@ export interface RestoredChatMessage {
   readonly stored: StoredChatMessage;
 }
 
+export interface InMemoryChatMessagesAccountSnapshot {
+  readonly rows: readonly {
+    readonly stored: StoredChatMessage;
+    readonly sequence: number;
+  }[] | null;
+  readonly sequence: number | null;
+}
+
+/** Adapter-private capabilities owned by the in-memory chat admission unit. */
+export interface InMemoryChatMessagesStore extends ChatMessagesStore {
+  snapshotAccount(accountId: string): InMemoryChatMessagesAccountSnapshot;
+  restoreAccount(accountId: string, snapshot: InMemoryChatMessagesAccountSnapshot): void;
+}
+
 const isNonNegativeSafeInteger = (value: number): boolean =>
   Number.isSafeInteger(value) && value >= 0;
 
@@ -173,7 +187,7 @@ interface InMemoryRow extends StoredChatMessage {
 /** Process-local adapter. Restored rows deliberately accept the read-tolerance sentinels. */
 export const createInMemoryChatMessagesStore = (
   restored: readonly RestoredChatMessage[] = [],
-): ChatMessagesStore => {
+): InMemoryChatMessagesStore => {
   const accounts = new Map<string, Map<string, InMemoryRow>>();
   const sequences = new Map<string, number>();
 
@@ -274,6 +288,28 @@ export const createInMemoryChatMessagesStore = (
     },
 
     writeCanonical: admit,
+
+    snapshotAccount(accountId: string): InMemoryChatMessagesAccountSnapshot {
+      const rows = accounts.get(accountId);
+      return Object.freeze({
+        rows: rows === undefined ? null : Object.freeze([...rows.values()].map((row) =>
+          Object.freeze({ stored: detachStored(row), sequence: row.sequence }))),
+        sequence: sequences.get(accountId) ?? null,
+      });
+    },
+
+    restoreAccount(accountId: string, snapshot: InMemoryChatMessagesAccountSnapshot): void {
+      if (snapshot.rows === null) {
+        accounts.delete(accountId);
+      } else {
+        accounts.set(accountId, new Map(snapshot.rows.map((row) => [
+          row.stored.message.id,
+          Object.freeze({ ...detachStored(row.stored), sequence: row.sequence }),
+        ])));
+      }
+      if (snapshot.sequence === null) sequences.delete(accountId);
+      else sequences.set(accountId, snapshot.sequence);
+    },
 
     reset(): void {
       accounts.clear();

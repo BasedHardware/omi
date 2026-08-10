@@ -23,6 +23,7 @@ import {
   createInMemoryChatMessagesStore,
   type ChatMessageRecord,
 } from "../stores/chat-messages-store";
+import type { InMemorySettingsProjectionStore } from "../control/settings-projection";
 import {
   createSqliteLocalServiceStores,
   SqliteChatMessagesStore,
@@ -98,6 +99,50 @@ const bootInMemory = (
 };
 
 describe("ratified /v1/chat-messages route", () => {
+  test("in-memory admission rolls message, quota, and event back when quota persistence crashes", async () => {
+    const base = createInMemoryLocalServiceStores();
+    base.settings.putEntitlement(ACCOUNT, {
+      planLabel: "Metered",
+      limitKey: "chat_messages",
+      used: 0,
+      limit: 3,
+      limitReached: false,
+      upgradeAvailable: true,
+    });
+    let quotaWrites = 0;
+    const crashingSettings: InMemorySettingsProjectionStore = Object.freeze({
+      putIdentity: base.settings.putIdentity,
+      putEntitlement(): void {
+        quotaWrites += 1;
+        throw new Error("injected quota crash");
+      },
+      readEntitlement: base.settings.readEntitlement,
+      consumeTranscriptionSeconds: base.settings.consumeTranscriptionSeconds,
+      readSettings: base.settings.readSettings,
+      snapshotAccount: base.settings.snapshotAccount,
+      restoreAccount: base.settings.restoreAccount,
+    });
+    const stores: LocalServiceStores = Object.freeze({
+      ...base,
+      settings: crashingSettings,
+      chatAdmission: createInMemoryChatAdmission(
+        base.chatMessages,
+        base.chatEvents,
+        crashingSettings,
+      ),
+    });
+    const { db, local } = bootInMemory(stores);
+
+    const admitted = await post(local, payload("atomic-crash", 1_000));
+
+    expect(admitted.status).toBe(503);
+    expect(quotaWrites).toBe(1);
+    expect(base.chatMessages.readMessage(ACCOUNT, "atomic-crash")).toBeNull();
+    expect(base.settings.readEntitlement(ACCOUNT)?.used).toBe(0);
+    expect(base.chatEvents.listUnterminated()).toEqual([]);
+    db.close();
+  });
+
   test("idempotent replay stores once, consumes quota once, and payload mutation conflicts", async () => {
     const stores = createInMemoryLocalServiceStores();
     stores.settings.putEntitlement(ACCOUNT, {
