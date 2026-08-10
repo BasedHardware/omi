@@ -12,6 +12,8 @@ Firmware releases are manual via `.github/workflows/firmware_release.yml`:
 
 Build logic lives in `omi/firmware/scripts/ci/`.
 
+The MCUboot signing key is never committed and never pinned in `sysbuild.conf`; it is injected per build. Contract and local-build steps: `omi/firmware/scripts/ci/README.md`.
+
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).

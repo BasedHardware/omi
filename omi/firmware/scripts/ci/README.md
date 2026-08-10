@@ -64,4 +64,21 @@ from any branch). The publish step also refuses to overwrite an existing
 - The build is heavy: ~1.5 GB NCS download + ~20-30 min on a cold cache.
 - DK2 / OmiGlass are **not** automated here yet. DK2 can be added as a second job
   (NCS 2.7.0 + `adafruit-nrfutil`); OmiGlass uses a separate ESP32/PlatformIO toolchain.
-- MCUboot signing requires the out-of-tree `MCUBOOT_SIGNING_KEY_FILE` environment variable; release CI injects `MCUBOOT_SIGNING_KEY` from GitHub Secrets.
+
+## MCUboot signing key
+
+The signing key is never committed, and `sysbuild.conf` does not pin
+`SB_CONFIG_BOOT_SIGNATURE_KEY_FILE` — it is injected per build.
+
+- `firmware_release.yml` writes the `MCUBOOT_SIGNING_KEY` GitHub secret into
+  `$RUNNER_TEMP` under `umask 077` and mounts it read-only at
+  `/run/secrets/mcuboot-signing-key.pem`. `build-cv1.sh` reads it via
+  `MCUBOOT_SIGNING_KEY_FILE` and fails closed when the variable is unset, does
+  not resolve to a file, or a retired in-repo key has reappeared.
+- Local builds must export `MCUBOOT_SIGNING_KEY_FILE` and pass
+  `-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE="$MCUBOOT_SIGNING_KEY_FILE"` (see
+  `../../BUILD_AND_OTA_FLASH.md`). Omitting it lets MCUboot fall back to its
+  **public upstream sample key** — never ship an image built that way.
+- `check_firmware_signing_key_boundary` in
+  `.github/scripts/check-release-process-guards.py` enforces all of the above and
+  runs in the `desktop-release-process-guards` manifest lane.
