@@ -51,7 +51,6 @@ from utils.executors import db_executor, llm_executor, postprocess_executor, run
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils import byok
-from utils.subscription import is_trial_paywalled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -1256,7 +1255,11 @@ async def generate_conversation_topic_endpoint(
     on a just-saved conversation instead of inventing one via Anthropic Haiku chat
     completions; full backend processing still overwrites it later.
     """
+    # Deferred with the LLM helper: this router is covered by module-isolation tests that
+    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
+    # in at import time.
     from utils.llm import conversation_topic as conversation_topic_llm
+    from utils.subscription import is_trial_paywalled
 
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
