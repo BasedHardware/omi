@@ -66,7 +66,9 @@ struct QueryShellHome: View {
   /// and any test asserting composer behaviour through the bridge was asserting on a variable nothing
   /// rendered. A `QueryShellRequest` is assembled per render from the draft plus these.
   @State private var filters = QueryShellFilters()
-  @State private var mode: QueryShellMode = .results
+  // Home opens in the conversation, not the search hub: the default surface is a chat with Omi,
+  // and `esc` / `‹ Results` remain the two labelled ways into the spine.
+  @State private var mode: QueryShellMode = QueryShellMode.homeDefault
   @State private var screenCount: Int?
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
