@@ -1,0 +1,45 @@
+desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
+  s_8815d69cdccdc7::t_74f2cca8cecf9b 82-93,191-192,226-229,272,289,293,410-418,422-424
+  s_8815d69cdccdc7::t_c6157f469f9fa9 147-170,193,254,290-292,300,332,357,419-421
+  s_8815d69cdccdc7::t_b9553dda37ae7b 74-75
+  s_8815d69cdccdc7::t_34e6749615a171 31-32,287-288
+  s_8815d69cdccdc7::t_4d27c665262d0b 33
+desktop/macos/changelog/unreleased/20260810-shell-click-away-dismissal.json
+  s_8815d69cdccdc7::t_34e6749615a171 2
+  s_8815d69cdccdc7::t_6f71bf9b954efe 1,3
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_8815d69cdccdc7::t_f3f7c006637f6f 139-142,148,153-166
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_8815d69cdccdc7::t_a6765f65c734fd 1089
+desktop/macos/Desktop/Tests/ShellSummonTests.swift
+  s_8815d69cdccdc7::t_024cb17694adb3 40-50,191-192,194,197,199-202,204-205,207,210,212-215
+  s_8815d69cdccdc7::t_f3f7c006637f6f 179-181,183,188-190
+  s_8815d69cdccdc7::t_c6157f469f9fa9 193,195-196,198,203,206,208-209,211,216-225
+  s_8815d69cdccdc7::t_8c9ea326c47082 39
+desktop/macos/Desktop/Tests/SBPostOnboardingGuidanceWiringTests.swift
+  s_8815d69cdccdc7::t_f3f7c006637f6f 213-215
+  s_8815d69cdccdc7::t_34e6749615a171 225-226
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
+  s_8815d69cdccdc7::t_6f71bf9b954efe 176-178
+  s_8815d69cdccdc7::t_34e6749615a171 183
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_8815d69cdccdc7::t_34e6749615a171 48-50,75
+  s_8815d69cdccdc7::t_4d27c665262d0b 45,47,151-153,197
+  s_8815d69cdccdc7::t_b9553dda37ae7b 42-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6775e04ca038a4e8d0da58c47a9c48f22ddf1f64",
+  "prompts": {},
+  "sessions": {
+    "s_8815d69cdccdc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fec42-ca7c-7331-8be8-63ee3e579f29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
