@@ -89,6 +89,10 @@ class _FakeDecodeError(Exception):
     """Stand-in for pydub.exceptions.CouldntDecodeError (pydub is stubbed here)."""
 
 
+class _FakeVADEmptyError(ValueError):
+    pass
+
+
 def _fake_upload_file(content: bytes, filename: str = "speech_profile.wav"):
     f = MagicMock()
     f.filename = filename
@@ -131,4 +135,25 @@ class TestUploadProfileWavDecodeGuard:
 
         assert exc_info.value.status_code == 400
         mock_vad.assert_not_called()
+        mock_upload.assert_not_called()
+
+    def test_empty_vad_returns_400_not_500(self):
+        fake_file = _fake_upload_file(b'silence')
+
+        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
+            mod, "AudioSegment"
+        ) as mock_aseg, patch.object(mod, "VADEmptyError", _FakeVADEmptyError), patch.object(
+            mod, "apply_vad_for_speech_profile", side_effect=_FakeVADEmptyError("Audio is empty")
+        ) as mock_vad, patch.object(
+            mod, "upload_profile_audio"
+        ) as mock_upload:
+            mock_os.makedirs.return_value = None
+            mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=5)
+
+            with pytest.raises(HTTPException) as exc_info:
+                mod.upload_profile(fake_file, uid="test-uid")
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Audio is empty"
+        mock_vad.assert_called_once()
         mock_upload.assert_not_called()
