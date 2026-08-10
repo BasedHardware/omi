@@ -365,7 +365,14 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             return
         canceled = stripe_utils.cancel_subscription(subscription_id)
         if not canceled:
-            raise RuntimeError('stripe cancel returned no subscription')
+            # The billing step owns a goal state — the subscription no longer bills — not a
+            # particular API call. Stripe rejects `cancel_at_period_end` on an already-canceled
+            # subscription, so without this the wipe fails forever and the account is never
+            # deleted even though billing is already where it must be. Asking Stripe for the
+            # status keeps this closed: anything but a terminal status is still a real failure.
+            if not stripe_utils.is_subscription_terminal(subscription_id):
+                raise RuntimeError('stripe cancel returned no subscription')
+            logger.info('delete_account billing cancellation satisfied by an already-canceled subscription')
     except Exception as e:
         raw_error = str(e)
         sanitized_error = sanitize(raw_error)
