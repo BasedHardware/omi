@@ -24,7 +24,7 @@ test("absent native staging is explicitly unsupported and never fabricates an id
   await assert.rejects(port.pickAndStage(), /attachment staging unavailable/);
 });
 
-test("one-way host receives only pick intent and returns a sanitized safe descriptor", async () => {
+test("the exact P7 no-name response succeeds and unsafe extras never surface", async () => {
   // red-proof: put caller metadata or a file payload on the request. The exact
   // request shape assertion below exposes the forbidden field at the host wire.
   const requests: BridgeChatAttachmentStagingRequest[] = [];
@@ -39,12 +39,12 @@ test("one-way host receives only pick intent and returns a sanitized safe descri
         id: request.id,
         attachment: {
           id: "opaque-stage-1",
-          displayName: "server-normalized.pdf",
           mimeType: "application/pdf",
           sizeBytes: 1234,
           expiresAt: "2026-08-11T12:00:00.000Z",
           state: "staged",
           localPath: "/private/user-secret.pdf",
+          absoluteUrl: "https://forbidden.example/file",
           token: "must-not-escape",
         },
       }));
@@ -55,7 +55,6 @@ test("one-way host receives only pick intent and returns a sanitized safe descri
   assert.equal(port.isAvailable(), true);
   assert.deepEqual(await port.pickAndStage(), {
     id: "opaque-stage-1",
-    displayName: "server-normalized.pdf",
     mimeType: "application/pdf",
     sizeBytes: 1234,
     expiresAt: "2026-08-11T12:00:00.000Z",
@@ -83,7 +82,6 @@ test("cancel and unsafe native metadata never create a staged descriptor", async
     id: "unused",
     attachment: {
       id: "https://forbidden.example/id",
-      displayName: "../caller-name.pdf",
       mimeType: "caller/type",
       sizeBytes: 10,
       expiresAt: "not-an-expiry",
@@ -91,6 +89,39 @@ test("cancel and unsafe native metadata never create a staged descriptor", async
     },
   };
   await assert.rejects(cancelled.pickAndStage(), /unsafe descriptor/);
+});
+
+test("staging descriptor bounds reject paths, oversized ids, bad MIME, size, expiry and state", async () => {
+  let attachment: Record<string, unknown> = {};
+  host[BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL] = {
+    postMessage(raw: string): void {
+      const request = JSON.parse(raw) as BridgeChatAttachmentStagingRequest;
+      const settle = host[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] as
+        (id: string, rawReply: string) => void;
+      settle(request.id, JSON.stringify({ ok: true, id: request.id, attachment }));
+    },
+  };
+  const port = bridgeChatAttachmentStagingPort();
+  const valid = {
+    id: "attachment_01234567-89ab-cdef-0123-456789abcdef",
+    mimeType: "application/pdf",
+    sizeBytes: 1,
+    expiresAt: "2026-08-11T12:00:00.000Z",
+    state: "staged",
+  };
+  const invalid: readonly Record<string, unknown>[] = [
+    { ...valid, id: "../private/file" },
+    { ...valid, id: "a".repeat(257) },
+    { ...valid, mimeType: "application/pdf\nsecret" },
+    { ...valid, sizeBytes: 0 },
+    { ...valid, sizeBytes: Number.MAX_SAFE_INTEGER + 1 },
+    { ...valid, expiresAt: "2026-08-11" },
+    { ...valid, state: "bound" },
+  ];
+  for (const value of invalid) {
+    attachment = value;
+    await assert.rejects(port.pickAndStage(), /unsafe descriptor/);
+  }
 });
 
 test("two staging ports share collision-proof realm reply routing", async () => {
@@ -115,7 +146,6 @@ test("two staging ports share collision-proof realm reply routing", async () => 
       id: request.id,
       attachment: {
         id: `opaque-stage-${index + 1}`,
-        displayName: `server-${index + 1}.pdf`,
         mimeType: "application/pdf",
         sizeBytes: index + 1,
         expiresAt: "2026-08-11T12:00:00.000Z",
