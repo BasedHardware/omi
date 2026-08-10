@@ -92,3 +92,37 @@ test("cancel and unsafe native metadata never create a staged descriptor", async
   };
   await assert.rejects(cancelled.pickAndStage(), /unsafe descriptor/);
 });
+
+test("two staging ports share collision-proof realm reply routing", async () => {
+  const requests: BridgeChatAttachmentStagingRequest[] = [];
+  host[BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL] = {
+    postMessage(raw: string): void {
+      requests.push(JSON.parse(raw) as BridgeChatAttachmentStagingRequest);
+    },
+  };
+  const firstPort = bridgeChatAttachmentStagingPort();
+  const secondPort = bridgeChatAttachmentStagingPort();
+  const first = firstPort.pickAndStage();
+  const second = secondPort.pickAndStage();
+
+  assert.equal(requests.length, 2);
+  assert.notEqual(requests[0]!.id, requests[1]!.id, "realm staging ids must never reset per port");
+  const reply = host[BRIDGE_CHAT_ATTACHMENT_STAGING_REPLY_FUNCTION] as
+    (id: string, rawReply: string) => void;
+  for (const [index, request] of requests.entries()) {
+    reply(request.id, JSON.stringify({
+      ok: true,
+      id: request.id,
+      attachment: {
+        id: `opaque-stage-${index + 1}`,
+        displayName: `server-${index + 1}.pdf`,
+        mimeType: "application/pdf",
+        sizeBytes: index + 1,
+        expiresAt: "2026-08-11T12:00:00.000Z",
+        state: "staged",
+      },
+    }));
+  }
+  assert.equal((await first)?.id, "opaque-stage-1");
+  assert.equal((await second)?.id, "opaque-stage-2");
+});
