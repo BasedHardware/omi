@@ -285,6 +285,16 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: github-actions-hygiene
+    command: ["python3", ".github/scripts/check_actions_hygiene.py"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/actions/**/action.yml", ".github/actions/**/action.yaml", ".github/scripts/check_actions_hygiene.py", ".github/scripts/test_check_actions_hygiene.py", ".github/checks-manifest.yaml", "backend/.github/workflows/**"]
+    lanes: ["local", "ci"]
+    reason: "reject mutable third-party action refs, retired Entelligence@latest, nested backend workflow templates, and flutter-buildrunner cache keys that embed github.run_id"
+  - id: github-actions-hygiene-fixtures
+    command: ["python3", ".github/scripts/test_check_actions_hygiene.py"]
+    triggers: [".github/scripts/check_actions_hygiene.py", ".github/scripts/test_check_actions_hygiene.py"]
+    lanes: ["local", "ci"]
+    reason: "actions hygiene fixtures must keep rejecting @latest, PyPI release-branch pins, and nested deploy templates"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
