@@ -39,6 +39,25 @@ overlay:
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        OMI_LLM_GATEWAY_URL:
+          value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+          category: service_discovery
+        OMI_ENV_STAGE:
+          value: dev
+          category: runtime_identity
+        OMI_LLM_GATEWAY_FEATURE_MODE:
+          value: gateway
+          category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
+        OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+          value: 'false'
+          category: rollout
+        OMI_LLM_GATEWAY_SERVICE_TOKEN:
+          secret:
+            name: dev-omi-backend-secrets
+            key: OMI_LLM_GATEWAY_SERVICE_TOKEN
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -88,7 +107,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -166,7 +185,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

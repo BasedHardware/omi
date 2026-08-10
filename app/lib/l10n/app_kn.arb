@@ -10774,5 +10774,11 @@
     "pinAsBaseline": "ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ",
     "unpinAsBaseline": "ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ",
     "baselineMemory": "ಆಧಾರ ಸ್ಮೃತಿ",
-    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ"
+    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

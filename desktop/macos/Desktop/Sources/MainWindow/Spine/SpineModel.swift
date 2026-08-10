@@ -1,13 +1,14 @@
 //
 //  SpineModel.swift — the day, as one list.
 //
-//  A conversation, the memories it produced, and the frames that were on screen while it happened
-//  are three records of the same minute. The app used to file them in three destinations, so
-//  answering "what was I doing at eight?" meant visiting all three and reconciling them by eye.
+//  A conversation, the memories and tasks it produced, and the frames that were on screen while it
+//  happened are records of the same minute. The app used to file them in separate destinations, so
+//  answering "what was I doing at eight?" meant visiting each one and reconciling them by eye.
 //  This composes them into **one reverse-chronological stream, grouped by day** — the order they
 //  actually happened in, newest first.
 //
-//  **Conversations stay dominant and the other two stay first-class.** Memories and screen moments
+//  **Conversations stay dominant and every extracted record stays first-class.** Memories, tasks,
+//  and screen moments
 //  render *indented under* the conversation that produced them, which is what keeps a conversation
 //  the thing your eye lands on. They are not children of a card, though: they are rows of the same
 //  spine, so filtering to one kind is a real filter over the whole stream rather than a different
@@ -32,6 +33,7 @@ enum SpineKind: String, CaseIterable, Identifiable, Sendable {
   case everything
   case conversations
   case memories
+  case tasks
   case screen
 
   var id: String { rawValue }
@@ -41,12 +43,13 @@ enum SpineKind: String, CaseIterable, Identifiable, Sendable {
     case .everything: return "Everything"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
+    case .tasks: return "Tasks"
     case .screen: return "Screen"
     }
   }
 
   /// The chips, in the order they are shown.
-  static let chips: [SpineKind] = [.everything, .conversations, .memories, .screen]
+  static let chips: [SpineKind] = [.everything, .conversations, .memories, .tasks, .screen]
 }
 
 // MARK: - Leaves
@@ -96,6 +99,41 @@ struct SpineMemory: Identifiable, Equatable, Sendable {
   let timestamp: Date
   /// The conversation this memory came out of, when the server recorded one.
   let conversationID: String?
+  let sourceConversationTitle: String?
+
+  init(
+    id: String,
+    text: String,
+    timestamp: Date,
+    conversationID: String?,
+    sourceConversationTitle: String? = nil
+  ) {
+    self.id = id
+    self.text = text
+    self.timestamp = timestamp
+    self.conversationID = conversationID
+    self.sourceConversationTitle = sourceConversationTitle
+  }
+}
+
+/// One task in the chronology, retaining its authoritative task-store value for completion writes.
+struct SpineTask: Identifiable, Equatable {
+  let task: TaskActionItem
+  let sourceConversationTitle: String?
+
+  var id: String { task.id }
+  var text: String { task.description }
+  var timestamp: Date { task.createdAt }
+  var conversationID: String? { task.conversationId }
+  var sourceLabel: String {
+    if let sourceConversationTitle { return "From \(sourceConversationTitle)" }
+    switch task.source {
+    case "screenshot": return "From screen capture"
+    case "manual": return "Added manually"
+    case .some(let source) where source.hasPrefix("transcription"): return "From a recording"
+    default: return "Task"
+    }
+  }
 }
 
 /// A memory's text, split where it repeats.
@@ -121,6 +159,7 @@ struct SpineMemoryCopy: Equatable, Sendable {
 struct SpineConversation: Identifiable, Equatable {
   let conversation: ServerConversation
   let memoryCount: Int
+  let taskCount: Int
   let momentCount: Int
 
   var id: String { conversation.id }
@@ -153,6 +192,7 @@ struct SpineConversation: Identifiable, Equatable {
     var parts: [String] = []
     if duration >= 1 { parts.append(SpineFormat.duration(duration)) }
     if memoryCount > 0 { parts.append(SpineFormat.plural(memoryCount, "memory", "memories")) }
+    if taskCount > 0 { parts.append(SpineFormat.plural(taskCount, "task", "tasks")) }
     if momentCount > 0 {
       parts.append(SpineFormat.plural(momentCount, "screen moment", "screen moments"))
     }
@@ -193,6 +233,7 @@ struct SpineRow: Identifiable, Equatable {
   enum Content: Equatable {
     case conversation(SpineConversation)
     case memories([SpineMemory])
+    case tasks([SpineTask])
     /// The frames a strip draws, plus how many there were in the window they were sampled from —
     /// a strip that silently shows 8 of 184 is a strip that lies about the day.
     case moments(shown: [SpineMoment], total: Int)
@@ -223,6 +264,7 @@ struct SpineDay: Identifiable, Equatable {
   let title: String
   let momentCount: Int
   let conversationCount: Int
+  let taskCount: Int
   let rows: [SpineRow]
 
   /// How many memories the day holds. Counted off the rows rather than carried alongside them, so it
@@ -247,6 +289,7 @@ struct SpineDay: Identifiable, Equatable {
       parts.append(SpineFormat.plural(conversationCount, "conversation", "conversations"))
     }
     if memoryCount > 0 { parts.append(SpineFormat.plural(memoryCount, "memory", "memories")) }
+    if taskCount > 0 { parts.append(SpineFormat.plural(taskCount, "task", "tasks")) }
     return parts.joined(separator: " · ")
   }
 
@@ -259,6 +302,7 @@ struct SpineDay: Identifiable, Equatable {
       switch row.content {
       case .conversation: return total + 1
       case .memories(let memories): return total + memories.count
+      case .tasks(let tasks): return total + tasks.count
       case .moments(_, let count): return total + count
       case .brainMap: return total
       }
@@ -341,6 +385,7 @@ enum SpineComposer {
   static func compose(
     conversations rawConversations: [ServerConversation],
     memories rawMemories: [SpineMemory],
+    tasks rawTasks: [SpineTask] = [],
     screen: [Date: SpineDayScreen],
     calendar: Calendar = .current
   ) -> [SpineDay] {
@@ -353,6 +398,7 @@ enum SpineComposer {
     // sighting of each and drops the rest here rather than rendering the same day twice.
     let conversations = uniqued(rawConversations, by: \.id)
     let memories = uniqued(rawMemories, by: \.id)
+    let tasks = uniqued(rawTasks, by: \.id)
 
     // Memories that name a conversation we actually hold attach to it; everything else stands on
     // its own at the time it was made. A memory pointing at a conversation on a page we have not
@@ -368,6 +414,16 @@ enum SpineComposer {
       }
     }
 
+    var attachedTasks: [String: [SpineTask]] = [:]
+    var looseTasks: [SpineTask] = []
+    for task in tasks {
+      if let conversationID = task.conversationID, conversationIDs.contains(conversationID) {
+        attachedTasks[conversationID, default: []].append(task)
+      } else {
+        looseTasks.append(task)
+      }
+    }
+
     // Group the day's conversations first, so a moment can ask which conversation's window it
     // falls inside without scanning every conversation in the account.
     var conversationsByDay: [Date: [SpineConversation]] = [:]
@@ -377,6 +433,7 @@ enum SpineComposer {
       let summary = SpineConversation(
         conversation: conversation,
         memoryCount: attachedMemories[conversation.id]?.count ?? 0,
+        taskCount: attachedTasks[conversation.id]?.count ?? 0,
         momentCount: 0
       )
       conversationsByDay[day, default: []].append(summary)
@@ -386,9 +443,14 @@ enum SpineComposer {
     for memory in looseMemories {
       memoriesByDay[calendar.startOfDay(for: memory.timestamp), default: []].append(memory)
     }
+    var tasksByDay: [Date: [SpineTask]] = [:]
+    for task in looseTasks {
+      tasksByDay[calendar.startOfDay(for: task.timestamp), default: []].append(task)
+    }
 
     let days = Set(conversationsByDay.keys)
       .union(memoriesByDay.keys)
+      .union(tasksByDay.keys)
       .union(screen.keys)
       .sorted(by: >)
 
@@ -397,7 +459,9 @@ enum SpineComposer {
         day: day,
         conversations: conversationsByDay[day] ?? [],
         attachedMemories: attachedMemories,
+        attachedTasks: attachedTasks,
         looseMemories: memoriesByDay[day] ?? [],
+        looseTasks: tasksByDay[day] ?? [],
         screen: screen[day] ?? .empty,
         calendar: calendar
       )
@@ -443,6 +507,7 @@ enum SpineComposer {
         title: day.title,
         momentCount: day.momentCount,
         conversationCount: day.conversationCount,
+        taskCount: day.taskCount,
         rows: rows
       )
     }
@@ -452,7 +517,9 @@ enum SpineComposer {
     day: Date,
     conversations: [SpineConversation],
     attachedMemories: [String: [SpineMemory]],
+    attachedTasks: [String: [SpineTask]],
     looseMemories: [SpineMemory],
+    looseTasks: [SpineTask],
     screen: SpineDayScreen,
     calendar: Calendar
   ) -> SpineDay {
@@ -485,9 +552,11 @@ enum SpineComposer {
     for summary in ordered {
       let memories = (attachedMemories[summary.id] ?? []).sorted { $0.timestamp > $1.timestamp }
       let moments = momentsByConversation[summary.id] ?? []
+      let tasks = (attachedTasks[summary.id] ?? []).sorted { $0.timestamp > $1.timestamp }
       let counted = SpineConversation(
         conversation: summary.conversation,
         memoryCount: memories.count,
+        taskCount: tasks.count,
         momentCount: moments.count
       )
       rows.append(
@@ -502,6 +571,9 @@ enum SpineComposer {
       if !memories.isEmpty {
         rows.append(memoryRow(memories, id: "conv-mem:\(summary.id)", isAttached: true))
       }
+      if !tasks.isEmpty {
+        rows.append(taskRow(tasks, id: "conv-task:\(summary.id)", isAttached: true))
+      }
       if !moments.isEmpty {
         rows.append(
           momentRow(moments, total: moments.count, id: "conv-shot:\(summary.id)", isAttached: true))
@@ -510,6 +582,10 @@ enum SpineComposer {
 
     for memory in looseMemories.sorted(by: { $0.timestamp > $1.timestamp }) {
       rows.append(memoryRow([memory], id: "mem:\(memory.id)", isAttached: false))
+    }
+
+    for task in looseTasks.sorted(by: { $0.timestamp > $1.timestamp }) {
+      rows.append(taskRow([task], id: "task:\(task.id)", isAttached: false))
     }
 
     for cluster in clusters(of: looseMoments) {
@@ -554,6 +630,10 @@ enum SpineComposer {
       title: SpineFormat.day(day, calendar: calendar),
       momentCount: screen.total,
       conversationCount: conversations.count,
+      taskCount: rows.reduce(0) { total, row in
+        if case .tasks(let tasks) = row.content { return total + tasks.count }
+        return total
+      },
       rows: rows
     )
   }
@@ -577,7 +657,7 @@ enum SpineComposer {
         spine.append(row)
         continue
       }
-      // "conv-mem:<id>" / "conv-shot:<id>" — the owner is everything after the first colon.
+      // "conv-mem:<id>" / "conv-task:<id>" / "conv-shot:<id>" — owner follows the colon.
       let owner = String(row.id.drop(while: { $0 != ":" }).dropFirst())
       attachments[owner, default: []].append(row)
     }
@@ -611,6 +691,17 @@ enum SpineComposer {
       searchText: moments.map { "\($0.appName) \($0.windowTitle ?? "")" }
         .joined(separator: " ")
         .lowercased()
+    )
+  }
+
+  private static func taskRow(_ tasks: [SpineTask], id: String, isAttached: Bool) -> SpineRow {
+    SpineRow(
+      id: id,
+      anchor: tasks.map(\.timestamp).max() ?? Date(),
+      kind: .tasks,
+      isAttached: isAttached,
+      content: .tasks(tasks),
+      searchText: tasks.map { "\($0.text) \($0.sourceLabel)" }.joined(separator: " ").lowercased()
     )
   }
 

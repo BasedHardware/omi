@@ -4,8 +4,18 @@ import XCTest
 
 final class APIClientUploadLocalFilesV2Tests: XCTestCase {
 
-  override func setUp() {
+  override func setUp() async throws {
+    await MainActor.run {
+      AccountCutoverControlManager.shared.resetForTesting()
+      AccountCutoverControlManager.shared.apply(.legacyDefault)
+    }
     SyncUploadURLProtocol.reset()
+  }
+
+  override func tearDown() async throws {
+    await MainActor.run {
+      AccountCutoverControlManager.shared.resetForTesting()
+    }
   }
 
   func testUploadLocalFilesV2202ReturnsQueuedJobId() async throws {

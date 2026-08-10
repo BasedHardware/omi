@@ -1,3 +1,0 @@
-{
-  "change": "Rescan Files now shows progress and how many files are indexed instead of doing nothing visible, and the AI Chat pane's Skills refresh and workspace picker re-scan from disk so newly added skills and a changed project folder show up"
-}

@@ -48,6 +48,7 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
+  @ObservedObject private var accountCutoverControl = AccountCutoverControlManager.shared
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
@@ -202,98 +203,52 @@ struct DesktopHomeView: View {
         if PostOnboardingPromptSuggestions.shouldArmPopup() {
           showTryAskingPopup = true
         }
-
         updatePolicyManager.refresh(force: true)
-        // Check all permissions on launch
+        // Permissions and update policy remain reachable while cutover fences
+        // product traffic.
         appState.checkAllPermissions()
-
-        // For existing users who haven't indexed files yet, run a background scan
-        if !AppBuild.usesLazyDevPermissions
-          && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
-        {
-          scheduleInitialFileIndexing()
-        }
-
-        // Migration: one-time reset for users whose screenAnalysisEnabled
-        // was incorrectly set to false by a bug in syncMonitoringState() that
-        // persisted false whenever monitoring stopped for any reason.
-        // v2: re-run because the root cause (syncMonitoringState disabling the
-        // setting) was only fixed in this release, so v1 users got re-broken.
-        if !UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV2) {
-          UserDefaults.standard.set(true, forKey: .screenAnalysisEnabled)
-          AssistantSettings.shared.screenAnalysisEnabled = true
-          UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
-          log(
-            "DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled"
-          )
-          // Push true to server so syncFromServer() doesn't revert it
-          Task { await SettingsSyncManager.shared.syncToServer() }
-        }
-
-        // Named development bundles used to seed screen analysis off to
-        // avoid permission prompts. Screen capture no longer requests
-        // TCC during startup, so restore the default once: a granted
-        // named-bundle permission must actually begin storing frames.
-        if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
-          usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
-          migrationApplied: UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV3)
-        ) {
-          AssistantSettings.shared.screenAnalysisEnabled = true
-          UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV3)
-          log("DesktopHomeView: Restored screen capture default for quiet named bundle")
-        }
-
-        restorePersistedCaptureServices(reason: "launch")
-
-        // Start Crisp chat in background for notifications, scoped to the signed-in user
-        CrispManager.shared.start(
-          initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
-          sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
-        )
-
-        // Set up floating control bar. Product invariant: normal signed-in
-        // launches must show the enabled bar immediately; hide-until-PTT is
-        // only for explicit onboarding/demo/minimal-mode contexts.
-        FloatingControlBarManager.shared.setup(
-          appState: appState, chatProvider: viewModelContainer.chatProvider)
-        FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
-
-        // Set up push-to-talk voice input
-        if let barState = FloatingControlBarManager.shared.barState {
-          PushToTalkManager.shared.setup(barState: barState)
-        }
       }
-      .task {
-        // Trigger eager data loading when main content appears
-        await viewModelContainer.loadAllData()
-        scheduleConversationWarmup()
-        scheduleAgentVMProvisioning()
+      .task(id: accountCutoverControl.productShellAdmissionToken) {
+        await DesktopHomeSignedInStartup.runProductServicesIfAdmitted(
+          appState: appState,
+          chatProvider: viewModelContainer.chatProvider,
+          scheduleInitialFileIndexing: scheduleInitialFileIndexing,
+          restorePersistedCaptureServices: restorePersistedCaptureServices(reason:)
+        )
+        await DesktopHomeSignedInStartup.loadDataIfAdmitted(
+          loadAllData: { await viewModelContainer.loadAllData() },
+          scheduleConversationWarmup: scheduleConversationWarmup,
+          scheduleAgentVMProvisioning: scheduleAgentVMProvisioning
+        )
       }
       // Refresh conversations when app becomes active (e.g. switching back from another app)
       .onReceive(
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
       ) { _ in
+        updatePolicyManager.refresh()
+        guard AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
         // Cooldown: only refresh conversations if last activation was 60+ seconds ago
         let now = Date()
         if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
           lastActivationRefresh = now
           Task { await appState.refreshConversations() }
         }
-        updatePolicyManager.refresh()
         // Reconcile persisted intent after returning from System Settings or
         // after a runtime service stopped while the app was inactive.
         restorePersistedCaptureServices(reason: "app active")
       }
       .onChange(of: apiKeyService.isLoaded) { _, loaded in
-        guard loaded else { return }
+        guard loaded, AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
         log("DesktopHomeView: API keys loaded — retrying deferred services")
         restorePersistedCaptureServices(reason: "key load")
       }
       .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+        guard AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
         reconcileCaptureServicesAfterSettingsSync()
       }
       // Cmd+R: refresh all data (conversations, chat, tasks, memories)
       .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
+        guard AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
         Task { await appState.refreshConversations() }
       }
   }
@@ -426,12 +381,14 @@ struct DesktopHomeView: View {
               onDownload: { updatePolicyManager.openDownload(policy) }
             )
             .zIndex(21)
+          } else {
+            AccountCutoverBlockingOverlay.host(onOpenDownload: { updatePolicyManager.openDownload($0) })
           }
         }
       }
     }
     .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
-    .background(ShellWindowAttachment().frame(width: 0, height: 0))
+    .background(ShellWindowAttachment().frame(width: 0, height: 0)).shellWindowDragSurface()
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)

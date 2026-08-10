@@ -47,6 +47,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             config_map:
               name: dev-omi-backend-config
@@ -55,7 +58,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -68,6 +71,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -171,6 +177,25 @@ environments:
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          OMI_LLM_GATEWAY_URL:
+            value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+            category: service_discovery
+          OMI_ENV_STAGE:
+            value: dev
+            category: runtime_identity
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: dev-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -220,7 +245,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -298,7 +323,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -372,6 +397,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -385,6 +413,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -495,6 +526,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -512,6 +546,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -631,6 +668,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -648,6 +688,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -762,6 +805,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -783,6 +829,9 @@ environments:
               category: memory_rollout
               value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -895,6 +944,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -987,6 +1039,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             config_map:
               name: prod-omi-backend-config
@@ -995,7 +1050,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1008,6 +1063,9 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1165,7 +1223,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1253,6 +1311,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -1266,6 +1327,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -1390,6 +1454,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -1407,6 +1474,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -1527,6 +1597,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -1544,6 +1617,9 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -1659,6 +1735,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -1680,6 +1759,9 @@ environments:
               category: memory_rollout
               value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
               category: rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1772,6 +1854,9 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:

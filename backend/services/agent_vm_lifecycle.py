@@ -43,6 +43,7 @@ ACTIVE_BOOT_IMAGE_MIGRATION_STATES = frozenset(
 PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES = frozenset({"candidate_creating", "candidate_ready", "candidate_deleted"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
+_MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 _SERVICE_ACCOUNT = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
 
@@ -353,7 +354,8 @@ def _claim_vm_lease_txn(
     transaction: Any,
     deletion_ref: Any,
     user_ref: Any,
-    uid: str,
+    recovery_ref: Any | None,
+    recovery_migration_id: str | None,
     vm_name: str,
     auth_token: str,
     owner: str,
@@ -375,7 +377,20 @@ def _claim_vm_lease_txn(
     release_changed = release_id is not None and reconcile.get("releaseId") != release_id
     same_release = release_id is None or not release_changed
     if reconcile.get("state") == "quarantined" and same_release:
-        return False
+        recovery_snapshot = recovery_ref.get(transaction=transaction) if recovery_ref is not None else None
+        recovery = recovery_snapshot.to_dict() if recovery_snapshot is not None and recovery_snapshot.exists else None
+        recorded_instance_id = str(vm.get("instanceId") or "")
+        if (
+            not isinstance(recovery, dict)
+            or recovery_migration_id != reconcile.get("durableMigration")
+            or recovery.get("migrationId") != recovery_migration_id
+            or recovery.get("state") not in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+            or recovery.get("oldVmName") != vm_name
+            or recovery.get("oldAuthToken") != auth_token
+            or recovery.get("targetRelease") != release_id
+            or (recorded_instance_id and str(recovery.get("oldInstanceId") or "") != recorded_instance_id)
+        ):
+            return False
     if float(reconcile.get("retryAt", 0) or 0) > now and same_release:
         return False
     lease_raw = reconcile.get("lease")
@@ -403,16 +418,29 @@ def _claim_vm_lease_txn(
 
 
 def claim_vm_lease(
-    uid: str, vm_name: str, auth_token: str, owner: str, release_id: str | None = None, now: float | None = None
+    uid: str,
+    vm_name: str,
+    auth_token: str,
+    owner: str,
+    release_id: str | None = None,
+    recovery_migration_id: str | None = None,
+    now: float | None = None,
 ) -> bool:
     now = time.time() if now is None else now
     client = get_firestore_client()
+    user_ref = client.collection("users").document(uid)
+    recovery_ref = (
+        user_ref.collection("agentVmMigrations").document(recovery_migration_id)
+        if isinstance(recovery_migration_id, str) and _MIGRATION_ID.fullmatch(recovery_migration_id)
+        else None
+    )
     return bool(
         _claim_vm_lease_txn(
             client.transaction(),
             client.collection("account_deletions").document(uid),
-            client.collection("users").document(uid),
-            uid,
+            user_ref,
+            recovery_ref,
+            recovery_migration_id,
             vm_name,
             auth_token,
             owner,
@@ -660,6 +688,7 @@ def clear_vm_reconcile_lease_fields() -> dict[str, Any]:
         "startRequestedAt": DELETE_FIELD,
         "drainRequested": DELETE_FIELD,
         "drainRequestedAt": DELETE_FIELD,
+        "migrationDrainRelease": DELETE_FIELD,
     }
 
 
@@ -672,6 +701,8 @@ def _migration_matches(
     owner: str,
     now: float,
     instance_id: str | None = None,
+    allow_drain_requested: bool = False,
+    allow_start_requested: bool = False,
 ) -> bool:
     """Validate the active pointer and reconciler lease for a migration CAS."""
     reconcile = vm.get("reconcile")
@@ -681,8 +712,8 @@ def _migration_matches(
         or (vm.get("zone") or DEFAULT_ZONE) != zone
         or vm.get("authToken") != auth_token
         or (instance_id is not None and str(vm.get("instanceId") or "") != instance_id)
-        or bool(reconcile.get("startRequested"))
-        or bool(reconcile.get("drainRequested"))
+        or (bool(reconcile.get("startRequested")) and not allow_start_requested)
+        or (bool(reconcile.get("drainRequested")) and not allow_drain_requested)
     ):
         return False
     lease = reconcile.get("lease")
@@ -742,11 +773,45 @@ def _begin_boot_image_migration_txn(
         return None
     snapshot = user_ref.get(transaction=transaction)
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    existing = migration_ref.get(transaction=transaction)
+    current = existing.to_dict() if existing.exists else None
+    durable_migration_id = migration.get("migrationId")
+    reconcile = vm.get("reconcile") if isinstance(vm, dict) else None
+    existing_matches = isinstance(current, dict) and (
+        current.get("oldVmName") == vm_name
+        and current.get("oldAuthToken") == auth_token
+        and current.get("oldInstanceId") == migration.get("oldInstanceId")
+        and current.get("candidateVmName") == migration.get("candidateVmName")
+        and current.get("targetRelease") == migration.get("targetRelease")
+    )
+    recovering_pre_cutover = (
+        existing_matches
+        and isinstance(current, dict)
+        and isinstance(reconcile, Mapping)
+        and reconcile.get("durableMigration") == durable_migration_id
+        and current.get("migrationId") == durable_migration_id
+        and current.get("state") in PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES
+        and current.get("candidateAuthToken") == migration.get("candidateAuthToken")
+        and current.get("targetBootImage") == migration.get("targetBootImage")
+    )
+    initial_migration_drain = (
+        not existing.exists
+        and isinstance(reconcile, Mapping)
+        and bool(reconcile.get("drainRequested"))
+        and reconcile.get("migrationDrainRelease") == migration.get("targetRelease")
+        and isinstance(migration.get("predecessorDrainedAt"), (int, float))
+    )
     if not isinstance(vm, dict) or not _migration_matches(
-        vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now
+        vm,
+        vm_name=vm_name,
+        zone=zone,
+        auth_token=auth_token,
+        owner=owner,
+        now=now,
+        allow_drain_requested=recovering_pre_cutover or initial_migration_drain,
+        allow_start_requested=initial_migration_drain,
     ):
         return None
-    durable_migration_id = migration.get("migrationId")
     old_instance_id = str(migration.get("oldInstanceId") or "")
     if not isinstance(durable_migration_id, str) or not durable_migration_id or not old_instance_id:
         return None
@@ -755,17 +820,23 @@ def _begin_boot_image_migration_txn(
         return None
     if str(vm.get("status") or "") not in {"stopped", "ready"}:
         return None
-    existing = migration_ref.get(transaction=transaction)
     if existing.exists:
-        current = existing.to_dict() or {}
-        if not (
-            current.get("oldVmName") == vm_name
-            and current.get("oldAuthToken") == auth_token
-            and current.get("oldInstanceId") == migration.get("oldInstanceId")
-            and current.get("candidateVmName") == migration.get("candidateVmName")
-            and current.get("targetRelease") == migration.get("targetRelease")
-        ):
+        if not existing_matches:
             return None
+        assert isinstance(current, dict)
+        if recovering_pre_cutover:
+            # Atomically exchange the crash-retained drain marker for the
+            # migration state. Both block new admission, while later journal
+            # transitions continue to reject unrelated drain requests.
+            transaction.update(
+                user_ref,
+                {
+                    "agentVm.reconcile.state": "migration_claimed",
+                    "agentVm.reconcile.drainRequested": DELETE_FIELD,
+                    "agentVm.reconcile.drainRequestedAt": DELETE_FIELD,
+                    "agentVm.reconcile.migrationDrainRelease": DELETE_FIELD,
+                },
+            )
         # A terminal candidate cleanup is explicitly retryable.  Reuse the
         # durable candidate name/token but remove its old provider identity so
         # the next creation can be recorded under the same fenced journal.
@@ -778,10 +849,20 @@ def _begin_boot_image_migration_txn(
         return current
     record = {**migration, "state": "candidate_creating", "createdAt": now, "updatedAt": now}
     transaction.set(migration_ref, record)
-    update = {
+    update: dict[str, Any] = {
         "agentVm.reconcile.state": "migration_claimed",
         "agentVm.reconcile.durableMigration": durable_migration_id,
     }
+    if initial_migration_drain:
+        # Exchange the explicit running-owner drain for the durable migration
+        # journal in one transaction. Admission remains closed throughout.
+        update.update(
+            {
+                "agentVm.reconcile.drainRequested": DELETE_FIELD,
+                "agentVm.reconcile.drainRequestedAt": DELETE_FIELD,
+                "agentVm.reconcile.migrationDrainRelease": DELETE_FIELD,
+            }
+        )
     if not recorded_instance_id:
         # Legacy owner records predate the explicit GCE ID field. Bind it only
         # inside this stopped-only, owner-token-and-lease CAS, then every
@@ -1148,7 +1229,13 @@ def _cutover_boot_image_migration_txn(
     ) != candidate.get("instanceId"):
         return False
     soak_seconds = migration.get("soakSeconds")
-    if not isinstance(soak_seconds, int) or soak_seconds < 60:
+    retention_seconds = migration.get("retentionSeconds", soak_seconds)
+    if (
+        not isinstance(soak_seconds, int)
+        or soak_seconds < 60
+        or not isinstance(retention_seconds, int)
+        or retention_seconds < soak_seconds
+    ):
         return False
     transaction.update(user_ref, {"agentVm": dict(candidate)})
     transaction.update(
@@ -1156,7 +1243,8 @@ def _cutover_boot_image_migration_txn(
         {
             "state": "cutover",
             "cutoverAt": now,
-            "retireAfter": now + soak_seconds,
+            "admitAfter": now + soak_seconds,
+            "retireAfter": now + retention_seconds,
             "updatedAt": now,
         },
     )
@@ -1206,15 +1294,42 @@ def _claim_boot_image_migration_retirement_txn(
             owner=owner,
             now=now,
             instance_id=candidate_instance_id,
+            allow_start_requested=True,
         )
     ):
         return None
-    if migration.get("state") == "cutover":
+    if migration.get("state") in {"cutover", "retained"}:
+        admit_after = migration.get("admitAfter", migration.get("retireAfter"))
         retire_after = migration.get("retireAfter")
-        if not isinstance(retire_after, (int, float)):
+        if not isinstance(admit_after, (int, float)) or not isinstance(retire_after, (int, float)):
             return None
-        if now < float(retire_after):
+        if migration.get("state") == "cutover" and now < float(admit_after):
             return {**migration, "state": "soaking"}
+        if now < float(retire_after):
+            if migration.get("state") == "cutover":
+                transaction.update(
+                    user_ref,
+                    {
+                        "agentVm.reconcile.state": "ready",
+                        "agentVm.reconcile.lease": DELETE_FIELD,
+                        "agentVm.reconcile.startRequested": DELETE_FIELD,
+                        "agentVm.reconcile.startRequestedAt": DELETE_FIELD,
+                        "agentVm.reconcile.migration.state": "retained",
+                        "agentVm.reconcile.migration.cutoverPending": DELETE_FIELD,
+                    },
+                )
+                transaction.update(migration_ref, {"state": "retained", "admittedAt": now, "updatedAt": now})
+                return {**migration, "state": "admitted"}
+            transaction.update(
+                user_ref,
+                {
+                    "agentVm.reconcile.state": "ready",
+                    "agentVm.reconcile.lease": DELETE_FIELD,
+                    "agentVm.reconcile.startRequested": DELETE_FIELD,
+                    "agentVm.reconcile.startRequestedAt": DELETE_FIELD,
+                },
+            )
+            return {**migration, "state": "retained"}
         transaction.update(migration_ref, {"state": "retiring", "retirementClaimedAt": now, "updatedAt": now})
         return {**migration, "state": "retiring"}
     return migration if migration.get("state") == "retiring" else None
@@ -1543,7 +1658,7 @@ class GceAgentVmClient:
             url = (
                 f"https://compute.googleapis.com/compute/v1/projects/{self.project}/zones/{self.zone}/operations/{name}"
             )
-        for _ in range(60):
+        for _ in range(150):
             await asyncio.sleep(2)
             response = await self.request("GET", url)
             response.raise_for_status()
@@ -1794,16 +1909,11 @@ class GceAgentVmClient:
                 "source": state_disk_source,
             },
         ]
-        if source_clone_disk_source:
-            disks.append(
-                {
-                    "boot": False,
-                    "autoDelete": True,
-                    "deviceName": STATE_SOURCE_DEVICE_NAME,
-                    "mode": "READ_ONLY",
-                    "source": source_clone_disk_source,
-                }
-            )
+        # A legacy source clone is a full predecessor boot disk. Attaching it
+        # during power-on exposes duplicate root/EFI labels to systemd before
+        # the startup script can select the named migration device. The
+        # reconciler hot-attaches that read-only clone after the candidate is
+        # running; metadata tells startup to wait for that bounded handoff.
         body = {
             "name": vm_name,
             "machineType": machine_type,
