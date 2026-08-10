@@ -8,7 +8,6 @@ from math import ceil
 from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
-import fal_client
 import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
@@ -281,7 +280,7 @@ def deepgram_prerecorded(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
-    Returns words in same format as fal_whisperx for compatibility with existing postprocessing.
+    Returns words in same format as prerecorded for compatibility with existing postprocessing.
 
     Args:
         audio_url: URL to the audio file
@@ -346,7 +345,7 @@ def deepgram_prerecorded(
                 return [], detected_lang or 'en'
             return []
 
-        # Convert Deepgram format to fal_whisperx compatible format
+        # Convert Deepgram format to prerecorded compatible format
         # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
         # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
         words: List[Dict[str, Any]] = []
@@ -524,48 +523,6 @@ def deepgram_prerecorded_from_bytes(
 
 
 @timeit
-def fal_whisperx(
-    audio_url: str,
-    speakers_count: Optional[int] = None,
-    attempts: int = 0,
-    return_language: bool = False,
-    diarize: bool = True,
-    chunk_level: str = 'word',
-) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    logger.info(f'fal_whisperx {audio_url} {speakers_count} {attempts}')
-
-    try:
-        handler = fal_client.submit(
-            "fal-ai/whisper",
-            arguments={
-                "audio_url": audio_url,
-                'task': 'transcribe',
-                'diarize': diarize,
-                'chunk_level': chunk_level,
-                'version': '3',
-                'batch_size': 64,
-                'num_speakers': speakers_count,
-            },
-        )
-        result = handler.get()
-        # print(result)
-        words = result.get('chunks', [])
-        if not words:
-            raise Exception('No chunks found')
-        if return_language:
-            languages = result.get('inferred_languages', ['en'])
-            language = languages[0] if languages else 'en'
-            return words, language
-        return words
-    except Exception as e:
-        logger.error(e)
-        if attempts < 2:
-            return fal_whisperx(audio_url, speakers_count, attempts + 1, return_language)
-        if return_language:
-            return [], 'en'
-        return []
-
-
 @timeit
 def modulate_prerecorded_from_bytes(
     audio_bytes: bytes,

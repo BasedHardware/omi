@@ -301,8 +301,6 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/fd/4d/e6e40f93031adbf
 [[packages]]
 name = "fal-client"
 version = "0.4.1"
-sdist = { url = "https://files.pythonhosted.org/packages/e3/54/7674e1c8181e5b4125dba43ea10e2324131bfee0498444d5bdf39907713b/fal_client-0.4.1.tar.gz", upload-time = 2024-06-28T18:43:25Z, size = 8413, hashes = { sha256 = "3121cdbf4be8a47226e6df8e782340c1a603b17ec04942a131c2929a32aedff3" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/0d/fd/340396fdceb9ac2fac768f9d91b0e8a1cf18c554567afd9bf01b60c949e8/fal_client-0.4.1-py3-none-any.whl", upload-time = 2024-06-28T18:43:24Z, size = 6296, hashes = { sha256 = "3fe13ac5108a02c1c27e146e52dcbb0b10d33694d870c8a1769966af18ff4a3f" } }]
 
 [[packages]]
 name = "fastapi"

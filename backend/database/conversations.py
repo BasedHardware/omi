@@ -1522,7 +1522,7 @@ def set_postprocessing_status(
     conversation_id: str,
     status: PostProcessingStatus,
     fail_reason: str = None,
-    model: PostProcessingModel = PostProcessingModel.fal_whisperx,
+    model: PostProcessingModel = PostProcessingModel.prerecorded,
 ):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1582,6 +1582,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
+    prerecorded_ref = conversation_ref.collection('prerecorded')
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
@@ -1592,6 +1593,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
             sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
         ),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
+        'prerecorded': list(sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))),
     }
 
 

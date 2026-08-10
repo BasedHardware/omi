@@ -199,9 +199,6 @@ def _desktop_transcribe_isolation():
         _deepgram.LiveTranscriptionEvents = MagicMock()
         sys.modules.setdefault('deepgram', _deepgram)
 
-        _fal_client = ModuleType('fal_client')
-        _fal_client.submit = MagicMock()
-        sys.modules.setdefault('fal_client', _fal_client)
 
         def _parse_options_header(value):
             if value is None:
