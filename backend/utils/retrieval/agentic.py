@@ -71,8 +71,6 @@ from database.redis_db import get_cached_user_geolocation
 from database.users import get_user_location_context_consent
 from models.geolocation import Geolocation
 from utils.conversations.location import async_get_google_maps_city
-from utils.other.endpoints import timeit
-from utils.observability.langsmith import is_langsmith_enabled
 import logging
 
 try:
