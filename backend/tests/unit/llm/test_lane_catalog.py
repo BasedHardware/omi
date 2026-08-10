@@ -243,8 +243,8 @@ class TestValidateServingConfig:
     def test_serving_lane_marked_dev_only_is_rejected(self):
         catalog = load_catalog()
         base = load_gateway_config(prod_mode=False)
-        extra = self._minimal_serving_config(lane_id="omi:auto:chat-extraction")
-        base.lanes["omi:auto:chat-extraction"] = extra.lanes["omi:auto:chat-extraction"]
+        extra = self._minimal_serving_config(lane_id="omi:auto:memory-graph")
+        base.lanes["omi:auto:memory-graph"] = extra.lanes["omi:auto:memory-graph"]
         base.route_artifacts.update(extra.route_artifacts)
         with pytest.raises(ConfigValidationError, match="only prod_ready lanes may serve"):
             validate_serving_config(catalog, base)
@@ -257,6 +257,25 @@ class TestValidateServingConfig:
         base.route_artifacts.update(extra.route_artifacts)
         with pytest.raises(ConfigValidationError, match="only prod_ready lanes may serve"):
             validate_serving_config(catalog, base)
+
+    def test_model_config_generated_lanes_keep_serving_without_a_catalog_entry(self):
+        """`utils.llm.model_config` owns the feature lanes it generates.
+
+        Gating them on the catalog would stop serving every feature the model
+        config routes through the gateway, so they are exempt from the catalog
+        cross-check even when uncatalogued or catalogued as dev_only.
+        """
+        catalog = load_catalog()
+        cfg = load_gateway_config(prod_mode=False)
+
+        assert "omi:auto:chat-agent" in cfg.generated_lane_ids
+        assert catalog.get("omi:auto:chat-agent") is None
+        assert "omi:auto:chat-agent" in cfg.lanes
+        # chat-extraction is catalogued dev_only but generated from model_config.
+        assert "omi:auto:chat-extraction" in cfg.generated_lane_ids
+        assert "omi:auto:chat-extraction" in cfg.lanes
+
+        validate_serving_config(catalog, cfg)
 
     def test_prod_ready_lane_missing_from_serving_config_raises(self):
         """R0.5 review fix F2: the count-only check missed the case where

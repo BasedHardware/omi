@@ -3,6 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatPromptsTests: XCTestCase {
+  func testCurrentTimePromptUsesOneExplicitInstantAndTimeZone() throws {
+    let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-31T02:30:45Z"))
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+
+    XCTAssertEqual(
+      ChatPromptBuilder.currentTimePrompt(for: "What day is it?", at: date, timeZone: timeZone),
+      "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nWhat day is it?"
+    )
+  }
+
   func testExplicitScreenShareRequestUsesCanonicalScreenRecordingPermissionTool() {
     let desktopPrompt = ChatPromptBuilder.buildDesktopChat(userName: "Taylor")
 
@@ -47,5 +57,14 @@ final class ChatPromptsTests: XCTestCase {
     XCTAssertLessThan(step5Range.lowerBound, step6Range.lowerBound)
     XCTAssertGreaterThan(gateRange.lowerBound, step4Range.lowerBound)
     XCTAssertLessThan(gateRange.lowerBound, step5Range.lowerBound)
+  }
+
+  @MainActor
+  func testPreferredResponseLanguageCreatesAnExplicitKernelDirective() {
+    XCTAssertEqual(
+      ChatProvider.responseLanguageInstruction(languageCodes: ["es-MX"]),
+      "Reply in Spanish (es-MX) unless the user asks for another language."
+    )
+    XCTAssertNil(ChatProvider.responseLanguageInstruction(languageCodes: []))
   }
 }

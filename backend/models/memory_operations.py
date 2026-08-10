@@ -18,6 +18,7 @@ class MemoryOperationType(str, Enum):
     archive_transition = "archive_transition"
     projection_sync = "projection_sync"
     vector_sync = "vector_sync"
+    graph_enrichment = "graph_enrichment"
     deletion = "deletion"
 
 

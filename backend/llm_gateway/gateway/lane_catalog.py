@@ -132,6 +132,10 @@ def validate_serving_config(
     status. Every prod_ready catalog entry must have at least one serving
     artifact (associated by lane_id, not just by total count).
 
+    Lanes listed in `serving_cfg.generated_lane_ids` are exempt: they are
+    derived from `utils.llm.model_config`, which owns their provider and model,
+    so the catalog does not govern them.
+
     Raises ConfigValidationError on any mismatch (consistent with the rest
     of config_loader.py; not a plain ValueError). The mismatch detail
     names the lane so the operator can fix the catalog or the serving
@@ -143,7 +147,7 @@ def validate_serving_config(
     from llm_gateway.gateway.config_loader import ConfigValidationError
 
     prod_ready = catalog.prod_ready_lane_ids()
-    serving_lane_ids = set(serving_cfg.lanes.keys())
+    serving_lane_ids = set(serving_cfg.lanes.keys()) - set(serving_cfg.generated_lane_ids)
     serving_lane_to_artifacts: dict[str, list[str]] = {}
     for art_id, art in serving_cfg.route_artifacts.items():
         serving_lane_to_artifacts.setdefault(art.lane_id, []).append(art_id)

@@ -22,6 +22,17 @@ def load_preflight():
     return module
 
 
+def test_preflight_script_imports_without_pythonpath() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), '--help'],
+        cwd=BACKEND_ROOT.parent,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     preflight = load_preflight()
     monkeypatch.setattr(preflight, '_secret_exists', lambda **kwargs: False)
@@ -322,6 +333,45 @@ environments:
             '--format=json',
         ]
     ]
+
+
+def test_runtime_binding_check_accepts_empty_public_literal_on_live_service(tmp_path: Path) -> None:
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        '''\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            EMPTY_PUBLIC_SETTING:
+              value: ''
+''',
+        encoding='utf-8',
+    )
+
+    def runner(command: list[str], **_kwargs):
+        assert command[:4] == ['gcloud', 'run', 'services', 'describe']
+        # Cloud Run drops `value` from describe output for an empty literal.
+        return SimpleNamespace(
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'env': [{'name': 'EMPTY_PUBLIC_SETTING'}]}]}}}}
+            )
+        )
+
+    drift = preflight.check_runtime_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=runner,
+    )
+
+    assert drift == []
 
 
 def test_runtime_binding_check_ignores_undeclared_live_bindings(tmp_path: Path) -> None:

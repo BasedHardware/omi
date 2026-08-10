@@ -10,10 +10,10 @@ from llm_gateway.gateway.output_budget import (
 from llm_gateway.gateway.schemas import OutputBudgetPolicy
 
 
-def test_session_titles_is_not_loaded_without_a_prod_ready_catalog_entry():
-    config = load_gateway_config(prod_mode=True)
+def test_session_titles_has_an_explicit_but_disabled_output_budget_policy():
+    route = load_gateway_config(prod_mode=True).route_artifacts['route.session_titles.model_config.001']
 
-    assert 'route.session_titles.model_config.001' not in config.route_artifacts
+    assert route.output_budget == OutputBudgetPolicy(experiment='session_titles', max_completion_tokens=128)
 
 
 def test_output_budget_policy_is_disabled_until_its_experiment_is_enabled(monkeypatch):

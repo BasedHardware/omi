@@ -63,7 +63,7 @@ def test_list_oversized_statuses_rejected_before_db(db):
     oversized = ",".join(["completed"] * 40)
 
     with pytest.raises(HTTPException) as ei:
-        conv.get_conversations(statuses=oversized, start_date=None, end_date=None, uid="u1")
+        conv.get_conversations(statuses=oversized, sources=None, start_date=None, end_date=None, uid="u1")
 
     assert ei.value.status_code == 400
     # The guard fires before the query is built: the Firestore-like fake never saw the filter.
@@ -71,7 +71,9 @@ def test_list_oversized_statuses_rejected_before_db(db):
 
 
 def test_list_normal_statuses_reach_db(db):
-    result = conv.get_conversations(statuses="processing,completed", start_date=None, end_date=None, uid="u1")
+    result = conv.get_conversations(
+        statuses="processing,completed", sources=None, start_date=None, end_date=None, uid="u1"
+    )
 
     assert result == []
     assert db.last_statuses == ["processing", "completed"]

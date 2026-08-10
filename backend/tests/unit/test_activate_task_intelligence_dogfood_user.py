@@ -20,6 +20,14 @@ def load_script():
     return module
 
 
+@pytest.fixture
+def script():
+    module = load_script()
+    module.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    module.CANONICAL_MEMORY_USERS = frozenset({module.TASK_INTELLIGENCE_DOGFOOD_UID})
+    return module
+
+
 class _Snapshot:
     def __init__(self, data=None):
         self._data = data
@@ -85,8 +93,7 @@ class _HttpResponse:
         return json.dumps(self._payload).encode('utf-8')
 
 
-def test_missing_control_plans_explicit_read_at_default_generation():
-    script = load_script()
+def test_missing_control_plans_explicit_read_at_default_generation(script):
     db = _Db()
 
     current = script.read_control(db, uid=script.TASK_INTELLIGENCE_DOGFOOD_UID)
@@ -100,6 +107,8 @@ def test_missing_control_plans_explicit_read_at_default_generation():
 
 def test_activation_preserves_existing_generation_and_is_idempotent(monkeypatch):
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     monkeypatch.setattr(script, 'firestore', _Firestore())
     path = script.control_path(script.TASK_INTELLIGENCE_DOGFOOD_UID)
     db = _Db({path: {'workflow_mode': 'off', 'account_generation': 7}})
@@ -120,6 +129,8 @@ def test_activation_preserves_existing_generation_and_is_idempotent(monkeypatch)
 
 def test_activation_rejects_stale_generation_without_a_write(monkeypatch):
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     monkeypatch.setattr(script, 'firestore', _Firestore())
     path = script.control_path(script.TASK_INTELLIGENCE_DOGFOOD_UID)
     db = _Db({path: {'workflow_mode': 'off', 'account_generation': 3}})
@@ -138,12 +149,14 @@ def test_activation_rejects_stale_generation_without_a_write(monkeypatch):
 def test_tool_rejects_any_non_dogfood_uid():
     script = load_script()
 
-    with pytest.raises(ValueError, match='restricted'):
+    with pytest.raises(RuntimeError, match='paused'):
         script.build_activation_plan('another-user', script.TaskWorkflowControl())
 
 
 def test_gcloud_user_transport_uses_current_document_precondition_and_never_reports_token():
     script = load_script()
+    script.TASK_INTELLIGENCE_DOGFOOD_UID = 'synthetic-task-dogfood-test-user'
+    script.CANONICAL_MEMORY_USERS = frozenset({script.TASK_INTELLIGENCE_DOGFOOD_UID})
     requests = []
     current_document = {
         'fields': {
@@ -182,4 +195,5 @@ def test_gcloud_user_transport_uses_current_document_precondition_and_never_repo
     assert 'currentDocument.updateTime=2026-07-12T00%3A00%3A00.000000Z' in patch_request.full_url
     assert b'"workflow_mode": {"stringValue": "read"}' in patch_request.data
     assert b'"account_generation": {"integerValue": "7"}' in patch_request.data
+    assert b'chat_first_ui_enabled' not in patch_request.data
     assert b'short-lived-token' not in patch_request.data

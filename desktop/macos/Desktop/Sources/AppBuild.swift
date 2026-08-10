@@ -1,8 +1,8 @@
-// v0.12.148 release path advancement marker
+// v0.12.149 release path advancement marker
 import Foundation
 
 enum AppBuild {
-  /// v0.12.148 release candidate source touch.
+  /// v0.12.149 release candidate source touch.
   static let productionBundleIdentifier = "com.omi.computer-macos"
   /// The separately-installable beta app ("Omi Beta.app"). A distinct bundle id gives it
   /// its own UserDefaults domain, TCC grants, Keychain ACL, and single-instance lock, so
@@ -108,6 +108,14 @@ enum AppBuild {
   /// Use `isBetaProductionBundle` when behavior differs between the two.
   static var isProductionBundle: Bool {
     productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+  }
+
+  static func firebaseAPIKey(bundleIdentifier: String, environmentKey: String?, bundledKey: String?) -> String {
+    // Shipped Beta shares production Firebase identity even while serving through dev.
+    if productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
+      return bundledKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+    return environmentKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
   }
 
   /// The separately-installable "Omi Beta" app. Its update channel is pinned to beta
@@ -443,7 +451,7 @@ enum AppBuild {
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
-    /// Release path advancement v0.12.148.
+    /// Release path advancement v0.12.149.
     /// Fixture fix validated for release path.
     session.dataTask(with: desktopAppcastURL) { data, _, _ in
       defer { session.finishTasksAndInvalidate() }

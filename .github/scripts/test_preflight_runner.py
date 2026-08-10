@@ -147,7 +147,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild()
         job = FakeWindowsJob()
 
-        runner.signal_child(child, signal.SIGINT, job)
+        runner.signal_child(child, signal.SIGINT, windows_job=job)
 
         self.assertEqual(job.calls, 1)
         self.assertEqual(child.signals, [])
@@ -156,7 +156,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild(returncode=0)
         job = FakeWindowsJob()
 
-        runner.signal_child(child, signal.SIGINT, job)
+        runner.signal_child(child, signal.SIGINT, windows_job=job)
 
         self.assertEqual(job.calls, 1)
 
@@ -289,7 +289,10 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn("source scripts/dev-harness/_resolve_python.sh", wrapper)
         self.assertIn('PYTHON_BIN="$(dev_harness_python)"', wrapper)
         self.assertIn('PREFLIGHT_COMMAND=(scripts/pre-push "$@")', wrapper)
-        self.assertIn('exec "$PYTHON_BIN" .github/scripts/preflight_runner.py --name pre-push -- "${PREFLIGHT_COMMAND[@]}"', wrapper)
+        self.assertIn(
+            'exec "$PYTHON_BIN" .github/scripts/preflight_runner.py --name pre-push -- "${PREFLIGHT_COMMAND[@]}"',
+            wrapper,
+        )
         self.assertIn("source scripts/dev-harness/_resolve_python.sh", pre_push)
         self.assertIn('PYTHON_BIN="$(dev_harness_python)"', pre_push)
         self.assertIn(
@@ -356,7 +359,10 @@ class LaunchContractTests(unittest.TestCase):
                 capture_output=True,
             )
             shutil.copy2(WRAPPER_PATH, scripts / "pre-push-singleflight")
-            shutil.copy2(REPO_ROOT / "scripts" / "dev-harness" / "_resolve_python.sh", scripts / "dev-harness" / "_resolve_python.sh")
+            shutil.copy2(
+                REPO_ROOT / "scripts" / "dev-harness" / "_resolve_python.sh",
+                scripts / "dev-harness" / "_resolve_python.sh",
+            )
             shutil.copy2(MODULE_PATH, github_scripts / "preflight_runner.py")
             proof_path = root / "wrapper-proof.txt"
             (scripts / "pre-push").write_text(

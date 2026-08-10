@@ -35,8 +35,12 @@ class FeedbackWindow {
 
     let newWindow = NSWindow(contentViewController: hostingController)
     newWindow.title = "Report Issue"
-    newWindow.styleMask = [.titled, .closable]
-    newWindow.setContentSize(NSSize(width: 400, height: 300))
+    newWindow.styleMask = [.titled, .closable, .fullSizeContentView]
+    // Transparent, light-pinned, and shadowed by its own frame. Without the pin an `NSTextField`
+    // inside this sheet resolves `labelColor` against the machine's appearance and renders near-white
+    // type on the near-white panel.
+    WindowGlass.wear(newWindow, as: .titled)
+    newWindow.setContentSize(NSSize(width: 400, height: 340))
     newWindow.center()
     newWindow.makeKeyAndOrderFront(nil)
     newWindow.level = .floating
@@ -74,13 +78,13 @@ struct FeedbackView: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: 48)
-            .foregroundColor(.green)
+            .foregroundColor(Ink.listeningGreen)
 
           Text("Report sent")
-            .font(.headline)
+            .inkStyle(.firstTitle, color: Ink.primary)
 
           Text("We'll look into this issue.")
-            .foregroundColor(.secondary)
+            .inkStyle(.prose, color: Ink.secondary)
 
           Button("Close") {
             onDismiss()
@@ -91,32 +95,29 @@ struct FeedbackView: View {
       } else {
         // Form state
         Text("Report an Issue")
-          .font(.headline)
+          .inkStyle(.rowCopy, color: Ink.primary)
 
         Text(
           "Redacted diagnostics will be included automatically. Notes, name, and email stay on this device for privacy; save a diagnostics file to share them manually."
         )
-        .font(.caption)
-        .foregroundColor(.secondary)
+        .inkStyle(.statusLabel, color: Ink.secondary)
 
         TextEditor(text: $feedbackText)
           .font(.body)
           .frame(minHeight: 100)
-          .border(Color.gray.opacity(0.3), width: 1)
+          .border(Ink.hairline, width: 1)
 
         HStack {
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Name (optional)")
-              .font(.caption)
-              .foregroundColor(.secondary)
+              .inkStyle(.statusLabel, color: Ink.secondary)
             TextField("Your name", text: $name)
               .textFieldStyle(.roundedBorder)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Email")
-              .font(.caption)
-              .foregroundColor(.secondary)
+              .inkStyle(.statusLabel, color: Ink.secondary)
             TextField("your@email.com", text: $email)
               .textFieldStyle(.roundedBorder)
           }
@@ -144,7 +145,12 @@ struct FeedbackView: View {
       }
     }
     .padding(OmiSpacing.xl)
-    .frame(width: 400, height: 300)
+    // Clear of the traffic lights, which `.fullSizeContentView` puts over the content.
+    .padding(.top, OmiSpacing.lg)
+    .frame(width: 400, height: 340)
+    // The sheet paints no ground of its own; the glass owns it, full bleed because the window frame
+    // already carries the corner and the shadow.
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   private func submitFeedback() {

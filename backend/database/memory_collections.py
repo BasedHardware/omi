@@ -36,6 +36,14 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/state"
 
     @property
+    def legacy_canonical_backfill_checkpoint(self) -> str:
+        return f"{self.user_root}/memory_control/legacy_canonical_backfill"
+
+    @property
+    def historical_graph_enrichment_cursor(self) -> str:
+        return f"{self.user_root}/memory_control/historical_graph_enrichment"
+
+    @property
     def memory_apply_control_state(self) -> str:
         return f"{self.user_root}/memory_state/apply_control"
 

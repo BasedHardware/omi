@@ -12,6 +12,20 @@ enum SBOnboardingLanguageCopy {
   }
 }
 
+/// The height-relevant identity of a step's widget — see `SBOnboardingModel.widgetShape`.
+///
+/// A value type rather than a set of `onChange`s in the view, so "the widget grew, scroll to it" is
+/// one rule with one place to add the next widget's state to, instead of a modifier per `@Published`
+/// property that someone has to remember.
+struct SBOnboardingWidgetShape: Equatable {
+  var step: SBOnboardingModel.Step
+  var localFileProfile: SBOnboardingModel.LocalFileProfileState
+  var permission: SBPermissionStepAction?
+  var screenDemoReady: Bool
+  var screenDemoUnavailable: Bool
+  var screenDemoDone: Bool
+}
+
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
 /// streams word-by-word, collects answers, and performs the SAME live side-effects
 /// as the legacy wizard (name/language → backend, every permission, the summon
@@ -112,9 +126,16 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
+  @Published var shortcutRecording = false
+  /// Set when the user pressed a bare key while recording. `acceptsRecordedChord` refuses it — a
+  /// bare `L` bound as a **global** hotkey makes every `L` typed anywhere open Omi — and the refusal
+  /// used to be silent, so the step simply stopped responding with nothing said. Cleared the moment
+  /// a valid chord arrives or the stage re-arms.
+  @Published var shortcutNeedsModifier = false
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
+  var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   /// Each shortcut stage keeps its own choice so stepping back does not make a
   /// user re-select a key they already confirmed.
   var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
@@ -275,7 +296,16 @@ final class SBOnboardingModel: ObservableObject {
     case .systemAudio:
       return "Now system audio, so I hear the other side too: Zoom, Meet, calls."
     case .screen:
-      return "Let me see your screen, so I can help with whatever you're looking at."
+      // Says what granting this actually starts. `complete()` turns
+      // `screenAnalysisEnabled` on unconditionally, and Rewind then captures every few seconds for
+      // as long as the app runs — the single most consequential thing the product does, and the app
+      // used to state it in exactly one place the user reaches days later (Rewind's empty state).
+      // "Every few seconds" rather than a number: the interval is a setting
+      // (`RewindSettings.captureInterval`, 3s by default, tripled on battery). "The pictures" rather
+      // than "it": the images do stay on this Mac, but `ScreenActivitySyncService` syncs their OCR
+      // text and embeddings to the backend, so an unqualified "it stays on this Mac" would be false.
+      return
+        "Let me see your screen. I'll take a picture every few seconds so you can scrub back to anything you saw — that's Rewind. The pictures stay on this Mac, and you can turn it off anytime in the top bar."
     case .files:
       return
         "Let me read your files, so I can point to your real documents. Read-only, it stays on this Mac, and you can turn it off anytime."
@@ -283,10 +313,12 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
+    // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
+    // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
-      return "How do you want to open me? Just press one of these to set it."
+      return "How do you want to open me? Choose one, or press your own — it needs ⌘, ⌃ or ⌥."
     case .shortcutTalk:
-      return "And to talk to me, hands-free? Just hold one of these and say something."
+      return "And to talk to me hands-free? Choose one, or hold your own modifier key."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -299,6 +331,26 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
+  /// What the current step's widget is showing, reduced to the things that change its **height**.
+  ///
+  /// The card is a fixed 540 × 640 with a bottom-anchored column, so a widget that grows *in place*
+  /// — without appending to the thread — is clipped by the card's lower edge unless something
+  /// scrolls. That is exactly how the Files step shipped with its Continue unreachable: the scan
+  /// finishing swapped a two-line "scanning…" widget for a four-element "your profile is ready"
+  /// one, no `thread`/`showWidget`/`streamingText` change fired, and the button rendered below the
+  /// fold with nothing to tell the user it was there. `showAIAssistants` already had a bespoke
+  /// `onChange` for the same reason; this is that rule for every widget instead of one.
+  var widgetShape: SBOnboardingWidgetShape {
+    SBOnboardingWidgetShape(
+      step: step,
+      localFileProfile: localFileProfileState,
+      permission: permissionKey(for: step).map { permissionPrimaryAction($0) },
+      screenDemoReady: screenDemoPTTReady,
+      screenDemoUnavailable: screenDemoPTTUnavailable,
+      screenDemoDone: screenDemoDone
+    )
+  }
+
   var displayName: String {
     let n = nameDraft.trimmingCharacters(in: .whitespaces)
     let stored = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
@@ -306,6 +358,18 @@ final class SBOnboardingModel: ObservableObject {
     if !stored.isEmpty { return stored }
     return "friend"
   }
+
+  var selectedResponseLanguageName: String {
+    let code = AssistantSettings.shared.voiceLanguages.first ?? "en"
+    let baseCode = AssistantSettings.baseLanguageCode(code)
+    return AssistantSettings.supportedLanguages.first {
+      AssistantSettings.baseLanguageCode($0.code) == baseCode
+    }?.name ?? code
+  }
+
+  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
+  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
+  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 
@@ -332,7 +396,29 @@ final class SBOnboardingModel: ObservableObject {
       streamMessage(for: target)
       return
     }
-    streamMessage(for: .promise)
+    guard
+      SBOnboardingIntroGate.shouldPlay(resumeStepRaw: savedRaw, promiseStepRaw: Step.promise.rawValue)
+    else {
+      startAmbientOnboardingMusic()
+      streamMessage(for: .promise)
+      return
+    }
+    // Marked before playing: a quit or crash mid-intro still counts as seen, so the
+    // intro can never re-arm itself into a loop.
+    SBOnboardingIntroGate.markPlayed()
+    OmiOnboardingCinematic.present { [weak self] _ in
+      guard let self else { return }
+      // The bed carries over from the intro into the chat onboarding, so the music
+      // does not stop and restart across the hand-off.
+      self.startAmbientOnboardingMusic()
+      self.streamMessage(for: .promise)
+    }
+  }
+
+  /// The ambient bed under the chat-style onboarding. Honours the user's persisted
+  /// mute, so a muted intro stays muted here.
+  private func startAmbientOnboardingMusic() {
+    OmiOnboardingCinematic.startAmbientMusic()
   }
 
   /// Detection only: the existing completion flag remains the UI gate. These
@@ -578,15 +664,29 @@ final class SBOnboardingModel: ObservableObject {
     complete(startListening: selection.startsListeningImmediately)
   }
 
-  /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
-  /// tab (with the personalized opener), without force-enabling capture or screen
-  /// analysis the user chose to bypass. They can turn those on later.
-  func skip() {
+  /// The one handoff both exit paths run when onboarding ends.
+  ///
+  /// `skip()` and `complete(startListening:)` used to carry byte-identical
+  /// copies of this sequence, which is how the post-onboarding guidance came to
+  /// be produced by neither: there was no single place that owned "onboarding is
+  /// over, hand the user to the app". There is now, so a step added here can
+  /// never reach one door and not the other.
+  ///
+  /// `clearOnboardingChatFlag` is the only real difference between the two
+  /// paths, and it is ordered exactly where each path had it.
+  func finishOnboardingHandoff(clearOnboardingChatFlag: Bool) {
     teardownAll()
+    // Fades rather than cuts: onboarding's last beat should not end on a click.
+    OmiOnboardingCinematic.stopAmbientMusic()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
+    if clearOnboardingChatFlag { chatProvider.isOnboarding = false }
+    // Answer "what do I do now" before anything renders it. Must precede
+    // `presentOnboardingOpener()`, which reads these saved suggestions to build
+    // the Chat tab's starter chips.
+    savePostOnboardingGuidance()
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
@@ -601,13 +701,15 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
+  /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
+  /// tab (with the personalized opener), without force-enabling capture or screen
+  /// analysis the user chose to bypass. They can turn those on later.
+  func skip() {
+    finishOnboardingHandoff(clearOnboardingChatFlag: false)
+  }
+
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete(startListening: Bool) {
-    teardownAll()
-    AnalyticsManager.shared.onboardingCompleted()
-    chatProvider.stopAgent(owner: .mainChat)
-    UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
-    UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -615,20 +717,7 @@ final class SBOnboardingModel: ObservableObject {
     // false) and every later rescan. Leaving it false lets that existing silent
     // backfill actually index the standard folders once the app is up, so the
     // Files connector becomes truly connected with real content.
-    chatProvider.isOnboarding = false
-    // Greet the user in the Home chat with the personalized opener + starters.
-    chatProvider.presentOnboardingOpener()
-    ChatToolExecutor.onboardingAppState = nil
-    OnboardingChatPersistence.clear()
-    ChatDraftStore.shared.clear(.onboardingMain)
-    ChatDraftStore.shared.clear(.onboardingFloating)
-
-    onComplete?()
-    Task { [weak self] in
-      guard let self else { return }
-      await self.chatProvider.finishOnboardingJournal()
-      self.appState.hasCompletedOnboarding = true
-    }
+    finishOnboardingHandoff(clearOnboardingChatFlag: true)
 
     Task {
       await AgentVMService.shared.startPipeline()

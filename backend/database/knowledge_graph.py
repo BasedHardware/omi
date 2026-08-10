@@ -5,7 +5,7 @@ import uuid
 from google.cloud.firestore_v1 import FieldFilter
 
 from models.memory_contracts import deterministic_contract_id
-from models.memory_promotion import MemoryGraphAssertion
+from models.memory_promotion import PROMOTION_GRAPH_ASSERTION_V2_VERSION, MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
 from ._client import db
@@ -24,6 +24,7 @@ MAX_KNOWLEDGE_GRAPH_NODES = 500
 MAX_KNOWLEDGE_GRAPH_EDGES = 1000
 MAX_KNOWLEDGE_GRAPH_ASSERTIONS = 500
 MAX_KNOWLEDGE_GRAPH_CITATION_FENCES = 500
+MEMORY_GRAPH_ASSERTION_BATCH_SIZE = 100
 KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
@@ -305,7 +306,7 @@ def _string_values(value: Any) -> List[str]:
     return sorted({item.strip() for item in cast(List[Any], value) if isinstance(item, str) and item.strip()})
 
 
-def _assertion_matches_active_item(
+def assertion_matches_active_item(
     uid: str,
     assertion: MemoryGraphAssertion,
     item: Dict[str, Any],
@@ -342,11 +343,121 @@ def _assertion_matches_active_item(
         and item.get('ledger_sequence') == assertion.commit_sequence
         and item.get('subject_entity_id') == assertion.subject_entity_id
         and item.get('predicate') == assertion.predicate
-        and item.get('arguments') == assertion.arguments
+        # v1 graph assertions derive their endpoints from the canonical item's
+        # arguments, so retain the equality fence.  v2 assertions carry typed
+        # subject/object endpoints and immutable qualifiers in the assertion
+        # itself.  Older canonical rows can retain legacy item arguments after
+        # a v2 assertion is written; treating those as a v2 fence rejects a
+        # valid, otherwise fully revision- and ledger-fenced relation.
+        and (
+            assertion.schema_version == PROMOTION_GRAPH_ASSERTION_V2_VERSION
+            or item.get('arguments') == assertion.arguments
+        )
         and evidence_ids == assertion.evidence_ids
         and not sensitivity_labels.intersection(RESTRICTED_SENSITIVITY_LABELS)
         and not (isinstance(promotion, dict) and cast(Dict[str, Any], promotion).get('user_review') is False)
     )
+
+
+def _memory_item_matches_account_generation(item: Dict[str, Any], account_generation: int) -> bool:
+    item_account_generation = item.get('account_generation')
+    return (
+        not isinstance(item_account_generation, bool)
+        and isinstance(item_account_generation, int)
+        and item_account_generation == account_generation
+    )
+
+
+def _parse_assertion_snapshot(uid: str, snapshot: Any) -> Optional[MemoryGraphAssertion]:
+    assertion = parse_snapshot_or_none(
+        MemoryGraphAssertion,
+        snapshot,
+        payload_from_snapshot=_typed_doc,
+    )
+    if assertion is None:
+        return None
+    snapshot_id = getattr(snapshot, 'id', assertion.memory_id)
+    if assertion.uid != uid or snapshot_id != assertion.memory_id:
+        return None
+    return assertion
+
+
+def _chunked_get_all(client: Any, refs: List[Any], *, batch_size: int) -> Iterable[Any]:
+    for start in range(0, len(refs), batch_size):
+        yield from client.get_all(refs[start : start + batch_size])
+
+
+def _load_assertions_by_memory_ids(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    db_client: Any,
+) -> Dict[str, MemoryGraphAssertion]:
+    if not memory_ids:
+        return {}
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    assertion_refs = [
+        user_ref.collection(memory_graph_assertions_collection).document(memory_id) for memory_id in memory_ids
+    ]
+    assertions_by_id: Dict[str, MemoryGraphAssertion] = {}
+    for snapshot in _chunked_get_all(client, assertion_refs, batch_size=MEMORY_GRAPH_ASSERTION_BATCH_SIZE):
+        assertion = _parse_assertion_snapshot(uid, snapshot)
+        if assertion is not None:
+            assertions_by_id[assertion.memory_id] = assertion
+    return assertions_by_id
+
+
+def _load_memory_items_by_ids(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    db_client: Any,
+) -> Dict[str, Dict[str, Any]]:
+    if not memory_ids:
+        return {}
+    client = _firestore_client(db_client)
+    user_ref = client.collection(users_collection).document(uid)
+    item_refs = [user_ref.collection(memory_items_collection).document(memory_id) for memory_id in memory_ids]
+    items_by_id: Dict[str, Dict[str, Any]] = {}
+    for snapshot in _chunked_get_all(client, item_refs, batch_size=MEMORY_GRAPH_ASSERTION_BATCH_SIZE):
+        if not getattr(snapshot, 'exists', False):
+            continue
+        snapshot_id = getattr(snapshot, 'id', None)
+        item = _typed_doc(snapshot)
+        memory_id = item.get('memory_id')
+        if not isinstance(snapshot_id, str) or not isinstance(memory_id, str) or snapshot_id != memory_id:
+            continue
+        items_by_id[memory_id] = item
+    return items_by_id
+
+
+def load_fenced_assertions_for_memory_items(
+    uid: str,
+    memory_ids: Iterable[str],
+    *,
+    account_generation: int,
+    db_client: Any = None,
+) -> List[MemoryGraphAssertion]:
+    """Load assertions fenced to active memory items for explicit memory IDs.
+
+    Callers provide memory_ids in the order they want results; only IDs that pass
+    account_generation and active-item fencing are returned, in that same order.
+    """
+    ordered_ids = [memory_id for memory_id in memory_ids if memory_id.strip()]
+    if not ordered_ids:
+        return []
+    unique_ids = list(dict.fromkeys(ordered_ids))
+    client = _firestore_client(db_client)
+    assertions_by_id = _load_assertions_by_memory_ids(uid, unique_ids, db_client=client)
+    items_by_id = _load_memory_items_by_ids(uid, unique_ids, db_client=client)
+    return [
+        assertion
+        for memory_id in ordered_ids
+        if (assertion := assertions_by_id.get(memory_id)) is not None
+        and _memory_item_matches_account_generation(items_by_id.get(memory_id, {}), account_generation)
+        and assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
+    ]
 
 
 def _load_active_memory_graph_assertions(
@@ -372,15 +483,8 @@ def _load_active_memory_graph_assertions(
         snapshots = snapshots[:bounded_limit]
 
     for snapshot in snapshots:
-        assertion = parse_snapshot_or_none(
-            MemoryGraphAssertion,
-            snapshot,
-            payload_from_snapshot=_typed_doc,
-        )
+        assertion = _parse_assertion_snapshot(uid, snapshot)
         if assertion is None:
-            continue
-        snapshot_id = getattr(snapshot, 'id', assertion.memory_id)
-        if assertion.uid != uid or snapshot_id != assertion.memory_id:
             continue
         current = candidates.get(assertion.memory_id)
         if current is None or (
@@ -397,21 +501,13 @@ def _load_active_memory_graph_assertions(
     if not candidates:
         return [], truncated
 
-    item_refs = [user_ref.collection(memory_items_collection).document(memory_id) for memory_id in sorted(candidates)]
-    items_by_id: Dict[str, Dict[str, Any]] = {}
-    for snapshot in client.get_all(item_refs):
-        if not getattr(snapshot, 'exists', False):
-            continue
-        item = _typed_doc(snapshot)
-        memory_id = item.get('memory_id')
-        if isinstance(memory_id, str):
-            items_by_id[memory_id] = item
+    items_by_id = _load_memory_items_by_ids(uid, sorted(candidates), db_client=client)
 
     return (
         [
             assertion
             for memory_id, assertion in sorted(candidates.items())
-            if _assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
+            if assertion_matches_active_item(uid, assertion, items_by_id.get(memory_id, {}))
         ],
         truncated,
     )

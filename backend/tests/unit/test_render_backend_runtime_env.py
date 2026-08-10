@@ -1,5 +1,6 @@
 """Renderer for backend Cloud Run runtime env."""
 
+import json
 import runpy
 from pathlib import Path
 
@@ -108,10 +109,11 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in memory_env
-    assert 'MEMORY_MODE=read' in memory_env
+    assert 'MEMORY_ENABLED_USERS=' in memory_env
+    assert 'MEMORY_MODE=off' in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
     rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
@@ -128,7 +130,20 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
 
-    notifications_job = jobs['notifications-job']
+
+def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
+    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
+
+    cloud_run = _MANIFEST['environments']['dev']['cloud_run']
+    services = cloud_run['services']
+    for service in services.values():
+        env = service.get('env', {})
+        if 'OMI_PARITY_PACK_CAPTURE' in env:
+            assert env['OMI_PARITY_PACK_CAPTURE']['value'] == '0'
+            assert env['OMI_PARITY_PACK_ALLOWED_PRINCIPALS']['value'] == ''
+
+    notifications_job = cloud_run['jobs']['notifications-job']
     notifications_env = notifications_job['env']
     forbidden_notifications_vars = {
         'MEMORY_MODE',
@@ -176,7 +191,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     job_env = _job_env_block(out, 'memory_maintenance_job')
     assert 'MEMORY_MODE=off' in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
+    assert 'MEMORY_ENABLED_USERS=' in job_env
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
 
@@ -211,6 +226,7 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
         service_env = _job_env_block(output, service)
         assert 'OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in service_env
+        assert 'OMI_LLM_CHAT_AGENT_ROUTE=gateway' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://172.16.160.108' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://127.0.0.1:9' not in service_env
 
@@ -292,8 +308,12 @@ def test_backend_service_deploys_remove_retired_canonical_promotion_env_vars():
         'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
     )
     workflow_root = Path(__file__).resolve().parents[3] / '.github/workflows'
+    deploy_action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    deploy_action_text = deploy_action.read_text(encoding='utf-8')
     for workflow_name in ('gcp_backend.yml', 'gcp_backend_auto_dev.yml'):
         text = (workflow_root / workflow_name).read_text(encoding='utf-8')
+        if './.github/actions/deploy-backend-stack' in text:
+            text += '\n' + deploy_action_text
         assert text.count(f'--remove-env-vars={retired}') == 1
         assert text.count(f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}') == 2
 

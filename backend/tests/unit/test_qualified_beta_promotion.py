@@ -14,6 +14,7 @@ from routers.updates import router as updates_router
 from utils.qualified_beta_promotion import (
     MAX_QUALIFICATION_ARTIFACT_BYTES,
     REPOSITORY,
+    SANCTIONED_BETA_ASSET_NAMES,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
     _asset_url,
@@ -69,7 +70,7 @@ class FakeQualifiedBetaReader:
         self.artifacts_payload = [
             {
                 "id": 456,
-                "name": f"desktop-qualification-evidence-{release['tag_name']}",
+                "name": f"desktop-qualification-evidence-{release['tag_name']}-m1-{run['id']}-{run['run_attempt']}",
                 "expired": False,
                 "size_in_bytes": len(artifact),
                 "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
@@ -242,6 +243,7 @@ def _candidate():
     }
     run = {
         "id": 123,
+        "run_attempt": 1,
         "status": "completed",
         "conclusion": "success",
         "repository": {"full_name": "BasedHardware/omi"},
@@ -268,6 +270,29 @@ def _candidate_with_beta():
         "qualification_run_id": 123,
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
         "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
+        "beta_uid_continuity": {
+            "schema_version": 1,
+            "status": "passed",
+            "firebase_auth": {
+                "project": "based-hardware",
+                "release_probe_uid": "omi-release-probe",
+                "token_claims": "production_project_verified",
+            },
+            "development_serving_reads": {
+                "python": {
+                    "url": "https://api.omiapi.com/",
+                    "production_authority_url": "https://api.omi.me/",
+                    "operation": "production_sentinel_development_read_cleanup",
+                    "status": "passed",
+                },
+                "desktop_backend": {
+                    "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                    "operation": "authenticated_proxy_authority_read",
+                    "status": "passed",
+                },
+            },
+            "redaction": {"customer_content_printed": False, "tokens_printed": False},
+        },
         "artifacts": {
             "Omi.zip": {
                 "url": release["assets"][0]["browser_download_url"],
@@ -710,6 +735,47 @@ async def test_server_admits_a_candidate_that_ships_the_side_by_side_beta_assets
 
 
 @pytest.mark.asyncio
+async def test_server_admits_a_candidate_from_github_release_digests_without_blob_reads():
+    release, evidence, run = _candidate_with_beta()[:3]
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    # Normal promotion only downloads the small, retained Actions artifact.
+    # It must not traverse the release binaries' temporary blob redirects.
+    reader.downloaded = {}
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
+    assert manifest["zip_sha256"] == release["assets"][0]["digest"]
+    assert manifest["dmg_sha256"] == release["assets"][1]["digest"]
+    assert reader.download_calls == []
+
+
+@pytest.mark.asyncio
+async def test_server_rejects_a_beta_asset_with_a_noncanonical_release_url():
+    # The beta asset digest is valid and the trusted artifact matches, but the
+    # beta asset's browser_download_url is not the canonical release-asset URL.
+    # Admission must fail without reading any blob bytes.
+    release, evidence, run = _candidate_with_beta()[:3]
+    for asset in release["assets"]:
+        if asset["name"] in SANCTIONED_BETA_ASSET_NAMES:
+            asset["browser_download_url"] = "https://example.com/evil-beta"
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.downloaded = {}
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="identity does not match"):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+    assert reader.download_calls == []
+
+
+@pytest.mark.asyncio
 async def test_server_rejects_a_non_sanctioned_beta_like_identity():
     release, evidence, run = _candidate()
     release["assets"].append(
@@ -725,6 +791,47 @@ async def test_server_rejects_a_non_sanctioned_beta_like_identity():
             reader=FakeQualifiedBetaReader(release, evidence, run),
             now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
         )
+
+
+@pytest.mark.asyncio
+async def test_manual_main_qualification_is_bound_by_its_run_evidence():
+    release, evidence, run = _candidate()
+    run["head_branch"] = "main"
+    run["head_sha"] = "b" * 40
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=FakeQualifiedBetaReader(release, evidence, run),
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
+
+
+@pytest.mark.asyncio
+async def test_requalified_run_uses_only_its_current_attempt_evidence():
+    release, evidence, run = _candidate()
+    run["run_attempt"] = 2
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.artifacts_payload.insert(
+        0,
+        {
+            "id": 455,
+            "name": f"desktop-qualification-evidence-{TAG}-m1-{run['id']}-1",
+            "expired": False,
+            "size_in_bytes": len(_artifact_archive(b"untrusted previous attempt")),
+            "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/455/zip",
+        },
+    )
+    reader.artifact_downloads[455] = _artifact_archive(b"untrusted previous attempt")
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
 
 
 @pytest.mark.asyncio
@@ -744,6 +851,7 @@ async def test_boolean_security_integer_metadata_is_rejected(field, expected_err
 
     if field == "qualification_run_id":
         run["id"] = 1
+        reader.artifacts_payload[0]["name"] = f"desktop-qualification-evidence-{TAG}-m1-{run['id']}-1"
         evidence = json.loads(evidence_bytes)
         evidence["qualification_run_id"] = True
         _replace_trusted_evidence(reader, evidence)
@@ -949,6 +1057,7 @@ async def test_documented_unrelated_github_member_shapes_do_not_reject_a_valid_c
     ("field", "value"),
     [
         ("id", True),
+        ("run_attempt", True),
         ("status", 1),
         ("conclusion", []),
         ("event", {}),
@@ -1070,7 +1179,7 @@ async def test_release_asset_replacement_with_self_consistent_release_evidence_i
     reader.artifacts_payload = [
         {
             "id": 456,
-            "name": f"desktop-qualification-evidence-{TAG}",
+            "name": f"desktop-qualification-evidence-{TAG}-m1-{run['id']}-1",
             "expired": False,
             "size_in_bytes": len(_artifact_archive(trusted_evidence)),
             "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
@@ -1196,14 +1305,14 @@ async def test_corrupted_deflated_artifact_returns_typed_rejection_without_post_
         [
             {
                 "id": 456,
-                "name": f"desktop-qualification-evidence-{TAG}",
+                "name": f"desktop-qualification-evidence-{TAG}-m1-123-1",
                 "expired": False,
                 "size_in_bytes": 1,
                 "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
             },
             {
                 "id": 457,
-                "name": f"desktop-qualification-evidence-{TAG}",
+                "name": f"desktop-qualification-evidence-{TAG}-m1-123-1",
                 "expired": False,
                 "size_in_bytes": 1,
                 "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/457/zip",
@@ -1212,7 +1321,7 @@ async def test_corrupted_deflated_artifact_returns_typed_rejection_without_post_
         [
             {
                 "id": 456,
-                "name": f"desktop-qualification-evidence-{TAG}",
+                "name": f"desktop-qualification-evidence-{TAG}-m1-123-1",
                 "expired": True,
                 "size_in_bytes": 1,
                 "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",

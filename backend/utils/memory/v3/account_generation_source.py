@@ -65,7 +65,12 @@ def _fail(*, uid: str, source_path: str, reason: V3AccountGenerationFailureReaso
     return V3TrustedAccountGenerationResult(uid=uid, source_path=source_path, read_error_reason=reason)
 
 
-def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3TrustedAccountGenerationResult:
+def read_memory_v3_trusted_account_generation(
+    *,
+    uid: str,
+    db_client: Any,
+    transaction: Any | None = None,
+) -> V3TrustedAccountGenerationResult:
     """Read and validate the independent account-generation state-head source.
 
     Future `/v3` GET wiring must feed this returned generation into projection
@@ -76,7 +81,9 @@ def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3
 
     source_path = MemoryCollections(uid=uid).memory_state_head
     try:
-        data = _snapshot_data(db_client.document(source_path).get())
+        document = db_client.document(source_path)
+        snapshot = document.get(transaction=transaction) if transaction is not None else document.get()
+        data = _snapshot_data(snapshot)
     except Exception:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.READ_FAILED)
 

@@ -27,6 +27,10 @@ enum DefaultsKey: String {
   case authTokenExpiry = "auth_tokenExpiry"
   case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
   case authIsImpersonating = "auth_isImpersonating"
+  /// Durable local cleanup journal written only after the backend accepts an
+  /// account deletion. It survives a crash between HTTP acceptance and the
+  /// owner transition, and is cleared only after local teardown completes.
+  case acceptedAccountDeletionOwnerId = "accepted_account_deletion_owner_id"
   /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
   /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
   case automationOwnerOverride = "automation_owner_override"
@@ -45,6 +49,9 @@ enum DefaultsKey: String {
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
+  case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
   case pairedDeviceId = "pairedDeviceId"
   case pairedDeviceName = "pairedDeviceName"
@@ -53,8 +60,16 @@ enum DefaultsKey: String {
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  // Task-order migration keys are typed so TasksPage and its tests share the
+  // migration contract instead of repeating raw UserDefaults literals.
+  case tasksCategoryOrder = "TasksCategoryOrder"
+  case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -68,6 +83,27 @@ struct ScopedDefaultsKey {
 
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+  }
+
+  static func tasksFullSyncCompleted(ownerID: String) -> Self {
+    Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
+  }
+
+  static func restoreLegacyConversationItemsCompleted(ownerID: String) -> Self {
+    Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
+  }
+
+  /// Owner-scoped key for the legacy task-order migration completion marker.
+  static func tasksSortOrderMigrated(ownerID: String) -> Self {
+    Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
+  }
+
+  static func importConnectorAvailabilityText(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
+  }
+
+  static func importConnectorSourceCount(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 }
 

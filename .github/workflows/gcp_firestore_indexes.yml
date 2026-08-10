@@ -72,7 +72,6 @@ jobs:
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --provision-missing \
             --dry-run
 
       - name: Apply approved Firestore schema plan and wait for readiness

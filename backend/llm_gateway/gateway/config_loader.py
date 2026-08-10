@@ -39,6 +39,10 @@ class GatewayConfig(BaseModel):
     lanes: dict[str, LaneConfig]
     route_artifacts: dict[str, RouteArtifact]
     feature_bundles: dict[str, FeatureBundle]
+    # Lanes derived from `utils.llm.model_config` rather than the hand-authored
+    # serving YAML. The lane catalog does not govern them, so catalog
+    # cross-validation skips them.
+    generated_lane_ids: frozenset[str] = frozenset()
 
 
 def load_gateway_config(
@@ -62,14 +66,16 @@ def load_gateway_config(
     generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
         generated_route_overrides
     )
+    # `utils.llm.model_config` remains the source of truth for feature lanes; the
+    # catalog governs the hand-authored serving config (lanes.yaml and friends)
+    # only. Gating generated feature lanes on the catalog would silently stop
+    # serving every feature that model_config routes through the gateway.
+    generated_lane_ids = {item['lane_id'] for item in generated_lane_items}
     if catalog is not None:
-        serving_lane_ids = catalog.prod_ready_lane_ids()
+        serving_lane_ids = catalog.prod_ready_lane_ids() | generated_lane_ids
         lane_items = [item for item in lane_items if item['lane_id'] in serving_lane_ids]
         artifact_items = [item for item in artifact_items if item['lane_id'] in serving_lane_ids]
         bundle_items = [item for item in bundle_items if item['lane_id'] in serving_lane_ids]
-        generated_lane_items = [item for item in generated_lane_items if item['lane_id'] in serving_lane_ids]
-        generated_artifact_items = [item for item in generated_artifact_items if item['lane_id'] in serving_lane_ids]
-        generated_bundle_items = [item for item in generated_bundle_items if item['lane_id'] in serving_lane_ids]
 
     # Explicit YAML wins over generated feature routes on the same id.
     lanes = _parse_lanes(generated_lane_items)
@@ -84,11 +90,14 @@ def load_gateway_config(
     if required_lane_ids is not None:
         _validate_required_lane_ids(required_lane_ids, lanes)
 
-    gateway_cfg = GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+    gateway_cfg = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=route_artifacts,
+        feature_bundles=feature_bundles,
+        generated_lane_ids=frozenset(generated_lane_ids),
+    )
     if catalog is not None:
         validate_serving_config(catalog, gateway_cfg)
-    elif (resolved_config_dir / 'lanes_catalog.yaml').exists():
-        validate_serving_config(load_catalog(resolved_config_dir / 'lanes_catalog.yaml'), gateway_cfg)
     return gateway_cfg
 
 
@@ -339,7 +348,7 @@ def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> d
         'text_input': True,
         'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': anthropic_messages or feature == 'memory_l2',
+        'tools': anthropic_messages or feature in {'chat_agent', 'memory_l2'},
         'translation': feature == 'translation',
     }
 

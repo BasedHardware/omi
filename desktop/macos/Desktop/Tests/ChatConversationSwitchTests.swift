@@ -8,7 +8,7 @@ import XCTest
 /// `onChange` `oldValue` (`oldId != nil`). Switching between two conversations
 /// through a transient empty timeline (A -> nil -> B) made `oldId` nil at the
 /// moment B arrived, so the reset was skipped and conversation B inherited A's
-/// stale `scrollMode` / `initialRestoreHandled` — opening at the wrong scroll
+/// stale `scrollMode` / initial-placement state — opening at the wrong scroll
 /// position. The pure transition below must still reset for B.
 final class ChatConversationSwitchTests: XCTestCase {
   func testInitialPopulationTracksWithoutReset() {
@@ -43,5 +43,29 @@ final class ChatConversationSwitchTests: XCTestCase {
     let t = ChatConversationSwitch.transition(current: "A1", incoming: "A1")
     XCTAssertEqual(t.newTracked, "A1")
     XCTAssertFalse(t.shouldReset)
+  }
+
+  func testConversationSwitchCancelsPendingScrollWork() throws {
+    let source = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+    let resetRange = try XCTUnwrap(
+      source.range(of: "if transition.shouldReset {", options: .backwards))
+    let resetBody = String(source[resetRange.lowerBound...].prefix(500))
+    XCTAssertTrue(
+      resetBody.contains("cancelAllPendingScrolls()"),
+      "conversation switches must cancel delayed initial scroll work from the previous chat"
+    )
+  }
+
+  func testMainChatDefaultIdentityIsShared() {
+    XCTAssertEqual(ChatConversationIdentity.mainChatDefault, "main-chat-default")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

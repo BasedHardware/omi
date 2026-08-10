@@ -23,13 +23,19 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   DateTime? endDate,
 });
 
+typedef DeleteActionItemRequest = Future<bool> Function(String id);
+
 class ActionItemsProvider extends ChangeNotifier {
-  ActionItemsProvider({ActionItemsFetcher? getActionItems})
-      : _getActionItems = getActionItems ?? api.tryGetActionItems {
+  ActionItemsProvider({
+    ActionItemsFetcher? getActionItems,
+    DeleteActionItemRequest? deleteActionItemRequest,
+  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
+  final DeleteActionItemRequest _deleteActionItemRequest;
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
 
@@ -62,6 +68,10 @@ class ActionItemsProvider extends ChangeNotifier {
   // Multi-selection state
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
+
+  // IDs of action items that have been optimistically deleted but whose server
+  // delete may still be in flight. Guarded against re-insertion by fetch/load.
+  final Set<String> _pendingDeletionIds = {};
 
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
@@ -217,7 +227,23 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (response != null) {
-        _actionItems = response.actionItems;
+        // Snapshot server IDs before filtering so tombstone retirement is
+        // based on the full server response, not the filtered subset.
+        final serverIds = response.actionItems.map((e) => e.id).toSet();
+        // Filter into a new list rather than mutating response.actionItems
+        // in-place: the response list may be unmodifiable, and aliasing it
+        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+        // and retire tombstones prematurely.
+        _actionItems = _pendingDeletionIds.isEmpty
+            ? List.of(response.actionItems)
+            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        // Lazily retire tombstones once the server confirms the item is gone:
+        // any ID still tracked as pending-deletion that did not appear in the
+        // fresh server response can be cleared, because subsequent refreshes
+        // will no longer see it.
+        if (_pendingDeletionIds.isNotEmpty) {
+          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+        }
         _hasMore = response.hasMore;
         loaded = true;
 
@@ -254,7 +280,8 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (response != null) {
-        _actionItems.addAll(response.actionItems);
+        final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
       }
     } catch (e) {
@@ -447,19 +474,31 @@ class ActionItemsProvider extends ChangeNotifier {
     // Delete linked Apple Reminder if one exists
     _deleteAppleReminderIfLinked(item);
 
+    // Track as pending-deletion so any background refresh doesn't re-insert it
+    // while the server delete is in flight.
+    _pendingDeletionIds.add(item.id);
+
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
     try {
-      final success = await api.deleteActionItem(item.id);
+      final success = await _deleteActionItemRequest(item.id);
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
+        // On failure, remove from pending set so a future reload can re-fetch it
+        _pendingDeletionIds.remove(item.id);
       }
+      // On success, the tombstone is intentionally retained: a refresh that
+      // started before the server processed the deletion may still return the
+      // deleted item. It is cleaned up lazily in fetchActionItems() once the
+      // server confirms the item is gone.
       return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
+      // On error, remove from pending set so a future reload can re-fetch it
+      _pendingDeletionIds.remove(item.id);
       return false;
     }
   }
@@ -789,6 +828,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    // Register all bulk-deleted IDs as pending so a concurrent background
+    // fetch cannot reinsert them while the server delete is in flight.
+    _pendingDeletionIds.addAll(ids);
     _selectedItems.clear();
     _isSelectionMode = false;
     notifyListeners();
@@ -802,6 +844,9 @@ class ActionItemsProvider extends ChangeNotifier {
     final deleted = await api.bulkDeleteActionItems(ids);
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      // Clear tombstones on rollback so future refreshes don't filter the
+      // re-inserted items.
+      _pendingDeletionIds.removeAll(ids);
       // Re-insert rows at their original positions, oldest index first.
       final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {

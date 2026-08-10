@@ -9,6 +9,7 @@ import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
 from llm_gateway.gateway.lane_catalog import ProviderSupportStatus, load_catalog
+from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -48,9 +49,15 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
+    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
@@ -83,12 +90,16 @@ def test_every_model_config_feature_has_inventory_and_gateway_lane():
     assert configured_features <= listed_features
 
     config = load_gateway_config(prod_mode=True)
+    missing_lanes = [feature for feature in configured_features if feature_lane_id(feature) not in config.lanes]
+    assert missing_lanes == []
+
+    # Hand-authored serving lanes stay catalog-governed; model_config lanes do not.
     production_lanes = {
         entry.lane_id
         for entry in load_catalog().lanes
         if entry.provider_support_status == ProviderSupportStatus.PROD_READY
     }
-    assert set(config.lanes) <= production_lanes
+    assert set(config.lanes) - set(config.generated_lane_ids) <= production_lanes
 
 
 def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
@@ -122,12 +133,19 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
-def test_uncatalogued_anthropic_generated_lanes_are_not_served():
+def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
     config = load_gateway_config(prod_mode=True)
 
     for feature in get_all_configured_features():
-        if get_provider(feature) == 'anthropic':
-            assert feature_lane_id(feature) not in config.lanes
+        if get_provider(feature) == 'anthropic' and feature != 'chat_agent':
+            lane = config.lanes[feature_lane_id(feature)]
+            assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+            assert lane.capabilities.streaming is False
+
+    chat_agent = config.lanes[feature_lane_id('chat_agent')]
+    assert chat_agent.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert chat_agent.capabilities.streaming is True
+    assert chat_agent.capabilities.tools is True
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():

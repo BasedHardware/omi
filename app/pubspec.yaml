@@ -66,7 +66,11 @@ dependencies:
   intl_country_data:
     git:
       url: https://github.com/mdmohsin7/intl_country_data.git
-      ref: da8bbe1
+      ref: bb5355c
+  # Pure-Dart port of Google's libphonenumber metadata (no platform channels,
+  # so it runs under `flutter test`). Owns phone-number validation; the country
+  # data above is only the picker's names, flags and dial codes.
+  phone_numbers_parser: ^9.0.25
   share_plus: 11.0.0
   shared_preferences: 2.5.3
   url_launcher: ^6.3.0

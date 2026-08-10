@@ -252,14 +252,6 @@ class AnalyticsManager {
     PostHogManager.shared.monitoringStopped()
   }
 
-  func distractionDetected(app: String, windowTitle: String?) {
-    PostHogManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
-  }
-
-  func focusRestored(app: String) {
-    PostHogManager.shared.focusRestored(app: app)
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
@@ -713,6 +705,17 @@ class AnalyticsManager {
 
   // MARK: - Claude Agent Events
 
+  /// Sends a Chat-first event only after its closed, content-free mapper has
+  /// produced the payload. Views must use this typed entry point instead of a
+  /// generic PostHog event so rich controls cannot leak user text or IDs.
+  func chatFirst(_ event: ChatFirstAnalyticsEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(
+      payload.eventName,
+      properties: payload.properties.mapValues { $0 as Any }
+    )
+  }
+
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
@@ -917,14 +920,6 @@ class AnalyticsManager {
   }
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
-
-  func focusAlertShown(app: String) {
-    PostHogManager.shared.focusAlertShown(app: app)
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    PostHogManager.shared.focusAlertDismissed(app: app, action: action)
-  }
 
   func taskExtracted(taskCount: Int) {
     PostHogManager.shared.taskExtracted(taskCount: taskCount)

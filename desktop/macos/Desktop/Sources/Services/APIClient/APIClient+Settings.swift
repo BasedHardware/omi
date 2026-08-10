@@ -205,141 +205,41 @@ extension APIClient {
 
   // MARK: - Knowledge Graph API
 
-  /// Get the full knowledge graph (nodes and edges)
-  func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-    return try await get("v1/knowledge-graph")
+  func getKnowledgeGraph(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphResponse {
+    try await getKnowledgeGraphImpl(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Rebuild the knowledge graph from memories
-  func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-    return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
+  func getKnowledgeGraphPage(
+    limit: Int = KnowledgeGraphResponse.defaultPageSize,
+    cursor: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KnowledgeGraphResponse {
+    try await getKnowledgeGraphPageImpl(
+      limit: limit,
+      cursor: cursor,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Delete the knowledge graph
+  func rebuildKnowledgeGraph(
+    limit: Int = 500,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> RebuildGraphResponse {
+    try await rebuildKnowledgeGraphImpl(
+      limit: limit,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
   func deleteKnowledgeGraph() async throws {
-    return try await delete("v1/knowledge-graph")
-  }
-}
-
-// MARK: - Knowledge Graph Models
-
-/// Node type in the knowledge graph
-enum KnowledgeGraphNodeType: String, Codable {
-  case person
-  case place
-  case organization
-  case thing
-  case concept
-}
-
-/// A node in the knowledge graph representing an entity
-struct KnowledgeGraphNode: Codable, Identifiable {
-  let id: String
-  let label: String
-  let nodeType: KnowledgeGraphNodeType
-  let aliases: [String]
-  let memoryIds: [String]
-  let createdAt: Date
-  let updatedAt: Date
-
-  enum CodingKeys: String, CodingKey {
-    case id, label, aliases
-    case nodeType = "node_type"
-    case memoryIds = "memory_ids"
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-  }
-
-  init(
-    id: String, label: String, nodeType: KnowledgeGraphNodeType, aliases: [String] = [],
-    memoryIds: [String] = [], createdAt: Date = Date(), updatedAt: Date = Date()
-  ) {
-    self.id = id
-    self.label = label
-    self.nodeType = nodeType
-    self.aliases = aliases
-    self.memoryIds = memoryIds
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    label = try container.decode(String.self, forKey: .label)
-    if let rawType = try container.decodeIfPresent(String.self, forKey: .nodeType) {
-      nodeType = KnowledgeGraphNodeType(rawValue: rawType) ?? .concept
-    } else {
-      nodeType = .concept
-    }
-    aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
-    memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
-  }
-}
-
-/// An edge in the knowledge graph representing a relationship
-struct KnowledgeGraphEdge: Codable, Identifiable {
-  let id: String
-  let sourceId: String
-  let targetId: String
-  let label: String
-  let memoryIds: [String]
-  let createdAt: Date
-
-  enum CodingKeys: String, CodingKey {
-    case id, label
-    case sourceId = "source_id"
-    case targetId = "target_id"
-    case memoryIds = "memory_ids"
-    case createdAt = "created_at"
-  }
-
-  init(
-    id: String, sourceId: String, targetId: String, label: String, memoryIds: [String] = [],
-    createdAt: Date = Date()
-  ) {
-    self.id = id
-    self.sourceId = sourceId
-    self.targetId = targetId
-    self.label = label
-    self.memoryIds = memoryIds
-    self.createdAt = createdAt
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    sourceId = try container.decode(String.self, forKey: .sourceId)
-    targetId = try container.decode(String.self, forKey: .targetId)
-    label = try container.decode(String.self, forKey: .label)
-    memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-  }
-}
-
-/// Response containing the full knowledge graph
-struct KnowledgeGraphResponse: Codable {
-  let nodes: [KnowledgeGraphNode]
-  let edges: [KnowledgeGraphEdge]
-
-  init(nodes: [KnowledgeGraphNode], edges: [KnowledgeGraphEdge]) {
-    self.nodes = nodes
-    self.edges = edges
-  }
-}
-
-/// Response for rebuild operation
-struct RebuildGraphResponse: Codable {
-  let status: String
-  let nodesCount: Int?
-  let edgesCount: Int?
-
-  enum CodingKeys: String, CodingKey {
-    case status
-    case nodesCount = "nodes_count"
-    case edgesCount = "edges_count"
+    try await deleteKnowledgeGraphImpl()
   }
 }
 
@@ -820,22 +720,6 @@ struct SharedAssistantSettingsResponse: Codable {
   }
 }
 
-struct FocusSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var cooldownInterval: Int?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case cooldownInterval = "cooldown_interval"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct TaskSettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -956,7 +840,6 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
-  var focus: FocusSettingsResponse?
   var task: TaskSettingsResponse?
   var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
@@ -965,7 +848,7 @@ struct AssistantSettingsResponse: Codable {
   var unknownSections: [String: AssistantSettingsJSONValue]
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case shared, focus, task
+    case shared, task
     case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
@@ -974,7 +857,6 @@ struct AssistantSettingsResponse: Codable {
 
   init(
     shared: SharedAssistantSettingsResponse? = nil,
-    focus: FocusSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
     insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
@@ -983,7 +865,6 @@ struct AssistantSettingsResponse: Codable {
     unknownSections: [String: AssistantSettingsJSONValue] = [:]
   ) {
     self.shared = shared
-    self.focus = focus
     self.task = task
     self.insight = insight
     self.memory = memory
@@ -995,7 +876,6 @@ struct AssistantSettingsResponse: Codable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
-    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
     insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
@@ -1016,7 +896,6 @@ struct AssistantSettingsResponse: Codable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
-    try container.encodeIfPresent(focus, forKey: .focus)
     try container.encodeIfPresent(task, forKey: .task)
     try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
@@ -1056,12 +935,6 @@ struct AssistantSettingsDynamicCodingKey: CodingKey {
     stringValue = String(intValue)
     self.intValue = intValue
   }
-}
-
-// MARK: - Focus Sessions API
-
-extension APIClient {
-
 }
 
 // MARK: - Insight API

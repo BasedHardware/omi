@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import runpy
+import shutil
 import tempfile
 
 import pytest
@@ -60,6 +61,32 @@ KEY_VALUE_END -->"""
     }
 
 
+def _beta_uid_continuity() -> dict:
+    return {
+        "schema_version": 1,
+        "status": "passed",
+        "firebase_auth": {
+            "project": "based-hardware",
+            "release_probe_uid": "omi-release-probe",
+            "token_claims": "production_project_verified",
+        },
+        "development_serving_reads": {
+            "python": {
+                "url": "https://api.omiapi.com/",
+                "production_authority_url": "https://api.omi.me/",
+                "operation": "production_sentinel_development_read_cleanup",
+                "status": "passed",
+            },
+            "desktop_backend": {
+                "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                "operation": "authenticated_proxy_authority_read",
+                "status": "passed",
+            },
+        },
+        "redaction": {"customer_content_printed": False, "tokens_printed": False},
+    }
+
+
 def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promoted():
     """Validation, registration, and promotion share the v1 executable contract."""
     accepted = manifest_contract.validate_manifest(_manifest())
@@ -78,11 +105,23 @@ def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promote
     assert pointer["release_id"] == accepted["release_id"]
 
 
+# omi-test-quality: source-inspection -- static contract: GitHub cannot execute a workflow_run fixture locally.
 def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
     workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert "/v2/desktop/beta/promote-qualified" in workflow
     assert 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in workflow
     assert '--data "{\\"tag\\":\\"${RELEASE_TAG}\\"}"' in workflow
+    for required in (
+        "actions: read",
+        "github.event.workflow_run.id",
+        "github.event.workflow_run.run_attempt",
+        "actions/runs/$QUALIFICATION_RUN_ID/artifacts",
+        "qualification-evidence.json",
+        "EVIDENCE_SOURCE_SHA",
+    ):
+        assert required in workflow
+    assert "github.event.workflow_run.head_branch" not in workflow
+    assert "github.event.workflow_run.head_sha" not in workflow
     for forbidden in (
         "gcloud",
         "google-github-actions/auth",
@@ -160,9 +199,14 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     }
 
     admission.validate_qualification_run(trusted_tag_run, "BasedHardware/omi", tag, candidate_sha)
-    drifted_main_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "b" * 40}
-    with pytest.raises(ValueError, match="candidate tag"):
-        admission.validate_qualification_run(drifted_main_run, "BasedHardware/omi", tag, candidate_sha)
+    manual_main_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "b" * 40}
+    admission.validate_qualification_run(manual_main_run, "BasedHardware/omi", tag, candidate_sha)
+    untrusted_control_run = {**trusted_tag_run, "head_branch": "release", "head_sha": "b" * 40}
+    with pytest.raises(ValueError, match="candidate tag controls or trusted main controls"):
+        admission.validate_qualification_run(untrusted_control_run, "BasedHardware/omi", tag, candidate_sha)
+    malformed_manual_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "not-a-commit"}
+    with pytest.raises(ValueError, match="immutable dispatch SHA"):
+        admission.validate_qualification_run(malformed_manual_run, "BasedHardware/omi", tag, candidate_sha)
 
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
@@ -173,6 +217,7 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification
     assert 'digest=$(shasum -a 256 "$QUALIFICATION_STAGE/qualification-evidence.json"' in qualification
     assert "gh release upload" in qualification
+    assert "desktop-qualification-backend-compatibility-" in qualification
 
 
 def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
@@ -226,8 +271,10 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
             paths[name] = path
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}, beta_uid_continuity_path=proof
         )
         paths["Omi.zip"].write_bytes(b"replacement")
         with pytest.raises(ValueError, match="Omi.zip hash differs"):
@@ -265,8 +312,14 @@ def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
             paths[name] = path
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release,
+            release["tagName"],
+            "a" * 40,
+            {**paths, "__candidate_gate__": gate},
+            beta_uid_continuity_path=proof,
         )
         assert set(evidence["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
         assert evidence["artifacts"]["Omi.Beta.zip"]["signature"] == "beta-signature"
@@ -312,6 +365,8 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
             asset_args += ["--asset", f"{name}={path}"]
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence_out = root / "evidence.json"
         result = subprocess.run(
             [
@@ -326,6 +381,8 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
                 "a" * 40,
                 "--candidate-gate",
                 str(gate),
+                "--beta-uid-continuity-evidence",
+                str(proof),
                 *asset_args,
                 "--evidence",
                 str(evidence_out),
@@ -552,3 +609,36 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     assert "EXPECTED_RELEASE_ID" in workflow
     assert "EXPECTED_GENERATION" in workflow
     assert "gcloud run deploy" not in workflow
+
+
+def test_release_process_guard_matches_trusted_auto_promotion(monkeypatch):
+    """Behavioral contract: the guard rejects a promotion that drops its trusted-repository gate."""
+    monkeypatch.syspath_prepend(str(SCRIPTS))
+    guard = _load("release_process_guards", "check-release-process-guards.py")
+    promotion_text = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
+    trusted_repository = "github.event.workflow_run.head_repository.full_name == github.repository"
+    obsolete_dispatch_gate = "github.event.workflow_run.event == 'workflow_dispatch'"
+
+    assert trusted_repository in promotion_text
+    assert obsolete_dispatch_gate not in promotion_text
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for relative_path in (
+            ".github/workflows/desktop_qualify_beta.yml",
+            ".github/workflows/desktop_promote_beta.yml",
+            ".github/workflows/desktop_recover_beta.yml",
+            ".github/scripts/check-desktop-auto-beta-candidate.py",
+        ):
+            target = root / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / relative_path, target)
+
+        promotion = root / ".github/workflows/desktop_promote_beta.yml"
+        promotion.write_text(promotion_text.replace(trusted_repository, "", 1), encoding="utf-8")
+        guard.ROOT = root
+        errors = guard.check_desktop_qualification_runner()
+        assert any(trusted_repository in error for error in errors), errors
+
+        promotion.write_text(promotion_text, encoding="utf-8")
+        assert guard.check_desktop_qualification_runner() == []

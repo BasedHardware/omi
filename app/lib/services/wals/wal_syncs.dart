@@ -259,13 +259,11 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Protect the live path before a potentially multi-hour device drain. The
-    // phone scheduler is lane-aware and sends recent WALs first; its one-job
-    // backfill window prevents this pass from flooding historical work.
-    Logger.debug("WalSyncs: Phase -1 - Uploading already-local fresh recordings");
-    DebugLogManager.logInfo('Sync Phase -1: Uploading fresh phone files first');
+    // Protect the live path before a potentially multi-hour device drain.
+    Logger.debug("WalSyncs: Phase -1 - Uploading already-local live-capture recordings");
+    DebugLogManager.logInfo('Sync Phase -1: Uploading live-capture phone files first');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
-    final preDrainResult = await _phoneSync.syncFreshOnly(progress: progress);
+    final preDrainResult = await _phoneSync.syncLiveCaptureOnly(progress: progress);
     if (preDrainResult != null) {
       resp.newConversationIds.addAll(
         preDrainResult.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -276,6 +274,8 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += preDrainResult.localUploadFailures;
+      resp.localUploadPermanentFailures += preDrainResult.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
     }
 
     // Phase 0: New offline storage sync, gated by firmware version.
@@ -360,6 +360,8 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += partialRes.localUploadFailures;
+      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
     }
 
     DebugLogManager.logEvent('sync_completed', {

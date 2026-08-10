@@ -30,6 +30,8 @@ import { useAuth } from "@/components/auth-provider";
 import { useAuthFetch } from "@/hooks/useAuthToken";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+import { PeriodChangeIndicator } from "@/components/dashboard/period-change-indicator";
+import { latestPeriodChange } from "@/lib/period-change";
 
 interface Subscription {
   id: string;
@@ -330,6 +332,17 @@ export default function SubscriptionsPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const subscriptionTrendChange = latestPeriodChange(
+    subscriptionTrends,
+    (point) => point.monthly + point.annual,
+    'vs previous month',
+  );
+  const mrrTrendChange = latestPeriodChange(
+    mrrTrends,
+    (point) => point.mrr,
+    'vs previous month',
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -437,11 +450,14 @@ export default function SubscriptionsPage() {
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Subscription Creation Trends</CardTitle>
-            <CardDescription>
-              Monthly and annual subscriptions created over the last 6 months
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Subscription Creation Trends</CardTitle>
+              <CardDescription>
+                Monthly and annual subscriptions created over the last 6 months
+              </CardDescription>
+            </div>
+            <PeriodChangeIndicator change={subscriptionTrendChange} />
           </CardHeader>
           <CardContent>
             {subscriptionTrends.length > 0 ? (
@@ -498,11 +514,14 @@ export default function SubscriptionsPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Monthly Recurring Revenue (MRR)</CardTitle>
-            <CardDescription>
-              MRR trend over the last 6 months
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Monthly Recurring Revenue (MRR)</CardTitle>
+              <CardDescription>
+                MRR trend over the last 6 months
+              </CardDescription>
+            </div>
+            <PeriodChangeIndicator change={mrrTrendChange} />
           </CardHeader>
           <CardContent>
             {mrrTrends.length > 0 ? (

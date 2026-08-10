@@ -5,17 +5,20 @@ extension RewindPage {
   var rewindToggle: some View {
     ZStack {
       Capsule()
+        // Green for on. `Ink.listeningGreen` is the palette's "this is live" colour and the one
+        // that reads as on without a label; the accent was doing that job in blue while every
+        // other live indicator in the app was green.
         .fill(
           screenCaptureHealth == .active
-            ? OmiColors.accent
-            : (screenCaptureHealth == .stopped ? Color.red : OmiColors.warning)
+            ? Ink.listeningGreen
+            : (screenCaptureHealth == .stopped ? Ink.errorRed : PageGlass.warning)
         )
         .frame(width: 36, height: 20)
 
       Circle()
-        .fill(isMonitoring ? OmiColors.backgroundPrimary : Color.white)
+        .fill(Ink.surface)
         .frame(width: 16, height: 16)
-        .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
         .offset(x: isMonitoring ? 8 : -8)
         .omiAnimation(.easeInOut(duration: 0.15), value: isMonitoring)
     }

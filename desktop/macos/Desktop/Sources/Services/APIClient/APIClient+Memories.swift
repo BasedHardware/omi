@@ -492,11 +492,13 @@ extension APIClient {
 extension APIClient {
   private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+  private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
 
   struct MemoryListPage {
     let memories: [ServerMemory]
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
+    let defaultMemoryDeleteSupported: Bool
   }
 
   /// Fetches memories from the API with optional filtering
@@ -506,6 +508,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
@@ -518,6 +521,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
@@ -532,7 +538,9 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
-    deviceScope: String? = nil
+    includeArchive: Bool = false,
+    deviceScope: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -544,6 +552,9 @@ extension APIClient {
     if includeDismissed {
       endpoint += "&include_dismissed=true"
     }
+    if includeArchive {
+      endpoint += "&include_archive=true"
+    }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
     }
@@ -551,10 +562,20 @@ extension APIClient {
     guard let url = URL(string: baseURL + endpoint) else {
       throw APIError.invalidResponse
     }
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: nil,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    let (data, httpResponse) = try await performAuthenticatedData(for: request)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = OmiHTTPTransport.extractErrorDetail(from: data)
@@ -562,14 +583,18 @@ extension APIClient {
     }
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
+    try validateExpectedOwner(authPolicy)
     let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
     let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    let defaultMemoryDeleteSupported =
+      httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     return MemoryListPage(
       memories: memories,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
-      deviceScopeSupported: deviceScopeSupported
+      deviceScopeSupported: deviceScopeSupported,
+      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported
     )
   }
 
@@ -587,7 +612,9 @@ extension APIClient {
     source: String? = nil,
     windowTitle: String? = nil,
     headline: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    allowsAuthRetry: Bool = true
   ) async throws -> CreateMemoryResponse {
     struct CreateRequest: Encodable {
       let content: String
@@ -625,7 +652,12 @@ extension APIClient {
       windowTitle: windowTitle,
       headline: headline
     )
-    return try await post("v3/memories", body: body, expectedOwnerId: expectedOwnerId)
+    return try await post(
+      "v3/memories",
+      body: body,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot,
+      allowsAuthRetry: allowsAuthRetry)
   }
 
   /// Max memories per POST /v3/memories/batch call. Must match the
@@ -750,10 +782,10 @@ extension APIClient {
   }
 
   /// Deletes all default-scope memories.
-  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  /// The backend keeps Archive outside this operation.
   func deleteAllMemories(scope: MemoryLayerScope) async throws {
     if scope == .defaultAccess {
-      try await deleteAllMemories()
+      try await delete("v3/memories?scope=default")
       return
     }
     throw APIError.unsupportedTierScopedBulkMutation("deletion")

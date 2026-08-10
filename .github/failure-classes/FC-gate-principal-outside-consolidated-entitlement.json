@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-gate-principal-outside-consolidated-entitlement",
+  "violated_contract": "When an entitlement predicate is consolidated onto one membership source, every synthetic principal a deploy or CI gate authenticates as must be carried into that source in the same change. A gate principal left outside it loses entitlement at every layer that now consults the predicate, the gated route fails closed, and the gate blocks all later deploys while reporting only its own contract name.",
+  "canonical_prevention": "Enumerate the code-owned fixture identities that gates authenticate as before narrowing an entitlement predicate, and cover each one against the shipped membership set — not a stubbed cohort — at both the route boundary and the store boundary, so removing its eligibility fails in unit CI instead of in the deploy lane.",
+  "evidence_prs": [
+    10171
+  ],
+  "scope_hints": [
+    "backend/config/canonical_memory_cohort.py",
+    "backend/config/what_matters_now_smoke_fixture.py",
+    "backend/database/task_recommendations.py",
+    "backend/utils/task_intelligence/rollout.py",
+    "backend/deploy/dev_candidate_acceptance.json"
+  ],
+  "status": "open"
+}
