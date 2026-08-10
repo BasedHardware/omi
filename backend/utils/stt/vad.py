@@ -7,7 +7,6 @@ import httpx
 import numpy as np
 import onnxruntime as ort  # onnxruntime is untyped
 import requests
-from fastapi import HTTPException
 from pydub import AudioSegment  # pydub is untyped
 
 from database import redis_db
@@ -24,6 +23,10 @@ class VADAudioDecodeError(RuntimeError):
 
 class VADProcessingError(RuntimeError):
     """The local VAD could not make a trustworthy speech decision."""
+
+
+class VADEmptyError(ValueError):
+    """The VAD found no speech segments in the audio."""
 
 
 def _hosted_vad_fallback_reason(exc: BaseException) -> str:
@@ -340,8 +343,8 @@ async def async_vad_is_empty(
 def apply_vad_for_speech_profile(file_path: str) -> None:
     logger.info(f'apply_vad_for_speech_profile {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
-    if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
-        raise HTTPException(status_code=400, detail="Audio is empty")
+    if len(voice_segments) == 0:
+        raise VADEmptyError("Audio is empty")
     joined_segments: List[Dict[str, Any]] = []
     for i, segment in enumerate(voice_segments):
         if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
