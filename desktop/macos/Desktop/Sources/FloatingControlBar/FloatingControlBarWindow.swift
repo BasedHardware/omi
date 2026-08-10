@@ -154,8 +154,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     rawValue: Int(CGWindowLevelForKey(.assistiveTechHighWindow))
   )
   static let notchExpandedWidth: CGFloat = 382
-  private static let notificationWidth: CGFloat = 430
-  private static let notificationHeight: CGFloat = 108
+  private static let notificationWidth: CGFloat = 508
+  private static let notificationHeight: CGFloat = 128
   private static let notificationSpacing: CGFloat = 8
   /// Vertical room for the readable PTT status banner under chrome/pill.
   static var pttStatusBannerBudget: CGFloat { notificationSpacing + pttHintRowHeight }

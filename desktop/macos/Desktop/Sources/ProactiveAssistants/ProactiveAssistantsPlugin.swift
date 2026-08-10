@@ -533,6 +533,22 @@ public class ProactiveAssistantsPlugin: NSObject {
     return (isMonitoring, currentApp)
   }
 
+  /// Which silent gate is currently skipping capture ticks, or nil when frames flow.
+  /// Logged only on transition: the gates above return without a trace, and a stuck
+  /// gate (idle misread, phantom screen share, excluded frontmost app) reads exactly
+  /// like a healthy quiet pipeline — that ambiguity cost a full debugging session.
+  private var lastCaptureGateReason: String??
+
+  private func logCaptureGate(_ reason: String?) {
+    guard lastCaptureGateReason != reason else { return }
+    lastCaptureGateReason = reason
+    if let reason {
+      log("CaptureGate: skipping capture ticks (\(reason))")
+    } else {
+      log("CaptureGate: capture ticks flowing")
+    }
+  }
+
   private func handleCaptureTargetUnavailable() {
     // A secure/system/helper surface is not proof that the capture engine or
     // permission failed. Keep the normal timer armed so the very next real
@@ -559,10 +575,31 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - Frame Capture
 
+  /// `kCGAnyInputEventType` — the "seconds since ANY input" sentinel for
+  /// `CGEventSource.secondsSinceLastEventType`. Not bridged to Swift's `CGEventType`
+  /// cases; the C header defines it as `((CGEventType)(~0))`. The raw-value init for
+  /// an imported C enum cannot actually fail; the `.null` fallback exists only to
+  /// satisfy the no-force-unwrap rule and would reintroduce the always-idle bug, so
+  /// it also asserts in debug.
+  private static let anyInputEventType: CGEventType = {
+    guard let type = CGEventType(rawValue: ~0) else {
+      assertionFailure("kCGAnyInputEventType (~0) must be representable as CGEventType")
+      return .null
+    }
+    return type
+  }()
+
   /// Seconds since the last HID (keyboard/mouse) event. Used to pause capture
   /// when the user is away from the machine without polling the screen.
+  ///
+  /// Must query `kCGAnyInputEventType`, not `.null`: `.null` (raw 0) asks for time
+  /// since the last *null-type* event, which essentially never occurs, so the value
+  /// grows without bound and the 60s idle gate silently swallowed every capture tick
+  /// while the user was actively typing (measured live: `.null` reported 322s idle at
+  /// the same instant the any-input sentinel reported 0.00006s).
   private func systemIdleSeconds() -> TimeInterval {
-    TimeInterval(CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .null))
+    TimeInterval(
+      CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: Self.anyInputEventType))
   }
 
   private func onAppActivated(appName: String) {
@@ -672,26 +709,34 @@ public class ProactiveAssistantsPlugin: NSObject {
       screenshotBackoffDuration: screenshotAppBackoffDuration,
       shareBackoffDuration: screenShareBackoffDuration
     ) {
+      logCaptureGate("external_capture_yield")
       return
     }
 
     // Cheap early exits before resolving the active window.
     let idleSeconds = systemIdleSeconds()
     if idleSeconds >= captureTrigger.idleThreshold {
+      logCaptureGate("idle")
       return
     }
     if let currentApp = currentApp, RewindSettings.shared.isAppExcluded(currentApp) {
+      logCaptureGate("excluded_app")
       return
     }
 
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
-    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
+    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else {
+      logCaptureGate("waiting_for_user_window")
+      return
+    }
 
     guard let windowID else {
+      logCaptureGate("no_window_id")
       handleCaptureTargetUnavailable()
       return
     }
+    logCaptureGate(nil)
 
     // Check if the current app is excluded from Rewind capture
     var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false

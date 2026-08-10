@@ -584,37 +584,70 @@ struct FloatingControlBarView: View {
     Button {
       FloatingControlBarManager.shared.openNotificationAsChat(notification)
     } label: {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "lightbulb")
-          .scaledFont(size: 13, weight: .medium)
-          .foregroundColor(.white.opacity(0.75))
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        ZStack {
+          RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .frame(width: 44, height: 44)
 
-        Text(notification.message)
-          .scaledFont(size: 13, weight: .medium)
-          .foregroundColor(.white)
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
-          .fixedSize(horizontal: false, vertical: true)
+          Image(systemName: "lightbulb.fill")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundColor(.white)
+        }
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Suggested by Omi")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(.white.opacity(0.5))
+            .lineLimit(1)
+
+          Text(notification.message)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(.white)
+            .lineLimit(3)
+            .multilineTextAlignment(.leading)
+            .lineSpacing(1.5)
+            .fixedSize(horizontal: false, vertical: true)
+        }
 
         Spacer(minLength: OmiSpacing.xs)
 
-        Button {
-          FloatingControlBarManager.shared.dismissCurrentNotification()
-        } label: {
-          Image(systemName: "xmark")
-            .scaledFont(size: 10, weight: .semibold)
-            .foregroundColor(.white.opacity(0.45))
-            .padding(OmiSpacing.xxs)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Dismiss suggestion")
+        // Reserve room so copy never runs under the overlaid dismiss button.
+        Color.clear
+          .frame(width: 28, height: 20)
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.md + 2)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .overlay(alignment: .topTrailing) {
+      Button {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(.white.opacity(0.62))
+          .frame(width: 18, height: 18)
+          .background(Color.white.opacity(0.08))
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .accessibilityLabel("Dismiss suggestion")
+    }
   }
 
   /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
@@ -1109,27 +1142,38 @@ struct FloatingControlBarView: View {
     Button {
       FloatingControlBarManager.shared.openNotificationAsChat(notification)
     } label: {
-      HStack(alignment: .top, spacing: 10) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
         ZStack {
-          RoundedRectangle(cornerRadius: 10)
-            .fill(Color.white.opacity(0.08))
-            .frame(width: 34, height: 34)
+          RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .frame(width: 44, height: 44)
 
           Image(systemName: "bell.badge.fill")
-            .font(.system(size: 14, weight: .semibold))
+            .font(.system(size: 18, weight: .semibold))
             .foregroundColor(.white)
         }
 
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        VStack(alignment: .leading, spacing: 3) {
           Text(notification.title)
-            .scaledFont(size: OmiType.body, weight: .semibold)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(.white)
             .lineLimit(1)
 
           Text(notification.message)
-            .scaledFont(size: 12)
-            .foregroundColor(.white.opacity(0.72))
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(.white.opacity(0.78))
             .lineLimit(3)
+            .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -1138,10 +1182,10 @@ struct FloatingControlBarView: View {
         // Reserve space so text never runs under the overlaid action buttons.
         // Wider for actionable (task) notifications that also show Execute.
         Color.clear
-          .frame(width: notification.assistantId == "task" ? 90 : 36, height: 18)
+          .frame(width: notification.assistantId == "task" ? 96 : 40, height: 20)
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.md + 2)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
     }
