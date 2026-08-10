@@ -24,6 +24,7 @@ import {
   sendChatMessageOp,
   platformChatGenerationEventsPath,
   platformChatGenerationPath,
+  wireToChatHistoryEnvelope,
   wireToChatMessage,
 } from "@omi-core/adapters-platform";
 import { chatMessagePayloadHash } from "@omi-core/kernel";
@@ -96,6 +97,27 @@ test("an empty attachment content reference rejects the containing message", () 
     wireToChatMessage(message),
     null,
     "empty is neither an opaque content reference nor the ratified null expiry state",
+  );
+});
+
+test("a history page with duplicate message ids is rejected intact", () => {
+  // red-proof: change the duplicate branch in wireToChatHistoryEnvelope back
+  // to `continue`. The malformed two-row page is silently accepted as one row.
+  const duplicate = canonicalMessage("amber-fox-ridge", "human", "First copy");
+  const envelope = {
+    messages: [duplicate, { ...duplicate, text: "Conflicting duplicate" }],
+    page: { olderCursor: null, hasOlder: false },
+    capabilities: {
+      maxAttachmentsPerMessage: 4,
+      maxAttachmentBytes: 50_000_000,
+      allowedAttachmentMimeTypes: ["application/pdf"],
+    },
+  };
+
+  assert.equal(
+    wireToChatHistoryEnvelope(envelope),
+    null,
+    "duplicate-free keyset history is a page invariant, not a lossy dedupe request",
   );
 });
 
