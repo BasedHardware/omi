@@ -151,9 +151,17 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
 
 function capabilitiesFor(state: ChatFixtureState): ChatCapabilities {
   if (state === "attachments-unknown-cap") {
-    return { maxAttachmentsPerMessage: null };
+    return {
+      maxAttachmentsPerMessage: null,
+      maxAttachmentBytes: null,
+      allowedAttachmentMimeTypes: null,
+    };
   }
-  return { maxAttachmentsPerMessage: FIXTURE_SERVER_ATTACHMENT_CAP };
+  return {
+    maxAttachmentsPerMessage: FIXTURE_SERVER_ATTACHMENT_CAP,
+    maxAttachmentBytes: 50_000_000,
+    allowedAttachmentMimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+  };
 }
 
 /**
@@ -173,6 +181,7 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     listeners.forEach((listener) => listener());
   };
   let olderLoaded = false;
+  let sentSequence = 0;
 
   return {
     status() {
@@ -207,17 +216,13 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     },
     async send(input) {
       if (state === "unavailable") throw new Error("fixture chat send failed");
+      sentSequence += 1;
+      const clientMessageId = `fixture-sent-client-${sentSequence}`;
       historyPage = {
         ...historyPage,
         messages: [
-          ...historyPage.messages.filter(
-            (message) =>
-              !(
-                (message.delivery.kind === "echo" || message.delivery.kind === "failed") &&
-                message.delivery.clientMessageId === input.clientMessageId
-              ),
-          ),
-          canonical(`fixture-sent-${input.clientMessageId}`, "user", input.text, input.clientMessageId),
+          ...historyPage.messages,
+          canonical(`fixture-sent-${clientMessageId}`, "user", input.text, clientMessageId),
         ],
       };
       notify();
@@ -225,12 +230,18 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
     capabilities() {
       return caps;
     },
+    stagingAvailable() {
+      return false;
+    },
+    async stageAttachment() {
+      throw new Error("fixture staging requires an explicitly supplied typed port");
+    },
     async retry(clientMessageId) {
       const failed = historyPage.messages.find(
         (message) => message.delivery.kind === "failed" && message.delivery.clientMessageId === clientMessageId,
       );
       if (!failed) return;
-      await this.send({ text: failed.text, clientMessageId, attachmentIds: [] });
+      await this.send({ text: failed.text, attachmentIds: [] });
     },
     async cancel(generationId) {
       const streamingMessage = historyPage.messages.find(
