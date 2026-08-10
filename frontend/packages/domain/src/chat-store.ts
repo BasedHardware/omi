@@ -58,6 +58,8 @@ export interface ActiveChatGeneration {
   readonly clientMessageId: RecordId;
   readonly text: string;
   readonly lastEventId: string | null;
+  readonly observationState: "streaming" | "failed";
+  readonly failure: "observation-failed" | null;
 }
 
 export interface ChatHistoryWindow {
@@ -114,6 +116,13 @@ export class ChatMessagesStore {
     );
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
+      if (outcome.state === "dead") {
+        // Outbox writes the retained payload immediately after this callback.
+        // Notify on the injected next turn so the dead-letter surface reads the
+        // durable letter, not the state transition just before it.
+        env.delay(0, () => store.notify());
+        return;
+      }
       if (outcome.state !== "confirmed") return;
       const domainOp = JSON.parse(op.payload) as ChatMessageOp;
       // The required terminal-delivery callback persisted the canonical
@@ -191,8 +200,9 @@ export class ChatMessagesStore {
     }
   }
 
-  discardDeadLetter(opId: string): Promise<void> {
-    return this.outbox.discardDeadLetter(opId);
+  async discardDeadLetter(opId: string): Promise<void> {
+    await this.outbox.discardDeadLetter(opId);
+    this.notify();
   }
 
   /** Queue a human send. Local journal mirrors; server is authority. */
@@ -303,6 +313,8 @@ export class ChatMessagesStore {
       clientMessageId: admission.message.id,
       text: "",
       lastEventId: null,
+      observationState: "streaming",
+      failure: null,
     };
     this.active.set(generationId, state);
     await this.persistActiveGenerations();
@@ -361,6 +373,8 @@ export class ChatMessagesStore {
             ...current,
             text: event.kind === "snapshot" ? event.text : `${current.text}${event.text}`,
             lastEventId: event.id,
+            observationState: "streaming",
+            failure: null,
           };
           this.active.set(generationId, next);
           await this.persistActiveGenerations();
@@ -374,6 +388,12 @@ export class ChatMessagesStore {
           return;
         } else {
           this.observations.delete(generationId);
+          this.active.set(generationId, {
+            ...current,
+            observationState: "failed",
+            failure: "observation-failed",
+          });
+          await this.persistActiveGenerations();
           this.notify();
           return;
         }
@@ -381,6 +401,15 @@ export class ChatMessagesStore {
     } catch {
       if (this.observations.get(generationId) === observation) {
         this.observations.delete(generationId);
+        const current = this.active.get(generationId);
+        if (current !== undefined) {
+          this.active.set(generationId, {
+            ...current,
+            observationState: "failed",
+            failure: "observation-failed",
+          });
+          await this.persistActiveGenerations();
+        }
         this.notify();
       }
     }
@@ -401,11 +430,19 @@ export class ChatMessagesStore {
           !(
             (value as ActiveChatGeneration).lastEventId === null ||
             typeof (value as ActiveChatGeneration).lastEventId === "string"
+          ) ||
+          !(
+            (value as ActiveChatGeneration).observationState === "streaming" ||
+            (value as ActiveChatGeneration).observationState === "failed"
+          ) ||
+          !(
+            (value as ActiveChatGeneration).failure === null ||
+            (value as ActiveChatGeneration).failure === "observation-failed"
           )
         ) continue;
         const state = value as ActiveChatGeneration;
         this.active.set(state.generationId, state);
-        this.startObservation(state);
+        if (state.observationState === "streaming") this.startObservation(state);
       }
     } catch {
       // Malformed advisory state never corrupts the canonical projection.

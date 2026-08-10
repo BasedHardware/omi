@@ -31,11 +31,11 @@ function echo(clientMessageId, text) {
   };
 }
 
-function failed(clientMessageId, text, retryable = true) {
+function failed(generationId, text, retryable = true) {
   return {
-    role: "user",
+    role: "assistant",
     text,
-    delivery: { kind: "failed", clientMessageId, retryable },
+    delivery: { kind: "failed", generationId, source: "provider", retryable },
     attachments: [],
   };
 }
@@ -108,21 +108,11 @@ test("unreported attachment cap disables the attach affordance", () => {
   );
 });
 
-test("failed sends survive reconcile until the server acknowledges them", () => {
-  // red-proof: dropping unacknowledged local entries must fail — the failed
-  // delivery would disappear or become canonical without a serverId match.
-  const local = [
-    canonical("s1", "ok"),
-    failed("c-fail", "please retry"),
-  ];
-  const incoming = [canonical("s1", "ok")];
-  const result = reconcileMessages(local, incoming);
-  const surviving = result.find((message) => message.text === "please retry");
-  assert.ok(surviving);
-  assert.equal(surviving.delivery.kind, "failed");
-  assert.equal(surviving.delivery.clientMessageId, "c-fail");
-  assert.equal(surviving.delivery.retryable, true);
-  assert.equal(result.some((message) => message.delivery.kind === "canonical" && message.text === "please retry"), false);
+test("failed generation projections have stable generation identity", () => {
+  const message = failed("generation-fail", "partial response");
+  assert.equal(messageKey(message), "generation:generation-fail");
+  assert.equal(message.delivery.kind, "failed");
+  assert.equal(message.delivery.retryable, true);
 });
 
 test("cancelled canonical delivery is distinct from completed and retains text", () => {

@@ -221,7 +221,7 @@ export const EN_MESSAGES = {
   "chat.stopped": "Stopped here on purpose",
   "chat.pending": "Sending",
   "chat.failed": "Not delivered",
-  "chat.retrySend": "Retry sending",
+  "chat.responseUnavailable": "Response unavailable.",
   "chat.emptyTitle": "No messages yet",
   "chat.emptyBody": "Ask a question to start this conversation.",
   "chat.loadOlder": "Load older messages",
