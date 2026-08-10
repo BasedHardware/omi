@@ -22,8 +22,6 @@ from routers import (
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
 
-load_backend_env()
-
 
 def _initialize_firebase_admin() -> None:
     """Initialize token verification without selecting the Google data project.
@@ -54,6 +52,7 @@ def _initialize_firebase_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    load_backend_env()
     prepare_google_credentials()
     _initialize_firebase_admin()
     try:
@@ -64,15 +63,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(lifespan=lifespan)
 
-
-def _cors_allowed_origins_from_env() -> list[str]:
-    origins = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
-    if '*' in origins:
-        raise RuntimeError('CORS_ALLOWED_ORIGINS must not contain "*" — list explicit origins instead')
-    return origins
-
-
-_cors_allowed_origins = _cors_allowed_origins_from_env()
+_cors_allowed_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+if '*' in _cors_allowed_origins:
+    raise RuntimeError('CORS_ALLOWED_ORIGINS must not contain "*" — list explicit origins instead')
 
 app.add_middleware(
     CORSMiddleware,
