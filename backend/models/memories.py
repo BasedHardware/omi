@@ -553,9 +553,6 @@ class MemoryDB(Memory):
     created_at: datetime
     updated_at: datetime
 
-    # TODO: remove these fields and use conversation_id and conversation_category after migration
-    memory_id: Optional[str] = None
-
     conversation_id: Optional[str] = None
 
     reviewed: bool = False
@@ -597,14 +594,6 @@ class MemoryDB(Memory):
 
     primary_capture_device: Optional[str] = None
     capture_device_ids: List[str] = Field(default_factory=list)
-
-    def __init__(self, **data: Any) -> None:
-        super().__init__(**data)
-        # Deprecated alias for legacy clients: always mirror `id`. Older code stored
-        # `memory_id = conversation_id` on the doc; serving that stored value makes
-        # desktop's ServerMemory decoder reject the whole memories list, so the alias
-        # must be normalized here rather than trusted from Firestore.
-        self.memory_id = self.id
 
     @property
     def is_active(self) -> bool:
