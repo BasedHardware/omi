@@ -41,6 +41,14 @@ export interface ConversationRecord {
   readonly starred: boolean;
   readonly visibility: ConversationVisibility;
   readonly is_locked: boolean;
+  /**
+   * Compatibility invariant: deleting the last folder deliberately may leave
+   * this identifier dangling. `registerConversationRoutes` currently serializes
+   * it as an opaque value in list and successful-mutation responses; that
+   * consumer must not dereference it or assume referential integrity. Any new
+   * read consumer that needs a folder row must first resolve the prototype wart
+   * as a spec change.
+   */
   readonly folder_id: string | null;
 }
 
