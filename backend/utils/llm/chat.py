@@ -51,7 +51,7 @@ def normalize_filter(value: str) -> str:
     value = value.replace('machine learning', 'ml')
     value = value.replace('natural language processing', 'nlp')
 
-    return value.strip()
+    return ' '.join(value.split()[:2]).strip()
 
 
 # ****************************************
