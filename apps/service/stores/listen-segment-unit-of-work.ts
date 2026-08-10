@@ -18,12 +18,17 @@ export interface ListenSegmentReservationInput {
   readonly at: string;
 }
 
-export interface ListenSegmentReservationOutcome {
-  readonly kind: "accepted";
-  readonly segment: ListenTranscriptSegment;
-  readonly inserted: boolean;
-  readonly entitlement: SettingsEntitlementProjection | null;
-}
+export type ListenSegmentReservationOutcome =
+  | {
+      readonly kind: "accepted";
+      readonly segment: ListenTranscriptSegment;
+      readonly inserted: boolean;
+      readonly entitlement: SettingsEntitlementProjection | null;
+    }
+  | {
+      readonly kind: "entitlement_exhausted";
+      readonly entitlement: SettingsEntitlementProjection;
+    };
 
 /** One atomic, idempotent reservation of transcript durability and metered usage. */
 export interface ListenSegmentUnitOfWork {
@@ -62,6 +67,9 @@ export const defineListenSegmentUnitOfWork = <Connection extends object>(
   reserve(input: ListenSegmentReservationInput): Promise<ListenSegmentReservationOutcome> {
     return transaction.execute(input, (context) => {
       const before = context.resolve(operations.readEntitlement(context, input));
+      if (before?.limitReached === true) {
+        return Object.freeze({ kind: "entitlement_exhausted" as const, entitlement: before });
+      }
       const appended = context.resolve(operations.appendSegment(context, input));
       const entitlement = appended.inserted
         ? context.resolve(operations.consumeTranscriptionSeconds(context, input))

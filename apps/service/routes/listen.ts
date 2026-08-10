@@ -58,6 +58,10 @@ interface ListenHandshake {
   readonly clientConversationId: string | null;
 }
 
+interface ActiveListenStream {
+  exhaust(projection: SettingsEntitlementProjection): void;
+}
+
 export interface EntitlementFrame {
   readonly type: "entitlement";
   readonly state: "transcription_paused_capture_continuing" | "limit_reached" | "upgrade_required";
@@ -182,10 +186,13 @@ const eventsForSession = (
   session: ListenSessionRecord,
   pendingSegments: readonly ListenTranscriptSegment[],
   handshake: ListenHandshake,
+  registerActive: (accountId: string, stream: ActiveListenStream) => () => void,
+  exhaustAccount: (accountId: string, projection: SettingsEntitlementProjection) => void,
 ): WSEvents => {
   let socket: WSContext | null = null;
   let terminal = false;
   let processing = Promise.resolve();
+  let unregisterActive: (() => void) | null = null;
 
   const finalize = (status: "completed" | "entitlement_exhausted", locked: boolean): void => {
     if (terminal) return;
@@ -208,24 +215,10 @@ const eventsForSession = (
     }
   };
 
-  const handleEmission = async (emission: TranscriptionEmission): Promise<void> => {
-    if (terminal) return;
-    const reservation = await deps.segments.reserve({
-      accountId: principal.uid,
-      sessionId: session.id,
-      segment: emission.segment,
-      consumedSeconds: emission.consumedSeconds,
-      at: deps.now(),
-    });
-    const appended = reservation;
-    const projection = reservation.entitlement;
-
-    const activeSocket = socket;
-    if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
-      sendJson(activeSocket, transcriptBatch([appended.segment]));
-    }
-
-    if (projection?.limitReached === true) {
+  const activeStream: ActiveListenStream = Object.freeze({
+    exhaust(projection): void {
+      if (terminal) return;
+      const activeSocket = socket;
       if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
         sendJson(activeSocket, createEntitlementFrame(projection));
       }
@@ -236,6 +229,32 @@ const eventsForSession = (
           "entitlement_exhausted",
         );
       }
+    },
+  });
+
+  const handleEmission = async (emission: TranscriptionEmission): Promise<void> => {
+    if (terminal) return;
+    const reservation = await deps.segments.reserve({
+      accountId: principal.uid,
+      sessionId: session.id,
+      segment: emission.segment,
+      consumedSeconds: emission.consumedSeconds,
+      at: deps.now(),
+    });
+    if (reservation.kind === "entitlement_exhausted") {
+      exhaustAccount(principal.uid, reservation.entitlement);
+      return;
+    }
+    const appended = reservation;
+    const projection = reservation.entitlement;
+
+    const activeSocket = socket;
+    if (activeSocket !== null && rawSocketIsOpen(activeSocket)) {
+      sendJson(activeSocket, transcriptBatch([appended.segment]));
+    }
+
+    if (projection?.limitReached === true) {
+      exhaustAccount(principal.uid, projection);
     }
   };
 
@@ -253,6 +272,7 @@ const eventsForSession = (
   return {
     onOpen(_event, openedSocket) {
       socket = openedSocket;
+      unregisterActive = registerActive(principal.uid, activeStream);
       sendJson(openedSocket, serviceStatus("initiating"));
       sendJson(openedSocket, serviceStatus("in_progress_conversations_processing"));
       sendJson(openedSocket, Object.freeze({
@@ -279,6 +299,8 @@ const eventsForSession = (
     onClose(event) {
       transcription.finish();
       socket = null;
+      unregisterActive?.();
+      unregisterActive = null;
       if (event.code === LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION) {
         finalize("entitlement_exhausted", true);
       } else if (event.code === 1000) {
@@ -296,6 +318,25 @@ const eventsForSession = (
 
 /** Registers the authenticated native WebSocket handshake at the ratified path. */
 export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): void => {
+  const streamsByAccount = new Map<string, Set<ActiveListenStream>>();
+  const registerActive = (accountId: string, stream: ActiveListenStream): (() => void) => {
+    const streams = streamsByAccount.get(accountId) ?? new Set<ActiveListenStream>();
+    streams.add(stream);
+    streamsByAccount.set(accountId, streams);
+    return () => {
+      streams.delete(stream);
+      if (streams.size === 0) streamsByAccount.delete(accountId);
+    };
+  };
+  const exhaustAccount = (
+    accountId: string,
+    projection: SettingsEntitlementProjection,
+  ): void => {
+    for (const stream of [...(streamsByAccount.get(accountId) ?? [])]) {
+      stream.exhaust(projection);
+    }
+  };
+
   app.get(LISTEN_PATH, async (context) => {
     const token = bearerToken(context.req.header("authorization"));
     const principal = token === null ? null : deps.resolvePrincipal(token);
@@ -337,6 +378,8 @@ export const registerListenRoutes = (app: Hono, deps: ListenRouteDependencies): 
       opened.session,
       opened.pendingSegments,
       handshake,
+      registerActive,
+      exhaustAccount,
     ));
   });
 };

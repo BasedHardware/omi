@@ -19,6 +19,7 @@ import { createEntitlementFrame } from "./listen";
 
 const ACCOUNT = "listen-account";
 const SESSION = "a661b15a-2401-4f5c-a4c4-23643dcf26d1";
+const SECOND_SESSION = "8f95c2d8-f398-4d72-94d3-580cffc96ef7";
 const openServers: Array<ReturnType<typeof Bun.serve>> = [];
 
 afterEach(() => {
@@ -317,6 +318,36 @@ describe("GET /v4/listen WebSocket", () => {
     expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1.25);
     expect(stores.listen.readSession(ACCOUNT, SESSION)?.status).toBe("entitlement_exhausted");
     expect(stores.conversations.readRecord(ACCOUNT, SESSION)?.is_locked).toBeTrue();
+  });
+
+  test("two live sockets share one atomic entitlement ceiling and both terminate", async () => {
+    const { service, stores, baseUrl } = boot({
+      used: 0.5,
+      limit: 1,
+      delayMs: 1,
+      consumedSeconds: 0.75,
+    });
+    const first = await observedSocket(service, baseUrl, SESSION);
+    const second = await observedSocket(service, baseUrl, SECOND_SESSION);
+    await Promise.all([first.waitFor(isReady), second.waitFor(isReady)]);
+
+    first.socket.send(new Uint8Array([1, 2, 3, 4]));
+    second.socket.send(new Uint8Array([5, 6, 7, 8]));
+    const [firstClose, secondClose] = await Promise.all([first.closed, second.closed]);
+
+    expect([firstClose.code, secondClose.code]).toEqual([4020, 4020]);
+    expect(first.frames.some((frame) =>
+      (frame as { readonly type?: unknown }).type === "entitlement")).toBeTrue();
+    expect(second.frames.some((frame) =>
+      (frame as { readonly type?: unknown }).type === "entitlement")).toBeTrue();
+    expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(1.25);
+    expect(
+      stores.listen.listSegments(ACCOUNT, SESSION).length
+      + stores.listen.listSegments(ACCOUNT, SECOND_SESSION).length,
+    ).toBe(1);
+    expect(stores.listen.readSession(ACCOUNT, SESSION)?.status).toBe("entitlement_exhausted");
+    expect(stores.listen.readSession(ACCOUNT, SECOND_SESSION)?.status)
+      .toBe("entitlement_exhausted");
   });
 
   test("a deleted account's otherwise valid token is refused on the upgrade request", async () => {
