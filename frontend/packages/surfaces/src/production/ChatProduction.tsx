@@ -42,6 +42,52 @@ function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
   return null;
 }
 
+function isSafeStagedAttachment(attachment: StagedChatAttachment): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(attachment.id) &&
+    /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u.test(attachment.mimeType) &&
+    attachment.mimeType.length <= 127 &&
+    Number.isSafeInteger(attachment.sizeBytes) &&
+    attachment.sizeBytes > 0 &&
+    attachment.expiresAt.length === 24 &&
+    !Number.isNaN(Date.parse(attachment.expiresAt)) &&
+    new Date(attachment.expiresAt).toISOString() === attachment.expiresAt &&
+    attachment.state === "staged";
+}
+
+function isValidAttachmentSelection(
+  capabilities: ChatCapabilities,
+  attachments: readonly StagedChatAttachment[],
+): boolean {
+  if (attachments.length === 0) return true;
+  if (
+    capabilities.maxAttachmentsPerMessage === null ||
+    capabilities.maxAttachmentBytes === null ||
+    capabilities.allowedAttachmentMimeTypes === null ||
+    attachments.length > capabilities.maxAttachmentsPerMessage
+  ) return false;
+  const maxAttachmentBytes = capabilities.maxAttachmentBytes;
+  const allowedAttachmentMimeTypes = capabilities.allowedAttachmentMimeTypes;
+  const ids = new Set<string>();
+  return attachments.every((attachment) => {
+    if (
+      !isSafeStagedAttachment(attachment) ||
+      ids.has(attachment.id) ||
+      attachment.sizeBytes > maxAttachmentBytes ||
+      !allowedAttachmentMimeTypes.includes(attachment.mimeType)
+    ) return false;
+    ids.add(attachment.id);
+    return true;
+  });
+}
+
+function sameAttachmentIds(
+  current: readonly StagedChatAttachment[],
+  submitted: readonly StagedChatAttachment[],
+): boolean {
+  return current.length === submitted.length &&
+    current.every((attachment, index) => attachment.id === submitted[index]?.id);
+}
+
 export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   store: ProductionChatStore;
   fixture?: string;
@@ -57,10 +103,18 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   const [attachments, setAttachments] = useState<StagedChatAttachment[]>([]);
   const [deadLetters, setDeadLetters] = useState<readonly RetainedChatSend[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [staging, setStaging] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const messageListRef = useRef<HTMLOListElement>(null);
+  const sendInFlightRef = useRef(false);
+  const stagingInFlightRef = useRef(false);
+  const attachmentsRef = useRef<readonly StagedChatAttachment[]>(attachments);
+  const capabilitiesRef = useRef(capabilities);
+  attachmentsRef.current = attachments;
+  capabilitiesRef.current = capabilities;
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   // A chat opens on its newest message. Landing at the top of history means the reader
@@ -134,19 +188,35 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
 
   const capState = attachmentCapState(capabilities, attachments.length);
   const stagingAvailable = store.stagingAvailable();
-  const canSend = draft.trim().length > 0;
+  const selectionValid = isValidAttachmentSelection(capabilities, attachments);
+  const canSend = draft.trim().length > 0 && selectionValid && !sending;
 
   const send = async (): Promise<void> => {
+    if (sendInFlightRef.current) return;
     const text = draft.trim();
     if (!text) return;
-    const submittedAttachments = attachments;
-    setDraft((current) => current.trim() === text ? "" : current);
-    setAttachments([]);
+    const submittedDraft = draft;
+    const submittedAttachments = [...attachmentsRef.current];
+    if (!isValidAttachmentSelection(capabilitiesRef.current, submittedAttachments)) {
+      setOperationError(t(locale, "chat.error"));
+      return;
+    }
+    sendInFlightRef.current = true;
+    setSending(true);
     setOperationError(null);
     try {
       await store.send({
         text,
         attachmentIds: submittedAttachments.map((attachment) => attachment.id),
+      });
+      setDraft((current) => current === submittedDraft ? "" : current);
+      setAttachments((current) => {
+        const submittedIds = new Set(submittedAttachments.map((attachment) => attachment.id));
+        const next = sameAttachmentIds(current, submittedAttachments)
+          ? []
+          : current.filter((attachment) => !submittedIds.has(attachment.id));
+        attachmentsRef.current = next;
+        return next;
       });
       const page = await store.history();
       setMessages((current) => reconcileMessages(current, page.messages));
@@ -157,6 +227,9 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     } catch {
       setOperationError(t(locale, "chat.error"));
       setStatus(store.status());
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
   };
 
@@ -179,28 +252,41 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   };
 
   const attach = async (): Promise<void> => {
-    if (!stagingAvailable || !capState.enabled) return;
+    if (
+      !stagingAvailable ||
+      !capState.enabled ||
+      sendInFlightRef.current ||
+      stagingInFlightRef.current
+    ) return;
+    stagingInFlightRef.current = true;
+    setStaging(true);
     setOperationError(null);
     try {
       const staged = await store.stageAttachment();
       if (staged === null) return;
-      if (
-        capabilities.maxAttachmentBytes === null ||
-        capabilities.allowedAttachmentMimeTypes === null ||
-        staged.sizeBytes > capabilities.maxAttachmentBytes ||
-        !capabilities.allowedAttachmentMimeTypes.includes(staged.mimeType)
-      ) {
+      const current = attachmentsRef.current;
+      const candidate = [...current, staged];
+      if (!isValidAttachmentSelection(capabilitiesRef.current, candidate)) {
         setOperationError(t(locale, "chat.error"));
         return;
       }
-      setAttachments((current) => [...current, staged]);
+      attachmentsRef.current = candidate;
+      setAttachments(candidate);
     } catch {
       setOperationError(t(locale, "chat.error"));
+    } finally {
+      stagingInFlightRef.current = false;
+      setStaging(false);
     }
   };
 
   const removeAttachment = (id: string): void => {
-    setAttachments((current) => current.filter((item) => item.id !== id));
+    if (sendInFlightRef.current) return;
+    setAttachments((current) => {
+      const next = current.filter((item) => item.id !== id);
+      attachmentsRef.current = next;
+      return next;
+    });
   };
 
   const cancelGeneration = (generationId: string): void => {
@@ -286,6 +372,22 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                         ? t(locale, "chat.responseUnavailable")
                         : "")}
                     </p>
+                    {message.attachments.length > 0 && (
+                      <ul className="chat-message-attachments" aria-label={t(locale, "chat.attachments")}>
+                        {message.attachments.map((attachment) => (
+                          <li key={attachment.id}>
+                            <span className="chat-message-attachment-name">{attachment.displayName}</span>
+                            <span>{t(locale, "chat.attachmentMetadata", {
+                              mediaType: attachment.mediaType,
+                              sizeBytes: attachment.sizeBytes,
+                            })}</span>
+                            {attachment.contentReference === null && (
+                              <span>{t(locale, "chat.attachmentExpired")}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {streamingGenerationId && (
                       <button type="button" onClick={() => cancelGeneration(streamingGenerationId)} aria-label={t(locale, "chat.stop")}>
                         {t(locale, "chat.stop")}
@@ -336,20 +438,21 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
                     mimeType: attachment.mimeType,
                     sizeBytes: attachment.sizeBytes,
                   })}</span>
-                  <button type="button" onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
+                  <button type="button" disabled={sending} onClick={() => removeAttachment(attachment.id)} aria-label={t(locale, "chat.attachmentRemove")}>
                     {t(locale, "chat.attachmentRemove")}
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {attachmentHint && <p className="chat-attachment-hint">{attachmentHint}</p>}
+          {attachmentHint && <p id="chat-attachment-hint" className="chat-attachment-hint">{attachmentHint}</p>}
           <div className="chat-composer-row">
             <button
               type="button"
               className="chat-attach"
-              disabled={!stagingAvailable || !capState.enabled}
+              disabled={!stagingAvailable || !capState.enabled || sending || staging}
               aria-label={t(locale, "chat.attach")}
+              aria-describedby={attachmentHint ? "chat-attachment-hint" : undefined}
               title={attachmentHint ?? t(locale, "chat.attach")}
               onClick={() => void attach()}
             >

@@ -231,6 +231,8 @@ export const EN_MESSAGES = {
   "chat.attachments": "Attachments",
   "chat.attachmentRemove": "Remove attachment",
   "chat.stagedAttachment": "Staged {mimeType}, {sizeBytes} bytes",
+  "chat.attachmentMetadata": "{mediaType}, {sizeBytes} bytes",
+  "chat.attachmentExpired": "Content expired or unavailable.",
   "chat.attachmentLimit": "Up to {count} attachments per message.",
   "chat.attachmentLimitReached": "Attachment limit reached: {count}.",
   "chat.attachmentCapUnknown": "Attachments stay unavailable until the server reports its limit.",
