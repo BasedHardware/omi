@@ -80,6 +80,41 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
           ? { kind: "replay", event: eventFromRow(existing) }
           : { kind: "conflict" };
       }
+      const terminal = this.db.query(`
+        SELECT event_id, generation_id, sequence, created_at, frame_json
+        FROM service_chat_generation_events
+        WHERE account_id = ? AND generation_id = ?
+          AND json_extract(frame_json, '$.kind') IN ('done', 'failed', 'cancelled')
+        ORDER BY sequence ASC
+        LIMIT 1
+      `).get(input.accountId, input.generationId) as EventRow | null;
+      if (terminal !== null) return { kind: "replay", event: eventFromRow(terminal) };
+
+      const isTerminal = ["done", "failed", "cancelled"].includes(input.frame.kind);
+      if (isTerminal) {
+        this.db.query(`
+          INSERT INTO service_chat_generation_lifecycle (account_id, generation_id, state)
+          VALUES (?, ?, 'active')
+          ON CONFLICT (account_id, generation_id) DO NOTHING
+        `).run(input.accountId, input.generationId);
+        const claimed = this.db.query(`
+          UPDATE service_chat_generation_lifecycle
+          SET state = 'terminal'
+          WHERE account_id = ? AND generation_id = ? AND state != 'terminal'
+        `).run(input.accountId, input.generationId);
+        if (claimed.changes !== 1) {
+          const winner = this.db.query(`
+            SELECT event_id, generation_id, sequence, created_at, frame_json
+            FROM service_chat_generation_events
+            WHERE account_id = ? AND generation_id = ?
+              AND json_extract(frame_json, '$.kind') IN ('done', 'failed', 'cancelled')
+            ORDER BY sequence ASC
+            LIMIT 1
+          `).get(input.accountId, input.generationId) as EventRow | null;
+          if (winner === null) throw new TypeError("terminal chat generation has no terminal event");
+          return { kind: "replay", event: eventFromRow(winner) };
+        }
+      }
       const row = this.db.query(`
         SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence
         FROM service_chat_generation_events
@@ -108,7 +143,7 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
       `).run(
         input.accountId,
         input.generationId,
-        ["done", "failed", "cancelled"].includes(input.frame.kind) ? "terminal" : "active",
+        isTerminal ? "terminal" : "active",
       );
       return {
         kind: "appended",

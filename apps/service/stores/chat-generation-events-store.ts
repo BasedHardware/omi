@@ -122,6 +122,12 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
           ? { kind: "replay", event: detachEvent(existing) }
           : { kind: "conflict" };
       }
+      if (log.state === "terminal") {
+        const terminal = log.events.find((event) =>
+          ["done", "failed", "cancelled"].includes(event.frame.kind));
+        if (terminal === undefined) throw new TypeError("terminal chat generation has no terminal event");
+        return { kind: "replay", event: detachEvent(terminal) };
+      }
       const event = Object.freeze({
         id: input.eventId,
         generationId: input.generationId,

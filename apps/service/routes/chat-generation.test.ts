@@ -380,6 +380,94 @@ describe("ratified chat generation wire red proofs", () => {
     }
   });
 
+  test("two SQLite supervisor compositions emit one terminal in a completion-cancel race", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "omi-chat-supervisor-race-"));
+    const path = join(directory, "service.sqlite");
+    const firstDb = new Database(path);
+    const secondDb = new Database(path);
+    try {
+      const firstStores = createSqliteLocalServiceStores(firstDb);
+      const secondStores = createSqliteLocalServiceStores(secondDb);
+      const admitted = firstStores.chatAdmission.admit({
+        accountId: ACCOUNT,
+        message: {
+          id: "race-human",
+          text: "race",
+          sender: "human",
+          type: "text",
+          createdAt: 100,
+          updatedAt: 100,
+          chatSessionId: null,
+          appId: null,
+          journalRevision: 1,
+          payloadHash: "sha256:race-human",
+          messageSource: "desktop_chat",
+          rating: null,
+          reported: false,
+          revision: "revision-race-human",
+        },
+        generationId: "generation-race",
+        acceptedEventId: "event-race-accepted",
+        admittedAt: 100,
+      });
+      if (admitted.kind !== "created") throw new TypeError("race admission failed");
+      let firstCallbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
+      let secondCallbacks: Parameters<ChatGenerationSource["start"]>[0] | null = null;
+      const source = (capture: (input: Parameters<ChatGenerationSource["start"]>[0]) => void): ChatGenerationSource =>
+        Object.freeze({
+          start(input) {
+            capture(input);
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        });
+      const supervisor = (
+        stores: ReturnType<typeof createSqliteLocalServiceStores>,
+        generationSource: ChatGenerationSource,
+      ) => createChatGenerationSupervisor({
+        source: generationSource,
+        context: createEmptyChatGenerationContextSource(),
+        messages: stores.chatMessages,
+        events: stores.chatEvents,
+        finalization: stores.chatFinalization,
+        nowEpochMilliseconds: () => 200,
+        assistantMessageId: () => "assistant-race",
+        eventId: (_accountId, _generationId, kind, sequence) => `event-race-${kind}-${sequence}`,
+        revision: () => "revision-assistant-race",
+      });
+      const first = supervisor(firstStores, source((input) => { firstCallbacks = input; }));
+      const second = supervisor(secondStores, source((input) => { secondCallbacks = input; }));
+      first.onAdmitted({ accountId: ACCOUNT, stored: admitted.stored, acceptedEvent: admitted.acceptedEvent });
+      second.onAdmitted({ accountId: ACCOUNT, stored: admitted.stored, acceptedEvent: admitted.acceptedEvent });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (firstCallbacks === null || secondCallbacks === null) throw new TypeError("sources did not start");
+      firstCallbacks.onDelta("winner");
+      expect(secondStores.chatEvents.requestCancellation(ACCOUNT, "generation-race").kind)
+        .toBe("accepted");
+      firstCallbacks.onComplete();
+      second.cancel(ACCOUNT, "generation-race");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const kinds = firstStores.chatEvents.listAfter(ACCOUNT, "generation-race", null)!
+        .map((event) => event.frame.kind);
+      expect(kinds.filter((kind) => ["done", "failed", "cancelled"].includes(kind)))
+        .toEqual(["done"]);
+      expect(firstStores.chatEvents.readLifecycle(ACCOUNT, "generation-race")?.state)
+        .toBe("terminal");
+      expect((await Promise.resolve(firstStores.chatMessages.listHistory(ACCOUNT, {
+        limit: 10,
+        snapshotSequence: firstStores.chatMessages.readSnapshotSequence(ACCOUNT),
+        olderThan: null,
+      }))).messages.map((entry) => [entry.sender, entry.text])).toEqual([
+        ["human", "race"],
+        ["ai", "winner"],
+      ]);
+    } finally {
+      secondDb.close();
+      firstDb.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("send replay produces one generation, one assistant, and one quota decrement", async () => {
     const stores = createInMemoryLocalServiceStores();
     stores.settings.putEntitlement(ACCOUNT, {

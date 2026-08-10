@@ -132,6 +132,53 @@ test("SQLite preserves monotonic journal revision and the cancelled-partial even
   db.close();
 });
 
+test("SQLite terminal append is compare-and-set and replays the winning terminal", () => {
+  const directory = mkdtempSync(join(tmpdir(), "omi-chat-terminal-cas-"));
+  const path = join(directory, "service.sqlite");
+  const firstDb = new Database(path);
+  const secondDb = new Database(path);
+  try {
+    const first = new SqliteChatGenerationEventsStore(firstDb);
+    const second = new SqliteChatGenerationEventsStore(secondDb);
+    expect(first.append({
+      accountId: "account",
+      generationId: "generation-cas",
+      eventId: "accepted-cas",
+      createdAt: 100,
+      frame: {
+        kind: "accepted",
+        message: message(),
+        generation: { id: "generation-cas" },
+      },
+    }).kind).toBe("appended");
+    const winning = first.append({
+      accountId: "account",
+      generationId: "generation-cas",
+      eventId: "done-cas",
+      createdAt: 200,
+      frame: { kind: "done", message: message({ id: "assistant-cas", sender: "ai" }) },
+    });
+    const losing = second.append({
+      accountId: "account",
+      generationId: "generation-cas",
+      eventId: "cancelled-cas",
+      createdAt: 201,
+      frame: { kind: "cancelled", message: null },
+    });
+
+    expect(winning.kind).toBe("appended");
+    expect(losing.kind).toBe("replay");
+    expect(losing.kind === "replay" ? losing.event.frame.kind : null).toBe("done");
+    expect(first.listAfter("account", "generation-cas", null)?.map((event) => event.frame.kind))
+      .toEqual(["accepted", "done"]);
+    expect(second.readLifecycle("account", "generation-cas")?.state).toBe("terminal");
+  } finally {
+    secondDb.close();
+    firstDb.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("SQLite rolls canonical assistant persistence back when terminal append crashes", () => {
   const db = new Database(":memory:");
   const messages = new SqliteChatMessagesStore(db);

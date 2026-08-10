@@ -30,6 +30,9 @@ export const defineChatGenerationFinalization = (
 ): ChatGenerationFinalization => Object.freeze({
   finalize(input): ChatGenerationEvent {
     return transaction.execute(() => {
+      const terminal = events.listAfter(input.accountId, input.generationId, null)
+        ?.find((event) => ["done", "failed", "cancelled"].includes(event.frame.kind));
+      if (terminal !== undefined) return terminal;
       const message = input.frame.kind === "failed" ? null : input.frame.message;
       if (message !== null) {
         const written = messages.writeCanonical(input.accountId, message, input.generationId);
