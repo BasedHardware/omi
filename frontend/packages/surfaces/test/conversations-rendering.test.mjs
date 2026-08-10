@@ -83,6 +83,35 @@ test("conversation detail orders metadata before summary and supports Enter and 
   }
 });
 
+test("conversation detail renders patch controls only across the canPatch boundary", async () => {
+  const permitted = await renderConversation("normal", true);
+  try {
+    const actions = permitted.container.querySelector(".conversation-detail > .conversation-detail-actions");
+    assert.ok(actions, "an unlocked, saved conversation renders its permitted action controls");
+    const buttonLabels = [...actions.querySelectorAll("button")].map((button) => button.textContent?.trim());
+    assert.ok(buttonLabels.includes(EN_MESSAGES["conversations.unstar"]), "star mutation is available");
+    assert.ok(buttonLabels.includes(EN_MESSAGES["conversations.delete"]), "delete mutation is available");
+    assert.equal(actions.querySelectorAll("select").length, 2, "visibility and folder mutations are available");
+  } finally {
+    await permitted.cleanup();
+  }
+
+  for (const state of ["locked", "discarded"]) {
+    const forbidden = await renderConversation(state, true);
+    try {
+      assert.equal(
+        forbidden.container.querySelector(".conversation-detail > .conversation-detail-actions"),
+        null,
+        `${state} conversation omits patch controls`,
+      );
+    } finally {
+      await forbidden.cleanup();
+    }
+  }
+  // red-proof: omitting the canPatch action block from a normal detail makes
+  // the positive boundary assertion fail; rendering it for locked/discarded fails the negative side.
+});
+
 test("conversation dead letters render product copy and never backend summaries", async () => {
   const rendered = await renderConversation("dead");
   try {
