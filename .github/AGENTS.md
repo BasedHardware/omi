@@ -34,7 +34,8 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
 - When editing workflows, keep `actionlint` coverage in CI so YAML and GitHub expression mistakes fail before merge.
 - Mutable third-party action refs (`@latest`, channel/branch pins such as
   `dtolnay/rust-toolchain@stable` or `pypa/gh-action-pypi-publish@release/v1`),
-  nested `backend/.github/workflows/` templates, and flutter-buildrunner cache
-  keys that embed `github.run_id` are rejected by
-  `.github/scripts/check_actions_hygiene.py` (manifest check
-  `github-actions-hygiene`). Pin third-party actions to a full commit SHA.
+  nested component-local GitHub workflow directories outside the repo-root
+  `.github/workflows/` tree, and flutter-buildrunner cache keys that embed
+  `github.run_id` are rejected by `.github/scripts/check_actions_hygiene.py`
+  (manifest check `github-actions-hygiene`). Pin third-party actions to a full
+  commit SHA.
