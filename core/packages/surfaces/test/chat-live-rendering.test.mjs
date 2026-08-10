@@ -44,6 +44,9 @@ class RenderedDomainChat {
   active = [];
   sent = [];
   cancelled = [];
+  deliveries = [];
+  dead = [];
+  discarded = [];
 
   status() { return status(); }
   subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -53,6 +56,13 @@ class RenderedDomainChat {
   async list() { return this.rows; }
   pendingMessageIds() { return []; }
   activeGenerations() { return this.active; }
+  async generationDeliveries() { return this.deliveries; }
+  async deadLetters() { return this.dead; }
+  async discardDeadLetter(opId) {
+    this.discarded.push(opId);
+    this.dead = this.dead.filter((letter) => letter.opId !== opId);
+    this.notify();
+  }
   capabilities() {
     return {
       maxAttachmentsPerMessage: 2,
@@ -70,6 +80,8 @@ class RenderedDomainChat {
       clientMessageId: "domain-authored-human",
       text: "First",
       lastEventId: "event-delta-1",
+      observationState: "streaming",
+      failure: null,
     }];
     this.notify();
   }
@@ -226,6 +238,94 @@ test("absent staging host renders unavailable and cannot mint a placeholder atta
     assert.equal(attach.disabled, true);
     assert.ok(rendered.container.textContent.includes(EN_MESSAGES["chat.attachmentUnavailable"]));
     assert.equal(rendered.container.querySelector(".chat-attachments"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("observer and provider failures render as non-streaming assistant failures", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("failed-human", "human", "Question")];
+  domain.active = [{
+    generationId: "observer-failed",
+    clientMessageId: "failed-human",
+    text: "Partial answer",
+    lastEventId: "event-1",
+    observationState: "failed",
+    failure: "bridge disconnected",
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    let failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed, "observer failure is visible as failed");
+    assert.equal(failed.dataset.delivery, "failed");
+    assert.equal(failed.getAttribute("aria-busy"), null, "observer failure is not still streaming");
+    assert.ok(failed.textContent.includes("Partial answer"));
+
+    await rendered.act(async () => {
+      domain.active = [];
+      domain.deliveries = [{
+        generationId: "provider-failed",
+        clientMessageId: "failed-human",
+        terminal: { kind: "failed", error: { code: "provider_down", retryable: true } },
+      }];
+      domain.notify();
+      await Promise.resolve();
+    });
+    failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed, "provider terminal failure is visible after active observation is removed");
+    assert.equal(failed.getAttribute("aria-busy"), null);
+    assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("retained dead send shows exact authored text and ordered ids with discard only", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("canonical-existing", "human", "Already admitted")];
+  domain.dead = [{
+    opId: "dead-send-1",
+    recordId: "dead-human",
+    domain: "chat",
+    summary: "Send chat",
+    payload: JSON.stringify({
+      op: "create",
+      text: "Exact authored text",
+      attachmentIds: ["opaque-one", "opaque-two"],
+    }),
+    failure: { kind: "permanent", reason: "forbidden", detail: "fixed" },
+    deadAt: 1,
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    const panel = rendered.container.querySelector(".chat-dead-letters");
+    assert.ok(panel);
+    assert.ok(panel.textContent.includes("Exact authored text"));
+    assert.deepEqual(
+      [...panel.querySelectorAll(".chat-dead-attachment-ids code")].map((item) => item.textContent),
+      ["opaque-one", "opaque-two"],
+    );
+    assert.equal([...panel.querySelectorAll("button")].some((button) => /retry/i.test(button.textContent)), false);
+    const discard = panel.querySelector("button");
+    assert.ok(discard);
+    await click(rendered, discard);
+    assert.deepEqual(domain.discarded, ["dead-send-1"]);
+    assert.equal(rendered.container.querySelector(".chat-dead-letters"), null);
   } finally {
     await rendered.cleanup();
   }

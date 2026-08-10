@@ -20,7 +20,12 @@ export type ChatDelivery =
     }
   | { readonly kind: "streaming"; readonly generationId: string }
   | { readonly kind: "echo"; readonly clientMessageId: string }
-  | { readonly kind: "failed"; readonly clientMessageId: string; readonly retryable: boolean };
+  | {
+      readonly kind: "failed";
+      readonly generationId: string;
+      readonly source: "observer" | "provider";
+      readonly retryable: boolean;
+    };
 
 export type ChatMessage = {
   readonly role: ChatRole;
@@ -46,7 +51,7 @@ export type ChatCapabilities = {
 function clientMessageIdOf(message: ChatMessage): string | null {
   if (message.delivery.kind === "canonical") return message.delivery.clientMessageId;
   if (message.delivery.kind === "streaming") return null;
-  return message.delivery.clientMessageId;
+  return message.delivery.kind === "echo" ? message.delivery.clientMessageId : null;
 }
 
 /**
@@ -58,7 +63,9 @@ export function messageKey(message: ChatMessage): string {
   if (clientMessageId !== null) return `cid:${clientMessageId}`;
   if (message.delivery.kind === "canonical") return `server:${message.delivery.serverId}`;
   if (message.delivery.kind === "streaming") return `generation:${message.delivery.generationId}`;
-  return `cid:${message.delivery.clientMessageId}`;
+  return message.delivery.kind === "failed"
+    ? `generation:${message.delivery.generationId}`
+    : `cid:${message.delivery.clientMessageId}`;
 }
 
 /**
@@ -80,7 +87,7 @@ export function reconcileMessages(
 
   const merged: ChatMessage[] = [...incoming];
   for (const message of local) {
-    if (message.delivery.kind !== "echo" && message.delivery.kind !== "failed") continue;
+    if (message.delivery.kind !== "echo") continue;
     if (acknowledged.has(message.delivery.clientMessageId)) continue;
     merged.push(message);
   }
