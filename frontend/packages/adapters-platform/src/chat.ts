@@ -87,7 +87,8 @@ function wireToChatAttachment(raw: unknown): ChatAttachment | null {
     typeof raw["displayName"] !== "string" ||
     typeof raw["mediaType"] !== "string" ||
     !isNonNegativeInteger(raw["sizeBytes"]) ||
-    !isNullableString(raw["contentReference"])
+    !isNullableString(raw["contentReference"]) ||
+    raw["contentReference"] === ""
   ) {
     return null;
   }

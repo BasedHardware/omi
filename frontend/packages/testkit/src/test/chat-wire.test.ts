@@ -78,6 +78,27 @@ test("attachment metadata survives absent content and round-trips", () => {
   assert.equal(missingDurableMetadata.contentReference, null);
 });
 
+test("an empty attachment content reference rejects the containing message", () => {
+  // red-proof: permit `contentReference === ""` in wireToChatAttachment. The
+  // malformed row below is accepted as a third semantic state beside an opaque
+  // reference and null.
+  const message = canonicalMessage("client-message-empty-reference", "human", "Read this", [
+    {
+      id: "attachment-opaque-01",
+      displayName: "handoff.pdf",
+      mediaType: "application/pdf",
+      sizeBytes: 12_345,
+      contentReference: "",
+    },
+  ]);
+
+  assert.equal(
+    wireToChatMessage(message),
+    null,
+    "empty is neither an opaque content reference nor the ratified null expiry state",
+  );
+});
+
 test("cancelled and completed terminals are distinct and cancellation retains the partial", () => {
   // red-proof: remove the cancelled arm or make its message nullable. This
   // construction or the retained-partial read stops compiling.
