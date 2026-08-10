@@ -306,15 +306,17 @@ def resolve_impact(
             selected.add("windows-kgworker-native-closure")
 
     if selector_changed:
-        # The selector is the boundary. A change to it runs all of its fixtures
-        # and conservatively wakes each component lane it can influence.
+        # The selector is the boundary. A change to it conservatively wakes each
+        # component lane it can influence. It deliberately excludes the
+        # generated-artifact regeneration lanes (flutter-codegen, flutter-l10n):
+        # editing routing metadata cannot make a committed generated file stale,
+        # and waking build_runner from a manifest-only diff costs ~17 minutes at
+        # push time. Those lanes stay owned by their real generator inputs.
         selected.update(
             {
                 "app-ci-only",
                 "app-analysis-tests",
                 "app-compile-smoke",
-                "flutter-l10n",
-                "flutter-codegen",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
