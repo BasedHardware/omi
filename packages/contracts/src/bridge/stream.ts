@@ -27,6 +27,56 @@ export type StreamFromShell =
   | { t: "error"; id: StreamId; failure: string };
 
 /**
+ * The single host-visible message channel used for every bridge stream. The
+ * logical stream channel remains in each message; this name only identifies
+ * the native message handler.
+ */
+export const BRIDGE_STREAM_MESSAGE_CHANNEL = "omiStream";
+
+/** The global sink a one-way host invokes with one JSON-encoded shell frame. */
+export const BRIDGE_STREAM_SINK_FUNCTION = "__omiStreamFrame";
+
+/** The logical channel whose params are `ChatGenerationStreamParams`. */
+export const CHAT_GENERATION_STREAM_CHANNEL = "chat-generation-events";
+
+/**
+ * Host-owned generation identity and reconnect cursor. The host constructs
+ * the fixed authenticated GET route; no origin, token, or caller-authored
+ * headers cross into JavaScript.
+ */
+export interface ChatGenerationStreamParams {
+  generationId: string;
+  lastEventId?: string;
+}
+
+/**
+ * Host-facing wire. `channel` is repeated after `open` so a frame routed from
+ * the wrong logical producer can be rejected before it reaches a stream.
+ * This wraps the ratified lifecycle without changing its three messages in
+ * either direction.
+ */
+export type StreamToShellWire = StreamToShell & { channel: string };
+export type StreamFromShellWire = StreamFromShell & { channel: string };
+
+export interface BridgeStreamOpenRequest {
+  channel: string;
+  params: string;
+  initialCredit: number;
+}
+
+/** One incrementally consumed payload stream owned by the bridge binding. */
+export interface BridgePayloadStream extends AsyncIterable<string> {
+  readonly id: StreamId;
+  readonly channel: string;
+  cancel(reason?: string): void;
+}
+
+/** Reusable typed port implemented by `@omi-core/bridge-web`. */
+export interface BridgeStreamPort {
+  open(request: BridgeStreamOpenRequest): BridgePayloadStream;
+}
+
+/**
  * The bundle manifest gate — ADR-009 §5. The shell reads this BEFORE
  * navigation and refuses/rolls back on mismatch; the surface must then send
  * `surface-ready` over the bridge within the shell's deadline.
