@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -16,6 +17,8 @@ import 'package:omi/utils/logger.dart';
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
+  static FlutterSecureStorage? _secureStorage;
+  static String _authToken = '';
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -28,6 +31,22 @@ class SharedPreferencesUtil {
 
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
+    _secureStorage = const FlutterSecureStorage();
+    try {
+      _authToken = await _secureStorage?.read(key: 'authToken') ?? '';
+    } catch (e) {
+      Logger.error('Failed to read authToken from secure storage: $e');
+      _authToken = '';
+    }
+
+    if (_authToken.isEmpty) {
+      final legacyToken = _preferences?.getString('authToken') ?? '';
+      if (legacyToken.isNotEmpty) {
+        _authToken = legacyToken;
+        await _secureStorage?.write(key: 'authToken', value: legacyToken);
+        await _preferences?.remove('authToken');
+      }
+    }
   }
 
   /// Picks up values written natively (the Dart cache doesn't see those otherwise).
@@ -682,9 +701,16 @@ class SharedPreferencesUtil {
 
   //--------------------------------- Auth ------------------------------------//
 
-  String get authToken => getString('authToken');
+  String get authToken => _authToken;
 
-  set authToken(String value) => saveString('authToken', value);
+  set authToken(String value) {
+    _authToken = value;
+    if (value.isEmpty) {
+      _secureStorage?.delete(key: 'authToken');
+    } else {
+      _secureStorage?.write(key: 'authToken', value: value);
+    }
+  }
 
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 

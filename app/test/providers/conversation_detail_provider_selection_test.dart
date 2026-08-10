@@ -9,6 +9,7 @@ import 'package:omi/providers/conversation_provider.dart';
 
 void main() {
   setUp(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });

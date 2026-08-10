@@ -136,6 +136,7 @@ dependencies:
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
+  flutter_secure_storage: ^10.3.1
 
 dependency_overrides:
   js: ^0.7.1
