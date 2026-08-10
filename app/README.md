@@ -53,7 +53,9 @@ configuration, and the beta bundle ID must be registered with both Firebase and
 the Apple team. Override the default bundle ID with
 `OMI_MOBILE_BETA_BUNDLE_ID` when your team uses a different registered ID. The
 beta build uses the `mobile_beta` profile and the `omi-beta://auth/callback`
-scheme; it must not be treated as a local-emulator build.
+scheme. Product traffic uses the beta serving API, while Google and Apple OAuth
+remain on `https://api.omi.me/`; the beta must not be treated as a local-emulator
+build.
  
 3. Ensure GitHub SSH access is set up correctly for pulling certificates from repositories. After running the command below, if you're prompted for a passphrase, enter your SSH passphrase — or simply press Enter/Return if you haven't set one.
     ```bash
