@@ -16,6 +16,7 @@ void main() {
     expect(result.request?.url.toString(), 'wss://staging.example.test/v4/listen?language=en');
     expect(result.request?.url.toString(), isNot(contains('omi-ui://local')));
     expect(result.request?.headers['authorization'], 'Bearer shell-token');
+    expect(result.request?.headers['x-omi-client-id'], 'run-listen-proof::ios');
     http.closeForTest();
   });
 
@@ -35,5 +36,16 @@ void main() {
         reason: raw,
       );
     }
+  });
+
+  test('an empty host can reset on every document navigation', () async {
+    final host = ShellTransportAuthority(
+      baseUrl: Uri.parse('https://api.example'),
+      token: 'shell-token',
+      runId: 'run-navigation',
+    ).makeListenHost();
+    await host.resetForNavigation();
+    await host.resetForNavigation();
+    await host.close();
   });
 }

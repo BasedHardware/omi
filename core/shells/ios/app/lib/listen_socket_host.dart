@@ -31,10 +31,15 @@ class ShellTransportAuthority {
 
   BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
 
-  ListenSocketHost makeListenHost() => ListenSocketHost(baseUrl: baseUrl, custody: custody);
+  ListenSocketHost makeListenHost() =>
+      ListenSocketHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
 
-  ListenSocketPolicyResult prepareListen(String path) =>
-      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
+  ListenSocketPolicyResult prepareListen(String path) => ListenSocketHostPolicy.prepare(
+    path: path,
+    baseUrl: baseUrl,
+    token: custody.currentToken,
+    clientIdentity: clientIdentity,
+  );
 }
 
 class ListenSocketPreparedRequest {
@@ -54,7 +59,12 @@ class ListenSocketPolicyResult {
 
 /// Pure authority/auth policy shared by the live host and composition test.
 class ListenSocketHostPolicy {
-  static ListenSocketPolicyResult prepare({required String path, required Uri baseUrl, required String? token}) {
+  static ListenSocketPolicyResult prepare({
+    required String path,
+    required Uri baseUrl,
+    required String? token,
+    required String clientIdentity,
+  }) {
     if (!path.startsWith('/') || path.startsWith('//') || path.contains('://')) {
       return const ListenSocketPolicyResult.failure('path is not origin-relative');
     }
@@ -77,23 +87,32 @@ class ListenSocketHostPolicy {
     return ListenSocketPolicyResult.dispatch(
       ListenSocketPreparedRequest(
         url: url,
-        headers: <String, String>{HttpHeaders.authorizationHeader: 'Bearer $token'},
+        headers: <String, String>{
+          HttpHeaders.authorizationHeader: 'Bearer $token',
+          'x-omi-client-id': clientIdentity,
+        },
       ),
     );
   }
 }
 
 class ListenSocketHost {
-  ListenSocketHost({required this.baseUrl, required this.custody});
+  ListenSocketHost({required this.baseUrl, required this.custody, required this.clientIdentity});
 
   static const channel = 'omiListenSocket';
 
   final Uri baseUrl;
   final ShellCredentialCustody custody;
+  final String clientIdentity;
   final Map<String, WebSocket> _sockets = <String, WebSocket>{};
 
   ListenSocketPolicyResult prepareUsingCurrentCustodyForConformance(String path) =>
-      ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
+      ListenSocketHostPolicy.prepare(
+        path: path,
+        baseUrl: baseUrl,
+        token: custody.currentToken,
+        clientIdentity: clientIdentity,
+      );
 
   Future<void> register(WebViewController controller) {
     return controller.addJavaScriptChannel(
@@ -118,7 +137,12 @@ class ListenSocketHost {
     }
     final path = decoded['path'];
     if (action != 'open' || path is! String) return;
-    final decision = ListenSocketHostPolicy.prepare(path: path, baseUrl: baseUrl, token: custody.currentToken);
+    final decision = ListenSocketHostPolicy.prepare(
+      path: path,
+      baseUrl: baseUrl,
+      token: custody.currentToken,
+      clientIdentity: clientIdentity,
+    );
     final prepared = decision.request;
     if (prepared == null) {
       await _emit(controller, id, const <String, Object>{'type': 'error'});
@@ -156,9 +180,13 @@ class ListenSocketHost {
     return controller.runJavaScript('window.__omiListenSocketEvent?.(${jsonEncode(id)}, ${jsonEncode(payload)})');
   }
 
-  Future<void> close() async {
+  Future<void> resetForNavigation() => _closeAll('surface navigation');
+
+  Future<void> close() => _closeAll('shell teardown');
+
+  Future<void> _closeAll(String reason) async {
     final sockets = _sockets.values.toList(growable: false);
     _sockets.clear();
-    await Future.wait(sockets.map((socket) => socket.close(WebSocketStatus.goingAway, 'shell teardown')));
+    await Future.wait(sockets.map((socket) => socket.close(WebSocketStatus.goingAway, reason)));
   }
 }

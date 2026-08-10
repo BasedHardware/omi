@@ -31,6 +31,7 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
       NODE_BIN: "/usr/bin/true",
       OMI_API_TOKEN: "test-token-never-printed",
       OMI_RUN_CLIENT_ID: "run-launcher-proof",
+      OMI_CONSUMER_EVIDENCE_PATH: path.join(scratch, "consumer-evidence.json"),
     };
     for (const route of ["memories", "conversations", "tasks", "folders", "chat", "settings", "listen"]) {
       const selected = spawnSync(
@@ -43,6 +44,8 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
       assert.match(args, /--dart-define=SURFACE_MODE=scheme/);
       assert.match(args, new RegExp(`--dart-define=SURFACE_QUERY=route=${route}&platform=mobile`));
       assert.match(args, /--dart-define=OMI_RUN_CLIENT_ID=run-launcher-proof/);
+      assert.match(args, /--dart-define=OMI_CONSUMER_EVIDENCE_PATH=.*consumer-evidence\.json/);
+      assert.match(args, /--dart-define=OMI_CONSUMER_EVIDENCE_EXIT=true/);
       assert.doesNotMatch(args, /rig=dev|qa=|api\.omi\.me/);
       assert.doesNotMatch(`${selected.stdout}${selected.stderr}`, /test-token-never-printed/);
     }
