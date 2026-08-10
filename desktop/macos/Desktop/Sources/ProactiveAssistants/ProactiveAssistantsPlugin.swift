@@ -575,10 +575,22 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - Frame Capture
 
+  /// `kCGAnyInputEventType` — the "seconds since ANY input" sentinel for
+  /// `CGEventSource.secondsSinceLastEventType`. Not bridged to Swift's `CGEventType`
+  /// cases; the C header defines it as `((CGEventType)(~0))`.
+  private static let anyInputEventType = CGEventType(rawValue: ~0)!
+
   /// Seconds since the last HID (keyboard/mouse) event. Used to pause capture
   /// when the user is away from the machine without polling the screen.
+  ///
+  /// Must query `kCGAnyInputEventType`, not `.null`: `.null` (raw 0) asks for time
+  /// since the last *null-type* event, which essentially never occurs, so the value
+  /// grows without bound and the 60s idle gate silently swallowed every capture tick
+  /// while the user was actively typing (measured live: `.null` reported 322s idle at
+  /// the same instant the any-input sentinel reported 0.00006s).
   private func systemIdleSeconds() -> TimeInterval {
-    TimeInterval(CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .null))
+    TimeInterval(
+      CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: Self.anyInputEventType))
   }
 
   private func onAppActivated(appName: String) {
