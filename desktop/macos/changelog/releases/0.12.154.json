@@ -1,12 +1,7 @@
 {
   "version": "0.12.154",
-  "date": "2026-08-08",
+  "date": "2026-08-09",
   "changes": [
-    "Fixed Rewind so zooming out or swiping back moves smoothly through all retained screen history instead of stopping at one day",
-    "Improved the reliability of the macOS local AI runtime after app updates",
-    "Made conversation details and the Home timeline easier to read, while keeping Rewind navigation reliable across retained history",
-    "Improved the macOS installer with a clearer layout, larger app icons and more readable instructions",
-    "Home now shows tasks in your timeline with links back to the conversation and transcript they came from",
-    "Fixed window dragging without blocking Chat, Rewind, Apps, or other clicks"
+    "Improved macOS beta release reliability when the trusted readiness stack starts slowly"
   ]
 }

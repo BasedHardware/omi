@@ -31,8 +31,9 @@ import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/env/prod_env.dart';
-import 'package:omi/firebase_options_dev.dart' as dev;
+import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/startup_routing.dart';
@@ -129,6 +130,7 @@ Future _init() async {
   } else {
     Env.init(DevEnv());
   }
+  Env.validateProfilePairing();
   validateApplicationStartupRouting();
 
   FlutterForegroundTask.initCommunicationPort();
@@ -139,13 +141,20 @@ Future _init() async {
 
   // Firebase
   if (Firebase.apps.isEmpty) {
-    final options = F.env == Environment.prod
-        ? prod.DefaultFirebaseOptions.currentPlatform
-        : dev.DefaultFirebaseOptions.currentPlatform;
+    final profile = Env.profile;
+    final options = profile == AppEnvironmentProfile.localDev
+        ? local.DefaultFirebaseOptions.currentPlatform
+        : prod.DefaultFirebaseOptions.currentPlatform;
+    Env.validateFirebaseProject(projectId: options.projectId);
     await Firebase.initializeApp(options: options);
   } else {
     // Firebase may already be initialized by native SDK (macOS)
     debugPrint('Firebase already initialized.');
+    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
+  }
+
+  if (Env.profile.usesFirebaseAuthEmulator) {
+    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
   }
 
   await PlatformManager.initializeServices();
@@ -303,8 +312,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

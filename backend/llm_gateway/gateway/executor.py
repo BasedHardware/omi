@@ -434,7 +434,47 @@ def _provider_request(
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
+    _sanitize_openai_chat_completions_request(provider_request, provider_ref)
     return provider_request
+
+
+def _sanitize_openai_chat_completions_request(
+    provider_request: dict[str, Any],
+    provider_ref: ProviderRef,
+) -> None:
+    """Normalize OpenAI chat-completions params OpenAI rejects for GPT-5.6 models.
+
+    Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
+    ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
+    Temperature must also stay at the model default (1).
+    """
+    # The same upstream model is reachable directly and through OpenRouter's
+    # ``openai/`` namespace, and both raise the 400s below — so the guard follows the
+    # model, not just the direct provider.
+    model = provider_ref.model
+    if provider_ref.provider == 'openai':
+        pass
+    elif provider_ref.provider == 'openrouter' and model.startswith('openai/'):
+        model = model.split('/', 1)[1]
+    else:
+        return
+    if not model.startswith('gpt-5.6'):
+        return
+
+    tools = provider_request.get('tools')
+    if tools:
+        effort = provider_request.get('reasoning_effort')
+        if effort not in (None, 'none'):
+            provider_request['reasoning_effort'] = 'none'
+
+    # OpenAI live 400 (2026-08): "Unsupported value: 'temperature' does not support 0.7
+    # with this model. Only the default (1) value is supported." Booleans must not slip
+    # through via True==1.
+    temperature = provider_request.get('temperature', None)
+    if 'temperature' in provider_request and (
+        isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or temperature != 1
+    ):
+        provider_request.pop('temperature', None)
 
 
 def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:

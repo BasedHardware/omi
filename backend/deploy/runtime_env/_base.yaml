@@ -53,6 +53,9 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
         GOOGLE_CLIENT_ID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -182,6 +185,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
             category: oauth_metadata
@@ -259,6 +265,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
             category: oauth_metadata
@@ -332,6 +341,9 @@ environment_shared:
             value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -425,6 +437,9 @@ environment_shared:
             value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -535,6 +550,9 @@ environment_shared:
             default: http://127.0.0.1:9
             category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:

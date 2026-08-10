@@ -26,6 +26,7 @@ import httpx
 
 # The pinned Starlette/httpx combination emits an import-time warning. The
 # oracle's stdout is reserved for its structural evidence JSON.
+from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 from llm_gateway.main import app
@@ -154,9 +155,32 @@ def _status_class(status_code: int) -> str:
     return f"{status_code // 100}xx"
 
 
+ORACLE_LANE_ID = "omi:auto:chat-structured"
+
+
 def _valid_gateway_request() -> dict[str, object]:
     # Empty content proves only the route contract and prevents prompt capture.
-    return {"model": "omi:auto:chat-structured", "messages": [{"role": "user", "content": ""}]}
+    return {"model": ORACLE_LANE_ID, "messages": [{"role": "user", "content": ""}]}
+
+
+def _lane_provider_keys(lane_id: str) -> tuple[str, ...]:
+    """Providers the lane's routes actually declare.
+
+    A hardcoded provider key makes this oracle fail with invalid_route_config the
+    moment the lane is repointed (e.g. OpenAI -> OpenRouter), so the fake registry
+    is keyed off the loaded gateway config instead.
+    """
+    gateway_config = load_gateway_config()
+    lane = gateway_config.lanes[lane_id]
+    keys: list[str] = []
+    for route_id in (lane.active_route, lane.last_known_good):
+        artifact = gateway_config.route_artifacts.get(route_id)
+        if artifact is None:
+            continue
+        for target in [artifact.primary, *artifact.fallbacks]:
+            if target.provider not in keys:
+                keys.append(target.provider)
+    return tuple(keys)
 
 
 def _loopback_http_client(**kwargs: Any) -> httpx.AsyncClient:
@@ -194,14 +218,11 @@ async def _run_gateway_oracle(upstream: _LoopbackOpenAI) -> dict[str, Any]:
     registry: ProviderRegistry | None = None
     try:
         async with _loopback_http_client() as provider_http_client:
-            registry = ProviderRegistry(
-                {
-                    "openai": OpenAICompatibleChatCompletionProvider(
-                        base_url=upstream.base_url,
-                        http_client=provider_http_client,
-                    ),
-                }
+            loopback_provider = OpenAICompatibleChatCompletionProvider(
+                base_url=upstream.base_url,
+                http_client=provider_http_client,
             )
+            registry = ProviderRegistry({key: loopback_provider for key in _lane_provider_keys(ORACLE_LANE_ID)})
             # This override is test-owned. Production construction remains the
             # cached registry in llm_gateway.routers.dependencies.
             app.dependency_overrides[dependencies.get_provider_registry] = lambda: registry

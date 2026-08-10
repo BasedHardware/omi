@@ -77,6 +77,7 @@ try:
         CHAT_STRUCTURED_AUTO_LANE_ID,
         feature_auto_lane_id,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
+        should_route_chat_agent_through_gateway,
         should_route_features_through_gateway,
     )
 except ImportError as exc:
@@ -90,6 +91,9 @@ except ImportError as exc:
         return f"omi:auto:{feature.replace('_', '-')}"
 
     def should_route_features_through_gateway() -> bool:
+        return False
+
+    def should_route_chat_agent_through_gateway() -> bool:
         return False
 
     def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
@@ -200,7 +204,11 @@ class _AnthropicClientProxy:
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
-        if should_route_features_through_gateway():
+        # Only pin Anthropic Messages through the gateway when agentic chat is
+        # itself on the gateway route. FEATURE_MODE alone must not force the
+        # Anthropic Messages client onto omi:auto:chat-agent (surface mismatch
+        # with the Luna/OpenAI lane).
+        if should_route_chat_agent_through_gateway():
             return get_gateway_anthropic_client(byok_api_key=byok)
         if byok:
             return _cached_anthropic(byok)
