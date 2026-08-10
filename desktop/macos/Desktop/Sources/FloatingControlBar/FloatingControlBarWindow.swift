@@ -465,6 +465,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     setupViews()
     updateNotchIslandState()
     registerMenuTrackingObservers()
+    installMouseInterceptionSync()
 
     if ShortcutSettings.shared.draggableBarEnabled,
       !notchModeEnabled,
@@ -490,6 +491,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   deinit {
     menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
+    interceptionMonitors.forEach(NSEvent.removeMonitor)
   }
 
   // MARK: - Window Level
@@ -1019,6 +1021,57 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // differently-sized state).
     state.setNotchHoverMenuOpen(allowed)
     resizeForAgentSwitcher(visible: allowed)
+  }
+
+  // MARK: - Mouse interception sync
+  //
+  // A view-level `hitTest` nil CANNOT make a window click-through: the window server routes the
+  // click to whichever window is under the cursor, and the window's frame view (NSNextStepFrame)
+  // swallows anything its content view declined. So the fixed, oversized notch panel was an
+  // invisible click sink over everything beneath it — other apps, and Omi's own centered shell
+  // (dead top-bar pills). The only working mechanism is `ignoresMouseEvents`, kept in sync with
+  // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
+  // Two monitors are required — the local one sees moves while we are interactive; the global one
+  // while we are ignored (events then belong to the window below).
+  private nonisolated(unsafe) var interceptionMonitors: [Any] = []
+
+  fileprivate func syncMouseInterception() {
+    let mouse = NSEvent.mouseLocation
+    let shouldInteract: Bool
+    if frame.contains(mouse) {
+      let local = NSPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
+      shouldInteract = acceptsMouseHit(inContentPoint: local)
+    } else {
+      // Pointer elsewhere: stay interactive so tracking areas fire the moment it arrives.
+      shouldInteract = true
+    }
+    if ignoresMouseEvents == shouldInteract {
+      ignoresMouseEvents = !shouldInteract
+    }
+  }
+
+  private func installMouseInterceptionSync() {
+    // Monitor handlers are delivered on the main thread; hop back into MainActor explicitly.
+    let sync: @Sendable () -> Void = { [weak self] in
+      DispatchQueue.main.async { self?.syncMouseInterception() }
+    }
+    let global = NSEvent.addGlobalMonitorForEvents(
+      matching: [.mouseMoved, .leftMouseDragged],
+      handler: { _ in sync() })
+    if let global { interceptionMonitors.append(global) }
+    let local = NSEvent.addLocalMonitorForEvents(
+      matching: [.mouseMoved],
+      handler: { event in
+        sync()
+        return event
+      })
+    if let local { interceptionMonitors.append(local) }
+    syncMouseInterception()
+  }
+
+  /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
+  func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
+    acceptsMouseHit(inContentPoint: point)
   }
 
   fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {

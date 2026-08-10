@@ -290,6 +290,11 @@ enum ShellSummon {
     applyPresentation(to: window)
     window.setFrame(frame, display: true)
     window.makeKeyAndOrderFront(nil)
+    // Order-in can re-constrain a frame in some sessions (space restore, display re-layout);
+    // re-asserting after it keeps "permission UI must not re-center the shell" true everywhere.
+    if window.frame != frame {
+      window.setFrame(frame, display: true)
+    }
     hasBeenShown = true
   }
 
