@@ -93,3 +93,59 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
     assert invoked['messages'][-1]['content'].startswith('NOW\n\n')
     assert invoked['configurable']['tools'] == [fake_tool]
     assert invoked['tool_schemas'][-1] == {'name': 'web_search'}
+
+
+@pytest.mark.parametrize('model_feature', ['chat_graph', 'chat_agent'])
+async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_feature(monkeypatch, model_feature):
+    calls = {}
+    usage_token = object()
+
+    class FailingModel:
+        def bind(self, **_kwargs):
+            return self
+
+        async def astream(self, _messages):
+            raise RuntimeError('stream failed')
+            yield
+
+    async def fake_handle_llm_error(error, provider, feature=None, model=None, operation='chat'):
+        calls['error'] = {
+            'error': error,
+            'provider': provider,
+            'feature': feature,
+            'model': model,
+            'operation': operation,
+        }
+
+    def fake_set_usage_context(user_id, feature):
+        calls['usage'] = (user_id, feature)
+        return usage_token
+
+    monkeypatch.setattr(agentic, 'get_llm', lambda *_args, **_kwargs: FailingModel())
+    monkeypatch.setattr(agentic, 'get_model', lambda feature: f'model-for-{feature}')
+    monkeypatch.setattr(agentic, 'set_usage_context', fake_set_usage_context)
+    monkeypatch.setattr(agentic, 'reset_usage_context', lambda token: calls.setdefault('reset_token', token))
+    monkeypatch.setattr(agentic, 'should_retry_provider_error', lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(agentic, 'handle_llm_error_async', fake_handle_llm_error)
+
+    callback = agentic.AsyncStreamingCallback()
+    full_response = []
+    result = await agentic._run_openai_agent_stream(
+        'SYSTEM',
+        [{'role': 'user', 'content': 'question'}],
+        [],
+        {},
+        callback,
+        full_response,
+        SimpleNamespace(),
+        {'user_id': 'uid-123'},
+        model_feature=model_feature,
+    )
+
+    assert result == 'provider_RuntimeError'
+    assert calls['usage'] == ('uid-123', model_feature)
+    assert calls['reset_token'] is usage_token
+    assert calls['error']['provider'] == 'openai'
+    assert calls['error']['feature'] == model_feature
+    assert calls['error']['model'] == f'model-for-{model_feature}'
+    assert full_response == ['\n\nSorry, I encountered an error. Please try again.']

@@ -62,7 +62,7 @@ from utils.retrieval.safety import (
 )
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, get_model, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
@@ -995,7 +995,7 @@ async def _run_openai_agent_stream(
                 usage_token = None
                 user_id = configurable.get('user_id') if isinstance(configurable, dict) else None
                 if isinstance(user_id, str) and user_id:
-                    usage_token = set_usage_context(user_id, 'chat_agent')
+                    usage_token = set_usage_context(user_id, model_feature)
                 try:
                     async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
                         chunks.append(chunk)
@@ -1039,7 +1039,7 @@ async def _run_openai_agent_stream(
                     await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
                     continue
 
-                await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+                await handle_llm_error_async(error, 'openai', feature=model_feature, model=get_model(model_feature))
                 await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
