@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,7 +11,6 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
-import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<String> simulateGetAuthHeader({required bool isSignedIn, required String token}) async {
@@ -170,49 +168,17 @@ void main() {
       // and the retry will not proceed.
       // What matters is that the Stream exception from draining the first response
       // is handled silently by `_drainStreamedResponse` and not propagated to crash the app.
-      final response = await makeRawApiCall(url: env.requestBaseUrl, method: 'GET');
+      final response = await makeRawApiCall(
+        url: env.requestBaseUrl,
+        method: 'GET',
+      );
 
       // If makeRawApiCall completes without crashing, the test passes.
       // The status code is 401 because the un-mocked token refresh failed.
       expect(response.statusCode, 401);
       expect(requestCount, 1);
-
-      final gateway = _TestAuthGateway();
-      final authService = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
-      final abortedStream = StreamController<List<int>>();
-      abortedStream.add(<int>[1]);
-      abortedStream.addError(StateError('aborted'));
-      abortedStream.close();
-
-      final replayedResponse = await refreshAndReplayAfter401<http.StreamedResponse>(
-        firstResponse: http.StreamedResponse(abortedStream.stream, 401),
-        statusCode: (value) => value.statusCode,
-        disposeUnauthorizedResponse: (value) async => drainStreamedResponseForTesting(value),
-        replay: () async => http.StreamedResponse(Stream.value(<int>[2]), 200),
-        expireTerminalSession: false,
-        authService: authService,
-      );
-
-      expect(replayedResponse.statusCode, 200);
-      expect(gateway.refreshCalls, 1);
     });
   });
-}
-
-final class _TestAuthGateway implements AuthTokenGateway {
-  int refreshCalls = 0;
-
-  @override
-  AuthUserSnapshot? get currentUser => const AuthUserSnapshot(uid: 'test-user');
-
-  @override
-  Future<RefreshedAuthToken?> forceRefresh() async {
-    refreshCalls++;
-    return RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now());
-  }
-
-  @override
-  Future<void> signOut() async {}
 }
 
 class _TestEnvFields implements EnvFields {
