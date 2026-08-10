@@ -531,6 +531,10 @@ struct SettingsContentView: View {
   @State var gmailMemoriesSaved: Int = 0
   @State var gmailReadError: String?
   @State var gmailLastFetched: Date?
+  @State var gmailReadGeneration = 0
+  @State var gmailAccounts: [GmailAccountOption] = []
+  @State var isProbingGmailAccounts: Bool = false
+  @State var showingGmailAccountPicker: Bool = false
 
   // Calendar Sync states
   @State var calendarEvents: [CalendarEvent] = []
