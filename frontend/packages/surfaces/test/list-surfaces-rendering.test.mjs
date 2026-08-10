@@ -158,3 +158,23 @@ test("ChatProduction true-empty renders both title and body without filter-miss 
     await rendered.cleanup();
   }
 });
+
+test("ChatProduction renders a retained cancellation as deliberately stopped", async () => {
+  // red-proof: collapse cancelled into ordinary canonical delivery in
+  // ChatProduction.deliveryLabel. The rendered label assertion fails while
+  // the retained partial remains, catching the user-visible ambiguity.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const fixtureChatStore = await loadProductionExport("chat-fixtures.ts", "fixtureChatStore");
+  const rendered = await renderComponent(ChatProduction, {
+    store: fixtureChatStore("cancelled"),
+    fixture: "cancelled",
+  });
+  try {
+    const cancelled = rendered.container.querySelector(".chat-message.is-cancelled");
+    assert.ok(cancelled, "retained partial is still a rendered message");
+    assert.ok(cancelled.textContent?.includes("Checking the saved review notes"));
+    assert.ok(cancelled.textContent?.includes(EN_MESSAGES["chat.stopped"]));
+  } finally {
+    await rendered.cleanup();
+  }
+});

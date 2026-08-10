@@ -17,7 +17,8 @@ function canonical(serverId, text, clientMessageId = null) {
   return {
     role: "user",
     text,
-    delivery: { kind: "canonical", serverId, clientMessageId },
+    delivery: { kind: "canonical", serverId, clientMessageId, generationOutcome: null },
+    attachments: [],
   };
 }
 
@@ -26,6 +27,7 @@ function echo(clientMessageId, text) {
     role: "user",
     text,
     delivery: { kind: "echo", clientMessageId },
+    attachments: [],
   };
 }
 
@@ -34,6 +36,7 @@ function failed(clientMessageId, text, retryable = true) {
     role: "user",
     text,
     delivery: { kind: "failed", clientMessageId, retryable },
+    attachments: [],
   };
 }
 
@@ -116,6 +119,28 @@ test("failed sends survive reconcile until the server acknowledges them", () => 
   assert.equal(surviving.delivery.clientMessageId, "c-fail");
   assert.equal(surviving.delivery.retryable, true);
   assert.equal(result.some((message) => message.delivery.kind === "canonical" && message.text === "please retry"), false);
+});
+
+test("cancelled canonical delivery is distinct from completed and retains text", () => {
+  // red-proof: collapse generationOutcome to a completed boolean or discard
+  // the cancelled row. The discriminant/text assertions fail.
+  const cancelled = {
+    role: "assistant",
+    text: "Retained partial",
+    delivery: {
+      kind: "canonical",
+      serverId: "assistant-partial-1",
+      clientMessageId: null,
+      generationOutcome: "cancelled",
+    },
+    attachments: [],
+  };
+  const completed = {
+    ...cancelled,
+    delivery: { ...cancelled.delivery, generationOutcome: "completed" },
+  };
+  assert.notEqual(cancelled.delivery.generationOutcome, completed.delivery.generationOutcome);
+  assert.equal(cancelled.text, "Retained partial");
 });
 
 test("ChatProduction avoids numeric attachment literals and fixture imports", async () => {

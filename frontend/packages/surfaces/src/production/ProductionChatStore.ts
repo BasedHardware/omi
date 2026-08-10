@@ -1,6 +1,7 @@
 import type { StoreStatus } from "@omi-core/domain";
 import type {
   ChatCapabilities,
+  ChatAttachment,
   ChatDelivery,
   ChatHistoryPage,
   ChatMessage,
@@ -9,6 +10,7 @@ import type {
 
 export type {
   ChatCapabilities,
+  ChatAttachment,
   ChatDelivery,
   ChatHistoryPage,
   ChatMessage,
@@ -32,8 +34,9 @@ export type ProductionChatStore = {
   send(input: {
     text: string;
     clientMessageId: string;
-    attachments: readonly string[];
+    attachmentIds: readonly string[];
   }): Promise<void>;
   capabilities(): ChatCapabilities;
   retry(clientMessageId: string): Promise<void>;
+  cancel(generationId: string): Promise<void>;
 };

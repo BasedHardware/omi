@@ -14,6 +14,7 @@ export const CHAT_FIXTURE_STATES = [
   "empty",
   "normal",
   "streaming",
+  "cancelled",
   "pending-echo",
   "send-failed",
   "older-available",
@@ -35,13 +36,22 @@ function canonical(
   role: ChatMessage["role"],
   text: string,
   clientMessageId: string | null = null,
-  streaming = false,
+  generationOutcome: "completed" | "cancelled" | null = role === "assistant" ? "completed" : null,
 ): ChatMessage {
   return {
     role,
     text,
-    delivery: { kind: "canonical", serverId, clientMessageId },
-    ...(streaming ? { streaming: true } : {}),
+    delivery: { kind: "canonical", serverId, clientMessageId, generationOutcome },
+    attachments: [],
+  };
+}
+
+function streaming(generationId: string, text: string): ChatMessage {
+  return {
+    role: "assistant",
+    text,
+    delivery: { kind: "streaming", generationId },
+    attachments: [],
   };
 }
 
@@ -73,7 +83,23 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
     return {
       messages: [
         ...baseMessages(),
-        canonical("fixture-chat-stream", "assistant", "Checking the saved review notes", null, true),
+        streaming("fixture-generation-stream", "Checking the saved review notes"),
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    };
+  }
+  if (state === "cancelled") {
+    return {
+      messages: [
+        ...baseMessages(),
+        canonical(
+          "fixture-chat-cancelled",
+          "assistant",
+          "Checking the saved review notes",
+          null,
+          "cancelled",
+        ),
       ],
       hasOlder: false,
       olderCursor: null,
@@ -87,6 +113,7 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
           role: "user",
           text: "Hold the glass check until after lunch.",
           delivery: { kind: "echo", clientMessageId: "fixture-cid-pending" },
+          attachments: [],
         },
       ],
       hasOlder: false,
@@ -101,6 +128,7 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
           role: "user",
           text: "Retry the delivery when the queue clears.",
           delivery: { kind: "failed", clientMessageId: "fixture-cid-failed", retryable: true },
+          attachments: [],
         },
       ],
       hasOlder: false,
@@ -202,7 +230,29 @@ export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
         (message) => message.delivery.kind === "failed" && message.delivery.clientMessageId === clientMessageId,
       );
       if (!failed) return;
-      await this.send({ text: failed.text, clientMessageId, attachments: [] });
+      await this.send({ text: failed.text, clientMessageId, attachmentIds: [] });
+    },
+    async cancel(generationId) {
+      const streamingMessage = historyPage.messages.find(
+        (message) => message.delivery.kind === "streaming" &&
+          message.delivery.generationId === generationId,
+      );
+      if (!streamingMessage) return;
+      historyPage = {
+        ...historyPage,
+        messages: historyPage.messages.map((message) =>
+          message === streamingMessage
+            ? canonical(
+                `fixture-cancelled-${generationId}`,
+                "assistant",
+                message.text,
+                null,
+                "cancelled",
+              )
+            : message,
+        ),
+      };
+      notify();
     },
   };
 }

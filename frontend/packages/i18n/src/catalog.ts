@@ -218,6 +218,7 @@ export const EN_MESSAGES = {
   "chat.roleUser": "You",
   "chat.roleAssistant": "Omi",
   "chat.streaming": "Omi is responding",
+  "chat.stopped": "Stopped here on purpose",
   "chat.pending": "Sending",
   "chat.failed": "Not delivered",
   "chat.retrySend": "Retry sending",

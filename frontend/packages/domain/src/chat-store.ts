@@ -8,15 +8,12 @@
  * queued sends, NEVER truth. `refresh()` reconciles from the server rather
  * than trusting local state; optimistic overlays are pending ops only.
  *
- * Alias protocol is retained for transport signature parity with the
- * tasks/memories exemplar. Under ADR-005 the server honors
- * `client_message_id` as the document id, so the alias map stays empty when
- * the platform path is correct; the machinery is inert until a mismatch
- * appears.
+ * The ratified wire echoes the client message id as the durable record id, so
+ * there is no alias protocol or server-assigned-id compatibility path.
  */
 
 import type { ChatMessage, DeadLetter, RecordId } from "@omi-core/contracts";
-import type { DurableKv, HttpClient, StorageBridge } from "@omi-core/contracts";
+import type { HttpClient, StorageBridge } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
 import { Outbox, Projection } from "@omi-core/sync";
 import {
@@ -34,12 +31,8 @@ import {
 } from "./chat-codec.js";
 import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
-const ALIAS_KEY = "id-aliases"; // { [serverId]: localSlug }
-
-
 export class ChatMessagesStore {
   private listeners = new Set<() => void>();
-  private aliases: Record<string, string> = {};
   private readonly refreshTracker: RefreshTracker;
 
   private constructor(
@@ -47,35 +40,26 @@ export class ChatMessagesStore {
     private readonly http: HttpClient,
     private readonly outbox: Outbox,
     private readonly projection: Projection<ChatMessage>,
-    private readonly aliasKv: DurableKv,
     hasSavedData: boolean,
   ) {
     this.refreshTracker = new RefreshTracker(hasSavedData);
   }
 
   static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<ChatMessagesStore> {
-    const aliasKv = await bridge.openKv("chat-aliases");
     const projection = await Projection.open(
       await bridge.openKv("chat-projection"),
       chatMessagesCodec,
     );
 
-    let store: ChatMessagesStore;
-    const transport = chatMessagesTransport(
-      http,
-      (localId: string, serverId: string) => void store.recordAlias(localId, serverId),
-      (localId) => store.toWireId(localId),
-    );
+    const transport = chatMessagesTransport(http);
     const outbox = await Outbox.open(bridge, env, transport, "chat");
-    store = new ChatMessagesStore(
+    const store = new ChatMessagesStore(
       env,
       http,
       outbox,
       projection,
-      aliasKv,
       (await projection.read([])).length > 0,
     );
-    store.aliases = JSON.parse((await aliasKv.get(ALIAS_KEY)) ?? "{}") as Record<string, string>;
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
       if (outcome.state !== "confirmed") return;
@@ -117,8 +101,10 @@ export class ChatMessagesStore {
   }
 
   /** Queue a human send. Local journal mirrors; server is authority. */
-  async send(text: string): Promise<void> {
-    await this.outbox.enqueue(chatMessageToPendingOp(buildCreateChatMessage(this.env, text)));
+  async send(text: string, attachmentIds: readonly string[] = []): Promise<void> {
+    await this.outbox.enqueue(
+      chatMessageToPendingOp(buildCreateChatMessage(this.env, text, { attachmentIds })),
+    );
     this.notify();
   }
 
@@ -157,15 +143,14 @@ export class ChatMessagesStore {
       rows = await fetchChatMessages(this.http);
       if (rows) {
         await this.refreshTracker.applyIfCurrent(token, () =>
-          this.projection.upsertServerRows(rows!.map((r) => this.rekeyed(r))),
+          this.projection.upsertServerRows(rows!),
         );
       }
       if (this.refreshTracker.isCurrent(token)) {
         const snapshot = await fetchChatMessageIdSnapshot(this.http);
         if (snapshot && this.refreshTracker.isCurrent(token)) {
-          const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
           await this.refreshTracker.applyIfCurrent(token, () =>
-            this.projection.reconcile({ ...snapshot, ids: localIds }).then(() => undefined),
+            this.projection.reconcile(snapshot).then(() => undefined),
           );
         }
       }
@@ -186,23 +171,6 @@ export class ChatMessagesStore {
     }
     this.notify();
     if (thrown !== undefined) throw thrown;
-  }
-
-  private rekeyed(row: ChatMessage): ChatMessage {
-    const local = this.aliases[row.id];
-    return local ? { ...row, id: local as RecordId } : row;
-  }
-
-  private toWireId(localId: string): string {
-    for (const [serverId, local] of Object.entries(this.aliases)) {
-      if (local === localId) return serverId;
-    }
-    return localId;
-  }
-
-  private async recordAlias(localId: string, serverId: string): Promise<void> {
-    this.aliases[serverId] = localId;
-    await this.aliasKv.set(ALIAS_KEY, JSON.stringify(this.aliases));
   }
 
   private notify(): void {
