@@ -146,6 +146,71 @@ test("loading never claims signed-out, empty, or unavailable copy", async () => 
   }
 });
 
+test("ready store with unresolved snapshot never claims signed-out", async () => {
+  // red-proof: treating null snapshot identity as signed-out while phase is ready
+  // makes this assertion fail — the DOM must not say "You are not signed in" before
+  // the snapshot that will prove signed-in has resolved.
+  const SettingsProduction = await loadProductionExport("SettingsProduction.tsx", "SettingsProduction");
+  let releaseSnapshot;
+  const snapshotGate = new Promise((resolve) => { releaseSnapshot = resolve; });
+  const pendingIdentity = { displayName: "Alex Rivera", email: "alex@example.com" };
+  const store = {
+    async snapshot() {
+      await snapshotGate;
+      return {
+        identity: pendingIdentity,
+        appearance: "system",
+        entitlement: { planLabel: "Omi Plus", limitKey: "memories", used: 1, limit: 100, limitReached: false, upgradeAvailable: true },
+      };
+    },
+    status() {
+      return {
+        refresh: { phase: "ready", hasSavedData: true },
+        queue: { phase: "idle", pendingCount: 0 },
+      };
+    },
+    async deadLetters() { return []; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async patch() {},
+    async signOut() {},
+    async discardDeadLetter() {},
+  };
+  const rendered = await renderComponent(SettingsProduction, {
+    store,
+    fixture: "ready-pending-snapshot",
+    locale: "en",
+  });
+  try {
+    assert.equal(
+      rendered.container.querySelector('[data-settings-account="signed-out"]') == null,
+      true,
+      "pending snapshot must not render the signed-out panel",
+    );
+    assert.equal(
+      textOf(rendered).includes(EN_MESSAGES["settings.notSignedIn"]),
+      false,
+      "pending snapshot must not claim the user is signed out",
+    );
+    assert.equal(
+      rendered.container.querySelector('[data-settings-account="loading"]') != null,
+      true,
+      "ready-with-pending-snapshot presents as loading until the snapshot lands",
+    );
+    await rendered.act(async () => {
+      releaseSnapshot();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    assert.equal(rendered.container.querySelector('[data-settings-account="signed-in"]') != null, true);
+    assert.ok(textOf(rendered).includes("Alex Rivera"));
+    assert.equal(rendered.container.querySelector('[data-settings-account="signed-out"]') == null, true);
+  } finally {
+    releaseSnapshot?.();
+    await rendered.cleanup();
+  }
+});
+
 test("sign-out replay stays quiet: second revoke does not surface an operation error", async () => {
   const rendered = await renderSettings("signed-in");
   try {
