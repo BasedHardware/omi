@@ -23,7 +23,7 @@ ENV_IDENTITY_DEFAULTS = {
         "values_file": CHART_DIR / "dev_omi_backend_listen_values.yaml",
         "image_repository": "gcr.io/based-hardware-dev/backend",
         "gcp_project_id": "based-hardware-dev",
-        "runtime_gcp_project_id": "based-hardware-dev",
+        "runtime_gcp_project_id": "based-hardware",
     },
 }
 
