@@ -48,9 +48,12 @@ def postprocess_conversation(
         return 400, "Conversation can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
-    if (
-        aseg.duration_seconds < 10
-    ):  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
+
+    expected_min_duration = 10
+    if conversation.transcript_segments:
+        expected_min_duration = conversation.transcript_segments[-1].end - conversation.transcript_segments[0].start - 10
+
+    if aseg.duration_seconds < expected_min_duration:
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         logger.info('postprocess_conversation: Audio duration is too short, seems wrong.')
         conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.canceled)
