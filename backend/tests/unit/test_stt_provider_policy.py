@@ -159,3 +159,31 @@ def test_live_policy_admits_languages_beyond_the_retired_deepgram_list(language)
 @pytest.mark.parametrize('language', ['my', 'am', 'lo'])
 def test_live_policy_rejects_languages_outside_modulate_auto_detection(language):
     assert supports_live_multilingual_mode(language) is False
+
+
+def test_parakeet_pod_stream_allowlist_matches_the_policy_source_of_truth():
+    """The isolated GPU pod mirror in ``backend/parakeet/transcribe.py`` cannot import this policy
+    (only ``backend/parakeet/`` is copied into that image), so it hardcodes ``APPROVED_STREAM_MODELS``.
+    Parse it statically and assert EXACT, bidirectional set equality with the code-owned source of
+    truth here, so adding/removing/typo'ing a model on either side fails this guard — the drift the
+    pod's comment promises (a substring or one-directional check would miss an extra pod-only value)."""
+    import ast
+
+    pod_source = Path(__file__).resolve().parents[2] / 'parakeet' / 'transcribe.py'
+    tree = ast.parse(pod_source.read_text(encoding='utf-8'), filename=str(pod_source))
+    pod_models = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+            value = node.value
+        else:
+            continue
+        if 'APPROVED_STREAM_MODELS' in names and value is not None:
+            pod_models = {n.value for n in ast.walk(value) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+            break
+
+    assert pod_models is not None, 'APPROVED_STREAM_MODELS not found in backend/parakeet/transcribe.py'
+    assert pod_models == set(APPROVED_STREAMING_PARAKEET_MODELS)

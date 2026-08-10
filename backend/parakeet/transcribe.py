@@ -13,7 +13,9 @@ from speaker_math import cosine_distance
 logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
+# Normalize once: a whitespace-padded value would pass the empty check and the routing policy but
+# then fail the approved-set validation at load, taking down the serving pod.
+STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "").strip()
 INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
 # Real-time (streaming/PTT) model allow-list. This mirrors
