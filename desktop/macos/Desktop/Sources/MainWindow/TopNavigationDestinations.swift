@@ -89,7 +89,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .home: return "Home"
+    case .home: return "Chat"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
     case .brainMap: return "Brain Map"
@@ -210,8 +210,8 @@ enum TopNavigationRoutes {
   /// are single pills. Nothing here opens a menu.
   static let primaryItems = [
     TopNavigationItem(
-      index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "magnifyingglass",
-      tooltip: "Home — chat with Omi about everything you've seen and heard"),
+      index: SidebarNavItem.dashboard.rawValue, title: "Chat", icon: "bubble.left.and.text.bubble.right",
+      tooltip: "Chat — talk to Omi about everything you've seen and heard"),
     TopNavigationItem(
       index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "books.vertical",
       tooltip: "Everything Omi has kept — activity, conversations, memories, brain map"),

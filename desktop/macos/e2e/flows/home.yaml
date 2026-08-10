@@ -25,7 +25,7 @@ steps:
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Home
+        - Chat
 
   - id: S2
     name: Verify the query bar is a composer
