@@ -123,16 +123,7 @@ def _preflight_imports() -> None:
     assert hasattr(_msvc, "MemoryService")
 
 
-def _load_client(project: str) -> Any:
-    from google.cloud import firestore
-
-    from database.google_credentials import prepare_google_credentials
-
-    prepare_google_credentials()
-    return firestore.Client(project=project)
-
-
-def _control_write_ready(db_client: Any, uid: str) -> tuple[bool, str]:
+def _control_write_ready(uid: str) -> tuple[bool, str]:
     from utils.memory.canonical_activation import canonical_write_decision
 
     decision = canonical_write_decision(uid)
@@ -163,7 +154,7 @@ def _ensure_user_control_only(*, uid: str) -> list[str]:
     return [path]
 
 
-def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
+def _create_marker(*, uid: str, marker: str) -> str:
     from models.memories import MemoryDB
     from utils.memory.memory_service import MemoryService
     from utils.memory.memory_system import MemorySystem
@@ -199,13 +190,13 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
     return str(getattr(created, "id", mid) or mid)
 
 
-def _read_item(db_client: Any, *, uid: str, memory_id: str) -> Any:
+def _read_item(*, uid: str, memory_id: str) -> Any:
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 
     return read_canonical_memory_item(uid, memory_id)
 
 
-def _process_one(db_client: Any, *, uid: str, memory_id: str) -> Any:
+def _process_one(*, uid: str, memory_id: str) -> Any:
     from utils.llm.clients import get_llm
     from utils.memory.canonical_required_processing import (
         invoke_required_memory_processor,
@@ -219,7 +210,7 @@ def _process_one(db_client: Any, *, uid: str, memory_id: str) -> Any:
     return process_required_memory_item(uid, memory_id, processor=processor)
 
 
-def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> list[str]:
+def _promote_one(*, uid: str, memory_id: str, run_id: str) -> list[str]:
     """Item-scoped promote; does not drain other pending ST rows."""
     import utils.memory.canonical_consolidation as consolidation_mod
     from utils.memory.canonical_consolidation import (
@@ -228,7 +219,7 @@ def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> li
     )
 
     read_control_state = getattr(consolidation_mod, "_read_control_state")
-    item = _read_item(db_client, uid=uid, memory_id=memory_id)
+    item = _read_item(uid=uid, memory_id=memory_id)
     if item is None:
         raise RuntimeError("memory_missing_after_processing")
     evidence_ids = [str(e.evidence_id) for e in (item.evidence or []) if getattr(e, "evidence_id", None)]
@@ -348,8 +339,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
             errors=errors,
         )
 
-    db_client = _load_client(args.project)
-    ready, reason = _control_write_ready(db_client, args.uid)
+    ready, reason = _control_write_ready(args.uid)
     notes.append(f"control_before={reason}")
     if not ready:
         if args.ensure_user_control:
@@ -376,7 +366,7 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
                     notes=notes,
                     errors=errors,
                 )
-            ready, reason = _control_write_ready(db_client, args.uid)
+            ready, reason = _control_write_ready(args.uid)
             notes.append(f"control_after_ensure={reason}")
         if not ready:
             errors.append(f"canonical_write_not_ready:{reason}")
@@ -402,15 +392,15 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
     memory_id = ""
     tier_before = processing_before = tier_after = processing_after = status_after = None
     try:
-        memory_id = _create_marker(db_client, uid=args.uid, marker=marker)
-        before = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+        memory_id = _create_marker(uid=args.uid, marker=marker)
+        before = _read_item(uid=args.uid, memory_id=memory_id)
         tier_before = _enum_val(getattr(before, "tier", None)) if before else None
         processing_before = _enum_val(getattr(before, "processing_state", None)) if before else None
         notes.append(f"created memory_id={memory_id}")
         if tier_before != "short_term":
             errors.append(f"expected_short_term_before got={tier_before}")
 
-        proc = _process_one(db_client, uid=args.uid, memory_id=memory_id)
+        proc = _process_one(uid=args.uid, memory_id=memory_id)
         notes.append(
             "required_processing "
             f"processed={getattr(proc, 'processed', None)} "
@@ -423,17 +413,17 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
                 f"{getattr(proc, 'skipped_reason', None) or getattr(proc, 'error_code', None) or 'unknown'}"
             )
         else:
-            mid_state = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+            mid_state = _read_item(uid=args.uid, memory_id=memory_id)
             processing_before = (
                 _enum_val(getattr(mid_state, "processing_state", None)) if mid_state else processing_before
             )
             if processing_before != "processed":
                 errors.append(f"expected_processed_before_promote got={processing_before}")
             else:
-                applied = _promote_one(db_client, uid=args.uid, memory_id=memory_id, run_id=run_id)
+                applied = _promote_one(uid=args.uid, memory_id=memory_id, run_id=run_id)
                 notes.append(f"promote_applied={applied}")
 
-        after = _read_item(db_client, uid=args.uid, memory_id=memory_id)
+        after = _read_item(uid=args.uid, memory_id=memory_id)
         tier_after = _enum_val(getattr(after, "tier", None)) if after else None
         processing_after = _enum_val(getattr(after, "processing_state", None)) if after else None
         status_after = _enum_val(getattr(after, "status", None)) if after else None
