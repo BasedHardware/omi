@@ -194,11 +194,11 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
               <p>{t(locale, "common.noResults")}</p>
               {needle && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }}>{t(locale, "common.clearSearch")}</button>}
             </div>
-          ) : (
+          ) : presentation.emptyKind === "empty-projection" ? (
             <div className="home-no-results" data-empty-kind="empty-projection">
               <p>{t(locale, "home.startTyping")}</p>
             </div>
-          )}
+          ) : null}
         </section>
       </div>
       <ProductionChrome locale={locale} active="home" placement="bottom" />
