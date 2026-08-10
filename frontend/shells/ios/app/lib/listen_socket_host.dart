@@ -8,12 +8,15 @@ import 'bridge_http_host.dart';
 
 /// One shell-owned authority composes both privileged transports.
 class ShellTransportAuthority {
-  ShellTransportAuthority({required this.baseUrl, required String? token}) : custody = ShellCredentialCustody(token);
+  ShellTransportAuthority({required this.baseUrl, required String? token, String? runId})
+    : custody = ShellCredentialCustody(token),
+      clientIdentity = runId == null || runId.isEmpty ? null : '$runId::ios';
 
   final Uri baseUrl;
   final ShellCredentialCustody custody;
+  final String? clientIdentity;
 
-  BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody);
+  BridgeHttpHost makeHttpHost() => BridgeHttpHost(baseUrl: baseUrl, custody: custody, clientIdentity: clientIdentity);
 
   ListenSocketHost makeListenHost() => ListenSocketHost(baseUrl: baseUrl, custody: custody);
 
@@ -138,5 +141,11 @@ class ListenSocketHost {
 
   Future<void> _emit(WebViewController controller, String id, Map<String, Object> payload) {
     return controller.runJavaScript('window.__omiListenSocketEvent?.(${jsonEncode(id)}, ${jsonEncode(payload)})');
+  }
+
+  Future<void> close() async {
+    final sockets = _sockets.values.toList(growable: false);
+    _sockets.clear();
+    await Future.wait(sockets.map((socket) => socket.close(WebSocketStatus.goingAway, 'shell teardown')));
   }
 }

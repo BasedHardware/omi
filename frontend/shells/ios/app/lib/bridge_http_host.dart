@@ -135,6 +135,8 @@ class ShellCredentialCustody {
 /// host-conformance test. The runner therefore exercises the same path as
 /// `_handle` without a socket or a WebView.
 class BridgeHttpHostPolicy {
+  static const String clientIdHeader = 'x-omi-client-id';
+
   static BridgeHttpPolicyResult prepare({
     required String id,
     required String method,
@@ -143,6 +145,8 @@ class BridgeHttpHostPolicy {
     required String? body,
     required Uri baseUrl,
     required String? token,
+    String? clientIdentity,
+    String contractVersion = AppRequestContract.version,
   }) {
     if (!const {'GET', 'POST', 'PATCH', 'DELETE'}.contains(method)) {
       return BridgeHttpPolicyResult.failure(BridgeHttpFailureReason.shellError, 'missing or unsupported method/path');
@@ -159,11 +163,20 @@ class BridgeHttpHostPolicy {
     }
     final outbound = <String, String>{};
     for (final entry in headers.entries) {
-      if (BridgeHttpContract.forbiddenHeaders.contains(entry.key.toLowerCase())) continue;
+      final normalized = entry.key.toLowerCase();
+      if (BridgeHttpContract.forbiddenHeaders.contains(normalized) ||
+          normalized == clientIdHeader ||
+          normalized == AppRequestContract.versionHeader) {
+        continue;
+      }
       outbound[entry.key] = entry.value;
     }
     if (body != null) outbound[HttpHeaders.contentTypeHeader] = 'application/json';
     outbound[HttpHeaders.authorizationHeader] = 'Bearer $token';
+    outbound[AppRequestContract.versionHeader] = contractVersion;
+    if (clientIdentity != null && clientIdentity.isNotEmpty) {
+      outbound[clientIdHeader] = clientIdentity;
+    }
     return BridgeHttpPolicyResult.dispatch(
       BridgeHttpPreparedRequest(
         id: id,
@@ -213,7 +226,7 @@ class BridgeHttpHostPolicy {
 }
 
 class BridgeHttpHost {
-  BridgeHttpHost({required this.baseUrl, required this.custody})
+  BridgeHttpHost({required this.baseUrl, required this.custody, required this.clientIdentity})
     : _client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 10)
         // The shell owns cookies: never persist or send them for API calls.
@@ -222,6 +235,7 @@ class BridgeHttpHost {
   /// Shell-held origin. Never sent to the webview.
   final Uri baseUrl;
   final ShellCredentialCustody custody;
+  final String? clientIdentity;
   final HttpClient _client;
   final BridgeHttpReplyGate _replyGate = BridgeHttpReplyGate();
 
@@ -239,6 +253,7 @@ class BridgeHttpHost {
     body: null,
     baseUrl: baseUrl,
     token: custody.currentToken,
+    clientIdentity: clientIdentity,
   );
 
   void observeResponseForConformance({required String method, required String path, required int status}) {
@@ -246,6 +261,8 @@ class BridgeHttpHost {
   }
 
   void closeForTest() => _client.close(force: true);
+
+  void close() => _client.close(force: true);
 
   /// Public only for the generated fixture runner; the live message handler
   /// calls this exact policy before opening a socket.
@@ -257,6 +274,7 @@ class BridgeHttpHost {
     required String? body,
     required Uri baseUrl,
     required String? token,
+    String? clientIdentity,
   }) => BridgeHttpHostPolicy.prepare(
     id: id,
     method: method,
@@ -265,6 +283,7 @@ class BridgeHttpHost {
     body: body,
     baseUrl: baseUrl,
     token: token,
+    clientIdentity: clientIdentity,
   );
 
   static BridgeHttpFailureReason transportFailureForConformance(String id, String name) =>
@@ -328,6 +347,7 @@ class BridgeHttpHost {
         body: body,
         baseUrl: baseUrl,
         token: custody.currentToken,
+        clientIdentity: clientIdentity,
       );
       if (decision.request == null) {
         return _fail(controller, id, decision.failureReason!, decision.detail!);

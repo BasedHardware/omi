@@ -8,6 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'bridge_http_host.dart';
+import 'chat_attachment_staging_host.dart';
+import 'chat_bridge_javascript_sink.dart';
+import 'chat_stream_host.dart';
 import 'gen/bridge.g.dart';
 import 'gen/bridge_http_contract.g.dart';
 import 'listen_socket_host.dart';
@@ -39,6 +42,9 @@ const String _addTask = String.fromEnvironment('ADD_TASK', defaultValue: '');
 // back to its DEV transport. Dev-grade custody (keychain is owed).
 const String _apiBaseUrl = String.fromEnvironment('OMI_API_BASE_URL', defaultValue: '');
 const String _apiToken = String.fromEnvironment('OMI_API_TOKEN', defaultValue: '');
+// Per-run QA identity. The shell appends its fixed `ios` identity natively;
+// neither value is placed in the surface URL or JavaScript state.
+const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultValue: '');
 // Optional scheme query/profile namespace. Values are appended to the local
 // scheme URL, never interpolated into page JavaScript or logs.
 const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
@@ -74,6 +80,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   late final OmiShellBridge _bridge;
   BridgeHttpHost? _http;
   ListenSocketHost? _listen;
+  ChatStreamHost? _chatStream;
+  ChatAttachmentStagingHost? _chatStaging;
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
@@ -149,9 +157,22 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // its first script evaluation and picks bridge mode rather than DEV.
     final apiBase = Uri.tryParse(_apiBaseUrl);
     if (_apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
-      final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken);
+      final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
       _http = authority.makeHttpHost();
       _listen = authority.makeListenHost();
+      final sink = ChatBridgeJavaScriptSink((source) => _controller.runJavaScript(source));
+      _chatStream = ChatStreamHost(
+        baseUrl: authority.baseUrl,
+        custody: authority.custody,
+        clientIdentity: authority.clientIdentity,
+        sink: sink,
+      );
+      _chatStaging = ChatAttachmentStagingHost(
+        baseUrl: authority.baseUrl,
+        custody: authority.custody,
+        clientIdentity: authority.clientIdentity,
+        sink: sink,
+      );
       debugPrint(
         '[bridge-http] enabled for ${apiBase.scheme}://${apiBase.host} '
         '(token ${_http!.hasCredential ? "present" : "absent"})',
@@ -181,6 +202,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       })
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageStarted: (_) {
+            unawaited(_chatStream?.resetForNavigation());
+            unawaited(_chatStaging?.resetForNavigation());
+          },
           onPageFinished: (url) {
             _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
             if (const bool.fromEnvironment('AUTODRIVE')) {
@@ -229,6 +254,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // navigation would leave it in DEV mode for the life of the page.
     await _http?.register(_controller);
     await _listen?.register(_controller);
+    await _chatStream?.register(_controller);
+    await _chatStaging?.register(_controller);
     switch (_mode) {
       case SurfaceMode.dev:
         await _controller.loadRequest(Uri.parse('http://$_devHost/'));
@@ -598,6 +625,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     WidgetsBinding.instance.removeObserver(this);
     _transcriptTimer?.cancel();
     _acceptanceFallback?.cancel();
+    _http?.close();
+    unawaited(_listen?.close());
+    unawaited(_chatStream?.close());
+    unawaited(_chatStaging?.close());
     super.dispose();
   }
 

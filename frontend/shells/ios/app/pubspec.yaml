@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   # Same version the real app pins (omi:app/pubspec.yaml).
   webview_flutter: 4.13.0
+  # Pinned: native Chat staging must select one path without loading bytes.
+  file_picker: 8.3.2
 
 dev_dependencies:
   flutter_test:
