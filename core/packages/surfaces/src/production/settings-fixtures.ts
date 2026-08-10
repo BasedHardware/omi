@@ -15,6 +15,8 @@ export const SETTINGS_FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
 export const SETTINGS_FIXTURE_STATES = [
   "signed-in",
   "signed-out",
+  "loading",
+  "entitlement-absent",
   "limit-reached",
   "unmetered",
   "upgrade-unavailable",
@@ -39,39 +41,55 @@ function baseEntitlement(overrides: Partial<EntitlementState> = {}): Entitlement
   };
 }
 
+function signedInIdentity() {
+  return { displayName: "Alex Rivera", email: "alex@example.com" };
+}
+
 function snapshotFor(state: SettingsFixtureState): SettingsSnapshot {
   const appearance: AppearanceSelection = "system";
   switch (state) {
     case "signed-out":
       return { identity: null, appearance, entitlement: null };
+    case "loading":
+      // Loading must not claim a signed-in or signed-out outcome yet.
+      return { identity: null, appearance, entitlement: null };
+    case "entitlement-absent":
+      return {
+        identity: signedInIdentity(),
+        appearance,
+        entitlement: null,
+      };
     case "limit-reached":
       return {
-        identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+        identity: signedInIdentity(),
         appearance: "dark",
         entitlement: baseEntitlement({ used: 100, limit: 100, limitReached: true, upgradeAvailable: true }),
       };
     case "unmetered":
       return {
-        identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+        identity: signedInIdentity(),
         appearance: "light",
         entitlement: baseEntitlement({ used: 7, limit: null, limitReached: false }),
       };
     case "upgrade-unavailable":
       return {
-        identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+        identity: signedInIdentity(),
         appearance: "default",
         entitlement: baseEntitlement({ used: 100, limit: 100, limitReached: true, upgradeAvailable: false }),
       };
     case "unavailable":
+      // 503 blackout: the whole read is absent, including identity. Forced by the
+      // served settings types when the entitlement source fails.
+      return { identity: null, appearance, entitlement: null };
     case "saving-failed":
       return {
-        identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+        identity: signedInIdentity(),
         appearance: "system",
         entitlement: baseEntitlement(),
       };
     default:
       return {
-        identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+        identity: signedInIdentity(),
         appearance: "system",
         entitlement: baseEntitlement(),
       };
@@ -93,13 +111,18 @@ function deadLetter(now: number): DeadLetter {
 
 export function fixtureSettingsStore(state: SettingsFixtureState, now = SETTINGS_FIXED_NOW): ProductionSettingsStore {
   let data = snapshotFor(state);
-  const refreshPhase: RefreshPhase = state === "unavailable"
-    ? "unavailable"
-    : state === "saving-failed"
-      ? "saved-but-refresh-failed"
-      : "ready";
+  const refreshPhase: RefreshPhase = state === "loading"
+    ? "initial-loading"
+    : state === "unavailable"
+      ? "unavailable"
+      : state === "saving-failed"
+        ? "saved-but-refresh-failed"
+        : "ready";
   const status: StoreStatus = {
-    refresh: { phase: refreshPhase, hasSavedData: state !== "signed-out" },
+    refresh: {
+      phase: refreshPhase,
+      hasSavedData: state !== "signed-out" && state !== "loading" && state !== "unavailable",
+    },
     queue: queue("idle"),
   };
   let dead: DeadLetter[] = [];
@@ -112,7 +135,8 @@ export function fixtureSettingsStore(state: SettingsFixtureState, now = SETTINGS
     async deadLetters() { return dead; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async refresh() {
-      if (state === "unavailable") throw new Error("fixture refresh failed");
+      // Unavailable stays phase-driven like memories/tasks; retry notifies without
+      // inventing a second error tone on top of the blackout presentation.
       notify();
     },
     async patch(patch: SettingsPatch) {
@@ -121,7 +145,10 @@ export function fixtureSettingsStore(state: SettingsFixtureState, now = SETTINGS
       notify();
     },
     async signOut() {
-      if (state === "saving-failed") throw new Error("fixture sign out failed");
+      // Replay is 204 by contract — already-signed-out stays a quiet success.
+      if (state === "saving-failed" && data.identity !== null) {
+        throw new Error("fixture sign out failed");
+      }
       data = { ...data, identity: null, entitlement: null };
       notify();
     },
