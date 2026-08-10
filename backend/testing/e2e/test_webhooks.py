@@ -67,7 +67,11 @@ def test_realtime_webhook_config_roundtrip_and_delivery_capture(client, auth_hea
     _run_realtime_delivery(monkeypatch, handler)
 
     assert len(requests) == 1
-    assert str(requests[0].url) == "https://webhook.test/realtime?uid=123"
+    # Delivery is pinned to the address validated by the SSRF check; the original
+    # hostname is preserved for vhost routing and TLS SNI.
+    assert str(requests[0].url) == "https://93.184.216.34/realtime?uid=123"
+    assert requests[0].headers["Host"] == "webhook.test"
+    assert requests[0].extensions["sni_hostname"] == "webhook.test"
     payload = requests[0].read()
     assert b"Hermetic realtime transcript" in payload
     assert _health(fake_redis)["failure_count"] == "0"

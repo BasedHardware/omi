@@ -122,6 +122,15 @@ dotenv.load_dotenv = _disabled_load_dotenv
 # ─── Network guard ──────────────────────────────────────────────────────
 
 _ALLOWED_NETWORK_HOSTS = {"127.0.0.1", "::1", "localhost", "0.0.0.0"}
+
+# Hostnames the harness resolves itself, without touching a real resolver.
+# Production SSRF validation (utils.http_client.assert_public_http_url) does a
+# real getaddrinfo() before a developer webhook URL is stored or delivered, so
+# fixture hostnames need an answer to exercise that path hermetically. The
+# answer is a public address, and outbound connections to it are still blocked
+# by the connect guard — tests must supply a transport stub.
+_FAKE_DNS_HOSTS = {"webhook.test": "93.184.216.34"}
+
 _original_socket_connect = socket.socket.connect
 _original_socket_connect_ex = socket.socket.connect_ex
 _original_socket_sendto = socket.socket.sendto
@@ -169,6 +178,9 @@ def _guarded_create_connection(address, timeout=None, source_address=None, *args
 
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
+    fake_ip = _FAKE_DNS_HOSTS.get(host)
+    if fake_ip is not None:
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (fake_ip, port or 0))]
     if host is not None and host not in _ALLOWED_NETWORK_HOSTS:
         raise AssertionError(f"Hermetic e2e blocked DNS lookup for {host!r}")
     return _original_getaddrinfo(host, port, *args, **kwargs)
