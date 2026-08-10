@@ -74,8 +74,7 @@ enum ShellWindowChrome {
   enum Presentation: Equatable, CaseIterable, Sendable {
     /// Steady state: floats over other apps and hides when another app or the desktop takes focus.
     case summoned
-    /// Onboarding, sign-in and permission-granting: an ordinary window that keeps out of System
-    /// Settings' way and can take a Space of its own.
+    /// Onboarding, sign-in and permission-granting: an ordinary window that stays put.
     case anchored
   }
 

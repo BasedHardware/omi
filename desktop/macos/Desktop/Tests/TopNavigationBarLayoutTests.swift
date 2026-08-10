@@ -161,7 +161,8 @@ final class TopNavigationBarLayoutTests: XCTestCase {
         SidebarNavItem.apps.rawValue,
       ]
     )
-    XCTAssertEqual(TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap])
+    XCTAssertEqual(
+      TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap, .activity])
 
     // No pill may instruct the user how to operate it. The retired menu's tooltip read "hover for
     // conversations, memories, tasks, Rewind", which is chrome apologising for itself.
@@ -176,17 +177,18 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       ShellDestination.unreachable(), [],
       "a destination lost the only mechanism that reached it")
 
-    // The three the retired menu owned are the hub's own views, and the hub itself has a pill.
+    // The retired menu's three plus the Activity spine are the hub's own views, and the hub itself
+    // has a pill.
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap])
-    // Home is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
-    // animates while Omi is answering.
+      [.conversations, .memories, .brainMap, .activity])
+    // Chat is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
+    // animates while Omi is answering. The pill wears a chat glyph because the page IS the chat.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
     XCTAssertEqual(ShellDestination.home.reach, .topBar)
     XCTAssertEqual(
-      TopNavigationRoutes.primaryItems.first?.icon, "magnifyingglass",
-      "Home must not spend the Omi mark on a static nav glyph")
+      TopNavigationRoutes.primaryItems.first?.icon, "bubble.left.and.text.bubble.right",
+      "Chat must not spend the Omi mark on a static nav glyph")
 
   }
 
@@ -250,8 +252,8 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     }
     XCTAssertEqual(
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
-      [.conversations, .memories, .brainMap],
-      "without the Library pill the hub's three views have no way in")
+      [.conversations, .memories, .brainMap, .activity],
+      "without the Memories pill the hub's views have no way in")
   }
 
   /// **The bridge's destination vocabulary, now that a test can reach it.** This mapping was a

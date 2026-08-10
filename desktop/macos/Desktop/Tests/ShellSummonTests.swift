@@ -224,7 +224,6 @@ final class ShellSummonTests: XCTestCase {
 
     XCTAssertNil(clickAwayReturn.consume(landingDisplayKey: "1", landingVisibleFrame: laptop))
   }
-
   // MARK: - Memory
 
   /// Two displays, two placements, neither overwriting the other. A single remembered frame is the

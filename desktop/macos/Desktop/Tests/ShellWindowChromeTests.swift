@@ -165,19 +165,18 @@ final class ShellWindowChromeTests: XCTestCase {
     ShellWindowChrome.dress(window, as: .summoned)
     XCTAssertTrue(window.hidesOnDeactivate)
   }
-
   /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
-  /// recording and accessibility. A `.floating` window sits on top of the Settings pane and covers the
-  /// control the user was just told to click, so before there is an account and a finished setup the
-  /// same window is an ordinary one that can also take a Space of its own.
-  func testAnAnchoredShellStaysOutOfTheWayOfTheSettingsPaneItSendsYouTo() {
+  /// recording and accessibility, and every trip deactivates this app. A shell that auto-hid would
+  /// vanish on the way out to grant the thing it just asked for, so before there is an account and a
+  /// finished setup the same window is an ordinary one.
+  func testAnAnchoredShellStaysUpSoAPermissionTripCannotStrandOnboarding() {
     let window = makeWindow()
     ShellWindowChrome.dress(window, as: .summoned)
 
     ShellWindowChrome.dress(window, as: .anchored)
 
-    XCTAssertEqual(window.level, .normal, "onboarding floats over the System Settings pane it just asked for")
-    XCTAssertFalse(window.hidesOnDeactivate, "a permission trip deactivates the app; onboarding must survive it")
+    XCTAssertFalse(window.hidesOnDeactivate, "onboarding disappears the moment the user grants a permission")
+    XCTAssertEqual(window.level, .normal)
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
   }
 

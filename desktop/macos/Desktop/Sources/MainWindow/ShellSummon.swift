@@ -1,9 +1,9 @@
 //
 //  ShellSummon.swift — where the shell lands when you call it, and where it goes when you don't.
 //
-//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, and floating in front of
-//  whatever else is on screen until you put it away. This says *where*, and it is a separate file
-//  because "where" is the half that is per-display state rather than per-window properties.
+//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, floating, hiding itself the
+//  moment it loses focus. This says *where*, and it is a separate file because "where" is the half
+//  that is per-display state rather than per-window properties.
 //
 //  ## Why per-display, and not one remembered frame
 //
@@ -29,8 +29,8 @@
 //  ## Dismissal
 //
 //  The signed-in shell dismisses when AppKit deactivates it, so clicking the desktop or another app
-//  returns the user to their work. `⌘O` toggles it directly; `⌘W` and Escape are explicit alternatives. Escape is
-//  `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
+//  returns the user to their work. `⌘O` toggles it directly; `⌘W` and Escape are explicit alternatives.
+//  Escape is `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
 //  after every modal, editor, page and navigation handler has declined it. Escape on a page still goes
 //  Home; Escape on Home, where nothing else wants it, puts the shell away.
 //
@@ -344,6 +344,11 @@ enum ShellSummon {
     applyPresentation(to: window)
     window.setFrame(frame, display: true)
     window.makeKeyAndOrderFront(nil)
+    // Order-in can re-constrain a frame in some sessions (space restore, display re-layout);
+    // re-asserting after it keeps "permission UI must not re-center the shell" true everywhere.
+    if window.frame != frame {
+      window.setFrame(frame, display: true)
+    }
     hasBeenShown = true
   }
 
