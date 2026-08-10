@@ -322,10 +322,7 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
 
 // User language preference API calls
 
-/// Primary-language options for the picker, in the order the server sends them.
-///
-/// Returns null on any failure so the caller keeps whatever it already has —
-/// the bundled fallback on a cold start, the cached list otherwise.
+/// Picker options as name -> code, in server order. Null on any failure.
 Future<Map<String, String>?> getAvailableLanguages() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/available-languages',

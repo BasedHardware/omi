@@ -7447,6 +7447,7 @@ export interface OmiApiPaths {
       responses: {
         "200": AvailableLanguagesResponse;
         "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -14124,7 +14125,7 @@ export async function update_assistant_settings_v1_users_assistant_settings_patc
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_available_languages_v1_users_available_languages_get(init?: OmiApiClientInit): Promise<AvailableLanguagesResponse> {
+export async function get_available_languages_v1_users_available_languages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AvailableLanguagesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/available-languages`;
   const _search = "";
@@ -14133,6 +14134,10 @@ export async function get_available_languages_v1_users_available_languages_get(i
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);

@@ -474,9 +474,7 @@ class SharedPreferencesUtil {
 
   set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
 
-  // Picker options last fetched from the backend, as a JSON name -> code map.
-  // Cached so a cold start offline shows the languages the server offered last
-  // time rather than the copy frozen into this build.
+  // Last served picker options, JSON name -> code.
   String get cachedAvailableLanguages => getString('cachedAvailableLanguages');
 
   set cachedAvailableLanguages(String value) => saveString('cachedAvailableLanguages', value);

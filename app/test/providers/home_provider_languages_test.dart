@@ -5,9 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The picker list moved to the backend so a language can be added without an
-/// app release. The bundled copy stays as the offline floor, so the behaviour
-/// worth pinning is which source wins and what happens when the fetch fails.
+/// The picker list moved to the backend. What matters is which source wins.
 
 void main() {
   setUp(() async {
@@ -54,6 +52,58 @@ void main() {
       await provider.loadAvailableLanguages();
 
       expect(provider.availableLanguages, isNotEmpty);
+    });
+  });
+
+  group('the served list wins', () {
+    test('over the bundled copy', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => {'Swahili': 'sw'});
+
+      expect(provider.availableLanguages, {'Swahili': 'sw'});
+      expect(provider.availableLanguages.containsKey('Japanese'), isFalse);
+    });
+
+    test('over a cached list, and replaces the cache', () async {
+      SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode({'Klingon': 'tlh'});
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => {'Welsh': 'cy'});
+
+      expect(provider.availableLanguages, {'Welsh': 'cy'});
+      expect(jsonDecode(SharedPreferencesUtil().cachedAvailableLanguages), {'Welsh': 'cy'});
+    });
+
+    test('a null fetch keeps the cached list and does not clear the cache', () async {
+      SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode({'Swahili': 'sw'});
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => null);
+
+      expect(provider.availableLanguages, {'Swahili': 'sw'});
+      expect(jsonDecode(SharedPreferencesUtil().cachedAvailableLanguages), {'Swahili': 'sw'});
+    });
+
+    test('a throwing fetch falls back to the bundled copy', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => throw Exception('offline'));
+
+      expect(provider.availableLanguages['English'], 'en');
+    });
+
+    test('an empty served list is ignored rather than emptying the picker', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => <String, String>{});
+
+      expect(provider.availableLanguages['English'], 'en');
     });
   });
 

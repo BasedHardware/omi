@@ -22,16 +22,8 @@ ACCEPTED_BASE_LANGUAGES: Final[frozenset[str]] = MODULATE_SUPPORTED_LANGUAGES | 
     PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
 )
 
-# Primary-language picker options, in the order clients render them.
-#
-# This list used to live in the Flutter app, so adding a language needed an app
-# release even when the backend could already transcribe it. Clients read it from
-# GET /v1/users/available-languages instead; the app keeps a bundled copy only as
-# an offline fallback.
-#
-# Every code here must survive normalize_user_language(), or the picker would
-# offer something PATCH /v1/users/language rejects. Enforced by
-# tests/unit/test_language_catalog.py.
+# Picker options, in render order. Every code must survive
+# normalize_user_language(); tests/unit/test_language_catalog.py enforces it.
 PRIMARY_LANGUAGE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     # Top languages first
     ('en', 'English'),

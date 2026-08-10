@@ -834,12 +834,8 @@ def set_chat_message_analytics(
 
 
 @router.get('/v1/users/available-languages', tags=['v1'], response_model=AvailableLanguagesResponse)
-def get_available_languages():
-    """Primary-language options for the picker, in render order.
-
-    Served rather than hardcoded in the app so a language can be added without an
-    app release. Clients fall back to their bundled copy when offline.
-    """
+def get_available_languages(uid: str = Depends(auth.get_current_user_uid)):
+    """Primary-language options for the picker, in render order."""
     return {'languages': [{'code': code, 'name': name} for code, name in PRIMARY_LANGUAGE_OPTIONS]}
 
 

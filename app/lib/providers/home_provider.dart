@@ -29,12 +29,8 @@ class HomeProvider extends ChangeNotifier {
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
   bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
-  /// Picker options as of this build.
-  ///
-  /// The list lives in the backend now (GET /v1/users/available-languages) so a
-  /// language can be added without an app release. This copy is the floor: it
-  /// is what a first run with no network shows, and what we fall back to if the
-  /// fetch fails. It is deliberately not deleted.
+  /// Offline floor for the served list. Not dead code — a first run with no
+  /// network shows this.
   static const Map<String, String> _bundledLanguages = {
     // Top languages first
     'English': 'en',
@@ -111,12 +107,11 @@ class HomeProvider extends ChangeNotifier {
 
   Map<String, String>? _serverLanguages;
 
-  /// Server list when we have one, otherwise the bundled copy.
   Map<String, String> get availableLanguages => _serverLanguages ?? _bundledLanguages;
 
-  /// Loads the picker options: cached list first so the UI never waits, then a
-  /// refresh from the server. A failed fetch leaves whatever we already had.
-  Future<void> loadAvailableLanguages() async {
+  /// Cached list first so the UI never waits, then the server's. A failed fetch
+  /// leaves whatever the picker already had.
+  Future<void> loadAvailableLanguages({Future<Map<String, String>?> Function()? fetch}) async {
     final cached = SharedPreferencesUtil().cachedAvailableLanguages;
     if (cached.isNotEmpty) {
       final restored = _decodeLanguages(cached);
@@ -129,13 +124,12 @@ class HomeProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     Map<String, String>? fetched;
     try {
-      fetched = await getAvailableLanguages();
+      fetched = await (fetch ?? getAvailableLanguages)();
     } catch (e) {
-      // Never let the picker depend on this call succeeding.
       Logger.debug('Error loading available languages: $e');
       return;
     }
-    if (fetched == null || generation != _sessionGeneration) return;
+    if (fetched == null || fetched.isEmpty || generation != _sessionGeneration) return;
 
     SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode(fetched);
     _serverLanguages = fetched;
@@ -148,8 +142,6 @@ class HomeProvider extends ChangeNotifier {
       if (decoded is! Map || decoded.isEmpty) return null;
       return {for (final entry in decoded.entries) entry.key as String: entry.value as String};
     } catch (_) {
-      // A cache written by an older build, or corrupted: fall back rather than
-      // leaving the picker empty.
       return null;
     }
   }
@@ -316,8 +308,7 @@ class HomeProvider extends ChangeNotifier {
   }
 
   String getLanguageName(String code) {
-    // A stored code can outlive the list that offered it — the server list
-    // changes without an app release, and this used to throw on a miss.
+    // A stored code can outlive the list that offered it.
     for (final entry in availableLanguages.entries) {
       if (entry.value == code) return entry.key;
     }
