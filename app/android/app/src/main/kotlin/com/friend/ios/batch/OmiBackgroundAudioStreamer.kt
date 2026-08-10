@@ -299,7 +299,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     }
 
     private fun buildRequest(url: String): Request? {
-        val token = stringPref("authToken")
+        val token = stringPref("nativeAuthToken").ifEmpty { stringPref("authToken") }
         if (token.isEmpty()) {
             Log.w(TAG, "Cannot open background transcription socket without auth token")
             return null

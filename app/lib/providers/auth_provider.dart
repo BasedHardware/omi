@@ -83,7 +83,7 @@ class AuthenticationProvider extends BaseProvider {
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
-          SharedPreferencesUtil().authToken = '';
+          await SharedPreferencesUtil().persistAuthToken('');
           SharedPreferencesUtil().tokenExpirationTime = 0;
           authToken = null;
         } else {

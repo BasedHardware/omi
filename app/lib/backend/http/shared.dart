@@ -73,13 +73,13 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
     final refreshResult = await AuthService.instance.refreshIdToken();
     switch (refreshResult) {
       case AuthTokenSuccess(:final token):
-        SharedPreferencesUtil().authToken = token;
+        await SharedPreferencesUtil().persistAuthToken(token);
         break;
       case AuthTokenTransientFailure():
         if (expiry.isBefore(DateTime.now())) {
           // Preserve a still-valid token during transient refresh trouble, but
           // never reuse one whose expiration has already passed.
-          SharedPreferencesUtil().authToken = '';
+          await SharedPreferencesUtil().persistAuthToken('');
         }
         break;
       case AuthTokenMissingUser():
