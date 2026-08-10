@@ -195,15 +195,21 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private let loadURL: URL
   private let http: BridgeHttpHandler?
   private let listen: ListenSocketHandler?
+  private let chatStream: ChatStreamHandler?
+  private let chatAttachmentStaging: ChatAttachmentStagingHandler?
+  private var tornDown = false
   var onCommittedURL: ((URL) -> Void)?
 
   init(
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
-    http: BridgeHttpHandler?, listen: ListenSocketHandler?
+    http: BridgeHttpHandler?, listen: ListenSocketHandler?,
+    chatStream: ChatStreamHandler?, chatAttachmentStaging: ChatAttachmentStagingHandler?
   ) {
     self.loadURL = loadURL
     self.http = http
     self.listen = listen
+    self.chatStream = chatStream
+    self.chatAttachmentStaging = chatAttachmentStaging
     let config = WKWebViewConfiguration()
     config.defaultWebpagePreferences.allowsContentJavaScript = true
     let webView = TransparentWKWebView(frame: frame, configuration: config)
@@ -226,6 +232,14 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     if let listen {
       config.userContentController.add(listen, name: ListenSocketHandler.channel)
     }
+    if let chatStream {
+      config.userContentController.add(chatStream, name: ChatStreamHandler.channel)
+    }
+    if let chatAttachmentStaging {
+      config.userContentController.addScriptMessageHandler(
+        chatAttachmentStaging, contentWorld: .page,
+        name: ChatAttachmentStagingHandler.channel)
+    }
     webView.navigationDelegate = self
     if #available(macOS 13.3, *) { webView.isInspectable = true }
   }
@@ -239,6 +253,28 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     } else {
       webView.load(URLRequest(url: loadURL))
     }
+  }
+
+  func teardown() {
+    guard !tornDown else { return }
+    tornDown = true
+    ticker?.invalidate()
+    ticker = nil
+    chatStream?.teardown()
+    chatAttachmentStaging?.teardown()
+    let content = webView.configuration.userContentController
+    content.removeScriptMessageHandler(forName: BridgeDispatcher.messageHandlerName)
+    content.removeScriptMessageHandler(forName: ListenSocketHandler.channel)
+    content.removeScriptMessageHandler(forName: ChatStreamHandler.channel)
+    content.removeScriptMessageHandler(
+      forName: BridgeHttpHandler.channel, contentWorld: .page)
+    content.removeScriptMessageHandler(
+      forName: ChatAttachmentStagingHandler.channel, contentWorld: .page)
+    webView.navigationDelegate = nil
+  }
+
+  deinit {
+    MainActor.assumeIsolated { teardown() }
   }
 
   func userContentController(
@@ -279,6 +315,18 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     guard let url = webView.url else { return }
     onCommittedURL?(url)
   }
+
+  func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+    // A new document owns a new JS sink/registry. Observation and staging work
+    // from the previous document must not route into it.
+    chatStream?.cancelAll()
+    chatAttachmentStaging?.cancelAll()
+  }
+
+  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    chatStream?.cancelAll()
+    chatAttachmentStaging?.cancelAll()
+  }
 }
 
 @MainActor
@@ -290,6 +338,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Retained so the reply-capable message handler outlives registration.
   var httpHandler: BridgeHttpHandler?
   var listenSocketHandler: ListenSocketHandler?
+  var chatStreamHandler: ChatStreamHandler?
+  var chatAttachmentStagingHandler: ChatAttachmentStagingHandler?
   private let env = ProcessInfo.processInfo.environment
   private var acceptanceEmitted = false
   private var acceptancePassed = true
@@ -396,6 +446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           .utf8))
     var httpHandler: BridgeHttpHandler?
     var listenSocketHandler: ListenSocketHandler?
+    var chatStreamHandler: ChatStreamHandler?
+    var chatAttachmentStagingHandler: ChatAttachmentStagingHandler?
     if let base = session.baseURL {
       let keychain = KeychainCredentialStore()
       let authority = ShellTransportAuthority(
@@ -410,6 +462,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         })
       httpHandler = authority.makeHTTPHandler(clientId: runClientId)
       listenSocketHandler = authority.makeListenHandler()
+      chatStreamHandler = ChatStreamHandler(
+        baseURL: base, custody: authority.custody, runId: runClientId)
+      chatAttachmentStagingHandler = ChatAttachmentStagingHandler(
+        baseURL: base, custody: authority.custody, runId: runClientId)
       FileHandle.standardError.write(
         Data(
           "bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(session.tokenPresent ? "present" : "absent"))\n"
@@ -420,9 +476,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     self.httpHandler = httpHandler
     self.listenSocketHandler = listenSocketHandler
+    self.chatStreamHandler = chatStreamHandler
+    self.chatAttachmentStagingHandler = chatAttachmentStagingHandler
     controller = WebViewController(
       handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
-      http: httpHandler, listen: listenSocketHandler)
+      http: httpHandler, listen: listenSocketHandler,
+      chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler)
     window = NSWindow(
       contentRect: contentRect,
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -564,6 +623,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    controller?.teardown()
     loopback?.stop()
   }
 
