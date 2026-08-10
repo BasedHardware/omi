@@ -6,10 +6,9 @@ import { FIXTURE_STATES as TASK_STATES } from "../production/task-fixtures.js";
 import { PROPOSITION_FIXTURE_STATES } from "../production/proposition-fixtures.js";
 import { CHAT_FIXTURE_STATES } from "../production/chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES } from "../production/settings-fixtures.js";
-import { LISTEN_FIXTURE_STATES } from "../production/listen-fixtures.js";
 import "./surface-lab.css";
 
-type SurfaceId = "memories" | "memories-platform" | "conversations" | "conversation-detail" | "tasks" | "chat" | "settings" | "listen";
+type SurfaceId = "memories" | "memories-platform" | "conversations" | "conversation-detail" | "tasks" | "chat" | "settings";
 type PreviewMode = "mobile" | "desktop" | "compare";
 
 type SurfaceDefinition = {
@@ -29,7 +28,6 @@ const SURFACES: readonly SurfaceDefinition[] = [
   { id: "memories-platform", label: "Memories (platform)", description: "Synthesized propositions, lineage, and honest recall completeness", states: PROPOSITION_FIXTURE_STATES },
   { id: "chat", label: "Chat", description: "Server-authoritative mirror, streaming, echo reconcile, and attachment cap", states: CHAT_FIXTURE_STATES },
   { id: "settings", label: "Settings", description: "Identity, appearance, and the entitlement upsell", states: SETTINGS_FIXTURE_STATES },
-  { id: "listen", label: "Listen", description: "Capture, entitlement pause, offline buffering, and the loud storage-ceiling stop", states: LISTEN_FIXTURE_STATES },
 ];
 
 function selectedSurface(value: string | null): SurfaceDefinition {

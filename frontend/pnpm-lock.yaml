@@ -50,6 +50,9 @@ importers:
       '@omi-core/sync':
         specifier: workspace:*
         version: link:../sync
+      '@omi-core/wire-listen':
+        specifier: workspace:*
+        version: link:../wire-listen
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -145,6 +148,9 @@ importers:
       '@omi-core/tokens':
         specifier: workspace:*
         version: link:../tokens
+      '@omi-core/wire-listen':
+        specifier: workspace:*
+        version: link:../wire-listen
       react:
         specifier: ^19.2.1
         version: 19.2.8

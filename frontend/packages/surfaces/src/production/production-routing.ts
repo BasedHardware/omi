@@ -10,7 +10,7 @@
  * Self-contained by design (no relative imports) so `node --test` runs it directly.
  */
 
-export type ProductionRouteName = "home" | "memories" | "conversations" | "tasks";
+export type ProductionRouteName = "home" | "memories" | "conversations" | "tasks" | "listen";
 export type MemoriesGeneration = "legacy" | "platform";
 
 export type ProductionRouteInput = {
@@ -37,6 +37,7 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
   const { requestedRoute, requestedQa, memoriesGeneration } = input;
 
   if (requestedRoute === "tasks" || requestedQa === "tasks") return "tasks";
+  if (requestedRoute === "listen") return "listen";
   if (
     requestedRoute === "conversations"
     || requestedQa === "conversations"

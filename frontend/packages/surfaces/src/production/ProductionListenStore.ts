@@ -1,4 +1,5 @@
 import type { StoreStatus } from "@omi-core/domain";
+import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { CaptureState } from "./capture-state.js";
 
 export type { CaptureState };
@@ -18,6 +19,8 @@ export type ProductionListenStore = {
   subscribe(listener: () => void): () => void;
   refresh(): Promise<void>;
   captureState(): CaptureState;
+  transcriptSegments(): readonly TranscriptSegment[];
+  entitlementState(): ListenEntitlementSnapshot | null;
   start(): Promise<void>;
   stop(): Promise<void>;
 };

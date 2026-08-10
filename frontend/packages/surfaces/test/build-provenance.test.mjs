@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -8,6 +9,7 @@ import test from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 const distStampPath = resolve(root, "dist/omi-build-stamp.json");
+const distAssetsPath = resolve(root, "dist/assets");
 
 test("vite.config.ts and main.tsx wire the build stamp end to end", async () => {
   const config = await read("vite.config.ts");
@@ -64,5 +66,29 @@ test(
       assert.match(stamp.commit, /^[0-9a-f]{40}$/);
       assert.equal(stamp.artifact, "surfaces-dist");
     }
+  },
+);
+
+test(
+  "the built Listen artifact contains runtime catalog copy and the ratified wire",
+  { skip: !existsSync(distAssetsPath) ? "dist/ not built — run `vite build` first" : false },
+  async () => {
+    const assets = (await readdir(distAssetsPath)).filter((name) => name.endsWith(".js"));
+    const bundle = (await Promise.all(
+      assets.map((name) => readFile(resolve(distAssetsPath, name), "utf8")),
+    )).join("\n");
+
+    for (const runtimeValue of [
+      "listen.statePausedEntitlement",
+      "Transcription paused — plan limit reached",
+      "listen.stateStoppedAtCeiling",
+      "Capture stopped — storage ceiling reached",
+      "/v4/listen",
+      "listen-realtime-protocol/0.3.0.json",
+    ]) {
+      assert.ok(bundle.includes(runtimeValue), `built Listen artifact contains ${runtimeValue}`);
+    }
+    // red-proof: drop the raw schema import or bypass the catalog at runtime;
+    // the emitted artifact loses the corresponding exact bytes.
   },
 );

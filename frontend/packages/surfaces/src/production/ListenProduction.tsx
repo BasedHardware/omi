@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDuration, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
+import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge } from "./ProductionPrimitives.js";
 import "./listen.css";
 
 type Locale = string;
@@ -28,13 +28,42 @@ function elapsedSeconds(state: CaptureState): number | null {
   }
 }
 
-export function ListenProduction({ store, fixture, locale = "en", onReady }: {
+function entitlementUsageLabel(
+  entitlement: ListenEntitlementSnapshot | null,
+  locale: Locale,
+): string | null {
+  if (entitlement?.usage === null || entitlement?.usage === undefined) return null;
+  const used = formatDuration(entitlement.usage.amount, locale);
+  switch (entitlement.limit.kind) {
+    case "metered":
+      return t(locale, "settings.usageOf", {
+        used,
+        limit: formatDuration(entitlement.limit.amount, locale),
+      });
+    case "unmetered":
+    case "unknown":
+      return t(locale, "settings.usageUnmetered", { used });
+    default: {
+      const _exhaustive: never = entitlement.limit;
+      throw new Error(`unhandled entitlement limit: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+function transcriptKey(segment: TranscriptSegment, index: number): string {
+  return segment.id && segment.id !== ""
+    ? segment.id
+    : `anonymous-${segment.start}-${segment.end}-${index}`;
+}
+
+export function ListenProduction({ store, locale = "en", onReady }: {
   store: ProductionListenStore;
-  fixture?: string;
   locale?: Locale;
   onReady?: () => void;
 }): React.JSX.Element {
   const [capture, setCapture] = useState<CaptureState>(() => store.captureState());
+  const [segments, setSegments] = useState<readonly TranscriptSegment[]>(() => store.transcriptSegments());
+  const [entitlement, setEntitlement] = useState<ListenEntitlementSnapshot | null>(() => store.entitlementState());
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
@@ -44,6 +73,8 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
   const reload = useCallback(async (): Promise<void> => {
     try {
       setCapture(store.captureState());
+      setSegments(store.transcriptSegments());
+      setEntitlement(store.entitlementState());
     } catch {
       setOperationError(t(locale, "lifecycle.error"));
     }
@@ -97,6 +128,7 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
   const description = describeCapture(capture);
   const elapsed = elapsedSeconds(capture);
   const hours = backlogHours(description.backlogSeconds);
+  const usageLabel = entitlementUsageLabel(entitlement, locale);
 
   return (
     <main
@@ -104,7 +136,6 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
       data-production-shell="true"
       data-route="listen"
       data-surface-state={status.refresh.phase}
-      data-qa-fixture={fixture ?? "none"}
       data-capture-kind={capture.kind}
     >
       <ProductionChrome locale={locale} active="listen" placement="top" />
@@ -123,7 +154,6 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
             )}
           </div>
         </header>
-        {fixture && <ProductionDataSourceBadge source={{ kind: "fixture", fixture }} locale={locale} />}
         <div className="surface-notices" aria-live="polite">
           {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
           {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
@@ -134,13 +164,21 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
           aria-label={t(locale, "listen.stateLabel")}
           data-loud={description.loud ? "true" : "false"}
           data-capturing={description.capturing ? "true" : "false"}
+          data-presentation={capture.kind}
           role={description.loud ? "alert" : "status"}
         >
-          <h2 className="listen-state-title">{t(locale, description.titleKey)}</h2>
-          <p className="listen-state-body">{t(locale, description.bodyKey)}</p>
-          {elapsed !== null && (
-            <p className="listen-elapsed">{t(locale, "listen.elapsed", { duration: formatDuration(elapsed, locale) })}</p>
-          )}
+          <div className={`listen-state-glyph is-${capture.kind}`} aria-hidden="true">
+            <span className="listen-state-glyph-core" />
+            <span className="listen-state-glyph-ring" />
+          </div>
+          <div className="listen-state-copy">
+            <h2 className="listen-state-title">{t(locale, description.titleKey)}</h2>
+            <p className="listen-state-body">{t(locale, description.bodyKey)}</p>
+            {elapsed !== null && (
+              <p className="listen-elapsed">{t(locale, "listen.elapsed", { duration: formatDuration(elapsed, locale) })}</p>
+            )}
+            {usageLabel && <p className="listen-entitlement-usage">{usageLabel}</p>}
+          </div>
           <div className="listen-backlog" aria-label={t(locale, "listen.backlogLabel")}>
             <span className="listen-backlog-label">{t(locale, "listen.backlogLabel")}</span>
             <span className="listen-backlog-value">
@@ -150,6 +188,24 @@ export function ListenProduction({ store, fixture, locale = "en", onReady }: {
             </span>
           </div>
         </section>
+        {segments.length > 0 && (
+          <section
+            className="listen-transcript"
+            aria-label={t(locale, "listen.title")}
+            data-transcript-count={segments.length}
+          >
+            {segments.map((segment, index) => (
+              <article
+                className={`listen-transcript-row${segment.is_user ? " is-user" : ""}`}
+                data-segment-id={segment.id ?? ""}
+                key={transcriptKey(segment, index)}
+              >
+                {segment.speaker && <p className="listen-transcript-speaker">{segment.speaker}</p>}
+                <p className="listen-transcript-text">{segment.text}</p>
+              </article>
+            ))}
+          </section>
+        )}
         <div className="listen-controls" aria-label={t(locale, "listen.stateLabel")}>
           {description.canStart && (
             <button

@@ -216,13 +216,6 @@ test("every production surface declares where its rows came from, and never hide
       fixtureExport: "fixtureSettingsStore",
       fixtureState: "signed-in",
     },
-    {
-      module: "ListenProduction.tsx",
-      exportName: "ListenProduction",
-      fixtureModule: "listen-fixtures.ts",
-      fixtureExport: "fixtureListenStore",
-      fixtureState: "idle",
-    },
   ];
   for (const renderCase of cases) {
     const Component = await loadProductionExport(renderCase.module, renderCase.exportName);

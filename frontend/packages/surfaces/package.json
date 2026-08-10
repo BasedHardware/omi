@@ -21,6 +21,7 @@
     "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*",
     "@omi-core/tokens": "workspace:*",
+    "@omi-core/wire-listen": "workspace:*",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
