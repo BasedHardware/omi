@@ -7,6 +7,7 @@ import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
+import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 
 type Locale = string;
@@ -182,6 +183,11 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
       return !needle || memory.content.toLocaleLowerCase(locale).includes(needle);
     });
   }, [locale, query, rows, visibilityFilter]);
+  const emptyKind = listEmptyKind({
+    phase: status.refresh.phase,
+    rowCount: rows.length,
+    visibleCount: visibleRows.length,
+  });
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
@@ -228,7 +234,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
           <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}>•••</button>
         </div>
       </div>
-      {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state"><strong>{t(locale, "memories.emptyTitle")}</strong><p>{t(locale, "memories.emptyBody")}</p></div> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{visibleRows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
+      {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state" data-empty-kind="empty-projection"><strong>{t(locale, "memories.emptyTitle")}</strong><p>{t(locale, "memories.emptyBody")}</p></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{visibleRows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
       {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map(deadLetterView).map((view) => <div className="dead-letter" key={view.opId}><span>{t(locale, view.messageKey)}</span>{view.savedEdit !== null && <pre className="dead-letter-payload">{view.savedEdit}</pre>}{/* Discard only — a retry resubmits an envelope the epoch fence refuses forever (dead-letter-presentation.ts). */}<button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(view.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
       </section>
       <ProductionChrome locale={locale} active="memories" placement="bottom" />
