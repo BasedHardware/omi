@@ -1,4 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -27,8 +29,13 @@ class HomeProvider extends ChangeNotifier {
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
   bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
-  // Available languages ordered by popularity
-  final Map<String, String> availableLanguages = {
+  /// Picker options as of this build.
+  ///
+  /// The list lives in the backend now (GET /v1/users/available-languages) so a
+  /// language can be added without an app release. This copy is the floor: it
+  /// is what a first run with no network shows, and what we fall back to if the
+  /// fetch fails. It is deliberately not deleted.
+  static const Map<String, String> _bundledLanguages = {
     // Top languages first
     'English': 'en',
     'English (US)': 'en-US',
@@ -101,6 +108,51 @@ class HomeProvider extends ChangeNotifier {
     'Urdu': 'ur',
     'Vietnamese': 'vi',
   };
+
+  Map<String, String>? _serverLanguages;
+
+  /// Server list when we have one, otherwise the bundled copy.
+  Map<String, String> get availableLanguages => _serverLanguages ?? _bundledLanguages;
+
+  /// Loads the picker options: cached list first so the UI never waits, then a
+  /// refresh from the server. A failed fetch leaves whatever we already had.
+  Future<void> loadAvailableLanguages() async {
+    final cached = SharedPreferencesUtil().cachedAvailableLanguages;
+    if (cached.isNotEmpty) {
+      final restored = _decodeLanguages(cached);
+      if (restored != null) {
+        _serverLanguages = restored;
+        notifyListeners();
+      }
+    }
+
+    final generation = _sessionGeneration;
+    Map<String, String>? fetched;
+    try {
+      fetched = await getAvailableLanguages();
+    } catch (e) {
+      // Never let the picker depend on this call succeeding.
+      Logger.debug('Error loading available languages: $e');
+      return;
+    }
+    if (fetched == null || generation != _sessionGeneration) return;
+
+    SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode(fetched);
+    _serverLanguages = fetched;
+    notifyListeners();
+  }
+
+  static Map<String, String>? _decodeLanguages(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded.isEmpty) return null;
+      return {for (final entry in decoded.entries) entry.key as String: entry.value as String};
+    } catch (_) {
+      // A cache written by an older build, or corrupted: fall back rather than
+      // leaving the picker empty.
+      return null;
+    }
+  }
 
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
@@ -264,7 +316,15 @@ class HomeProvider extends ChangeNotifier {
   }
 
   String getLanguageName(String code) {
-    return availableLanguages.entries.firstWhere((element) => element.value == code).key;
+    // A stored code can outlive the list that offered it — the server list
+    // changes without an app release, and this used to throw on a miss.
+    for (final entry in availableLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    for (final entry in _bundledLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    return code;
   }
 
   Future setUserPeople() async {

@@ -357,6 +357,7 @@ class _AppShellState extends State<AppShell> {
     final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
     if (isSignedIn) {
       context.read<HomeProvider>().setupHasSpeakerProfile();
+      context.read<HomeProvider>().loadAvailableLanguages();
       context.read<HomeProvider>().setupUserPrimaryLanguage();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
