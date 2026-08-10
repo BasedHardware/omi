@@ -135,6 +135,12 @@ class PrePushCiPredictionTests(unittest.TestCase):
                 self.assertFalse(plan.includes("flutter-l10n"))
                 self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
 
+    def test_mobile_workflow_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/workflows/mobile-app-checks.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+
     def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
         codegen = self.plan(["app/build.yaml"])
         self.assertTrue(codegen.includes("flutter-codegen"))

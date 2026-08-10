@@ -305,6 +305,9 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
+    if ".github/workflows/mobile-app-checks.yml" in normalized_paths:
+        selected.update({"flutter-codegen", "flutter-l10n"})
+
     if selector_changed:
         # The selector is the boundary. A change to it conservatively wakes each
         # component lane it can influence. It deliberately excludes the
