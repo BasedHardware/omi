@@ -373,7 +373,7 @@ def _snapshot_from_rows(
     except (KeyError, TypeError, ValueError) as exc:
         raise ChatFirstE2EFixtureNotPrepared('chat-first E2E fixture state is invalid') from exc
 
-    intents = []
+    intents: list[ProactiveIntent] = []
     for document in (
         _user_ref(uid, firestore_client=firestore_client).collection(intents_db.INTENTS_COLLECTION).stream()
     ):

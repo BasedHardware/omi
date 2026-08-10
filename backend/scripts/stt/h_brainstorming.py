@@ -71,7 +71,9 @@ def diarization(content: str):
     Here is the output schema:
     ```
     {"properties": {"segments": {"title": "Segments", "description": "The segments of the conversation", "default": [], "type": "array", "items": {"$ref": "#/definitions/Segment"}}}, "definitions": {"Segment": {"title": "Segment", "type": "object", "properties": {"speaker": {"title": "Speaker", "description": "The speaker id for this segment", "default": "SPEAKER_00", "type": "string"}, "text": {"title": "Text", "description": "The text of the segment", "default": "", "type": "string"}}}}}
-    ```'''.replace('  ', '').strip()
+    ```'''.replace(
+        '  ', ''
+    ).strip()
 
     response = client.chat.completions.create(
         # model="gpt-4o",

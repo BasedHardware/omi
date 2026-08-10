@@ -6,6 +6,8 @@ remain persisted generation fences and diagnostics, not rollout gates.
 
 # LIFECYCLE: permanent
 
+from typing import Any
+
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
@@ -44,7 +46,7 @@ def resolve_task_intelligence_for_user(
     uid: str,
     workflow_mode: TaskWorkflowMode | str,
     account_generation: int = 0,
-    db_client=None,
+    db_client: Any | None = None,
 ) -> TaskIntelligenceRolloutDecision:
     """Compose workflow mode with the authoritative canonical-memory selector."""
 

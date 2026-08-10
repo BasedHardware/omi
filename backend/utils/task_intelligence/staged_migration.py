@@ -69,9 +69,9 @@ def migrate_staged_tasks(
     after_id: Optional[str] = None,
     limit: int = 500,
 ) -> CandidateMigrationReport:
-    rows = sorted(staged_tasks_db.get_all_staged_tasks_for_migration(uid), key=lambda row: row.get('id', ''))
+    rows = sorted(staged_tasks_db.get_all_staged_tasks_for_migration(uid), key=lambda row: str(row.get('id', '')))
     if after_id:
-        rows = [row for row in rows if row.get('id', '') > after_id]
+        rows = [row for row in rows if str(row.get('id', '')) > after_id]
     rows = rows[:limit]
     dry_run = control.workflow_mode in {TaskWorkflowMode.off, TaskWorkflowMode.shadow}
     created = reconciled = unchanged = failed = 0

@@ -6,7 +6,7 @@ Collection: users/{uid}/staged_tasks
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
@@ -93,10 +93,10 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     return items
 
 
-def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
+def get_all_staged_tasks_for_migration(uid: str) -> List[dict[str, Any]]:
     """Read active and terminal staged rows for idempotent Candidate reconciliation."""
 
-    items: List[dict] = []
+    items: List[dict[str, Any]] = []
     for snapshot in _user_col(uid, 'staged_tasks').stream():
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
