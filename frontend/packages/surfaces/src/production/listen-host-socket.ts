@@ -77,6 +77,13 @@ function parsePreflightEvent(event: ListenPreflightEvent | string): ListenPrefli
     if (parsed === null || typeof parsed !== "object") return null;
     const prototype = Object.getPrototypeOf(parsed);
     if (prototype !== Object.prototype && prototype !== null) return null;
+    // Descriptor checks alone accept a Proxy that mirrors a plain object. The
+    // structured-clone boundary rejects proxies without invoking accessors;
+    // native shells still deliver ordinary JSON-shaped objects here.
+    const descriptors = Object.getOwnPropertyDescriptors(parsed);
+    if (Object.values(descriptors).some((descriptor) => !("value" in descriptor))) return null;
+    if (typeof globalThis.structuredClone !== "function") return null;
+    globalThis.structuredClone(parsed);
     const ownData = (key: string): { present: boolean; value: unknown } => {
       const descriptor = Object.getOwnPropertyDescriptor(parsed, key);
       if (descriptor === undefined) return { present: false, value: undefined };
