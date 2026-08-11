@@ -110,6 +110,7 @@ async function startService(): Promise<LiveService> {
   const reader = child.stdout.getReader();
   const decoder = new TextDecoder();
   let banner = "";
+  let pendingRead = reader.read();
 
   while (Date.now() < deadline) {
     // A wrapper that only polls for HTTP readiness reports success while the
@@ -118,8 +119,14 @@ async function startService(): Promise<LiveService> {
       const stderr = await new Response(child.stderr).text();
       throw new Error(`live-service exited before readiness (${child.exitCode}): ${stderr}${banner}`);
     }
-    const chunk = await Promise.race([reader.read(), Bun.sleep(100).then(() => null)]);
-    if (chunk !== null && !chunk.done) banner += decoder.decode(chunk.value, { stream: true });
+    // Keep one read pending. Racing a fresh reader.read() on every poll loses
+    // the banner when the timeout wins but the abandoned read later consumes
+    // the child's one stdout line.
+    const chunk = await Promise.race([pendingRead, Bun.sleep(100).then(() => null)]);
+    if (chunk !== null) {
+      if (!chunk.done) banner += decoder.decode(chunk.value, { stream: true });
+      pendingRead = reader.read();
+    }
     const line = banner.split("\n").find((entry) => entry.includes("live_service_listening"));
     if (line === undefined) continue;
     const announced = JSON.parse(line) as { url: string; devToken: string; ownerAccountId: string };
