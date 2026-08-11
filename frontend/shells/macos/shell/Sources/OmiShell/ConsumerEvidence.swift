@@ -2,6 +2,35 @@ import Foundation
 
 let consumerEvidenceSchema = "omi.consumer-evidence.v1"
 
+struct ConsumerEvidenceRouteDriveState {
+  private var expected: ObjectIdentifier?
+  var pollCount = 0
+  var listenStartRequested = false
+  var chatAdmissionBaseline: Int?
+  var chatSubmitted = false
+
+  mutating func begin(_ navigation: AnyObject?) -> Bool {
+    guard let navigation else {
+      expected = nil
+      return false
+    }
+    expected = ObjectIdentifier(navigation)
+    pollCount = 0
+    listenStartRequested = false
+    chatAdmissionBaseline = nil
+    chatSubmitted = false
+    return true
+  }
+
+  mutating func acceptFinished(_ navigation: AnyObject?) -> Bool {
+    guard let expected, let navigation, ObjectIdentifier(navigation) == expected else {
+      return false
+    }
+    self.expected = nil
+    return true
+  }
+}
+
 enum ConsumerEvidenceRoute: String, CaseIterable, Codable {
   case memories
   case tasks

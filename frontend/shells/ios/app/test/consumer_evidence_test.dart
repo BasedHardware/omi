@@ -25,9 +25,12 @@ void main() {
     expect(normalizeRenderedObservationResult(WebKitNullSentinel()), isNull);
     expect(normalizeRenderedObservationResult(WebKitNullSentinel()), isNot('<null>'));
     expect(normalizeRenderedObservationResult('<null>'), isNull);
+    expect(normalizeRenderedObservationResult('null'), isNull);
     expect(normalizeRenderedObservationResult(rendered), rendered);
-    expect(RenderedConsumerObservation.decodeRenderedJson(normalizeRenderedObservationResult(rendered)!).route,
-        ConsumerEvidenceRoute.memories);
+    expect(
+      RenderedConsumerObservation.decodeRenderedJson(normalizeRenderedObservationResult(rendered)!).route,
+      ConsumerEvidenceRoute.memories,
+    );
   });
 
   test('real iOS writer replaces no prior run and atomically writes the exact seven-row document', () async {

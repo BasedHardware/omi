@@ -235,6 +235,33 @@ test("out-of-order wire segments paint in content order", async () => {
   // red-proof: render arrival order; both DOM arrays reverse.
 });
 
+test("rendered Listen evidence bounds four non-ASCII segments by UTF-8 bytes without splitting scalars", async () => {
+  const boundedRenderedTranscript = await loadProductionExport(
+    "consumer-observation.ts",
+    "boundedRenderedTranscript",
+  );
+  const segments = ["😀", "界", "é", "🧭"].map((value) => ({ text: value.repeat(300) }));
+  const transcript = boundedRenderedTranscript(segments);
+  assert.notEqual(transcript, "");
+  assert.ok(Buffer.byteLength(transcript, "utf8") <= 1_024);
+  assert.doesNotMatch(transcript, /\uFFFD/u, "UTF-8 truncation must not split a Unicode scalar");
+  for (const value of ["😀", "界", "é", "🧭"]) {
+    assert.ok(transcript.includes(value), `bounded evidence retains the ${value} segment`);
+  }
+
+  assert.equal(
+    boundedRenderedTranscript([
+      { text: " ignored because only the last four survive " },
+      { text: " alpha   beta " },
+      { text: "gamma" },
+      { text: "delta" },
+      { text: "x".repeat(300) },
+    ]),
+    `alpha beta gamma delta ${"x".repeat(240)}`,
+    "ASCII evidence remains byte-identical",
+  );
+});
+
 test("entitlement pause and ceiling stop stay distinct and neither renders idle", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const paused = wireStore();

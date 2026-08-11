@@ -199,7 +199,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private let chatAttachmentStaging: ChatAttachmentStagingHandler?
   private var tornDown = false
   var onCommittedURL: ((URL) -> Void)?
-  var onFinishedNavigation: (() -> Void)?
+  var onFinishedNavigation: ((WKNavigation?) -> Void)?
 
   init(
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
@@ -252,11 +252,12 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     load(loadURL)
   }
 
-  func load(_ url: URL) {
+  @discardableResult
+  func load(_ url: URL) -> WKNavigation? {
     if url.isFileURL {
-      webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+      return webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
     } else {
-      webView.load(URLRequest(url: url))
+      return webView.load(URLRequest(url: url))
     }
   }
 
@@ -323,7 +324,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    onFinishedNavigation?()
+    onFinishedNavigation?(navigation)
   }
 
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -530,7 +531,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           resultURL: resultURL, runId: runClientId, shell: "macos", hashes: hashes)
         let driver = ConsumerEvidenceDriver(collector: collector, baseURL: surfaceLoad.url)
         consumerEvidenceDriver = driver
-        controller.onFinishedNavigation = { [weak driver] in driver?.pageDidFinish() }
+        controller.onFinishedNavigation = { [weak driver] navigation in
+          driver?.pageDidFinish(navigation)
+        }
       } catch {
         FileHandle.standardError.write(
           Data("CONSUMER-EVIDENCE: FAIL \(error)\n".utf8))
