@@ -5,7 +5,7 @@ import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
 import "./listen.css";
 
@@ -157,13 +157,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
     >
       <ProductionChrome locale={locale} active="listen" placement="top" />
       <section className="desktop-page-panel">
-        <header className="production-header listen-header">
-          <div>
-            <p className="eyebrow">{t(locale, "listen.title")}</p>
-            <h1>{t(locale, "listen.title")}</h1>
-            <p>{t(locale, "listen.subtitle")}</p>
-          </div>
-        </header>
+        <ProductionPageHeader className="production-header listen-header" eyebrow={t(locale, "listen.title")} title={t(locale, "listen.title")} description={t(locale, "listen.subtitle")} />
         <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"

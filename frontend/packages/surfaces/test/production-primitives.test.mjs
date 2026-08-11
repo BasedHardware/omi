@@ -273,3 +273,20 @@ test("named control collections expose groups and ready errors never advertise a
     assert.match(source, new RegExp(`className="${className}" role="group"`));
   }
 });
+
+test("every titled production route uses the shared page-header hierarchy", async () => {
+  for (const file of [
+    "ChatProduction.tsx",
+    "MemoriesProduction.tsx",
+    "MemoriesPlatformProduction.tsx",
+    "TasksProduction.tsx",
+    "ConversationsProduction.tsx",
+    "FoldersProduction.tsx",
+    "ListenProduction.tsx",
+    "SettingsProduction.tsx",
+  ]) {
+    const source = await read(`src/production/${file}`);
+    assert.match(source, /<ProductionPageHeader/, `${file} adopts the shared header`);
+    assert.doesNotMatch(source, /<header className="(?:production-header|tasks-header|settings-header)/, `${file} has no parallel header implementation`);
+  }
+});

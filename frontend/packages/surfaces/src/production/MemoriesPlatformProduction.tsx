@@ -4,7 +4,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
 import type { SynthesizedMemoryItem, SynthesizedRecallState } from "@omi-core/contracts";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import {
   citationSummary,
   completenessNotice,
@@ -161,13 +161,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
       <section className="desktop-page-panel">
         <ProductionLibrarySegment locale={locale} active="memories" />
         <ProductionDataSourceBadge source={source} locale={locale} />
-        <header className="production-header memories-platform-header">
-          <div>
-            <p className="eyebrow">{t(locale, "nav.memories")}</p>
-            <h1>{t(locale, "memoriesPlatform.title")}</h1>
-            <p>{t(locale, "memoriesPlatform.subtitle")}</p>
-          </div>
-        </header>
+        <ProductionPageHeader className="production-header memories-platform-header" eyebrow={t(locale, "nav.memories")} title={t(locale, "memoriesPlatform.title")} description={t(locale, "memoriesPlatform.subtitle")} />
         <ProductionLifecycleRegion
           className="surface-notices"
           phase={status.refresh.phase}

@@ -14,7 +14,7 @@ import {
   reconcileMessages,
 } from "./chat-reconcile.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import "./chat.css";
 
 type Locale = string;
@@ -319,13 +319,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
         "send-chat": send,
       }} commandEnabled={{ "send-chat": canSend }} />
       <section className="desktop-page-panel">
-        <header className="production-header chat-header">
-          <div>
-            <p className="eyebrow">{t(locale, "chat.title")}</p>
-            <h1>{t(locale, "chat.title")}</h1>
-            <p>{t(locale, "chat.subtitle")}</p>
-          </div>
-        </header>
+        <ProductionPageHeader className="production-header chat-header" eyebrow={t(locale, "chat.title")} title={t(locale, "chat.title")} description={t(locale, "chat.subtitle")} />
         <ProductionDataSourceBadge source={fixture ? { kind: "fixture", fixture } : { kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"

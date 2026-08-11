@@ -3,7 +3,7 @@ import { t } from "@omi-core/i18n";
 import type { Folder } from "@omi-core/contracts";
 import type { ProductionFolderStore } from "./ProductionStores.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
 
 export function FoldersProduction({ store, locale = "en", onReady }: {
   store: ProductionFolderStore;
@@ -65,12 +65,7 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
     >
       <ProductionChrome locale={locale} active="folders" placement="top" />
       <section className="desktop-page-panel">
-        <header className="production-header">
-          <div>
-            <p className="eyebrow">{t(locale, "conversations.folder")}</p>
-            <h1>{t(locale, "conversations.folder")}</h1>
-          </div>
-        </header>
+        <ProductionPageHeader className="production-header" eyebrow={t(locale, "conversations.folder")} title={t(locale, "conversations.folder")} />
         <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"
