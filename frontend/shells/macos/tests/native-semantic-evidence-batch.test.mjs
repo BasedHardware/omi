@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,10 +73,26 @@ test("keyboard trace requires each observed transition and Escape restoration", 
   try {
     const out = join(root, ".build", `semantic-keyboard-test-${process.pid}`); mkdirSync(out, { recursive: true }); const probe = join(out, "fake-probe.mjs"); fakeProbe(probe); const matrix = join(out, "matrix.json"); writeFileSync(matrix, JSON.stringify(manifest("keyboard_trace")));
     const prepared = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--probe", probe, "--prepare"], { encoding: "utf8" }); assert.equal(prepared.status, 0, prepared.stderr);
-    const captured = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--prepared-input-set", join(out, "prepared-input-set.json")], { encoding: "utf8" }); assert.equal(captured.status, 0, `${captured.stdout}${captured.stderr}`);
+    const captured = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--prepared-input-set", join(out, "prepared-input-set.json")], { encoding: "utf8", env: { ...process.env, OMI_ALLOW_TEMPORARY_FOCUS: "1" } }); assert.equal(captured.status, 0, `${captured.stdout}${captured.stderr}`);
     const evidence = JSON.parse(readFileSync(join(out, "captures/macos/semantic-keyboard_trace.json"), "utf8")); assert.equal(evidence.schema, "omi.polish.keyboard/v1"); assert.deepEqual(evidence.steps.map((step) => step.result), ["observed", "observed"]); assert.equal(evidence.steps.at(-1).action, "restore-focus");
     const sidecar = JSON.parse(readFileSync(join(out, "captures/macos/semantic-keyboard_trace.json.sidecar.json"), "utf8")); assert.equal(sidecar.frontmost_restored, true);
   } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-keyboard-test-${process.pid}`), { recursive: true, force: true }); }
+});
+
+test("keyboard batch is focus-safe by default and requires explicit operator consent", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-focus-block-"));
+  try {
+    const out = join(root, ".build", `semantic-focus-block-test-${process.pid}`); mkdirSync(out, { recursive: true });
+    const invoked = join(out, "probe-invoked");
+    const probe = join(out, "fake-probe.mjs");
+    writeFileSync(probe, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(invoked)}, 'yes');\n`, { mode: 0o755 }); chmodSync(probe, 0o755);
+    const matrix = join(out, "matrix.json"); writeFileSync(matrix, JSON.stringify(manifest("keyboard_trace")));
+    const prepared = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--probe", probe, "--prepare"], { encoding: "utf8" }); assert.equal(prepared.status, 0, prepared.stderr);
+    const captured = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--prepared-input-set", join(out, "prepared-input-set.json")], { encoding: "utf8", env: { ...process.env, OMI_ALLOW_TEMPORARY_FOCUS: "0" } });
+    assert.equal(captured.status, 3, `${captured.stdout}${captured.stderr}`);
+    const blocked = JSON.parse(captured.stdout); assert.equal(blocked.status, "blocked_user_focus");
+    assert.equal(existsSync(invoked), false, "focus-blocked batches must not start the native probe");
+  } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-focus-block-test-${process.pid}`), { recursive: true, force: true }); }
 });
 
 test("AX batch rejects a probe that tries to serialize user text", () => {
