@@ -58,9 +58,11 @@ The coordinator never relabels such results as a comparison.
 A producer stop ends the run with its closed producer stop/failure code and all
 already recorded pairs. A thrown producer becomes a closed
 `dependency_unavailable` stop. Pair construction failure becomes
-`invalid_result`. Repository retry, authorization/context denial, idempotency
-conflict, and unavailable/invalid adapter behavior remain distinct closed
-stops. No raw exception or provider content survives.
+`invalid_result`. Repository retry, authorization/context denial, and
+idempotency conflict remain distinct closed stops. The sealed repository throws
+for both an invalid adapter envelope and an adapter exception; the coordinator
+therefore maps both to one honest `pair_storage_unavailable` outcome instead of
+inspecting raw error text. No raw exception or provider content survives.
 
 Restart invokes the producer again for each coordinate, but the producer loads
 the exact staged result plus grounding first and revalidates the source before
@@ -92,8 +94,9 @@ records later repeats for read-side disagreement only and computes no statistic.
    forged assignment, accessor/proxy/decorated input, and dependency accessors
    fail before producer or repository access.
 6. Producer stop/throw, pair mismatch, repository retry, authorization denial,
-   idempotency conflict, malformed adapter result, and pair-write throw remain
-   closed and distinguishable. Already recorded pairs remain exact.
+   idempotency conflict, and pair-storage-unavailable remain closed and
+   distinguishable. Malformed adapter output and pair-write throw share the
+   last class by design. Already recorded pairs remain exact.
 7. Serialized completed/stopped outcomes contain none of the sensitive fields
    named above. Pair order and identity are stable under replay.
 8. Later repeats are present with exact ordinals but the existing statistics
