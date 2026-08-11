@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const producer = path.join(root, "shells/tools/capture-native-fixture.mjs");
-const coreSha = "cfb9c998cb9d882e5c422ae3bd48e1882b75171d";
+const coreSha = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
 const platformSha = "1".repeat(40);
 
 function manifest(overrides = {}) {
@@ -50,5 +50,8 @@ test("native fixture producer source keeps backend and browser-preview claims ou
   assert.match(source, /xcrun simctl io screenshot/);
   assert.match(source, /allowedEnvironmentKeys/);
   assert.match(source, /PUB_CACHE/);
+  assert.match(source, /const timeoutSeconds = 300/);
+  assert.match(source, /timeout: timeoutSeconds \* 1000/);
+  assert.match(source, /timeout_seconds: timeoutSeconds/);
   assert.doesNotMatch(source, /const env = \{ \.\.\.process\.env \}/);
 });
