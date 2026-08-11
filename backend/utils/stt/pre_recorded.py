@@ -4,6 +4,7 @@ import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
+from math import ceil
 from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
@@ -37,6 +38,7 @@ from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddi
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
+_MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -1183,21 +1185,52 @@ def _retrieve_user_speaker_id(words: List[Dict[str, Any]], skip_n_seconds: int) 
 def _merge_segments(
     words: List[Dict[str, Any]], skip_n_seconds: int, user_speaker_id: Optional[str]
 ) -> List[Dict[str, Any]]:
+    def split_long_entry(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+        start = float(entry['start'])
+        end = float(entry['end'])
+        duration = end - start
+        if duration <= _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS:
+            return [entry]
+
+        chunk_count = ceil(duration / _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS)
+        text_words = str(entry['text']).split()
+        words_per_chunk, remainder = divmod(len(text_words), chunk_count)
+        chunks: List[Dict[str, Any]] = []
+        text_offset = 0
+        for index in range(chunk_count):
+            chunk_word_count = words_per_chunk + (1 if index < remainder else 0)
+            next_text_offset = text_offset + chunk_word_count
+            chunk = dict(entry)
+            chunk['start'] = start + index * _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS
+            chunk['end'] = min(start + (index + 1) * _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS, end)
+            chunk['text'] = ' '.join(text_words[text_offset:next_text_offset])
+            chunks.append(chunk)
+            text_offset = next_text_offset
+        return chunks
+
     segments: List[Dict[str, Any]] = []
     for word in words:
         if word['start'] < skip_n_seconds:
             continue
-        word['is_user'] = word['speaker'] == user_speaker_id if word['speaker'] else False
+        for entry in split_long_entry(word):
+            entry['is_user'] = entry['speaker'] == user_speaker_id if entry['speaker'] else False
 
-        same_prev_speaker = word['speaker'] == segments[-1]['speaker'] if segments else False
-        seconds_from_prev = word['start'] - segments[-1]['end'] if segments else 0
+            same_prev_speaker = entry['speaker'] == segments[-1]['speaker'] if segments else False
+            seconds_from_prev = entry['start'] - segments[-1]['end'] if segments else 0
 
-        within_max_duration = word['end'] - segments[-1]['start'] < 30 if segments else False
-        if segments and same_prev_speaker and seconds_from_prev < 30 and within_max_duration:
-            segments[-1]['end'] = word['end']
-            segments[-1]['text'] += ' ' + word['text']
-        else:
-            segments.append(word)
+            within_max_duration = (
+                entry['end'] - segments[-1]['start'] < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS if segments else False
+            )
+            if (
+                segments
+                and same_prev_speaker
+                and seconds_from_prev < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS
+                and within_max_duration
+            ):
+                segments[-1]['end'] = entry['end']
+                segments[-1]['text'] += ' ' + entry['text']
+            else:
+                segments.append(entry)
     return segments
 
 
