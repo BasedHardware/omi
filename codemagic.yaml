@@ -2826,6 +2826,7 @@ workflows:
           # digests, and exact Beta signed-smoke asset. Retries are idempotent.
           for attempt in 1 2 3; do
             if curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
               --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/promote-candidate" \
               --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
               --header 'Content-Type: application/json' \

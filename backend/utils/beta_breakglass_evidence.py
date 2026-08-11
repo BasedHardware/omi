@@ -32,34 +32,35 @@ def _smoke_evidence(
     source_sha: str,
     bundle_id: str,
     expected_artifacts: dict[str, str] | None = None,
+    label: str = "emergency target",
 ) -> None:
     try:
         smoke = json.loads(payload)
     except (TypeError, json.JSONDecodeError):
-        candidate_fail("emergency target signed-artifact smoke is invalid")
+        candidate_fail(f"{label} signed-artifact smoke is invalid")
     if not isinstance(smoke, dict):
-        candidate_fail("emergency target signed-artifact smoke is invalid")
+        candidate_fail(f"{label} signed-artifact smoke is invalid")
     required = {"ok": True, "release_tag": tag, "expected_channel": "beta", "bundle_id": bundle_id}
     if any(smoke.get(key) != value for key, value in required.items()):
-        candidate_fail("emergency target signed-artifact smoke does not bind the target")
+        candidate_fail(f"{label} signed-artifact smoke does not bind the target")
     checks = smoke.get("checks")
     if not isinstance(checks, list) or "Signed desktop artifact smoke completed" not in checks:
-        candidate_fail("emergency target signed-artifact smoke is incomplete")
+        candidate_fail(f"{label} signed-artifact smoke is incomplete")
     if smoke.get("source_sha") != source_sha:
-        candidate_fail("emergency target source identity is invalid")
+        candidate_fail(f"{label} source identity is invalid")
     if expected_artifacts is not None:
         artifacts = smoke.get("artifacts")
         if not isinstance(artifacts, list):
-            candidate_fail("signed-artifact smoke has no artifact digest set")
+            candidate_fail(f"{label} smoke has no artifact digest set")
         observed: dict[str, str] = {}
         for artifact in artifacts:
             if not isinstance(artifact, dict):
-                candidate_fail("signed-artifact smoke artifact digest set is invalid")
-            label, digest = artifact.get("label"), artifact.get("sha256")
-            if label in expected_artifacts and isinstance(digest, str):
-                observed[label] = f"sha256:{digest}"
+                candidate_fail(f"{label} smoke artifact digest set is invalid")
+            art_label, digest = artifact.get("label"), artifact.get("sha256")
+            if art_label in expected_artifacts and isinstance(digest, str):
+                observed[art_label] = f"sha256:{digest}"
         if observed != expected_artifacts:
-            candidate_fail("signed-artifact smoke does not bind the published artifacts")
+            candidate_fail(f"{label} smoke does not bind the published artifacts")
 
 
 async def build_signed_beta_manifest(tag: str, *, reader: Any | None = None, now: Any | None = None) -> dict[str, Any]:
@@ -98,6 +99,7 @@ async def build_signed_beta_manifest(tag: str, *, reader: Any | None = None, now
         tag=tag,
         source_sha=actual_source,
         bundle_id="com.omi.computer-macos.beta",
+        label="candidate",
         expected_artifacts={
             "sparkle_zip": digests["Omi.Beta.zip"],
             "dmg": digests["omi-beta.dmg"],

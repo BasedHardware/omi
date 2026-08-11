@@ -245,7 +245,7 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_sha256(manifest, "qualification_evidence_sha256")
     qualification_tier = manifest.get("qualification_tier")
     qualification_passed = manifest.get("qualification_passed")
-    if (qualification_tier, qualification_passed) not in {
+    if not isinstance(qualification_passed, bool) or (qualification_tier, qualification_passed) not in {
         ("T2", True),
         ("signed-smoke", False),
         ("emergency", False),
