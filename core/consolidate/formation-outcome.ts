@@ -3,7 +3,7 @@
 // domain-pending(DIV-DOMX-005)
 import { isProxy } from "node:util/types";
 
-export const MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION = "memory-formation-outcome-v1" as const;
+export const MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION = "memory-formation-outcome-v2" as const;
 
 export interface FormationStrategyCoordinates {
   readonly contract_version: typeof MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION;
@@ -64,6 +64,10 @@ export interface FormationOutcomeEnvelope {
   readonly owner_account_id: string;
   readonly work_id: string;
   readonly input_frontier: string;
+  /** SHA-256 of the exact strict model response envelope. */
+  readonly response_digest: string;
+  /** Number of candidates in the exact model response, including all drops. */
+  readonly candidate_count: number;
   readonly coordinates: Readonly<FormationStrategyCoordinates>;
   readonly extraction_outcomes: readonly ExtractionOutcome[];
   readonly placement_outcomes: readonly PlacementOutcome[];
@@ -71,6 +75,7 @@ export interface FormationOutcomeEnvelope {
 
 const ASCII_TOKEN = /^[\x21-\x7e]{1,256}$/;
 const ERROR_CODE = /^[a-z][a-z0-9_.-]{0,127}$/;
+const SHA256_HEX = /^[a-f0-9]{64}$/;
 const ARRAY_INDEX = /^(0|[1-9]\d*)$/;
 
 const fail = (message: string): never => { throw new TypeError(`formation outcome ${message}`); };
@@ -130,11 +135,21 @@ const code = (value: unknown, label: string): string => {
   return value;
 };
 
+const sha256Digest = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || !SHA256_HEX.test(value)) return fail(`${label} must be a lowercase SHA-256 digest`);
+  return value;
+};
+
 const nullableToken = (value: unknown, label: string): string | null =>
   value === null ? null : token(value, label);
 
 const positiveInteger = (value: unknown, label: string): number => {
   if (!Number.isSafeInteger(value) || (value as number) < 1) return fail(`${label} must be a positive safe integer`);
+  return value as number;
+};
+
+const nonnegativeInteger = (value: unknown, label: string): number => {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) return fail(`${label} must be a nonnegative safe integer`);
   return value as number;
 };
 
@@ -264,16 +279,21 @@ const parsePlacementOutcome = (value: unknown, index: number): PlacementOutcome 
 export const parseFormationOutcomeEnvelope = (value: unknown): Readonly<FormationOutcomeEnvelope> => {
   const input = record(value, "envelope");
   exactKeys(input, [
-    "contract_version", "owner_account_id", "work_id", "input_frontier", "coordinates",
+    "contract_version", "owner_account_id", "work_id", "input_frontier", "response_digest", "candidate_count", "coordinates",
     "extraction_outcomes", "placement_outcomes",
   ], "envelope");
   if (input.contract_version !== MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION) fail("contract_version is unsupported");
+  const candidateCount = nonnegativeInteger(input.candidate_count, "candidate_count");
   const extractionOutcomes = array(input.extraction_outcomes, "extraction_outcomes")
     .map(parseExtractionOutcome);
   const placementOutcomes = array(input.placement_outcomes, "placement_outcomes")
     .map(parsePlacementOutcome);
   const candidateRefs = extractionOutcomes.map((outcome) => outcome.candidate_ref);
   if (new Set(candidateRefs).size !== candidateRefs.length) fail("candidate_ref values must be unique");
+  if (extractionOutcomes.length !== candidateCount
+    || candidateRefs.some((candidateRef, index) => candidateRef !== `candidate:${index + 1}`)) {
+    fail("extraction outcomes must cover every raw candidate in order");
+  }
   const acceptedClaimIds = extractionOutcomes.flatMap((outcome) =>
     outcome.kind === "accepted" ? [outcome.claim_revision_id] : []);
   if (new Set(acceptedClaimIds).size !== acceptedClaimIds.length) fail("accepted claim_revision_id values must be unique");
@@ -281,6 +301,10 @@ export const parseFormationOutcomeEnvelope = (value: unknown): Readonly<Formatio
   if (new Set(placementInputIds).size !== placementInputIds.length) fail("placement input ids must be unique");
   const accepted = new Set(acceptedClaimIds);
   if (placementInputIds.some((id) => !accepted.has(id))) fail("placement input must reference an accepted extraction");
+  if (placementInputIds.length !== acceptedClaimIds.length
+    || acceptedClaimIds.some((id) => !placementInputIds.includes(id))) {
+    fail("every accepted extraction must have exactly one placement outcome");
+  }
   const canonicalIds = placementOutcomes.flatMap((outcome) =>
     outcome.kind === "admitted" ? [outcome.canonical_claim_revision_id] : []);
   if (new Set(canonicalIds).size !== canonicalIds.length) fail("canonical allocations must be unique");
@@ -289,6 +313,8 @@ export const parseFormationOutcomeEnvelope = (value: unknown): Readonly<Formatio
     owner_account_id: token(input.owner_account_id, "owner_account_id"),
     work_id: token(input.work_id, "work_id"),
     input_frontier: token(input.input_frontier, "input_frontier"),
+    response_digest: sha256Digest(input.response_digest, "response_digest"),
+    candidate_count: candidateCount,
     coordinates: parseCoordinates(input.coordinates),
     extraction_outcomes: Object.freeze(extractionOutcomes),
     placement_outcomes: Object.freeze(placementOutcomes),

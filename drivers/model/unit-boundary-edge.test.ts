@@ -45,7 +45,7 @@ test("C2 adversarial session transition commits once, persists returned bindings
     }
     throw new Error(`unexpected strategy ${request.strategy}`);
   });
-  const request = { ledger, model, session_id: "session-3", owner_account_id: "owner", provisionals, entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] }], evidence, valid_times: Object.fromEntries(provisionals.map((item) => [item.claim_revision_id, valid_time])), parent_commit: null, versions };
+  const request = { ledger, model, session_id: "session-3", formation_work_id: "work:session-3:v1", owner_account_id: "owner", provisionals, entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] }], evidence, valid_times: Object.fromEntries(provisionals.map((item) => [item.claim_revision_id, valid_time])), parent_commit: null, versions };
   await commitSessionStmToLtmTransition(request);
   expect(commitCalls).toBe(1);
   const graph = sqlite.snapshot("owner");
@@ -61,6 +61,29 @@ test("C2 adversarial session transition commits once, persists returned bindings
   expect(resumed.idempotent).toBe(true);
   expect(commitCalls).toBe(1);
   expect(edgeCalls).toBe(callsBeforeResume);
+
+  await expect(commitSessionStmToLtmTransition({
+    ...request,
+    model: new DeterministicFakeModel(() => { throw new Error("changed work must fail before model invocation"); }),
+    versions: { ...versions, prompt_version: "changed-prompt" },
+  })).rejects.toThrow("formation work id reused with changed input or versions");
+  await expect(commitSessionStmToLtmTransition({
+    ...request,
+    model: new DeterministicFakeModel(() => { throw new Error("changed frontier must fail before model invocation"); }),
+    graph_frontier: 1,
+  })).rejects.toThrow("formation work id reused with changed input or versions");
+  await expect(commitSessionStmToLtmTransition({
+    ...request,
+    model: new DeterministicFakeModel(() => { throw new Error("changed valid time must fail before model invocation"); }),
+    valid_times: { ...request.valid_times, "p-alice": { ...valid_time, derivation: { ...valid_time.derivation, resolver_version: "changed" } } },
+  })).rejects.toThrow("formation work id reused with changed input or versions");
+  await expect(commitSessionStmToLtmTransition({
+    ...request,
+    model: new DeterministicFakeModel(() => { throw new Error("changed entities must fail before model invocation"); }),
+    entities: [...request.entities, { entity_id: "entity:bob", owner_account_id: "owner", entity_revision_id: "entity:bob:r1", handle: "bob", labels: ["Bob"] }],
+  })).rejects.toThrow("formation work id reused with changed input or versions");
+  expect(commitCalls).toBe(1);
+  expect(edgeCalls).toBe(callsBeforeResume);
 });
 
 test("C4 unit-boundary sends retained source excerpts and fails closed without one", () => {
@@ -70,7 +93,7 @@ test("C4 unit-boundary sends retained source excerpts and fails closed without o
 
 const singleTransitionRequest = (id: string, surface: string, model: DeterministicFakeModel) => {
   const provisional = claim(id, surface);
-  return { ledger: new SqliteLedger(new Database(":memory:")), model, session_id: `session:${id}`, owner_account_id: "owner", provisionals: [provisional], entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] }], evidence: [{ evidence_id: `e:${id}`, event_revision_id: `event:${id}`, source_unit_ref: id, range: { start: 0, end: `${surface} works on atlas`.length }, excerpt: `${surface} works on atlas`, source_identity_ref: null, speaker_rendering: "speaker:owner", source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "session" }], valid_times: { [id]: valid_time }, parent_commit: null, versions };
+  return { ledger: new SqliteLedger(new Database(":memory:")), model, session_id: `session:${id}`, formation_work_id: `work:${id}:v1`, owner_account_id: "owner", provisionals: [provisional], entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] }], evidence: [{ evidence_id: `e:${id}`, event_revision_id: `event:${id}`, source_unit_ref: id, range: { start: 0, end: `${surface} works on atlas`.length }, excerpt: `${surface} works on atlas`, source_identity_ref: null, speaker_rendering: "speaker:owner", source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "session" }], valid_times: { [id]: valid_time }, parent_commit: null, versions };
 };
 
 test("D40 adversarial exact sol counterexample: She entity-abstains while scope accepts, so no canonical claim is filed", async () => {
@@ -164,7 +187,7 @@ test("D47 adversarial: targetless model distinct cannot mint or later merge a du
   const existing = claim("p-existing", "Alice");
   const mintedEntityId = "entity:owner:session:minted-census:m-nora";
   const request = {
-    ledger: new SqliteLedger(new Database(":memory:")), session_id: "session:minted-census", owner_account_id: "owner", provisionals: [minted, sameNora, existing],
+    ledger: new SqliteLedger(new Database(":memory:")), session_id: "session:minted-census", formation_work_id: "work:minted-census:v1", owner_account_id: "owner", provisionals: [minted, sameNora, existing],
     entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "entity:alice:r1", handle: "alice", labels: ["Alice"] }],
     evidence: [minted, sameNora, existing].map((item) => ({ evidence_id: item.evidence_refs[0]!, event_revision_id: `event:${item.claim_revision_id}`, source_unit_ref: item.claim_revision_id, range: { start: 0, end: `${item.arguments[0]!.value.value} works on atlas`.length }, excerpt: `${item.arguments[0]!.value.value} works on atlas`, source_identity_ref: null, speaker_rendering: "speaker:owner", source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "session" })),
     valid_times: { "p-minted": valid_time, "p-same-nora": valid_time, "p-existing": valid_time }, parent_commit: null, versions,
@@ -227,9 +250,11 @@ test("P0-a adversarial: a non-zero caller frontier admits exactly its owner-conf
   const base = singleTransitionRequest("p-frontier", "Alice", model);
   const request = { ...base, graph_frontier: 9, evidence: [{ ...base.evidence[0]!, source_identity_ref: identity }], identity_authorizations: [authorization], identity_authority_context: { owner_confirmations: [{ confirmation_ref: "confirm:frontier:9", owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const }], producer_assertions: [], standing_policies: [] } };
   await commitSessionStmToLtmTransition(request);
-  expect(request.ledger.snapshot("owner").claims.filter((item) => item.claim.lifecycle === "canonical").map((item) => item.revision_id)).toEqual(["canonical:owner:session:p-frontier:p-frontier"]);
+  expect(request.ledger.snapshot("owner").claims.filter((item) => item.claim.lifecycle === "canonical").map((item) => item.revision_id)).toEqual([
+    expect.stringMatching(/^canonical:[a-f0-9]{64}:p-frontier$/),
+  ]);
 
-  const wrong = { ...request, ledger: new SqliteLedger(new Database(":memory:")), session_id: "session:frontier-wrong", identity_authorizations: [{ ...authorization, authorization_id: "auth:frontier:8", evaluated_frontier: 8 }], identity_authority_context: { owner_confirmations: [{ confirmation_ref: "confirm:frontier:9", owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const }], producer_assertions: [], standing_policies: [] } };
+  const wrong = { ...request, ledger: new SqliteLedger(new Database(":memory:")), session_id: "session:frontier-wrong", formation_work_id: "work:frontier-wrong:v1", identity_authorizations: [{ ...authorization, authorization_id: "auth:frontier:8", evaluated_frontier: 8 }], identity_authority_context: { owner_confirmations: [{ confirmation_ref: "confirm:frontier:9", owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const }], producer_assertions: [], standing_policies: [] } };
   await commitSessionStmToLtmTransition(wrong);
   expect(wrong.ledger.snapshot("owner").claims.filter((item) => item.claim.lifecycle === "canonical")).toHaveLength(0);
 });
@@ -258,6 +283,6 @@ test("I5 adversarial mixed batch canonicalizes only fully identity-authorized cl
     throw new Error(`unexpected strategy ${edge.strategy}`);
   });
   const ledger = new SqliteLedger(new Database(":memory:"));
-  await commitSessionStmToLtmTransition({ ledger, model, session_id: "mixed", owner_account_id: "owner", graph_frontier: 12, provisionals: [good, bad, pair], entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "alice:r1", handle: "alice", labels: [] }, { entity_id: "entity:bob", owner_account_id: "owner", entity_revision_id: "bob:r1", handle: "bob", labels: [] }], evidence, valid_times: { "p-good": valid_time, "p-bad": valid_time, "p-pair": valid_time }, parent_commit: null, versions, identity_authorizations: authorizations, identity_authority_context: { owner_confirmations: authorizations.map((authorization) => ({ confirmation_ref: (authorization.support as { confirmation_ref: string }).confirmation_ref, owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const })), producer_assertions: [], standing_policies: [] } });
+  await commitSessionStmToLtmTransition({ ledger, model, session_id: "mixed", formation_work_id: "work:mixed:v1", owner_account_id: "owner", graph_frontier: 12, provisionals: [good, bad, pair], entities: [{ entity_id: "entity:alice", owner_account_id: "owner", entity_revision_id: "alice:r1", handle: "alice", labels: [] }, { entity_id: "entity:bob", owner_account_id: "owner", entity_revision_id: "bob:r1", handle: "bob", labels: [] }], evidence, valid_times: { "p-good": valid_time, "p-bad": valid_time, "p-pair": valid_time }, parent_commit: null, versions, identity_authorizations: authorizations, identity_authority_context: { owner_confirmations: authorizations.map((authorization) => ({ confirmation_ref: (authorization.support as { confirmation_ref: string }).confirmation_ref, owner_account_id: "owner", endpoints: authorization.endpoints, relation: "same" as const })), producer_assertions: [], standing_policies: [] } });
   expect(ledger.snapshot("owner").claims.filter((item) => item.claim.lifecycle === "canonical").map((item) => item.claim.source_provisional_revision_ids[0])).toEqual(["p-good"]);
 });

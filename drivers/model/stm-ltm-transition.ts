@@ -1,5 +1,5 @@
 import { buildFlywheelArtifacts } from "../../core/scope/flywheel";
-import { prepareDerivation, type AtomicGraphTransition, type DerivationVersions, type LedgerPort } from "../../core/ledger";
+import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition, type DerivationVersions, type LedgerPort } from "../../core/ledger";
 import { hasDistinctArgumentSlotIds, type CoreferenceSupport, type Entity, type Evidence, type IdentityAuthorization, type L1Event, type Mention, type PersistedValidTime, type Predicate, type ProvisionalClaim, type SourceIdentityRef } from "../../core/schema";
 import { durableRoleSlotBindings, isForcedUnresolvedMention } from "../../core/resolve/mention-detection";
 import { authorizeIdentity, type IdentityAuthorityContext } from "../../core/resolve/identity-authority";
@@ -14,6 +14,8 @@ export interface SessionStmLtmRequest {
   ledger: LedgerPort;
   model: ModelPort;
   session_id: string;
+  /** Exact formation work namespace, derived from complete strategy coordinates. */
+  formation_work_id: string;
   owner_account_id: string;
   provisionals: readonly ProvisionalClaim[];
   entities: readonly Entity[];
@@ -31,8 +33,10 @@ export interface SessionStmLtmRequest {
   identity_authority_context?: IdentityAuthorityContext;
 }
 
-const sessionKey = (owner: string, session: string) => `cold-session:${owner}:${session}`;
-const canonicalRevisionId = (owner: string, session: string, provisional: string) => `canonical:${owner}:${session}:${provisional}`;
+const sessionWorkCoordinate = (owner: string, session: string, work: string): string =>
+  sha256CanonicalRedacted({ owner, session, work });
+const sessionKey = (coordinate: string) => `cold-session:${coordinate}`;
+const canonicalRevisionId = (coordinate: string, provisional: string) => `canonical:${coordinate}:${provisional}`;
 const unscopedIdentity = (session: string, mention: Mention): SourceIdentityRef => ({
   namespace_instance_ref: `unscoped:${session}:${mention.evidence_id}:${mention.mention_id}`,
   local_key: mention.mention_id,
@@ -41,7 +45,11 @@ const unscopedIdentity = (session: string, mention: Mention): SourceIdentityRef 
 });
 
 const sourceIdentityForMention = (request: SessionStmLtmRequest, mention: Mention): SourceIdentityRef =>
-  request.evidence.find((item) => item.evidence_id === mention.evidence_id)?.source_identity_ref ?? unscopedIdentity(request.session_id, mention);
+  // Mention planning is the authority boundary: only the observed speaker slot
+  // receives the evidence producer coordinate. Reloading the evidence-wide
+  // identity here upgraded every named bystander or repaired speaker slot into
+  // the diarized speaker and could make an unrelated owner authorization fit.
+  mention.source_identity_ref ?? unscopedIdentity(request.session_id, mention);
 const revisionContent = (revision: AtomicGraphTransition["revisions"][number]) => revision.kind === "claim" ? revision.claim : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "mention" ? revision.mention : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "coreference_support" ? revision.support : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "predicate" ? revision.predicate : revision.assertion;
 
 /**
@@ -49,18 +57,47 @@ const revisionContent = (revision: AtomicGraphTransition["revisions"][number]) =
  * canonical facts from those outputs, then writes the whole session once.
  */
 export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequest): Promise<{ commit_id: string; sequence: number; idempotent: boolean }> => {
-  if (!request.session_id || !request.owner_account_id) throw new Error("session transition requires stable session and owner ids");
-  const key = sessionKey(request.owner_account_id, request.session_id);
-  const prior = request.ledger.findCommitByIdempotencyKey(key);
-  // This happens before an edge call: a changed model output cannot turn a
-  // resumed session into an idempotency conflict.
-  if (prior) return { ...prior, idempotent: true };
+  if (!request.session_id || !request.formation_work_id || !request.owner_account_id) throw new Error("session transition requires stable session, formation work, and owner ids");
+  const coordinate = sessionWorkCoordinate(request.owner_account_id, request.session_id, request.formation_work_id);
+  const key = sessionKey(coordinate);
   const ids = new Set<string>();
   for (const claim of request.provisionals) {
     if (claim.owner_account_id !== request.owner_account_id || ids.has(claim.claim_revision_id)) throw new Error("session claims must be unique and owner-local");
     if (!hasDistinctArgumentSlotIds(claim.arguments)) throw new Error(`claim arguments must have distinct slot_ids: ${claim.claim_revision_id}`);
     ids.add(claim.claim_revision_id);
     if (!request.valid_times[claim.claim_revision_id]) throw new Error(`session canonical construction lacks valid_time: ${claim.claim_revision_id}`);
+  }
+  const decisionInputDigest = sha256CanonicalRedacted({
+    parent_commit: request.parent_commit,
+    graph_frontier: request.graph_frontier ?? 0,
+    entities: request.entities,
+    valid_times: request.valid_times,
+    identity_authorizations: request.identity_authorizations ?? [],
+    identity_authority_context: request.identity_authority_context ?? null,
+  });
+  const inputRevisions = [
+    ...request.provisionals.map((claim) => ({ revision_id: claim.claim_revision_id, content: claim })),
+    ...(request.events ?? []).map((event) => ({ revision_id: event.event_revision_id, content: event })),
+    ...request.evidence.map((evidence) => ({ revision_id: `evidence-revision:${evidence.evidence_id}`, content: evidence })),
+    { revision_id: `formation-decision-input:${coordinate}`, content: { decision_input_digest: decisionInputDigest } },
+  ];
+  const preflight = prepareDerivation({
+    attempt_id: `attempt:session:${coordinate}`,
+    commit_id: `commit:session:${coordinate}`,
+    owner_account_id: request.owner_account_id,
+    parent_commit: request.parent_commit,
+    idempotency_key: key,
+    input_revisions: inputRevisions,
+    output_revisions: [],
+    versions: request.versions,
+    success_kind: "successful_empty",
+  });
+  const prior = request.ledger.findCommitByIdempotencyKey(key);
+  // Resume before any model edge only when both inputs and every strategy
+  // coordinate are identical. Reusing a work id with changed content is loud.
+  if (prior) {
+    if (prior.input_version_digest !== preflight.commit.input_version_digest) throw new Error(`formation work id reused with changed input or versions: ${request.formation_work_id}`);
+    return { commit_id: prior.commit_id, sequence: prior.sequence, idempotent: true };
   }
 
   const mentioned = await invokeClaimMentionStrategy(request.model, request.owner_account_id, request.provisionals, request.evidence);
@@ -155,7 +192,7 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
     // Canonical placement is allowed only after every original role mention
     // resolved to a durable entity and the scope plan agrees with it.
     const admitted = unit_boundary.decision === "accept_ltm" && scope_plan.confidently_placed && allRoleSlotsResolved;
-    const canonicalId = canonicalRevisionId(request.owner_account_id, request.session_id, provisional.claim_revision_id);
+    const canonicalId = canonicalRevisionId(coordinate, provisional.claim_revision_id);
     revisions.push({ kind: "claim", revision_id: provisional.claim_revision_id, claim: provisional, placement_status: admitted ? "consumed" : "provisional_abstained" });
     if (admitted) {
       admittedProvisionals.add(provisional.claim_revision_id);
@@ -187,10 +224,10 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
   }
   for (const support of coreferenceSupports) revisions.push({ kind: "coreference_support", revision_id: `coreference-support:${support.coreference_support_id}`, support });
   const derivation = prepareDerivation({
-    attempt_id: `attempt:session:${request.owner_account_id}:${request.session_id}`,
-    commit_id: `commit:session:${request.owner_account_id}:${request.session_id}`,
+    attempt_id: `attempt:session:${coordinate}`,
+    commit_id: `commit:session:${coordinate}`,
     owner_account_id: request.owner_account_id, parent_commit: request.parent_commit, idempotency_key: key,
-    input_revisions: [...request.provisionals.map((claim) => ({ revision_id: claim.claim_revision_id, content: claim })), ...(request.events ?? []).map((event) => ({ revision_id: event.event_revision_id, content: event })), ...request.evidence.map((evidence) => ({ revision_id: `evidence-revision:${evidence.evidence_id}`, content: evidence }))],
+    input_revisions: inputRevisions,
     output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: revisionContent(revision) })),
     versions: request.versions, success_kind: allocations && Object.keys(allocations).length ? "success" : "successful_empty",
   });

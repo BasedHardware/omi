@@ -460,8 +460,8 @@ export class SqliteLedger implements LedgerPort {
   }
 
   /** Read before a session invokes models: changed later outputs must not collide. */
-  findCommitByIdempotencyKey(idempotencyKey: string): { commit_id: string; sequence: number } | null {
-    return this.db.query("SELECT commit_id, sequence FROM derivation_commits WHERE idempotency_key = ?").get(idempotencyKey) as { commit_id: string; sequence: number } | null;
+  findCommitByIdempotencyKey(idempotencyKey: string): { commit_id: string; sequence: number; input_version_digest: string } | null {
+    return this.db.query("SELECT commit_id, sequence, input_version_digest FROM derivation_commits WHERE idempotency_key = ?").get(idempotencyKey) as { commit_id: string; sequence: number; input_version_digest: string } | null;
   }
 
   graphHead(ownerAccountId: string): { commit_id: string; sequence: number } | null {

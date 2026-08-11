@@ -216,3 +216,63 @@ with typed persisted strategy versions rather than research environment variable
 - [x] The fixture passes on the canonical baseline without model or network access.
 
 P0 is closed. Runtime source changes may now begin as separately tested vertical slices.
+
+## P1 adoption record — grounded formation, 2026-08-11
+
+The first measured extraction port is selective even within the four named
+research commits (`6d22e23696`, `195d2e5678`, `c320a49960`, and
+`88f243e1c2`). It does not copy the research file wholesale.
+
+Adopted into the production-neutral core:
+
+- one stable `candidate:<raw ordinal>` for every accepted or dropped model
+  candidate, so a repaired earlier candidate cannot rename later claims;
+- closed drop reasons and content-free subreasons, with no raw surface or
+  relation crossing the durable formation boundary;
+- case/whitespace-only relocation that stores the evidence's verbatim slice and
+  records every normalized ambiguous offset;
+- conservative temporal default, missing-slot ordinal, and generic-role repair,
+  each carried as a typed repair code and a visible ambiguity marker;
+- optional bounded contextual evidence: all supplied active evidence is
+  readable, while only an explicit non-empty target subset can ground output;
+- strict exact-envelope/plain-data parsing, candidate bounds, active evidence,
+  and unique evidence ids before the model edge;
+- monotone preservation of non-`subject:*` evidence policy labels into the
+  provisional claim;
+- a total formation outcome contract (`memory-formation-outcome-v2`): every raw
+  candidate has one extraction outcome and every accepted candidate has exactly
+  one admitted, abstained, retryable, or dead placement outcome;
+- a content-safe SHA-256 of the exact strict response envelope plus candidate
+  manifest, so omissions and changed model responses are replay-visible;
+- response- and version-scoped formation work ids, provisional/lineage ids,
+  mention/antecedent ids, transition keys, attempts, commits, and canonical ids.
+  Exact replay includes every placement input (frontier, entities, valid time,
+  parent, and identity authority) and returns the prior commit before a model
+  call; reusing a work id with changed input or versions fails loudly, while a
+  new work namespace coexists in the same ledger.
+
+Explicitly not adopted:
+
+- `OMI_DROP_SURFACES` and every core environment selector;
+- durable or console diagnostics containing model-produced relation/surface
+  text;
+- duplicate-slot renaming or clearing an invalid speaker-slot annotation. The
+  current subject-tier compatibility path can reconstruct owner authority from
+  first-person text, so those research repairs are not fail-closed and remain
+  explicit drops;
+- the unrelated name-only predicate identity change from `fc4ec6b7a9`;
+- any model, prompt, route, storage, compose-voice, or `subject:*` default
+  change. The target-context instruction exists only on the explicit opt-in
+  call shape; the default prompt path is unchanged.
+
+The canonical transition was also corrected to resolve identity from the
+persisted mention coordinate, not by reloading the evidence-wide speaker
+coordinate for every mention. This prevents a non-speaker or repaired mention
+from fitting an unrelated owner authorization. A dedicated adversarial test
+proves the claim remains unresolved and non-canonical even when the model asks
+to bind it to the owner.
+
+`role_generic` and `temporal_default` remain observable semantic uncertainty,
+not evidence that placement is safe. Production job wiring must preserve their
+repair codes and may shadow/defer them independently. Compose receives no new
+owner-voice authority in this slice; its default remains a David gate.

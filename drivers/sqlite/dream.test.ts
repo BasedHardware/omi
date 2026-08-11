@@ -4,6 +4,7 @@ import { canonicalizeRedacted, prepareDerivation, sha256CanonicalRedacted, type 
 import { project } from "../../core/retrieve";
 import { walk } from "../../core/retrieve/walk";
 import { DeterministicFakeModel } from "../model/port";
+import { groundedFormationMentionId } from "../../core/extract/grounded";
 import { runSqliteDreamCycle, SqliteDreamStore } from "./dream";
 import { SqliteLedger } from "./index";
 
@@ -38,6 +39,17 @@ const seed = async (ledger: SqliteLedger, claims: readonly ReturnType<typeof see
   const derivation = prepareDerivation({ attempt_id: "seed-attempt", commit_id: "seed", owner_account_id: owner, parent_commit: null, idempotency_key: "seed", input_revisions: [], output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "claim" ? revision.claim : revision.mention })), versions, success_kind: "success" });
   await ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: Object.fromEntries(claims.map((item) => [item.provisional.claim_revision_id, item.canonical.claim_revision_id])), results: claims.map((item) => ({ input_provisional_revision_id: item.provisional.claim_revision_id, disposition: "admit" as const, operation: null })) }, derivation, revisions, adjacency: [], artifacts: claims.map((item) => ({ artifact_id: `auto-placement:${item.provisional.claim_revision_id}`, kind: "auto_placement_log" as const, provisional_revision_id: item.provisional.claim_revision_id, canonical_claim_revision_id: item.canonical.claim_revision_id, margin: null, risk_markers: [], unit_boundary_decision: "accept_ltm" as const, scope_locality: "source_local" as const })) });
 };
+
+test("P1 two formation works retain distinct grounded mentions in one ledger", async () => {
+  const ledger = new SqliteLedger(new Database(":memory:"));
+  const raw_mention_id = "mention:e:uses:0:candidate:1:subject";
+  const leftBase = seedClaim("grounded-work-left", true);
+  const rightBase = seedClaim("grounded-work-right", true);
+  const left = { ...leftBase, mention: { ...leftBase.mention, mention_id: groundedFormationMentionId({ owner_account_id: owner, session_id: "same-session", work_id: "work:left", raw_mention_id }) } };
+  const right = { ...rightBase, mention: { ...rightBase.mention, mention_id: groundedFormationMentionId({ owner_account_id: owner, session_id: "same-session", work_id: "work:right", raw_mention_id }) } };
+  await seed(ledger, [left, right]);
+  expect(ledger.mentions(owner).map((mention) => mention.mention_id).sort()).toEqual([left.mention.mention_id, right.mention.mention_id].sort());
+});
 
 const dreamModel = (cycleId: string, groups: readonly (readonly string[])[], overrides: {
   boundary?: "accept_ltm" | "abstain";

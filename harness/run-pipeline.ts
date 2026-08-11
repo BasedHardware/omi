@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import Ajv2020 from "ajv/dist/2020.js";
 import { Database } from "bun:sqlite";
-import { extractGrounded, materializeGroundedMentions, materializeGroundedProvisional } from "../core/extract/grounded";
+import { extractGrounded, materializeGroundedMentions, materializeGroundedProvisional, type GroundedDropRecord } from "../core/extract/grounded";
 import { checkRelationDistribution, type QualityFinding } from "../core/extract/quality";
 import { ingestConversation, splitUtteranceText } from "../core/extract/ingest";
 import { prepareDerivation, type AtomicGraphTransition } from "../core/ledger";
@@ -124,7 +124,7 @@ export const subjectPolicyLabels = (
 };
 
 const itemFor = (session: Session, claim: ReturnType<typeof materializeGroundedProvisional>, evidence: readonly ReturnType<typeof ingestConversation>["evidence"][number][], argument_origins: Readonly<Record<string, "suggested" | "independent">>): DurableStmItem => {
-  const labeled = { ...claim, policy_labels: [...subjectPolicyLabels(claim, evidence)] };
+  const labeled = { ...claim, policy_labels: [...new Set([...claim.policy_labels, ...subjectPolicyLabels(claim, evidence)])].sort() };
   return {
     id: labeled.claim_revision_id, session_id: session.session_id, event_time_watermark: labeled.temporal_scope.observed_at,
     capture_sequence: session.capture_sequence, revision_lineage: session.revision_lineage, ingest_sequence: session.ingest_sequence,
@@ -322,7 +322,7 @@ const extracted = await Promise.all(ingested.map(async ({ session, evidence }) =
       const model = dependencies.selectModel?.({ session_id: session.session_id, hermetic_seed: seed }).model ?? selectModel(options, seed).model;
       try {
         const outputs: { item: ReturnType<typeof itemFor>; mentions: ReturnType<typeof materializeGroundedMentions> }[] = [];
-        const dropped: { reason: string; relation: string | null }[] = [];
+        const dropped: GroundedDropRecord[] = [];
         const quality_findings: { code: string; detail: string }[] = [];
         const predicates: string[] = [];
         // Windows are independent extract calls; fan out bounded, assemble in
@@ -340,17 +340,18 @@ const extracted = await Promise.all(ingested.map(async ({ session, evidence }) =
             windowResults[index] = await withRetry(session.session_id, () => extractGrounded(model, { context, predicate_registry: context.predicate_signatures.map((signature) => signature.name), entity_registry: context.entity_candidates.map((candidate) => candidate.ref), evidence: windows[index]!, version: "stage-a-grounded-v2" }));
           }
         }));
-        for (const extraction of windowResults) {
+        for (const [windowIndex, extraction] of windowResults.entries()) {
           dropped.push(...extraction.dropped);
           quality_findings.push(...extraction.quality_findings);
           predicates.push(...extraction.claims.map((claim) => claim.predicate_ref));
+          const work_id = `formation:${digest({ session_id: session.session_id, window_index: windowIndex, evidence_ids: windows[windowIndex]!.map((item) => item.evidence_id), versions, response_digest: extraction.response_digest })}`;
           for (const [offset, emission] of extraction.claims.entries()) {
             const claim_index = outputs.length + offset;
-            const claim = materializeGroundedProvisional({ owner_account_id: corpus.owner_account_id, session_id: session.session_id, observed_at: session.segments[0]!.start_at, source_language: "unknown", context, claim_index, emission });
+            const claim = materializeGroundedProvisional({ owner_account_id: corpus.owner_account_id, session_id: session.session_id, work_id, observed_at: session.segments[0]!.start_at, source_language: "unknown", context, claim_index, emission, evidence });
             const windowMentions = extraction.mentions.filter((mention) => mention.claim_index === offset).map((mention) => ({ ...mention, claim_index }));
             outputs.push({
               item: itemFor(session, claim, evidence, emission.argument_origins),
-              mentions: materializeGroundedMentions({ owner_account_id: corpus.owner_account_id, claim, claim_index, mentions: windowMentions }),
+              mentions: materializeGroundedMentions({ owner_account_id: corpus.owner_account_id, session_id: session.session_id, work_id, claim, claim_index, mentions: windowMentions }),
             });
           }
         }
@@ -364,7 +365,7 @@ const extracted = await Promise.all(ingested.map(async ({ session, evidence }) =
     for (const entry of extracted) if (entry) {
       stm.put(entry.outputs);
       relations.push(...entry.extraction.claims.map((claim) => claim.predicate_ref));
-      for (const drop of entry.extraction.dropped) console.error(`drop ${entry.session.session_id}: ${drop.reason}${drop.relation ? ` (${drop.relation})` : ""}`);
+      for (const drop of entry.extraction.dropped) console.error(`drop ${entry.session.session_id}: ${drop.candidate_ref}:${drop.reason}${drop.sub_reason ? `:${drop.sub_reason}` : ""}`);
       for (const finding of entry.extraction.quality_findings) console.error(`quality ${entry.session.session_id}: ${finding.code}: ${finding.detail}`);
     }
 

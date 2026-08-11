@@ -10,6 +10,8 @@ import {
   retainsAcceptedWork,
 } from "./formation-outcome";
 
+const responseDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
 const coordinates = () => ({
   contract_version: MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION,
   strategy_version: "grounded-reference-v1",
@@ -29,25 +31,27 @@ const envelope = () => ({
   owner_account_id: "owner:synthetic",
   work_id: "work:synthetic:1",
   input_frontier: "frontier:synthetic:1",
+  response_digest: responseDigest,
+  candidate_count: 3,
   coordinates: coordinates(),
   extraction_outcomes: [
     {
       kind: "accepted",
-      candidate_ref: "candidate:accepted",
+      candidate_ref: "candidate:1",
       claim_revision_id: "claim:provisional:accepted",
       evidence_ids: ["evidence:2", "evidence:1"],
       repair_codes: ["surface_case_normalized"],
     },
     {
       kind: "accepted",
-      candidate_ref: "candidate:error",
+      candidate_ref: "candidate:2",
       claim_revision_id: "claim:provisional:error",
       evidence_ids: ["evidence:1"],
       repair_codes: [],
     },
     {
       kind: "dropped",
-      candidate_ref: "candidate:dropped",
+      candidate_ref: "candidate:3",
       reason_code: "missing_argument",
       reason_detail: "object",
     },
@@ -154,7 +158,7 @@ test("P1 formation contract rejects unaccepted placement, duplicates, extras, ac
   expect(() => parseFormationOutcomeEnvelope(unaccepted)).toThrow("must reference an accepted extraction");
 
   const duplicate = envelope();
-  duplicate.extraction_outcomes[1]!.candidate_ref = "candidate:accepted";
+  duplicate.extraction_outcomes[1]!.candidate_ref = "candidate:1";
   expect(() => parseFormationOutcomeEnvelope(duplicate)).toThrow("candidate_ref values must be unique");
 
   const extra = { ...envelope(), extra: true };
@@ -170,4 +174,34 @@ test("P1 formation contract rejects unaccepted placement, duplicates, extras, ac
   expect(getterCalls).toBe(0);
 
   expect(() => parseFormationOutcomeEnvelope(new Proxy(envelope(), {}))).toThrow("plain record");
+});
+
+test("P1 formation contract is total over raw candidates and accepted placement", () => {
+  const missingCandidate = envelope();
+  missingCandidate.extraction_outcomes.pop();
+  expect(() => parseFormationOutcomeEnvelope(missingCandidate)).toThrow("cover every raw candidate");
+
+  const skippedOrdinal = envelope();
+  skippedOrdinal.extraction_outcomes[1]!.candidate_ref = "candidate:4";
+  expect(() => parseFormationOutcomeEnvelope(skippedOrdinal)).toThrow("cover every raw candidate");
+
+  const missingPlacement = envelope();
+  missingPlacement.placement_outcomes.pop();
+  expect(() => parseFormationOutcomeEnvelope(missingPlacement)).toThrow("every accepted extraction");
+
+  const empty = envelope();
+  empty.candidate_count = 0;
+  empty.extraction_outcomes = [];
+  empty.placement_outcomes = [];
+  expect(parseFormationOutcomeEnvelope(empty)).toMatchObject({
+    candidate_count: 0,
+    extraction_outcomes: [],
+    placement_outcomes: [],
+  });
+});
+
+test("P1 formation contract requires the exact response digest coordinate", () => {
+  const invalid = envelope();
+  invalid.response_digest = "not-a-digest";
+  expect(() => parseFormationOutcomeEnvelope(invalid)).toThrow("lowercase SHA-256 digest");
 });

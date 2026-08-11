@@ -120,7 +120,7 @@ test("all placement fake edges preserve the resolution gate when scope or bounda
     throw new Error(`unexpected fixture strategy: ${request.strategy}`);
   });
   const ledger = new SqliteLedger(new Database(":memory:"));
-  await commitSessionStmToLtmTransition({ ledger, model, session_id: "fixture-gates", owner_account_id: "owner", provisionals, entities: [entity], evidence, valid_times: { "p-scope": validTime, "p-boundary": validTime }, parent_commit: null, versions: { strategy_version: "fixture", model_version: "fixture", prompt_version: "fixture", policy_version: "fixture", code_version: "fixture", schema_version: "fixture", tokenizer_version: "fixture", tool_version: "fixture" } });
+  await commitSessionStmToLtmTransition({ ledger, model, session_id: "fixture-gates", formation_work_id: "work:fixture-gates:v1", owner_account_id: "owner", provisionals, entities: [entity], evidence, valid_times: { "p-scope": validTime, "p-boundary": validTime }, parent_commit: null, versions: { strategy_version: "fixture", model_version: "fixture", prompt_version: "fixture", policy_version: "fixture", code_version: "fixture", schema_version: "fixture", tokenizer_version: "fixture", tool_version: "fixture" } });
   expect(ledger.snapshot("owner").claims.filter((revision) => revision.claim.lifecycle === "canonical")).toHaveLength(0);
 });
 

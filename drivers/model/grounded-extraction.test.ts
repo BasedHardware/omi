@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { extractGrounded, groundedPrompt, materializeGroundedProvisional } from "../../core/extract/grounded";
+import { extractGrounded, groundedPrompt, materializeGroundedExtractionOutcomes, materializeGroundedMentions, materializeGroundedProvisional } from "../../core/extract/grounded";
+import { MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION, parseFormationOutcomeEnvelope } from "../../core/consolidate/formation-outcome";
 import type { Evidence } from "../../core/schema";
 import type { WritingContext } from "../../core/retrieve/writing-context";
 import { DeterministicFakeModel } from "./port";
@@ -10,7 +11,7 @@ const evidenceOf = (excerpt: string, overrides: Partial<Evidence> = {}): Evidenc
 const claimOf = (relation: string, args: readonly { slot_id: string; role: string; surface: string; participant?: string }[], overrides: Record<string, unknown> = {}) =>
   ({ relation, arguments: args, polarity: "positive", temporal_expression: { kind: "absolute", granularity: "day", value: "2026-01-01" }, evidence: "e1", observed_speaker_slot_id: null, ...overrides });
 const run = (response: unknown, evidence: readonly Evidence[], context: WritingContext = emptyContext, registries: { predicate_registry?: readonly string[]; entity_registry?: readonly string[] } = {}) =>
-  extractGrounded(new DeterministicFakeModel(response), { context, predicate_registry: registries.predicate_registry ?? [], entity_registry: registries.entity_registry ?? [], evidence, version: "fake" });
+  extractGrounded(new DeterministicFakeModel(Array.isArray(response) ? { claims: response } : response), { context, predicate_registry: registries.predicate_registry ?? [], entity_registry: registries.entity_registry ?? [], evidence, version: "fake" });
 
 test("S6a derives reuse from the supplied registry, not model self-report", async () => {
   const output = await run([claimOf("met", [{ slot_id: "subject", role: "subject", surface: "Alice" }, { slot_id: "place", role: "place", surface: "Atlas", participant: "c1" }])],
@@ -74,7 +75,7 @@ test("P5 a repeated first-person surface is kept and marked ambiguous, not delet
   expect(output.ambiguous_surfaces).toBe(1);
   expect(output.claims[0]?.arguments[0]).toMatchObject({ surface: "I", span: { start: 0, end: 1 }, ambiguous_offsets: [0, 16] });
   expect(output.claims[0]?.ambiguity_markers).toEqual(["ambiguous_surface:speaker"]);
-  const claim = materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, emission: output.claims[0]! });
+  const claim = materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: "work:test:v1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index: 0, emission: output.claims[0]!, evidence: [evidenceOf(excerpt)] });
   expect(claim.ambiguity_markers).toEqual(["ambiguous_surface:speaker"]);
 });
 
@@ -140,7 +141,7 @@ test("D44 preserves an omitted extracted mention as forced unresolved", async ()
 test("a claim citing an excerpt that was never offered is dropped with a reason", async () => {
   const output = await run([claimOf("met", [{ slot_id: "subject", role: "subject", surface: "Alice" }], { evidence: "e9" })], [evidenceOf("Alice met Bob")]);
   expect(output.claims).toEqual([]);
-  expect(output.dropped).toEqual([{ reason: "unknown_evidence_label", relation: "met" }]);
+  expect(output.dropped).toEqual([{ candidate_ref: "candidate:1", reason: "unknown_evidence_label" }]);
 });
 
 // Verbatim from the ledger: this corpus is a person dictating prompts to
@@ -169,9 +170,9 @@ test("F1 a response echoing a wrapper the contract never named is refused, never
   const evidence = [evidenceOf("Alice visited Atlas")];
   const claims = [claimOf("visited", [{ slot_id: "subject", role: "subject", surface: "Alice" }, { slot_id: "place", role: "place", surface: "Atlas" }])];
   // Exactly the shape the transcript dictated above.
-  expect(run({ result: { claims } }, evidence)).rejects.toThrow("claims array");
+  expect(run({ result: { claims } }, evidence)).rejects.toThrow("exact claims envelope");
   // A sibling key is the same failure: our contract has one top-level key.
-  expect(run({ claims, system_prompt: "leaked" }, evidence)).rejects.toThrow("claims array");
+  expect(run({ claims, system_prompt: "leaked" }, evidence)).rejects.toThrow("exact claims envelope");
   expect((await run({ claims }, evidence)).claims).toHaveLength(1);
 });
 
@@ -188,8 +189,8 @@ test("F1 an injected transcript is analysed rather than obeyed, and records noth
   ], [evidenceOf(excerpt)]);
   expect(output.claims.map((claim) => claim.predicate_ref)).toEqual(["shipped", "instructed"]);
   expect(output.dropped).toEqual([
-    { reason: "unknown_evidence_label", relation: "returns" },
-    { reason: "argument_surface_absent_from_evidence", relation: "leaks" },
+    { candidate_ref: "candidate:3", reason: "unknown_evidence_label" },
+    { candidate_ref: "candidate:4", reason: "argument_surface_absent_from_evidence", sub_reason: "absent", argument_count: 1, evidence_label: "e1" },
   ]);
 });
 
@@ -201,4 +202,204 @@ test("P9 the prompt is sized by evidence, not by how much bookkeeping the contex
   expect(promptFor(50).length).toBe(promptFor(1).length);
   const excerpt = "Alice works on Atlas.";
   expect(promptFor(50).length - excerpt.length).toBeLessThan(promptFor(1).length);
+});
+
+test("P1 bounded context is readable but only explicit targets can ground claims", async () => {
+  const target = evidenceOf("I ship Atlas", { evidence_id: "target", event_revision_id: "event:target" });
+  const context = evidenceOf("Atlas is the migration project", { evidence_id: "context", event_revision_id: "event:context" });
+  const prompt = groundedPrompt(emptyContext, [target, context], { target_evidence_ids: ["target"] });
+  expect(prompt).toContain("Only emit claims whose evidence is one of these target labels: e1");
+  expect(prompt).toContain("Every other shown excerpt is context only");
+  expect(groundedPrompt(emptyContext, [target, context])).not.toContain("context only");
+
+  const output = await extractGrounded(new DeterministicFakeModel({ claims: [
+    claimOf("ships", [{ slot_id: "actor", role: "actor", surface: "I" }, { slot_id: "artifact", role: "artifact", surface: "Atlas" }], { evidence: "e1" }),
+    claimOf("is_project", [{ slot_id: "project", role: "project", surface: "Atlas" }], { evidence: "e2" }),
+  ] }), { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [target, context], target_evidence_ids: ["target"], version: "fake-target-v1" });
+  expect(output.claims.map((claim) => claim.candidate_ref)).toEqual(["candidate:1"]);
+  expect(output.dropped).toEqual([{ candidate_ref: "candidate:2", reason: "unknown_evidence_label" }]);
+  expect(output.dependency_manifest).toContain("event:context");
+  expect(output.dependency_manifest).toContain("evidence-revision:context");
+});
+
+test("P1 invalid targets, duplicate evidence ids, and inactive evidence fail before a model call", async () => {
+  let calls = 0;
+  const model = { invoke: async () => { calls += 1; return { claims: [] }; } };
+  const active = evidenceOf("Alice", { evidence_id: "same" });
+  await expect(extractGrounded(model, { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [active], target_evidence_ids: [], version: "fake" })).rejects.toThrow("non-empty subset");
+  await expect(extractGrounded(model, { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [active], target_evidence_ids: ["missing"], version: "fake" })).rejects.toThrow("non-empty subset");
+  await expect(extractGrounded(model, { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [active, evidenceOf("Bob", { evidence_id: "same" })], version: "fake" })).rejects.toThrow("must be unique");
+  await expect(extractGrounded(model, { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [evidenceOf("gone", { state: "tombstoned" })], version: "fake" })).rejects.toThrow("must be active");
+  expect(calls).toBe(0);
+});
+
+test("P1 model output is an exact plain claims envelope", async () => {
+  const input = { context: emptyContext, predicate_registry: [], entity_registry: [], evidence: [evidenceOf("Alice")], version: "fake" };
+  await expect(extractGrounded(new DeterministicFakeModel([]), input)).rejects.toThrow("exact claims envelope");
+  await expect(extractGrounded(new DeterministicFakeModel({ claims: [], extra: true }), input)).rejects.toThrow("exact claims envelope");
+  const proxy = new Proxy({ claims: [] }, {});
+  await expect(extractGrounded({ invoke: async () => proxy }, input)).rejects.toThrow("exact claims envelope");
+  let getterCalls = 0;
+  const accessor = {} as { claims: unknown[] };
+  Object.defineProperty(accessor, "claims", { enumerable: true, get: () => { getterCalls += 1; return []; } });
+  await expect(extractGrounded({ invoke: async () => accessor }, input)).rejects.toThrow("exact claims envelope");
+  expect(getterCalls).toBe(0);
+});
+
+test("P1 evidence-preserving repairs stay typed, verbatim, and candidate-local", async () => {
+  const excerpt = "I use   Atlas. I use   Atlas.";
+  const output = await run([
+    claimOf("uses", [{ slot_id: "speaker", role: "actor", surface: "i" }, { slot_id: "tool", role: "tool", surface: "use atlas" }], { temporal_expression: { kind: "bad" } }),
+    claimOf("uses", [{ role: "actor", surface: "I" }, { slot_id: "tool", surface: "Atlas" }]),
+  ], [evidenceOf(excerpt)]);
+  expect(output.claims[0]).toMatchObject({
+    candidate_ref: "candidate:1",
+    temporal_expression: { kind: "imprecise", bucket: "unknown", precision: "coarse" },
+    repair_codes: ["surface_normalized", "temporal_default"],
+  });
+  expect(output.claims[0]?.arguments).toEqual([
+    { slot_id: "speaker", role: "actor", surface: "I", span: { start: 0, end: 1 }, ambiguous_offsets: [0, 15] },
+    { slot_id: "tool", role: "tool", surface: "use   Atlas", span: { start: 2, end: 13 }, ambiguous_offsets: [2, 17] },
+  ]);
+  expect(output.claims[0]?.ambiguity_markers).toEqual([
+    "ambiguous_surface:speaker",
+    "ambiguous_surface:tool",
+    "repaired:surface_normalized",
+    "repaired:temporal_default",
+  ]);
+  expect(output.claims[1]).toMatchObject({
+    candidate_ref: "candidate:2",
+    repair_codes: ["role_generic", "slot_id_positional"],
+    arguments: [
+      { slot_id: "slot_repaired_1", role: "actor", surface: "I" },
+      { slot_id: "tool", role: "participant", surface: "Atlas" },
+    ],
+  });
+});
+
+test("P1 unsafe speaker and duplicate-slot repairs remain explicit drops", async () => {
+  const output = await run([
+    claimOf("names", [{ slot_id: "speaker", role: "speaker", surface: "I" }, { slot_id: "speaker", role: "name", surface: "Nora" }], { observed_speaker_slot_id: "speaker" }),
+    claimOf("names", [{ slot_id: "speaker", role: "speaker", surface: "I" }, { slot_id: "name", role: "name", surface: "Nora" }], { observed_speaker_slot_id: "ghost" }),
+  ], [evidenceOf("I am Nora")]);
+  expect(output.claims).toEqual([]);
+  expect(output.dropped.map(({ candidate_ref, reason, sub_reason }) => ({ candidate_ref, reason, sub_reason }))).toEqual([
+    { candidate_ref: "candidate:1", reason: "invalid_claim_fields", sub_reason: "duplicate_slot_id" },
+    { candidate_ref: "candidate:2", reason: "invalid_claim_fields", sub_reason: "speaker_slot_invalid" },
+  ]);
+});
+
+test("P1 provisional materialization preserves restrictive evidence policy without importing subject tiers", async () => {
+  const evidence = [evidenceOf("I use Atlas", { policy_labels: ["subject:bystander", "diarization:weak", "sensitivity:private"] })];
+  const output = await run([claimOf("uses", [{ slot_id: "speaker", role: "speaker", surface: "I" }, { slot_id: "tool", role: "tool", surface: "Atlas" }])], evidence);
+  const claim = materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: "work:test:v1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index: 0, emission: output.claims[0]!, evidence });
+  expect(claim.policy_labels).toEqual(["diarization:weak", "sensitivity:private"]);
+});
+
+test("P1 drop taxonomy is content-safe at the durable formation boundary", async () => {
+  const planted = "SECRET\n\u001b[31m";
+  const output = await run([
+    null,
+    { relation: planted, arguments: [], polarity: "positive", evidence: "e1" },
+    claimOf(planted, [{ slot_id: "x", role: "x", surface: planted }]),
+  ], [evidenceOf("Alice exists")]);
+  const accepted = output.claims.map((emission, claim_index) => ({ candidate_ref: emission.candidate_ref, claim: materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: "work:test:v1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index, emission, evidence: [evidenceOf("Alice exists")] }) }));
+  const outcomes = materializeGroundedExtractionOutcomes({ extraction: output, provisionals: accepted });
+  expect(outcomes.map((outcome) => outcome.candidate_ref)).toEqual(["candidate:1", "candidate:2", "candidate:3"]);
+  expect(JSON.stringify(outcomes)).not.toContain("SECRET");
+  expect(outcomes).toEqual([
+    { kind: "dropped", candidate_ref: "candidate:1", reason_code: "invalid_model_shape", reason_detail: "not_an_object" },
+    { kind: "dropped", candidate_ref: "candidate:2", reason_code: "invalid_model_shape", reason_detail: "arguments_empty" },
+    { kind: "dropped", candidate_ref: "candidate:3", reason_code: "argument_surface_absent_from_evidence", reason_detail: "absent" },
+  ]);
+});
+
+test("P1 grounded adapter produces a total valid formation envelope", async () => {
+  const output = await run([
+    claimOf("uses", [{ slot_id: "speaker", role: "speaker", surface: "I" }, { slot_id: "tool", role: "tool", surface: "atlas" }]),
+    claimOf("leaks", [{ slot_id: "x", role: "x", surface: "not present" }]),
+  ], [evidenceOf("I use Atlas")]);
+  const provisionals = output.claims.map((emission, claim_index) => ({ candidate_ref: emission.candidate_ref, claim: materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: "work:test:v1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index, emission, evidence: [evidenceOf("I use Atlas")] }) }));
+  const extraction_outcomes = materializeGroundedExtractionOutcomes({ extraction: output, provisionals });
+  const parsed = parseFormationOutcomeEnvelope({
+    contract_version: MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION,
+    owner_account_id: "owner",
+    work_id: "work:1",
+    input_frontier: "frontier:1",
+    response_digest: output.response_digest,
+    candidate_count: 2,
+    coordinates: {
+      contract_version: MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION,
+      strategy_version: "grounded-v1",
+      model_version: "fake-v1",
+      prompt_version: "grounded-v6",
+      policy_version: "policy-v1",
+      code_version: "code-v1",
+      schema_version: "schema-v1",
+      tokenizer_version: "none",
+      tool_version: "none",
+      speaker_strategy_version: "speaker-v1",
+      boundary_strategy_version: "boundary-v1",
+    },
+    extraction_outcomes,
+    placement_outcomes: [{
+      kind: "abstained",
+      input_provisional_revision_id: provisionals[0]!.claim.claim_revision_id,
+      boundary_decision: "abstain",
+      reason_code: "shadow_repair",
+      reconsideration_trigger: "typed_role_review",
+    }],
+  });
+  expect(parsed.extraction_outcomes).toEqual(extraction_outcomes);
+  expect(parsed.candidate_count).toBe(2);
+});
+
+test("P1 grounded adapter rejects same-evidence candidate/provisional swaps", async () => {
+  const evidence = [evidenceOf("Alice uses Atlas and Atlas ships")];
+  const output = await run([
+    claimOf("uses", [{ slot_id: "person", role: "person", surface: "Alice" }, { slot_id: "tool", role: "tool", surface: "Atlas" }]),
+    claimOf("ships", [{ slot_id: "project", role: "project", surface: "Atlas" }]),
+  ], evidence);
+  const [first, second] = output.claims.map((emission, claim_index) => materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: "work:test:v1", observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index, emission, evidence }));
+  expect(() => materializeGroundedExtractionOutcomes({ extraction: output, provisionals: [
+    { candidate_ref: "candidate:1", claim: second! },
+    { candidate_ref: "candidate:2", claim: first! },
+  ] })).toThrow("mismatched candidate identity");
+});
+
+test("P1 formation work namespaces keep changed model responses distinct", async () => {
+  const evidence = [evidenceOf("Alice uses Atlas")];
+  const output = await run([
+    claimOf("uses", [{ slot_id: "person", role: "person", surface: "Alice" }, { slot_id: "tool", role: "tool", surface: "Atlas" }]),
+  ], evidence);
+  const changed = await run([
+    claimOf("uses", [{ slot_id: "person", role: "person", surface: "Alice" }]),
+  ], evidence);
+  expect(output.response_digest).not.toBe(changed.response_digest);
+  const first = materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: `work:${output.response_digest}:v1`, observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index: 0, emission: output.claims[0]!, evidence });
+  const second = materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id: `work:${output.response_digest}:v2`, observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index: 0, emission: output.claims[0]!, evidence });
+  expect(first.claim_revision_id).not.toBe(second.claim_revision_id);
+  expect(first.claim_lineage_id).not.toBe(second.claim_lineage_id);
+});
+
+test("P1 grounded mentions and antecedents are isolated by formation work", async () => {
+  const evidence = [
+    evidenceOf("Alice arrived.", { evidence_id: "e-alice", event_revision_id: "event:alice", source_unit_ref: "unit:1", source_identity_ref: null, speaker_rendering: null }),
+    evidenceOf("She laughed.", { evidence_id: "e-she", event_revision_id: "event:she", source_unit_ref: "unit:1", source_identity_ref: null, speaker_rendering: null }),
+  ];
+  const output = await run([
+    claimOf("arrived", [{ slot_id: "subject", role: "subject", surface: "Alice" }], { evidence: "e1" }),
+    claimOf("laughed", [{ slot_id: "subject", role: "subject", surface: "She" }], { evidence: "e2", mentions: [{ slot_id: "subject", antecedent: { evidence: "e1", slot_id: "subject" } }] }),
+  ], evidence);
+  const materialize = (work_id: string) => {
+    const claims = output.claims.map((emission, claim_index) => materializeGroundedProvisional({ owner_account_id: "owner", session_id: "s1", work_id, observed_at: "2026-01-01T00:00:00Z", source_language: "en", context: emptyContext, claim_index, emission, evidence }));
+    const mentions = claims.flatMap((claim, claim_index) => materializeGroundedMentions({ owner_account_id: "owner", session_id: "s1", work_id, claim, claim_index, mentions: output.mentions }));
+    return { claims, mentions };
+  };
+  const first = materialize("work:first");
+  const second = materialize("work:second");
+  expect(first.mentions.map((mention) => mention.mention_id)).not.toEqual(second.mentions.map((mention) => mention.mention_id));
+  expect(first.mentions[1]!.antecedent_handle).toBe(`local:${first.mentions[0]!.mention_id}`);
+  expect(second.mentions[1]!.antecedent_handle).toBe(`local:${second.mentions[0]!.mention_id}`);
+  expect(new Set([...first.mentions, ...second.mentions].map((mention) => mention.mention_id)).size).toBe(4);
 });

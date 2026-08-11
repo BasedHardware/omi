@@ -9,12 +9,14 @@
     "read_strategy": "authorized-synthesized-v1"
   },
   "formation": {
-    "contract_version": "memory-formation-outcome-v1",
+    "contract_version": "memory-formation-outcome-v2",
     "owner_account_id": "owner:synthetic",
     "work_id": "work:synthetic:1",
     "input_frontier": "frontier:synthetic:1",
+    "response_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "candidate_count": 3,
     "coordinates": {
-      "contract_version": "memory-formation-outcome-v1",
+      "contract_version": "memory-formation-outcome-v2",
       "strategy_version": "grounded-reference-v1",
       "model_version": "deterministic-fake-v1",
       "prompt_version": "none",
@@ -29,21 +31,21 @@
     "extraction_outcomes": [
       {
         "kind": "accepted",
-        "candidate_ref": "candidate:synthetic:1",
+        "candidate_ref": "candidate:1",
         "claim_revision_id": "claim:provisional:1",
         "evidence_ids": ["evidence:synthetic:1"],
         "repair_codes": []
       },
       {
         "kind": "accepted",
-        "candidate_ref": "candidate:synthetic:retryable",
+        "candidate_ref": "candidate:2",
         "claim_revision_id": "claim:provisional:retryable",
         "evidence_ids": ["evidence:synthetic:1"],
         "repair_codes": []
       },
       {
         "kind": "dropped",
-        "candidate_ref": "candidate:synthetic:dropped",
+        "candidate_ref": "candidate:3",
         "reason_code": "missing_argument",
         "reason_detail": "object"
       }
@@ -247,7 +249,7 @@
     "extraction_dispositions": [
       "claim:provisional:1:accepted",
       "claim:provisional:retryable:accepted",
-      "candidate:synthetic:dropped:dropped:missing_argument:object"
+      "candidate:3:dropped:missing_argument:object"
     ],
     "placement_dispositions": [
       "claim:provisional:1:admitted:claim:canonical:1",

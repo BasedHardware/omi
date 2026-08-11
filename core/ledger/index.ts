@@ -318,6 +318,6 @@ export interface LedgerPort {
   /** Repair is an append/replay of an immutable transition, never raw-table mutation. */
   repairTransitionPlan(plan: AtomicGraphTransition): Promise<{ commit_id: string; sequence: number; idempotent: boolean }>;
   /** A stable idempotency-key lookup is required before a session calls models. */
-  findCommitByIdempotencyKey(idempotencyKey: string): { commit_id: string; sequence: number } | null;
+  findCommitByIdempotencyKey(idempotencyKey: string): { commit_id: string; sequence: number; input_version_digest: string } | null;
 }
 export interface LedgerSnapshot { owner_account_id: string; graph_generation: number; }
