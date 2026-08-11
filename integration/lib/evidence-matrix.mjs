@@ -26,16 +26,35 @@ export const SERVICE_BASE_URL = "http://127.0.0.1:4851";
 export const PRODUCER_EVIDENCE_PATH = "/v1/qa/evidence";
 
 const HASH = /^[0-9a-f]{40}$/;
+export const RAW_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 const keyOf = (shell, domain) => `${shell}/${domain}`;
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 
 function requireExactKeys(value, allowed, label, failures) {
-  if (!isObject(value)) return;
+  if (!isObject(value)) {
+    failures.push(`${label} must be an object`);
+    return;
+  }
+  const missing = allowed.filter((key) => !Object.hasOwn(value, key));
   const unexpected = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (missing.length > 0) {
+    failures.push(`${label} is missing schema field(s): ${missing.join(", ")}`);
+  }
   if (unexpected.length > 0) {
     failures.push(`${label} has non-schema field(s): ${unexpected.join(", ")}`);
   }
+}
+
+export function rawRunIdFailure(runId) {
+  if (typeof runId !== "string" || !RAW_RUN_ID.test(runId)) return "runId must be a raw bounded producer-evidence id";
+  if (runId === "anonymous" || runId === "overflow" || runId.startsWith("__")) return `runId ${JSON.stringify(runId)} is reserved`;
+  if (runId.endsWith("::macos") || runId.endsWith("::ios")) return "runId must not contain host transport shell attribution";
+  return null;
+}
+
+export function isRawRunId(runId) {
+  return rawRunIdFailure(runId) === null;
 }
 
 export function deterministicListenAudio() {
@@ -57,8 +76,14 @@ export function expectedCoordinates() {
   return SHELLS.flatMap((shell) => DOMAINS.map((domain) => ({ shell, domain })));
 }
 
-function requireText(value, label, failures) {
-  if (typeof value !== "string" || value.trim() === "") failures.push(`${label} must be non-empty text`);
+function requireText(value, label, failures, maxBytes = null) {
+  if (typeof value !== "string" || value.trim() === "") {
+    failures.push(`${label} must be non-empty text`);
+    return;
+  }
+  if (maxBytes !== null && Buffer.byteLength(value, "utf8") > maxBytes) {
+    failures.push(`${label} must be at most ${maxBytes} UTF-8 bytes`);
+  }
 }
 
 function validateCoordinate(row, index, expectedRunId, failures) {
@@ -86,6 +111,10 @@ function requireExactMatrix(rows, expectedRunId, label, failures) {
   rows.forEach((row, index) => {
     const key = validateCoordinate(row, index, expectedRunId, failures);
     if (key === null) return;
+    const expected = expectedCoordinates()[index];
+    if (expected && key !== keyOf(expected.shell, expected.domain)) {
+      failures.push(`${label}.rows[${index}] is reordered: expected ${keyOf(expected.shell, expected.domain)}, got ${key}`);
+    }
     if (byKey.has(key)) failures.push(`${label}.rows contains duplicate coordinate ${key}`);
     else byKey.set(key, row);
   });
@@ -158,6 +187,10 @@ export function validateServiceReadiness(record, {
     "ownerAccountId",
   ], "service readiness", failures);
   if (record.schema !== SERVICE_READINESS_SCHEMA) failures.push(`service readiness schema must be ${SERVICE_READINESS_SCHEMA}`);
+  const runIdFailure = rawRunIdFailure(runId);
+  if (runIdFailure) failures.push(runIdFailure);
+  const recordRunIdFailure = rawRunIdFailure(record.runId);
+  if (recordRunIdFailure) failures.push(`service readiness ${recordRunIdFailure}`);
   if (record.runId !== runId) failures.push(`service readiness has wrong runId ${JSON.stringify(record.runId)}`);
   if (record.executable !== executable) failures.push(`unknown launcher executable ${JSON.stringify(record.executable)}; expected ${executable}`);
   if (record.baseUrl !== baseUrl) failures.push(`service readiness baseUrl must be ${baseUrl}`);
@@ -178,7 +211,8 @@ export function arbitrateEvidence({
   expectedSurfaceTreeHash,
 } = {}) {
   const failures = [];
-  requireText(runId, "runId", failures);
+  const runIdFailure = rawRunIdFailure(runId);
+  if (runIdFailure) failures.push(runIdFailure);
   if (!HASH.test(expectedShellTreeHash ?? "")) failures.push("expectedShellTreeHash must be a 40-character git tree hash");
   if (!HASH.test(expectedSurfaceTreeHash ?? "")) failures.push("expectedSurfaceTreeHash must be a 40-character git tree hash");
 
@@ -226,8 +260,8 @@ export function arbitrateEvidence({
         );
         if (c.observation.route !== domain) failures.push(`${key} rendered route ${JSON.stringify(c.observation.route)} does not match its domain`);
         if (c.observation.state !== "ready") failures.push(`${key} is readiness-only or not semantically ready`);
-        requireText(c.observation.semantic, `${key} rendered semantic observation`, failures);
-        if (domain === "listen") requireText(c.observation.transcript, `${key} rendered transcript`, failures);
+        requireText(c.observation.semantic, `${key} rendered semantic observation`, failures, 256);
+        if (domain === "listen") requireText(c.observation.transcript, `${key} rendered transcript`, failures, 1024);
       }
       if (c.shellTreeHash !== expectedShellTreeHash) failures.push(`${key} has stale or mismatched shell tree hash`);
       if (c.surfaceTreeHash !== expectedSurfaceTreeHash) failures.push(`${key} has stale or mismatched surface tree hash`);
@@ -241,17 +275,15 @@ export function arbitrateEvidence({
       requireExactKeys(p, allowedRowKeys, `${key} producer row`, failures);
       if (p.evidence !== "served-outcome") failures.push(`${key} producer evidence is dispatch-only or readiness-only`);
       if (domain !== "listen") {
+        if (isObject(p.http)) requireExactKeys(p.http, ["successful"], `${key} HTTP counts`, failures);
         if (!isObject(p.http) || !integer(p.http.successful) || p.http.successful <= 0) {
           failures.push(`${key} producer evidence requires a positive successful served count`);
-        } else {
-          requireExactKeys(p.http, ["successful"], `${key} HTTP counts`, failures);
         }
       }
       if (domain === "chat") {
+        if (isObject(p.chat)) requireExactKeys(p.chat, ["acceptedAdmission"], `${key} Chat counts`, failures);
         if (!isObject(p.chat) || !integer(p.chat.acceptedAdmission) || p.chat.acceptedAdmission <= 0) {
           failures.push(`${key} producer evidence requires positive chat.acceptedAdmission`);
-        } else {
-          requireExactKeys(p.chat, ["acceptedAdmission"], `${key} Chat counts`, failures);
         }
       }
       if (domain === "listen") {
@@ -283,10 +315,68 @@ export function arbitrateEvidence({
   return Object.freeze({
     schema: MATRIX_REPORT_SCHEMA,
     runId,
+    expectedShellTreeHash,
+    expectedSurfaceTreeHash,
     expectedRows: MATRIX_SIZE,
     rowCount: matrix.length,
     result: failures.length === 0 && matrix.length === MATRIX_SIZE ? "pass" : "fail",
     failures: Object.freeze(failures),
     rows: Object.freeze(matrix),
   });
+}
+
+export function validateFinalEvidenceMatrix(matrix, {
+  runId,
+  expectedShellTreeHash,
+  expectedSurfaceTreeHash,
+} = {}) {
+  const failures = [];
+  requireExactKeys(matrix, [
+    "schema",
+    "runId",
+    "expectedShellTreeHash",
+    "expectedSurfaceTreeHash",
+    "expectedRows",
+    "rowCount",
+    "result",
+    "failures",
+    "rows",
+  ], "final evidence matrix", failures);
+  const runIdFailure = rawRunIdFailure(runId);
+  if (runIdFailure) failures.push(runIdFailure);
+  if (matrix?.schema !== MATRIX_REPORT_SCHEMA) failures.push(`final evidence matrix schema must be ${MATRIX_REPORT_SCHEMA}`);
+  if (matrix?.runId !== runId) failures.push("final evidence matrix has wrong runId");
+  if (matrix?.expectedShellTreeHash !== expectedShellTreeHash) failures.push("final evidence matrix has stale or mismatched shell tree hash");
+  if (matrix?.expectedSurfaceTreeHash !== expectedSurfaceTreeHash) failures.push("final evidence matrix has stale or mismatched surface tree hash");
+  if (matrix?.expectedRows !== MATRIX_SIZE || matrix?.rowCount !== MATRIX_SIZE) failures.push(`final evidence matrix must declare exactly ${MATRIX_SIZE} rows`);
+  if (matrix?.result !== "pass") failures.push("final evidence matrix result must be pass");
+  if (!Array.isArray(matrix?.failures) || matrix.failures.length !== 0) failures.push("final evidence matrix must have no failures");
+  if (!Array.isArray(matrix?.rows)) {
+    failures.push("final evidence matrix rows must be an array");
+    return Object.freeze({ ok: false, failures: Object.freeze(failures) });
+  }
+  if (matrix.rows.length !== MATRIX_SIZE) failures.push(`final evidence matrix rows must contain exactly ${MATRIX_SIZE} rows`);
+
+  const consumerRows = [];
+  const producerRows = [];
+  matrix.rows.forEach((row, index) => {
+    requireExactKeys(row, ["shell", "domain", "consumer", "producer"], `final evidence matrix row[${index}]`, failures);
+    const expected = expectedCoordinates()[index];
+    if (!expected || row?.shell !== expected.shell || row?.domain !== expected.domain) {
+      failures.push(`final evidence matrix row[${index}] is reordered or has the wrong coordinate`);
+    }
+    if (isObject(row?.consumer)) consumerRows.push(row.consumer);
+    if (isObject(row?.producer)) producerRows.push(row.producer);
+  });
+
+  const joined = arbitrateEvidence({
+    runId,
+    consumer: { schema: CONSUMER_EVIDENCE_SCHEMA, runId, rows: consumerRows },
+    producer: { schema: PRODUCER_EVIDENCE_SCHEMA, runId, rows: producerRows },
+    expectedShellTreeHash,
+    expectedSurfaceTreeHash,
+  });
+  failures.push(...joined.failures);
+  if (joined.result !== "pass" || joined.rowCount !== MATRIX_SIZE) failures.push("final evidence matrix producer/consumer rejoin failed");
+  return Object.freeze({ ok: failures.length === 0, failures: Object.freeze(failures) });
 }
