@@ -92,7 +92,13 @@ export const readChatGenerationSourceCapability = (
   source: ChatGenerationSource,
 ): ChatGenerationSourceCapabilityReceipt => {
   try {
-    return canonicalCapability(source?.capability);
+    // Capability declarations are untrusted input. Read only an own data
+    // descriptor so inherited values and accessor/proxy getters cannot run
+    // while a receipt is being inspected.
+    if (source === null || typeof source !== "object") return unknownCapability();
+    const descriptor = Object.getOwnPropertyDescriptor(source, "capability");
+    if (descriptor === undefined || !("value" in descriptor)) return unknownCapability();
+    return canonicalCapability(descriptor.value);
   } catch {
     return unknownCapability();
   }

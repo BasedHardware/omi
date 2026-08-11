@@ -46,6 +46,35 @@ describe("deterministic Chat generation scenarios", () => {
       capability: { tier: "real-provider", adapter: "local-provider", deterministic: false },
       start: () => Object.freeze({ cancel: (): void => {} }),
     })).toEqual({ tier: "real-provider", adapter: "local-provider", deterministic: false });
+    let getterCalls = 0;
+    const getterSource = Object.defineProperty({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    }, "capability", {
+      get: (): unknown => {
+        getterCalls += 1;
+        return { tier: "real-provider", adapter: "local-provider", deterministic: false };
+      },
+    });
+    expect(readChatGenerationSourceCapability(getterSource)).toEqual({
+      tier: "unknown", adapter: "unreported", deterministic: false,
+    });
+    expect(getterCalls).toBe(0);
+    const inheritedSource = Object.create({
+      capability: { tier: "real-provider", adapter: "local-provider", deterministic: false },
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    expect(readChatGenerationSourceCapability(inheritedSource)).toEqual({
+      tier: "unknown", adapter: "unreported", deterministic: false,
+    });
+    const hostileProxy = new Proxy({
+      capability: { tier: "real-provider", adapter: "local-provider", deterministic: false },
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    }, {
+      getOwnPropertyDescriptor: (): never => { throw new Error("capability proxy escaped"); },
+    });
+    expect(readChatGenerationSourceCapability(hostileProxy)).toEqual({
+      tier: "unknown", adapter: "unreported", deterministic: false,
+    });
   });
 
   test("records prompt deltas and completion with a scripted capability receipt", async () => {
