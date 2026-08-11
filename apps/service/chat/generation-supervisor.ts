@@ -396,7 +396,11 @@ export const createChatGenerationSupervisor = (
           void finalize(state, "failed", "", defaultFailure("callback"));
           return;
         }
-        state.heartbeatTimer = scheduler.setTimeout(heartbeat, liveness.heartbeatIntervalMs);
+        try {
+          state.heartbeatTimer = scheduler.setTimeout(heartbeat, liveness.heartbeatIntervalMs);
+        } catch {
+          void finalize(state, "failed", "", defaultFailure("callback"));
+        }
       };
       state.heartbeatTimer = scheduler.setTimeout(heartbeat, liveness.heartbeatIntervalMs);
     }
@@ -738,10 +742,16 @@ export const createChatGenerationSupervisor = (
         cancelRun(state);
         if (liveness !== undefined && liveness.cancelGraceMs > 0) {
           clearTimer(state.cancelGraceTimer);
-          state.cancelGraceTimer = scheduler.setTimeout(() => {
-            state.cancelGraceTimer = null;
+          try {
+            state.cancelGraceTimer = scheduler.setTimeout(() => {
+              state.cancelGraceTimer = null;
+              void finalize(state, "cancelled", state.text);
+            }, liveness.cancelGraceMs);
+          } catch {
+            // If the injected scheduler cannot arm grace, cancellation still
+            // owns the race and must terminalize synchronously.
             void finalize(state, "cancelled", state.text);
-          }, liveness.cancelGraceMs);
+          }
           return;
         }
       }

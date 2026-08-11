@@ -1687,4 +1687,71 @@ describe("ratified chat generation wire red proofs", () => {
     expect((await history(local)).filter((message) => message.sender === "ai")).toHaveLength(0);
     db.close();
   });
+
+  test("cancel-grace scheduler failure falls back to one cancelled terminal", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    const scheduler: ChatGenerationScheduler = Object.freeze({
+      setTimeout(callback, delayMs): ReturnType<typeof setTimeout> {
+        if (delayMs === 3) throw new Error("injected grace timer fault");
+        return setTimeout(callback, delayMs);
+      },
+      clearTimeout(handle): void {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      source,
+      "chat-cancel-grace-scheduler-proof",
+      createEmptyChatGenerationContextSource(),
+      undefined,
+      scheduler,
+      { firstEventDeadlineMs: 10, maxRunDurationMs: 20, heartbeatIntervalMs: 0, cancelGraceMs: 3 },
+    );
+    const { admission, eventsResponse } = await admitAndOpen(local, create("cancel-grace-scheduler"));
+    const response = await local.app.request(`/v1/chat-generations/${admission.generation.id}`, {
+      method: "DELETE", headers: auth(local.devToken),
+    });
+    expect(response.status).toBe(202);
+    expect(parseSse(await eventsResponse.text()).at(-1)?.event).toBe("cancelled");
+    expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)
+      ?.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind))).toHaveLength(1);
+    db.close();
+  });
+
+  test("heartbeat reschedule scheduler failure becomes one failed terminal", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    let heartbeatSchedules = 0;
+    const scheduler: ChatGenerationScheduler = Object.freeze({
+      setTimeout(callback, delayMs): ReturnType<typeof setTimeout> {
+        if (delayMs === 2) {
+          heartbeatSchedules += 1;
+          if (heartbeatSchedules === 2) throw new Error("injected heartbeat reschedule fault");
+        }
+        return setTimeout(callback, delayMs);
+      },
+      clearTimeout(handle): void {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      },
+    });
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      source,
+      "chat-heartbeat-scheduler-proof",
+      createEmptyChatGenerationContextSource(),
+      undefined,
+      scheduler,
+      { firstEventDeadlineMs: 20, maxRunDurationMs: 50, heartbeatIntervalMs: 2, cancelGraceMs: 0 },
+    );
+    const { admission, eventsResponse } = await admitAndOpen(local, create("heartbeat-reschedule"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.at(-1)?.event).toBe("failed");
+    expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)
+      ?.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind))).toHaveLength(1);
+    db.close();
+  });
 });
