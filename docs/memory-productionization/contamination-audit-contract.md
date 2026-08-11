@@ -36,9 +36,11 @@ manifest.
 The first implementation unit defines and tests this sealed port with hermetic
 fixtures. It does not claim a production source implementation. Activation
 requires wiring inside the exact authorized retrieval/composition producer—where
-trace-to-claim correspondence exists—and artifact parity with the inherited
-29.7% measurement. An adapter that reconstructs correspondence from answer text
-or opaque-reference shape is forbidden.
+trace-to-claim correspondence exists. A QA-only copied-artifact compatibility
+tool now reproduces the inherited 29.7% whole-answer measurement, but this does
+not substitute for fresh assertion-local producer evidence. An adapter that
+reconstructs correspondence from answer text or opaque-reference shape is
+forbidden.
 
 The exact producer, artifact, atomic staging, revalidation, and legacy-parity
 requirements are frozen in
@@ -108,5 +110,6 @@ strategy ID, owner, source, or truth grade and makes no promotion decision.
 - no claim that a clean finding means a correct answer or correct diarization;
 - no real sample, David time, PostgreSQL runtime, credential, deployment, or
   cohort decision;
-- activation requires zero-model parity on copied existing artifacts, including
-  reproduction of the inherited 29.7% figure and paired populations.
+- copied-artifact zero-model compatibility must continue to reproduce the
+  inherited 29.7% figure and paired population; activation additionally
+  requires fresh assertion-local results from the authorized producer.

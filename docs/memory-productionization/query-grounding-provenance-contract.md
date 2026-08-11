@@ -1,7 +1,7 @@
 # Finalized query grounding and provenance contract
 
-Status: P5 preregistration, 2026-08-11; no producer, persistence adapter, route,
-or runtime activation landed
+Status: P5 contract plus legacy compatibility gate, 2026-08-11; no authorized
+producer, persistence adapter, route, or runtime activation landed
 
 ## Purpose
 
@@ -24,10 +24,10 @@ The canonical tree has the pieces, but no producer currently owns all of them:
 - the contamination audit requires one total subject-class row per grounded
   trace reference;
 - `core/retrieve/agentic.ts` is query-bearing dogfood, not an application read:
-  it returns raw evidence identifiers, discards the final entailed assertion
-  manifest after salvage, does not require a branded application-authorized
-  projected snapshot, and performs no final authorization/projection
-  revalidation after model calls;
+  it returns raw evidence identifiers, now retains the final entailed assertion
+  manifest after salvage, but does not require a branded
+  application-authorized projected snapshot and performs no final
+  authorization/projection revalidation after model calls;
 - `core/retrieve/application-read.ts` has the correct authorization-before-load,
   coherent reload, reader-scoped codecs, and final revalidation discipline, but
   serves synthesized pages rather than query answers; and
@@ -160,6 +160,18 @@ compose-voice default decision.
    whole-answer result reported separately.
 5. **Fresh assertion-local evaluation:** paired repeats, content-safe report,
    then a batched blind truth sheet only if the machine gates pass.
+
+Landed sub-units:
+
+- `cb2e6dc` preserves final entailed assertion manifests across both query
+  retrieval paths and writes recall-log v3 assertion/citation ordinals. It does
+  not claim authorized trace encoding or final revalidation.
+- The QA compatibility tool
+  `integration/memory-productionization/legacy-contamination-parity.ts` opens a
+  copied store read-only, hashes all five inputs, performs zero writes/model
+  calls, and reproduces voice-off 21/39, voice-on 11/37, 15/5 discordance over
+  41 paired cells, and p=`0.04138946533203125`. Report digest:
+  `6307b3f1f0da796578d43b14d7117d3db08cdad7a406ae44f613a736c68bd59a`.
 
 ## Pre-registered acceptance tests
 
