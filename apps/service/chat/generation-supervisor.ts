@@ -81,12 +81,40 @@ export interface ChatGenerationFailure {
   readonly retryable: boolean;
 }
 
+const defaultFailure = (
+  stage: "provider" | "context" | "attachment" | "callback" | "timeout",
+): ChatGenerationFailure => stage === "context"
+  ? { code: "generation_context_failed", retryable: true }
+  : stage === "attachment"
+    ? { code: "generation_attachment_failed", retryable: true }
+    : stage === "callback"
+      ? { code: "generation_interrupted", retryable: true }
+      : stage === "timeout"
+        ? { code: "generation_timeout", retryable: true }
+        : { code: "generation_provider_failed", retryable: true };
+
+/** Reads only own data properties; hostile getters/proxies fail closed. */
+const readFailureDeclaration = (
+  error: unknown,
+): Readonly<{ readonly code: unknown; readonly retryable: unknown }> | null => {
+  try {
+    if (error === null || typeof error !== "object") return null;
+    const code = Object.getOwnPropertyDescriptor(error, "code");
+    const retryable = Object.getOwnPropertyDescriptor(error, "retryable");
+    if (code === undefined || retryable === undefined
+      || !("value" in code) || !("value" in retryable)) return null;
+    return Object.freeze({ code: code.value, retryable: retryable.value });
+  } catch {
+    return null;
+  }
+};
+
 const classifyFailure = (
   error: unknown,
   stage: "provider" | "context" | "attachment" | "callback" | "timeout",
 ): ChatGenerationFailure => {
-  if (error !== null && typeof error === "object") {
-    const candidate = error as { readonly code?: unknown; readonly retryable?: unknown };
+  try {
+    const candidate = readFailureDeclaration(error);
     const allowed = stage === "provider"
       ? ["generation_provider_failed", "generation_timeout"]
       : stage === "context"
@@ -96,19 +124,15 @@ const classifyFailure = (
           : stage === "callback"
             ? ["generation_interrupted", "generation_timeout"]
             : ["generation_timeout"];
-    if (typeof candidate.code === "string" && allowed.includes(candidate.code)
-      && typeof candidate.retryable === "boolean") {
+    if (candidate !== null && typeof candidate.code === "string"
+      && allowed.includes(candidate.code) && typeof candidate.retryable === "boolean") {
       return { code: candidate.code as ChatGenerationFailureCode, retryable: candidate.retryable };
     }
+  } catch {
+    // Treat all malformed declarations, including adversarial proxies, as an
+    // untyped failure at the current boundary.
   }
-  if (stage === "context") return { code: "generation_context_failed", retryable: true };
-  if (stage === "attachment") return { code: "generation_attachment_failed", retryable: true };
-  // Keep the pre-existing interrupted code for callback/storage failures so old
-  // clients retain their wire vocabulary while the source/context causes become
-  // distinguishable typed failures.
-  if (stage === "callback") return { code: "generation_interrupted", retryable: true };
-  if (stage === "timeout") return { code: "generation_timeout", retryable: true };
-  return { code: "generation_provider_failed", retryable: true };
+  return defaultFailure(stage);
 };
 
 const accumulatedText = (events: readonly ChatGenerationEvent[]): string => {
@@ -240,7 +264,9 @@ export const createChatGenerationSupervisor = (
   ): boolean => {
     try {
       const prior = deps.events.listAfter(accountId, generationId, null);
-      if (prior === null) return false;
+      // A timeout/recovery callback must never manufacture a terminal for a
+      // generation that has no durable admission record.
+      if (prior === null || !prior.some((event) => event.frame.kind === "accepted")) return false;
       deps.finalization.finalize({
         accountId,
         generationId,

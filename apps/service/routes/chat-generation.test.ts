@@ -763,6 +763,38 @@ describe("ratified chat generation wire red proofs", () => {
         attachmentFailure: false,
       },
       {
+        name: "provider-getter",
+        code: "generation_provider_failed",
+        source: Object.freeze({
+          start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            const malformed = Object.defineProperties({}, {
+              code: { get: (): never => { throw new Error("code getter escaped"); } },
+              retryable: { get: (): never => { throw new Error("retryable getter escaped"); } },
+            });
+            queueMicrotask(() => input.onError(malformed));
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: false,
+      },
+      {
+        name: "provider-proxy",
+        code: "generation_provider_failed",
+        source: Object.freeze({
+          start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            const malformed = new Proxy(
+              { code: "generation_provider_failed", retryable: false },
+              { getOwnPropertyDescriptor: (): never => { throw new Error("proxy escaped"); } },
+            );
+            queueMicrotask(() => input.onError(malformed));
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: false,
+      },
+      {
         name: "context",
         code: "generation_context_failed",
         source: Object.freeze({
@@ -836,6 +868,29 @@ describe("ratified chat generation wire red proofs", () => {
         .toHaveLength(1);
       db.close();
     }
+  });
+
+  test("an out-of-band timeout cannot create a ghost terminal without admission", async () => {
+    const stores = createInMemoryLocalServiceStores();
+    const supervisor = createChatGenerationSupervisor({
+      source: Object.freeze({
+        start() {
+          return Object.freeze({ cancel: (): void => {} });
+        },
+      }),
+      context: createEmptyChatGenerationContextSource(),
+      messages: stores.chatMessages,
+      events: stores.chatEvents,
+      finalization: stores.chatFinalization,
+      attachments: stores.chatAttachments,
+      nowEpochMilliseconds: () => 100,
+      assistantMessageId: (_accountId, id) => `assistant-${id}`,
+      eventId: (_accountId, id, kind, sequence) => `event-${id}-${kind}-${sequence}`,
+      revision: (_accountId, id, hash) => `revision-${id}-${hash}`,
+    });
+    supervisor.timeout?.(ACCOUNT, "never-admitted");
+    await Promise.resolve();
+    expect(stores.chatEvents.listAfter(ACCOUNT, "never-admitted", null)).toEqual([]);
   });
 
   test("a durable terminalization failure stays active until recovery can append failed", async () => {
