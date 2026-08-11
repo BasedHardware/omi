@@ -373,7 +373,10 @@ export function observeAgentRun(
   let cancelDelay: (() => void) | null = null;
   let cursor = resumeAfterEventId;
   let lastSequence: number | null = null;
-  const seen = new Set<string>();
+  // A caller-supplied reconnect cursor is already durable even though this
+  // observer did not surface it. Remember it so that only the one permitted
+  // first-frame echo can be skipped; a duplicate or late echo is corruption.
+  const seen = new Set<string>(resumeAfterEventId === undefined ? [] : [resumeAfterEventId]);
 
   const cancel = (reason?: string): void => {
     if (cancelled) return;
@@ -403,6 +406,7 @@ export function observeAgentRun(
     let reconnect = 0;
     while (!cancelled) {
       let replayedCursor = cursor;
+      let atStreamStart = true;
       try {
         active = streamPort.open({
           channel: CHAT_AGENT_RUN_STREAM_CHANNEL,
@@ -420,12 +424,16 @@ export function observeAgentRun(
           for (const item of parsed) {
             if (item.runId !== generationId) throw new Error("agent-run event belongs to another generation");
             // Some transports echo the reconnect cursor once. It is already
-            // durable and must not be surfaced twice; any later reuse remains
-            // corruption and fails closed.
-            if (replayedCursor !== undefined && item.id === replayedCursor) {
+            // durable and must not be surfaced twice. Only the first parsed
+            // event may be that echo; duplicate or late reuse fails closed.
+            const isFirstStreamEvent = atStreamStart;
+            atStreamStart = false;
+            if (isFirstStreamEvent && replayedCursor !== undefined && item.id === replayedCursor) {
+              seen.add(item.id);
               replayedCursor = undefined;
               continue;
             }
+            replayedCursor = undefined;
             if (seen.has(item.id)) throw new Error("agent-run event cursor was reused");
             if (lastSequence !== null && item.event.sequence <= lastSequence) {
               throw new Error("agent-run event sequence did not advance");

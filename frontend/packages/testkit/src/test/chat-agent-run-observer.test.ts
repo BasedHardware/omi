@@ -160,3 +160,38 @@ test("agent-run observer reconnects by exact cursor and stops at one terminal", 
   ]);
   assert.equal(port.streams[1]?.cancelled, true);
 });
+
+test("agent-run observer rejects duplicate and late reconnect cursor echoes", async () => {
+  const accepted = visible("event-accepted", 1, "run_accepted", "Run accepted", {
+    admissionId: "admission-one",
+  });
+  const status = visible("event-status", 2, "status", "Generating", {
+    status: "generating", progressPct: 40,
+  });
+  const duplicatePort = new ScriptedPort([
+    [sse(accepted) + sse(accepted) + sse(status)],
+  ]);
+  const duplicate = observeAgentRun(duplicatePort, "generation-one", new ManualEnv(), "event-accepted");
+  const duplicateObserved: AgentRunObservationEvent[] = [];
+  for await (const item of duplicate.events) duplicateObserved.push(item);
+  assert.deepEqual(duplicateObserved.map((item) => item.kind), ["error"]);
+  assert.match(
+    duplicateObserved[0]?.kind === "error" ? duplicateObserved[0].failure : "",
+    /cursor was reused/,
+  );
+
+  const latePort = new ScriptedPort([
+    [sse(status) + sse(accepted)],
+  ]);
+  const late = observeAgentRun(latePort, "generation-one", new ManualEnv(), "event-accepted");
+  const lateObserved: AgentRunObservationEvent[] = [];
+  for await (const item of late.events) lateObserved.push(item);
+  assert.deepEqual(
+    lateObserved.map((item) => item.kind === "event" ? item.event.kind : item.kind),
+    ["status", "error"],
+  );
+  assert.match(
+    lateObserved[1]?.kind === "error" ? lateObserved[1].failure : "",
+    /cursor was reused/,
+  );
+});
