@@ -35,7 +35,7 @@ function failed(generationId, text, retryable = true) {
   return {
     role: "assistant",
     text,
-    delivery: { kind: "failed", generationId, source: "provider", retryable },
+    delivery: { kind: "failed", generationId, clientMessageId: "failed-client", source: "provider", retryable },
     attachments: [],
   };
 }

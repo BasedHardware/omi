@@ -133,6 +133,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const onReadyRef = useRef(onReady);
   const messageListRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
+  const draftRef = useRef<HTMLTextAreaElement>(null);
   const historyRequestRef = useRef(0);
   const sendInFlightRef = useRef(false);
   const stagingInFlightRef = useRef(false);
@@ -412,6 +413,20 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     void run(() => store.cancel(generationId));
   };
 
+  const startNewMessage = (failed: Extract<ChatMessage["delivery"], { kind: "failed" }>): void => {
+    const original = messages.find((message) =>
+      message.role === "user" &&
+      message.delivery.kind === "canonical" &&
+      message.delivery.clientMessageId === failed.clientMessageId
+    );
+    if (!original || draft.trim().length > 0 || attachments.length > 0) {
+      draftRef.current?.focus();
+      return;
+    }
+    setDraft(original.text);
+    draftRef.current?.focus();
+  };
+
   const attachmentHint = !stagingAvailable
     ? t(locale, "chat.attachmentUnavailable")
     : capState.reason === "unknown-cap"
@@ -494,6 +509,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                   : null;
                 const cancelled = message.delivery.kind === "canonical" &&
                   message.delivery.generationOutcome === "cancelled";
+                const failedDelivery = message.delivery.kind === "failed" ? message.delivery : null;
                 return (
                   <li
                     key={messageKey(message)}
@@ -531,6 +547,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                         {t(locale, "chat.stop")}
                       </button>
                     )}
+                    {failedDelivery?.source === "provider" &&
+                      failedDelivery.retryable && (
+                        <div className="chat-failure-recovery">
+                          <button type="button" onClick={() => startNewMessage(failedDelivery)}>
+                            {t(locale, "chat.startNewMessage")}
+                          </button>
+                          <p>{t(locale, "chat.startNewMessageHint")}</p>
+                        </div>
+                      )}
                   </li>
                 );
               })}
@@ -608,6 +633,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               {t(locale, "chat.attach")}
             </button>
             <textarea
+              ref={draftRef}
               className="chat-draft"
               value={draft}
               placeholder={t(locale, "chat.composerPlaceholder")}

@@ -251,6 +251,8 @@ export const EN_MESSAGES = {
   "chat.pending": "Sending",
   "chat.failed": "Not delivered",
   "chat.responseUnavailable": "Response unavailable.",
+  "chat.startNewMessage": "Start a new message",
+  "chat.startNewMessageHint": "This restores the question for review. It does not rerun the failed response or restore attachments.",
   "chat.emptyTitle": "No messages yet",
   "chat.emptyBody": "Ask a question to start this conversation.",
   "chat.loadOlder": "Load older messages",

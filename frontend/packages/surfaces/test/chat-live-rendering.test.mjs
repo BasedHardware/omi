@@ -784,6 +784,7 @@ test("observer and provider failures render as non-streaming assistant failures"
     assert.equal(failed.dataset.delivery, "failed");
     assert.equal(failed.getAttribute("aria-busy"), null, "observer failure is not still streaming");
     assert.ok(failed.textContent.includes("Partial answer"));
+    assert.equal(failed.querySelector(".chat-failure-recovery"), null, "observer failure does not claim a provider retry path");
 
     await rendered.act(async () => {
       domain.active = [];
@@ -799,6 +800,17 @@ test("observer and provider failures render as non-streaming assistant failures"
     assert.ok(failed, "provider terminal failure is visible after active observation is removed");
     assert.equal(failed.getAttribute("aria-busy"), null);
     assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
+    const recovery = failed.querySelector(".chat-failure-recovery button");
+    assert.ok(recovery, "retryable provider failure offers a truthful new-message recovery");
+    assert.equal(failed.textContent.includes("does not rerun"), true);
+    await click(rendered, recovery);
+    const composer = rendered.container.querySelector("textarea.chat-draft");
+    assert.equal(composer.value, "Question");
+    assert.equal(rendered.window.document.activeElement, composer);
+    assert.equal(domain.sent.length, 0, "recovery never silently resends or invents retry semantics");
+    await setTextarea(rendered, composer, "Keep this newer draft");
+    await click(rendered, recovery);
+    assert.equal(composer.value, "Keep this newer draft", "recovery never overwrites unsent composer work");
   } finally {
     await rendered.cleanup();
   }
