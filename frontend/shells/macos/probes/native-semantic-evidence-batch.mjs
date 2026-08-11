@@ -202,6 +202,7 @@ function loadPrepared(file, manifestPath, manifest, offset, limit) {
   const descriptor = JSON.parse(readFileSync(file, "utf8"));
   const descriptorKeys = ["authority", "capture_class", "coordinate_run_ids", "input_set", "limit", "manifest_path", "manifest_sha256", "offset", "probe", "schema", "shell", "source_shas"];
   if (descriptor.schema !== "omi.native-semantic-prepared/v1" || Object.keys(descriptor).sort().join(",") !== descriptorKeys.sort().join(",") || descriptor.source_shas.core !== manifest.source_shas.core || descriptor.source_shas.platform !== manifest.source_shas.platform || descriptor.manifest_path !== `core:${authorityRelative(manifestPath)}` || descriptor.manifest_sha256 !== hashFile(manifestPath) || descriptor.capture_class !== manifest.capture_class || descriptor.shell !== "macos" || descriptor.offset !== offset || descriptor.limit !== limit) fail("prepared semantic input set is stale");
+  if (canonical(descriptor.authority) !== canonical({ fixture: manifest.capture_class === "native_fixture", bridge: "disabled", credentials: false, production_api: false })) fail("prepared semantic authority is not fixture-only");
   const expectedRunIds = manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id);
   if (canonical(descriptor.coordinate_run_ids) !== canonical(expectedRunIds)) fail("prepared semantic coordinate range is stale");
   const probePath = coreFile(String(descriptor.probe || "").replace(/^core:/, ""), "prepared probe", true);
