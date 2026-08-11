@@ -445,6 +445,8 @@ function loadPreparedInputSet(file, manifestPath, manifest, shell) {
   const artifacts = {};
   if (shell === "both" || shell === "macos") artifacts.macos = resolvePreparedArtifact(descriptor, "macos");
   if (shell === "both" || shell === "ios") artifacts.ios = resolvePreparedArtifact(descriptor, "ios");
+  const preparedBaseInput = inputSet(manifestPath, artifacts);
+  if (!descriptor.input_set || canonical(descriptor.input_set) !== canonical(preparedBaseInput)) fail("prepared input set file list/hash is stale");
   return { descriptor, artifacts, input: inputSet(manifestPath, artifacts, [file]) };
 }
 
@@ -687,7 +689,9 @@ function main() {
   if (args.prepare) {
     if (coordinates.some((coordinate) => coordinate.shell === "macos")) artifacts.macos = buildMac(manifest, outRoot, batchBuildId);
     if (coordinates.some((coordinate) => coordinate.shell === "ios")) artifacts.ios = buildIos(manifest, outRoot, batchBuildId);
-    writePreparedInputSet(preparedPath, manifestPath, manifest, coordinates, outRoot, shell, offset, limit, artifacts);
+    const preparedDescriptor = writePreparedInputSet(preparedPath, manifestPath, manifest, coordinates, outRoot, shell, offset, limit, artifacts);
+    preparedDescriptor.input_set = inputSet(manifestPath, artifacts);
+    writeAtomic(preparedPath, preparedDescriptor);
     const preparedInput = inputSet(manifestPath, artifacts, [preparedPath]);
     process.stdout.write(`NATIVE_FIXTURE_PREPARED: ${preparedInput.id} coordinates=${coordinates.length} file=${authorityRelative(preparedPath)}\n`);
     return;
