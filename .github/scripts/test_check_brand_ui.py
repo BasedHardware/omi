@@ -43,6 +43,11 @@ class BrandUiTests(unittest.TestCase):
         for digits in ("6C2BD9", "2D1B69", "7C3AED", "A855F7", "C4B5FD", "D946EF"):
             self.assertTrue(is_purple_hex(digits), digits)
 
+    def test_counts_css_swift_and_dart_indigo_literals(self) -> None:
+        self.assertEqual(count_purple("#6366F1"), 1)
+        self.assertEqual(count_purple("Color(hex: 0x6366F1)"), 1)
+        self.assertEqual(count_purple("Color(0xFF6366F1)"), 1)
+
     def test_hue_test_leaves_blues_greys_and_pinks_alone(self) -> None:
         # A false positive here blocks unrelated PRs, so the negative cases
         # matter as much as the positive ones. Includes the app palette's own

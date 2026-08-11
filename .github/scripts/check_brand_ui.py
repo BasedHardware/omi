@@ -76,10 +76,10 @@ def is_ui_source(path: str) -> bool:
 
 # Any six-digit hex literal, so the hue test below sees every colour rather
 # than only the ones someone remembered to enumerate.
-HEX_LITERAL = re.compile(r"#([0-9A-Fa-f]{6})\b")
+HEX_LITERAL = re.compile(r"(?:#|0x(?:[0-9A-Fa-f]{2})?)([0-9A-Fa-f]{6})\b")
 
 # HSV hue degrees that read as purple, between blue and magenta.
-PURPLE_HUE_RANGE = (250.0, 320.0)
+PURPLE_HUE_RANGE = (235.0, 320.0)
 # Below these a colour is grey or near-black and reads as neutral whatever its
 # hue: #1A1A1A computes a hue but nobody perceives it as purple.
 MIN_SATURATION = 0.25
