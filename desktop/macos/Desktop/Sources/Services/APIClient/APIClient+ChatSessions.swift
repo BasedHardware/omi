@@ -241,6 +241,30 @@ extension APIClient {
       requestTimeout: Self.managedSynthesisTimeout)
   }
 
+  /// Return-only AgentPill title + spoken ack through managed session_titles.
+  func generateAgentPillTitle(
+    query: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentPillTitleResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let query: String
+    }
+    return try await post(
+      "v1/desktop/agent-pill/title",
+      body: Body(query: String(query.prefix(2000))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: 8)
+  }
+
   // MARK: - Agent VM
 
   struct AgentProvisionResponse: Decodable {
@@ -270,4 +294,9 @@ extension APIClient {
   func getAgentStatus() async throws -> AgentStatusResponse? {
     return try await get("v2/agent/status", customBaseURL: rustBackendURL)
   }
+}
+
+struct AgentPillTitleResponse: Codable, Equatable, Sendable {
+  let title: String
+  let ack: String
 }

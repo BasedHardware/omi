@@ -308,6 +308,53 @@ def generate_session_title(
     return {'title': title}
 
 
+class AgentPillTitleRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    query: str = Field(..., min_length=1, max_length=100_000)
+
+
+class AgentPillTitleResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    title: str = ""
+    ack: str = ""
+
+
+@router.post(
+    '/v1/desktop/agent-pill/title',
+    tags=['chat-sessions'],
+    response_model=AgentPillTitleResponse,
+)
+async def generate_agent_pill_title(
+    body: AgentPillTitleRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "desktop:agent_pill_title"))
+    ),
+):
+    """Return-only AgentPill title + spoken ack through the managed session_titles feature.
+
+    Does not write Firestore. Desktop AgentPill should call this instead of inventing
+    title/ack via Anthropic Haiku chat completions.
+    """
+    # Deferred with the LLM helper: this router is covered by module-isolation tests that
+    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
+    # in at import time.
+    from utils.executors import db_executor, llm_executor, run_blocking
+    from utils.llm import agent_pill_title as agent_pill_title_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    result = await run_blocking(
+        llm_executor,
+        lambda: agent_pill_title_llm.generate_agent_pill_title_ack(uid, body.query),
+    )
+    if result is None:
+        raise HTTPException(status_code=502, detail="agent_pill_title_failed")
+    return AgentPillTitleResponse(title=result.title or "", ack=result.ack or "")
+
+
 @router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'], response_model=ChatMessageCountResponse)
 def get_chat_message_count(
     uid: str = Depends(auth.get_current_user_uid),

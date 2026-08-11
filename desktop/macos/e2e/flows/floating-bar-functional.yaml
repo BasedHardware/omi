@@ -10,6 +10,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
+  # AgentPill title/ack resolves through backend session_titles SSOT.
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ChatSessions.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarAdviceDelivery.swift

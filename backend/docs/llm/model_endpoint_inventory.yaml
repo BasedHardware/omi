@@ -185,6 +185,13 @@ surfaces:
     gateway_lane_capability_needed: generated omi:auto:conv-structure lane
     migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
     test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
+  - surface: agent_pill_title
+    code_path: backend/routers/chat_sessions.py:generate_agent_pill_title
+    current_provider_model: session_titles feature (get_llm)
+    request_shape: return-only title + spoken ack for a kicked-off AgentPill
+    gateway_lane_capability_needed: generated omi:auto:session-titles lane
+    migration_status: get_llm_routed; desktop AgentPill should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_agent_pill_title_route.py
   - surface: ai_user_profile_synthesis
     code_path: backend/routers/users.py:synthesize_ai_profile
     current_provider_model: openai/gpt-5.6-luna memories feature
