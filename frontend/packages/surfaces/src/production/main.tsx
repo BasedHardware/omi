@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { t } from "@omi-core/i18n";
-import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
+import { getTheme, themeNameFor, typographyFamilyStack, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { openOnDiskFallbackSink } from "@omi-core/sync";
 import {
@@ -145,14 +145,23 @@ const applyTheme = (name: ThemeName): void => {
   set("--accent", theme.colors.accent);
   set("--min-tap-target", `${theme.interaction.minTapTarget}px`);
   set("--focus-ring-width", `${theme.interaction.focusRingWidth}px`);
+  set("--selected-border-width", `${theme.interaction.selectedBorderWidth}px`);
+  set("--pressed-offset", `${theme.interaction.pressedOffset}px`);
+  set("--disabled-opacity", theme.interaction.disabledOpacity);
   for (const [token, value] of Object.entries(theme.radii)) set(`--radius-${token}`, `${value}px`);
   for (const [token, value] of Object.entries(theme.spacing)) set(`--space-${token}`, `${value}px`);
+  for (const [token, value] of Object.entries(theme.motion.duration)) set(`--motion-${token}`, `${value}ms`);
+  for (const [token, value] of Object.entries(theme.motion.easing)) set(`--easing-${token}`, value);
+  for (const [token, value] of Object.entries(theme.layout.contentWidth)) set(`--content-width-${token}`, `${value}px`);
+  set("--readable-measure", `${theme.layout.readableMeasure}px`);
+  set("--row-min-height", `${theme.layout.rowMinHeight}px`);
+  for (const [token, value] of Object.entries(theme.shadows)) set(`--shadow-${token}`, value);
   for (const [token, role] of Object.entries(theme.typography)) {
     set(`--type-${token}-size`, `${role.size}px`);
     set(`--type-${token}-weight`, role.weight);
     set(`--type-${token}-line`, role.lineHeight);
     set(`--type-${token}-tracking`, `${role.tracking}px`);
-    set(`--type-${token}-family`, role.family === "openRunde" ? "Open Runde, system-ui" : "system-ui");
+    set(`--type-${token}-family`, typographyFamilyStack(role.family));
   }
 };
 applyTheme(themeName);
