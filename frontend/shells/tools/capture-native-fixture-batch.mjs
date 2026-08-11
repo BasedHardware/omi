@@ -187,6 +187,7 @@ function walkFiles(root) {
     const file = path.join(root, entry.name);
     if (entry.isDirectory()) files.push(...walkFiles(file));
     else if (entry.isFile()) files.push(file);
+    else if (entry.isSymbolicLink()) fail(`prepared app contains unsupported symlink: ${file}`);
   }
   return files;
 }
