@@ -59,6 +59,10 @@ test("TasksProduction renders shared chrome, translated affordances, and accessi
     assert.match(cards[0].getAttribute("data-indent-level") ?? "", /^[0-3]$/);
     const counts = [...rendered.container.querySelectorAll(".tasks-group-count")].map((node) => Number(node.textContent));
     assert.equal(counts.reduce((sum, count) => sum + count, 0), cards.length, "rendered group counts sum to rendered rows");
+    assert.ok(rendered.container.querySelector(".tasks-group-overdue")?.textContent?.includes(EN_MESSAGES["tasks.overdue"]));
+    assert.ok(rendered.container.querySelector(".tasks-group-noDeadline")?.textContent?.includes(EN_MESSAGES["tasks.noDeadline"]));
+    assert.equal(rendered.container.querySelectorAll(".tasks-group-empty").length, 0, "empty urgency groups do not add visual noise");
+    assert.ok(rendered.container.textContent?.includes(EN_MESSAGES["tasks.dueDateHint"]), "date intent is explicit");
 
     await rendered.act(async () => {
       rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "]", metaKey: true, bubbles: true }));
@@ -177,6 +181,32 @@ test("TasksProduction renders shared chrome, translated affordances, and accessi
     }
     // red-proof: removing Control modifiers, the `[` branch, either clamp, or
     // the global Meta/Control-N branch fails the rendered shortcut assertions.
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Tasks empty state starts a focused first task", async () => {
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
+  const rendered = await renderComponent(TasksProduction, {
+    store: fixtureStore("empty"),
+    fixture: "empty",
+    translate,
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+  try {
+    const empty = rendered.container.querySelector('[data-empty-kind="empty-projection"] .production-empty-state');
+    assert.ok(empty?.textContent?.includes(EN_MESSAGES["tasks.emptyTitle"]));
+    const action = empty.querySelector("button");
+    assert.equal(action?.textContent, EN_MESSAGES["tasks.newTask"]);
+    await rendered.act(async () => {
+      action.click();
+      await new Promise((resolve) => rendered.window.requestAnimationFrame(resolve));
+    });
+    const draft = rendered.container.querySelector(`textarea[aria-label="${EN_MESSAGES["tasks.newTask"]}"]`);
+    assert.equal(rendered.window.document.activeElement, draft);
+    assert.equal(rendered.container.querySelector(".tasks-create")?.classList.contains("is-open"), true);
   } finally {
     await rendered.cleanup();
   }

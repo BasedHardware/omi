@@ -58,6 +58,7 @@
 
 .tasks-create textarea { min-height: 64px; resize: vertical; }
 .tasks-create label { display: grid; gap: var(--space-xs); color: var(--content-secondary); font-size: var(--type-label-size); }
+.task-date-hint { max-width: 32ch; color: var(--content-tertiary); font-weight: 400; }
 .tasks-create input { min-height: var(--min-tap-target); }
 .tasks-create-cancel { display: none; }
 
@@ -81,6 +82,7 @@
 .tasks-group { display: grid; gap: var(--space-xs); }
 .tasks-group-heading { display: flex; align-items: center; gap: var(--space-sm); min-height: var(--min-tap-target); border-bottom: 1px solid var(--border); }
 .tasks-group h2 { margin: 0; font-size: var(--type-heading-size); font-weight: var(--type-heading-weight); }
+.tasks-group-overdue .tasks-group-heading { color: var(--danger); border-bottom-color: var(--danger); }
 .tasks-group-count { display: inline-flex; min-width: var(--space-xl); min-height: var(--space-xl); align-items: center; justify-content: center; border-radius: var(--radius-circular); color: var(--content-tertiary); background: var(--surface-elevated); font-family: var(--type-label-family); font-size: var(--type-label-size); }
 .tasks-group-empty { margin: var(--space-sm) 0 0; color: var(--content-tertiary); }
 
