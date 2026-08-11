@@ -61,7 +61,7 @@ const FIXTURE_BY_STATE: Readonly<Record<PolishEvidenceDomain, Readonly<Record<st
 export function resolvePolishFixture(domain: string | null, state: string | null): PolishFixtureSelection | null {
   if (domain === null || state === null) return null;
   const normalizedDomain = domain === "memories-platform" ? "memories" : domain;
-  if (!(normalizedDomain in POLISH_EVIDENCE_STATES)) return null;
+  if (!Object.hasOwn(POLISH_EVIDENCE_STATES, normalizedDomain)) return null;
   const typedDomain = normalizedDomain as PolishEvidenceDomain;
   const states = POLISH_EVIDENCE_STATES[typedDomain] as readonly string[];
   if (!states.includes(state)) return null;
