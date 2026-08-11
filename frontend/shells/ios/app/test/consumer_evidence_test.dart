@@ -7,6 +7,11 @@ import 'package:omi_webview_proto/consumer_evidence.dart';
 const hashA = '1111111111111111111111111111111111111111';
 const hashB = '2222222222222222222222222222222222222222';
 
+final class WebKitNullSentinel {
+  @override
+  String toString() => '<null>';
+}
+
 RenderedConsumerObservation observation(ConsumerEvidenceRoute route) => RenderedConsumerObservation(
   route: route,
   semantic: '${route.wireName}:rendered',
@@ -14,6 +19,17 @@ RenderedConsumerObservation observation(ConsumerEvidenceRoute route) => Rendered
 );
 
 void main() {
+  test('iOS observation wrapper admits only genuine JavaScript strings to the consumer decoder', () {
+    const rendered = '{"route":"memories","state":"ready","semantic":"memories:rendered"}';
+    expect(normalizeRenderedObservationResult(null), isNull);
+    expect(normalizeRenderedObservationResult(WebKitNullSentinel()), isNull);
+    expect(normalizeRenderedObservationResult(WebKitNullSentinel()), isNot('<null>'));
+    expect(normalizeRenderedObservationResult('<null>'), isNull);
+    expect(normalizeRenderedObservationResult(rendered), rendered);
+    expect(RenderedConsumerObservation.decodeRenderedJson(normalizeRenderedObservationResult(rendered)!).route,
+        ConsumerEvidenceRoute.memories);
+  });
+
   test('real iOS writer replaces no prior run and atomically writes the exact seven-row document', () async {
     final scratch = await Directory.systemTemp.createTemp('omi-ios-consumer-evidence-');
     addTearDown(() => scratch.delete(recursive: true));
