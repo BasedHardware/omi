@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -31,10 +32,14 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _loadApps() async {
-    final appProvider = context.read<AppProvider>();
-    await appProvider.getApps();
-    if (mounted) {
-      await appProvider.getPopularApps();
+    try {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.getApps();
+      if (mounted) {
+        await appProvider.getPopularApps();
+      }
+    } catch (e, s) {
+      Logger.handle(e, s, message: 'Error loading apps page data');
     }
   }
 
