@@ -106,7 +106,7 @@ export default function KeysManager() {
       setError(
         err instanceof Error
           ? `Rotation failed: ${err.message}`
-          : 'Rotation is not available yet.',
+          : 'Could not rotate the key.',
       );
     } finally {
       setBusy(false);

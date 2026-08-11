@@ -177,7 +177,7 @@ describe('backend seams are isolated to one client function each', () => {
       path.join(FRONTEND_SRC, 'lib', 'api', 'billing.ts'),
       'utf8',
     );
-    assert.match(client, /platform-api-quota/);
+    assert.match(client, /\/v1\/memory\/platform\/quota/);
     for (const file of SOURCE_FILES) {
       assert.ok(
         !/v1\/payments\//.test(read(file)),

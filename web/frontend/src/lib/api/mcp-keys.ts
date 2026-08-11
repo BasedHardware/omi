@@ -71,9 +71,8 @@ export function listMcpKeys(token: string) {
 }
 
 /**
- * LIVE for `name`. PENDING for `scopes`: the MCP create endpoint currently
- * ignores per-key scopes; a backend change adds them. Sending the field now is
- * forward-compatible and is dropped by the current server.
+ * LIVE: POST /v1/mcp/keys. `scopes` is authoritative per key — the route 400s on
+ * an unknown or empty scope list, and that detail is surfaced to the user.
  */
 export function createMcpKey(token: string, name: string, scopes: McpScope[]) {
   return request<McpApiKeyCreated>('/v1/mcp/keys', token, {
@@ -90,8 +89,8 @@ export function revokeMcpKey(token: string, keyId: string) {
 }
 
 /**
- * PENDING: the rotation endpoint is being added backend-side this cycle. This is
- * the single client seam — when the route lands, only this function changes.
+ * LIVE: POST /v1/mcp/keys/{key_id}/rotate. The new raw key is returned exactly
+ * once. There is no grace window — the previous secret stops working at once.
  */
 export function rotateMcpKey(token: string, keyId: string) {
   return request<McpApiKeyCreated>(
