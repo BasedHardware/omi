@@ -322,6 +322,7 @@ class GeneratedPlanLimits {
   final double? chatCostUsdPerMonth;
   final int? chatQuestionsPerMonth;
   final int? insightsGained;
+  final int? platformApiRequestsPerMonth;
   final int? transcriptionSeconds;
   final int? wordsTranscribed;
 
@@ -329,6 +330,7 @@ class GeneratedPlanLimits {
     this.chatCostUsdPerMonth,
     this.chatQuestionsPerMonth,
     this.insightsGained,
+    this.platformApiRequestsPerMonth,
     this.transcriptionSeconds,
     this.wordsTranscribed,
   });
@@ -338,6 +340,7 @@ class GeneratedPlanLimits {
       chatCostUsdPerMonth: _readFieldValue<double>(_readField(json, const ["chat_cost_usd_per_month"]), "chat_cost_usd_per_month", _readDouble, requiredField: false, nullable: true),
       chatQuestionsPerMonth: _readFieldValue<int>(_readField(json, const ["chat_questions_per_month"]), "chat_questions_per_month", _readInt, requiredField: false, nullable: true),
       insightsGained: _readFieldValue<int>(_readField(json, const ["insights_gained"]), "insights_gained", _readInt, requiredField: false, nullable: true),
+      platformApiRequestsPerMonth: _readFieldValue<int>(_readField(json, const ["platform_api_requests_per_month"]), "platform_api_requests_per_month", _readInt, requiredField: false, nullable: true),
       transcriptionSeconds: _readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: true),
       wordsTranscribed: _readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: true),
     );
@@ -348,6 +351,7 @@ class GeneratedPlanLimits {
       'chat_cost_usd_per_month': chatCostUsdPerMonth,
       'chat_questions_per_month': chatQuestionsPerMonth,
       'insights_gained': insightsGained,
+      'platform_api_requests_per_month': platformApiRequestsPerMonth,
       'transcription_seconds': transcriptionSeconds,
       'words_transcribed': wordsTranscribed,
     };
