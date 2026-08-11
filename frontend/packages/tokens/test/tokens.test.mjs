@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getTheme, SEMANTIC_TOKENS, themeNameFor } from "../dist/index.js";
+import { getTheme, SEMANTIC_TOKENS, themeNameFor, typographyFamilyStack } from "../dist/index.js";
 
 test("exposes platform geometry in explicit light and dark modes", () => {
   assert.deepEqual(Object.keys(SEMANTIC_TOKENS), ["mobileDark", "mobileLight", "desktopLightGlass", "desktopDarkGlass"]);
@@ -50,4 +50,7 @@ test("ships a complete visual-state token contract without an unbundled font", (
     assert.ok(theme.layout.rowMinHeight >= 44);
     assert.deepEqual(Object.keys(theme.shadows), ["card", "floating", "overlay"]);
   }
+  assert.match(typographyFamilyStack("system"), /-apple-system/);
+  assert.match(typographyFamilyStack("rounded"), /ui-rounded/);
+  assert.match(typographyFamilyStack("mono"), /ui-monospace/);
 });

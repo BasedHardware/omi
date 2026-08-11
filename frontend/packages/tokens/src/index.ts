@@ -3,8 +3,8 @@
  *
  * Values are intentionally platform-neutral strings/numbers. A host maps these
  * roles to CSS variables, SwiftUI colours, or Flutter colours; surfaces should
- * not import a platform theme directly. The two themes are the only ratified
- * production modes in Wave 0.
+ * not import a platform theme directly. Four host/appearance combinations are
+ * ratified: mobile and desktop, each in light and dark mode.
  */
 
 export type ThemeName = "mobileDark" | "mobileLight" | "desktopLightGlass" | "desktopDarkGlass";
@@ -61,6 +61,17 @@ export type TypographyRole = {
   lineHeight: number;
   tracking: number;
 };
+
+export function typographyFamilyStack(family: TypographyRole["family"]): string {
+  switch (family) {
+    case "rounded":
+      return "ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    case "mono":
+      return "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    case "system":
+      return "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  }
+}
 
 export type TypographyTokens = {
   display: TypographyRole;
