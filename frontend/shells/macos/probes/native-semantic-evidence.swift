@@ -449,7 +449,7 @@ private func scan(_ element: AXUIElement, window: String?, depth: Int, landmark:
   guard depth <= 8, result.nodes.count < 128 else { return }
   if let value = node(element, window: window) {
     result.nodes.append(value)
-    if value.name == landmark { result.foundLandmark = true }
+    if let landmark, value.name == landmark { result.foundLandmark = true }
   }
   for child in elementArrayAttribute(element, kAXChildrenAttribute) {
     scan(child, window: window, depth: depth + 1, landmark: landmark, result: &result)
