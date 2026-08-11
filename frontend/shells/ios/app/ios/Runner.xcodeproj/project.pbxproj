@@ -18,6 +18,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A1B2C3D41E5F607182930A01 /* OmiUiWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E5F607182930A00 /* OmiUiWebView.swift */; };
 		C0FFEE000000000000000001 /* NativeSemanticEvidenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE000000000000000002 /* NativeSemanticEvidenceUITests.swift */; };
+		D0FFEE00000000000000000B /* NativeRuntimeEvidenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FFEE00000000000000000C /* NativeRuntimeEvidenceUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0FFEE000000000000000002 /* NativeSemanticEvidenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSemanticEvidenceUITests.swift; sourceTree = "<group>"; };
+		D0FFEE00000000000000000C /* NativeRuntimeEvidenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeEvidenceUITests.swift; sourceTree = "<group>"; };
 		C0FFEE000000000000000003 /* RunnerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				C0FFEE000000000000000002 /* NativeSemanticEvidenceUITests.swift */,
+				D0FFEE00000000000000000C /* NativeRuntimeEvidenceUITests.swift */,
 			);
 			path = RunnerUITests;
 			sourceTree = "<group>";
@@ -345,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0FFEE000000000000000001 /* NativeSemanticEvidenceUITests.swift in Sources */,
+				D0FFEE00000000000000000B /* NativeRuntimeEvidenceUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
