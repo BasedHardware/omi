@@ -62,6 +62,41 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
   }
 });
 
+test("query evaluation constructors are private to the single composition root", () => {
+  const routeFixture = join(platformRoot, "apps", "service", "routes", "query-evaluation-tripwire-fixture.ts");
+  const copyFixture = join(platformRoot, "apps", "service", "composition", "memory-query-evaluation-copy.ts");
+  try {
+    writeFileSync(routeFixture, [
+      'import * as ownerSource from "../workers/memory-owner-query-evidence-source";',
+      'import { defineMemoryAuthorizedQueryGroundingProducer as makeProducer } from "../workers/memory-authorized-query-grounding-producer";',
+      'import "../workers/memory-paired-query-grounding-coordinator";',
+      'export const dynamic = () => import("../workers/memory-owner-query-evidence-source");',
+      "export const bypass = { ownerSource, makeProducer };",
+    ].join("\n"));
+    writeFileSync(copyFixture, [
+      'import { defineMemoryPairedQueryGroundingCoordinator } from "../workers/memory-paired-query-grounding-coordinator";',
+      "export const copy = defineMemoryPairedQueryGroundingCoordinator;",
+    ].join("\n"));
+    const rejected = runLint();
+    expect(rejected.status).not.toBe(0);
+    const output = `${rejected.stdout}${rejected.stderr}`;
+    expect(output).toContain("apps/service/routes/query-evaluation-tripwire-fixture.ts: low-level query-evaluation constructors are private");
+    expect(output).toContain("apps/service/composition/memory-query-evaluation-copy.ts: low-level query-evaluation constructors are private");
+
+    rmSync(copyFixture, { force: true });
+    writeFileSync(routeFixture, [
+      'import { composeMemoryQueryEvaluation } from "../composition/memory-query-evaluation";',
+      "export const registered = composeMemoryQueryEvaluation;",
+    ].join("\n"));
+    const accepted = runLint();
+    expect(accepted.status).toBe(0);
+    expect(`${accepted.stdout}${accepted.stderr}`).not.toContain("low-level query-evaluation constructors are private");
+  } finally {
+    rmSync(routeFixture, { force: true });
+    rmSync(copyFixture, { force: true });
+  }
+});
+
 const withPortFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(portFixture, source);

@@ -2,8 +2,8 @@
 
 Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, sealed
 repository, production-neutral producer/source/paired-coordinator kernels, and
-composition-root preregistration, 2026-08-11; no concrete PostgreSQL adapter,
-route, grant, or runtime activation landed
+single composition root, 2026-08-11; no concrete PostgreSQL adapter, route,
+grant, or runtime activation landed
 
 ## Purpose
 
@@ -212,9 +212,9 @@ Landed sub-units:
   sequential authority/shadow/repeat execution only through the branded atomic
   grounding producer, verified immutable pair persistence, opaque receipts,
   zero-call replay, and no statistic or truth judgment inside orchestration.
-- `query-evaluation-composition-contract.md` freezes the one allowed assembly
-  site and an import path fence that prevents a route or worker from wiring the
-  low-level source/producer/coordinator into a parallel ungrounded path.
+- `apps/service/composition/memory-query-evaluation.ts` is the one allowed
+  assembly site. Its import path fence prevents a route or worker from wiring
+  the low-level source/producer/coordinator into a parallel ungrounded path.
 
 ## Pre-registered acceptance tests
 

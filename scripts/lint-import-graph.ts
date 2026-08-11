@@ -436,6 +436,15 @@ const storageProvenanceIdentifiers = [
 ];
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
+const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
+const queryEvaluationInternalImporters = new Set([
+  queryEvaluationCompositionRoot,
+  "apps/service/workers/memory-owner-query-evidence-source.ts",
+  "apps/service/workers/memory-authorized-query-grounding-producer.ts",
+  "apps/service/workers/memory-paired-query-grounding-coordinator.ts",
+]);
+const queryEvaluationLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*memory-(?:owner-query-evidence-source|authorized-query-grounding-producer|paired-query-grounding-coordinator)(?:\.ts)?["']/;
+
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
   .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
@@ -476,6 +485,12 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: application code may not import the raw PostgreSQL connection/transaction capability; `
         + "compose only the sealed authoritative repository adapter",
+      );
+    }
+    if (!queryEvaluationInternalImporters.has(shown) && queryEvaluationLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: low-level query-evaluation constructors are private to ${queryEvaluationCompositionRoot}; `
+        + "import the registered composition root instead of assembling a parallel grounded or ungrounded path",
       );
     }
   }

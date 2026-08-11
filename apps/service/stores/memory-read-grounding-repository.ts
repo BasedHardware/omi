@@ -105,6 +105,21 @@ export interface MemoryReadGroundingRepositoryImplementation {
 const fail = (code: string): never => { throw new TypeError(`memory read grounding repository ${code}`); };
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
+export const assertMemoryReadGroundingRepository = (
+  value: unknown,
+): MemoryReadGroundingRepository => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail("unverified_repository");
+  const brand = Object.getOwnPropertyDescriptor(value, PORT);
+  const methods = ["stage", "load"].map((name) => Object.getOwnPropertyDescriptor(value, name));
+  if (!brand || !("value" in brand) || brand.value !== true
+    || methods.some((descriptor) => !descriptor || !("value" in descriptor)
+      || typeof descriptor.value !== "function" || !descriptor.enumerable)) {
+    fail("unverified_repository");
+  }
+  return value as MemoryReadGroundingRepository;
+};
+
 const exactRecord = (value: unknown, keys: readonly string[], code: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail(code);

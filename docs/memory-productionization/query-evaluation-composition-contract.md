@@ -1,6 +1,7 @@
 # Query-evaluation composition-root contract
 
-Status: P5 preregistration, 2026-08-11; implementation and activation absent
+Status: P5 preregistration plus production-neutral composition root,
+2026-08-11; concrete adapters and activation absent
 
 ## Purpose
 
@@ -82,6 +83,36 @@ zero model calls, while the import fence mechanically rejects a second
 low-level composition from a non-test route. This proves assembly identity and
 replay discipline only; it does not prove a production database, secret,
 provider, answer, truth grade, or policy decision.
+
+## Landed composition
+
+`apps/service/composition/memory-query-evaluation.ts` is the sole assembly
+site. It validates one exact injected configuration, requires branded result
+and grounding repositories, constructs the owner source, atomic grounding
+producer, and paired coordinator once, and returns only the coordinator. It
+contains no environment, database, model credential, secret, route, worker,
+cache, scheduler, retry, or logging behavior.
+
+The import graph now fences all three low-level query-evaluation modules to
+their implementations and this composition root. Adversarial fixtures prove a
+route cannot bypass the root through named, aliased, namespace, side-effect, or
+dynamic imports, and a copied composition file is rejected. Importing the root
+from the same route fixture passes.
+
+The end-to-end hermetic test staged one finalized grounded baseline/candidate
+pair and returned one opaque receipt; exact restart returned the same pair ref
+with zero model calls. The returned object exposes only `run`, model input stays
+class-blind, and an empty owner projection pairs with zero model/codec calls.
+
+Verification: 3 focused composition tests passed; composition plus coordinator
+passed 11 tests with 80 expectations; the full source/producer/coordinator/
+repository/migration chain passed 54 tests with 1,380 expectations. The import
+fence suite passed 18 tests with 43 expectations. The broad platform gate
+passed 1,293 tests with 9,406 expectations across 178 files, and the isolated
+epoch gate passed 18 tests with 141 expectations. The first post-broad epoch
+attempt cleared one known dangling test process and timed out in cleanup; its
+immediate isolated rerun passed. Import graph and diff checks passed; the known
+occupied fixed-port dev-server test remained excluded.
 
 ## Explicit exclusions
 
