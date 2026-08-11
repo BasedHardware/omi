@@ -93,6 +93,21 @@ class RoutingFailure(Exception):
         self.phase = phase
 
 
+class _GeminiRateLimitExceeded(HTTPException):
+    """Rate-limit response with explicit client replay semantics."""
+
+    def __init__(self, detail: str, *, retryable: bool, retry_after: int) -> None:
+        self.retryable = retryable
+        super().__init__(
+            status_code=429,
+            detail=detail,
+            headers={
+                'Retry-After': str(max(0, int(retry_after))),
+                'X-Omi-Retryable': 'true' if retryable else 'false',
+            },
+        )
+
+
 class ClientDisconnected(Exception):
     pass
 
@@ -384,12 +399,14 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
     if get_byok_key('gemini'):
         return path
     try:
-        burst_allowed, _, _ = await run_blocking(
+        burst_allowed, _, burst_retry_after = await run_blocking(
             critical_executor, redis_db.check_rate_limit, uid, 'desktop_gemini_burst', _BURST_LIMIT, 60
         )
         if not burst_allowed:
-            raise HTTPException(status_code=429, detail='Gemini request rate limit exceeded')
-        daily_allowed, daily_remaining, _ = await run_blocking(
+            raise _GeminiRateLimitExceeded(
+                'Gemini request rate limit exceeded', retryable=True, retry_after=burst_retry_after
+            )
+        daily_allowed, daily_remaining, daily_retry_after = await run_blocking(
             critical_executor,
             redis_db.check_rate_limit,
             uid,
@@ -402,7 +419,9 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
     except Exception as exc:
         raise HTTPException(status_code=503, detail='Gemini rate limiter is unavailable') from exc
     if not daily_allowed:
-        raise HTTPException(status_code=429, detail='Gemini daily request limit exceeded')
+        raise _GeminiRateLimitExceeded(
+            'Gemini daily request limit exceeded', retryable=False, retry_after=daily_retry_after
+        )
     daily_used = _DAILY_HARD_LIMIT - int(daily_remaining)
     soft_limit = 300 if os.getenv('OMI_MODEL_TIER', '').strip().lower() == 'max' else 30
     if daily_used > soft_limit and action not in {'embedContent', 'batchEmbedContents'} and model == 'gemini-2.5-pro':
@@ -711,7 +730,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
         phase = telemetry.phase if telemetry.phase == 'metering' else 'validation'
-        retryable = exc.status_code == 429
+        retryable = exc.retryable if isinstance(exc, _GeminiRateLimitExceeded) else exc.status_code == 429
         telemetry.complete(outcome=outcome, status_code=exc.status_code, retryable=retryable, phase=phase)
         exc.headers = {
             **(exc.headers or {}),

@@ -272,6 +272,28 @@ async def test_server_gemini_meter_rejects_request_over_the_daily_hard_limit(mon
 
     assert error.value.status_code == 429
     assert error.value.detail == "Gemini daily request limit exceeded"
+    assert error.value.retryable is False
+    assert error.value.headers == {"Retry-After": "86400", "X-Omi-Retryable": "false"}
+
+
+@pytest.mark.asyncio
+async def test_proxy_marks_daily_quota_exhaustion_non_retryable_and_preserves_retry_after(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return False, 0, 86_400
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+
+    assert error.value.status_code == 429
+    assert error.value.headers["X-Omi-Retryable"] == "false"
+    assert error.value.headers["Retry-After"] == "86400"
 
 
 @pytest.mark.asyncio
