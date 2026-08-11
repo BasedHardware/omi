@@ -20,11 +20,11 @@ describe("deterministic Chat generation scenarios", () => {
     const detached = readChatGenerationSourceCapability(declaredSource);
     mutable.adapter = "mutated";
     expect(detached).toEqual({ tier: "unknown", adapter: "unreported", deterministic: false });
-    const registered = registerChatGenerationSourceCapability(declaredSource, {
+    const untrustedRegistration = registerChatGenerationSourceCapability(declaredSource, {
       tier: "real-provider", adapter: "local-provider", deterministic: false,
     });
-    expect(readChatGenerationSourceCapability(registered)).toEqual({
-      tier: "real-provider", adapter: "local-provider", deterministic: false,
+    expect(readChatGenerationSourceCapability(untrustedRegistration)).toEqual({
+      tier: "unknown", adapter: "unreported", deterministic: false,
     });
     expect(Object.isFrozen(detached)).toBe(true);
     expect(readChatGenerationSourceCapability({
@@ -52,13 +52,6 @@ describe("deterministic Chat generation scenarios", () => {
     expect(readChatGenerationSourceCapability({
       start: () => Object.freeze({ cancel: (): void => {} }),
     })).toEqual({ tier: "unknown", adapter: "unreported", deterministic: false });
-    const registeredProvider = registerChatGenerationSourceCapability({
-      capability: { tier: "real-provider", adapter: "local-provider", deterministic: false },
-      start: () => Object.freeze({ cancel: (): void => {} }),
-    }, { tier: "real-provider", adapter: "local-provider", deterministic: false });
-    expect(readChatGenerationSourceCapability(registeredProvider)).toEqual({
-      tier: "real-provider", adapter: "local-provider", deterministic: false,
-    });
     let getterCalls = 0;
     const getterSource = Object.defineProperty({
       start: () => Object.freeze({ cancel: (): void => {} }),

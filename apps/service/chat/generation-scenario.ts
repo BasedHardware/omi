@@ -9,7 +9,6 @@ import {
 } from "./generation-supervisor";
 import {
   createScriptedChatGenerationSource,
-  registerChatGenerationSourceCapability,
   readChatGenerationSourceCapability,
   type ChatGenerationScheduler,
   type ChatGenerationSource,
@@ -110,26 +109,8 @@ const sourceWithFault = (
   scenario: ChatGenerationScenario,
   scheduler: DeterministicChatGenerationScheduler,
 ): ChatGenerationSource => {
-  const scripted = createScriptedChatGenerationSource(scenario.script ?? [], scheduler);
-  const source: ChatGenerationSource = Object.freeze({
-    capability: scripted.capability,
-    start(input) {
-      const run = scripted.start(input);
-      const errorTimer = scenario.sourceErrorAtMs === undefined
-        ? null
-        : scheduler.setTimeout(() => input.onError(new Error("scenario provider fault")), scenario.sourceErrorAtMs);
-      return Object.freeze({
-        cancel(): void {
-          run.cancel();
-          if (errorTimer !== null) scheduler.clearTimeout(errorTimer);
-        },
-      });
-    },
-  });
-  return registerChatGenerationSourceCapability(source, {
-    tier: "deterministic-scripted",
-    adapter: "scripted-chat-generation",
-    deterministic: true,
+  return createScriptedChatGenerationSource(scenario.script ?? [], scheduler, {
+    errorAtMs: scenario.sourceErrorAtMs,
   });
 };
 

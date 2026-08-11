@@ -56,6 +56,7 @@ const SAFE_ADAPTER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
 // provenance out-of-band so reading a receipt cannot invoke source traps,
 // inherited properties, or accessors.
 const REGISTERED_CAPABILITIES = new WeakMap<object, ChatGenerationSourceCapabilityReceipt>();
+const TRUSTED_CAPABILITY_TOKEN = Symbol("trusted-chat-generation-capability");
 
 const unknownCapability = (): ChatGenerationSourceCapabilityReceipt => UNKNOWN_CAPABILITY;
 
@@ -111,20 +112,41 @@ export const readChatGenerationSourceCapability = (
  * This is an internal dependency seam; callers must provide the receipt from
  * trusted adapter wiring, not from a source object's declaration field.
  */
-export const registerChatGenerationSourceCapability = (
+const registerTrustedChatGenerationSourceCapability = (
   source: ChatGenerationSource,
   capability: unknown,
+  token: symbol,
 ): ChatGenerationSource => {
   if ((typeof source !== "object" && typeof source !== "function") || source === null) {
     return source;
   }
+  if (token !== TRUSTED_CAPABILITY_TOKEN) return source;
   REGISTERED_CAPABILITIES.set(source, canonicalCapability(capability));
+  return source;
+};
+
+/**
+ * Compatibility no-op: untrusted callers cannot mint a receipt. Trusted
+ * constructors below use the module-private token and registrar directly.
+ */
+export const registerChatGenerationSourceCapability = (
+  source: ChatGenerationSource,
+  _capability: unknown,
+): ChatGenerationSource => {
+  if ((typeof source === "object" || typeof source === "function") && source !== null) {
+    REGISTERED_CAPABILITIES.set(source, unknownCapability());
+  }
   return source;
 };
 
 export interface ScriptedChatGenerationStep {
   readonly delayMs: number;
   readonly text: string;
+}
+
+export interface ScriptedChatGenerationOptions {
+  /** Deterministic fault injection used only by the local scenario harness. */
+  readonly errorAtMs?: number;
 }
 
 const DEFAULT_SCRIPT: readonly ScriptedChatGenerationStep[] = Object.freeze([
@@ -144,7 +166,11 @@ const validateStep = (step: ScriptedChatGenerationStep): ScriptedChatGenerationS
 export const createScriptedChatGenerationSource = (
   script: readonly ScriptedChatGenerationStep[] = DEFAULT_SCRIPT,
   scheduler: ChatGenerationScheduler = realtimeChatGenerationScheduler,
+  options: ScriptedChatGenerationOptions = {},
 ): ChatGenerationSource => {
+  if (options.errorAtMs !== undefined && (!Number.isSafeInteger(options.errorAtMs) || options.errorAtMs < 0)) {
+    throw new TypeError("invalid scripted source error delay");
+  }
   const steps = Object.freeze(script.map(validateStep));
   const source: ChatGenerationSource = Object.freeze({
     capability: Object.freeze({
@@ -156,6 +182,11 @@ export const createScriptedChatGenerationSource = (
       let cancelled = false;
       const timers: unknown[] = [];
       let elapsed = 0;
+      if (options.errorAtMs !== undefined) {
+        timers.push(scheduler.setTimeout(() => {
+          if (!cancelled) input.onError(new Error("scripted provider fault"));
+        }, options.errorAtMs));
+      }
       for (const [index, step] of steps.entries()) {
         elapsed += step.delayMs;
         timers.push(scheduler.setTimeout(() => {
@@ -181,9 +212,9 @@ export const createScriptedChatGenerationSource = (
       });
     },
   });
-  return registerChatGenerationSourceCapability(source, {
+  return registerTrustedChatGenerationSourceCapability(source, {
     tier: "deterministic-scripted",
     adapter: "scripted-chat-generation",
     deterministic: true,
-  });
+  }, TRUSTED_CAPABILITY_TOKEN);
 };
