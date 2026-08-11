@@ -54,7 +54,8 @@ export type RadiusTokens = {
 };
 
 export type TypographyRole = {
-  family: "system" | "openRunde";
+  /** Deliberate system fallbacks; no unshipped font name may enter a token. */
+  family: "system" | "rounded" | "mono";
   size: number;
   weight: 400 | 500 | 600;
   lineHeight: number;
@@ -69,6 +70,36 @@ export type TypographyTokens = {
   row: TypographyRole;
   label: TypographyRole;
   button: TypographyRole;
+  code: TypographyRole;
+};
+
+export type MotionTokens = {
+  duration: {
+    instant: number;
+    fast: number;
+    standard: number;
+    deliberate: number;
+  };
+  easing: {
+    standard: string;
+    emphasized: string;
+  };
+};
+
+export type LayoutTokens = {
+  contentWidth: {
+    compact: number;
+    regular: number;
+    wide: number;
+  };
+  readableMeasure: number;
+  rowMinHeight: number;
+};
+
+export type ShadowTokens = {
+  card: string;
+  floating: string;
+  overlay: string;
 };
 
 export type GlassTokens = {
@@ -84,6 +115,9 @@ export type GlassTokens = {
 export type InteractionTokens = {
   minTapTarget: number;
   focusRingWidth: number;
+  selectedBorderWidth: number;
+  pressedOffset: number;
+  disabledOpacity: number;
 };
 
 export type SemanticTheme = {
@@ -92,8 +126,32 @@ export type SemanticTheme = {
   spacing: SpacingTokens;
   radii: RadiusTokens;
   typography: TypographyTokens;
+  motion: MotionTokens;
+  layout: LayoutTokens;
+  shadows: ShadowTokens;
   glass: GlassTokens;
   interaction: InteractionTokens;
+};
+
+const sharedMotion: MotionTokens = {
+  duration: {
+    instant: 0,
+    fast: 120,
+    standard: 180,
+    deliberate: 260,
+  },
+  easing: {
+    standard: "cubic-bezier(0.2, 0, 0, 1)",
+    emphasized: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+  },
+};
+
+const sharedInteraction: InteractionTokens = {
+  minTapTarget: 44,
+  focusRingWidth: 2,
+  selectedBorderWidth: 2,
+  pressedOffset: 1,
+  disabledOpacity: 0.46,
 };
 
 const mobileDark: SemanticTheme = {
@@ -149,6 +207,18 @@ const mobileDark: SemanticTheme = {
     row: { family: "system", size: 15, weight: 500, lineHeight: 1.4, tracking: 0 },
     label: { family: "system", size: 12, weight: 500, lineHeight: 1.2, tracking: 0 },
     button: { family: "system", size: 15, weight: 600, lineHeight: 1.2, tracking: 0 },
+    code: { family: "mono", size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
+  },
+  motion: sharedMotion,
+  layout: {
+    contentWidth: { compact: 320, regular: 680, wide: 920 },
+    readableMeasure: 640,
+    rowMinHeight: 52,
+  },
+  shadows: {
+    card: "none",
+    floating: "0 10px 30px rgba(0, 0, 0, 0.28)",
+    overlay: "0 24px 64px rgba(0, 0, 0, 0.40)",
   },
   glass: {
     material: "none",
@@ -158,10 +228,7 @@ const mobileDark: SemanticTheme = {
     edgeOpacity: 0,
     reduceTransparencyMaterial: "solid",
   },
-  interaction: {
-    minTapTarget: 44,
-    focusRingWidth: 2,
-  },
+  interaction: sharedInteraction,
 };
 
 /** Mobile keeps its established geometry in light mode; only semantic colour roles change. */
@@ -187,6 +254,11 @@ const mobileLight: SemanticTheme = {
     danger: "#B42318",
     success: "#27843A",
     warning: "#B85C00",
+  },
+  shadows: {
+    card: "0 1px 2px rgba(17, 18, 22, 0.06)",
+    floating: "0 12px 32px rgba(17, 18, 22, 0.16)",
+    overlay: "0 24px 64px rgba(17, 18, 22, 0.22)",
   },
 };
 
@@ -235,13 +307,25 @@ const desktopLightGlass: SemanticTheme = {
     circular: 999,
   },
   typography: {
-    display: { family: "openRunde", size: 34, weight: 600, lineHeight: 1.1, tracking: -1.19 },
-    title: { family: "openRunde", size: 27, weight: 600, lineHeight: 1.18, tracking: -0.81 },
+    display: { family: "rounded", size: 34, weight: 600, lineHeight: 1.1, tracking: -1.19 },
+    title: { family: "rounded", size: 27, weight: 600, lineHeight: 1.18, tracking: -0.81 },
     heading: { family: "system", size: 20, weight: 600, lineHeight: 1.25, tracking: 0 },
     body: { family: "system", size: 17, weight: 400, lineHeight: 1.55, tracking: -0.17 },
     row: { family: "system", size: 15, weight: 500, lineHeight: 1.4, tracking: -0.15 },
     label: { family: "system", size: 12, weight: 500, lineHeight: 1.2, tracking: 0 },
     button: { family: "system", size: 15, weight: 600, lineHeight: 1.2, tracking: 0 },
+    code: { family: "mono", size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
+  },
+  motion: sharedMotion,
+  layout: {
+    contentWidth: { compact: 640, regular: 960, wide: 1180 },
+    readableMeasure: 720,
+    rowMinHeight: 48,
+  },
+  shadows: {
+    card: "0 1px 2px rgba(27, 31, 35, 0.08)",
+    floating: "0 14px 36px rgba(27, 31, 35, 0.16)",
+    overlay: "0 28px 72px rgba(27, 31, 35, 0.22)",
   },
   glass: {
     material: "hudWindow",
@@ -251,10 +335,7 @@ const desktopLightGlass: SemanticTheme = {
     edgeOpacity: 0.06,
     reduceTransparencyMaterial: "solid",
   },
-  interaction: {
-    minTapTarget: 44,
-    focusRingWidth: 2,
-  },
+  interaction: sharedInteraction,
 };
 
 /** Desktop dark mode retains the glass geometry and interaction model of the Aqua default. */
@@ -280,6 +361,11 @@ const desktopDarkGlass: SemanticTheme = {
     danger: "#FF453A",
     success: "#30D158",
     warning: "#FF9F0A",
+  },
+  shadows: {
+    card: "0 1px 2px rgba(0, 0, 0, 0.22)",
+    floating: "0 14px 38px rgba(0, 0, 0, 0.34)",
+    overlay: "0 30px 76px rgba(0, 0, 0, 0.48)",
   },
 };
 

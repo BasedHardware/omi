@@ -26,5 +26,28 @@ test("keeps platform interaction targets in logical points", () => {
   for (const theme of Object.values(SEMANTIC_TOKENS)) {
     assert.ok(theme.interaction.minTapTarget >= 44);
     assert.ok(theme.interaction.focusRingWidth > 0);
+    assert.ok(theme.interaction.selectedBorderWidth >= theme.interaction.focusRingWidth);
+    assert.ok(theme.interaction.disabledOpacity > 0 && theme.interaction.disabledOpacity < 1);
+  }
+});
+
+test("ships a complete visual-state token contract without an unbundled font", () => {
+  // red-proof: reintroducing the unshipped Open Runde family, omitting the code
+  // role, or collapsing the state timing ladder must fail here.
+  const serialized = JSON.stringify(SEMANTIC_TOKENS).toLowerCase();
+  assert.equal(serialized.includes("open runde"), false);
+  assert.equal(serialized.includes("openrunde"), false);
+  for (const theme of Object.values(SEMANTIC_TOKENS)) {
+    assert.deepEqual(Object.keys(theme.motion.duration), ["instant", "fast", "standard", "deliberate"]);
+    assert.equal(theme.motion.duration.instant, 0);
+    assert.ok(theme.motion.duration.fast > 0);
+    assert.ok(theme.motion.duration.standard > theme.motion.duration.fast);
+    assert.ok(theme.motion.duration.deliberate > theme.motion.duration.standard);
+    assert.equal(theme.typography.code.family, "mono");
+    assert.ok(theme.layout.contentWidth.compact < theme.layout.contentWidth.regular);
+    assert.ok(theme.layout.contentWidth.regular < theme.layout.contentWidth.wide);
+    assert.ok(theme.layout.readableMeasure <= theme.layout.contentWidth.regular);
+    assert.ok(theme.layout.rowMinHeight >= 44);
+    assert.deepEqual(Object.keys(theme.shadows), ["card", "floating", "overlay"]);
   }
 });
