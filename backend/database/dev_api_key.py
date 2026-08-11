@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Tuple, cast
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
+from database.read_boundary import parse_snapshot_strict
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
@@ -167,7 +168,9 @@ def rotate_dev_key(user_id: str, key_id: str) -> Tuple[str, DevApiKey]:
     projected = projection.metadata
     projected["scopes"] = scopes
     projected["last_used_at"] = None
-    return raw_key, DevApiKey.model_validate(projected)
+    # Credential rotation is correctness-critical, so the repaired projection
+    # goes through the strict shared read boundary rather than a direct parse.
+    return raw_key, parse_snapshot_strict(DevApiKey, key_doc, payload_from_snapshot=lambda _snapshot: projected)
 
 
 def get_dev_keys_for_user_with_repair_info(
