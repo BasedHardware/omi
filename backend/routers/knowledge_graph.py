@@ -14,7 +14,7 @@ from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other import endpoints as auth
-from utils.subscription import is_trial_paywalled
+from utils.subscription import enforce_chat_quota, is_trial_paywalled
 
 router = APIRouter()
 Payload = Dict[str, Any]
@@ -105,7 +105,7 @@ class DeleteKnowledgeGraphResponse(BaseModel):
 
 class ExtractKnowledgeGraphRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100_000)
-    user_name: Optional[str] = None
+    user_name: Optional[str] = Field(default=None, max_length=200)
     include_existing: bool = False
 
 
@@ -208,16 +208,19 @@ async def extract_knowledge_graph(
     """
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
+    await run_blocking(db_executor, enforce_chat_quota, uid, 'desktop')
     kg_mod = _knowledge_graph_llm_module()
     resolved_name = body.user_name or await run_blocking(db_executor, get_user_name, uid)
     user_name = (resolved_name or "User").strip() or "User"
+    existing_nodes = await run_blocking(db_executor, kg_db.get_knowledge_nodes, uid) if body.include_existing else None
     extraction = await run_blocking(
         llm_executor,
         lambda: getattr(kg_mod, "extract_kg_from_text")(
             uid,
             body.text,
             user_name=user_name,
-            load_existing_from_db=body.include_existing,
+            existing_nodes=existing_nodes,
+            load_existing_from_db=False,
             strict_parse=True,
             usage_memory_id="http-extract",
         ),

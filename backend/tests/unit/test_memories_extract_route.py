@@ -17,6 +17,7 @@ def _entitled(monkeypatch):
     import utils.subscription as subscription
 
     monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: False)
+    monkeypatch.setattr(subscription, 'enforce_chat_quota', lambda uid, platform=None: None)
 
 
 async def test_extract_memory_log_returns_without_persisting(monkeypatch):
@@ -60,6 +61,22 @@ async def test_extract_memory_log_fails_closed_when_extractor_returns_none(monke
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_extract_memory_log_blocks_when_chat_quota_is_exhausted(monkeypatch):
+    import utils.subscription as subscription
+
+    def reject_quota(*_args, **_kwargs):
+        raise HTTPException(status_code=402, detail='quota_exceeded')
+
+    monkeypatch.setattr(subscription, 'enforce_chat_quota', reject_quota)
+
+    with pytest.raises(HTTPException) as exc:
+        await memories_router.extract_memory_log(
+            memories_router.ExtractMemoryLogRequest(text='something memorable'),
+            uid=UID,
+        )
+    assert exc.value.status_code == 402
 
 
 async def test_extract_memory_log_blocks_a_trial_expired_account(monkeypatch):

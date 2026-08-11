@@ -100,6 +100,7 @@ from utils.subscription import (
     wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
+    enforce_chat_quota,
     get_trial_metadata,
 )
 from database import user_usage as user_usage_db
@@ -2093,6 +2094,7 @@ async def synthesize_ai_profile(
 
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
+    await run_blocking(db_executor, enforce_chat_quota, uid, 'desktop')
     synthesis = await run_blocking(
         llm_executor,
         lambda: ai_user_profile_llm.synthesize_ai_user_profile(

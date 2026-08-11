@@ -18,6 +18,7 @@ UID = 'uid-kg-extract'
 def _entitled(monkeypatch):
     """Default to an entitled account; the paywall gate has its own test."""
     monkeypatch.setattr(kg_router, 'is_trial_paywalled', lambda uid, platform: False)
+    monkeypatch.setattr(kg_router, 'enforce_chat_quota', lambda uid, platform=None: None)
 
 
 async def test_extract_knowledge_graph_returns_client_graph_without_persisting(monkeypatch):
@@ -80,6 +81,55 @@ async def test_extract_knowledge_graph_fails_closed_when_extractor_returns_none(
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_extract_knowledge_graph_loads_existing_nodes_on_db_executor(monkeypatch):
+    calls: dict[str, object] = {}
+
+    def fake_extract(uid, text, **kwargs):
+        calls['kwargs'] = kwargs
+        return KnowledgeGraphExtraction(nodes=[], edges=[])
+
+    monkeypatch.setattr(
+        kg_router,
+        '_knowledge_graph_llm_module',
+        lambda: SimpleNamespace(
+            extract_kg_from_text=fake_extract,
+            extraction_to_client_graph=lambda *_a, **_k: {
+                'nodes': [],
+                'edges': [],
+            },
+        ),
+    )
+    monkeypatch.setattr(kg_router, 'get_user_name', lambda uid: 'Trinity')
+    monkeypatch.setattr(kg_router.kg_db, 'get_knowledge_nodes', lambda uid: [{'id': 'n1', 'label': 'Neo'}])
+
+    await kg_router.extract_knowledge_graph(
+        kg_router.ExtractKnowledgeGraphRequest(text='Neo likes coffee', include_existing=True),
+        uid=UID,
+    )
+
+    assert calls['kwargs']['existing_nodes'] == [{'id': 'n1', 'label': 'Neo'}]
+    assert calls['kwargs']['load_existing_from_db'] is False
+
+
+def test_extract_knowledge_graph_bounds_caller_user_name():
+    with pytest.raises(ValueError):
+        kg_router.ExtractKnowledgeGraphRequest(text='something memorable', user_name='x' * 201)
+
+
+async def test_extract_knowledge_graph_blocks_when_chat_quota_is_exhausted(monkeypatch):
+    def reject_quota(*_args, **_kwargs):
+        raise HTTPException(status_code=402, detail='quota_exceeded')
+
+    monkeypatch.setattr(kg_router, 'enforce_chat_quota', reject_quota)
+
+    with pytest.raises(HTTPException) as exc:
+        await kg_router.extract_knowledge_graph(
+            kg_router.ExtractKnowledgeGraphRequest(text='something memorable'),
+            uid=UID,
+        )
+    assert exc.value.status_code == 402
 
 
 async def test_extract_knowledge_graph_blocks_a_trial_expired_account(monkeypatch):

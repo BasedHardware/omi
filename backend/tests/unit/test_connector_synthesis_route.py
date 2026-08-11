@@ -15,6 +15,7 @@ UID = 'uid-connector-synthesis'
 def _entitled(monkeypatch):
     """Default to an entitled account; the paywall gate has its own test."""
     monkeypatch.setattr(integrations_router, 'is_trial_paywalled', lambda uid, platform: False)
+    monkeypatch.setattr(integrations_router, 'enforce_chat_quota', lambda uid, platform=None: None)
 
 
 async def test_synthesize_connector_data_returns_without_persisting(monkeypatch):
@@ -65,6 +66,20 @@ async def test_synthesize_connector_data_fails_closed_when_synthesis_returns_non
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+async def test_synthesize_connector_data_blocks_when_chat_quota_is_exhausted(monkeypatch):
+    def reject_quota(*_args, **_kwargs):
+        raise HTTPException(status_code=402, detail='quota_exceeded')
+
+    monkeypatch.setattr(integrations_router, 'enforce_chat_quota', reject_quota)
+
+    with pytest.raises(HTTPException) as exc:
+        await integrations_router.synthesize_connector_data(
+            integrations_router.ConnectorSynthesisRequest(source='notes', items=['Bought a piano']),
+            uid=UID,
+        )
+    assert exc.value.status_code == 402
 
 
 async def test_synthesize_connector_data_blocks_a_trial_expired_account(monkeypatch):
