@@ -20,7 +20,8 @@ Authorization runs in this order and never speculates around a failed stage:
 2. ask the credential/grant source once for the exact configured application
    and capability under that Firebase uid;
 3. strictly validate an active head-bound credential and exact active enabled
-   grant, including principal/uid, application, capability, expiry, grant
+   grant, including the exact requested Firebase uid binding, principal,
+   application, capability, expiry, grant
    version, authorization-state digest, and the control coordinates observed by
    that source;
 4. inspect the account through the coherent control source once;
@@ -36,11 +37,14 @@ Its `current | absent | unavailable` envelope is untrusted plain data. A current
 row is exact-shaped and carries the full repository revalidation coordinates;
 the composition copies no raw record or provider detail.
 
-The source's principal id must equal the verified Firebase uid and its
-authentication strength must be exactly `firebase-id-token`. The uid remains a
-credential principal, never an account id. Account ids are pre-existing opaque
-coordinates; this unit does not implement the unresolved ADR-012 word grammar
-or mint an account.
+The source's returned Firebase uid must equal the verified uid and its
+authentication strength must be exactly `firebase-id-token`. The source also
+returns the separate bounded principal coordinate persisted on the credential;
+the composition does not derive it from the uid or require Firebase's broader
+uid alphabet to satisfy an internal identifier grammar. The uid is an external
+credential binding, never an account id. Account and principal ids are
+pre-existing opaque coordinates; this unit does not implement the unresolved
+ADR-012 word grammar or mint either one.
 
 ## Closed outcomes
 
@@ -80,7 +84,8 @@ sealed authorize operation, never the issuer or raw mint input.
    emit one branded frozen context with minimum expiry.
 2. Invalid identity calls neither source; absent grant calls no control source;
    no refusal produces or exposes an account id.
-3. Wrong uid/principal, application, capability, auth strength, lifecycle,
+3. Wrong uid binding, malformed principal, application, capability, auth
+   strength, lifecycle,
    enabled flag, expiry, account, digest, or unsafe version/counter denies before
    issuer access.
 4. Missing, conflicting, legacy, migrating, stranded, unactivated, pending
