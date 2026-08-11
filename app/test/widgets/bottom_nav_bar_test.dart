@@ -29,12 +29,14 @@ void main() {
     addTearDown(provider.dispose);
 
     final taps = <(int, bool)>[];
+    final warmups = <int>[];
     await tester.pumpWidget(
       ChangeNotifierProvider<HomeProvider>.value(
         value: provider,
         child: MaterialApp(
           home: Scaffold(
             body: BottomNavBar(
+              onTabWarmup: warmups.add,
               onTabTap: (index, isRepeat) {
                 taps.add((index, isRepeat));
                 provider.setIndex(index);
@@ -61,6 +63,7 @@ void main() {
     await tester.tap(_findIcon(FontAwesomeIcons.listCheck));
 
     expect(taps, [(2, false), (2, true)]);
+    expect(warmups, [2, 2]);
   });
 }
 

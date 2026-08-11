@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -41,6 +43,57 @@ typedef _ConversationListRow = ({
   LocalRecording? recording,
   int conversationIndex,
 });
+
+typedef _ConversationPageSnapshot = ({
+  List<ServerConversation> conversations,
+  Map<DateTime, List<ServerConversation>> groupedConversations,
+  List<ServerConversation> processingConversations,
+  List<LocalRecording> recordings,
+  String previousQuery,
+  String? selectedFolderId,
+  String? selectedSpeakerId,
+  DateTime? selectedDate,
+  bool showStarredOnly,
+  bool showDailySummaries,
+  bool hasDailySummaries,
+  bool isSelectionModeActive,
+  bool isLoadingConversations,
+  bool isFetchingConversations,
+  bool isAwaitingInitialFetchRetry,
+  int conversationIdentitySignature,
+  int processingIdentitySignature,
+  int recordingIdentitySignature,
+  int pendingDeleteCount,
+});
+
+int _identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
+
+_ConversationPageSnapshot _conversationPageSnapshot(
+  ConversationProvider conversations,
+  LocalRecordingsProvider recordings,
+) {
+  return (
+    conversations: conversations.conversations,
+    groupedConversations: conversations.groupedConversations,
+    processingConversations: conversations.processingConversations,
+    recordings: recordings.recordings,
+    previousQuery: conversations.previousQuery,
+    selectedFolderId: conversations.selectedFolderId,
+    selectedSpeakerId: conversations.selectedSpeakerId,
+    selectedDate: conversations.selectedDate,
+    showStarredOnly: conversations.showStarredOnly,
+    showDailySummaries: conversations.showDailySummaries,
+    hasDailySummaries: conversations.hasDailySummaries,
+    isSelectionModeActive: conversations.isSelectionModeActive,
+    isLoadingConversations: conversations.isLoadingConversations,
+    isFetchingConversations: conversations.isFetchingConversations,
+    isAwaitingInitialFetchRetry: conversations.isAwaitingInitialFetchRetry,
+    conversationIdentitySignature: _identitySignature(conversations.conversations),
+    processingIdentitySignature: _identitySignature(conversations.processingConversations),
+    recordingIdentitySignature: _identitySignature(recordings.recordings),
+    pendingDeleteCount: conversations.memoriesToDelete.length,
+  );
+}
 
 List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
@@ -129,6 +182,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  String? _loadMoreFilterKey;
+  String? _lastLoadMoreRequestKey;
+  bool _isBootstrapping = true;
 
   void _refreshGoals() {}
 
@@ -146,29 +202,86 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
-      if (conversationProvider.conversations.isEmpty) {
-        await conversationProvider.getInitialConversations();
-      } else {
-        // Still check for daily summaries even if conversations are cached
-        conversationProvider.checkHasDailySummaries();
+      try {
+        if (conversationProvider.conversations.isEmpty) {
+          await conversationProvider.getInitialConversations();
+        } else {
+          // Still check for daily summaries even if conversations are cached
+          _scheduleDeferred(conversationProvider.checkHasDailySummaries);
+        }
+      } finally {
+        if (mounted) setState(() => _isBootstrapping = false);
       }
 
       if (!mounted) return;
 
-      // Surface any unsynced batch recordings written by the native layer.
-      context.read<LocalRecordingsProvider>().refresh();
+      // Keep filesystem scanning off the first navigation/scroll frame.
+      _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
 
       // Load folders for folder tabs
       final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
-        await folderProvider.loadFolders();
+        _scheduleDeferred(folderProvider.loadFolders);
       }
 
       // Check if we should show the app review prompt for first conversation
       if (mounted && conversationProvider.conversations.isNotEmpty) {
-        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
+        _scheduleDeferred(
+          () => _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true),
+        );
       }
     });
+  }
+
+  void _scheduleDeferred(Future<void> Function() operation) {
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 200), () async {
+        if (!mounted) return;
+        try {
+          await operation();
+        } catch (error, stackTrace) {
+          Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
+        }
+      }),
+    );
+  }
+
+  bool _requestMoreIfNeeded(ConversationProvider provider) {
+    if (provider.isLoadingConversations) return false;
+
+    final filterKey = [
+      provider.previousQuery,
+      provider.selectedFolderId ?? '',
+      provider.selectedSpeakerId ?? '',
+      provider.selectedDate?.toIso8601String() ?? '',
+      provider.showStarredOnly,
+    ].join('|');
+    if (_loadMoreFilterKey != filterKey) {
+      _loadMoreFilterKey = filterKey;
+      _lastLoadMoreRequestKey = null;
+    }
+
+    final String pageOrCount;
+    final isSearch = provider.previousQuery.isNotEmpty || provider.selectedSpeakerId != null;
+    if (isSearch) {
+      if (provider.totalSearchPages <= provider.currentSearchPage) return false;
+      pageOrCount = 'page:${provider.currentSearchPage}';
+    } else {
+      final count = provider.conversations.length + provider.memoriesToDelete.length;
+      if (count == 0 || count % 50 != 0) return false;
+      pageOrCount = 'count:$count';
+    }
+
+    final requestKey = '$filterKey|$pageOrCount';
+    if (_lastLoadMoreRequestKey == requestKey) return false;
+    _lastLoadMoreRequestKey = requestKey;
+
+    if (isSearch) {
+      unawaited(provider.searchMoreConversations());
+    } else {
+      unawaited(provider.getMoreConversationsFromServer());
+    }
+    return true;
   }
 
   void scrollToTop() {
@@ -330,12 +443,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
-    return Consumer<ConversationProvider>(
-      builder: (context, convoProvider, child) {
+    return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
+      selector: (_, conversationProvider, recordingsProvider) =>
+          _conversationPageSnapshot(conversationProvider, recordingsProvider),
+      builder: (context, snapshot, child) {
+        final convoProvider = context.read<ConversationProvider>();
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final recordingsProvider = context.watch<LocalRecordingsProvider>();
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
@@ -344,13 +459,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
           // from device offline-sync (which lives on the Sync page).
-          for (final rec in recordingsProvider.recordings) {
+          for (final rec in snapshot.recordings) {
             final dt = DateTime.fromMillisecondsSinceEpoch(rec.timerStart * 1000);
             final day = DateTime(dt.year, dt.month, dt.day);
             (recordingsByDate[day] ??= <LocalRecording>[]).add(rec);
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
+        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+            convoProvider.isLoadingConversations ||
+            convoProvider.isFetchingConversations ||
+            convoProvider.isAwaitingInitialFetchRetry;
         final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
@@ -362,6 +482,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
+            _lastLoadMoreRequestKey = null;
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             // Refresh goals widget
             _goalsWidgetKey.currentState?.refresh();
@@ -369,7 +490,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             await Future.wait([
               convoProvider.getInitialConversations(),
               Provider.of<FolderProvider>(context, listen: false).loadFolders(),
-              recordingsProvider.refresh(),
+              Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
             ]);
           },
           color: Colors.deepPurpleAccent,
@@ -384,9 +505,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: ActiveCallBanner()),
 
               // Search bar
-              Consumer2<HomeProvider, ConversationProvider>(
-                builder: (context, homeProvider, convoProvider, _) {
-                  bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+              Selector<HomeProvider, bool>(
+                selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
+                builder: (context, showConvoSearchBar, _) {
+                  bool shouldShowSearchBar = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                   if (!shouldShowSearchBar) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());
                   }
@@ -399,9 +521,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               getProcessingConversationsWidget(convoProvider.processingConversations),
 
               // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
-              Consumer<HomeProvider>(
-                builder: (context, homeProvider, _) {
-                  final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+              Selector<HomeProvider, bool>(
+                selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
+                builder: (context, showConvoSearchBar, _) {
+                  final isSearchActive = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                   final hasCalendarFilter = convoProvider.selectedDate != null;
                   final prefs = SharedPreferencesUtil();
                   if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
@@ -413,7 +536,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   }
                   return SliverToBoxAdapter(
                     child: Column(
-                      children: [if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)],
+                      children: [
+                        if (showGoals)
+                          RepaintBoundary(child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)),
+                      ],
                     ),
                   );
                 },
@@ -425,8 +551,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // users get the empty-state hero below instead.
               if (convoProvider.showDailySummaries ||
                   _nonDiscardedConversationCount(convoProvider) > 0 ||
-                  convoProvider.isLoadingConversations ||
-                  convoProvider.isFetchingConversations ||
+                  isShowingConversationSkeleton ||
                   _hasActiveFilter(convoProvider))
                 SliverToBoxAdapter(
                   child: Builder(
@@ -452,11 +577,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // clear it, even when the filtered result is empty.
               if (!convoProvider.showDailySummaries &&
                   (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                      convoProvider.isLoadingConversations ||
-                      convoProvider.isFetchingConversations ||
+                      isShowingConversationSkeleton ||
                       _hasActiveFilter(convoProvider)))
-                Consumer2<FolderProvider, ConversationProvider>(
-                  builder: (context, folderProvider, convoProvider, _) {
+                Consumer<FolderProvider>(
+                  builder: (context, folderProvider, _) {
                     return SliverToBoxAdapter(
                       child: FolderTabs(
                         folders: folderProvider.folders,
@@ -478,18 +602,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 const DailySummariesList()
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
                   !hasRecordings &&
-                  !convoProvider.isLoadingConversations &&
-                  !convoProvider.isFetchingConversations &&
-                  !convoProvider.isAwaitingInitialFetchRetry &&
+                  !isShowingConversationSkeleton &&
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
-              else if (convoProvider.groupedConversations.isEmpty &&
-                  !hasRecordings &&
-                  !convoProvider.isLoadingConversations &&
-                  !convoProvider.isFetchingConversations &&
-                  !convoProvider.isAwaitingInitialFetchRetry)
+              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
@@ -498,11 +616,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty &&
-                  !hasRecordings &&
-                  (convoProvider.isLoadingConversations ||
-                      convoProvider.isFetchingConversations ||
-                      convoProvider.isAwaitingInitialFetchRetry))
+              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && isShowingConversationSkeleton)
                 _buildLoadingShimmer()
               else
                 SliverList(
@@ -516,17 +630,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       return VisibilityDetector(
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
-                          var provider = Provider.of<ConversationProvider>(context, listen: false);
-                          if (provider.previousQuery.isNotEmpty) {
-                            if (visibilityInfo.visibleFraction > 0 &&
-                                !provider.isLoadingConversations &&
-                                (provider.totalSearchPages > provider.currentSearchPage)) {
-                              provider.searchMoreConversations();
-                            }
-                          } else {
-                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
-                              convoProvider.getMoreConversationsFromServer();
-                            }
+                          if (visibilityInfo.visibleFraction > 0) {
+                            _requestMoreIfNeeded(context.read<ConversationProvider>());
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),

@@ -1445,13 +1445,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, data, child) {
           return Stack(
             children: [
-              ListView(
-                shrinkWrap: true,
+              CustomScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                children: [
-                  const GetSummaryWidgets(),
+                slivers: [
+                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
                   data.item1
-                      ? const ReprocessDiscardedWidget()
+                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,
                           currentResultIndex: widget.currentResultIndex,
@@ -1470,8 +1469,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
-                  const GetGeolocationWidgets(),
-                  const SizedBox(height: 150),
+                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
                 ],
               ),
             ],

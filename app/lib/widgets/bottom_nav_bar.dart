@@ -8,9 +8,10 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 
 class BottomNavBar extends StatefulWidget {
-  const BottomNavBar({super.key, required this.onTabTap});
+  const BottomNavBar({super.key, required this.onTabTap, this.onTabWarmup});
 
   final void Function(int index, bool isRepeat) onTabTap;
+  final ValueChanged<int>? onTabWarmup;
 
   @override
   State<BottomNavBar> createState() => _BottomNavBarState();
@@ -61,11 +62,17 @@ class _BottomNavBarState extends State<BottomNavBar> {
   Widget _buildTab(BuildContext context, int selectedIndex, int index, FaIconData icon, String label) {
     return Expanded(
       child: InkWell(
+        onTapDown: (_) => widget.onTabWarmup?.call(index),
         onTap: () {
-          HapticFeedback.mediumImpact();
-          PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
-          primaryFocus?.unfocus();
+          // Switch the visible page before crossing the platform channel for
+          // haptics or analytics. Both can be delayed when the device is busy,
+          // but neither should delay visual acknowledgement of the tap.
           widget.onTabTap(index, context.read<HomeProvider>().selectedIndex == index);
+          primaryFocus?.unfocus();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            HapticFeedback.selectionClick();
+            PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
+          });
         },
         child: SizedBox(
           height: 90,

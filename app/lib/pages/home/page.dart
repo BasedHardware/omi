@@ -71,6 +71,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
@@ -155,6 +156,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   // tabs until the user visits them. Once created, a tab remains in the stack
   // so its scroll position and other state are preserved.
   final List<Widget?> _pages = List<Widget?>.filled(4, null);
+  final Set<int> _scheduledPageInitializations = <int>{};
 
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
@@ -182,9 +184,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _schedulePageInitialization(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
+    if (!_scheduledPageInitializations.add(pageIndex)) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduledPageInitializations.remove(pageIndex);
+      if (!mounted || _pages[pageIndex] != null) return;
+      setState(() => _ensurePageInitialized(pageIndex));
+    });
+    // addPostFrameCallback does not schedule a frame by itself. Background
+    // prewarming often runs while the UI is idle, so explicitly request one.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _prewarmRemainingTabs(int selectedIndex) {
+    var delay = const Duration(milliseconds: 350);
+    for (var index = 0; index < _pages.length; index++) {
+      if (index == selectedIndex) continue;
+      final pageIndex = index;
+      Timer(delay, () {
+        if (!mounted) return;
+        _schedulePageInitialization(pageIndex);
+      });
+      delay += const Duration(milliseconds: 180);
+    }
+  }
+
   List<Widget> _buildPages(int selectedIndex) {
-    _ensurePageInitialized(selectedIndex);
-    return [for (final page in _pages) page ?? const SizedBox.shrink()];
+    return [
+      for (var index = 0; index < _pages.length; index++)
+        TickerMode(
+          enabled: index == selectedIndex,
+          child: RepaintBoundary(child: _pages[index] ?? _TabLoadingSkeleton(tabIndex: index)),
+        ),
+    ];
   }
 
   void _scrollToTop(int pageIndex) {
@@ -336,6 +370,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
+    _prewarmRemainingTabs(homePageIdx);
 
     // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
     if (SharedPreferencesUtil().claudeAgentEnabled) {
@@ -727,12 +762,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           return child!;
         },
-        child: Consumer<HomeProvider>(
-          builder: (context, homeProvider, _) {
+        child: Selector<HomeProvider, int>(
+          selector: (_, homeProvider) => homeProvider.selectedIndex,
+          builder: (context, selectedIndex, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               resizeToAvoidBottomInset: false,
-              appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
+              appBar: selectedIndex == 5 ? null : _buildAppBar(context),
               body: GestureDetector(
                 onTap: () {
                   primaryFocus?.unfocus();
@@ -744,11 +780,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     Column(
                       children: [
                         // Show slim green call bar on non-home/conversations tabs when a call is active
-                        if (homeProvider.selectedIndex > 1) const ActiveCallTopBar(),
+                        if (selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
                           child: IndexedStack(
-                            index: homeProvider.selectedIndex,
-                            children: _buildPages(homeProvider.selectedIndex),
+                            index: selectedIndex,
+                            children: _buildPages(selectedIndex),
                           ),
                         ),
                       ],
@@ -764,6 +800,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         return Stack(
                           children: [
                             BottomNavBar(
+                              // Queue page construction after the current
+                              // gesture frame. Building a destination directly
+                              // in onTapDown makes the tap itself feel stuck.
+                              onTabWarmup: _schedulePageInitialization,
                               onTabTap: (index, isRepeat) {
                                 if (isRepeat) {
                                   _scrollToTop(index);
@@ -773,8 +813,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     final cp = context.read<ConversationProvider>();
                                     if (cp.showDailySummaries) cp.toggleDailySummaries();
                                   }
-                                  _ensurePageInitialized(index);
+                                  // Change tabs immediately. If background
+                                  // prewarming has not completed yet, the
+                                  // destination paints a skeleton for one frame
+                                  // and mounts its real content afterwards.
                                   home.setIndex(index);
+                                  _schedulePageInitialization(index);
                                 }
                               },
                             ),
@@ -785,11 +829,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       },
                     ),
                     // Merge action bar - floats above bottom nav when in selection mode
-                    if (homeProvider.selectedIndex == 1)
-                      const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
+                    if (selectedIndex == 1) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
                     // Task selection action bar - floats above bottom nav on the
                     // tasks tab when selection mode is active in ActionItemsProvider.
-                    if (homeProvider.selectedIndex == 2)
+                    if (selectedIndex == 2)
                       const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
                   ],
                 ),
@@ -1228,5 +1271,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
     super.dispose();
+  }
+}
+
+class _TabLoadingSkeleton extends StatelessWidget {
+  const _TabLoadingSkeleton({required this.tabIndex});
+
+  final int tabIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = tabIndex == 3 ? 6 : 5;
+    return IgnorePointer(
+      child: ListView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
+        itemCount: itemCount,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: ShimmerWithTimeout(
+            baseColor: const Color(0xFF1F1F25),
+            highlightColor: const Color(0xFF303038),
+            child: Container(
+              height: index == 0 ? 34 : 76,
+              width: double.infinity,
+              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
