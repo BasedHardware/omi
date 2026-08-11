@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { Predicate } from "../schema";
 import {
   invokePredicateAlignment,
+  planPredicateAlignmentQuestions,
   predicateAlignmentBatchDigest,
   predicateAlignmentVocabularyFrontier,
   type PredicateAlignmentAdjudicationContract,
@@ -413,6 +414,23 @@ test("exhaustive questions cover every eligible pair and are input-order determi
     remaining_pairs_after_plan: 0,
     maximum_remaining_questions_after_plan: 0,
   });
+});
+
+test("pure scheduling plan is byte-identical to the invocation question plan", async () => {
+  const predicates = ["hotel", "alpha", "echo", "bravo", "delta", "charlie"]
+    .map((name) => v2("ignored", name, "owner-a", ["subject"]));
+  const planningOptions = options({ batch_prompt_budget: 35, max_questions_per_invocation: 3 });
+  const planned = planPredicateAlignmentQuestions([...predicates].reverse(), planningOptions);
+  const invoked: PredicateAlignmentRequest[] = [];
+  const result = await invokePredicateAlignment({ invoke: async ({ input }) => {
+    invoked.push(input as PredicateAlignmentRequest);
+    return { assertions: [] };
+  } }, predicates, planningOptions);
+  expect(planned.questions.map((question) => question.request)).toEqual(invoked);
+  expect(planned.questions.map((question) => question.batch_question_digest))
+    .toEqual(result.batch_outcomes.map((outcome) => outcome.batch_question_digest));
+  expect(planned.coverage).toEqual(result.coverage);
+  expect(planPredicateAlignmentQuestions(predicates, planningOptions)).toEqual(planned);
 });
 
 test("successful question records resume exactly while stale contract and role coordinates re-ask", async () => {

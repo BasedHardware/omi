@@ -35,13 +35,11 @@ export interface PredicateAlignmentAdjudicationContract {
   code_version: string;
 }
 
-export interface PredicateAlignmentOptions {
+export interface PredicateAlignmentPlanningOptions {
   /** The owner whose vocabulary may enter this model question. */
   owner_account_id: string;
   /** Positive, finite upper bound on the exact prompt-shaped cost of a call. */
   batch_prompt_budget: number;
-  /** Positive bounded number of model calls in flight. */
-  model_concurrency: number;
   /** Positive hard bound on questions emitted by one resumable invocation. */
   max_questions_per_invocation: number;
   /**
@@ -56,6 +54,11 @@ export interface PredicateAlignmentOptions {
    * durable; a model response or settlement digest alone is not authority.
    */
   successful_questions?: readonly PredicateAlignmentSuccessfulQuestion[];
+}
+
+export interface PredicateAlignmentOptions extends PredicateAlignmentPlanningOptions {
+  /** Positive bounded number of model calls in flight. */
+  model_concurrency: number;
 }
 
 export interface PredicateAlignmentSuccessfulQuestion {
@@ -131,6 +134,22 @@ export interface PreparedPredicateAlignmentQuestion {
   excluded_predicates: readonly PredicateAlignmentExclusion[];
 }
 
+export interface PredicateAlignmentPlannedQuestion {
+  batch_index: number;
+  batch_question_digest: string;
+  predicate_frontier: string;
+  predicate_ids: readonly string[];
+  prompt_cost: number;
+  request: PredicateAlignmentRequest;
+}
+
+export interface PredicateAlignmentPlan {
+  questions: readonly PredicateAlignmentPlannedQuestion[];
+  valid_successful_questions: readonly PredicateAlignmentSuccessfulQuestion[];
+  excluded_predicates: readonly PredicateAlignmentExclusion[];
+  coverage: PredicateAlignmentCoverage;
+}
+
 export interface PredicateAlignmentCoverage {
   eligible_predicates: number;
   total_pairs: number;
@@ -161,16 +180,11 @@ const requireNonEmpty = (value: string, code: string): void => {
   if (!value.trim()) throw new TypeError(code);
 };
 
-const validateOptions = (options: PredicateAlignmentOptions): void => {
+const validatePlanningOptions = (options: PredicateAlignmentPlanningOptions): void => {
   if (!Number.isSafeInteger(options.batch_prompt_budget)
     || options.batch_prompt_budget < 1
     || options.batch_prompt_budget > MAX_ALIGNMENT_PROMPT_BUDGET) {
     throw new RangeError("predicate_alignment_prompt_budget_invalid");
-  }
-  if (!Number.isSafeInteger(options.model_concurrency)
-    || options.model_concurrency < 1
-    || options.model_concurrency > MAX_ALIGNMENT_CONCURRENCY) {
-    throw new RangeError("predicate_alignment_concurrency_invalid");
   }
   if (!Number.isSafeInteger(options.max_questions_per_invocation)
     || options.max_questions_per_invocation < 1
@@ -188,7 +202,16 @@ const validateOptions = (options: PredicateAlignmentOptions): void => {
   requireNonEmpty(contract.code_version, "predicate_alignment_code_version_invalid");
 };
 
-const measuredCost = (options: PredicateAlignmentOptions, request: PredicateAlignmentRequest): number => {
+const validateOptions = (options: PredicateAlignmentOptions): void => {
+  validatePlanningOptions(options);
+  if (!Number.isSafeInteger(options.model_concurrency)
+    || options.model_concurrency < 1
+    || options.model_concurrency > MAX_ALIGNMENT_CONCURRENCY) {
+    throw new RangeError("predicate_alignment_concurrency_invalid");
+  }
+};
+
+const measuredCost = (options: PredicateAlignmentPlanningOptions, request: PredicateAlignmentRequest): number => {
   const cost = options.prompt_cost(request);
   if (!Number.isSafeInteger(cost) || cost < 1) throw new RangeError("predicate_alignment_prompt_cost_invalid");
   return cost;
@@ -441,7 +464,7 @@ const digestPattern = /^[0-9a-f]{64}$/;
 
 const validSuccessfulQuestions = (
   view: readonly PredicateView[],
-  options: PredicateAlignmentOptions,
+  options: PredicateAlignmentPlanningOptions,
 ): readonly PredicateAlignmentSuccessfulQuestion[] => {
   const byId = new Map(view.map((predicate) => [predicate.predicate_id, predicate]));
   const valid = new Map<string, PredicateAlignmentSuccessfulQuestion>();
@@ -487,7 +510,7 @@ const validSuccessfulQuestions = (
 
 const planBatches = (
   view: readonly PredicateView[],
-  options: PredicateAlignmentOptions,
+  options: PredicateAlignmentPlanningOptions,
 ): { planned: readonly PlannedBatch[]; coverage: PredicateAlignmentCoverage; valid_successes: readonly PredicateAlignmentSuccessfulQuestion[] } => {
   const requestFor = (predicates: readonly PredicateView[]): PredicateAlignmentRequest => ({
     predicate_frontier: vocabularyFrontierForView(predicates, options.owner_account_id),
@@ -585,6 +608,46 @@ const planBatches = (
       maximum_remaining_questions_after_plan: uncovered.size,
     },
   };
+};
+
+/**
+ * Pure bounded exhaustive question planning. Model execution calls the same
+ * private planner below, so scheduling cannot drift into a second batching
+ * algorithm.
+ */
+export const planPredicateAlignmentQuestions = (
+  predicates: readonly Predicate[],
+  options: PredicateAlignmentPlanningOptions,
+): PredicateAlignmentPlan => {
+  validatePlanningOptions(options);
+  const { view, excluded } = buildView(predicates, options.owner_account_id);
+  const plan = planBatches(view, options);
+  return Object.freeze({
+    questions: Object.freeze(plan.planned.map((batch) => Object.freeze({
+      batch_index: batch.batch_index,
+      batch_question_digest: batch.digest,
+      predicate_frontier: batch.request.predicate_frontier,
+      predicate_ids: Object.freeze(batch.request.predicates.map((predicate) => predicate.predicate_id)),
+      prompt_cost: batch.cost,
+      request: Object.freeze({
+        predicate_frontier: batch.request.predicate_frontier,
+        predicates: Object.freeze(batch.request.predicates.map((predicate) => Object.freeze({
+          predicate_id: predicate.predicate_id,
+          name: predicate.name,
+          slot_ids: Object.freeze([...predicate.slot_ids]),
+        }))),
+      }),
+    }))),
+    valid_successful_questions: Object.freeze(plan.valid_successes.map((success) => Object.freeze({
+      batch_question_digest: success.batch_question_digest,
+      predicate_frontier: success.predicate_frontier,
+      predicate_ids: Object.freeze([...success.predicate_ids]),
+      response_digest: success.response_digest,
+      result_digest: success.result_digest,
+    }))),
+    excluded_predicates: Object.freeze(excluded.map((item) => Object.freeze({ ...item }))),
+    coverage: Object.freeze({ ...plan.coverage }),
+  });
 };
 
 const reject = (

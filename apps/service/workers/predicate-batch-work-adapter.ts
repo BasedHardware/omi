@@ -4,7 +4,6 @@ import {
   invokePredicateAlignment,
   predicateAlignmentBatchDigest,
   preparePredicateAlignmentQuestion,
-  type PredicateAlignmentAdjudicationContract,
 } from "../../../core/consolidate/relations";
 import {
   parseDurableMemoryWorkJob,
@@ -19,7 +18,6 @@ import type { CanonicalJson, GraphRevision } from "../../../core/ledger";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { PredicateSchema, type Predicate } from "../../../core/schema";
 import { validateStrict } from "../../../core/schema/json";
-import { predicateAlignmentPromptCost } from "../../../drivers/model/glm";
 import type { ModelPort } from "../../../drivers/model/port";
 import {
   assertAuthorizedLedgerWriteContext,
@@ -47,10 +45,14 @@ import {
   defineConsolidationWorkAdapter,
   type ConsolidationWorkAdapter,
 } from "./consolidation-work-service";
+import {
+  PREDICATE_BATCH_PROMPT_BUDGET,
+  predicateBatchAdjudicationContract,
+  predicateBatchPromptCost,
+} from "./predicate-batch-contract";
 
 export const PREDICATE_BATCH_INPUT_SNAPSHOT_VERSION = "predicate-batch-input-snapshot-v1" as const;
 const MAX_BATCH_PREDICATE_REVISIONS = 10_000;
-const PREDICATE_PROMPT_BUDGET = 20_000;
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 
@@ -108,24 +110,25 @@ const failed = (error_code: DurableMemoryWorkErrorCode): DurableMemoryWorkProduc
 
 const token = (value: unknown): string => {
   if (typeof value !== "string" || !TOKEN.test(value)) fail("invalid_snapshot");
-  return value;
+  return value as string;
 };
 
 const digest = (value: unknown): string => {
   if (typeof value !== "string" || !DIGEST.test(value)) fail("invalid_snapshot");
-  return value;
+  return value as string;
 };
 
 const exactDependencies = (value: unknown): PredicateBatchWorkAdapterDependencies => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail("invalid_dependencies");
-  const keys = Reflect.ownKeys(value);
+  const objectValue = value as object;
+  const keys = Reflect.ownKeys(objectValue);
   if (keys.length !== 3 || keys.some((key) => typeof key !== "string")
     || !(keys as string[]).every((key) => ["load_input", "resolve_model", "load_current_parent"].includes(key))) {
     fail("invalid_dependencies");
   }
   for (const key of keys as string[]) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable
       || typeof descriptor.value !== "function" || isProxy(descriptor.value)) fail("invalid_dependencies");
   }
@@ -187,16 +190,6 @@ export const predicateBatchWorkInputManifest = (
   ]);
 };
 
-const adjudicationContract = (
-  strategy: Readonly<RegisteredMemoryStrategy>,
-): PredicateAlignmentAdjudicationContract => ({
-  model_version: strategy.coordinates.model_version,
-  strategy: "predicate-alignment",
-  prompt_version: strategy.coordinates.prompt_version,
-  schema_version: strategy.coordinates.schema_version,
-  code_version: strategy.coordinates.code_version,
-});
-
 const assertSnapshot = (
   snapshot: Readonly<PredicateBatchInputSnapshot>,
   job: Readonly<DurableMemoryWorkJob>,
@@ -210,9 +203,9 @@ const assertSnapshot = (
   }
   const prepared = preparePredicateAlignmentQuestion(snapshot.predicates, job.owner_account_id);
   if (prepared.excluded_predicates.length || prepared.request.predicates.length < 2
-    || predicateAlignmentBatchDigest(adjudicationContract(strategy), prepared.request)
+    || predicateAlignmentBatchDigest(predicateBatchAdjudicationContract(strategy), prepared.request)
       !== snapshot.batch_question_digest) fail("invalid_question");
-  return { request: prepared.request, prompt_cost: predicateAlignmentPromptCost(prepared.request) };
+  return { request: prepared.request, prompt_cost: predicateBatchPromptCost(prepared.request) };
 };
 
 const mapRetryable = (code: "batch_prompt_budget_exceeded" | "model_invoke_failed" | "model_response_invalid"):
@@ -227,7 +220,11 @@ export const definePredicateBatchWorkAdapter = (
 ): PredicateBatchWorkAdapter => {
   const dependencies = exactDependencies(dependenciesValue);
   return Object.freeze({
-    async produce(contextValue, jobValue, strategyValue) {
+    async produce(
+      contextValue: AuthorizedLedgerWriteContext,
+      jobValue: Readonly<DurableMemoryWorkJob>,
+      strategyValue: Readonly<RegisteredMemoryStrategy>,
+    ) {
       let context: AuthorizedLedgerWriteContext;
       let job: Readonly<DurableMemoryWorkJob>;
       let strategy: Readonly<RegisteredMemoryStrategy>;
@@ -253,7 +250,7 @@ export const definePredicateBatchWorkAdapter = (
         if (loaded.kind !== "found") return failed("dependency_unavailable");
         snapshot = parsePredicateBatchInputSnapshot(loaded.snapshot);
         const prepared = assertSnapshot(snapshot, job, strategy);
-        if (prepared.prompt_cost > PREDICATE_PROMPT_BUDGET) return failed("prompt_budget_exceeded");
+        if (prepared.prompt_cost > PREDICATE_BATCH_PROMPT_BUDGET) return failed("prompt_budget_exceeded");
         request = prepared.request;
       } catch {
         return failed("dependency_unavailable");
@@ -268,11 +265,11 @@ export const definePredicateBatchWorkAdapter = (
       try {
         const alignment = await invokePredicateAlignment(model, snapshot.predicates, {
           owner_account_id: job.owner_account_id,
-          batch_prompt_budget: PREDICATE_PROMPT_BUDGET,
+          batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
           model_concurrency: 1,
           max_questions_per_invocation: 1,
-          prompt_cost: predicateAlignmentPromptCost,
-          adjudication_contract: adjudicationContract(strategy),
+          prompt_cost: predicateBatchPromptCost,
+          adjudication_contract: predicateBatchAdjudicationContract(strategy),
         });
         if (alignment.excluded_predicates.length || alignment.batch_outcomes.length !== 1
           || alignment.coverage.remaining_pairs_after_plan !== 0) {
@@ -320,7 +317,12 @@ export const definePredicateBatchWorkAdapter = (
       }
     },
 
-    async materialize(context, job, staged, strategy) {
+    async materialize(
+      context: AuthorizedLedgerWriteContext,
+      job: Readonly<DurableMemoryWorkJob>,
+      staged: StagedDurableMemoryWorkResult,
+      strategy: Readonly<RegisteredMemoryStrategy>,
+    ) {
       try {
         if (durableMemoryGraphPlanIsEmpty(context, job, staged, strategy)) {
           return Object.freeze({
