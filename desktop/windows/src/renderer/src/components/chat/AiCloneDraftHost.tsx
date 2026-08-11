@@ -11,10 +11,31 @@ import type { AiCloneIncomingMessageEvent } from '../../../../shared/types'
 // Mounted once, app-wide (mirrors ChatBridgeHost / TrayStateHost): no UI,
 // just a persistent listener so drafting keeps working regardless of which
 // page is showing.
+
+// Serializes draftAndSubmit calls PER CHAT. If one poll finds multiple new
+// messages in the same chat, each triggers its own independent LLM call, and
+// nothing otherwise guarantees they finish in the order the messages
+// actually arrived — in an auto-send chat, a faster call for a NEWER message
+// could reach aiCloneSubmitDraft (and get sent) before an OLDER message's
+// still-in-flight call does, scrambling the conversation from the
+// recipient's point of view. Chaining onto a per-chat tail promise keeps one
+// chat's messages processed one at a time, in arrival order, while different
+// chats still run fully in parallel with each other.
+const chatProcessingQueues = new Map<string, Promise<void>>()
+
+function enqueueForChat(event: AiCloneIncomingMessageEvent): void {
+  const previous = chatProcessingQueues.get(event.chatID) ?? Promise.resolve()
+  // draftAndSubmit never rejects (its own try/catch swallows failures), so
+  // chaining with .then() is safe — one message failing can't break the
+  // chain for whatever's queued after it in the same chat.
+  const next = previous.then(() => draftAndSubmit(event))
+  chatProcessingQueues.set(event.chatID, next)
+}
+
 export function AiCloneDraftHost(): null {
   useEffect(() => {
     return window.omi.onAiCloneIncomingMessage((event: AiCloneIncomingMessageEvent) => {
-      void draftAndSubmit(event)
+      enqueueForChat(event)
     })
   }, [])
 

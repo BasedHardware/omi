@@ -383,9 +383,17 @@ export function registerAiCloneHandlers(): void {
   ipcMain.handle('aiClone:status', (): Promise<AiCloneStatus> => statusFor(clientOrNull()))
 
   ipcMain.handle('aiClone:disconnect', (): void => {
-    tokenStore().clear()
-    bumpSessionGeneration()
-    stopAiClonePolling()
+    // The in-memory shutdown (generation bump + poll stop) must happen
+    // regardless of whether the token file could actually be deleted — a
+    // transient unlink failure (permissions, file lock, AV scanning it)
+    // must not leave AI Clone silently active just because clear() threw
+    // before reaching the lines that actually invalidate the session.
+    try {
+      tokenStore().clear()
+    } finally {
+      bumpSessionGeneration()
+      stopAiClonePolling()
+    }
   })
 
   ipcMain.handle('aiClone:listChats', async (): Promise<AiCloneChatSummary[]> => {
@@ -501,6 +509,7 @@ export function registerAiCloneHandlers(): void {
         const decision = decideReplyAction({
           mode,
           draftText: args.draftText,
+          incomingMessageText: args.incomingMessageText,
           needsInput: draftNeedsInput(args.draftText)
         })
 

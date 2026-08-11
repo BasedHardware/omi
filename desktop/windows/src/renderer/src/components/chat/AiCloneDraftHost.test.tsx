@@ -91,4 +91,105 @@ describe('AiCloneDraftHost', () => {
     unmount()
     expect(incomingCb).toBeNull()
   })
+
+  it('processes messages from the same chat sequentially, not concurrently', async () => {
+    // The bug this closes: two messages in the same chat each trigger their
+    // own independent LLM call. Without serialization, a faster call for
+    // the SECOND (newer) message could reach aiCloneSubmitDraft before the
+    // first message's still-in-flight call does, so a newer reply could get
+    // sent before an older one — scrambling the conversation.
+    let resolveA: ((value: string) => void) | undefined
+    callAgentLLMSpy.mockImplementation((prompt: string) => {
+      if (prompt === 'prompt-A') {
+        return new Promise<string>((resolve) => {
+          resolveA = resolve
+        })
+      }
+      return Promise.resolve('reply-B')
+    })
+
+    render(<AiCloneDraftHost />)
+
+    const eventA: AiCloneIncomingMessageEvent = {
+      ...baseEvent,
+      messageID: 'msg-A',
+      promptText: 'prompt-A'
+    }
+    const eventB: AiCloneIncomingMessageEvent = {
+      ...baseEvent,
+      messageID: 'msg-B',
+      promptText: 'prompt-B'
+    }
+
+    // A arrives first, B second — same chat.
+    incomingCb?.(eventA)
+    incomingCb?.(eventB)
+
+    await waitFor(() => expect(callAgentLLMSpy).toHaveBeenCalledWith('prompt-A'))
+
+    // A's model call hasn't resolved yet, so B — queued behind A for the
+    // same chat — must not have started at all yet.
+    expect(callAgentLLMSpy).not.toHaveBeenCalledWith('prompt-B')
+    expect(submitDraftSpy).not.toHaveBeenCalled()
+
+    resolveA?.('reply-A')
+
+    // Wait for both to complete, then verify the ORDER — that's the actual
+    // property under test. (B resolves near-instantly once unblocked, so
+    // asserting an exact intermediate count of 1 here would be a race
+    // against however fast the event loop drains microtasks, not a
+    // meaningful check.)
+    await waitFor(() => expect(submitDraftSpy).toHaveBeenCalledTimes(2))
+    expect(submitDraftSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ messageID: 'msg-A' })
+    )
+    expect(submitDraftSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ messageID: 'msg-B' })
+    )
+  })
+
+  it('does not block a message from a DIFFERENT chat while another chat is still processing', async () => {
+    let resolveA: ((value: string) => void) | undefined
+    callAgentLLMSpy.mockImplementation((prompt: string) => {
+      if (prompt === 'prompt-A') {
+        return new Promise<string>((resolve) => {
+          resolveA = resolve
+        })
+      }
+      return Promise.resolve('reply-other')
+    })
+
+    render(<AiCloneDraftHost />)
+
+    const eventChat1: AiCloneIncomingMessageEvent = {
+      ...baseEvent,
+      chatID: 'chat-1',
+      messageID: 'msg-A',
+      promptText: 'prompt-A'
+    }
+    const eventChat2: AiCloneIncomingMessageEvent = {
+      ...baseEvent,
+      chatID: 'chat-2',
+      messageID: 'msg-other',
+      promptText: 'prompt-other'
+    }
+
+    incomingCb?.(eventChat1)
+    incomingCb?.(eventChat2)
+
+    // chat-2's message must not be stuck behind chat-1's still-pending call —
+    // serialization is per chat, not global.
+    await waitFor(() =>
+      expect(submitDraftSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ messageID: 'msg-other' })
+      )
+    )
+
+    resolveA?.('reply-A')
+    await waitFor(() =>
+      expect(submitDraftSpy).toHaveBeenCalledWith(expect.objectContaining({ messageID: 'msg-A' }))
+    )
+  })
 })

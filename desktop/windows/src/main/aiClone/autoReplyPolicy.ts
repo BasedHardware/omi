@@ -39,6 +39,14 @@ export type ReplyDecision = 'skip' | 'queue_for_review' | 'send'
 export interface ReplyDecisionInput {
   mode: ChatReplyMode
   draftText: string
+  /** The message being replied to. Checked for sensitivity ALONGSIDE the
+   *  draft, not instead of it: a short agreement like "sounds good" or "I
+   *  agree" contains no sensitive keywords of its own, but if it's agreeing
+   *  to something the incoming message asked for — a payment, a legal
+   *  commitment, a relationship decision — auto-sending it is exactly as
+   *  risky as if the draft had spelled the commitment out itself. Checking
+   *  only the draft text let that class of reply through undetected. */
+  incomingMessageText: string
   /** True when the draft itself flagged that it needs a human (see
    *  personaDraftPrompt.draftNeedsInput) — always forces review, even in
    *  auto_send mode. */
@@ -67,7 +75,13 @@ export function decideReplyAction(input: ReplyDecisionInput): ReplyDecision {
       return 'queue_for_review'
     case 'auto_send':
       if (input.needsInput) return 'queue_for_review'
-      return looksSensitive(text) ? 'queue_for_review' : 'send'
+      // Check the incoming request as well as the draft — see
+      // ReplyDecisionInput.incomingMessageText's comment for why a
+      // draft-only check misses a short agreement to a sensitive ask.
+      if (looksSensitive(text) || looksSensitive(input.incomingMessageText)) {
+        return 'queue_for_review'
+      }
+      return 'send'
     default:
       // Defense in depth: `input.mode` is typed as ChatReplyMode, but that's
       // only a compile-time promise. If a corrupted settings file or a stale

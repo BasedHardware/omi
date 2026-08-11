@@ -137,6 +137,22 @@ describe('registerAiCloneHandlers', () => {
     await expect(call('aiClone:status')).resolves.toEqual({ connected: false, accounts: [] })
   })
 
+  it('disconnect still invalidates the session even when the token file cannot be deleted', () => {
+    // A transient unlink failure (permissions, file lock, AV scanning it)
+    // must not leave AI Clone silently active just because clear() threw
+    // before the lines that actually shut things down.
+    const generationBefore = __getSessionGenerationForTests()
+    vi.spyOn(BeeperTokenStore.prototype, 'clear').mockImplementationOnce(() => {
+      throw new Error('disk full')
+    })
+
+    expect(() => call('aiClone:disconnect')).toThrow('disk full')
+
+    // The caller does see the error (nothing silently swallowed it), but the
+    // in-memory shutdown must have happened anyway.
+    expect(__getSessionGenerationForTests()).toBeGreaterThan(generationBefore)
+  })
+
   it('listChats returns empty before a token is connected', async () => {
     await expect(call('aiClone:listChats')).resolves.toEqual([])
   })
