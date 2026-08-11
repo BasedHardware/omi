@@ -262,7 +262,8 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
       for (let index = 0; index < log.events.length; index += 1) {
         const event = log.events[index]!;
         if ((event.frame.kind !== "snapshot" && event.frame.kind !== "delta")
-          || retainedSet.has(event.id) || nowEpochMilliseconds < event.createdAt + policy.ttlMs) continue;
+          || retainedSet.has(event.id) || nowEpochMilliseconds < event.createdAt + policy.ttlMs
+          || event.frame.text === "[redacted]") continue;
         const frame = event.frame.kind === "snapshot"
           ? { kind: "snapshot" as const, text: "[redacted]" }
           : { kind: "delta" as const, text: "[redacted]" };

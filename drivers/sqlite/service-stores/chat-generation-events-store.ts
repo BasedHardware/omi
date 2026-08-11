@@ -288,6 +288,9 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
       for (const row of details) {
         if (retained.has(row.event_id) || nowEpochMilliseconds < row.created_at + policy.ttlMs) continue;
         const frame = JSON.parse(row.frame_json) as ChatGenerationFrame;
+        if (frame.kind === "snapshot" || frame.kind === "delta") {
+          if (frame.text === "[redacted]") continue;
+        }
         const redacted: ChatGenerationFrame = frame.kind === "snapshot"
           ? { kind: "snapshot", text: "[redacted]" }
           : { kind: "delta", text: "[redacted]" };

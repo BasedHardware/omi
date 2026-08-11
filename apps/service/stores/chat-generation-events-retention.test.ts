@@ -49,6 +49,9 @@ describe("chat generation retention metadata", () => {
     expect(events[2]?.frame).toEqual({ kind: "delta", text: "[redacted]" });
     expect(events[3]?.frame.kind).toBe("done");
     expect(store.retentionMetadata!("retention-account", "generation:retention")).toEqual(result?.metadata);
+    const replay = store.compact!("retention-account", "generation:retention", 30, { ttlMs: 10, maxDetailEvents: 0 });
+    expect(replay?.redactedEventCount).toBe(0);
+    expect(replay?.metadata.redactedEventCount).toBe(2);
   });
 
   test("retention policy rejects unbounded or negative values and unknown generations are inert", () => {

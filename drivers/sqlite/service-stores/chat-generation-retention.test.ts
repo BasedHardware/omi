@@ -30,6 +30,9 @@ test("SQLite chat generation compaction persists redaction metadata", () => {
   ]);
   expect(store.listAfter(accountId, generationId, null)?.[1]?.frame).toEqual({ kind: "snapshot", text: "[redacted]" });
   expect(store.retentionMetadata(accountId, generationId)).toEqual(result?.metadata);
+  const replay = store.compact(accountId, generationId, 30, { ttlMs: 10, maxDetailEvents: 0 });
+  expect(replay?.redactedEventCount).toBe(0);
+  expect(replay?.metadata.redactedEventCount).toBe(2);
   db.close();
 });
 
