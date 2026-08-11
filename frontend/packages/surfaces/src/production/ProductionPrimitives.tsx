@@ -25,14 +25,17 @@ export function ProductionDataSourceBadge({ source, locale }: {
   locale: string;
 }): React.JSX.Element {
   const live = source.kind === "live";
-  const detail = t(locale, "dataSource.detail", {
-    source: t(locale, live ? "dataSource.live" : "dataSource.fixture"),
-    detail: live ? source.origin : source.fixture,
-  });
+  const detail = live
+    ? t(locale, "dataSource.live")
+    : t(locale, "dataSource.detail", {
+        source: t(locale, "dataSource.fixture"),
+        detail: source.fixture,
+      });
   return (
     <p
       className={`data-source-badge tone-${live ? "live" : "fixture"}`}
       data-source-kind={source.kind}
+      data-source-origin={live ? source.origin : undefined}
       aria-label={detail}
       role="status"
     >

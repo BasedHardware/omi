@@ -174,9 +174,9 @@ html[data-platform="desktop"] .proposition-list { gap: 8px; }
 
 html[data-platform="desktop"] .proposition-card {
   padding: 14px 15px;
-  border: 1px solid rgba(42, 49, 58, .055);
+  border: 1px solid var(--control-border);
   border-radius: 13px;
-  background: rgba(255, 255, 255, .33);
+  background: var(--glass-surface-soft);
 }
 
 html[data-platform="desktop"] .proposition-read-only-note,
@@ -188,7 +188,7 @@ html[data-platform="desktop"] .completeness-notice {
 html[data-platform="desktop"] .completeness-notice {
   padding: 8px 11px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, .46);
+  background: var(--glass-surface-soft);
 }
 
 /* Specificity note: the desktop rule above outranks `.completeness-notice.tone-neutral`,

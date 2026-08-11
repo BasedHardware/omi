@@ -206,30 +206,30 @@ html[data-platform="desktop"] .tasks-create {
   display: none;
   margin: 0 0 12px;
   padding: 9px;
-  border: 1px solid rgba(39,46,55,.07);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
-  background: rgba(255,255,255,.34);
+  background: var(--glass-surface-soft);
 }
 html[data-platform="desktop"] .tasks-create.is-open { display: grid; }
 html[data-platform="desktop"] .tasks-header-actions { display: flex; min-width: 0; align-items: center; gap: 7px; }
 html[data-platform="desktop"] .tasks-search { position: relative; min-width: 0; flex: 1; }
 html[data-platform="desktop"] .tasks-search::before,
 html[data-platform="desktop"] .tasks-search::after { display: none; content: none; }
-html[data-platform="desktop"] .tasks-search input { width: 100%; min-height: 36px; border: 1px solid rgba(39,46,55,.07); border-radius: 11px; padding: 7px 12px 7px 36px; color: var(--content-primary); background: rgba(255,255,255,.42); font: inherit; font-size: 12px; }
+html[data-platform="desktop"] .tasks-search input { width: 100%; min-height: var(--min-tap-target); border: 1px solid var(--control-border); border-radius: 11px; padding: 7px 12px 7px 36px; color: var(--content-primary); background: var(--glass-surface-soft); font: inherit; font-size: 12px; }
 html[data-platform="desktop"] .tasks-search input::placeholder { color: var(--content-tertiary); }
 html[data-platform="desktop"] .tasks-add-trigger,
-html[data-platform="desktop"] .tasks-settings-trigger { width: 34px; min-width: 34px; min-height: 34px; padding: 0; border-radius: 17px; }
+html[data-platform="desktop"] .tasks-settings-trigger { width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-radius: var(--radius-circular); }
 html[data-platform="desktop"] .tasks-add-trigger { font-size: 18px; }
 html[data-platform="desktop"] .tasks-settings-trigger { font-size: 10px; letter-spacing: 1px; }
 html[data-platform="desktop"] .tasks-create textarea,
-html[data-platform="desktop"] .tasks-create input { min-height: 34px; padding: 7px 10px; border-color: rgba(39,46,55,.08); background: rgba(255,255,255,.43); }
-html[data-platform="desktop"] .tasks-create textarea { height: 34px; resize: none; }
+html[data-platform="desktop"] .tasks-create input { min-height: var(--min-tap-target); padding: 7px 10px; border-color: var(--control-border); background: var(--glass-surface-soft); }
+html[data-platform="desktop"] .tasks-create textarea { height: var(--min-tap-target); resize: none; }
 html[data-platform="desktop"] .tasks-groups { gap: 22px; }
 html[data-platform="desktop"] .tasks-group { gap: 1px; }
-html[data-platform="desktop"] .tasks-group-heading { min-height: 32px; border: 0; }
+html[data-platform="desktop"] .tasks-group-heading { min-height: var(--min-tap-target); border: 0; }
 html[data-platform="desktop"] .tasks-group-heading > .production-icon {
   width: 19px;
-  color: rgba(35,43,51,.78);
+  color: var(--content-secondary);
 }
 html[data-platform="desktop"] .tasks-group h2 { font-family: var(--type-title-family); font-size: 17px; letter-spacing: -.25px; }
 html[data-platform="desktop"] .tasks-group-count { display: none; }
@@ -243,15 +243,15 @@ html[data-platform="desktop"] .task-card {
   background: transparent;
 }
 html[data-platform="desktop"] .task-card:hover,
-html[data-platform="desktop"] .task-card.is-selected { border-color: transparent; background: rgba(255,255,255,.42); }
+html[data-platform="desktop"] .task-card.is-selected { border-color: transparent; background: var(--surface-hover); }
 html[data-platform="desktop"] .task-card-main { align-items: center; gap: 10px; }
-html[data-platform="desktop"] .task-check { flex-basis: 24px; width: 24px; min-width: 24px; min-height: 24px; padding: 0; border-color: rgba(43,49,58,.24); background: rgba(255,255,255,.26); font-size: 12px; }
+html[data-platform="desktop"] .task-check { flex-basis: var(--min-tap-target); width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-color: var(--border); background: var(--glass-surface-soft); font-size: 12px; }
 html[data-platform="desktop"] .task-description { font-size: 14px; line-height: 1.3; }
 html[data-platform="desktop"] .task-meta { display: none; }
 html[data-platform="desktop"] .task-actions { align-items: center; opacity: 0; transition: opacity 120ms ease; }
 html[data-platform="desktop"] .task-card:hover .task-actions,
 html[data-platform="desktop"] .task-card:focus-within .task-actions { opacity: 1; }
-html[data-platform="desktop"] .task-actions button { min-height: 27px; padding: 2px 7px; font-size: 10px; }
+html[data-platform="desktop"] .task-actions button { min-height: var(--min-tap-target); padding: 2px 7px; font-size: 10px; }
 html[data-platform="desktop"] .tasks-shortcuts {
   position: fixed;
   right: 50%;
@@ -262,15 +262,15 @@ html[data-platform="desktop"] .tasks-shortcuts {
   margin: 0;
   padding: 4px 7px;
   transform: translateX(50%);
-  border-color: rgba(255,255,255,.4);
+  border-color: var(--glass-border);
   border-radius: 17px;
-  background: rgba(246,248,250,.72);
-  box-shadow: 0 12px 30px rgba(27,37,49,.15), inset 0 1px 0 rgba(255,255,255,.55);
+  background: var(--glass-surface-strong);
+  box-shadow: var(--shadow-floating), inset 0 1px 0 var(--glass-highlight);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
   backdrop-filter: blur(24px) saturate(1.2);
   flex-wrap: nowrap;
   gap: 2px;
 }
-html[data-platform="desktop"] .tasks-shortcuts span { min-height: 24px; padding: 0 3px; font-size: 8px; }
+html[data-platform="desktop"] .tasks-shortcuts span { min-height: var(--min-tap-target); padding: 0 3px; font-size: 9px; }
 html[data-platform="desktop"] .tasks-shortcuts span:first-child { display: none; }
 html[data-platform="desktop"] .tasks-shortcuts kbd { margin-right: 2px; padding: 1px 3px; font-size: 8px; }
