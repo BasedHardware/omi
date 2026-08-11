@@ -17,7 +17,7 @@
   "dependencies": {
     "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
     "firebase-admin": "14.2.0",
-    "hono": "4.12.26"
+    "hono": "4.12.34"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
