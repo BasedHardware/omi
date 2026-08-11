@@ -45,7 +45,11 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
   try {
     writeFileSync(issuerFixture, [
       'import * as authorityInternals from "../apps/service/auth/authorized-context-internal";',
+      'import { createAuthorizedLedgerWriteContextIssuer as aliasedIssuer } from "../apps/service/auth/authorized-context-internal";',
+      'export { createAuthorizedLedgerWriteContextIssuer as reexportedIssuer } from "../apps/service/auth/authorized-context-internal";',
+      'export const dynamicIssuer = () => import("../apps/service/auth/authorized-context-internal");',
       "export const issuer = authorityInternals;",
+      "export const alias = aliasedIssuer;",
     ].join("\n"));
     writeFileSync(postgresFixture, [
       'import { withAuthorizedSerializableTransaction } from "../../../drivers/postgres/transaction";',

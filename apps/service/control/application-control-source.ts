@@ -116,8 +116,8 @@ const parseActivation = (
     || activatedEpoch !== projection.account_epoch
     || atControlRevision > projection.control_revision) fail();
   return Object.freeze({
-    activated_epoch: activatedEpoch,
-    at_control_revision: atControlRevision,
+    activated_epoch: activatedEpoch as number,
+    at_control_revision: atControlRevision as number,
   });
 };
 
@@ -132,7 +132,7 @@ const parseConflict = (value: unknown): AccountControlConflict | null => {
     || typeof detail !== "string"
     || !CONFLICT_REASONS.has(detail)) fail();
   return Object.freeze({
-    at_control_revision: atControlRevision,
+    at_control_revision: atControlRevision as number,
     detail: detail as AccountControlRejection,
   });
 };
@@ -164,18 +164,18 @@ const parseProjection = (value: unknown, requestedAccountId: string): AccountCon
 
   const base = {
     account_generation: accountGeneration as AccountGeneration,
-    account_epoch: accountEpoch,
-    control_revision: controlRevision,
+    account_epoch: accountEpoch as number | null,
+    control_revision: controlRevision as number,
   };
   const activation = parseActivation(row.activation, base);
   const conflict = parseConflict(row.conflict);
   return Object.freeze({
-    account_id: accountId,
-    control_revision: controlRevision,
+    account_id: accountId as string,
+    control_revision: controlRevision as number,
     account_generation: base.account_generation,
     account_epoch: base.account_epoch,
     lifecycle_state: lifecycleState as AccountLifecycleState,
-    deletion_epoch: deletionEpoch,
+    deletion_epoch: deletionEpoch as number | null,
     activation,
     conflict,
   });

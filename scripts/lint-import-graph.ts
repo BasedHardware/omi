@@ -437,6 +437,7 @@ const storageProvenanceIdentifiers = [
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
+const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
 const queryEvaluationInternalImporters = new Set([
   queryEvaluationCompositionRoot,
   "apps/service/workers/memory-owner-query-evidence-source.ts",
@@ -466,6 +467,7 @@ for (const file of files(root)) {
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
     const code = withoutComments(text);
     if (shown !== "apps/service/auth/authorized-context-internal.ts"
+      && shown !== authorizedLedgerContextCompositionRoot
       && /\bcreateAuthorizedLedgerWriteContextIssuer\b/.test(code)) {
       failures.push(
         `${shown}: only the auth authority module may construct an authorized ledger context issuer; `
@@ -473,6 +475,7 @@ for (const file of files(root)) {
       );
     }
     if (shown !== "apps/service/auth/authorized-context.ts"
+      && shown !== authorizedLedgerContextCompositionRoot
       && shown !== "scripts/lint-import-graph.ts"
       && /["'][^"']*authorized-context-internal(?:\.ts)?["']/.test(code)) {
       failures.push(
