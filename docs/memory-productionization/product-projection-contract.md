@@ -89,8 +89,9 @@ Projection revisions are immutable. Each binds the proposition, exact membership
 revision, graph frontier, renderer contract, rendered-content digest, and a complete
 set of citation-support records. Recomputing with a new provider or renderer appends a
 revision and does not change the proposition id. A projection with no citation support
-is not servable. Citation support binds exact claim revisions and evidence revisions;
-it never cites a current group or an unversioned source label.
+is not servable. Citation support binds exact claim revisions and their evidence
+references at the exact graph frontier; it never cites a current group or an
+unversioned source label.
 
 The latest projection is selected only after reader-relative authorization and
 deletion-dominant liveness have been applied. A hidden newer projection cannot suppress
