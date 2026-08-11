@@ -18,19 +18,65 @@ import AppKit
 import CoreGraphics
 import Foundation
 
-private let schema = "omi.native-semantic-evidence.v1"
+private extension Array {
+  subscript(safe index: Index) -> Element? {
+    indices.contains(index) ? self[index] : nil
+  }
+}
+
+private let schema = "omi.native-semantic-evidence.v2"
+private let fullSHA = try! NSRegularExpression(pattern: "^[0-9a-f]{40}$")
+private let safeRunID = try! NSRegularExpression(pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+private let allowedRoles: Set<String> = [
+  "AXApplication", "AXButton", "AXCheckBox", "AXComboBox", "AXDialog", "AXGroup",
+  "AXHeading", "AXImage", "AXLink", "AXList", "AXListItem", "AXMenu", "AXMenuItem",
+  "AXRadioButton", "AXRow", "AXScrollArea", "AXSearchField", "AXStaticText", "AXTab",
+  "AXTabGroup", "AXTable", "AXTextArea", "AXTextField", "AXToolbar", "AXWebArea",
+  "AXWindow",
+]
+private let allowedNames: Set<String> = [
+  "app", "main", "window", "content", "route", "home", "tasks", "memories", "conversations",
+  "folders", "listen", "chat", "settings", "primary-navigation", "bottom-navigation",
+  "command-palette", "command-palette-dialog", "command-input", "open-command-palette",
+  "search", "composer", "chat-composer", "listen-transcript", "task-list", "memory-list",
+  "conversation-list", "send", "save", "retry", "latest", "dialog", "main-window", "omi",
+]
+
+private func bounded(_ value: String?, limit: Int = 64) -> String? {
+  guard let value, !value.isEmpty, value.utf8.count <= limit else { return nil }
+  return value
+}
+
+private func valid(_ value: String, _ expression: NSRegularExpression) -> Bool {
+  let range = NSRange(value.startIndex..<value.endIndex, in: value)
+  return expression.firstMatch(in: value, range: range) != nil
+}
 
 private struct AXNode: Codable, Equatable {
-  let role: String?
+  let role: String
   let subrole: String?
-  let title: String?
-  let description: String?
+  let name: String?
   let identifier: String?
-  let value: String?
-  let enabled: Bool?
+  let window: String?
+  // Ordinal/window-path context is used only for focus identity. It is not
+  // serialized, keeping the evidence surface to redacted role/name tokens.
+  var focusWindowContext: String? = nil
 
-  var focusIdentity: [String?] {
-    [role, subrole, title, description, identifier]
+  enum CodingKeys: String, CodingKey {
+    case role, subrole, name, identifier, window
+  }
+
+  init(role: String, subrole: String?, name: String?, identifier: String?, window: String?, focusWindowContext: String? = nil) {
+    self.role = role; self.subrole = subrole; self.name = name; self.identifier = identifier; self.window = window; self.focusWindowContext = focusWindowContext
+  }
+
+  var focusIdentity: String? {
+    // AX titles/descriptions are not identity.  A keyboard trace may only
+    // claim focus restoration when the target supplies a stable, allowlisted
+    // identifier and a stable window token; otherwise collisions/all-nil
+    // metadata fail closed.
+    guard let identifier, !identifier.isEmpty, let window, !window.isEmpty else { return nil }
+    return [role, subrole ?? "", identifier, window, focusWindowContext ?? ""].joined(separator: "|")
   }
 }
 
@@ -41,12 +87,23 @@ private struct KeyObservation: Codable {
   let posted: Bool
   let focusedBefore: AXNode?
   let focusedAfter: AXNode?
+  let targetConsumed: Bool
+  let expectedLandmark: String?
 }
 
 private struct WindowObservation: Codable {
-  let role: String?
-  let title: String?
+  let role: String
+  let name: String?
   let identifier: String?
+}
+
+private struct TargetBinding: Codable {
+  let pid: Int32
+  let bundleId: String
+  let processNameBound: Bool
+  let expectedPid: Int32
+  let expectedBundleId: String
+  let bound: Bool
 }
 
 private struct Evidence: Codable {
@@ -54,13 +111,21 @@ private struct Evidence: Codable {
   let shell: String
   let runId: String
   let targetPid: Int32?
-  let targetName: String?
-  let targetBundleId: String?
+  let target: TargetBinding?
   let axTrusted: Bool
+  let evidenceClass: String
+  let kind: String?
+  let coordinate: String?
+  let sourceCoreSha: String?
+  let sourcePlatformSha: String?
   let windows: [WindowObservation]
+  let nodes: [AXNode]
+  let domainLandmark: String?
+  let domainLandmarkFound: Bool
   let focusedBefore: AXNode?
   let keys: [KeyObservation]
   let focusRestored: Bool?
+  let matrixEligible: Bool
   let error: String?
 }
 
@@ -68,9 +133,14 @@ private enum ProbeError: Error, CustomStringConvertible {
   case usage(String)
   case targetNotFound(String)
   case targetAmbiguous(String)
+  case targetIdentityMismatch(String)
   case accessibilityNotTrusted
   case targetNotActive
   case noAccessibleWindow
+  case noDomainLandmark(String)
+  case invalidMatrixBinding(String)
+  case keyboardTransitionNotObserved(String)
+  case focusNotRestored
   case cannotPostKeys
 
   var description: String {
@@ -78,10 +148,15 @@ private enum ProbeError: Error, CustomStringConvertible {
     case .usage(let message): return "usage: \(message)"
     case .targetNotFound(let message): return "target-not-found: \(message)"
     case .targetAmbiguous(let message): return "target-ambiguous: \(message)"
+    case .targetIdentityMismatch(let message): return "target-identity-mismatch: \(message)"
     case .accessibilityNotTrusted:
       return "accessibility-not-trusted: grant Accessibility access to this probe"
     case .targetNotActive: return "target-not-active: pass --activate before --keys"
     case .noAccessibleWindow: return "no-accessible-window: keep the headed shell frontmost"
+    case .noDomainLandmark(let message): return "no-domain-landmark: \(message)"
+    case .invalidMatrixBinding(let message): return "invalid-matrix-binding: \(message)"
+    case .keyboardTransitionNotObserved(let message): return "keyboard-transition-not-observed: \(message)"
+    case .focusNotRestored: return "focus-not-restored: Escape did not return to the bound focus identity"
     case .cannotPostKeys: return "cannot-post-keys: CGEvent creation failed"
     }
   }
@@ -90,33 +165,54 @@ private enum ProbeError: Error, CustomStringConvertible {
 private struct Options {
   var pid: Int32?
   var bundleId: String?
+  var expectedBundleId: String?
+  var expectedProcessName: String?
   var name: String?
   var runId = "native-semantic"
+  var sourceCoreSha: String?
+  var sourcePlatformSha: String?
+  var coordinate: String?
+  var kind: String?
+  var landmark: String?
+  var expectedAfter: [String?] = []
+  var requireMatrix = false
   var keys: [String] = []
   var activate = false
   var json = false
   var help = false
+  var selfTest = false
 }
 
 private func printHelp() {
   print("""
-  Usage: native-semantic-evidence (--pid PID | --bundle-id ID | --name NAME) [options]
+  Usage: native-semantic-evidence (--pid PID | --name NAME) [options]
 
   Options:
     --pid PID             Exact target process (preferred for scratch shells)
-    --bundle-id ID        Resolve one running application by bundle identifier
+    --bundle-id ID        Assert the resolved process bundle identifier
+    --expected-bundle-id ID  Required exact bundle identifier for matrix evidence
+    --expected-process-name NAME  Required scratch process name for matrix evidence
     --name NAME            Resolve one running application by process name
     --run-id ID             Stable evidence identifier (default: native-semantic)
+    --source-core-sha SHA   Exact 40-character core source SHA
+    --source-platform-sha SHA Exact 40-character platform source SHA
+    --coordinate KEY        Exact matrix coordinate binding
+    --kind KIND             ax_snapshot or keyboard_trace
+    --landmark NAME         Allowlisted domain landmark required for success
+    --expect-after LIST     Comma-separated allowlisted landmarks after keys; '-' means none
+    --require-matrix        Fail unless all matrix bindings and observations are proven
     --keys SPEC             Comma-separated keys, e.g. cmd+k,escape
     --activate              Activate/raise the target before posting keys
     --json                  Emit one JSON evidence document
+    --self-test              Run deterministic redaction/focus guard tests
     --help                  Show this help
 
   Keys: cmd+k, ctrl+k, shift+enter, enter, escape, tab, shift+tab,
         arrow-up, arrow-down, arrow-left, arrow-right
 
-  The target must be a headed native shell. This probe observes AXUIElement
-  roles/titles/focus and posts native CGEvents; it does not take screenshots or
+  The target must be a headed scratch native shell. This probe observes bounded,
+  AXUIElement roles,
+  allowlisted AX roles/names and posts native CGEvents; it does not take screenshots or
   claim that a browser preview is native evidence.
   """)
 }
@@ -140,6 +236,16 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
       else { throw ProbeError.usage("--bundle-id needs a value") }
       options.bundleId = arguments[index + 1]
       index += 2
+    case "--expected-bundle-id":
+      guard index + 1 < arguments.count, !arguments[index + 1].isEmpty
+      else { throw ProbeError.usage("--expected-bundle-id needs a value") }
+      options.expectedBundleId = arguments[index + 1]
+      index += 2
+    case "--expected-process-name":
+      guard index + 1 < arguments.count, !arguments[index + 1].isEmpty
+      else { throw ProbeError.usage("--expected-process-name needs a value") }
+      options.expectedProcessName = arguments[index + 1]
+      index += 2
     case "--name":
       guard index + 1 < arguments.count, !arguments[index + 1].isEmpty
       else { throw ProbeError.usage("--name needs a value") }
@@ -150,6 +256,43 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
       else { throw ProbeError.usage("--run-id needs a value") }
       options.runId = arguments[index + 1]
       index += 2
+    case "--source-core-sha":
+      guard index + 1 < arguments.count, valid(arguments[index + 1].lowercased(), fullSHA)
+      else { throw ProbeError.usage("--source-core-sha needs a full SHA") }
+      options.sourceCoreSha = arguments[index + 1].lowercased()
+      index += 2
+    case "--source-platform-sha":
+      guard index + 1 < arguments.count, valid(arguments[index + 1].lowercased(), fullSHA)
+      else { throw ProbeError.usage("--source-platform-sha needs a full SHA") }
+      options.sourcePlatformSha = arguments[index + 1].lowercased()
+      index += 2
+    case "--coordinate":
+      guard index + 1 < arguments.count, !arguments[index + 1].isEmpty,
+        arguments[index + 1].utf8.count <= 256,
+        arguments[index + 1].allSatisfy({ $0.isASCII && ( $0.isLetter || $0.isNumber || "_:-|".contains($0)) })
+      else { throw ProbeError.usage("--coordinate needs a bounded matrix key") }
+      options.coordinate = arguments[index + 1]
+      index += 2
+    case "--kind":
+      guard index + 1 < arguments.count, ["ax_snapshot", "keyboard_trace"].contains(arguments[index + 1])
+      else { throw ProbeError.usage("--kind must be ax_snapshot or keyboard_trace") }
+      options.kind = arguments[index + 1]
+      index += 2
+    case "--landmark":
+      guard index + 1 < arguments.count, allowedNames.contains(arguments[index + 1].lowercased())
+      else { throw ProbeError.usage("--landmark must be an allowlisted name") }
+      options.landmark = arguments[index + 1].lowercased()
+      index += 2
+    case "--expect-after":
+      guard index + 1 < arguments.count else { throw ProbeError.usage("--expect-after needs a value") }
+      options.expectedAfter = arguments[index + 1].split(separator: ",", omittingEmptySubsequences: false).map { token in
+        let value = String(token).lowercased()
+        return value == "-" ? nil : value
+      }
+      index += 2
+    case "--require-matrix":
+      options.requireMatrix = true
+      index += 1
     case "--keys":
       guard index + 1 < arguments.count else { throw ProbeError.usage("--keys needs a value") }
       options.keys = arguments[index + 1].split(separator: ",", omittingEmptySubsequences: true).map(String.init)
@@ -160,15 +303,42 @@ private func parseOptions(_ arguments: [String]) throws -> Options {
     case "--json":
       options.json = true
       index += 1
+    case "--self-test":
+      options.selfTest = true
+      index += 1
     default:
       throw ProbeError.usage("unknown option \(argument)")
     }
   }
   if options.help { return options }
-  let selectors = [options.pid != nil, options.bundleId != nil, options.name != nil].filter { $0 }.count
-  guard selectors == 1 else { throw ProbeError.usage("provide exactly one of --pid, --bundle-id, or --name") }
+  if options.selfTest { return options }
+  guard options.pid != nil || options.name != nil else { throw ProbeError.usage("provide --pid or --name") }
+  guard valid(options.runId, safeRunID) else { throw ProbeError.usage("--run-id must be a bounded stable identifier") }
   if !options.keys.isEmpty && !options.activate {
     throw ProbeError.usage("--keys requires --activate")
+  }
+  guard options.keys.allSatisfy({ $0.utf8.count <= 32 && $0.allSatisfy({ $0.isASCII }) }) else {
+    throw ProbeError.usage("--keys contains an invalid bounded key")
+  }
+  guard options.expectedAfter.allSatisfy({ value in value == nil || (value!.utf8.count <= 64 && allowedNames.contains(value!)) }) else {
+    throw ProbeError.usage("--expect-after contains an unallowlisted landmark")
+  }
+  if options.requireMatrix {
+    guard let pid = options.pid, pid > 0, options.bundleId != nil,
+      let expectedBundleId = options.expectedBundleId, expectedBundleId == options.bundleId,
+      let expectedProcessName = options.expectedProcessName, expectedProcessName.hasPrefix("omi-on-"),
+      valid(options.runId, safeRunID), options.sourceCoreSha != nil, options.sourcePlatformSha != nil,
+      options.coordinate != nil, let kind = options.kind, options.landmark != nil,
+      allowedNames.contains(options.landmark!.lowercased()), !expectedProcessName.contains("/"),
+      expectedProcessName.utf8.count <= 64,
+      expectedProcessName.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ".-_".contains($0)) }),
+      expectedBundleId.contains("omi"), expectedBundleId.utf8.count <= 128,
+      expectedBundleId.allSatisfy({ $0.isASCII && !$0.isWhitespace }) else { throw ProbeError.invalidMatrixBinding("matrix target, source, run, coordinate, kind, and landmark are required") }
+    if kind == "keyboard_trace" {
+      guard !options.keys.isEmpty, options.expectedAfter.count == options.keys.count else {
+        throw ProbeError.invalidMatrixBinding("keyboard expected-after count must match keys")
+      }
+    }
   }
   return options
 }
@@ -190,17 +360,23 @@ private func boolAttribute(_ element: AXUIElement, _ attribute: String) -> Bool?
   return (value as? NSNumber)?.boolValue
 }
 
-private func node(_ element: AXUIElement?) -> AXNode? {
+private func allowlistedName(_ element: AXUIElement) -> String? {
+  for attribute in [kAXIdentifierAttribute, kAXTitleAttribute, kAXDescriptionAttribute] {
+    guard let raw = stringAttribute(element, attribute)?.lowercased(), bounded(raw) != nil else { continue }
+    if allowedNames.contains(raw) { return raw }
+  }
+  return nil
+}
+
+private func node(_ element: AXUIElement?, window: String? = nil, focusWindowContext: String? = nil) -> AXNode? {
   guard let element else { return nil }
-  return AXNode(
-    role: stringAttribute(element, kAXRoleAttribute),
-    subrole: stringAttribute(element, kAXSubroleAttribute),
-    title: stringAttribute(element, kAXTitleAttribute),
-    description: stringAttribute(element, kAXDescriptionAttribute),
-    identifier: stringAttribute(element, kAXIdentifierAttribute),
-    value: stringAttribute(element, kAXValueAttribute),
-    enabled: boolAttribute(element, kAXEnabledAttribute)
-  )
+  guard let role = stringAttribute(element, kAXRoleAttribute), allowedRoles.contains(role) else { return nil }
+  let rawIdentifier = stringAttribute(element, kAXIdentifierAttribute)?.lowercased()
+  let identifier = rawIdentifier.flatMap { allowedNames.contains($0) ? bounded($0) : nil }
+  // Subroles are implementation-specific AX strings and may contain titles or
+  // other host-provided text.  The matrix contract only permits the bounded
+  // role/name token surface, so keep the optional field deliberately empty.
+  return AXNode(role: role, subrole: nil, name: allowlistedName(element), identifier: identifier, window: window, focusWindowContext: focusWindowContext)
 }
 
 private func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
@@ -225,16 +401,22 @@ private func elementArrayAttribute(_ element: AXUIElement, _ attribute: String) 
 }
 
 private func windowObservations(_ application: AXUIElement) -> [WindowObservation] {
-  elementArrayAttribute(application, kAXWindowsAttribute).compactMap { window in
+  elementArrayAttribute(application, kAXWindowsAttribute).compactMap { window -> WindowObservation? in
     let role = stringAttribute(window, kAXRoleAttribute)
     // Some macOS releases include the application element in AXWindows. Never
     // report it as a window; doing so would turn an inactive shell into a false
     // native-window success.
-    guard role == kAXWindowRole else { return nil }
+    guard let role, role == kAXWindowRole, allowedRoles.contains(role) else { return nil }
+    let identifier: String?
+    if let raw = stringAttribute(window, kAXIdentifierAttribute)?.lowercased(), allowedNames.contains(raw) {
+      identifier = bounded(raw)
+    } else {
+      identifier = nil
+    }
     return WindowObservation(
       role: role,
-      title: stringAttribute(window, kAXTitleAttribute),
-      identifier: stringAttribute(window, kAXIdentifierAttribute))
+      name: allowlistedName(window),
+      identifier: identifier)
   }
 }
 
@@ -246,12 +428,48 @@ private func focusedElement(_ application: AXUIElement, windows: [AXUIElement]) 
   return nil
 }
 
+private func focusedNode(_ application: AXUIElement, windows: [AXUIElement]) -> AXNode? {
+  for (index, window) in windows.enumerated() {
+    guard let focused = elementAttribute(window, kAXFocusedUIElementAttribute) else { continue }
+    // A raw window identifier can contain host/user text.  If it is not one
+    // of the exact semantic tokens, fail closed instead of serializing it.
+    let windowToken = allowlistedName(window)
+    let context = windowToken.map { "\($0)#\(index)" }
+    if let value = node(focused, window: windowToken, focusWindowContext: context) { return value }
+  }
+  return node(elementAttribute(application, kAXFocusedUIElementAttribute))
+}
+
+private struct AXScan {
+  var nodes: [AXNode] = []
+  var foundLandmark = false
+}
+
+private func scan(_ element: AXUIElement, window: String?, depth: Int, landmark: String?, result: inout AXScan) {
+  guard depth <= 8, result.nodes.count < 128 else { return }
+  if let value = node(element, window: window) {
+    result.nodes.append(value)
+    if value.name == landmark { result.foundLandmark = true }
+  }
+  for child in elementArrayAttribute(element, kAXChildrenAttribute) {
+    scan(child, window: window, depth: depth + 1, landmark: landmark, result: &result)
+    if result.nodes.count >= 128 { return }
+  }
+}
+
+private func isScratchProcess(_ app: NSRunningApplication, expectedName: String) -> Bool {
+  guard expectedName.hasPrefix("omi-on-"), app.localizedName == expectedName else { return false }
+  guard let bundle = app.bundleURL?.lastPathComponent, bundle.hasPrefix("omi-on-"), bundle.hasSuffix(".app") else { return false }
+  return true
+}
+
 private func sameFocus(_ first: AXNode?, _ second: AXNode?) -> Bool {
   guard let first, let second else { return false }
   // Values and enabled state can legitimately change while a command palette
   // opens and closes. Focus restoration is an identity assertion, not a stale
   // value snapshot.
-  return first.focusIdentity == second.focusIdentity
+  guard let firstIdentity = first.focusIdentity, let secondIdentity = second.focusIdentity else { return false }
+  return firstIdentity == secondIdentity
 }
 
 private struct KeySpec {
@@ -312,13 +530,21 @@ private func failureEvidence(_ options: Options, error: Error, app: NSRunningApp
     shell: "macos",
     runId: options.runId,
     targetPid: app?.processIdentifier,
-    targetName: app?.localizedName,
-    targetBundleId: app?.bundleIdentifier,
+    target: nil,
     axTrusted: AXIsProcessTrusted(),
+    evidenceClass: "supplementary_observation",
+    kind: options.kind,
+    coordinate: options.coordinate,
+    sourceCoreSha: options.sourceCoreSha,
+    sourcePlatformSha: options.sourcePlatformSha,
     windows: [],
+    nodes: [],
+    domainLandmark: options.landmark,
+    domainLandmarkFound: false,
     focusedBefore: nil,
     keys: [],
     focusRestored: nil,
+    matrixEligible: false,
     error: String(describing: error))
 }
 
@@ -326,6 +552,15 @@ private func resolveTarget(_ options: Options) throws -> NSRunningApplication {
   if let pid = options.pid {
     guard let app = NSRunningApplication(processIdentifier: pid) else {
       throw ProbeError.targetNotFound("pid \(pid) is not running")
+    }
+    if let bundleId = options.bundleId, app.bundleIdentifier != bundleId {
+      throw ProbeError.targetIdentityMismatch("bundle identifier does not match expected process")
+    }
+    if let expected = options.expectedBundleId, app.bundleIdentifier != expected {
+      throw ProbeError.targetIdentityMismatch("bundle identifier does not match matrix binding")
+    }
+    if options.requireMatrix, let expectedName = options.expectedProcessName, !isScratchProcess(app, expectedName: expectedName) {
+      throw ProbeError.targetIdentityMismatch("process is not the expected omi-on-* scratch shell")
     }
     return app
   }
@@ -340,14 +575,28 @@ private func resolveTarget(_ options: Options) throws -> NSRunningApplication {
     let names = candidates.map { "\($0.processIdentifier):\($0.localizedName ?? "?")" }.joined(separator: ",")
     throw ProbeError.targetAmbiguous(names)
   }
+  if options.requireMatrix { throw ProbeError.invalidMatrixBinding("matrix evidence requires an exact PID") }
   return candidates[0]
 }
 
 private func run(_ options: Options) throws -> Evidence {
-  guard AXIsProcessTrusted() else {
-    throw ProbeError.accessibilityNotTrusted
-  }
+  guard AXIsProcessTrusted() else { throw ProbeError.accessibilityNotTrusted }
   let app = try resolveTarget(options)
+  guard let bundleId = app.bundleIdentifier else {
+    throw ProbeError.targetIdentityMismatch("target bundle identifier is unavailable")
+  }
+  let expectedBundle = options.expectedBundleId ?? options.bundleId ?? bundleId
+  let processBound = options.expectedProcessName.map { isScratchProcess(app, expectedName: $0) } ?? true
+  let target = TargetBinding(
+    pid: app.processIdentifier,
+    bundleId: bundleId,
+    processNameBound: processBound,
+    expectedPid: options.pid ?? app.processIdentifier,
+    expectedBundleId: expectedBundle,
+    bound: app.processIdentifier == (options.pid ?? app.processIdentifier) && bundleId == expectedBundle && processBound)
+  guard !options.requireMatrix || target.bound else {
+    throw ProbeError.targetIdentityMismatch("PID, bundle identifier, or scratch process name is not bound")
+  }
   if options.activate {
     _ = app.activate(options: [])
     usleep(180_000)
@@ -366,37 +615,84 @@ private func run(_ options: Options) throws -> Evidence {
     let isActive = NSRunningApplication(processIdentifier: app.processIdentifier)?.isActive ?? false
     guard isActive else { throw ProbeError.targetNotActive }
   }
-  let beforeElement = focusedElement(application, windows: axWindows)
-  let before = node(beforeElement)
+  var snapshot = AXScan()
+  for window in axWindows where stringAttribute(window, kAXRoleAttribute) == kAXWindowRole {
+    scan(window, window: allowlistedName(window), depth: 0, landmark: options.landmark, result: &snapshot)
+    if snapshot.nodes.count >= 128 { break }
+  }
+  guard !options.requireMatrix || snapshot.foundLandmark else {
+    throw ProbeError.noDomainLandmark(options.landmark ?? "required allowlisted landmark")
+  }
+  let before = focusedNode(application, windows: axWindows)
   var observations: [KeyObservation] = []
-  for rawKey in options.keys {
+  for (index, rawKey) in options.keys.enumerated() {
     guard let spec = keySpec(rawKey) else { throw ProbeError.usage("unknown key \(rawKey)") }
-    let keyBefore = node(focusedElement(application, windows: axWindows))
+    let keyBefore = focusedNode(application, windows: axWindows)
     try post(spec)
-    let keyAfter = node(focusedElement(application, windows: axWindows))
+    var afterScan = AXScan()
+    for window in axWindows where stringAttribute(window, kAXRoleAttribute) == kAXWindowRole {
+      scan(window, window: allowlistedName(window), depth: 0, landmark: options.expectedAfter[safe: index] ?? nil, result: &afterScan)
+      if afterScan.nodes.count >= 128 { break }
+    }
+    let keyAfter = focusedNode(application, windows: axWindows)
+    let expected = options.expectedAfter[safe: index] ?? nil
+    let consumed = expected.map { _ in afterScan.foundLandmark } ?? (rawKey.lowercased() == "escape" && sameFocus(keyBefore, keyAfter))
     observations.append(KeyObservation(
       key: spec.label,
       keyCode: spec.keyCode,
       modifiers: spec.modifierLabels,
       posted: true,
       focusedBefore: keyBefore,
-      focusedAfter: keyAfter))
+      focusedAfter: keyAfter,
+      targetConsumed: consumed,
+      expectedLandmark: expected))
+    guard !options.requireMatrix || consumed else {
+      throw ProbeError.keyboardTransitionNotObserved(spec.label)
+    }
   }
-  let after = node(focusedElement(application, windows: axWindows))
+  let after = focusedNode(application, windows: axWindows)
   let restored = options.keys.isEmpty ? nil : sameFocus(before, after)
+  if options.requireMatrix && options.kind == "keyboard_trace" && restored != true {
+    throw ProbeError.focusNotRestored
+  }
+  // Generic operator observations are supplementary by definition.  Matrix
+  // eligibility is earned only by an explicit, fully bound --require-matrix
+  // invocation with the required landmark/keyboard transition proof.
+  let matrixEligible = options.requireMatrix && (options.kind == "ax_snapshot" ? snapshot.foundLandmark : observations.allSatisfy(\.targetConsumed) && restored == true)
   return Evidence(
     schema: schema,
     shell: "macos",
     runId: options.runId,
     targetPid: app.processIdentifier,
-    targetName: app.localizedName,
-    targetBundleId: app.bundleIdentifier,
+    target: target,
     axTrusted: true,
+    evidenceClass: matrixEligible ? (options.kind == "keyboard_trace" ? "native_keyboard_trace" : "native_ax_snapshot") : "supplementary_observation",
+    kind: options.kind,
+    coordinate: options.coordinate,
+    sourceCoreSha: options.sourceCoreSha,
+    sourcePlatformSha: options.sourcePlatformSha,
     windows: windows,
+    nodes: snapshot.nodes,
+    domainLandmark: options.landmark,
+    domainLandmarkFound: snapshot.foundLandmark,
     focusedBefore: before,
     keys: observations,
     focusRestored: restored,
+    matrixEligible: matrixEligible,
     error: nil)
+}
+
+private func selfTest() -> Bool {
+  let noIdentity = AXNode(role: "AXTextField", subrole: nil, name: "composer", identifier: nil, window: "main-window", focusWindowContext: nil)
+  let sameA = AXNode(role: "AXTextField", subrole: nil, name: "composer", identifier: "composer", window: "main-window", focusWindowContext: "main-window#0")
+  let sameB = AXNode(role: "AXTextField", subrole: nil, name: "composer", identifier: "composer", window: "main-window", focusWindowContext: "main-window#0")
+  let collision = AXNode(role: "AXTextField", subrole: nil, name: "composer", identifier: "composer", window: "main-window", focusWindowContext: "main-window#1")
+  return !sameFocus(nil, nil) && !sameFocus(noIdentity, noIdentity) && sameFocus(sameA, sameB) && !sameFocus(sameA, collision) && allowlistedNameToken("composer") != nil && allowlistedNameToken("arbitrary-user-text") == nil
+}
+
+private func allowlistedNameToken(_ value: String) -> String? {
+  let lower = value.lowercased()
+  return allowedNames.contains(lower) ? bounded(lower) : nil
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -405,6 +701,11 @@ do {
   if options.help {
     printHelp()
     exit(0)
+  }
+  if options.selfTest {
+    let passed = selfTest()
+    print("{\"schema\":\"omi.native-semantic-self-test.v1\",\"passed\":\(passed ? "true" : "false")}")
+    exit(passed ? 0 : 1)
   }
   do {
     emit(try run(options), json: options.json)

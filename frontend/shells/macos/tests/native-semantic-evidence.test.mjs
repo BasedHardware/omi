@@ -54,10 +54,17 @@ test(
       });
       assert.equal(missing.status, 1, missing.stderr);
       const missingDocument = JSON.parse(missing.stdout);
-      assert.equal(missingDocument.schema, "omi.native-semantic-evidence.v1");
+      assert.equal(missingDocument.schema, "omi.native-semantic-evidence.v2");
       assert.equal(missingDocument.shell, "macos");
       assert.match(missingDocument.error, /^target-not-found:/);
       assert.deepEqual(missingDocument.keys, []);
+
+      const selfTest = spawnSync(binary, ["--self-test", "--json"], { encoding: "utf8" });
+      assert.equal(selfTest.status, 0, selfTest.stderr);
+      assert.deepEqual(JSON.parse(selfTest.stdout), {
+        schema: "omi.native-semantic-self-test.v1",
+        passed: true,
+      });
 
       const loginPid = spawnSync("pgrep", ["-x", "loginwindow"], { encoding: "utf8" })
         .stdout.trim().split(/\s+/)[0];
@@ -67,11 +74,14 @@ test(
         });
         assert.equal(observed.status, 0, `${observed.stdout}${observed.stderr}`);
         const document = JSON.parse(observed.stdout);
-        assert.equal(document.schema, "omi.native-semantic-evidence.v1");
+        assert.equal(document.schema, "omi.native-semantic-evidence.v2");
         assert.equal(document.shell, "macos");
         assert.equal(document.runId, "ax-loginwindow-proof");
         assert.equal(document.axTrusted, true);
-        assert.ok(document.windows.some((window) => window.role === "AXWindow"));
+        assert.equal(document.evidenceClass, "supplementary_observation");
+        assert.equal(document.matrixEligible, false);
+        assert.ok(document.windows.every((window) => !Object.hasOwn(window, "title")));
+        assert.ok(document.nodes.every((node) => !Object.hasOwn(node, "title") && !Object.hasOwn(node, "description") && !Object.hasOwn(node, "value") && !Object.hasOwn(node, "focusWindowContext")));
         assert.deepEqual(document.keys, []);
       }
 
@@ -84,6 +94,23 @@ test(
       ], { encoding: "utf8" });
       assert.equal(implicitFocusSteal.status, 2);
       assert.match(implicitFocusSteal.stderr, /--keys requires --activate/);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "matrix mode rejects missing target/source/coordinate binding instead of downgrading to generic evidence",
+  { skip: hasNativeToolchain() ? false : "macOS swiftc is unavailable" },
+  () => {
+    const scratch = mkdtempSync(join(tmpdir(), "omi-native-semantic-binding-"));
+    try {
+      const binary = join(scratch, "native-semantic-evidence");
+      execFileSync("swiftc", ["-O", "-framework", "AppKit", "-framework", "ApplicationServices", "-framework", "CoreGraphics", "-o", binary, source]);
+      const result = spawnSync(binary, ["--name", "loginwindow", "--require-matrix", "--json"], { encoding: "utf8" });
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /invalid-matrix-binding/);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
