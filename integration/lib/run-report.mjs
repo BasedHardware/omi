@@ -12,10 +12,23 @@ import {
   MATRIX_SIZE,
   MATRIX_REPORT_SCHEMA,
   arbitrateEvidence,
+  rawRunIdFailure,
   validateServiceReadiness,
 } from "./evidence-matrix.mjs";
 
-export const RUN_REPORT_SCHEMA_VERSION = 2;
+export const RUN_REPORT_SCHEMA_VERSION = 3;
+
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function exactKeys(value, expected, label, failures) {
+  if (!isObject(value)) {
+    failures.push(`${label} must be an object`);
+    return;
+  }
+  const missing = expected.filter((key) => !Object.hasOwn(value, key));
+  const extra = Object.keys(value).filter((key) => !expected.includes(key));
+  if (missing.length > 0) failures.push(`${label} is missing field(s): ${missing.join(", ")}`);
+  if (extra.length > 0) failures.push(`${label} has non-schema field(s): ${extra.join(", ")}`);
+}
 
 const assertion = (name, claim, measuredBy, corroboratedBy, result, detail) => Object.freeze({
   name,
@@ -27,11 +40,24 @@ const assertion = (name, claim, measuredBy, corroboratedBy, result, detail) => O
   detail,
 });
 
-export function buildReport(facts) {
+export function buildReport(facts, { readinessRecord = facts?.service?.readiness } = {}) {
   if (facts === null || typeof facts !== "object" || Array.isArray(facts)) {
     throw new TypeError("run facts must be an object");
   }
-  const readiness = validateServiceReadiness(facts.service?.readiness, {
+  const factsFailures = [];
+  exactKeys(facts, [
+    "schema", "runId", "startedAt", "finishedAt", "expectedShellTreeHash",
+    "expectedSurfaceTreeHash", "service", "launchers", "consumer", "producer",
+  ], "run facts", factsFailures);
+  if (facts.schema !== "omi.dev-stack-facts.v1") factsFailures.push("run facts schema is wrong");
+  const runIdFailure = rawRunIdFailure(facts.runId);
+  if (runIdFailure) factsFailures.push(runIdFailure);
+  exactKeys(facts.service, ["databasePath", "launchedPid", "reachableAfter"], "run facts service", factsFailures);
+  exactKeys(facts.launchers, ["macos", "ios"], "run facts launchers", factsFailures);
+  for (const shell of ["macos", "ios"]) {
+    exactKeys(facts.launchers?.[shell], ["status", "exitCode"], `${shell} launcher outcome`, factsFailures);
+  }
+  const readiness = validateServiceReadiness(readinessRecord, {
     runId: facts.runId,
     databasePath: facts.service?.databasePath,
     pid: facts.service?.launchedPid,
@@ -44,17 +70,23 @@ export function buildReport(facts) {
     expectedSurfaceTreeHash: facts.expectedSurfaceTreeHash,
   });
   const shellFailures = ["macos", "ios"].flatMap((shell) => {
-    const result = facts.shells?.[shell];
-    if (result === null || result === undefined) return [`${shell} structured result is missing`];
-    if (result.shell !== shell) return [`${shell} structured result has shell=${JSON.stringify(result.shell)}`];
-    if (result.runId !== facts.runId) return [`${shell} structured result has wrong runId`];
-    if (result.status !== "pass") return [`${shell} structured result status is ${JSON.stringify(result.status)}`];
+    const result = facts.launchers?.[shell];
+    if (result === null || result === undefined) return [`${shell} launcher outcome is missing`];
+    if (result.status !== "pass") return [`${shell} launcher status is ${JSON.stringify(result.status)}`];
     if (!Number.isInteger(result.exitCode) || result.exitCode !== 0) return [`${shell} launcher exitCode is ${JSON.stringify(result.exitCode)}`];
     return [];
   });
   const backendAlive = facts.service?.reachableAfter === true;
 
   const assertions = [
+    assertion(
+      "facts_integrity",
+      "the final host facts contain only the exact safe wrapper metadata",
+      "launcher: exact schema-v1 host facts without readiness credentials or origins",
+      "report: independently revalidates raw run identity and every wrapper key",
+      factsFailures.length === 0 ? "pass" : "fail",
+      factsFailures.join("; ") || "final host facts use the exact safe schema",
+    ),
     assertion(
       "direct_service_readiness",
       "the exact platform dev-server executable owns the one run-scoped SQLite service",
@@ -66,7 +98,7 @@ export function buildReport(facts) {
     assertion(
       "two_shell_results",
       "macOS and iOS both built, launched, and returned structured results for this run",
-      "shell launchers: versioned result documents with exact run + shell attribution",
+      "shell launchers: separate host-owned exit outcomes after native validation",
       "consumer matrix: seven rendered semantic rows from each shell",
       shellFailures.length === 0 ? "pass" : "fail",
       shellFailures.join("; ") || "macos and ios structured results both passed",
@@ -99,16 +131,15 @@ export function buildReport(facts) {
     },
     result: failed.length === 0 ? "pass" : "fail",
     service: {
-      executable: facts.service?.readiness?.executable ?? null,
-      baseUrl: facts.service?.readiness?.baseUrl ?? null,
+      executable: readinessRecord?.executable ?? null,
       databasePath: facts.service?.databasePath ?? null,
-      pid: facts.service?.readiness?.pid ?? null,
-      readinessSchema: facts.service?.readiness?.schema ?? null,
+      pid: readinessRecord?.pid ?? null,
+      readinessSchema: readinessRecord?.schema ?? null,
       reachableAfter: backendAlive,
     },
-    shells: {
-      macos: facts.shells?.macos ?? null,
-      ios: facts.shells?.ios ?? null,
+    launchers: {
+      macos: facts.launchers?.macos ?? null,
+      ios: facts.launchers?.ios ?? null,
     },
     evidence: matrix,
     assertions,
@@ -133,7 +164,7 @@ export function nextActions(report) {
 function renderHuman(report) {
   const lines = [
     `run ${report.run.id}: ${report.result.toUpperCase()}`,
-    `service ${report.service.executable ?? "missing"} at ${report.service.baseUrl ?? "missing"}`,
+    `service ${report.service.executable ?? "missing"} pid ${report.service.pid ?? "missing"}`,
     `matrix ${report.evidence.rowCount}/${MATRIX_SIZE} (${MATRIX_REPORT_SCHEMA})`,
   ];
   for (const row of report.assertions) lines.push(`${row.result === "pass" ? "PASS" : "FAIL"} ${row.name}: ${row.detail}`);
@@ -148,6 +179,7 @@ function parseCli(argv) {
   };
   return {
     factsPath: value("--facts"),
+    readinessPath: value("--readiness"),
     outPath: value("--out"),
     json: argv.includes("--json"),
     assert: argv.includes("--assert"),
@@ -156,18 +188,20 @@ function parseCli(argv) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const cli = parseCli(process.argv.slice(2));
-  if (!cli.factsPath) {
-    process.stderr.write("usage: run-report.mjs --facts <path> [--out <path>] [--json] [--assert]\n");
+  if (!cli.factsPath || !cli.readinessPath) {
+    process.stderr.write("usage: run-report.mjs --facts <path> --readiness <path> [--out <path>] [--json] [--assert]\n");
     process.exit(2);
   }
   let facts;
+  let readinessRecord;
   try {
     facts = JSON.parse(readFileSync(cli.factsPath, "utf8"));
+    readinessRecord = JSON.parse(readFileSync(cli.readinessPath, "utf8"));
   } catch (error) {
     process.stderr.write(`could not read run facts: ${error.message}\n`);
     process.exit(1);
   }
-  const report = buildReport(facts);
+  const report = buildReport(facts, { readinessRecord });
   if (cli.outPath) writeFileSync(cli.outPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(cli.json ? `${JSON.stringify(report, null, 2)}\n` : renderHuman(report));
   if (cli.assert && report.result !== "pass") process.exit(1);

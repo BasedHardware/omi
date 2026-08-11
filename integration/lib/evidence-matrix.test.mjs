@@ -17,6 +17,8 @@ import {
   SHELLS,
   arbitrateEvidence,
   deterministicListenAudio,
+  rawRunIdFailure,
+  validateFinalEvidenceMatrix,
   validateServiceReadiness,
 } from "./evidence-matrix.mjs";
 
@@ -325,4 +327,74 @@ test("RED-PROOF a foreign readiness PID cannot stand in for the launched service
   }, { runId: RUN, databasePath, pid: 123 });
   assert.equal(result.ok, false);
   assert.match(result.failures.join("\n"), /does not match launched pid/);
+});
+
+test("RED-PROOF missing document, row, observation, producer, and count keys fail", () => {
+  const cases = [
+    (consumer) => { delete consumer.schema; },
+    (consumer) => { delete consumer.rows[0].fixture; },
+    (consumer) => { delete consumer.rows[0].observation.state; },
+  ];
+  for (const mutate of cases) {
+    const consumer = healthyConsumer();
+    mutate(consumer);
+    mustFail(verdict({ consumer }), /missing schema field/);
+  }
+  const producer = healthyProducer();
+  delete producer.rows[0].http.successful;
+  mustFail(verdict({ producer }), /missing schema field.*successful/);
+});
+
+test("RED-PROOF canonical coordinates cannot be reordered", () => {
+  const consumer = healthyConsumer();
+  [consumer.rows[0], consumer.rows[1]] = [consumer.rows[1], consumer.rows[0]];
+  mustFail(verdict({ consumer }), /reordered: expected macos\/memories, got macos\/tasks/);
+});
+
+test("RED-PROOF semantic and Listen transcript limits count UTF-8 bytes", () => {
+  const inside = healthyConsumer();
+  inside.rows[0].observation.semantic = "é".repeat(128);
+  inside.rows.find((row) => row.domain === "listen").observation.transcript = "😀".repeat(256);
+  assert.equal(verdict({ consumer: inside }).result, "pass");
+
+  const semanticOutside = healthyConsumer();
+  semanticOutside.rows[0].observation.semantic = "é".repeat(129);
+  mustFail(verdict({ consumer: semanticOutside }), /at most 256 UTF-8 bytes/);
+
+  const transcriptOutside = healthyConsumer();
+  transcriptOutside.rows.find((row) => row.domain === "listen").observation.transcript = "😀".repeat(257);
+  mustFail(verdict({ consumer: transcriptOutside }), /at most 1024 UTF-8 bytes/);
+});
+
+test("RED-PROOF unsafe, reserved, overflow, and transport-attributed run ids fail", () => {
+  for (const runId of ["anonymous", "overflow", "__internal", "a".repeat(97), "run::macos", "run::ios", "has space"]) {
+    assert.ok(rawRunIdFailure(runId), `${runId} must be rejected`);
+    const result = arbitrateEvidence({
+      runId,
+      consumer: healthyConsumer(),
+      producer: healthyProducer(),
+      expectedShellTreeHash: TREE,
+      expectedSurfaceTreeHash: SURFACE,
+    });
+    mustFail(result, /runId|reserved|transport/);
+  }
+});
+
+test("RED-PROOF final matrix is deeply rejoined before receipt use", () => {
+  const healthy = verdict();
+  assert.equal(validateFinalEvidenceMatrix(healthy, {
+    runId: RUN,
+    expectedShellTreeHash: TREE,
+    expectedSurfaceTreeHash: SURFACE,
+  }).ok, true);
+
+  const reordered = structuredClone(healthy);
+  [reordered.rows[0], reordered.rows[1]] = [reordered.rows[1], reordered.rows[0]];
+  const result = validateFinalEvidenceMatrix(reordered, {
+    runId: RUN,
+    expectedShellTreeHash: TREE,
+    expectedSurfaceTreeHash: SURFACE,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.failures.join("\n"), /reordered|wrong coordinate/);
 });

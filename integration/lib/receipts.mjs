@@ -41,6 +41,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { rawRunIdFailure, validateFinalEvidenceMatrix } from "./evidence-matrix.mjs";
 import {
   REPO_PATHS,
   WORKSPACE_ROOT,
@@ -369,30 +370,27 @@ export function writeReceipt({
         `read one, which is not a pass: supply the real values, or write result: "fail".`,
     );
   }
+  const stamps = stampDeclaredRepos(row);
   if (result === "pass" && lane === "L3") {
     const matrix = arbiters.evidenceMatrix;
-    const rows = matrix?.rows;
-    const coordinates = Array.isArray(rows)
-      ? new Set(rows.map((entry) => `${entry?.shell}/${entry?.domain}`))
-      : new Set();
-    if (
-      matrix?.schema !== "omi.shell-domain-matrix.v1"
-      || matrix?.result !== "pass"
-      || matrix?.rowCount !== 14
-      || !Array.isArray(rows)
-      || rows.length !== 14
-      || coordinates.size !== 14
-      || rows.some((entry) => entry?.consumer === null || typeof entry?.consumer !== "object"
-        || entry?.producer === null || typeof entry?.producer !== "object")
-    ) {
+    const arbiterKeys = ["steps", "runId", "evidenceMatrix", "assertions"];
+    const exactArbiters = arbiters !== null && typeof arbiters === "object" && !Array.isArray(arbiters)
+      && Object.keys(arbiters).sort().join("\0") === arbiterKeys.sort().join("\0");
+    const runIdError = rawRunIdFailure(arbiters.runId);
+    const expectedTreeHash = stamps["core-foundation"]?.treeHash;
+    const matrixValidation = validateFinalEvidenceMatrix(matrix, {
+      runId: arbiters.runId,
+      expectedShellTreeHash: expectedTreeHash,
+      expectedSurfaceTreeHash: expectedTreeHash,
+    });
+    if (!exactArbiters || runIdError || !matrixValidation.ok) {
       throw new Error(
-        "writeReceipt: lane L3 requires the passing exact 14-row producer/consumer evidenceMatrix; "
-        + "ios:null or an aggregate counter is not a coordinate.",
+        "writeReceipt: lane L3 requires exact safe arbiter keys and a revalidated canonical 14-row producer/consumer evidenceMatrix; "
+        + `${runIdError ?? (matrixValidation.failures.join("; ") || "arbiter keys are not exact")}.`,
       );
     }
   }
 
-  const stamps = stampDeclaredRepos(row);
   const key = receiptKey(lane, stamps);
   // `hrtime` is system-monotonic across the short-lived lane processes used by
   // the runner. Padding makes lexicographic order equal append-start order;
@@ -640,6 +638,26 @@ export function verifyReceiptObject(lane, receipt) {
         reason:
           `${lane}'s receipt is stale for ${repo}: receipt tree ${short(stamp.treeHash)}, ` +
           `current tree ${short(worktree?.treeHash ?? stamp.treeHash)} — ${reason || "tree hash mismatch"}.`,
+      };
+    }
+  }
+
+  if (lane === "L3") {
+    const arbiterKeys = ["steps", "runId", "evidenceMatrix", "assertions"];
+    const exactArbiters = receipt.arbiters !== null && typeof receipt.arbiters === "object" && !Array.isArray(receipt.arbiters)
+      && Object.keys(receipt.arbiters).sort().join("\0") === arbiterKeys.sort().join("\0");
+    const runIdError = rawRunIdFailure(receipt.arbiters?.runId);
+    const expectedTreeHash = receipt.stamps?.["core-foundation"]?.treeHash;
+    const matrixValidation = validateFinalEvidenceMatrix(receipt.arbiters?.evidenceMatrix, {
+      runId: receipt.arbiters?.runId,
+      expectedShellTreeHash: expectedTreeHash,
+      expectedSurfaceTreeHash: expectedTreeHash,
+    });
+    if (!exactArbiters || runIdError || !matrixValidation.ok) {
+      return {
+        ok: false,
+        kind: "failed",
+        reason: `L3 receipt evidence failed revalidation: ${runIdError ?? (matrixValidation.failures.join("; ") || "arbiter keys are not exact")}.`,
       };
     }
   }

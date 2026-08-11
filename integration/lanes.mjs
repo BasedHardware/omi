@@ -173,7 +173,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/lib/evidence-matrix.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/single-service-structure.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs core/shells/macos/tests/consumer-evidence-writer.test.mjs core/shells/ios/tests/dev-run-ios.test.mjs" },
     ],
   },
   L3: {

@@ -16,6 +16,10 @@ node integration/lanes.mjs L3
 # Or name the simulator explicitly
 integration/dev-stack.sh --device <simulator-udid> --assert
 
+# Start only the one owned service (no build or native shell), then stop it
+integration/dev-stack.sh --up
+integration/dev-stack.sh --stop
+
 # Applied negative controls; each full run must finish red at its named assertion
 integration/red-proof-assert.sh
 ```
@@ -54,8 +58,11 @@ The service must write this readiness record before the bounded readiness probe 
 
 An absent record, a different executable/path/run, a PID other than the exact launched
 process, or a readiness response without the record fails. The token is read only by the
-host launcher, passed only to native shell custody, removed with the temporary facts, and
-never copied into the report or receipt.
+host launcher, passed only to native shell custody, and never copied into final facts, a
+launcher log, the report, or the receipt. `--up` retains a separate exact owner record with
+the raw run id, expected executable and command, random owner token, process-start identity,
+database path, and readiness path. `--stop` verifies every coordinate again before signaling;
+a stale, reused, or unknown PID is reported and left alive.
 P7's structural and real-subprocess tests own the single-store proof; H3 does not invent
 store-set fields on this readiness schema.
 
@@ -80,9 +87,10 @@ or other user/fixture content.
 
 ## Shell result contract
 
-The host gives each native shell the same run id and host-owned attribution key
-`<run-id>::<shell>`. Each shell writes `omi.consumer-evidence.v1` with its shell name and
-exactly seven rows. Every row includes:
+The host gives each native shell the same raw run id. Only the host-owned
+`x-omi-client-id` transport attribution appends `::<shell>`. Each shell writes an exact
+top-level `{schema,runId,rows}` `omi.consumer-evidence.v1` document with exactly seven rows;
+`shell` exists only on each row. Every row includes:
 
 ```json
 {
@@ -106,8 +114,8 @@ shown above; observations have exactly `route`, `state`, and `semantic`, plus `t
 for Listen. The arbiter rejects any extra field and rebuilds each consumer report row from these
 allowed fields so rejected input cannot leak into a report or receipt. The consumer Listen row
 carries a non-empty rendered `observation.transcript`; every other domain must omit it. Producer
-evidence contains no transcript to compare against. The launcher adds its actual exit code after
-collection; the app cannot self-award launcher success.
+evidence contains no transcript to compare against. The host records launcher status and exit code
+in separate safe facts; it never stamps or rewrites either native result document.
 
 The final `omi.shell-domain-matrix.v1` report and receipt contain the 14 joined producer and
 consumer rows. Missing, duplicate, wrong-run, wrong-shell, fixture, stale-tree, aggregate,
