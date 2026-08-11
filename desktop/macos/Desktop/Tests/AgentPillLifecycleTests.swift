@@ -840,6 +840,26 @@ import XCTest
     XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
   }
 
+  func testStartingPushToTalkDuringNotchRetractionKeepsThePanelVisible() {
+    let window = FloatingControlBarWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 360, height: 58),
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = UncancellableRetractionScheduler()
+    window.notchRetractionScheduler = scheduler
+
+    window.makeKeyAndOrderFront(nil)
+    window.retractIntoNotch { [weak window] in window?.orderOut(nil) }
+    window.resizeForPTTState(expanded: true)
+    scheduler.fire()
+
+    XCTAssertTrue(window.isVisible, "a stale retraction must not hide active push-to-talk")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
     let viewSource = try floatingControlBarViewSource()

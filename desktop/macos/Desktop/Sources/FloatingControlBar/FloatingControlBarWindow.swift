@@ -2013,6 +2013,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
   func resizeForPTTState(expanded: Bool) {
+    if expanded { cancelPendingRetraction() }
     if notchModeEnabled {
       if state.showingAIConversation {
         return
@@ -2037,7 +2038,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       animationDuration: 0.18
     )
   }
-
   /// Size the notch to fit the "thinking" indicator (active width) while a PTT
   /// query is being processed, then collapse it back once the response takes
   /// over. Voice listening and the open conversation surface own sizing while

@@ -91,8 +91,8 @@ final class ShellWindowChromeTests: XCTestCase {
   }
 
   /// …and the window still moves. It has two handles: the transparent title bar over the reserved
-  /// band and a thresholded SwiftUI gesture across the content. The native background-drag switch is
-  /// deliberately off because AppKit mistakes hosted SwiftUI buttons for background.
+  /// band and a thresholded simultaneous SwiftUI gesture on the visible top bar. The native
+  /// background-drag switch is deliberately off because AppKit mistakes hosted buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
     window.isMovableByWindowBackground = false
