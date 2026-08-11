@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<String> simulateGetAuthHeader({required bool isSignedIn, required String token}) async {
@@ -63,6 +65,26 @@ void main() {
       );
 
       expect(headers['Authorization'], equals('Bearer fresh-token'));
+    });
+
+    test('_drainStreamedResponse suppresses exceptions from aborted streams before replaying', () async {
+      var replayCount = 0;
+      final service = AuthService.forTesting(tokenGateway: _TestAuthTokenGateway(), refreshDelay: (_) async {});
+
+      final response = await refreshAndReplayAfter401(
+        firstResponse: http.StreamedResponse(_abortedResponseBody(), HttpStatus.unauthorized),
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: drainStreamedResponseForTesting,
+        replay: () async {
+          replayCount++;
+          return http.StreamedResponse(const Stream<List<int>>.empty(), HttpStatus.ok);
+        },
+        expireTerminalSession: true,
+        authService: service,
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(replayCount, 1);
     });
   });
 
@@ -126,59 +148,23 @@ void main() {
       expect(requestCount, 1);
     });
   });
+}
 
-  group('error handling during retry flows', () {
-    late HttpServer server;
+Stream<List<int>> _abortedResponseBody() async* {
+  yield [1, 2, 3];
+  throw StateError('aborted response');
+}
 
-    setUp(() async {
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
-    });
+final class _TestAuthTokenGateway implements AuthTokenGateway {
+  @override
+  AuthUserSnapshot? get currentUser => const AuthUserSnapshot(uid: 'test-user');
 
-    tearDown(() async {
-      await server.close(force: true);
-    });
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async =>
+      RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
 
-    test('_drainStreamedResponse suppresses exceptions from aborted streams when replaying', () async {
-      var requestCount = 0;
-
-      server.listen((request) async {
-        requestCount++;
-        if (requestCount == 1) {
-          // Send 401 but violently abort before the body finishes.
-          // This forces a stream exception when the retry logic attempts to drain it.
-          request.response.statusCode = 401;
-          request.response.headers.contentType = ContentType.json;
-          request.response.contentLength = 100;
-
-          final socket = await request.response.detachSocket(writeHeaders: true);
-          socket.write('{"error": "partial');
-          await socket.flush();
-          socket.destroy();
-        } else {
-          // Let the replayed request succeed.
-          request.response.statusCode = 200;
-          request.response.write('{"success": true}');
-          await request.response.close();
-        }
-      });
-
-      // The 401 handler `refreshAndReplayAfter401` will trigger `AuthService.instance.refreshIdToken`.
-      // Since we haven't mocked AuthService fully, it will return AuthTokenMissingUser
-      // and the retry will not proceed.
-      // What matters is that the Stream exception from draining the first response
-      // is handled silently by `_drainStreamedResponse` and not propagated to crash the app.
-      final response = await makeRawApiCall(
-        url: env.requestBaseUrl,
-        method: 'GET',
-      );
-
-      // If makeRawApiCall completes without crashing, the test passes.
-      // The status code is 401 because the un-mocked token refresh failed.
-      expect(response.statusCode, 401);
-      expect(requestCount, 1);
-    });
-  });
+  @override
+  Future<void> signOut() async {}
 }
 
 class _TestEnvFields implements EnvFields {
