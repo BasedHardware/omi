@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { auth, onAuthStateChange } from '@/src/lib/firebase';
 
@@ -10,6 +10,10 @@ export interface SessionState {
   /**
    * Returns a fresh Firebase ID token. The token is never written to durable
    * browser storage by this surface.
+   *
+   * Stable across renders: consumers use it as a `useCallback` dependency and
+   * those callbacks as `useEffect` dependencies, so a new identity per render
+   * would make every successful load immediately trigger another one.
    */
   getToken: () => Promise<string | null>;
 }
@@ -26,11 +30,11 @@ export function useSessionToken(): SessionState {
     return () => unsubscribe();
   }, []);
 
-  const getToken = async () => {
+  const getToken = useCallback(async () => {
     const current = auth.currentUser;
     if (!current) return null;
     return current.getIdToken();
-  };
+  }, []);
 
   return { user, loading, getToken };
 }
