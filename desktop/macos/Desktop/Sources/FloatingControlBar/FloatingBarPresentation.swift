@@ -16,6 +16,14 @@ enum FloatingBarPreferenceMutation: Equatable {
   }
 }
 
+extension FloatingControlBarWindow {
+  var shouldOrderOutAfterConversationClose: Bool {
+    !FloatingControlBarManager.shared.isEnabled
+      && state.currentNotification == nil
+      && !state.showingAIConversation
+  }
+}
+
 /// Shared reveal implementation for persistent settings, temporary snoozes,
 /// and direct Push-to-Talk presentation.
 extension FloatingControlBarManager {

@@ -883,6 +883,25 @@ import XCTest
     XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
   }
 
+  func testDisabledBarDoesNotOrderOutAReplacementConversationAfterCloseSettles() {
+    let manager = FloatingControlBarManager.shared
+    let previousEnabled = manager.isEnabled
+    manager.isEnabled = false
+    defer { manager.isEnabled = previousEnabled }
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.state.showingAIConversation = true
+    XCTAssertFalse(window.shouldOrderOutAfterConversationClose)
+    window.state.showingAIConversation = false
+    XCTAssertTrue(window.shouldOrderOutAfterConversationClose)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
     let viewSource = try floatingControlBarViewSource()

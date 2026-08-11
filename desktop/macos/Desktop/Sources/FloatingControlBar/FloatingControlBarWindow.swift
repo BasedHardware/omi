@@ -1372,7 +1372,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // AI conversation instead of leaving the compact pill visible — unless a
       // queued notification was just flushed; hiding now would swallow it, and
       // its dismissal re-hides the bar anyway.
-      if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
+      if self.shouldOrderOutAfterConversationClose {
         self.orderOut(nil)
       }
     }
