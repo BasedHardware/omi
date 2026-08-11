@@ -1,6 +1,3 @@
-import os
-import uuid
-from pathlib import Path
 from typing import List, Optional
 
 import av
@@ -21,6 +18,7 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
+from utils.upload_temp import temp_upload_path
 from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
@@ -95,9 +93,11 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
-    os.makedirs(f'_temp/{uid}', exist_ok=True)
-    safe_suffix = Path(file.filename).name if file.filename else "upload"
-    file_path = f"_temp/{uid}/{uuid.uuid4().hex}_{safe_suffix}"
+    with temp_upload_path(f'_temp/{uid}', file.filename) as file_path:
+        return _process_uploaded_speech_profile(uid, file, file_path)
+
+
+def _process_uploaded_speech_profile(uid: str, file: UploadFile, file_path: str):
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
