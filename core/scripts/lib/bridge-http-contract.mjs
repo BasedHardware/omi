@@ -40,6 +40,10 @@ export function readBridgeHttpContract(sourceAbs) {
   if (!replyMatch) bad("could not extract BRIDGE_HTTP_REPLY_FUNCTION");
   const replyFunction = replyMatch[1];
 
+  const documentQueryMatch = src.match(/export const BRIDGE_HTTP_DOCUMENT_QUERY\s*=\s*"([^"]+)"/);
+  if (!documentQueryMatch) bad("could not extract BRIDGE_HTTP_DOCUMENT_QUERY");
+  const documentQuery = documentQueryMatch[1];
+
   const headersMatch = src.match(/export const BRIDGE_HTTP_FORBIDDEN_HEADERS[^=]*=\s*\[([^\]]*)\]/);
   if (!headersMatch) bad("could not extract BRIDGE_HTTP_FORBIDDEN_HEADERS");
   const forbiddenHeaders = [...headersMatch[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
@@ -69,7 +73,7 @@ export function readBridgeHttpContract(sourceAbs) {
   if (missingStatus.length) bad(`reasons with no status mapping: ${missingStatus.join(", ")}`);
   if (orphanStatus.length) bad(`status entries with no matching reason: ${orphanStatus.join(", ")}`);
 
-  return { channel, replyFunction, forbiddenHeaders, reasons, failureStatus };
+  return { channel, replyFunction, documentQuery, forbiddenHeaders, reasons, failureStatus };
 }
 
 /** kebab-case reason -> lowerCamelCase enum case (Swift and Dart agree here). */

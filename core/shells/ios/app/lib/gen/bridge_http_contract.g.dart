@@ -51,6 +51,10 @@ class BridgeHttpContract {
   /// host delivers each reply by invoking this with (id, replyJson).
   static const String replyFunction = '__omiHttpReply';
 
+  /// BRIDGE_HTTP_DOCUMENT_QUERY — reserved non-secret navigation
+  /// coordinate used to fence document-local request ids.
+  static const String documentQuery = '__omiHttpDocument';
+
   /// BRIDGE_HTTP_FORBIDDEN_HEADERS — stripped from caller headers,
   /// case-insensitively, BEFORE the shell adds its own credential.
   /// Enforced, never trusted: a compromised surface must not be able to

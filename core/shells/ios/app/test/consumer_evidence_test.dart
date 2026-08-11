@@ -311,4 +311,45 @@ void main() {
     expect(observations, 2);
     expect(ownedDocumentPreparations, 2);
   });
+
+  test('owned URI is installed before navigation can synchronously finish', () async {
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-consumer-navigation-race-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final collector = ConsumerEvidenceCollector(
+      resultPath: '${scratch.path}/result.json',
+      runId: 'run-ios-navigation-race',
+      hashes: const ConsumerEvidenceTreeHashes(shell: hashA, surface: hashB),
+    );
+    await collector.prepare();
+    final navigated = <Uri>[];
+    var documentSequence = 0;
+    var observations = 0;
+    late final ConsumerEvidenceDriver driver;
+    driver = ConsumerEvidenceDriver(
+      collector: collector,
+      ownNavigation: (uri) =>
+          uri.replace(queryParameters: {...uri.queryParameters, '__omiHttpDocument': 'd${++documentSequence}'}),
+      navigate: (uri) async {
+        navigated.add(uri);
+        await driver.pageFinished(uri.toString());
+      },
+      observe: () async {
+        observations++;
+        return jsonEncode(observation(ConsumerEvidenceRoute.memories).toJson());
+      },
+      startListen: () async => true,
+      authorChat: () async => 0,
+      submitChat: () async => true,
+      observeChatAfterAdmission: (_) async => jsonEncode(observation(ConsumerEvidenceRoute.chat).toJson()),
+      delay: (_) async {},
+      maxPolls: 1,
+    );
+
+    await driver.start();
+
+    expect(observations, 1, reason: 'pageFinished inside navigate must see the already-owned URI');
+    expect(navigated.map((uri) => uri.queryParameters['route']), ['memories', 'tasks']);
+    expect(navigated.map((uri) => uri.queryParameters['__omiHttpDocument']), ['d1', 'd2']);
+    await driver.teardown();
+  });
 }
