@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
 
 import {
@@ -8,6 +9,23 @@ import {
 } from "./render-harness.mjs";
 
 after(closeRenderHarness);
+
+test("every production domain root exposes a stable localized AX landmark", () => {
+  const expectations = {
+    "MemoriesProduction.tsx": /<main[^>]+aria-label=\{t\(locale, "memories\.title"\)\}[^>]+data-route="memories"/,
+    "MemoriesPlatformProduction.tsx": /<main[\s\S]+aria-label=\{t\(locale, "memoriesPlatform\.title"\)\}[\s\S]+data-route="memories"/,
+    "TasksProduction.tsx": /<main[^>]+aria-label=\{translate\("tasks\.title"\)\}[^>]+data-route="tasks"/,
+    "ConversationsProduction.tsx": /<main[^>]+aria-label=\{t\(locale, "conversations\.title"\)\}[^>]+data-route="conversations"/,
+    "FoldersProduction.tsx": /<main[\s\S]+aria-label=\{t\(locale, "nav\.folders"\)\}[\s\S]+data-route="folders"/,
+    "ChatProduction.tsx": /<main[^>]+aria-label=\{t\(locale, "chat\.title"\)\}[^>]+data-route="chat"/,
+    "ListenProduction.tsx": /<main[\s\S]+aria-label=\{t\(locale, "listen\.title"\)\}[\s\S]+data-route="listen"/,
+    "SettingsProduction.tsx": /<main[^>]+aria-label=\{t\(locale, "settings\.title"\)\}[^>]+data-route="settings"/,
+  };
+  for (const [file, pattern] of Object.entries(expectations)) {
+    const source = readFileSync(new URL(`../src/production/${file}`, import.meta.url), "utf8");
+    assert.match(source, pattern, `${file} must expose its route label on the main landmark`);
+  }
+});
 
 async function settle(rendered) {
   await rendered.act(async () => {

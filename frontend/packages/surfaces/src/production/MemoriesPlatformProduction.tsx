@@ -160,6 +160,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
   return (
     <main
       className="production-shell"
+      aria-label={t(locale, "memoriesPlatform.title")}
       data-production-shell="true"
       data-route="memories"
       data-generation="platform"

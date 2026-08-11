@@ -75,6 +75,7 @@ export function FoldersProduction({ store, locale = "en", onReady, source = { ki
   return (
     <main
       className="production-shell"
+      aria-label={t(locale, "nav.folders")}
       data-production-shell="true"
       data-route="folders"
       data-surface-state={phase}

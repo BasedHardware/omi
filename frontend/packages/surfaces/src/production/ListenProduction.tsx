@@ -277,6 +277,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   return (
     <main
       className="production-shell listen-production-shell"
+      aria-label={t(locale, "listen.title")}
       data-production-shell="true"
       data-route="listen"
       data-surface-state={status.refresh.phase}
