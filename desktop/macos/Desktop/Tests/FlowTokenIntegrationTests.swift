@@ -21,6 +21,21 @@ import XCTest
     XCTAssertFalse(OmiMarkdown.isPlainText("| Name | Value |\n| --- | --- |\n| Omi | 1 |"))
   }
 
+  /// The settled document turns `---` into a divider and decodes `&amp;`, so
+  /// classifying either as plain text made the bubble visibly change the
+  /// instant streaming ended.
+  func testPlainTextGateCatchesThematicBreaksAndCharacterReferences() {
+    XCTAssertFalse(OmiMarkdown.isPlainText("Intro\n---\nOutro"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("---"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Carrier: AT&amp;T"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Fraction: &#189; done"))
+    XCTAssertFalse(OmiMarkdown.isPlainText("Hex entity: &#x1F600; done"))
+
+    // A bare ampersand or a lone dash is still ordinary prose.
+    XCTAssertTrue(OmiMarkdown.isPlainText("Tom & Jerry"))
+    XCTAssertTrue(OmiMarkdown.isPlainText("A dash - inside a sentence."))
+  }
+
   func testFlowTokenFadeInRendersPlainStreamingTextWithFiniteLayout() {
     let host = NSHostingView(
       rootView: TokenizedText(

@@ -57,13 +57,24 @@ struct OmiMarkdown: View {
 
   static func isPlainText(_ content: String) -> Bool {
     guard !content.isEmpty, !containsGFMTable(content) else { return false }
+    guard !containsThematicBreak(content) else { return false }
     let markdownSyntax =
       #"(?m)^\s{0,3}(?:#{1,6}\s|[-+*]\s|\d+\.\s|>\s|```)|[`*_~]|\[[^\]]+\]\([^)]+\)"#
       + #"|<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]+|[^\s<>@]+@[^\s<>@]+)>"#
+      + #"|&(?:[A-Za-z][A-Za-z0-9]{1,31}|#[0-9]{1,7}|#[Xx][0-9A-Fa-f]{1,6});"#
     return content.range(
       of: markdownSyntax,
       options: .regularExpression
     ) == nil
+  }
+
+  /// `---` carries no inline delimiter, so the syntax regex cannot see it, but
+  /// the settled document turns the same line into a divider. Share the settled
+  /// parser's rule so the streaming branch never renders a break as literal text.
+  private static func containsThematicBreak(_ content: String) -> Bool {
+    content.split(separator: "\n", omittingEmptySubsequences: false).contains {
+      OmiMarkdownDocument.isThematicBreak(String($0))
+    }
   }
 }
 
