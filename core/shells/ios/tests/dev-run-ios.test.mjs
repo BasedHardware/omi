@@ -37,6 +37,7 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
     const xcrun = path.join(scratch, "xcrun");
     const node = path.join(scratch, "node");
     const nativeResult = path.join(scratch, "native-result.json");
+    const invalidNativeResult = path.join(scratch, "invalid-native-result.json");
     const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
     writeFileSync(nativeResult, JSON.stringify({
       schema: "omi.consumer-evidence.v1",
@@ -48,6 +49,7 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
         shellTreeHash: "1".repeat(40), surfaceTreeHash: "2".repeat(40),
       })),
     }));
+    writeFileSync(invalidNativeResult, JSON.stringify({ schema: "wrong", runId: "run-launcher-proof", rows: [] }));
     writeFileSync(
       flutter,
       `#!/bin/bash\necho x >> "${flutterCount}"\nif [[ "$1" == "--version" ]]; then echo "Flutter 3.44.5"; exit 0; fi\nprintf '%s\\n' "$@" > "${argsFile}"\nif [[ "$1" == "build" && "\${OMI_TEST_FAIL_BUILD:-}" == "1" ]]; then exit 9; fi\nif [[ "$1" == "build" ]]; then mkdir -p "${fakeApp}/build/ios/iphonesimulator/Runner.app"; fi\n`,
@@ -59,7 +61,11 @@ printf '%s\n' "$*" >> "${simctlLog}"
 if [[ "$1 $2" == "simctl get_app_container" ]]; then printf '%s\n' "${container}"; exit 0; fi
 if [[ "$1 $2" == "simctl launch" ]]; then
   [[ -e "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json" ]] && exit 71
-  [[ "\${OMI_TEST_NO_NATIVE_RESULT:-}" == "1" ]] || cp "${nativeResult}" "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json"
+  if [[ "\${OMI_TEST_INVALID_NATIVE_RESULT:-}" == "1" ]]; then
+    cp "${invalidNativeResult}" "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json"
+  elif [[ "\${OMI_TEST_NO_NATIVE_RESULT:-}" != "1" ]]; then
+    cp "${nativeResult}" "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json"
+  fi
 fi
 exit 0
 `);
@@ -214,6 +220,20 @@ exit 0
     });
     assert.equal(timeout.status, 124, timeout.stderr || timeout.stdout);
     assert.equal(existsSync(evidence), false, "timeout cannot retain host success");
+
+    writeFileSync(evidence, "stale before invalid native result");
+    const invalidNative = spawnSync("/bin/bash", [
+      launcher, "--route", "chat", "--device", "simulator-proof",
+      "--evidence-out", evidence, "--run-id", "run-launcher-proof",
+    ], { encoding: "utf8", env: { ...env, OMI_TEST_INVALID_NATIVE_RESULT: "1" } });
+    assert.equal(invalidNative.status, 1, invalidNative.stderr || invalidNative.stdout);
+    assert.match(invalidNative.stderr, /invalid native consumer evidence: wrong schema/);
+    assert.equal(existsSync(evidence), false, "invalid native result cannot retain host success");
+    assert.equal(
+      existsSync(path.join(container, "Documents/omi-c3b3-consumer-run-launcher-proof.json")),
+      false,
+      "invalid native result is removed from the simulator container",
+    );
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

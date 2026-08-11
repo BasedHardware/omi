@@ -8,6 +8,7 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "shell/Sources/OmiShell/ConsumerEvidence.swift");
+const validator = resolve(root, "../tools/validate-consumer-evidence.mjs");
 
 test("macOS evidence driver authors through the rendered composer and waits for canonical admission", () => {
   // red-proof: restore the visit-only Chat branch; one of the author, submit,
@@ -21,8 +22,13 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /button\.chat-send/);
   assert.match(driver, /consumerChatAdmissionCount/);
   assert.ok(driver.includes("admitted <= \\#(baseline)"));
-  assert.match(driver, /chatAdmissionBaseline = number\.intValue/);
-  assert.match(driver, /chatSubmitted = value as\? Bool == true/);
+  assert.match(driver, /routeDriveState\.chatAdmissionBaseline = number\.intValue/);
+  assert.match(driver, /routeDriveState\.chatSubmitted = value as\? Bool == true/);
+  assert.match(driver, /pageDidFinish\(_ navigation: WKNavigation\?\)/);
+  assert.match(driver, /routeDriveState\.acceptFinished\(navigation\)/);
+  assert.match(driver, /routeDriveState\.begin\(navigation\)/);
+  const finishBody = driver.match(/func pageDidFinish[\s\S]*?\n  \}/u)?.[0] ?? "";
+  assert.doesNotMatch(finishBody, /\.begin\(|listenStartRequested = false|chatAdmissionBaseline = nil|chatSubmitted = false/);
 });
 
 function hasSwiftc() {
@@ -56,6 +62,22 @@ let surfaceStamp = scratch.appendingPathComponent("surface.json")
 try! Data("{\"artifact\":\"macos-app\",\"treeHash\":\"1111111111111111111111111111111111111111\"}".utf8).write(to: shellStamp)
 try! Data("{\"artifact\":\"surfaces-dist\",\"treeHash\":\"2222222222222222222222222222222222222222\"}".utf8).write(to: surfaceStamp)
 let hashes = try! ConsumerEvidenceTreeHashes.load(shellStamp: shellStamp, surfaceStamp: surfaceStamp)
+
+var routeDriveState = ConsumerEvidenceRouteDriveState()
+let listenNavigation = NSObject()
+let chatNavigation = NSObject()
+check("owned Listen navigation begins", routeDriveState.begin(listenNavigation))
+routeDriveState.listenStartRequested = true
+check("owned Listen completion advances", routeDriveState.acceptFinished(listenNavigation))
+check("duplicate Listen completion cannot replay", !routeDriveState.acceptFinished(listenNavigation))
+check("duplicate Listen completion preserves action state", routeDriveState.listenStartRequested)
+check("owned Chat navigation begins", routeDriveState.begin(chatNavigation))
+check("new owned route resets prior action state", !routeDriveState.listenStartRequested)
+routeDriveState.chatAdmissionBaseline = 2
+routeDriveState.chatSubmitted = true
+check("late Listen completion cannot reset Chat", !routeDriveState.acceptFinished(listenNavigation))
+check("late Listen completion preserves Chat submission", routeDriveState.chatAdmissionBaseline == 2 && routeDriveState.chatSubmitted)
+check("next owned Chat completion advances", routeDriveState.acceptFinished(chatNavigation))
 
 rejects("stale tree hash") {
   try Data("{\"artifact\":\"macos-app\",\"treeHash\":\"stale\"}".utf8).write(to: shellStamp)
@@ -142,3 +164,44 @@ test(
     }
   },
 );
+
+test("native evidence validator rejects reversed route rows and accepts canonical order", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "omi-consumer-evidence-order-"));
+  try {
+    const result = join(scratch, "result.json");
+    const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
+    const document = {
+      schema: "omi.consumer-evidence.v1",
+      runId: "run-order-proof",
+      rows: domains.map((domain) => ({
+        runId: "run-order-proof",
+        shell: "macos",
+        domain,
+        fixture: "none",
+        evidence: "rendered-semantic",
+        observation: {
+          route: domain,
+          state: "ready",
+          semantic: `${domain}:rendered`,
+          ...(domain === "listen" ? { transcript: "local transcript" } : {}),
+        },
+        shellTreeHash: "1".repeat(40),
+        surfaceTreeHash: "2".repeat(40),
+      })),
+    };
+    writeFileSync(result, JSON.stringify({ ...document, rows: [...document.rows].reverse() }));
+    const reversed = spawnSync(process.execPath, [
+      validator, "--file", result, "--run-id", "run-order-proof", "--shell", "macos",
+    ], { encoding: "utf8" });
+    assert.equal(reversed.status, 1);
+    assert.match(reversed.stderr, /canonical domain order/);
+
+    writeFileSync(result, JSON.stringify(document));
+    const canonical = spawnSync(process.execPath, [
+      validator, "--file", result, "--run-id", "run-order-proof", "--shell", "macos",
+    ], { encoding: "utf8" });
+    assert.equal(canonical.status, 0, canonical.stderr);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
