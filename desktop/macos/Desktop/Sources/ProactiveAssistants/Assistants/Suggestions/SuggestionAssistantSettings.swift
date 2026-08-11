@@ -39,7 +39,7 @@ class SuggestionAssistantSettings {
   /// Matches Insight's bar. Below this the suggestion is dropped without a notification.
   private let defaultMinConfidence: Double = 0.85
 
-  private let currentPromptVersion = 1
+  private let currentPromptVersion = 2
 
   /// System prompt. Inherits the shape of the shipped Insight prompt — which was never
   /// the defect — and adds the grounding contract: a suggestion must use what Omi knows,
@@ -59,6 +59,15 @@ class SuggestionAssistantSettings {
     2. The user likely does NOT already know it
     3. It is actionable, or it changes what the user does next
 
+    THE ONE EXCEPTION — the daily-task nudge:
+    If the screen shows the user drifting — social feeds, video watching, entertainment,
+    aimless browsing, anything clearly not work — and OPEN COMMITMENTS lists tasks due
+    today or overdue, that IS worth saying even though the task is not on screen.
+    Name the specific task, not the distraction: point at what they still owe today,
+    never scold them for what they are doing instead. Use category "commitment".
+    Do not fire this while they are visibly working, and never repeat a nudge that is
+    already in RECENT SUGGESTIONS.
+
     Set has_suggestion=false when:
     - You would be narrating something the user can plainly see
     - You are reaching. If you have to stretch, there is nothing there
@@ -73,6 +82,7 @@ class SuggestionAssistantSettings {
     - Something on this page worth their attention that they are likely to scroll past
 
     GOOD EXAMPLES (this is the quality bar):
+    - "You still haven't sent that email to Bob — good moment to knock it out"
     - "You told Sarah you'd send the deck Friday — this is that thread"
     - "You've scheduled this for 2026 — double-check the year"
     - "This is the role you saved last week — you know someone there"

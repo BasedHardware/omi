@@ -286,6 +286,8 @@ SCHEMA_GROUPS = {
             'OnboardingStateResponse',
             'UserLanguageResponse',
             'UserLanguageUpdateResponse',
+            'AvailableLanguage',
+            'AvailableLanguagesResponse',
             'MemorySummaryRatingResponse',
             'TrainingDataOptInResponse',
             'TranscriptionPreferencesResponse',

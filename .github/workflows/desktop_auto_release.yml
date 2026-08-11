@@ -1,10 +1,13 @@
 name: Build Desktop Release Candidate
 
 on:
-  # Manual only: automatic push/schedule tagging was cutting a new macOS candidate
-  # tag on nearly every desktop-affecting main merge and every 15 minutes. Plan and
-  # publish a candidate deliberately via workflow_dispatch; qualification/promotion
-  # workflows remain unchanged once a tag exists.
+  # The hourly release train: at most one candidate per hour, coalescing every
+  # merge since the last tag. The planner's --min-tag-interval-seconds throttle
+  # applies only to schedule runs; workflow_dispatch stays immediate for
+  # deliberate/emergency cuts. (The old per-merge push trigger cut a candidate
+  # on nearly every desktop-affecting merge; the train replaces it.)
+  schedule:
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -47,7 +50,8 @@ jobs:
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
             --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
-            --source-check-poll-seconds 30
+            --source-check-poll-seconds 30 \
+            --min-tag-interval-seconds "${{ github.event_name == 'schedule' && '3300' || '0' }}"
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"

@@ -342,6 +342,8 @@ actor AppleNotesReaderService {
     }
   }
 
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the note rows and persists what comes back.
   func synthesizeFromNotes(notes: [AppleNoteRecord]) async -> (
     memories: Int, profileSummary: String
   ) {
@@ -354,32 +356,8 @@ actor AppleNotesReaderService {
       let detail = note.summary.isEmpty ? "" : " | \(note.summary)"
       return "[\(date)] \(note.title)\(detail)"
     }
-    let noteText = noteLines.joined(separator: "\n")
 
-    let synthesisPrompt = """
-      Analyze these \(notes.count) recent Apple Notes entries and extract profile information about the user.
-
-      APPLE NOTES:
-      \(noteText)
-
-      Respond ONLY with valid JSON (no markdown, no code fences):
-      {
-        "memories": [
-          "clear factual statement about the user"
-        ],
-        "profile": "2-3 sentence summary of what these notes say about the user"
-      }
-
-      RULES:
-      - Extract 8-12 memories grounded in the note titles and summaries
-      - Focus on plans, projects, interests, shopping intent, relationships, routines, and recurring ideas
-      - Ignore screenshot noise, OCR garbage, duplicate lines, and generic UI text
-      - Each memory should be one concise third-person factual statement
-      - Do not invent details not supported by the notes
-      """
-
-    // Retry the synthesis (bridge/LLM call) on transient failure instead of silently
-    // dropping the whole import. Each attempt uses a fresh bridge.
+    // Retry the synthesis on transient failure instead of silently dropping the whole import.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
       do {
@@ -389,30 +367,15 @@ actor AppleNotesReaderService {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-        let result = try await AgentClient.run(
-          surface: .service("apple_notes_reader"),
-          prompt: synthesisPrompt,
-          model: ModelQoS.Claude.synthesis,
-          systemPrompt:
-            "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
-          onTextDelta: { @Sendable _ in },
-          onToolCall: { @Sendable _, _, _ in "" },
-          onToolActivity: { @Sendable _, _, _, _ in }
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "notes",
+          items: noteLines
         )
 
-        let responseText = Self.extractJSONObject(from: result.text)
-        guard
-          let jsonData = responseText.data(using: .utf8),
-          let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else {
-          log("AppleNotesReaderService: Failed to parse synthesis response")
-          return (0, "")
-        }
-
-        let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
+        let memoryStrings = synthesis.memories.filter {
           !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        let profileSummary = parsed["profile"] as? String ?? ""
+        let profileSummary = synthesis.profile
 
         let artifacts = memoryStrings.map { memory in
           ImportEvidenceBatchItem(
@@ -608,26 +571,6 @@ actor AppleNotesReaderService {
     }
 
     return title.count < 3 && summary.count < 12
-  }
-
-  private static func extractJSONObject(from text: String) -> String {
-    var responseText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    if responseText.hasPrefix("```") {
-      if let firstNewline = responseText.firstIndex(of: "\n") {
-        responseText = String(responseText[responseText.index(after: firstNewline)...])
-      }
-      if responseText.hasSuffix("```") {
-        responseText = String(responseText.dropLast(3)).trimmingCharacters(
-          in: .whitespacesAndNewlines)
-      }
-    }
-
-    if let braceIndex = responseText.firstIndex(of: "{") {
-      responseText = String(responseText[braceIndex...])
-    }
-
-    return responseText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
 }

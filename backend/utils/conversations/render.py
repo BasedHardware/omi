@@ -134,7 +134,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
-    # Search may attach match_snippets before list redaction; never leak evidence for locked rows.
+    # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
     conv['match_snippets'] = []
     return conv
 

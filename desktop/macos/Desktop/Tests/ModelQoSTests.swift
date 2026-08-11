@@ -43,17 +43,10 @@ final class ModelQoSTests: XCTestCase {
       ModelQoS.activeTier = tier
       XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
-      XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-20250514")
       XCTAssertEqual(ModelQoS.Claude.chatLabGrade, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.defaultSelection, "claude-sonnet-4-6")
     }
-  }
-
-  // MARK: - Synthesis uses Haiku (extraction workloads)
-
-  func testSynthesisUsesHaiku() {
-    XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-haiku-4-5-20251001")
   }
 
   // MARK: - Chat uses Sonnet (user-facing)
@@ -143,7 +136,6 @@ final class ModelQoSTests: XCTestCase {
       allModels.formUnion([
         ModelQoS.Claude.chat,
         ModelQoS.Claude.floatingBar,
-        ModelQoS.Claude.synthesis,
         ModelQoS.Claude.chatLabQuery,
         ModelQoS.Claude.chatLabGrade,
         ModelQoS.Claude.defaultSelection,

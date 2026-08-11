@@ -32,6 +32,26 @@ def test_snippet_finds_transcript_phrase_summary_would_miss():
     assert "lunch plans" in snippets[0]["text"]
 
 
+def test_snippet_matches_noncontiguous_multi_term_tokens():
+    """All query tokens present but separated must still match (fuzzy multi-term path)."""
+    segments = [
+        {
+            "id": "s1",
+            "text": "We need to review the quarterly budget after lunch",
+            "start": 1.0,
+            "end": 3.0,
+        }
+    ]
+    snippets = build_transcript_match_snippets(segments, "budget review")
+    assert len(snippets) == 1
+    assert snippets[0]["segment_id"] == "s1"
+
+
+def test_snippet_rejects_partial_multi_term_tokens():
+    segments = [{"id": "s1", "text": "Only the budget looks fine today", "start": 0.0, "end": 1.0}]
+    assert build_transcript_match_snippets(segments, "budget review") == []
+
+
 def test_snippet_empty_when_no_transcript_match():
     segments = [{"id": "s0", "text": "Weather looks fine", "start": 0.0, "end": 1.0}]
     assert build_transcript_match_snippets(segments, "budget review") == []
@@ -68,6 +88,10 @@ def test_merge_typesense_page_keeps_typesense_order_after_page_one():
     ) == ["ts3", "ts4"]
 
 
+def test_merge_prefers_transcript_ids_then_summary():
+    assert merge_summary_and_transcript_ids(["t1", "t2"], ["s1", "t1", "s2"], limit=3) == ["t1", "t2", "s1"]
+
+
 def test_resolve_merges_chunk_hits_ahead_of_summary_vectors():
     ids = resolve_mcp_conversation_search_ids(
         "uid",
@@ -80,6 +104,37 @@ def test_resolve_merges_chunk_hits_ahead_of_summary_vectors():
         ],
     )
     assert ids == ["transcript-hit", "shared", "summary-only"]
+
+
+def test_resolve_shares_one_query_vector_across_searches():
+    captured = {"embed_calls": 0, "summary_vector": None, "chunk_vector": None}
+    shared = [0.11, 0.22]
+
+    def _embed(q):
+        captured["embed_calls"] += 1
+        assert q == "budget"
+        return shared
+
+    def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
+        captured["summary_vector"] = query_vector
+        return ["s1"]
+
+    def _chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
+        captured["chunk_vector"] = query_vector
+        return []
+
+    ids = resolve_mcp_conversation_search_ids(
+        "uid",
+        "budget",
+        limit=5,
+        query_vectors=_query_vectors,
+        search_transcript_chunks=_chunks,
+        embed_query=_embed,
+    )
+    assert ids == ["s1"]
+    assert captured["embed_calls"] == 1
+    assert captured["summary_vector"] is shared
+    assert captured["chunk_vector"] is shared
 
 
 def test_resolve_fail_open_when_chunk_search_raises():
