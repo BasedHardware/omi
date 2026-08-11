@@ -56,7 +56,9 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  CLAUDE_CONNECTOR_OAUTH,
   SECTION_INFO,
+  SIGNED_OUT_DESTINATION,
   isSettingsSectionId,
   type SettingsSectionId,
 } from '@/lib/settingsSections';
@@ -2018,8 +2020,8 @@ function DeveloperSection({
   // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
   const claudeConnectorName = 'Omi Memory';
   const claudeConnectorUrl = mcpServerUrl;
-  const claudeConnectorClientId = 'omi';
-  const claudeConnectorSecret = mcpKeys.find((k) => k.key)?.key ?? '';
+  const claudeConnectorClientId = CLAUDE_CONNECTOR_OAUTH.clientId;
+  const claudeConnectorSecret: string = CLAUDE_CONNECTOR_OAUTH.clientSecret;
 
   // Experimental features (stored in localStorage)
   const [experimentalFeatures, setExperimentalFeatures] = useState({
@@ -2491,11 +2493,7 @@ function DeveloperSection({
                 </button>
               ) : (
                 <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
-                  <span className="text-sm text-text-quaternary italic">
-                    {mcpKeys.length > 0
-                      ? 'Create a new MCP key above — existing keys cannot be retrieved'
-                      : 'Create an MCP key first (above)'}
-                  </span>
+                  <span className="text-sm text-text-quaternary italic">Leave blank</span>
                 </div>
               )}
             </div>
@@ -3304,7 +3302,7 @@ export function SettingsPage() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.push('/');
+    router.push(SIGNED_OUT_DESTINATION);
   };
 
   const handleDeleteAccount = async () => {
@@ -3312,7 +3310,7 @@ export function SettingsPage() {
     try {
       await deleteAccount();
       await signOut();
-      router.push('/');
+      router.push(SIGNED_OUT_DESTINATION);
     } catch {
       setIsDeleting(false);
     }

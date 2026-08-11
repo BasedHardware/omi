@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CLAUDE_CONNECTOR_OAUTH,
   SECTION_INFO,
   SETTINGS_SECTIONS,
+  SIGNED_OUT_DESTINATION,
   isSettingsSectionId,
 } from '@/lib/settingsSections';
+
+describe('CLAUDE_CONNECTOR_OAUTH', () => {
+  it('uses the registered public PKCE client without a secret', () => {
+    expect(CLAUDE_CONNECTOR_OAUTH).toEqual({
+      clientId: 'omi-claude-prod',
+      clientSecret: '',
+    });
+  });
+});
+
+describe('SIGNED_OUT_DESTINATION', () => {
+  it('uses a registered client route after authentication ends', () => {
+    expect(SIGNED_OUT_DESTINATION).toBe('/login');
+  });
+});
 
 describe('SETTINGS_SECTIONS', () => {
   it('includes privacy, which shipped with no nav entry pointing at it', () => {

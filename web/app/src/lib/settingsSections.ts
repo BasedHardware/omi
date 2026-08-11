@@ -31,6 +31,13 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
+export const CLAUDE_CONNECTOR_OAUTH = {
+  clientId: 'omi-claude-prod',
+  clientSecret: '',
+} as const;
+
+export const SIGNED_OUT_DESTINATION = '/login';
+
 export const SECTION_INFO = Object.fromEntries(
   SETTINGS_SECTIONS.map(({ id, title, description }) => [id, { title, description }]),
 ) as Record<SettingsSectionId, { title: string; description: string }>;
