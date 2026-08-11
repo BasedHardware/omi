@@ -13,7 +13,7 @@ final class RewindTrackWindowModel: ObservableObject {
   @Published private(set) var start: Double = 0
   @Published private(set) var span: Double = 0
 
-  /// The day's full extent, set by the track as the captures load. Zooming is bounded by it.
+  /// The retained history's full extent. The visible window is independent and can pan anywhere in it.
   private(set) var range: ClosedRange<Double> = 0...1
 
   var canZoomIn: Bool { span > RewindTrackWindow.minimumSpan + 0.5 }
@@ -25,20 +25,17 @@ final class RewindTrackWindowModel: ObservableObject {
     newRange != range || span == 0
   }
 
-  /// Whether `reveal` would move the window — the same read-only question for the same reason.
-  func wouldReveal(_ instant: Double?) -> Bool {
-    guard let instant, span > 0 else { return false }
-    return instant < start || instant > start + span
-  }
-
-  /// Adopts a new day. Resets to the full extent, because a window kept across days would open on a
-  /// range the new day has no capture in.
-  func adopt(range newRange: ClosedRange<Double>) {
+  /// Adopt the database's global bounds without forcing the viewport to show all of history at once.
+  /// The first adoption starts at the already-loaded recent range; later bound extensions preserve
+  /// the user's viewport.
+  func adopt(range newRange: ClosedRange<Double>, initialWindow: ClosedRange<Double>? = nil) {
     guard needsAdoption(of: newRange) else { return }
+    let hadWindow = span > 0
     range = newRange
+    let proposed = initialWindow ?? newRange
     let clamped = RewindTrackWindow.clamp(
-      start: newRange.lowerBound,
-      span: newRange.upperBound - newRange.lowerBound,
+      start: hadWindow ? start : proposed.lowerBound,
+      span: hadWindow ? span : proposed.upperBound - proposed.lowerBound,
       within: newRange)
     start = clamped.start
     span = clamped.span
@@ -60,10 +57,25 @@ final class RewindTrackWindowModel: ObservableObject {
     set(start: clamped.start, span: clamped.span)
   }
 
+  /// Pan continuously through time. AppKit reports a rightward content gesture as a negative
+  /// horizontal delta, while the established wheel convention reports scrolling down/newer as a
+  /// positive vertical delta, so the two dominant-axis paths intentionally have opposite signs.
+  func pan(deltaX: CGFloat, deltaY: CGFloat, pointsPerSpan: CGFloat = 600) {
+    guard span > 0, pointsPerSpan > 0 else { return }
+    let movement = abs(deltaX) >= abs(deltaY) ? -deltaX : deltaY
+    set(start: start + Double(movement / pointsPerSpan) * span, span: span)
+  }
+
+  /// Move the current viewport to an instant without changing its zoom level.
+  func center(on instant: Double) {
+    guard span > 0 else { return }
+    set(start: instant - span / 2, span: span)
+  }
+
   /// Keeps an instant inside the visible window, so stepping frames with the arrow keys cannot walk
   /// the playhead off a zoomed track.
   func reveal(_ instant: Double) {
-    guard wouldReveal(instant) else { return }
+    guard span > 0, instant < start || instant > start + span else { return }
     set(start: instant - span / 2, span: span)
   }
 }
@@ -78,10 +90,12 @@ final class RewindTrackWindowModel: ObservableObject {
 /// remove.
 struct RewindTrackRepresentable: NSViewRepresentable {
   let screenshots: [Screenshot]
+  let historyRange: ClosedRange<Double>?
   let currentIndex: Int
   let searchResultIndices: Set<Int>?
   @ObservedObject var window: RewindTrackWindowModel
   let onSelect: (Int) -> Void
+  let onScroll: (CGFloat, CGFloat) -> Void
 
   @MainActor
   final class Coordinator {
@@ -119,19 +133,20 @@ struct RewindTrackRepresentable: NSViewRepresentable {
     let coordinator = context.coordinator
     coordinator.refresh(screenshots)
 
-    let range = RewindTrackWindow.fullRange(of: coordinator.instants)
+    let loadedRange = RewindTrackWindow.fullRange(of: coordinator.instants)
+    let range = historyRange ?? loadedRange
     let playheadAt =
       coordinator.instants.indices.contains(currentIndex)
       ? coordinator.instants[currentIndex] : nil
 
     // **Scheduled, not called.** `updateNSView` runs inside SwiftUI's own update pass, and publishing
     // from there is the "Publishing changes from within view updates" defect — an observable mutated
-    // mid-pass either warns or is dropped. A new day adopts its range, and a step that walked off a
-    // zoomed track pulls it back, one turn of the run loop later; neither is visible at a frame.
-    if window.needsAdoption(of: range) || window.wouldReveal(playheadAt) {
+    // mid-pass either warns or is dropped. The track adopts global bounds one turn of the run loop
+    // later. The playhead deliberately does not pull a panned viewport back; explicit frame
+    // navigation owns revealing it.
+    if window.needsAdoption(of: range) {
       DispatchQueue.main.async {
-        window.adopt(range: range)
-        if let playheadAt { window.reveal(playheadAt) }
+        window.adopt(range: range, initialWindow: loadedRange)
       }
     }
 
@@ -154,6 +169,7 @@ struct RewindTrackRepresentable: NSViewRepresentable {
     context.coordinator.onSelect = onSelect
     view.onSelect = { [weak coordinator = context.coordinator] in coordinator?.onSelect?($0) }
     view.onScrubEnd = { [weak coordinator = context.coordinator] in coordinator?.onSelect?($0) }
+    view.onScroll = onScroll
     view.onZoom = { [window] start, span in window.set(start: start, span: span) }
   }
 }
@@ -161,18 +177,22 @@ struct RewindTrackRepresentable: NSViewRepresentable {
 /// The track plus the height the badges and hour labels need.
 struct RewindTrackBar: View {
   let screenshots: [Screenshot]
+  let historyRange: ClosedRange<Double>?
   let currentIndex: Int
   let searchResultIndices: Set<Int>?
   @ObservedObject var window: RewindTrackWindowModel
   let onSelect: (Int) -> Void
+  let onScroll: (CGFloat, CGFloat) -> Void
 
   var body: some View {
     RewindTrackRepresentable(
       screenshots: screenshots,
+      historyRange: historyRange,
       currentIndex: currentIndex,
       searchResultIndices: searchResultIndices,
       window: window,
-      onSelect: onSelect
+      onSelect: onSelect,
+      onScroll: onScroll
     )
     .frame(height: RewindTrackNSView.height)
     .padding(.horizontal, 18)

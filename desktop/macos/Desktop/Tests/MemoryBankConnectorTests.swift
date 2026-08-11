@@ -59,6 +59,13 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(headers["Authorization"] as? String, "Bearer test-key")
     XCTAssertNotNil(servers["other"])
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    let skill = try String(contentsOf: skillURL, encoding: .utf8)
+    XCTAssertEqual(skill, MemoryExportService.omiAgentSkillText)
+    XCTAssertTrue(skill.contains("`search_conversations`"))
+    XCTAssertTrue(skill.contains("`get_people`"))
+    XCTAssertTrue(skill.contains("`get_action_items`"))
+    XCTAssertTrue(skill.contains("`get_screen_activity`"))
 
     let backups = try FileManager.default.contentsOfDirectory(
       at: tempHome.appendingPathComponent(".claude/backups", isDirectory: true),
@@ -132,6 +139,28 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(content.contains(MemoryExportDestination.mcpServerURL))
     XCTAssertTrue(content.contains("Authorization: Bearer test-key"))
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .codex, home: tempHome))
+    XCTAssertEqual(
+      try String(contentsOf: skillURL, encoding: .utf8),
+      MemoryExportService.omiAgentSkillText
+    )
+  }
+
+  func testClaudeCodeConnectPreservesExistingUserAuthoredOmiSkill() throws {
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    try FileManager.default.createDirectory(
+      at: skillURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try "user-authored".write(to: skillURL, atomically: true, encoding: .utf8)
+
+    XCTAssertEqual(try MemoryBankConnector.connect(.claudeCode, key: "test-key"), "Claude Code is now connected.")
+    XCTAssertEqual(try String(contentsOf: skillURL, encoding: .utf8), "user-authored")
   }
 
   func testCodexConnectRequiresCLI() throws {

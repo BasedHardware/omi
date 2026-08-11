@@ -436,6 +436,13 @@
             ],
             "title": "Ownership Confidence"
           },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
+          },
           "target_task_id": {
             "anyOf": [
               {
@@ -10698,6 +10705,18 @@
             ],
             "title": "Device Id"
           },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
           "excerpt_hash": {
             "anyOf": [
               {
@@ -10722,6 +10741,35 @@
           },
           "scope": {
             "$ref": "#/components/schemas/EvidenceScope"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "transcript_segment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segment Ids"
           },
           "version": {
             "anyOf": [

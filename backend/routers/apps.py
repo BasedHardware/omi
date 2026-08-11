@@ -645,6 +645,30 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
+def _matches_search_text(app: App, query: str) -> bool:
+    """Whether `app` matches a lowercased search query.
+
+    Name *or* description — the contract the `q` parameter documents, and the same fields the
+    clients' offline fallback ranks over (desktop `appRanking.ts`). Matching the name alone made
+    the remote endpoint strictly narrower than that fallback: an app found offline by a word in
+    its description returned "No apps found" once the endpoint answered.
+    """
+    return query in app.name.lower() or query in (app.description or '').lower()
+
+
+def _name_match_tier(app: App, query: str) -> int:
+    """Relevance tier for a search hit: 0 exact name, 1 name prefix, 2 matched elsewhere.
+
+    Mirrors `nameMatchTier` in the desktop client so both orderings agree.
+    """
+    name = app.name.lower()
+    if name == query:
+        return 0
+    if name.startswith(query):
+        return 1
+    return 2
+
+
 @router.get('/v2/apps/search', tags=['v2'], response_model=AppSearchResponse)
 def search_apps(
     q: str | None = Query(default=None, description='Search query for app name or description'),
@@ -722,7 +746,7 @@ def search_apps(
     # Apply text search filter
     if q and q.strip():
         search_query = q.strip().lower()
-        filtered_apps = [app for app in filtered_apps if search_query in app.name.lower()]
+        filtered_apps = [app for app in filtered_apps if _matches_search_text(app, search_query)]
 
     # Apply rating filter
     if rating is not None:
@@ -742,7 +766,11 @@ def search_apps(
     else:
         # sort by installs when searching, otherwise by name
         if q and q.strip():
-            filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
+            search_query = q.strip().lower()
+            # Name matches rank above description-only matches before popularity: results are
+            # paginated, so an exact-name app must not be pushed off page 1 by a more-installed
+            # app that only mentions the query in its description.
+            filtered_apps = sorted(filtered_apps, key=lambda a: (_name_match_tier(a, search_query), -(a.installs or 0)))
         else:
             filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
 

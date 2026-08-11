@@ -181,6 +181,11 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert literals == {
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "OMI_ENV_STAGE": "dev",
+        "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
+        "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
+        "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
+        "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,dg-nova-3,parakeet",
     }
