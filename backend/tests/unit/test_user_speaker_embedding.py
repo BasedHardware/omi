@@ -174,7 +174,7 @@ class TestSpeechProfileEmbeddingExtraction:
             mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
             mock_av.time_base = 1_000_000
 
-            with patch('routers.speech_profile.os.makedirs'):
+            with patch('routers.speech_profile.temp_upload_path', _tmp_upload_path()):
                 with patch('builtins.open', MagicMock()):
                     with patch('routers.speech_profile.AudioSegment') as mock_aseg:
                         mock_audio = MagicMock()
@@ -224,7 +224,7 @@ class TestSpeechProfileEmbeddingExtraction:
             mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
             mock_av.time_base = 1_000_000
 
-            with patch('routers.speech_profile.os.makedirs'):
+            with patch('routers.speech_profile.temp_upload_path', _tmp_upload_path()):
                 with patch('builtins.open', MagicMock()):
                     with patch('routers.speech_profile.AudioSegment') as mock_aseg:
                         mock_audio = MagicMock()
@@ -238,6 +238,21 @@ class TestSpeechProfileEmbeddingExtraction:
         assert result == {"url": "https://storage.example.com/profile.wav"}
         # Store was NOT called since extraction failed
         mock_store.assert_not_called()
+
+
+def _tmp_upload_path():
+    """Real temp_upload_path (naming + cleanup), rooted at a throwaway dir."""
+    import tempfile
+    import os as _os
+
+    from utils.upload_temp import temp_upload_path
+
+    root = tempfile.mkdtemp()
+
+    def _wrapper(directory, filename):
+        return temp_upload_path(_os.path.join(root, directory.lstrip('/')), filename)
+
+    return _wrapper
 
 
 # ─── Transcribe Firestore Loading Path ───────────────────────────────────────
