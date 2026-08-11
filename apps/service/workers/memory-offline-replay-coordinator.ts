@@ -10,16 +10,17 @@ import {
   type RegisteredMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
 import type { CanonicalJson } from "../../../core/ledger";
-import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import {
   assertAuthorizedLedgerWriteContext,
   type AuthorizedLedgerWriteContext,
 } from "../auth/authorized-context";
 import {
   durableMemoryWorkNormalizedResultDigest,
-  normalizeDurableMemoryWorkResultJson,
-  type NormalizedDurableMemoryWorkResultJson,
 } from "../stores/durable-memory-work-result-repository";
+import {
+  assertCopiedMemoryEvaluationInput,
+  type CopiedMemoryEvaluationInput,
+} from "../stores/memory-evaluation-evidence-source";
 import {
   memoryEvaluationStageRequestDigest,
   pairMemoryEvaluationResults,
@@ -35,19 +36,11 @@ const COORDINATOR_PORT: unique symbol = Symbol("memory-offline-replay-coordinato
 const CAPABILITY = "memories.experiments.shadow";
 const MAX_REPEATS = 20;
 const RUN_ID = /^mer1_[a-f0-9]{64}$/;
-const copiedInputs = new WeakSet<object>();
 const ERROR_CODES = new Set<DurableMemoryWorkErrorCode>([
   "model_timeout", "model_rate_limited", "model_response_invalid",
   "prompt_budget_exceeded", "dependency_unavailable", "serialization_retryable",
   "worker_lost",
 ]);
-
-export interface CopiedMemoryEvaluationInput {
-  readonly version: "copied-memory-evaluation-input-v1";
-  readonly input_frontier: string;
-  readonly input_digest: string;
-  readonly payload: NormalizedDurableMemoryWorkResultJson;
-}
 
 export type OfflineMemoryEvaluationProduceOutcome =
   | Readonly<{
@@ -138,33 +131,6 @@ const frozenPairs = (
   pairs: readonly Readonly<MemoryEvaluationPair>[],
 ): readonly Readonly<MemoryEvaluationPair>[] => Object.freeze([...pairs]);
 
-export const copyMemoryEvaluationInput = (
-  inputFrontierValue: string,
-  payloadValue: unknown,
-): Readonly<CopiedMemoryEvaluationInput> => {
-  const inputFrontier = token(inputFrontierValue, "invalid_copied_input");
-  const payload = normalizeDurableMemoryWorkResultJson(payloadValue);
-  const inputDigest = sha256CanonicalContent({
-    contract_version: "copied-memory-evaluation-input-v1",
-    payload,
-  });
-  const copied = Object.freeze({
-    version: "copied-memory-evaluation-input-v1" as const,
-    input_frontier: inputFrontier,
-    input_digest: inputDigest,
-    payload,
-  });
-  copiedInputs.add(copied);
-  return copied;
-};
-
-const assertCopiedInput = (value: unknown): Readonly<CopiedMemoryEvaluationInput> => {
-  if (value === null || typeof value !== "object" || !copiedInputs.has(value)) {
-    fail("unverified_copied_input");
-  }
-  return value as Readonly<CopiedMemoryEvaluationInput>;
-};
-
 const strategyFor = (
   bundle: Readonly<MemoryStrategyAssignmentBundle>,
   assignment: Readonly<MemoryStrategyAssignmentEntry>,
@@ -246,7 +212,7 @@ export const defineMemoryOfflineReplayCoordinator = (
     if (bundle.shadows.length === 0) fail("no_selected_shadow");
     const evaluationRunId = token(request["evaluation_run_id"], "invalid_request");
     if (!RUN_ID.test(evaluationRunId)) fail("invalid_request");
-    const copied = assertCopiedInput(request["copied_input"]);
+    const copied = assertCopiedMemoryEvaluationInput(context, request["copied_input"]);
     const repeats = request["repeats"];
     if (!Number.isSafeInteger(repeats) || (repeats as number) < 1 || (repeats as number) > MAX_REPEATS) {
       fail("invalid_repeats");

@@ -10,6 +10,10 @@ import {
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
+  defineMemoryEvaluationEvidenceSource,
+  type CopiedMemoryEvaluationInput,
+} from "../stores/memory-evaluation-evidence-source";
+import {
   defineMemoryShadowResultRepository,
   materializeMemoryEvaluationResult,
   memoryEvaluationResultId,
@@ -18,17 +22,16 @@ import {
   type MemoryShadowResultImplementation,
 } from "../stores/memory-shadow-result-repository";
 import {
-  copyMemoryEvaluationInput,
   defineMemoryOfflineReplayCoordinator,
 } from "./memory-offline-replay-coordinator";
 
 const digest = (character: string): string => character.repeat(64);
 
-const context = (capability = "memories.experiments.shadow") =>
+const context = (capability = "memories.experiments.shadow", owner = "account:alice") =>
   createAuthorizedLedgerWriteContextIssuer().issue({
     context_version: "authorized-ledger-write-context-v1",
     principal_id: "worker:evaluator",
-    account_id: "account:alice",
+    account_id: owner,
     application_id: "app:memory-evaluator",
     credential_id: "credential:evaluator",
     credential_generation: 1,
@@ -44,6 +47,29 @@ const context = (capability = "memories.experiments.shadow") =>
     expires_at_epoch_seconds: 200,
     authorization_state_digest: digest("a"),
   }, 150);
+
+const copiedInput = async (
+  inputFrontier: string,
+  payload: unknown,
+  authorized = context(),
+): Promise<Readonly<CopiedMemoryEvaluationInput>> => {
+  const source = defineMemoryEvaluationEvidenceSource(async (sourceContext, request) => ({
+    kind: "found",
+    owner_account_id: sourceContext.account_id,
+    account_epoch: sourceContext.account_epoch,
+    source_kind: request.source_kind,
+    source_ref: request.source_ref,
+    input_frontier: request.input_frontier,
+    payload,
+  }));
+  const loaded = await source.load(authorized, {
+    source_kind: "formation_input_snapshot",
+    source_ref: "source:snapshot:one",
+    input_frontier: inputFrontier,
+  });
+  if (loaded.kind !== "found") throw new Error("test copied input unavailable");
+  return loaded.copied_input;
+};
 
 const assignment = (shadowCount = 2): Readonly<MemoryStrategyAssignmentBundle> => {
   const strategy = (id: string, prompt: string) => registerMemoryStrategy({
@@ -124,7 +150,7 @@ describe("production-neutral memory offline replay coordinator", () => {
   test("runs explicit repeats sequentially, records exact pairs, and replays with zero model calls", async () => {
     const storage = memoryRepository();
     const source = { transcript: [{ speaker: "A", text: "raw copied sentinel" }] };
-    const copied = copyMemoryEvaluationInput("frontier:raw:sentinel", source);
+    const copied = await copiedInput("frontier:raw:sentinel", source);
     source.transcript[0]!.text = "mutated after copy";
     let active = 0;
     let peak = 0;
@@ -196,7 +222,7 @@ describe("production-neutral memory offline replay coordinator", () => {
         return produced(request.strategy.strategy_id, request.repeat_ordinal);
       },
     });
-    const copied = copyMemoryEvaluationInput("frontier:one", { events: [1, 2, 3] });
+    const copied = await copiedInput("frontier:one", { events: [1, 2, 3] });
     const base = { assignment_bundle: assignment(), evaluation_run_id: evaluationRunId, copied_input: copied };
     await expect(coordinator.run(context(), { ...base, repeats: 1 })).resolves.toMatchObject({
       kind: "completed", model_calls: 3, reused_results: 0,
@@ -214,10 +240,13 @@ describe("production-neutral memory offline replay coordinator", () => {
       result_repository: memoryRepository().repository,
       produce: async () => { calls += 1; return produced("strategy:authority", 0); },
     });
-    const copied = copyMemoryEvaluationInput("frontier:one", { events: [] });
+    const copied = await copiedInput("frontier:one", { events: [] });
     const valid = { assignment_bundle: assignment(), evaluation_run_id: evaluationRunId, copied_input: copied, repeats: 1 };
     await expect(coordinator.run(context("memories.work.execute"), valid)).rejects.toThrow("capability_denied");
     await expect(coordinator.run(context(), { ...valid, copied_input: { ...copied } })).rejects.toThrow("unverified_copied_input");
+    const foreign = await copiedInput("frontier:one", { events: [] }, context("memories.experiments.shadow", "account:bob"));
+    await expect(coordinator.run(context(), { ...valid, copied_input: foreign }))
+      .rejects.toThrow("copied_input_authority_mismatch");
     await expect(coordinator.run(context(), { ...valid, assignment_bundle: { ...valid.assignment_bundle } }))
       .rejects.toThrow("memory strategy unminted_assignment");
     await expect(coordinator.run(context(), { ...valid, repeats: 0 })).rejects.toThrow("invalid_repeats");
@@ -234,7 +263,7 @@ describe("production-neutral memory offline replay coordinator", () => {
     }).run(context(), {
       assignment_bundle: assignment(1),
       evaluation_run_id: evaluationRunId,
-      copied_input: copyMemoryEvaluationInput("frontier:secret", { transcript: "raw secret" }),
+      copied_input: await copiedInput("frontier:secret", { transcript: "raw secret" }),
       repeats: 1,
     });
     await expect(run(async () => ({ kind: "failed", error_code: "model_timeout" }))).resolves.toMatchObject({
@@ -264,7 +293,7 @@ describe("production-neutral memory offline replay coordinator", () => {
       return coordinator.run(context(), {
         assignment_bundle: assignment(1),
         evaluation_run_id: evaluationRunId,
-        copied_input: copyMemoryEvaluationInput("frontier:one", { events: [] }),
+        copied_input: await copiedInput("frontier:one", { events: [] }),
         repeats: 1,
       });
     };

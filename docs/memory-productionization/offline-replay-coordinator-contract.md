@@ -13,12 +13,13 @@ or promote a strategy.
 
 ## Copied input
 
-A constructor accepts one bounded exact plain JSON object and an opaque input
-frontier. It detaches and deeply freezes the object with the existing normalized
-result limits, computes its canonical digest, and brands the resulting input.
-The coordinator accepts only that branded value. Raw copied content is passed
-only to the injected producer and is never returned in the run outcome, pair
-record, telemetry, or error.
+The authorized evaluation evidence-source facade loads one exact source under a
+sealed shadow context, detaches and deeply freezes it with the existing
+normalized-result limits, and brands the result. The v2 digest binds owner,
+account epoch, source kind/reference digest, frontier, and payload. The
+coordinator accepts only that branded value and rechecks owner/epoch. Raw copied
+content is passed only to the injected producer and is never returned in the
+run outcome, pair record, telemetry, or error.
 
 ## Execution
 
@@ -79,7 +80,7 @@ David-specific truth cannot be machine-judged.
 
 ## Explicit exclusions
 
-- No evidence-copy source, production event loader, PostgreSQL adapter, worker,
+- No production event/graph loader implementation, PostgreSQL adapter, worker,
   scheduler, model composition, route, runtime grant, telemetry sink, or
   experimental product projection is added.
 - No statistical test, contamination audit, blind sheet, human grade, promotion
