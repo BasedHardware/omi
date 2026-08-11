@@ -375,7 +375,6 @@ class TasksStore: ObservableObject {
     let local = max(pageSize, loadedCount)
     return (api: clampedApiPageLimit(local), local: local)
   }
-
   private var hasLoadedIncomplete = false
   private var hasLoadedCompleted = false
   private var hasLoadedDeleted = false
