@@ -875,18 +875,24 @@ describe("ratified chat generation wire red proofs", () => {
         code: "generation_provider_failed",
         source: Object.freeze({
           start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            let trapCalls = 0;
             const malformed = new Proxy(
               { code: "generation_provider_failed", retryable: true },
               {
-                getOwnPropertyDescriptor: (_target, key): PropertyDescriptor | undefined =>
-                  key === "code"
-                    ? { value: "generation_timeout", writable: true, enumerable: true, configurable: true }
-                    : key === "retryable"
-                      ? { value: false, writable: true, enumerable: true, configurable: true }
-                      : undefined,
+                get: (): never => {
+                  trapCalls += 1;
+                  throw new Error("proxy getter escaped");
+                },
+                getOwnPropertyDescriptor: (): PropertyDescriptor | undefined => {
+                  trapCalls += 1;
+                  return { value: "generation_timeout", writable: true, enumerable: true, configurable: true };
+                },
               },
             );
-            queueMicrotask(() => input.onError(malformed));
+            queueMicrotask(() => {
+              input.onError(malformed);
+              expect(trapCalls).toBe(0);
+            });
             return Object.freeze({ cancel: (): void => {} });
           },
         }),

@@ -6,6 +6,7 @@
 // domain-pending(DIV-CHAT-SOURCE-001)
 
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 import {
   normalizeChatGenerationContext,
@@ -99,6 +100,14 @@ const readFailureDeclaration = (
 ): Readonly<{ readonly code: unknown; readonly retryable: unknown }> | null => {
   try {
     if (error === null || typeof error !== "object") return null;
+    // A Proxy can forge own descriptors (and even paired get results) while
+    // retaining an ordinary prototype. Detect it before any reflective read;
+    // no provider-controlled trap should run at this boundary.
+    if (isProxy(error)) return null;
+    const prototype = Object.getPrototypeOf(error);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const keys = Reflect.ownKeys(error);
+    if (keys.length !== 2 || keys.some((key) => key !== "code" && key !== "retryable")) return null;
     const code = Object.getOwnPropertyDescriptor(error, "code");
     const retryable = Object.getOwnPropertyDescriptor(error, "retryable");
     if (code === undefined || retryable === undefined
