@@ -328,9 +328,52 @@ enum SuggestionDueDescription {
 /// for were the ones it could never fire in. Dwell therefore tracks the app; the title is
 /// still updated so the evaluated frame describes what is on screen now.
 enum SuggestionDwellAnchor {
-  static func anchor(current: Date?, currentApp: String?, newApp: String, now: Date) -> Date {
+  /// Words too common to prove two titles are the same place.
+  private static let stopwords: Set<String> = [
+    "the", "and", "for", "you", "your", "with", "new", "tab", "untitled", "loading", "www", "com",
+  ]
+
+  private static func tokens(_ title: String?) -> Set<String> {
+    guard let title else { return [] }
+    let lowered = title.lowercased()
+    let stripped = String(lowered.map { $0.isLetter || $0.isNumber ? $0 : " " })
+    return Set(stripped.split(separator: " ").map(String.init).filter { $0.count > 2 })
+      .subtracting(stopwords)
+  }
+
+  /// Whether two window titles describe the same sitting.
+  ///
+  /// Title churn inside one place keeps a recognisable word — TikTok and YouTube leave their
+  /// own name in the tab, a document keeps its filename — so one shared significant word is
+  /// enough to say "still here". Moving from a work page to a feed shares nothing, and must
+  /// start the clock over.
+  static func isSameContext(_ lhs: String?, _ rhs: String?) -> Bool {
+    if lhs == rhs { return true }
+    // A title we cannot read is no evidence either way; do not let it end a sitting.
+    guard let lhs, let rhs else { return true }
+    let left = tokens(lhs)
+    let right = tokens(rhs)
+    // A readable title that carries no identifying word ("New Tab", "Untitled") is a real
+    // transition — the user left the previous page — so it starts a new sitting.
+    if left.isEmpty || right.isEmpty { return false }
+    return !left.isDisjoint(with: right)
+  }
+
+  /// The timestamp the dwell clock should run from after a context switch.
+  ///
+  /// Keying on the app alone was wrong in the other direction: ten minutes on a work page
+  /// followed by one tab change to TikTok would inherit the whole prior dwell and fire
+  /// instantly, which is the opposite of proving the user settled somewhere.
+  static func anchor(
+    current: Date?,
+    currentApp: String?,
+    currentWindowTitle: String?,
+    newApp: String,
+    newWindowTitle: String?,
+    now: Date
+  ) -> Date {
     guard let current, currentApp == newApp else { return now }
-    return current
+    return isSameContext(currentWindowTitle, newWindowTitle) ? current : now
   }
 }
 

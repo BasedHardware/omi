@@ -128,17 +128,22 @@ enum SuggestionAssistantTelemetry {
     let memoryCount: Int
     let commitmentCount: Int
     let relatedScreenCount: Int
+    let goalCount: Int
 
     init(model: Model, previewData: Data, grounding: SuggestionGrounding) {
       self.model = model
       imageWidthBucket = Self.imageWidthBucket(for: previewData)
       imageBytesBucket = Self.imageBytesBucket(for: previewData)
-      // The source queries cap these at 15 memories, 25 commitments, and 12
-      // screens. Keep an explicit ceiling here as defense-in-depth if a source
-      // changes before the telemetry contract does.
+      // The source queries cap these at 15 memories, 25 commitments, 12 screens,
+      // and 4 active goals. Keep an explicit ceiling here as defense-in-depth if a
+      // source changes before the telemetry contract does.
       memoryCount = min(max(grounding.memories.count, 0), 15)
       commitmentCount = min(max(grounding.openCommitments.count, 0), 25)
       relatedScreenCount = min(max(grounding.relatedScreens.count, 0), 12)
+      // Goals count toward `SuggestionGrounding.isEmpty`, so a goal-only grounding can be
+      // the sole reason an evaluation is paid for. Leaving it out of the shape would report
+      // grounding_source_count=0 for a spend that did happen.
+      goalCount = min(max(grounding.goals.count, 0), 8)
     }
 
     private static func imageWidthBucket(for data: Data) -> ImageWidthBucket {
@@ -233,9 +238,11 @@ enum SuggestionAssistantTelemetry {
   }
 
   private static func evaluationPayload(identity: Identity, shape: EvaluationShape) -> [String: Any] {
-    let sourceCount = [shape.memoryCount, shape.commitmentCount, shape.relatedScreenCount]
-      .filter { $0 > 0 }
-      .count
+    let sourceCount = [
+      shape.memoryCount, shape.commitmentCount, shape.relatedScreenCount, shape.goalCount,
+    ]
+    .filter { $0 > 0 }
+    .count
     return [
       "evaluation_id": identity.evaluationID.uuidString,
       "model": shape.model.rawValue,
@@ -248,6 +255,8 @@ enum SuggestionAssistantTelemetry {
       "has_commitments": shape.commitmentCount > 0,
       "related_screen_count": shape.relatedScreenCount,
       "has_related_screens": shape.relatedScreenCount > 0,
+      "goal_count": shape.goalCount,
+      "has_goals": shape.goalCount > 0,
     ]
   }
 }

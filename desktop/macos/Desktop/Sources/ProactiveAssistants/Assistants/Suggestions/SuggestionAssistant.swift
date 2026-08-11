@@ -108,7 +108,9 @@ actor SuggestionAssistant: ProactiveAssistant {
     pendingContextSwitchAt = SuggestionDwellAnchor.anchor(
       current: pendingContextSwitchAt,
       currentApp: pendingApp,
+      currentWindowTitle: pendingWindowTitle,
       newApp: newApp,
+      newWindowTitle: newWindowTitle,
       now: Date()
     )
     pendingApp = newApp
@@ -267,12 +269,6 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   /// Describe a commitment the way a person would say it out loud.
   ///
-  /// This string is what the model quotes, so an absolute date here comes back out in the
-  /// card as "call dad (due 2026-08-10)" — a database row read aloud. Worse, the raw
-  /// `ISO8601DateFormatter` rendered in UTC, so anything due after 8pm Eastern printed as
-  /// *tomorrow*; the model then scored a due-today task as not-yet-urgent and it fell under
-  /// the confidence bar. Relative phrasing fixes the voice and the timezone in one move,
-  /// and it is what the model actually needs — it reasons about urgency, not calendars.
   /// Fire-and-forget goal refresh. Never awaited by grounding: the next evaluation gets the
   /// fresher list, this one is not delayed for it.
   ///
@@ -332,6 +328,14 @@ actor SuggestionAssistant: ProactiveAssistant {
     return cachedGoals
   }
 
+  /// Describe a commitment the way a person would say it out loud.
+  ///
+  /// This string is what the model quotes, so an absolute date here comes back out in the
+  /// card as "call dad (due 2026-08-10)" — a database row read aloud. Worse, the raw
+  /// `ISO8601DateFormatter` rendered in UTC, so anything due after 8pm Eastern printed as
+  /// *tomorrow*; the model then scored a due-today task as not-yet-urgent and it fell under
+  /// the confidence bar. Relative phrasing fixes the voice and the timezone in one move,
+  /// and it is what the model actually needs — it reasons about urgency, not calendars.
   private static func describeCommitment(_ task: TaskActionItem) -> String {
     guard let dueAt = task.dueAt else { return task.description }
     return "\(task.description) — \(SuggestionDueDescription.phrase(for: dueAt))"

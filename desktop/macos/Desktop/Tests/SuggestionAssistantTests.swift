@@ -424,54 +424,89 @@ final class SuggestionCommitmentGuardTests: XCTestCase {
 final class SuggestionDwellAnchorTests: XCTestCase {
   private let start = Date(timeIntervalSince1970: 1_800_000_000)
 
-  func testTitleChangeWithinTheSameAppKeepsTheClockRunning() {
-    let afterOneVideo = start.addingTimeInterval(3)
-    let anchor = SuggestionDwellAnchor.anchor(
-      current: start,
-      currentApp: "Google Chrome",
-      newApp: "Google Chrome",
-      now: afterOneVideo
+  private func anchor(
+    current: Date?,
+    fromApp: String?,
+    fromTitle: String?,
+    toApp: String,
+    toTitle: String?,
+    at offset: TimeInterval
+  ) -> Date {
+    SuggestionDwellAnchor.anchor(
+      current: current,
+      currentApp: fromApp,
+      currentWindowTitle: fromTitle,
+      newApp: toApp,
+      newWindowTitle: toTitle,
+      now: start.addingTimeInterval(offset)
     )
-    XCTAssertEqual(anchor, start)
   }
 
-  /// The real trace: title churn every few seconds, still one sitting. Under the old
-  /// behaviour dwell here was 3s; it must now be the full 33s.
+  func testTitleChurnWithinOneSittingKeepsTheClockRunning() {
+    let a = anchor(
+      current: start, fromApp: "Google Chrome", fromTitle: "TikTok - Make Your Day",
+      toApp: "Google Chrome", toTitle: "Watch trending videos for you | TikTok 🔊", at: 3)
+    XCTAssertEqual(a, start)
+  }
+
+  /// The real trace: title churn every few seconds, still one sitting. Pre-fix dwell here
+  /// was 3s; it must now be the full 33s.
   func testDwellSurvivesRepeatedTitleChurnAndClearsTheGate() {
-    var anchor = start
+    var current = start
+    var title = "TikTok - Make Your Day"
     for second in stride(from: 3, through: 33, by: 3) {
-      anchor = SuggestionDwellAnchor.anchor(
-        current: anchor,
-        currentApp: "Google Chrome",
-        newApp: "Google Chrome",
-        now: start.addingTimeInterval(TimeInterval(second))
-      )
+      let next = "(\(second)) TikTok - Make Your Day 🔊"
+      current = anchor(
+        current: current, fromApp: "Google Chrome", fromTitle: title,
+        toApp: "Google Chrome", toTitle: next, at: TimeInterval(second))
+      title = next
     }
-    let dwell = start.addingTimeInterval(33).timeIntervalSince(anchor)
+    let dwell = start.addingTimeInterval(33).timeIntervalSince(current)
     XCTAssertEqual(dwell, 33)
     XCTAssertGreaterThanOrEqual(dwell, 30, "33s of unbroken TikTok must clear the 30s bar")
   }
 
+  /// The regression the reviewer caught: ten minutes on a work page then one tab change to
+  /// a feed must NOT inherit that dwell and fire immediately.
+  func testSwitchingToADifferentPageInTheSameAppRestartsTheClock() {
+    let switched = anchor(
+      current: start, fromApp: "Google Chrome",
+      fromTitle: "BasedHardware/omi: AI wearable — pull requests",
+      toApp: "Google Chrome", toTitle: "TikTok - Make Your Day", at: 600)
+    XCTAssertEqual(
+      switched, start.addingTimeInterval(600),
+      "a work page and a feed are different contexts; dwell must not carry over")
+  }
+
   func testSwitchingAppsRestartsTheClock() {
-    let switchedAt = start.addingTimeInterval(20)
-    let anchor = SuggestionDwellAnchor.anchor(
-      current: start,
-      currentApp: "Google Chrome",
-      newApp: "Warp",
-      now: switchedAt
-    )
-    XCTAssertEqual(anchor, switchedAt)
+    let switched = anchor(
+      current: start, fromApp: "Google Chrome", fromTitle: "TikTok - Make Your Day",
+      toApp: "Warp", toTitle: "zsh", at: 20)
+    XCTAssertEqual(switched, start.addingTimeInterval(20))
   }
 
   /// After an evaluation consumes the pending context, the next switch starts fresh.
   func testFirstSwitchAfterAnEvaluationAnchorsToNow() {
-    let anchor = SuggestionDwellAnchor.anchor(
-      current: nil,
-      currentApp: nil,
-      newApp: "Google Chrome",
-      now: start
-    )
-    XCTAssertEqual(anchor, start)
+    let a = anchor(
+      current: nil, fromApp: nil, fromTitle: nil,
+      toApp: "Google Chrome", toTitle: "TikTok - Make Your Day", at: 0)
+    XCTAssertEqual(a, start)
+  }
+
+  /// An unreadable title is not evidence the sitting ended.
+  func testUnreadableTitleDoesNotEndASitting() {
+    XCTAssertTrue(SuggestionDwellAnchor.isSameContext("TikTok - Make Your Day", nil))
+    XCTAssertTrue(SuggestionDwellAnchor.isSameContext(nil, nil))
+  }
+
+  func testContextIdentityIgnoresGenericChrome() {
+    // "New Tab" carries no identity, so it must not vouch for a match.
+    XCTAssertFalse(
+      SuggestionDwellAnchor.isSameContext("New Tab", "TikTok - Make Your Day"),
+      "a blank new tab is not the same place as a feed")
+    XCTAssertTrue(
+      SuggestionDwellAnchor.isSameContext(
+        "Peter Steinberger — YouTube", "Rick Astley — YouTube"))
   }
 }
 

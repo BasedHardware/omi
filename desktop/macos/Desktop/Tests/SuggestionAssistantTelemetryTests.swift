@@ -54,7 +54,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       Set([
         "evaluation_id", "model", "image_width_bucket", "image_bytes_bucket", "grounding_source_count",
         "memory_count", "has_memories", "commitment_count", "has_commitments", "related_screen_count",
-        "has_related_screens",
+        "has_related_screens", "goal_count", "has_goals",
       ])
     )
     XCTAssertEqual(payload["evaluation_id"] as? String, "00000000-0000-0000-0000-000000000001")
@@ -65,6 +65,8 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(payload["memory_count"] as? Int, 1)
     XCTAssertEqual(payload["commitment_count"] as? Int, 1)
     XCTAssertEqual(payload["related_screen_count"] as? Int, 1)
+    XCTAssertEqual(payload["goal_count"] as? Int, 0)
+    XCTAssertEqual(payload["has_goals"] as? Bool, false)
 
     let serialized = try XCTUnwrap(
       String(
@@ -218,5 +220,49 @@ final class SuggestionAssistantTelemetryBoundaryTests: XCTestCase {
         "evaluation_id": expectedEvaluationID,
         "suggestion_id": expectedSuggestionID ?? "",
       ])
+  }
+
+  /// Goals participate in `SuggestionGrounding.isEmpty`, so a goal-only grounding is a real
+  /// reason to pay for an evaluation. If the shape ignored goals this spend would report
+  /// `grounding_source_count = 0`, which is the analytics-integrity failure of describing a
+  /// paid call as having had no inputs.
+  func testGoalOnlyGroundingIsCountedAsASpentSource() throws {
+    let goalOnly = SuggestionGrounding(
+      memories: [],
+      openCommitments: [],
+      relatedScreens: [],
+      goals: ["Reach 200k total users by month-end"]
+    )
+    XCTAssertFalse(goalOnly.isEmpty, "a goal alone must be able to justify an evaluation")
+
+    let payload = SuggestionAssistantTelemetry.evaluationStartedPayload(
+      identity: SuggestionAssistantTelemetry.Identity(),
+      shape: SuggestionAssistantTelemetry.EvaluationShape(
+        model: .gemini25FlashLite,
+        previewData: Data([0x00, 0x01, 0x02]),
+        grounding: goalOnly
+      )
+    )
+
+    XCTAssertEqual(payload["grounding_source_count"] as? Int, 1)
+    XCTAssertEqual(payload["goal_count"] as? Int, 1)
+    XCTAssertEqual(payload["has_goals"] as? Bool, true)
+    XCTAssertEqual(payload["has_commitments"] as? Bool, false)
+
+    // The goal's text is never a property; only its bounded count.
+    let serialized = try XCTUnwrap(
+      String(data: try JSONSerialization.data(withJSONObject: payload), encoding: .utf8))
+    XCTAssertFalse(serialized.contains("200k"))
+  }
+
+  /// Counts are bounded so an unexpectedly large source cannot become a high-cardinality
+  /// property.
+  func testGoalCountIsBounded() {
+    let shape = SuggestionAssistantTelemetry.EvaluationShape(
+      model: .gemini25FlashLite,
+      previewData: Data([0x00]),
+      grounding: SuggestionGrounding(goals: Array(repeating: "goal", count: 500))
+    )
+    XCTAssertEqual(shape.goalCount, 8)
   }
 }
