@@ -35,17 +35,25 @@ export default function BillingPanel() {
   const load = useCallback(async () => {
     const token = await getToken();
     if (!token) return;
-    try {
-      const [info, available] = await Promise.all([
-        getOverageInfo(token),
-        getAvailablePlans(token),
-      ]);
-      setOverage(info);
-      setPlans(available);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load billing.');
-    }
+    // Settled independently: Promise.all would discard a successful sibling and
+    // render the fallback Free plan with zero usage next to the error, even
+    // though the backend returned the user's real paid plan.
+    const [info, available] = await Promise.allSettled([
+      getOverageInfo(token),
+      getAvailablePlans(token),
+    ]);
+    if (info.status === 'fulfilled') setOverage(info.value);
+    if (available.status === 'fulfilled') setPlans(available.value);
+    const failed = [info, available].filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    setError(
+      failed.length === 0
+        ? null
+        : failed[0].reason instanceof Error
+        ? failed[0].reason.message
+        : 'Could not load billing.',
+    );
     // Quota lives on a different service than payments: a failure here must not
     // blank out the plan and usage the user can already see.
     try {

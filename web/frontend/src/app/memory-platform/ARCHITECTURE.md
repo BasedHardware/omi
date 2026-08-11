@@ -18,15 +18,17 @@ The public developer surface for Omi's backend-authoritative memory service.
 - `components/` — kebab-case route-local components. `platform-shell.tsx` owns the dark chrome and applies the `dark` class the shadcn primitives key off (the app's root layout is light).
 - `utils/metadata.ts` — `generateMetadata()` builder plus JSON-LD helpers, mirroring `app/apps/utils/metadata.ts`.
 - `utils/snippets.ts` — every published code snippet, single-sourced so docs and pages cannot drift.
-- `hooks/use-session-token.ts` — Firebase session + a `getToken()` that mints a fresh ID token per request. Tokens are never persisted.
+- `hooks/use-session-token.ts` — Firebase session + a stable `getToken()` that mints a fresh ID token per request. Tokens are never persisted. `getToken` is memoized: consumers use it as an effect dependency, so an unstable identity re-triggers every load.
+- `hooks/use-embed-session.ts` — how a framed widget gets a credential. The sandboxed frame has an opaque origin and no storage, so Firebase cannot work inside it; the host page mints a short-lived token server-side and hands it over by `postMessage`. Messages are validated by `event.source`, never by origin, because an opaque-origin sender always reports `"null"`.
 
 ## Backend seams
 
 All network calls live in `src/lib/api/`, one function per endpoint:
 
 - `memory-platform.ts` — `GET /v1/memory/platform`, `/search`, `POST /ingest`. `MEMORY_PLATFORM_LIMITS` mirrors the bounds the backend enforces (`MAX_PRODUCT_MEMORY_READ_LIMIT`, query length, offset ceiling).
-- `mcp-keys.ts` — list/create/revoke are live. `rotateMcpKey` and per-key `scopes` are the seams for backend work landing in the same cycle; when the route ships, only that function changes.
-- `billing.ts` — plans, checkout, portal, and overage are live. `getPlatformApiQuota` is the single pending seam for per-plan platform-API quota.
+- `mcp-keys.ts` — list, create (with per-key `scopes`), rotate (`POST /v1/mcp/keys/{key_id}/rotate`), and revoke are all live against real routes. Nothing here is pending.
+- `billing.ts` — plans, checkout, portal, overage, and `getPlatformApiQuota` (`GET /v1/memory/platform/quota`) are all live. `getAvailablePlans` must send `X-App-Platform: web`, or the backend serves the legacy catalog.
+- `browser-base.ts` — the one base-URL helper every browser client uses. It reads `NEXT_PUBLIC_API_BASE_URL`; the server-only `API_URL` is undefined in the client bundle and collapses requests to the web origin.
 
 ## Invariants
 
