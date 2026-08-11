@@ -20,12 +20,33 @@ from utils.llm.gateway_client import LLM_GATEWAY_FEATURE_MODE_ENV_VAR  # noqa: E
 
 def _gateway_mode(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('K_SERVICE', raising=False)
     monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
 
 
 def test_upload_proceeds_and_records_surface_under_gateway_mode(monkeypatch, tmp_path):
     _gateway_mode(monkeypatch)
+    file_path = tmp_path / 'note.txt'
+    file_path.write_text('hello')
+
+    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.txt'))
+    with patch.object(cf.openai, 'files', fake_files), patch.object(cf, 'record_direct_exception_surface') as record:
+        result = cf.FileChatTool.upload(file_path)
+
+    assert result['file_id'] == 'file-1'
+    record.assert_called_once_with(surface='file_chat.openai_files_assistants_vision')
+
+
+def test_upload_proceeds_when_gateway_mode_is_misconfigured_in_prod(monkeypatch, tmp_path):
+    # Prod runtime with gateway mode on but the allow-prod flag missing makes
+    # should_route_features_through_gateway raise RuntimeError; upload must still work.
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.delenv('ENVIRONMENT', raising=False)
+    monkeypatch.delenv('APP_ENV', raising=False)
+    monkeypatch.setenv('K_SERVICE', 'omi-backend')
+    monkeypatch.delenv('OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE', raising=False)
     file_path = tmp_path / 'note.txt'
     file_path.write_text('hello')
 

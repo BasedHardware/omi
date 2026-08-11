@@ -360,7 +360,13 @@ class MessageProvider extends ChangeNotifier {
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
-        clearSelectedFiles();
+        final failedPaths = files.map((e) => e.path).toSet();
+        for (var i = selectedFiles.length - 1; i >= 0; i--) {
+          if (failedPaths.contains(selectedFiles[i].path)) {
+            selectedFiles.removeAt(i);
+            selectedFileTypes.removeAt(i);
+          }
+        }
         final l10n = globalNavigatorKey.currentContext?.l10n;
         AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }

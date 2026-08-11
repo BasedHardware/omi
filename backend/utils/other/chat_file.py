@@ -70,8 +70,14 @@ def _get_async_openai() -> AsyncOpenAI:
 
 def _record_direct_file_chat_surface() -> None:
     """File chat has no gateway lane (OpenAI Files/Assistants/vision), so under gateway
-    feature mode it stays an acknowledged direct surface: counted, never blocked."""
-    if should_route_features_through_gateway():
+    feature mode it stays an acknowledged direct surface: counted, never blocked.
+    A misconfigured gateway rollout (should_route_features_through_gateway raising) must
+    not block it either."""
+    try:
+        routed = should_route_features_through_gateway()
+    except RuntimeError:
+        routed = True
+    if routed:
         record_direct_exception_surface(surface='file_chat.openai_files_assistants_vision')
 
 
