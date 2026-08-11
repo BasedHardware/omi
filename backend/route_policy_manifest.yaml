@@ -67,7 +67,7 @@ routes:
           - firebase_id_token
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none
@@ -90,7 +90,7 @@ routes:
           - firebase_id_token
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: tools:search
         key_subject: uid
@@ -113,7 +113,7 @@ routes:
           - firebase_id_token
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: memories:create
         key_subject: uid
@@ -136,7 +136,7 @@ routes:
           - firebase_id_token
         placement: dependency
         scopes: []
-      byok: not_applicable
+      byok: validated_when_headers_present
       rate_limit:
         policy_name: none
         key_subject: none
