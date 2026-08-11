@@ -273,7 +273,8 @@ const parsePatch = (body: Readonly<Record<string, unknown>>): PatchInput | null 
   return Object.freeze(patch);
 };
 
-const contentDigest = (accountId: string, description: string): string =>
+/** Exact historical idempotency framing, exported only for executable compatibility proof. */
+export const actionItemsCompatCreateDigest = (accountId: string, description: string): string =>
   createHash("sha256")
     .update(`${accountId.length}:${accountId}:${description.trim().toLowerCase()}`, "utf8")
     .digest("hex");
@@ -336,6 +337,51 @@ const allocateFreshId = (deps: ActionItemsCompatRouteDependencies, accountId: st
   throw new TypeError("compatibility id factory did not produce a fresh id");
 };
 
+/**
+ * LOAD-BEARING SINGLE-PROCESS CRITICAL REGION.
+ *
+ * The request body is completely parsed before this synchronous helper is
+ * entered. From the first retry/live-id observation through `TasksStore.apply`
+ * there is deliberately no `await`, so another request cannot interleave this
+ * region on one Bun service event loop. This is not a cross-process claim: the
+ * compatibility target is one service process with one SQLite authority.
+ */
+const createOrReuseActionItem = (
+  deps: ActionItemsCompatRouteDependencies,
+  accountId: string,
+  input: CreateInput,
+): TasksRecord => {
+  const digest = actionItemsCompatCreateDigest(accountId, input.description);
+  const retry = deps.store.listRecords(accountId).find((record) =>
+    record.content.completed === false && record.content[PRIVATE_CREATE_DIGEST_KEY] === digest);
+  if (retry !== undefined) return retry;
+
+  const now = injectedNow(deps.nowEpochMilliseconds);
+  const id = allocateFreshId(deps, accountId);
+  const applied = deps.store.apply(accountId, {
+    op: "create",
+    record_id: id,
+    content: Object.freeze({
+      description: input.description,
+      completed: false,
+      completedAt: null,
+      dueAt: input.dueAt,
+      owner: "user",
+      source: input.source,
+      provenance: Object.freeze([]),
+      sortOrder: 0,
+      indentLevel: 0,
+      createdAt: now,
+      updatedAt: now,
+      [PRIVATE_CREATE_DIGEST_KEY]: digest,
+    }),
+  });
+  if (!applied.applied) throw new TypeError("unconditional compatibility create conflicted");
+  const stored = deps.store.readRecord(accountId, id);
+  if (stored === null) throw new TypeError("compatibility create was not readable");
+  return stored;
+};
+
 const guarded = (handler: (context: Context, principal: DevPrincipal) => Response | Promise<Response>, deps: ActionItemsCompatRouteDependencies) =>
   async (context: Context): Promise<Response> => {
     const principal = principalOf(context, deps.resolvePrincipal);
@@ -385,36 +431,7 @@ export const registerActionItemsCompatRoutes = (
     const raw = await parseBodyObject(context);
     const input = raw === null ? null : parseCreate(raw);
     if (input === null) return fixedResponse(BAD_REQUEST_BODY, 400);
-
-    const digest = contentDigest(principal.uid, input.description);
-    const retry = deps.store.listRecords(principal.uid).find((record) =>
-      record.content.completed === false && record.content[PRIVATE_CREATE_DIGEST_KEY] === digest);
-    if (retry !== undefined) return jsonResponse(projectRecord(retry));
-
-    const now = injectedNow(deps.nowEpochMilliseconds);
-    const id = allocateFreshId(deps, principal.uid);
-    const applied = deps.store.apply(principal.uid, {
-      op: "create",
-      record_id: id,
-      content: Object.freeze({
-        description: input.description,
-        completed: false,
-        completedAt: null,
-        dueAt: input.dueAt,
-        owner: "user",
-        source: input.source,
-        provenance: Object.freeze([]),
-        sortOrder: 0,
-        indentLevel: 0,
-        createdAt: now,
-        updatedAt: now,
-        [PRIVATE_CREATE_DIGEST_KEY]: digest,
-      }),
-    });
-    if (!applied.applied) throw new TypeError("unconditional compatibility create conflicted");
-    const stored = deps.store.readRecord(principal.uid, id);
-    if (stored === null) throw new TypeError("compatibility create was not readable");
-    return jsonResponse(projectRecord(stored));
+    return jsonResponse(projectRecord(createOrReuseActionItem(deps, principal.uid, input)));
   }, deps));
 
   app.patch(`${ACTION_ITEMS_COMPAT_PATH}/:id`, guarded(async (context, principal) => {
@@ -427,6 +444,8 @@ export const registerActionItemsCompatRoutes = (
     const raw = await parseBodyObject(context);
     const input = raw === null ? null : parsePatch(raw);
     if (input === null) return fixedResponse(BAD_REQUEST_BODY, 400);
+    // Load-bearing: TasksStore patch upserts an absent id. Keep this synchronous
+    // preflight adjacent to `apply`; there is no await between them in one service.
     if (deps.store.readRecord(principal.uid, id) === null) return fixedResponse(NOT_FOUND_BODY, 404);
 
     const now = injectedNow(deps.nowEpochMilliseconds);
@@ -455,6 +474,8 @@ export const registerActionItemsCompatRoutes = (
     const id = context.req.param("id");
     if (FROZEN_STATIC_SIBLINGS.has(id)) return fixedResponse(NOT_FOUND_BODY, 404);
     if (!SAFE_LEGACY_ID.test(id)) return fixedResponse(BAD_REQUEST_BODY, 400);
+    // Load-bearing: TasksStore delete reports applied for an absent id. Keep
+    // this synchronous preflight adjacent to `apply` in the one-service target.
     if (deps.store.readRecord(principal.uid, id) === null) return fixedResponse(NOT_FOUND_BODY, 404);
     const applied = deps.store.apply(principal.uid, { op: "delete", record_id: id });
     if (!applied.applied) throw new TypeError("unconditional compatibility delete conflicted");

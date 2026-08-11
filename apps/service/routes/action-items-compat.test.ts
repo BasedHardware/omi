@@ -9,8 +9,10 @@ import {
   createInMemoryLocalServiceStores,
   createLocalDevService,
   type LocalService,
+  type LocalServiceStores,
 } from "../app-facing";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
+import { actionItemsCompatCreateDigest } from "./action-items-compat";
 
 const OWNER = "compatibility-owner";
 const OTHER = "compatibility-other";
@@ -127,12 +129,67 @@ const platformPatch = async (
   service: LocalService,
   recordId: string,
   patch: Readonly<Record<string, unknown>>,
+  baseRevision?: string,
 ): Promise<Response> => request(service, "/v1/tasks/ops", "POST", {
   write_id: "a".repeat(64),
   account_epoch: 7,
   domain: "tasks",
-  op: { op: "patch", record_id: recordId, patch },
+  op: {
+    op: "patch",
+    record_id: recordId,
+    patch,
+    ...(baseRevision === undefined ? {} : { base_revision: baseRevision }),
+  },
 });
+
+type StoreComposition = "in-memory" | "sqlite";
+
+const bootComposition = (
+  composition: StoreComposition,
+  options: {
+    readonly owner?: string;
+    readonly now?: () => number;
+    readonly ids?: readonly string[];
+  } = {},
+): {
+  readonly service: LocalService;
+  readonly stores: LocalServiceStores;
+  readonly close: () => void;
+} => {
+  const db = new Database(":memory:");
+  const stores = composition === "sqlite"
+    ? createSqliteLocalServiceStores(db)
+    : createInMemoryLocalServiceStores();
+  let nextId = 0;
+  const service = createLocalDevService({
+    db,
+    ownerAccountId: options.owner ?? OWNER,
+    memoryCount: 1,
+    accountTimezone: "UTC",
+    devSecretLabel: `action-items-compatibility-${composition}-proof`,
+    stores,
+    persistentQaStores: true,
+    nowEpochMilliseconds: options.now ?? (() => NOW),
+    actionItemId: () => options.ids?.[nextId++] ?? `compat-proof-${String(nextId).padStart(3, "0")}`,
+  });
+  return Object.freeze({ service, stores, close: () => db.close() });
+};
+
+const storeBytes = (stores: LocalServiceStores, owner = OWNER): string =>
+  JSON.stringify(stores.tasks.listRecords(owner));
+
+// Vendored equivalent of core/contracts/src/ids.ts `parseRecordId`: retain all
+// three accepted branches so this proof exercises the real client boundary.
+const vendoredCoreParseRecordId = (raw: string): string | null =>
+  /^[a-z]{2,12}(?:-[a-z]{2,12}){2,4}$/.test(raw)
+    || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(raw)
+    || /^[A-Za-z0-9_-]{4,128}$/.test(raw)
+    ? raw
+    : null;
+
+const expectVendoredRecordIdBoundary = (recordId: string): void => {
+  expect(vendoredCoreParseRecordId(recordId)).toBe(recordId);
+};
 
 describe("legacy action-items compatibility red-to-green proofs", () => {
   test("the real app factory serves all five adapter invocations", async () => {
@@ -537,5 +594,195 @@ describe("legacy action-items composition parity", () => {
       expect(await json(await request(service, `${PATH}/ids`))).toEqual({ ids: [] });
     }
     sqliteDb.close();
+  });
+});
+
+describe("legacy action-items single-process race and store-seam proofs", () => {
+  for (const composition of ["in-memory", "sqlite"] as const) {
+    test(`${composition}: concurrent open-create retries serialize to one row and one clock sample`, async () => {
+      let clockCalls = 0;
+      const booted = bootComposition(composition, {
+        ids: ["compat-concurrent-proof"],
+        now: () => {
+          clockCalls += 1;
+          return NOW;
+        },
+      });
+      try {
+        const descriptions = [
+          "  Concurrent CAFÉ Task  ",
+          "concurrent café task",
+          " CONCURRENT CAFÉ TASK ",
+          "\tConcurrent Café Task\n",
+          "concurrent CAFÉ task",
+          "  CONCURRENT café TASK",
+        ];
+        const responses = await Promise.all(descriptions.map((description) =>
+          request(booted.service, PATH, "POST", { description })));
+        expect(responses.every((response) => response.status === 200)).toBeTrue();
+        const legacyWires = await Promise.all(responses.map((response) => response.text()));
+        const legacyRows = legacyWires.map((wire) => JSON.parse(wire) as Record<string, unknown>);
+        const returnedIds = legacyRows.map((row) => String(row.id));
+        expect(new Set(returnedIds)).toEqual(new Set(["compat-concurrent-proof"]));
+        for (const id of returnedIds) expectVendoredRecordIdBoundary(id);
+
+        const records = booted.stores.tasks.listRecords(OWNER);
+        expect(records).toHaveLength(1);
+        expect(clockCalls).toBe(1);
+        const privateKey = Object.keys(records[0]!.content).find((key) => key.startsWith("__omi."));
+        expect(privateKey).toBeDefined();
+        const privateDigest = String(records[0]!.content[privateKey!]);
+        for (const wire of legacyWires) {
+          expect(wire).not.toContain(privateKey!);
+          expect(wire).not.toContain(privateDigest);
+        }
+
+        const tasksResponse = await request(booted.service, "/v1/tasks");
+        expect(tasksResponse.status).toBe(200);
+        const tasksWire = await tasksResponse.text();
+        expect(parseTaskPageJson(tasksWire)?.items).toHaveLength(1);
+        expect(tasksWire).not.toContain(privateKey!);
+        expect(tasksWire).not.toContain(privateDigest);
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: missing PATCH and DELETE preserve byte-identical store contents`, async () => {
+      const booted = bootComposition(composition);
+      try {
+        booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: "compat-preflight-control",
+          content: canonicalBag("must remain byte-identical"),
+        });
+        const before = storeBytes(booted.stores);
+        const [patched, deleted] = await Promise.all([
+          request(booted.service, `${PATH}/compat-missing-proof`, "PATCH", { description: "must not upsert" }),
+          request(booted.service, `${PATH}/compat-missing-proof`, "DELETE"),
+        ]);
+        expect([patched.status, deleted.status]).toEqual([404, 404]);
+        expect(storeBytes(booted.stores)).toBe(before);
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: an injected collision cannot overwrite a live row`, async () => {
+      const booted = bootComposition(composition, {
+        ids: ["compat-collision-live", "compat-collision-new"],
+      });
+      try {
+        booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: "compat-collision-live",
+          content: canonicalBag("original live row"),
+        });
+        const original = JSON.stringify(booted.stores.tasks.readRecord(OWNER, "compat-collision-live"));
+        const response = await request(booted.service, PATH, "POST", { description: "new row" });
+        expect(response.status).toBe(200);
+        const created = await json(response);
+        expect(created.id).toBe("compat-collision-new");
+        expectVendoredRecordIdBoundary(String(created.id));
+        expect(JSON.stringify(booted.stores.tasks.readRecord(OWNER, "compat-collision-live"))).toBe(original);
+        expect(booted.stores.tasks.listRecords(OWNER)).toHaveLength(2);
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: invalid injected ids fail without mutation`, async () => {
+      for (const injectedId of ["bad id", "abc", "../escape"]) {
+        const booted = bootComposition(composition, { ids: [injectedId] });
+        try {
+          expect(vendoredCoreParseRecordId(injectedId)).toBeNull();
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, PATH, "POST", {
+            description: `invalid id ${injectedId}`,
+          });
+          expect(response.status).toBe(500);
+          expect(storeBytes(booted.stores)).toBe(before);
+        } finally {
+          booted.close();
+        }
+      }
+    });
+
+    test(`${composition}: delete and recreate preserve revision continuity against a stale platform patch`, async () => {
+      const booted = bootComposition(composition);
+      try {
+        const recordId = "compat-revision-continuity";
+        const created = booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: recordId,
+          content: canonicalBag("first incarnation"),
+        });
+        expect(created.applied).toBeTrue();
+        if (!created.applied) throw new Error("initial create unexpectedly conflicted");
+        const staleRevision = created.revision;
+
+        expect(booted.stores.tasks.apply(OWNER, { op: "delete", record_id: recordId }).applied).toBeTrue();
+        const recreated = booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: recordId,
+          content: canonicalBag("second incarnation"),
+        });
+        expect(recreated.applied).toBeTrue();
+        if (!recreated.applied) throw new Error("recreate unexpectedly conflicted");
+        expect(recreated.revision).not.toBe(staleRevision);
+
+        await cutOver(booted.service);
+        const beforeConflict = storeBytes(booted.stores);
+        const stale = await platformPatch(
+          booted.service,
+          recordId,
+          { description: "must conflict" },
+          staleRevision,
+        );
+        expect(stale.status).toBe(409);
+        expect(await stale.text()).toBe(JSON.stringify({ error: "conflict" }));
+        expect(storeBytes(booted.stores)).toBe(beforeConflict);
+      } finally {
+        booted.close();
+      }
+    });
+
+    test(`${composition}: malformed platform task bags remain non-mutating without choosing projection policy`, async () => {
+      const booted = bootComposition(composition);
+      try {
+        const malformedId = "compat-malformed-platform-bag";
+        await cutOver(booted.service);
+        const platformCreated = await request(booted.service, "/v1/tasks/ops", "POST", {
+          write_id: "e".repeat(64),
+          account_epoch: 7,
+          domain: "tasks",
+          op: {
+            op: "create",
+            record_id: malformedId,
+            content: { description: "only one field is known" },
+          },
+        });
+        expect(platformCreated.status).toBe(200);
+        const before = storeBytes(booted.stores);
+        const response = await request(booted.service, PATH);
+        const responseWire = await response.text();
+        // COULD NOT DETERMINE from settled records whether this family should
+        // fail, skip, or repair. This proof only forbids fabricating this row.
+        expect(responseWire).not.toContain(malformedId);
+        expect(storeBytes(booted.stores)).toBe(before);
+      } finally {
+        booted.close();
+      }
+    });
+  }
+
+  test("the historical digest frames a colon account and non-ASCII description exactly", () => {
+    const owner = "team:user";
+    const description = "  CAFÉ DéJÀ VU  ";
+    const expectedPayload = "9:team:user:café déjà vu";
+    const expectedDigest = "6ed7a2fb56db5e04805be8c7d9f4ededf798345baae4238916461683986e0c1d";
+    expect(owner.length).toBe(9);
+    expect(`${owner.length}:${owner}:${description.trim().toLowerCase()}`).toBe(expectedPayload);
+    expect(actionItemsCompatCreateDigest(owner, description)).toBe(expectedDigest);
   });
 });
