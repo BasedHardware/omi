@@ -628,15 +628,24 @@ private func run(_ options: Options) throws -> Evidence {
   for (index, rawKey) in options.keys.enumerated() {
     guard let spec = keySpec(rawKey) else { throw ProbeError.usage("unknown key \(rawKey)") }
     let keyBefore = focusedNode(application, windows: axWindows)
+    let expected = options.expectedAfter[safe: index] ?? nil
+    var beforeScan = AXScan()
+    if let expected {
+      for window in axWindows where stringAttribute(window, kAXRoleAttribute) == kAXWindowRole {
+        scan(window, window: allowlistedName(window), depth: 0, landmark: expected, result: &beforeScan)
+        if beforeScan.nodes.count >= 128 { break }
+      }
+    }
     try post(spec)
     var afterScan = AXScan()
     for window in axWindows where stringAttribute(window, kAXRoleAttribute) == kAXWindowRole {
-      scan(window, window: allowlistedName(window), depth: 0, landmark: options.expectedAfter[safe: index] ?? nil, result: &afterScan)
+      scan(window, window: allowlistedName(window), depth: 0, landmark: expected, result: &afterScan)
       if afterScan.nodes.count >= 128 { break }
     }
     let keyAfter = focusedNode(application, windows: axWindows)
-    let expected = options.expectedAfter[safe: index] ?? nil
-    let consumed = expected.map { _ in afterScan.foundLandmark } ?? (rawKey.lowercased() == "escape" && sameFocus(keyBefore, keyAfter))
+    // A landmark that was already present before the key is not evidence of a
+    // transition. Escape remains a focus-identity restoration proof.
+    let consumed = expected.map { _ in !beforeScan.foundLandmark && afterScan.foundLandmark } ?? (rawKey.lowercased() == "escape" && sameFocus(keyBefore, keyAfter))
     observations.append(KeyObservation(
       key: spec.label,
       keyCode: spec.keyCode,
