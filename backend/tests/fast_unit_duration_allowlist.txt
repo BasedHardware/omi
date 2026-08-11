@@ -15,6 +15,8 @@
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
+# Builds 10,001 in-memory records to prove universal export has no historical-data cap.
+tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
 tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
 tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
 tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema
