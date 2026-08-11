@@ -562,10 +562,17 @@ class _SurfaceHostState extends State<SurfaceHost>
           (decoded['state'] as String).isEmpty) {
         throw StateError('capture surface did not expose a typed fixture root');
       }
-      debugPrint(
-        'NATIVE_CAPTURE_READY run_id=$_captureRunId '
-        'route=${decoded['route']} fixture=${decoded['fixture']} state=${decoded['state']}',
-      );
+      final confirmed = await const MethodChannel('omi/capture-launch')
+          .invokeMethod<bool>('ready', <String, String>{
+            'run_id': _captureRunId,
+            'route': decoded['route'] as String,
+            'fixture': decoded['fixture'] as String,
+            'state': decoded['state'] as String,
+          });
+      if (confirmed != true) {
+        throw StateError('native capture host did not confirm readiness');
+      }
+      debugPrint('NATIVE_CAPTURE_HOST_CONFIRMED run_id=$_captureRunId');
       return;
     }
     if (_consumerEvidence != null) {
