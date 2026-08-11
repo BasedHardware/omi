@@ -183,7 +183,7 @@ export function ProductionLifecycleRegion({
         </p>
       )}
       {nextAction && <p className="lifecycle-next-action">{t(locale, "lifecycle.nextAction", { action: nextAction })}</p>}
-      {retry && <button type="button" className="lifecycle-retry" onClick={() => void retry.onRetry()}>{retry.label ?? t(locale, "common.retry")}</button>}
+      {retry && <button type="button" className="lifecycle-retry" aria-label={retry.label ?? t(locale, "common.retry")} onClick={() => void retry.onRetry()}>{retry.label ?? t(locale, "common.retry")}</button>}
       <ProductionOperationError error={operationError} />
       {children}
     </section>

@@ -3,6 +3,7 @@ import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
@@ -13,6 +14,7 @@ type Locale = string;
 export type SearchProjection<T> = {
   list(): Promise<T[]>;
   status(): StoreStatus;
+  refresh?: () => Promise<void>;
   subscribe(listener: () => void): () => void;
 };
 
@@ -64,8 +66,9 @@ function readCombinedStatus(sources: HomeSearchSources): RefreshStatus {
   );
 }
 
-export function HomeProduction({ sources, locale = "en", onReady }: {
+export function HomeProduction({ sources, source, locale = "en", onReady }: {
   sources: HomeSearchSources;
+  source?: SurfaceDataSource;
   locale?: Locale;
   onReady?: () => void;
 }): React.JSX.Element {
@@ -126,6 +129,15 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
   const filtering = Boolean(needle) || kind !== "all";
   // Every notice / row visibility decision ships through this helper — JSX does not re-derive.
   const presentation = homeSurfacePresentation(refresh, results.length, refreshPhaseNoticeKey(refresh.phase), filtering);
+  const dataSource = source ?? { kind: "live", origin: "bridge" } satisfies SurfaceDataSource;
+  const canRetry = Boolean(memorySource.refresh || conversationSource.refresh);
+  const retry = async (): Promise<void> => {
+    await Promise.allSettled([
+      memorySource.refresh?.(),
+      conversationSource.refresh?.(),
+    ]);
+    await reload();
+  };
 
   return (
     <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
@@ -156,8 +168,17 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
           </label>
         </section>
 
-        <section className="home-results-panel" aria-label={t(locale, "common.search")} aria-live="polite">
-          {presentation.noticeKey && <div className={`status-notice ${presentation.phase}`} role="status">{t(locale, presentation.noticeKey)}</div>}
+        <section className="home-results-panel" aria-label={t(locale, "common.search")}>
+          <ProductionDataSourceBadge source={dataSource} locale={locale} />
+          <ProductionLifecycleRegion
+            className="surface-notices"
+            phase={refresh.phase}
+            hasSavedData={refresh.hasSavedData}
+            locale={locale}
+            nextAction={presentation.phase === "unavailable" ? t(locale, canRetry ? "common.retry" : "nav.settings") : null}
+            retry={presentation.phase === "unavailable" && canRetry ? { onRetry: retry } : null}
+          />
+          <ProductionLiveAnnouncement message={t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })} />
           <header className="home-results-header">
             <div className="home-kind-filter" aria-label={t(locale, "common.search")}>
               {(["all", "conversation", "memory"] as const).map((value) => <button type="button" key={value} aria-pressed={kind === value} onClick={() => setKind(value)}>

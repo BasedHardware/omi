@@ -34,6 +34,7 @@ import { ChatProduction } from "./ChatProduction.js";
 import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
 import { FoldersProduction } from "./FoldersProduction.js";
+import { ProductionLifecycleRegion } from "./ProductionPrimitives.js";
 import { createProductionListenHostSocketFactory } from "./listen-host-socket.js";
 import { createPlatformProductionSettingsStore } from "./createPlatformSettingsStore.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
@@ -241,11 +242,19 @@ const emitReady = (state: string): void => {
   );
 };
 
-function bridgeUnavailable(): React.JSX.Element {
+export function bridgeUnavailable(): React.JSX.Element {
+  const bridgeUnavailablePhase = "unavailable" as const;
   return (
     <main className="bridge-unavailable" data-production-shell="true" data-route={route} data-surface-state="bridge-unavailable" data-qa-fixture="none">
       <h1>{t(locale, "app.name")}</h1>
       <p>{t(locale, "qa.bridgeUnavailable")}</p>
+      <ProductionLifecycleRegion
+        phase={bridgeUnavailablePhase}
+        hasSavedData={false}
+        locale={locale}
+        nextAction={t(locale, "qa.bridgeNext")}
+      />
+      <button type="button" className="bridge-unavailable-retry" onClick={() => window.location.reload()}>{t(locale, "common.retry")}</button>
     </main>
   );
 }
@@ -296,7 +305,7 @@ if (query.get("lab") === "1") {
   } else if (settingsFixture) {
     root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
   } else if (homeFixture) {
-    root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
+    root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} source={{ kind: "fixture", fixture: "home" }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {
     root.render(<StrictMode><TasksProduction store={fixtureTaskStore(taskFixture)} fixture={taskFixture} locale={locale} translate={translateTasks} now={TASK_FIXED_NOW} onReady={() => emitReady(`fixture:${taskFixture}`)} /></StrictMode>);
   } else if (conversationFixture) {
@@ -361,7 +370,7 @@ if (query.get("lab") === "1") {
           ]);
           await Promise.allSettled([memories.refresh(), conversations.refresh()]);
           markRendered("home", "legacy");
-          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "tasks") {
           const store = await stores.openTasks();
           markRendered("tasks", null);

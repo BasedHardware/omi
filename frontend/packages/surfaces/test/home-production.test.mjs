@@ -136,6 +136,21 @@ test("HomeProduction with zero rows makes no empty claim while loading, then ren
   // the initial-loading assertion failed against that real shipped behavior.
 });
 
+test("Home unavailable state does not promise Retry when projections have no refresh capability", async () => {
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const memories = projection("unavailable");
+  const conversations = projection("unavailable");
+  const rendered = await renderComponent(HomeProduction, {
+    sources: { memories: memories.source, conversations: conversations.source },
+  });
+  try {
+    assert.equal(rendered.container.querySelector(".lifecycle-retry"), null);
+    assert.ok(rendered.container.querySelector(".production-lifecycle-region")?.textContent?.includes(EN_MESSAGES["nav.settings"]));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("HomeProduction renders a merged searchable spine with clear, filter, and keyboard focus behavior", async () => {
   const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
   const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");

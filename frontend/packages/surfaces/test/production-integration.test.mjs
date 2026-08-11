@@ -32,11 +32,36 @@ test("Listen is composed from the ratified platform stream and has no fixture di
   assert.match(main, /__OMI_LISTEN_PROTOCOL_SCHEMA__/);
   assert.match(main, /route === "listen"/);
   assert.doesNotMatch(main, /listen-fixtures|fixtureListenStore|listenFixture/);
-  assert.doesNotMatch(listen, /fixture\??:|ProductionDataSourceBadge/);
+  assert.doesNotMatch(listen, /fixture\??:/);
+  assert.match(listen, /ProductionDataSourceBadge/);
   assert.match(listen, /data-qa-fixture="none"/);
   assert.match(store, /platformListenCaptureState/);
   // red-proof: restoring the QA dispatch or bypassing the typed platform
   // client makes the production composition assertions fail.
+});
+
+test("every live route adopts the shared source, lifecycle, and live-boundary primitives", async () => {
+  const routeFiles = [
+    "HomeProduction.tsx",
+    "MemoriesProduction.tsx",
+    "TasksProduction.tsx",
+    "ConversationsProduction.tsx",
+    "FoldersProduction.tsx",
+    "ChatProduction.tsx",
+    "ListenProduction.tsx",
+    "SettingsProduction.tsx",
+  ];
+  const sources = await Promise.all(routeFiles.map((name) => read(`src/production/${name}`)));
+  for (const source of sources) {
+    assert.match(source, /ProductionDataSourceBadge/);
+    assert.match(source, /ProductionLifecycleRegion/);
+    assert.match(source, /surface-notices/);
+  }
+  for (const source of sources.filter((_, index) => [0, 5, 6, 7].includes(index))) {
+    assert.match(source, /ProductionLiveAnnouncement/);
+  }
+  // The route render suites exercise the concrete stores; this guard prevents
+  // a new route from silently bypassing the shared contracts.
 });
 
 test("live Chat and Settings are composed through their ratified stores and native hosts", async () => {

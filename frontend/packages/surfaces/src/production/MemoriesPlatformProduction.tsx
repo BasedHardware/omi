@@ -4,7 +4,7 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
 import type { SynthesizedMemoryItem, SynthesizedRecallState } from "@omi-core/contracts";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import {
   citationSummary,
   completenessNotice,
@@ -13,7 +13,6 @@ import {
   lineageRows,
   paginationAffordance,
 } from "./proposition-presentation.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import "./memories-platform.css";
 
 /**
@@ -30,11 +29,6 @@ import "./memories-platform.css";
  */
 
 type Locale = string;
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 function PropositionCard({ item, locale }: {
   item: SynthesizedMemoryItem;
@@ -128,7 +122,6 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
 
-  const notice = phaseLabel(status, locale);
   const completeness = useMemo(() => completenessNotice(recall), [recall]);
   const pagination = useMemo(() => paginationAffordance(recall), [recall]);
   const presentation = useMemo(() => emptyPresentation(items.length, recall), [items.length, recall]);
@@ -174,16 +167,17 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
             <h1>{t(locale, "memoriesPlatform.title")}</h1>
             <p>{t(locale, "memoriesPlatform.subtitle")}</p>
           </div>
-          <div className="header-actions">
-            {status.refresh.phase !== "ready" && (
-              <button type="button" onClick={() => void reload()} aria-label={t(locale, "common.retry")}>
-                {t(locale, "common.retry")}
-              </button>
-            )}
-          </div>
         </header>
-        <div className="surface-notices" aria-live="polite">
-          {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
+        <ProductionLifecycleRegion
+          className="surface-notices"
+          phase={status.refresh.phase}
+          hasSavedData={status.refresh.hasSavedData}
+          locale={locale}
+          operationError={operationError}
+          nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+          retry={status.refresh.phase !== "ready" ? { onRetry: reload } : null}
+        />
+        <div className="surface-notices">
           {completeness.titleKey && (
             <div
               className={`completeness-notice tone-${completeness.tone}`}
@@ -199,8 +193,8 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
               )}
             </div>
           )}
-          {operationError && <div className="operation-error" role="alert">{operationError}</div>}
         </div>
+        <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleItems.length })} />
         <p className="proposition-read-only-note">{t(locale, "memoriesPlatform.readOnlyNote")}</p>
         <div className="proposition-controls">
           <ProductionSearchField

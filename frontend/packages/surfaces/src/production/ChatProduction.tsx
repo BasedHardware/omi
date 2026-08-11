@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
-import type { StoreStatus } from "@omi-core/domain";
 import type {
   ProductionChatStore,
   ChatMessage,
@@ -14,18 +13,12 @@ import {
   messageKey,
   reconcileMessages,
 } from "./chat-reconcile.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import "./chat.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 function roleLabel(role: ChatMessage["role"], locale: Locale): string {
   return role === "user" ? t(locale, "chat.roleUser") : t(locale, "chat.roleAssistant");
@@ -40,6 +33,19 @@ function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
   if (message.delivery.kind === "echo") return t(locale, "chat.pending");
   if (message.delivery.kind === "failed") return t(locale, "chat.failed");
   return null;
+}
+
+function chatAnnouncement(messages: readonly ChatMessage[], locale: Locale): string | null {
+  const latest = [...messages].reverse()[0];
+  if (!latest) return null;
+  if (latest.delivery.kind === "streaming") return t(locale, "chat.streaming");
+  if (latest.delivery.kind === "echo") return t(locale, "chat.pending");
+  if (latest.delivery.kind === "failed") return t(locale, "chat.failed");
+  if (latest.delivery.kind === "canonical") {
+    if (latest.delivery.generationOutcome === "cancelled") return t(locale, "chat.stopped");
+    if (latest.role === "assistant" && latest.delivery.generationOutcome === "completed") return t(locale, "chat.completed");
+  }
+  return t(locale, "lifecycle.resultsCount", { count: messages.length });
 }
 
 function isSafeStagedAttachment(attachment: StagedChatAttachment): boolean {
@@ -88,11 +94,12 @@ function sameAttachmentIds(
     current.every((attachment, index) => attachment.id === submitted[index]?.id);
 }
 
-export function ChatProduction({ store, fixture, locale = "en", onReady }: {
+export function ChatProduction({ store, fixture, locale = "en", onReady, announcementScheduler }: {
   store: ProductionChatStore;
   fixture?: string;
   locale?: Locale;
   onReady?: () => void;
+  announcementScheduler?: ProductionAnnouncementScheduler;
 }): React.JSX.Element {
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [hasOlder, setHasOlder] = useState(false);
@@ -176,16 +183,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
     void boot();
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
-
-  const notice = phaseLabel(status, locale);
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return t(locale, "queue.paused");
-    if (status.queue.phase === "retrying") return t(locale, "queue.retrying");
-    if (status.queue.phase === "sending") return t(locale, "queue.sending", { count });
-    return t(locale, "queue.queuedCount", { count });
-  }, [locale, status]);
 
   const capState = attachmentCapState(capabilities, attachments.length);
   const stagingAvailable = store.stagingAvailable();
@@ -328,20 +325,23 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
             <h1>{t(locale, "chat.title")}</h1>
             <p>{t(locale, "chat.subtitle")}</p>
           </div>
-          <div className="header-actions">
-            {status.refresh.phase !== "ready" && (
-              <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>
-                {t(locale, "common.retry")}
-              </button>
-            )}
-          </div>
         </header>
-        {fixture && <ProductionDataSourceBadge source={{ kind: "fixture", fixture }} locale={locale} />}
-        <div className="surface-notices" aria-live="polite">
-          {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-          {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-          {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-        </div>
+        <ProductionDataSourceBadge source={fixture ? { kind: "fixture", fixture } : { kind: "live", origin: "bridge" }} locale={locale} />
+        <ProductionLifecycleRegion
+          className="surface-notices"
+          phase={status.refresh.phase}
+          hasSavedData={status.refresh.hasSavedData}
+          locale={locale}
+          queue={status.queue}
+          deadLetterCount={deadLetters.length}
+          operationError={operationError}
+          nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+          retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+        />
+        <ProductionLiveAnnouncement
+          message={operationError ? t(locale, "chat.error") : chatAnnouncement(messages, locale)}
+          {...(announcementScheduler ? { scheduler: announcementScheduler } : {})}
+        />
         {status.refresh.phase === "initial-loading" ? (
           <p className="chat-empty-state">{t(locale, "common.loading")}</p>
         ) : status.refresh.phase === "unavailable" && messages.length === 0 ? (

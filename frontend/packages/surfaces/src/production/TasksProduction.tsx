@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task, TaskPatch } from "@omi-core/contracts";
-import type { StoreStatus } from "@omi-core/domain";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionSearchField } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
@@ -76,11 +74,6 @@ function groupFor(task: Task, now: number, calendarDay: (timestamp: number) => s
   const tomorrow = calendarDay(now + 86_400_000);
   if (due === tomorrow) return "tomorrow";
   return "later";
-}
-
-function phaseLabel(status: StoreStatus, translate: Translate): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : translate(key);
 }
 
 function groupLabel(group: GroupKey, translate: Translate): string {
@@ -255,15 +248,6 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     return () => { active = false; unsubscribe(); };
   }, [reload, store, translate]);
 
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return translate("queue.paused");
-    if (status.queue.phase === "retrying") return translate("queue.retrying");
-    if (status.queue.phase === "sending") return translate("queue.sending", { count });
-    return translate("queue.queuedCount", { count });
-  }, [status, translate]);
-
   const grouped = useMemo(() => {
     const groups: Record<GroupKey, Task[]> = { today: [], tomorrow: [], later: [] };
     const needle = query.trim().toLocaleLowerCase(locale);
@@ -295,7 +279,6 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     }
   };
 
-  const notice = phaseLabel(status, translate);
   const groups: GroupKey[] = ["today", "tomorrow", "later"];
   const selectedTask = selectedTaskId ? rows.find((task) => task.id === selectedTaskId) : undefined;
   const filtering = query.trim().length > 0;
@@ -306,6 +289,9 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     visibleCount,
     filtering,
   });
+  const source = (fixture
+    ? { kind: "fixture", fixture }
+    : { kind: "live", origin: "bridge" }) satisfies SurfaceDataSource;
 
   const openCreate = (): void => {
     setCreateOpen(true);
@@ -353,15 +339,22 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         </div>
         <div className="tasks-header-actions">
           <ProductionSearchField className="tasks-search" label={translate("tasks.filterSavedPlaceholder")} placeholder={translate("tasks.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
-          {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={translate("common.retry")}>{translate("common.retry")}</button>}
           <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}>{createOpen ? "×" : "+"}</button>
           <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}>•••</button>
         </div>
       </header>
-      {fixture && <p className="tasks-fixture-label">{translate("qa.fixtureLabel", { name: translate("qa.syntheticData"), fixture })}</p>}
-      {notice && <div className={`tasks-status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-      {queueLabel && <div className={`tasks-queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-      {operationError && <div className="tasks-operation-error" role="alert">{operationError}</div>}
+      <ProductionDataSourceBadge source={source} locale={locale} />
+      <ProductionLifecycleRegion
+        className="surface-notices"
+        phase={status.refresh.phase}
+        hasSavedData={status.refresh.hasSavedData}
+        locale={locale}
+        queue={status.queue}
+        deadLetterCount={dead.length}
+        operationError={operationError}
+        nextAction={status.refresh.phase !== "ready" || operationError ? translate("common.retry") : null}
+        retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+      />
       <section className={`tasks-create${createOpen ? " is-open" : ""}`} aria-label={translate("tasks.newTask")}>
         <textarea ref={draftRef} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -407,6 +400,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           ))}
         </section>
       )}
+      <ProductionLiveAnnouncement message={translate("lifecycle.resultsCount", { count: visibleCount })} />
       {dead.length > 0 && <section className="tasks-dead-panel" aria-labelledby="tasks-dead-heading">
           <h2 id="tasks-dead-heading">{translate("dead.title")}</h2>
           {dead.map(deadLetterView).map((view) => <div className="tasks-dead-row" key={view.opId}>
