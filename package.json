@@ -12,7 +12,8 @@
     "test": "bun test",
     "test:node": "bun test",
     "lint:imports": "bun run scripts/lint-import-graph.ts",
-    "qa:contracts": "bun run scripts/qa-contracts.ts"
+    "qa:contracts": "bun run scripts/qa-contracts.ts",
+    "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs"
   },
   "dependencies": {
     "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
