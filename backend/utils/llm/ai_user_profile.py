@@ -105,7 +105,16 @@ class ProfileSources(BaseModel):
 
     def cleaned(self) -> "ProfileSources":
         def clean(lines: List[str]) -> List[str]:
-            return [line.strip()[:MAX_LINE_CHARS] for line in lines if line.strip()][:MAX_LINES_PER_SOURCE]
+            cleaned: List[str] = []
+            for line in lines:
+                value = line.strip()
+                if not value:
+                    continue
+                for start in range(0, len(value), MAX_LINE_CHARS):
+                    if len(cleaned) >= MAX_LINES_PER_SOURCE:
+                        return cleaned
+                    cleaned.append(value[start : start + MAX_LINE_CHARS])
+            return cleaned
 
         return ProfileSources(
             memories=clean(self.memories),

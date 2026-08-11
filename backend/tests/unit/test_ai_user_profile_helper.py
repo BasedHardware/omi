@@ -112,3 +112,16 @@ def test_profile_text_is_hard_capped(monkeypatch):
 
     assert result is not None
     assert len(result.profile_text) == ai_user_profile.MAX_PROFILE_CHARS
+
+
+def test_long_source_lines_are_chunked_without_losing_the_tail(monkeypatch):
+    captured: list[list[tuple[str, str]]] = []
+    _patch(monkeypatch, ['- User is an engineer'], captured)
+    long_line = 'x' * ai_user_profile.MAX_LINE_CHARS + ' durable tail fact'
+
+    result = ai_user_profile.synthesize_ai_user_profile('uid', ai_user_profile.ProfileSources(memories=[long_line]))
+
+    assert result is not None
+    stage1_user = captured[0][1][1]
+    assert 'x' * ai_user_profile.MAX_LINE_CHARS in stage1_user
+    assert 'durable tail fact' in stage1_user
