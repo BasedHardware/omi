@@ -122,6 +122,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /replay_proof/);
   assert.match(source, /maxBatchCoordinates = 32/);
   assert.match(source, /prepared-input-set/);
+  assert.match(source, /preparedDescriptor\.input_set/);
   assert.match(source, /screenConfig.*geometry/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
