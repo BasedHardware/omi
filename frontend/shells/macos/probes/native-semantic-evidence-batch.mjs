@@ -161,7 +161,8 @@ function commandText(manifestPath, outRoot, preparedPath, offset, limit, replayP
   return args.map((value) => `'${value.replaceAll("'", "'\\''")}'`).join(" ");
 }
 function checkProbeDocument(document, coordinate) {
-  if (!document || document.schema !== "omi.native-semantic-evidence.v2" || document.runId !== coordinate.run_id || document.coordinate !== coordinateKey(coordinate) || document.matrixEligible !== true || document.domainLandmarkFound !== true) fail(`${coordinate.run_id}: probe did not produce a matrix-eligible observation`);
+  const expectedClass = coordinate.kind === "keyboard_trace" ? "native_keyboard_trace" : "native_ax_snapshot";
+  if (!document || document.schema !== "omi.native-semantic-evidence.v2" || document.runId !== coordinate.run_id || document.coordinate !== coordinateKey(coordinate) || document.axTrusted !== true || document.evidenceClass !== expectedClass || document.matrixEligible !== true || document.domainLandmarkFound !== true) fail(`${coordinate.run_id}: probe did not produce a matrix-eligible observation`);
   if (document.targetPid !== coordinate.target.pid || document.target?.bound !== true || document.target.pid !== coordinate.target.pid || document.target.bundleId !== coordinate.target.bundle_id || document.target.processNameBound !== true || document.target.expectedPid !== coordinate.target.pid || document.target.expectedBundleId !== coordinate.target.bundle_id) fail(`${coordinate.run_id}: probe target binding is not exact`);
   if (document.sourceCoreSha !== coordinate.source_shas.core || document.sourcePlatformSha !== coordinate.source_shas.platform) fail(`${coordinate.run_id}: probe source binding is stale`);
   return document;
