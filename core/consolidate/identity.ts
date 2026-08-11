@@ -34,6 +34,11 @@ export interface IdentityPartitionProposal {
   uncertain_pairs: readonly (readonly [string, string])[];
   /** Deterministic admission rejections, preserved by the dream cycle for audit. */
   rejected_same_groups: readonly IdentityProposalRejection[];
+  /** Successfully answered phase-one cluster questions, before downstream settlement filtering. */
+  adjudicated_cluster_digests?: readonly string[];
+  /** Complete membership for every successfully answered cluster question. */
+  cluster_membership?: readonly { digest: string; mention_ids: readonly string[] }[];
+  skipped_settled_clusters?: number;
 }
 export interface IdentityAdjudicationPort { invoke(request: { strategy: string; version: string; input: unknown }): Promise<unknown>; }
 
@@ -51,6 +56,41 @@ type ProfileEvidence = { revision_id: string; evidence: Evidence };
 type ProfileEvent = { revision_id: string; event: L1Event };
 
 const stableValue = (value: unknown): string => JSON.stringify(value);
+const profileDigestView = (profiles: readonly ReferentProfile[]) => profiles.map((profile) => ({
+  mention_id: profile.mention_id,
+  claim_revision_id: profile.claim_revision_id,
+  source_identity_ref: {
+    namespace_instance_ref: profile.source_identity_ref.namespace_instance_ref,
+    local_key: profile.source_identity_ref.local_key,
+    producer: {
+      producer_ref: profile.source_identity_ref.producer.producer_ref,
+      contract_ref: profile.source_identity_ref.producer.contract_ref,
+    },
+    asserted_identity: {
+      domain: profile.source_identity_ref.asserted_identity.domain,
+      scope_ref: profile.source_identity_ref.asserted_identity.scope_ref,
+    },
+  },
+  discriminating_claims: profile.discriminating_claims.map((claim) => ({
+    predicate: claim.predicate,
+    role: claim.role,
+    polarity: claim.polarity,
+    other_arguments: claim.other_arguments.map((argument) => ({
+      role: argument.role,
+      value_json: JSON.stringify(argument.value) ?? "undefined",
+    })),
+    evidence_context: claim.evidence_context.map((evidence) => ({
+      evidence_ref: evidence.evidence_ref,
+      excerpt: evidence.excerpt,
+      capture_session_id: evidence.capture_session_id,
+      event_time: evidence.event_time,
+      source_sequence: evidence.source_sequence,
+    })),
+    cooccurring_predicates: claim.cooccurring_predicates,
+    observed_at: claim.observed_at,
+    evidence_refs: claim.evidence_refs,
+  })),
+}));
 const sourceIdentityKey = (identity: NonNullable<Mention["source_identity_ref"]>): string => JSON.stringify([
   identity.namespace_instance_ref, identity.local_key, identity.producer.producer_ref,
   identity.producer.contract_ref, identity.asserted_identity.domain, identity.asserted_identity.scope_ref,
@@ -266,7 +306,43 @@ export interface BlockedAdjudicationInput {
   profile_cost?: (profiles: readonly ReferentProfile[]) => number;
   /** Concurrent model calls per phase (adjudicate, verify, card). Results are applied in deterministic order regardless. */
   model_concurrency?: number;
+  /** Exact already-settled cluster questions. Requires `adjudication_contract`. */
+  settled_cluster_digests?: ReadonlySet<string>;
+  /**
+   * Full identity adjudication contract. Settlement never outlives any model,
+   * prompt, policy, schema, or code coordinate that can change the answer.
+   */
+  adjudication_contract?: {
+    model_version: string;
+    adjudication_version: string;
+    verification_version: string;
+    naming_version: string;
+    self_reference_version: string;
+    prompt_version: string;
+    policy_version: string;
+    schema_version: string;
+    code_version: string;
+  };
 }
+
+/**
+ * Per-cluster settlement selector. Retryable work in one cluster never blocks
+ * unrelated clusters, and any retryable subset keeps its whole source cluster
+ * open for the next cycle.
+ */
+export const selectSettleableIdentityClusterDigests = (input: {
+  proposal: IdentityPartitionProposal;
+  retryable_group_mention_ids?: readonly (readonly string[])[];
+}): readonly string[] => {
+  const retryableMentions = new Set([
+    ...input.proposal.rejected_same_groups.filter((item) => item.retryable).map((item) => item.group_mention_ids),
+    ...(input.retryable_group_mention_ids ?? []),
+  ].flat());
+  return (input.proposal.cluster_membership ?? [])
+    .filter((entry) => !entry.mention_ids.some((id) => retryableMentions.has(id)))
+    .map((entry) => entry.digest)
+    .sort(compareStrings);
+};
 
 /**
  * STANDING RULE for any future input reduction here: a reduction may SELECT
@@ -306,6 +382,9 @@ const mapLimit = async <T, R>(items: readonly T[], limit: number, task: (item: T
 export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicationPort, input: BlockedAdjudicationInput): Promise<IdentityPartitionProposal> => {
   const maxClusterSize = input.max_cluster_size ?? 16;
   const modelConcurrency = input.model_concurrency ?? 6;
+  if (!Number.isInteger(maxClusterSize) || maxClusterSize < 2) throw new Error("identity max cluster size must be an integer of at least two");
+  if (!Number.isInteger(modelConcurrency) || modelConcurrency < 1) throw new Error("identity model concurrency must be a positive integer");
+  if (input.settled_cluster_digests && !input.adjudication_contract) throw new Error("identity settlement requires a complete adjudication contract");
   const { clusters, oversize, single_claim } = blockMentionClusters(input.mentions, maxClusterSize);
   const identityBlocks = blockIdentityClusters(input.mentions, maxClusterSize, claimSessionIndex(input.claims, input.evidence ?? [], input.events ?? []));
   const clusterKey = (cluster: readonly Mention[]): string => JSON.stringify(cluster.map((mention) => mention.mention_id).sort());
@@ -319,10 +398,27 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
     ...oversize.map((group) => ({ group_mention_ids: group.map((mention) => mention.mention_id).sort(), retryable: false, reason: "ambiguous_high_frequency_surface" })),
   ];
   const budget = input.batch_profile_budget ?? 24_000;
+  if (!Number.isInteger(budget) || budget < 1) throw new Error("identity batch profile budget must be a positive integer");
   const profileCost = input.profile_cost ?? ((profiles: readonly ReferentProfile[]) => JSON.stringify(profiles).length);
-  const prepared = blocked
-    .map((cluster) => { const profiles = buildReferentProfiles(cluster, input.claims, input.evidence ?? [], input.events ?? []); return { profiles, cost: profileCost(profiles) }; })
+  const preparedAll = blocked
+    .map((cluster) => {
+      const profiles = buildReferentProfiles(cluster, input.claims, input.evidence ?? [], input.events ?? []);
+      return {
+        cluster,
+        profiles,
+        cost: profileCost(profiles),
+        digest: sha256CanonicalRedacted({
+          kind: "identity-cluster-v4",
+          contract: input.adjudication_contract ?? null,
+          profiles: profileDigestView(profiles),
+          bindings: [...cluster].map((mention) => [mention.mention_id, mention.entity_id] as const).sort((left, right) => compareStrings(left[0], right[0])),
+        }),
+      };
+    })
     .filter((entry) => entry.profiles.length > 1);
+  const settled = input.settled_cluster_digests ?? new Set<string>();
+  const prepared = preparedAll.filter((entry) => !settled.has(entry.digest));
+  const skipped_settled_clusters = preparedAll.length - prepared.length;
   const batches: (typeof prepared)[] = [];
   let current: typeof prepared = [];
   let size = 0;
@@ -340,9 +436,15 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
   const key = (group: readonly string[]): string => JSON.stringify([...group].sort());
   const batchOutcomes = await mapLimit(batches, modelConcurrency, async (batch) => {
     const profiles = batch.flatMap((entry) => entry.profiles);
-    try { return { profiles, proposal: await invokeIdentityAdjudication(model, profiles), error: null }; }
-    catch (error) { return { profiles, proposal: null, error }; }
+    const digests = batch.map((entry) => entry.digest);
+    try { return { profiles, digests, proposal: await invokeIdentityAdjudication(model, profiles), failed: false as const }; }
+    catch { return { profiles, digests, proposal: null, failed: true as const }; }
   });
+  const adjudicated_cluster_digests = batchOutcomes.filter((outcome) => outcome.proposal !== null).flatMap((outcome) => outcome.digests).sort(compareStrings);
+  const adjudicated = new Set(adjudicated_cluster_digests);
+  const cluster_membership = prepared
+    .filter((entry) => adjudicated.has(entry.digest))
+    .map((entry) => ({ digest: entry.digest, mention_ids: entry.cluster.map((mention) => mention.mention_id).sort(compareStrings) }));
   for (const outcome of batchOutcomes) {
     if (outcome.proposal) {
       const proposal = outcome.proposal;
@@ -350,7 +452,7 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
       uncertainPairs.push(...proposal.uncertain_pairs);
       rejected_same_groups.push(...proposal.rejected_same_groups);
     } else {
-      rejected_same_groups.push({ group_mention_ids: outcome.profiles.map((profile) => profile.mention_id).sort(), retryable: true, reason: `adjudication_failed: ${outcome.error instanceof Error ? outcome.error.message.slice(0, 120) : "unknown"}` });
+      rejected_same_groups.push({ group_mention_ids: outcome.profiles.map((profile) => profile.mention_id).sort(), retryable: true, reason: "adjudication_failed" });
     }
   }
   // Second, adversarial pass per surviving group. The grouping frame
@@ -426,7 +528,7 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
     const outcome = verifications[index]!;
     if (outcome.kind === "producer") { verified.push(group); laneByGroup.set(key(group), "producer"); continue; }
     if (outcome.kind === "recurrence") { verified.push(group); laneByGroup.set(key(group), "recurrence"); continue; }
-    if (outcome.kind === "error") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: true, reason: `verification_failed: ${outcome.error instanceof Error ? outcome.error.message.slice(0, 120) : "unknown"}` }); continue; }
+    if (outcome.kind === "error") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: true, reason: "verification_failed" }); continue; }
     const verdict = outcome.verdict;
     const who = verdict?.who ?? whoByGroup.get(key(group)) ?? null;
     if (verdict?.verdict !== "same") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: false, reason: "identity_not_proven_on_verification" }); continue; }
@@ -490,8 +592,8 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
         const verdict = await model.invoke({ strategy: "speaker-self-reference", version: "dream-self-reference-v1", input: { speaker: dominantOf(group), phrases: groupSurfaces } }) as { self_referring?: readonly boolean[] };
         const selfReferring = new Set(groupSurfaces.filter((_, index) => verdict?.self_referring?.[index] === true));
         coherent = group.filter((id) => selfReferring.has(surfaceByMention.get(id) ?? ""));
-      } catch (error) {
-        return { kind: "producer_rejected" as const, reason: `self_reference_check_failed: ${error instanceof Error ? error.message.slice(0, 120) : "unknown"}` };
+      } catch {
+        return { kind: "producer_rejected" as const, reason: "self_reference_check_failed" };
       }
       if (coherent.length < 2) return { kind: "producer_rejected" as const, reason: "speaker_slot_not_self_reference" };
       const shed = group.filter((id) => !coherent.includes(id));
@@ -524,13 +626,13 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
       admitted.push(outcome.members); continue;
     }
     if (outcome.kind === "producer_rejected") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), reason: outcome.reason, retryable: true }); continue; }
-    if (outcome.kind === "error") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: true, reason: `naming_check_failed: ${outcome.error instanceof Error ? outcome.error.message.slice(0, 120) : "unknown"}` }); continue; }
+    if (outcome.kind === "error") { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: true, reason: "naming_check_failed" }); continue; }
     if (outcome.kind === "no_label" || outcome.check?.names_specific_referent !== true) { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: false, reason: "identity_reference_context_dependent" }); continue; }
     admitted.push(group);
   }
   const same_groups = [...admitted].sort((left, right) => compareStrings(key(left), key(right)));
   const uncertain_pairs = [...new Map(uncertainPairs.map((pair) => [pair.join("|"), pair])).values()].sort((left, right) => compareStrings(left.join("|"), right.join("|")));
-  return { partition_hash: `partition:${sha256CanonicalRedacted({ same_groups })}`, same_groups, same_group_who: same_groups.map((group) => whoByGroup.get(key(group)) ?? null), same_group_kind: same_groups.map((group) => kindByGroup.get(key(group)) ?? null), same_group_lane: same_groups.map((group) => laneByGroup.get(key(group)) ?? "verified"), uncertain_pairs, rejected_same_groups };
+  return { partition_hash: `partition:${sha256CanonicalRedacted({ same_groups })}`, same_groups, same_group_who: same_groups.map((group) => whoByGroup.get(key(group)) ?? null), same_group_kind: same_groups.map((group) => kindByGroup.get(key(group)) ?? null), same_group_lane: same_groups.map((group) => laneByGroup.get(key(group)) ?? "verified"), uncertain_pairs, rejected_same_groups, adjudicated_cluster_digests, cluster_membership, skipped_settled_clusters };
 };
 
 type AdjudicationGroup = readonly string[] | { members: readonly string[]; who?: string | null; kind?: string | null };

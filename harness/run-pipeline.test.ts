@@ -135,7 +135,7 @@ test("chunked dream runs full-graph identity only at open and close of a trigger
   expect(result.dream_cycles).toBe(promoteChunks + 1);
 });
 
-test("a failed dream chunk retries once then continues draining other items", async () => {
+test("a contained dream model failure does not strand later items", async () => {
   const path = dbPath("omi-dream-retry-");
   let dreamInvokes = 0;
   const result = await runPipeline([fixture, "--db", path, "--batch", "7"], {
@@ -145,8 +145,10 @@ test("a failed dream chunk retries once then continues draining other items", as
       model: {
         invoke: async (request) => {
           dreamInvokes += 1;
-          // Fail the first model call of the first chunk; identity errors are
-          // swallowed into rejected groups, so use a strategy that bubbles.
+          // With no predicate vocabulary yet, the first real call is the
+          // promotion boundary. Promotion contains this item-local provider
+          // failure as a durable defer; it must not manufacture a whole-cycle
+          // failure or strand the remaining frontier.
           if (dreamInvokes === 1) throw new Error("timeout simulating provider");
           return hermetic.invoke(request);
         },
@@ -155,8 +157,7 @@ test("a failed dream chunk retries once then continues draining other items", as
       },
     }),
   });
-  expect(result.dream_failures.length).toBe(1);
-  expect(result.dream_failures[0]!.reason).toMatch(/timeout/);
+  expect(result.dream_failures).toEqual([]);
   expect(dreamInvokes).toBeGreaterThanOrEqual(2);
   expect(new SqliteStmStore(new Database(path)).unconsumed()).toEqual([]);
   expect(result.dream_cycles).toBeGreaterThanOrEqual(3);

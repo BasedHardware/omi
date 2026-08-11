@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { liveCommittedClaims } from "../../core/retrieve";
 import type { ProvisionalClaim } from "../../core/schema";
+import { predicateIdForName } from "../../core/consolidate/predicate-identity";
 import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
@@ -9,7 +10,7 @@ import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
 test("I1 commits event and evidence with a session transition so later claims are live", async () => {
   const identity = { namespace_instance_ref: "device", local_key: "owner", producer: { producer_ref: "producer", contract_ref: "contract" }, asserted_identity: { domain: "person", scope_ref: "owner" } };
   const authorization = { authorization_id: "a", owner_account_id: "owner", endpoints: [{ kind: "source_identity" as const, source_identity_ref: identity }, { kind: "entity" as const, entity_id: "entity:owner" }], relation: "same" as const, support: { kind: "owner_confirmation" as const, confirmation_ref: "confirm" }, standing_policy_ref: null, namespace_scope: { namespace_instance_ref: "device", identity_domain: "person", scope_ref: "owner" }, authority_policy_version: "v1", evaluated_frontier: 0, actor_provenance: { actor_ref: "owner", producer_ref: null }, lifecycle: "active" as const, superseded_by: null };
-  const claim: ProvisionalClaim = { claim_lineage_id: "l", claim_revision_id: "p", owner_account_id: "owner", predicate: "met", arguments: [{ slot_id: "speaker", role: "speaker", surface: "I", span: { start: 0, end: 1 }, value: { kind: "source_local_ref", ref: "speaker:0" } }], observed_speaker_slot_id: "speaker", polarity: "positive", temporal_scope: { observed_at: "2026-01-01T00:00:00Z", precision: "instant" }, evidence_refs: ["e"], policy_labels: [], source_language: "en", scope: { locality: "source_local", scope_ref: null }, lifecycle: "provisional", ambiguity_markers: [], context_packet: null };
+  const claim: ProvisionalClaim = { claim_lineage_id: "l", claim_revision_id: "p", owner_account_id: "owner", predicate_id: predicateIdForName("met"), predicate: "met", arguments: [{ slot_id: "speaker", role: "speaker", surface: "I", span: { start: 0, end: 1 }, value: { kind: "source_local_ref", ref: "speaker:0" } }], observed_speaker_slot_id: "speaker", polarity: "positive", temporal_scope: { observed_at: "2026-01-01T00:00:00Z", precision: "instant" }, evidence_refs: ["e"], policy_labels: [], source_language: "en", scope: { locality: "source_local", scope_ref: null }, lifecycle: "provisional", ambiguity_markers: [], context_packet: null };
   const event = { event_id: "event", event_revision_id: "event:r1", owner_account_id: "owner", capture_session_id: "session", stream_id: "stream", event_kind: "text", payload_schema_ref: "text", schema_version: "v1", payload: {}, event_time: "2026-01-01T00:00:00Z", ingest_time: "2026-01-01T00:00:00Z", source_sequence: 0, evidence_addressable_refs: ["e"], source_trust: "test", policy_labels: [], canonical_redacted_hash: "hash" };
   const evidence = [{ evidence_id: "e", event_revision_id: "event:r1", source_unit_ref: "u", range: { start: 0, end: 10 }, excerpt: "I met Alice", source_identity_ref: identity, speaker_rendering: "Owner", source_local_mention_ref: "speaker-0", state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "capture" }];
   const model = new DeterministicFakeModel((request) => request.strategy === "mention-local-handle" ? { mentions: [{ claim_revision_id: "p", slot_id: "speaker", surface: "I", evidence_id: "e", antecedent_handle: null }] } : request.strategy === "local-handle-durable-entity" ? { decision: "same", entity_id: "entity:owner" } : request.strategy === "scope-role-binding" ? { bindings: { speaker: "entity:owner" }, scope: { locality: "durable", scope_ref: "global" } } : { decision: "accept_ltm" });
@@ -20,7 +21,26 @@ test("I1 commits event and evidence with a session transition so later claims ar
   await expect(commitSessionStmToLtmTransition({ ...request, identity_authority_context: { owner_confirmations: [], producer_assertions: [], standing_policies: [] } })).rejects.toThrow("formation work id reused with changed input or versions");
   const snapshot = ledger.snapshot("owner");
   expect(snapshot.evidence?.map((item) => item.evidence.evidence_id)).toEqual(["e"]);
+  expect(snapshot.predicates?.map((item) => item.predicate)).toEqual([
+    expect.objectContaining({ predicate_id: predicateIdForName("met"), identity_version: "name-v2", slot_ids: [], observed_roles: ["speaker"] }),
+  ]);
   expect(liveCommittedClaims(snapshot).filter((item) => item.claim.lifecycle === "canonical")).toHaveLength(1);
+
+  const legacyLedger = new SqliteLedger(new Database(":memory:"));
+  const legacyClaim = { ...claim, predicate_id: "predicate:legacy-name-plus-window-slots" };
+  await commitSessionStmToLtmTransition({
+    ...request,
+    ledger: legacyLedger,
+    formation_work_id: "work:session:event:legacy-v1",
+    provisionals: [legacyClaim],
+  });
+  expect(legacyLedger.snapshot("owner").predicates?.map((item) => item.predicate)).toEqual([
+    expect.objectContaining({
+      predicate_id: "predicate:legacy-name-plus-window-slots",
+      identity_version: "name-slots-v1",
+      slot_ids: ["speaker"],
+    }),
+  ]);
 });
 
 test("D44 an anaphor binds through its antecedent, which a per-evidence handle key made unreachable", async () => {

@@ -1,6 +1,7 @@
 import { buildFlywheelArtifacts } from "../../core/scope/flywheel";
 import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition, type DerivationVersions, type LedgerPort } from "../../core/ledger";
-import { hasDistinctArgumentSlotIds, type CoreferenceSupport, type Entity, type Evidence, type IdentityAuthorization, type L1Event, type Mention, type PersistedValidTime, type Predicate, type ProvisionalClaim, type SourceIdentityRef } from "../../core/schema";
+import { hasDistinctArgumentSlotIds, type CoreferenceSupport, type Entity, type Evidence, type IdentityAuthorization, type L1Event, type Mention, type PersistedValidTime, type ProvisionalClaim, type SourceIdentityRef } from "../../core/schema";
+import { predicateRevisionForStoredObservation } from "../../core/consolidate/predicate-identity";
 import { durableRoleSlotBindings, isForcedUnresolvedMention } from "../../core/resolve/mention-detection";
 import { authorizeIdentity, type IdentityAuthorityContext } from "../../core/resolve/identity-authority";
 import type { CandidateSnapshot } from "../../core/resolve/candidates";
@@ -160,12 +161,22 @@ export const commitSessionStmToLtmTransition = async (request: SessionStmLtmRequ
   }
 
   const revisions: AtomicGraphTransition["revisions"] = [];
-  // Predicate identity is the extracted name plus slot set; rendering can change without moving a claim.
-  const predicates = new Map<string, Predicate>();
-  for (const provisional of request.provisionals) if (provisional.predicate_id && !predicates.has(provisional.predicate_id)) predicates.set(provisional.predicate_id, {
-    predicate_id: provisional.predicate_id, owner_account_id: request.owner_account_id, predicate_revision_id: `${provisional.predicate_id}:initial`, identity_name: provisional.predicate, display_name: provisional.predicate, lifecycle: "provisional", slot_ids: provisional.arguments.map((argument) => argument.slot_id).sort(),
-  });
-  for (const predicate of predicates.values()) revisions.push({ kind: "predicate", revision_id: predicate.predicate_revision_id, predicate });
+  // One predicate id spans all observations of a normalized relation name;
+  // optional semantic roles produce immutable sibling revisions. Keying this
+  // map by predicate id would silently discard a second role set in one session.
+  const predicates = new Map<string, ReturnType<typeof predicateRevisionForStoredObservation>>();
+  for (const provisional of request.provisionals) if (provisional.predicate_id) {
+    const revision = predicateRevisionForStoredObservation({
+      owner_account_id: request.owner_account_id,
+      predicate_id: provisional.predicate_id,
+      display_name: provisional.predicate,
+      roles: provisional.arguments.map((argument) => argument.role),
+      legacy_slot_ids: provisional.arguments.map((argument) => argument.slot_id),
+      lifecycle: "provisional",
+    });
+    predicates.set(revision.revision_id, revision);
+  }
+  for (const revision of predicates.values()) revisions.push({ kind: "predicate", revision_id: revision.revision_id, predicate: revision.predicate });
   const eventsByRevision = new Map((request.events ?? []).map((event) => [event.event_revision_id, event]));
   for (const event of request.events ?? []) revisions.push({ kind: "event", revision_id: event.event_revision_id, event });
   for (const evidence of request.evidence) {

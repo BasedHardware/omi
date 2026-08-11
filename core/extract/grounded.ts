@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Evidence, Mention, ProvisionalClaim, SourceIdentityRef, TypedTemporalExpr } from "../schema";
 import { sha256CanonicalRedacted } from "../ledger";
 import { aliasFrontierGeneration, rawPropositionKey, resolvedPropositionKey } from "../consolidate/predicate-frontier";
+import { predicateIdForName } from "../consolidate/predicate-identity";
 import type { ExtractionOutcome } from "../consolidate/formation-outcome";
 import { isOpaqueIdentifier, type WritingContext } from "../retrieve/writing-context";
 import { checkRelationDistribution, extractionQualityThresholds, soleArgumentCoversEvidence, type QualityFinding } from "./quality";
@@ -568,7 +569,7 @@ export const materializeGroundedProvisional = (input: { owner_account_id: string
   const workCoordinate = groundedWorkCoordinate(input.owner_account_id, input.session_id, input.work_id);
   const citedEvidence = input.evidence.find((item) => item.evidence_id === input.emission.evidence_span.evidence_id);
   if (!citedEvidence || citedEvidence.state !== "active") throw new Error("grounded provisional requires its active cited evidence");
-  const predicate_id = `predicate:${sha256CanonicalRedacted({ name: input.emission.predicate_ref, slot_ids: input.emission.arguments.map((argument) => argument.slot_id).sort() })}`;
+  const predicate_id = predicateIdForName(input.emission.predicate_ref);
   const arguments_ = input.emission.arguments.map((argument) => ({ slot_id: argument.slot_id, role: argument.role, surface: argument.surface, span: argument.span, value: { kind: "source_local_ref" as const, ref: `source-local:${input.session_id}:${input.emission.evidence_span.evidence_id}:${argument.span.start}:${argument.span.end}` } }));
   const identity = { predicate_id, slots: arguments_.map((argument) => ({ slot_id: argument.slot_id, value_key: `${argument.value.kind}:${argument.value.ref}` })) };
   // Extraction has no alias authority. Its first revision records the empty, hashed frontier

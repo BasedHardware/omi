@@ -7,7 +7,7 @@ import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
 import { boundaryVersion, buildUnitBoundaryRequest } from "./unit-boundary-edge";
-import { EDGES, GlmModel } from "./glm";
+import { EDGES, GlmModel, predicateAlignmentPromptCost } from "./glm";
 
 const claim = (id = "p-1", surface = "Alice"): ProvisionalClaim => ({
   claim_lineage_id: `lineage:${id}`, claim_revision_id: id, owner_account_id: "owner", predicate: "works_on",
@@ -150,6 +150,7 @@ test("predicate alignment is asked about names, not about the digests it cannot 
   const provider = fixtureProvider('{"aliases":[{"relation":"p2","means_the_same_as":"p1","slot_aliases":[{"from_slot_id":"actor","to_slot_id":"subject"}]}]}');
   const aligned = await modelFor(provider).invoke({ strategy: "predicate-alignment", version: "dream-predicate-v1", input });
   const prompt = (provider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
+  expect(predicateAlignmentPromptCost(input)).toBe(prompt.length);
   for (const predicate of input.predicates) expect(prompt).not.toContain(predicate.predicate_id);
   expect(prompt).toContain("is_working_on");
   expect(aligned).toEqual({ assertions: [{ predicate_id: input.predicates[1]!.predicate_id, target_predicate_id: input.predicates[0]!.predicate_id, slot_aliases: [{ from_slot_id: "actor", to_slot_id: "subject" }] }] });

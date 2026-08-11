@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import fc from "fast-check";
-import { CanonicalClaimSchema, EnvelopeJsonSchemas2020, ProvisionalClaimSchema, isValidLifecycleTransition, transitionClaimLifecycle } from "./index";
+import { CanonicalClaimSchema, EnvelopeJsonSchemas2020, PredicateSchema, ProvisionalClaimSchema, isValidLifecycleTransition, transitionClaimLifecycle } from "./index";
 import { validateStrict } from "./json";
 
 const fixtureClaim = (predicate = "unknown.future/predicate") => ({
@@ -54,4 +54,35 @@ test("T1 canonical claims carry explicit revision supersession edges", () => {
 
 test("C6 core canonical schema contains no confidence field", () => {
   expect(JSON.stringify(EnvelopeJsonSchemas2020.canonical_claim)).not.toContain("confidence");
+});
+
+test("predicate schema keeps legacy slots and name-v2 semantic roles disjoint", () => {
+  const base = {
+    predicate_id: "predicate:test",
+    owner_account_id: "owner",
+    predicate_revision_id: "predicate:test:r1",
+    identity_name: "test",
+    display_name: "test",
+    lifecycle: "canonical",
+  };
+  expect(validateStrict(PredicateSchema, { ...base, slot_ids: ["window-slot-1"] })).toBe(true);
+  expect(validateStrict(PredicateSchema, {
+    ...base,
+    identity_version: "name-v2",
+    slot_ids: [],
+    observed_roles: ["subject", "object"],
+  })).toBe(true);
+  expect(validateStrict(PredicateSchema, { ...base, identity_version: "name-v2", slot_ids: [] })).toBe(false);
+  expect(validateStrict(PredicateSchema, {
+    ...base,
+    identity_version: "name-v2",
+    slot_ids: ["window-slot-1"],
+    observed_roles: ["subject"],
+  })).toBe(false);
+  expect(validateStrict(PredicateSchema, {
+    ...base,
+    identity_version: "name-v2",
+    slot_ids: [],
+    observed_roles: ["subject", "subject"],
+  })).toBe(false);
 });

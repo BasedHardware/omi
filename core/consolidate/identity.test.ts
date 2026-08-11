@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { blockIdentityClusters, blockMentionClusters, buildReferentProfiles, invokeBlockedIdentityAdjudication, invokeIdentityAdjudication, proposeProfileOverlaps } from "./identity";
+import { blockIdentityClusters, blockMentionClusters, buildReferentProfiles, invokeBlockedIdentityAdjudication, invokeIdentityAdjudication, proposeProfileOverlaps, selectSettleableIdentityClusterDigests } from "./identity";
 
 const identity = (key: string) => ({ namespace_instance_ref: `namespace:${key}`, local_key: key, producer: { producer_ref: "test", contract_ref: "test" }, asserted_identity: { domain: null, scope_ref: null } });
 const mention = (id: string, claim_revision_id: string, source: ReturnType<typeof identity>) => ({ mention_id: id, owner_account_id: "owner", claim_revision_id, span: { start: 0, end: 1 }, evidence_id: `evidence:${id}`, source_identity_ref: source, speaker_rendering: null, slot_id: "subject", surface: `surface-only:${id}`, antecedent_handle: null, resolution: "unresolved" as const, entity_id: null });
@@ -7,6 +7,17 @@ const claim = (id: string, evidence_ref: string, object: string) => ({ revision_
 const evidence = (id: string, excerpt: string, event_revision_id: string) => ({ revision_id: `evidence-revision:${id}`, evidence: { evidence_id: id, event_revision_id, source_unit_ref: id, range: { start: 0, end: excerpt.length }, excerpt, source_identity_ref: identity(`evidence:${id}`), speaker_rendering: null, source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: `capture:${id}` } });
 const event = (id: string, session: string) => ({ revision_id: id, event: { event_id: id, event_revision_id: id, owner_account_id: "owner", capture_session_id: session, stream_id: "test", event_kind: "text", payload_schema_ref: "test", schema_version: "test", payload: {}, event_time: "2026-01-01T00:00:00Z", ingest_time: "2026-01-01T00:00:00Z", source_sequence: 1, evidence_addressable_refs: [], source_trust: "test", policy_labels: [], canonical_redacted_hash: id } });
 const proposalModel = (response: unknown) => ({ async invoke(): Promise<unknown> { return response; } });
+const identityContract = {
+  model_version: "model-v1",
+  adjudication_version: "dream-identity-v1",
+  verification_version: "dream-identity-verify-v2",
+  naming_version: "dream-naming-check-v1",
+  self_reference_version: "dream-self-reference-v1",
+  prompt_version: "prompt-v1",
+  policy_version: "policy-v1",
+  schema_version: "schema-v1",
+  code_version: "code-v1",
+};
 
 test("identity adjudication rejects a same-claim group before it can be admitted", async () => {
   const first = mention("mention:first", "claim:one", identity("first"));
@@ -96,7 +107,7 @@ test("a failed adjudication batch loses only its own candidates and the union ha
   // Budget of 1 forces one cluster per batch, so the failure isolates cleanly.
   const proposal = await invokeBlockedIdentityAdjudication(failing, { mentions: [a, b, c, d], claims, batch_profile_budget: 1 });
   expect(proposal.same_groups).toEqual([["mention:b1", "mention:b2"]]);
-  expect(proposal.rejected_same_groups).toEqual([{ group_mention_ids: ["mention:a1", "mention:a2"], reason: "adjudication_failed: prompt too long", retryable: true }]);
+  expect(proposal.rejected_same_groups).toEqual([{ group_mention_ids: ["mention:a1", "mention:a2"], reason: "adjudication_failed", retryable: true }]);
 
   const healthy = { async invoke(request: { strategy: string; input: unknown }): Promise<unknown> {
     if (request.strategy === "identity-naming-check") return { names_specific_referent: true };
@@ -390,5 +401,60 @@ test("a naming-check error fails closed as a retryable rejection, never an admis
   } };
   const proposal = await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims });
   expect(proposal.same_groups).toEqual([]);
-  expect(proposal.rejected_same_groups).toEqual([{ group_mention_ids: ["mention:nc-1", "mention:nc-2"], reason: "naming_check_failed: model unavailable", retryable: true }]);
+  expect(proposal.rejected_same_groups).toEqual([{ group_mention_ids: ["mention:nc-1", "mention:nc-2"], reason: "naming_check_failed", retryable: true }]);
+});
+
+test("identity settlement is scoped to the complete adjudicator contract and binding state", async () => {
+  const shared = identity("settlement-person");
+  const a = mention("mention:settle-a", "claim:settle-a", shared);
+  const b = mention("mention:settle-b", "claim:settle-b", shared);
+  const claims = [claim("claim:settle-a", "evidence:settle-a", "atlas"), claim("claim:settle-b", "evidence:settle-b", "atlas")];
+  let calls = 0;
+  const model = { async invoke(): Promise<unknown> { calls += 1; return { same_groups: [], uncertain_pairs: [] }; } };
+
+  const first = await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims, adjudication_contract: identityContract });
+  const settled = new Set(first.adjudicated_cluster_digests ?? []);
+  expect(settled.size).toBe(1);
+
+  calls = 0;
+  const repeat = await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims, adjudication_contract: identityContract, settled_cluster_digests: settled });
+  expect(calls).toBe(0);
+  expect(repeat.skipped_settled_clusters).toBe(1);
+
+  calls = 0;
+  await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims, adjudication_contract: { ...identityContract, prompt_version: "prompt-v2" }, settled_cluster_digests: settled });
+  expect(calls).toBeGreaterThan(0);
+
+  calls = 0;
+  await invokeBlockedIdentityAdjudication(model, { mentions: [{ ...a, entity_id: "entity:settled" }, b], claims, adjudication_contract: identityContract, settled_cluster_digests: settled });
+  expect(calls).toBeGreaterThan(0);
+});
+
+test("identity settlement is per cluster and withholds only retryable-touched work", async () => {
+  const mia = identity("mia"), noa = identity("noa");
+  const mentions = [
+    mention("mention:mia-a", "claim:mia-a", mia), mention("mention:mia-b", "claim:mia-b", mia),
+    mention("mention:noa-a", "claim:noa-a", noa), mention("mention:noa-b", "claim:noa-b", noa),
+  ];
+  const claims = mentions.map((item) => claim(item.claim_revision_id, item.evidence_id, "atlas"));
+  const model = { async invoke(): Promise<unknown> { return { same_groups: [], uncertain_pairs: [] }; } };
+  const proposal = await invokeBlockedIdentityAdjudication(model, { mentions, claims, batch_profile_budget: 1, adjudication_contract: identityContract });
+  expect(proposal.cluster_membership).toHaveLength(2);
+  expect(new Set(proposal.cluster_membership?.flatMap((item) => item.mention_ids))).toEqual(new Set(mentions.map((item) => item.mention_id)));
+
+  const settleable = selectSettleableIdentityClusterDigests({
+    proposal,
+    retryable_group_mention_ids: [["mention:mia-a"]],
+  });
+  expect(settleable).toHaveLength(1);
+  const settledMembership = proposal.cluster_membership?.find((item) => item.digest === settleable[0]);
+  expect(settledMembership?.mention_ids).toEqual(["mention:noa-a", "mention:noa-b"]);
+});
+
+test("identity settlement requires explicit contract coordinates", async () => {
+  const shared = identity("contract-required");
+  const mentions = [mention("mention:contract-a", "claim:contract-a", shared), mention("mention:contract-b", "claim:contract-b", shared)];
+  const claims = mentions.map((item) => claim(item.claim_revision_id, item.evidence_id, "atlas"));
+  await expect(invokeBlockedIdentityAdjudication(proposalModel({ same_groups: [], uncertain_pairs: [] }), { mentions, claims, settled_cluster_digests: new Set(["digest"]) }))
+    .rejects.toThrow("identity settlement requires a complete adjudication contract");
 });

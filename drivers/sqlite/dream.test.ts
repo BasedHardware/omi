@@ -5,6 +5,7 @@ import { project } from "../../core/retrieve";
 import { walk } from "../../core/retrieve/walk";
 import { DeterministicFakeModel } from "../model/port";
 import { groundedFormationMentionId } from "../../core/extract/grounded";
+import { predicateIdForName } from "../../core/consolidate/predicate-identity";
 import { runSqliteDreamCycle, SqliteDreamStore } from "./dream";
 import { SqliteLedger } from "./index";
 
@@ -55,6 +56,8 @@ const dreamModel = (cycleId: string, groups: readonly (readonly string[])[], ove
   boundary?: "accept_ltm" | "abstain";
   scopeLocality?: "durable" | "source_local" | null;
   onBoundary?: () => void;
+  predicateAssertions?: readonly { predicate_id: string; target_predicate_id: string }[];
+  onPredicate?: () => void;
 } = {}) => new DeterministicFakeModel((request) => {
   if (request.strategy === "identity-adjudication") return { partition_hash: cycleId, same_groups: groups, uncertain_pairs: [] };
   if (request.strategy === "identity-verification") return { verdict: "same", who: "the recurring referent" };
@@ -68,6 +71,10 @@ const dreamModel = (cycleId: string, groups: readonly (readonly string[])[], ove
     return overrides.scopeLocality === null
       ? { bindings: {}, scope: null }
       : { bindings: {}, scope: { locality: overrides.scopeLocality ?? "durable", scope_ref: "fixture:scope" } };
+  }
+  if (request.strategy === "predicate-alignment") {
+    overrides.onPredicate?.();
+    return { assertions: overrides.predicateAssertions ?? [] };
   }
   return { assertions: [] };
 });
@@ -308,11 +315,15 @@ const stmItem = (id: string, overrides: {
   source_trust?: string;
   observed_speaker_slot_id?: string | null;
   local_key?: string;
+  predicate?: string;
+  predicate_id?: string;
 } = {}) => {
   const base = seedClaim(id, false);
   const evidence = { ...base.evidence, source_trust: overrides.source_trust ?? "test", source_identity_ref: { ...base.evidence.source_identity_ref!, local_key: overrides.local_key ?? base.evidence.source_identity_ref!.local_key } };
   const claim = {
     ...base.provisional,
+    predicate: overrides.predicate ?? base.provisional.predicate,
+    predicate_id: overrides.predicate_id ?? predicateIdForName(overrides.predicate ?? base.provisional.predicate),
     policy_labels: [...(overrides.labels ?? [])],
     observed_speaker_slot_id: overrides.observed_speaker_slot_id === undefined ? "subject" : overrides.observed_speaker_slot_id,
     evidence_refs: [evidence.evidence_id],
@@ -362,7 +373,78 @@ test("promotion admits owner + accept_ltm + durable scope", async () => {
   const item = stmItem("promo-admit", { labels: ["subject:owner"] });
   const report = await promoteCycle(db, ledger, "promo-admit-1", [item], { boundary: "accept_ltm", scopeLocality: "durable" });
   expect(report).toMatchObject({ promoted: 1, deferred: [] });
-  expect(ledger.snapshot(owner).claims.some((row) => row.claim.lifecycle === "canonical" && row.claim.source_provisional_revision_ids.includes(item.claim.claim_revision_id))).toBe(true);
+  const snapshot = ledger.snapshot(owner);
+  expect(snapshot.claims.some((row) => row.claim.lifecycle === "canonical" && row.claim.source_provisional_revision_ids.includes(item.claim.claim_revision_id))).toBe(true);
+  expect(snapshot.predicates?.map((row) => row.predicate)).toEqual([
+    expect.objectContaining({ predicate_id: predicateIdForName(item.claim.predicate), identity_version: "name-v2", slot_ids: [], observed_roles: ["subject"] }),
+  ]);
+});
+
+test("promotion preserves queued legacy predicate identity for later migration", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const item = stmItem("promo-legacy-predicate", {
+    labels: ["subject:owner"],
+    predicate: "legacy relation",
+    predicate_id: "predicate:legacy-name-plus-window-slots",
+  });
+  await promoteCycle(db, ledger, "promo-legacy-predicate", [item], { boundary: "accept_ltm", scopeLocality: "durable" });
+  expect(ledger.snapshot(owner).predicates?.map((row) => row.predicate)).toEqual([
+    expect.objectContaining({
+      predicate_id: "predicate:legacy-name-plus-window-slots",
+      identity_version: "name-slots-v1",
+      slot_ids: ["subject"],
+    }),
+  ]);
+  await promoteCycle(db, ledger, "promo-legacy-predicate-audit", [], {});
+  expect(db.query("SELECT code FROM dream_predicate_exclusions").all()).toEqual([{ code: "legacy_identity_version" }]);
+});
+
+test("predicate batches settle only after their exact graph result is durable", async () => {
+  const db = new Database(":memory:"), ledger = new SqliteLedger(db);
+  const alpha = stmItem("predicate-alpha", { labels: ["subject:owner"], predicate: "alpha relation" });
+  const bravo = stmItem("predicate-bravo", { labels: ["subject:owner"], predicate: "bravo relation" });
+  await promoteCycle(db, ledger, "predicate-promotion", [alpha, bravo], { boundary: "accept_ltm", scopeLocality: "durable" });
+
+  let predicateCalls = 0;
+  const predicateAssertions = [{
+    predicate_id: predicateIdForName("alpha relation"),
+    target_predicate_id: predicateIdForName("bravo relation"),
+  }];
+  const runAlignment = (cycleId: string) => runSqliteDreamCycle({
+    db,
+    ledger,
+    owner_account_id: owner,
+    stm_items: [],
+    stm_mentions: [],
+    cycle_id: cycleId,
+    trigger_kind: "idle",
+    model: dreamModel(cycleId, [], { predicateAssertions, onPredicate: () => { predicateCalls += 1; } }),
+  });
+  await runAlignment("predicate-align-1");
+  expect(predicateCalls).toBe(1);
+  expect(ledger.snapshot(owner).predicate_assertions).toHaveLength(1);
+  expect(db.query("SELECT kind, response_digest, result_digest, error_code FROM dream_predicate_batch_outcomes").all()).toEqual([{
+    kind: "success",
+    response_digest: expect.any(String),
+    result_digest: expect.any(String),
+    error_code: null,
+  }]);
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_settled_predicate_batches").get()).toEqual({ count: 1 });
+
+  // Simulate a process crash after the graph append but before the QA audit
+  // and settlement transaction. The exact result must replay through the
+  // graph idempotency key, restore settlement, and never duplicate an alias.
+  db.exec("DELETE FROM dream_settled_predicate_batches; DELETE FROM dream_predicate_batch_outcomes;");
+  await runAlignment("predicate-align-crash-resume");
+  expect(predicateCalls).toBe(2);
+  expect(ledger.snapshot(owner).predicate_assertions).toHaveLength(1);
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_settled_predicate_batches").get()).toEqual({ count: 1 });
+
+  // The assertion commit does not change the vocabulary frontier, so the
+  // exact settled question is skipped instead of asking itself forever.
+  await runAlignment("predicate-align-2");
+  expect(predicateCalls).toBe(2);
+  expect(ledger.snapshot(owner).predicate_assertions).toHaveLength(1);
 });
 
 test("promotion defers bystander without calling boundary", async () => {

@@ -29,16 +29,25 @@ copied-store replay and paired evaluation exists.
 
 1. Predicate identity is a versioned digest of the normalized relationship name alone.
    Per-window `slot_id` ordinals never enter predicate identity.
-2. A predicate may have several immutable revisions. Each revision records one observed
-   rendering and the sorted unique semantic argument roles for that occurrence.
-3. Revision identity includes every varying revision field. A later observation with a
-   different role set must coexist instead of conflicting with or overwriting the first.
+2. A predicate may have several immutable revisions. Each `name-v2` revision records one
+   observed rendering and the sorted unique semantic argument roles for that occurrence
+   in an explicit `observed_roles` field. Legacy `slot_ids` remain uninterpreted window
+   ordinals until an expand/backfill/contract migration; a comment-only semantic change
+   is forbidden.
+3. Revision identity includes the owner and every varying revision field. A later
+   observation with a different role set must coexist instead of conflicting with or
+   overwriting the first, and two owners can never collide on one physical revision key.
 4. Proposition identity does not change in this unit. The measured v7 artifact had zero
    duplicate canonical claims under either proposition key, and ADR-013 keeps product
    proposition identity separate from vocabulary alignment.
-5. Existing identifiers are never rewritten in place. The new predicate identity has
-   an explicit version namespace; migration/backfill belongs to P2/P4 and must retain an
-   attributable old-to-new mapping or derivation.
+5. Existing identifiers are never rewritten in place. Queued claims with a historical
+   name-plus-window-slot id persist an explicit `name-slots-v1` compatibility revision
+   and are excluded/audited by v2 alignment. The new identity has an explicit version
+   namespace; migration/backfill belongs to P2/P4 and must retain an attributable
+   old-to-new mapping or derivation.
+6. The persisted schema is discriminated: `name-v2` requires unique `observed_roles`
+   and an empty legacy `slot_ids` tuple. Alignment additionally verifies the complete
+   content-derived v2 revision coordinate before a row can reach the model.
 
 ### Predicate alignment
 
@@ -54,11 +63,18 @@ copied-store replay and paired evaluation exists.
 5. Each batch has a typed outcome: success or retryable error. An error is not an empty
    answer, abstention, rejection, or completed presentation, and one failed batch cannot
    discard another batch's assertions.
-6. Settlement is scoped to the exact ordered batch question plus the adjudication
-   contract (model, strategy, prompt/schema/code versions). Only a successful batch is
-   settleable. A changed contract or changed batch question is fresh work.
+6. Settlement is scoped to the exact ordered batch question, its owner-local exact-batch
+   vocabulary frontier, and the adjudication contract (model, strategy,
+   prompt/schema/code versions). Only a successful batch is settleable. Adding vocabulary
+   re-asks only new or deterministically regrouped batches; unchanged settled batches do
+   not become an owner-wide rescan. A changed contract or batch question is fresh work.
 7. Core returns content-safe codes and opaque coordinates; it does not log model text,
    read environment variables, persist state, or select a provider.
+8. This selective port preserves the measured name-ordered, batch-local coverage; it is
+   not an exhaustive all-pairs synonym search. Cross-batch candidate retrieval or an
+   overlap pass was explicitly unmeasured in the research chain and is not silently
+   invented here. Production activation remains blocked until P2 defines a bounded
+   candidate/coverage job and copied-store evidence measures its recall and cost.
 
 ### Identity-cluster settlement
 
@@ -96,6 +112,10 @@ copied-store replay and paired evaluation exists.
 - a failed batch is retryable, does not settle, and does not erase successful sibling
   batches;
 - a changed alignment contract or exact batch payload misses settlement;
+- owner growth is incremental, while a crash after graph append but before settlement
+  idempotently restores the same batch without duplicate assertions;
+- malformed v2 rows and forged revision coordinates fail closed, and queued legacy
+  predicate ids survive both cold-transition and dream-promotion replay;
 - identity cluster settlement changes with contract or binding state, reports exact
   membership, and excludes only clusters touched by retryable skips;
 - no source/environment/logging import enters `core/`, and the full import-graph and
@@ -110,4 +130,6 @@ full-suite, import-graph, and independent safety review evidence. It does not ch
 P1 corpus conservation box: C1-C3 and predicate counters require the first copied-store
 replay produced by the P2/P3 vertical slice. The later replay must report distinct
 predicate names/revisions, exact settled/open/error batch counts, alias yield, and
-byte/version-stable replay under the same coordinates before any performance claim.
+byte/version-stable replay under the same coordinates before any performance claim. It
+must also pre-register and measure cross-batch candidate coverage before this QA adapter
+can become a production consolidation default.

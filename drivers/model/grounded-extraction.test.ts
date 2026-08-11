@@ -367,6 +367,29 @@ test("P1 grounded adapter rejects same-evidence candidate/provisional swaps", as
   ] })).toThrow("mismatched candidate identity");
 });
 
+test("P1 predicate identity ignores window slot ordinals and optional roles", async () => {
+  const evidence = [evidenceOf("Alice uses Atlas and Bob uses Atlas today")];
+  const output = await run([
+    claimOf("uses-tool", [{ slot_id: "slot_7", role: "agent", surface: "Alice" }, { slot_id: "slot_8", role: "tool", surface: "Atlas" }]),
+    claimOf("uses tool", [{ slot_id: "slot_63", role: "agent", surface: "Bob" }, { slot_id: "slot_64", role: "tool", surface: "Atlas" }, { slot_id: "slot_65", role: "time", surface: "today" }]),
+  ], evidence);
+  const claims = output.claims.map((emission, claim_index) => materializeGroundedProvisional({
+    owner_account_id: "owner",
+    session_id: "s1",
+    work_id: "work:predicate-name-v2",
+    observed_at: "2026-01-01T00:00:00Z",
+    source_language: "en",
+    context: emptyContext,
+    claim_index,
+    emission,
+    evidence,
+  }));
+
+  expect(claims).toHaveLength(2);
+  expect(claims[0]!.predicate_id).toBe(claims[1]!.predicate_id);
+  expect(claims[0]!.arguments.map((argument) => argument.slot_id)).not.toEqual(claims[1]!.arguments.map((argument) => argument.slot_id));
+});
+
 test("P1 formation work namespaces keep changed model responses distinct", async () => {
   const evidence = [evidenceOf("Alice uses Atlas")];
   const output = await run([

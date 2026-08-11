@@ -4,13 +4,14 @@ import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition,
 import { endpointsMatch } from "../../core/resolve/identity-authority";
 import { scanContradictions } from "../../core/consolidate/contradiction";
 import { runDreamCycle } from "../../core/consolidate/dream";
-import { invokeBlockedIdentityAdjudication } from "../../core/consolidate/identity";
+import { invokeBlockedIdentityAdjudication, selectSettleableIdentityClusterDigests } from "../../core/consolidate/identity";
+import { predicateRevisionForStoredObservation } from "../../core/consolidate/predicate-identity";
 import { validateAndAllocatePlacement } from "../../core/consolidate/plan";
 import { reprojectBoundClaims, reprojectionWitnesses, type ReprojectionBinding } from "../../core/consolidate/reprojection";
-import { invokePredicateAlignment } from "../../core/consolidate/relations";
+import { invokePredicateAlignment, type PredicateAlignmentBatchOutcome, type PredicateAlignmentExclusion } from "../../core/consolidate/relations";
 import { diffGraphSnapshots, liveCommittedClaims, type GraphSnapshot } from "../../core/retrieve";
 import type { Entity, IdentityAuthorization, IdentityConstraint, Mention } from "../../core/schema";
-import { identityAdjudicationCost } from "../model/glm";
+import { identityAdjudicationCost, predicateAlignmentPromptCost } from "../model/glm";
 import { invokeScopeStrategy } from "../model/scope-edge";
 import { invokeUnitBoundaryStrategy } from "../model/unit-boundary-edge";
 import type { ModelPort } from "../model/port";
@@ -22,6 +23,24 @@ export const TRUSTED_SOURCE_TRUST = new Set(["user_asserted", "imported_unverifi
 // model_version is provenance, not decoration: a live-adjudicated commit must
 // not claim the deterministic fake produced it.
 const versionsFor = (model_version: string) => ({ strategy_version: "dream-consolidation-v1", model_version, prompt_version: "dream-v1", policy_version: "d50-v1", code_version: "dream-v1", schema_version: "stage-b2-v1", tokenizer_version: "none", tool_version: "dream-v1" });
+const identityContractFor = (model_version: string) => ({
+  model_version,
+  adjudication_version: "dream-identity-v1",
+  verification_version: "dream-identity-verify-v2",
+  naming_version: "dream-naming-check-v1",
+  self_reference_version: "dream-self-reference-v1",
+  prompt_version: "dream-v1",
+  policy_version: "d50-v1",
+  schema_version: "stage-b2-v1",
+  code_version: "dream-v1",
+});
+const predicateContractFor = (model_version: string) => ({
+  model_version,
+  strategy: "predicate-alignment",
+  prompt_version: "dream-predicate-v1",
+  schema_version: "predicate-response-v2",
+  code_version: "relations-v2",
+});
 const instant = (at: string) => ({ typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: at }, resolved_interval: { kind: "instant" as const, start: at, end: at, timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "dream-promotion-v1", timezone: "UTC" } });
 const payload = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "mention" ? revision.mention : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "predicate" ? revision.predicate : revision.kind === "predicate_assertion" ? revision.assertion : revision.support;
 const promotionIdempotencyKey = (owner: string, itemId: string) => `dream-promotion:${owner}:${itemId}`;
@@ -47,9 +66,63 @@ export class SqliteDreamStore {
     CREATE TABLE IF NOT EXISTS dream_cycles (cycle_id TEXT PRIMARY KEY, owner_account_id TEXT NOT NULL, trigger_kind TEXT NOT NULL, before_generation INTEGER NOT NULL, after_generation INTEGER NOT NULL, trajectory_json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS dream_merge_skips (cycle_id TEXT NOT NULL, owner_account_id TEXT NOT NULL, group_key TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(cycle_id, owner_account_id, group_key));
     CREATE TABLE IF NOT EXISTS dream_partition_history (owner_account_id TEXT NOT NULL, partition_hash TEXT NOT NULL, PRIMARY KEY(owner_account_id, partition_hash));
+    CREATE TABLE IF NOT EXISTS dream_settled_clusters (owner_account_id TEXT NOT NULL, cluster_digest TEXT NOT NULL, PRIMARY KEY(owner_account_id, cluster_digest));
+    CREATE TABLE IF NOT EXISTS dream_settled_predicate_batches (owner_account_id TEXT NOT NULL, batch_digest TEXT NOT NULL, PRIMARY KEY(owner_account_id, batch_digest));
+    CREATE TABLE IF NOT EXISTS dream_predicate_batch_outcomes (outcome_id TEXT PRIMARY KEY, cycle_id TEXT NOT NULL, owner_account_id TEXT NOT NULL, batch_question_digest TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('success', 'retryable_error')), response_digest TEXT, result_digest TEXT, error_code TEXT);
+    CREATE TABLE IF NOT EXISTS dream_predicate_exclusions (exclusion_id TEXT PRIMARY KEY, cycle_id TEXT NOT NULL, owner_account_id TEXT NOT NULL, predicate_revision_digest TEXT NOT NULL, code TEXT NOT NULL);
   `); }
   priorPartitions(owner: string): readonly string[] { return (this.db.query("SELECT partition_hash FROM dream_partition_history WHERE owner_account_id=? ORDER BY partition_hash").all(owner) as { partition_hash: string }[]).map((row) => row.partition_hash); }
   recordPartition(owner: string, hash: string): void { this.db.query("INSERT OR IGNORE INTO dream_partition_history VALUES (?, ?)").run(owner, hash); }
+  settledClusters(owner: string): ReadonlySet<string> {
+    return new Set((this.db.query("SELECT cluster_digest FROM dream_settled_clusters WHERE owner_account_id=? ORDER BY cluster_digest").all(owner) as { cluster_digest: string }[]).map((row) => row.cluster_digest));
+  }
+  recordSettledClusters(owner: string, digests: readonly string[]): void {
+    if (!digests.length) return;
+    this.db.transaction(() => {
+      for (const digest of digests) this.db.query("INSERT OR IGNORE INTO dream_settled_clusters VALUES (?, ?)").run(owner, digest);
+    })();
+  }
+  settledPredicateBatches(owner: string): ReadonlySet<string> {
+    return new Set((this.db.query("SELECT batch_digest FROM dream_settled_predicate_batches WHERE owner_account_id=? ORDER BY batch_digest").all(owner) as { batch_digest: string }[]).map((row) => row.batch_digest));
+  }
+  recordPredicateBatchOutcome(cycleId: string, owner: string, outcome: PredicateAlignmentBatchOutcome): void {
+    const responseDigest = outcome.kind === "success" ? outcome.response_digest : null;
+    const resultDigest = outcome.kind === "success" ? outcome.result_digest : null;
+    const errorCode = outcome.kind === "retryable_error" ? outcome.error_code : null;
+    const outcomeId = `predicate-batch-outcome:${sha256CanonicalRedacted({
+      cycle_id: cycleId,
+      owner_account_id: owner,
+      batch_question_digest: outcome.batch_question_digest,
+      kind: outcome.kind,
+      response_digest: responseDigest,
+      result_digest: resultDigest,
+      error_code: errorCode,
+    })}`;
+    this.db.query("INSERT OR IGNORE INTO dream_predicate_batch_outcomes VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+      outcomeId,
+      cycleId,
+      owner,
+      outcome.batch_question_digest,
+      outcome.kind,
+      responseDigest,
+      resultDigest,
+      errorCode,
+    );
+  }
+  recordSettledPredicateBatch(owner: string, digest: string): void {
+    this.db.query("INSERT OR IGNORE INTO dream_settled_predicate_batches VALUES (?, ?)").run(owner, digest);
+  }
+  recordPredicateExclusion(cycleId: string, owner: string, exclusion: PredicateAlignmentExclusion): void {
+    const predicateRevisionDigest = sha256CanonicalRedacted({ predicate_revision_id: exclusion.predicate_revision_id });
+    const exclusionId = `predicate-exclusion:${sha256CanonicalRedacted({ cycle_id: cycleId, owner_account_id: owner, predicate_revision_digest: predicateRevisionDigest, code: exclusion.code })}`;
+    this.db.query("INSERT OR IGNORE INTO dream_predicate_exclusions VALUES (?, ?, ?, ?, ?)").run(
+      exclusionId,
+      cycleId,
+      owner,
+      predicateRevisionDigest,
+      exclusion.code,
+    );
+  }
   recordMergeSkip(cycleId: string, owner: string, groupMentionIds: readonly string[], reason: string): void {
     this.db.query("INSERT OR REPLACE INTO dream_merge_skips VALUES (?, ?, ?, ?)").run(cycleId, owner, JSON.stringify([...groupMentionIds].sort()), reason);
   }
@@ -145,7 +218,16 @@ const promotionTransition = async (input: {
       const { ambiguity_markers: _ambiguity, context_packet: _context, ...base } = item.claim;
       return { ...base, claim_revision_id: canonicalId, temporal_scope: { ...item.claim.temporal_scope, valid_time: instant(item.claim.temporal_scope.observed_at) }, lifecycle: "canonical" as const, canonical_claim_id: canonicalId, source_provisional_revision_ids: [item.claim.claim_revision_id], ...(scopeLocality ? { scope: { locality: scopeLocality, scope_ref: item.claim.scope.scope_ref } } : {}) };
     })() : null;
-    const predicate = item.claim.predicate_id ? [{ kind: "predicate" as const, revision_id: `${item.claim.predicate_id}:initial`, predicate: { predicate_id: item.claim.predicate_id, owner_account_id: input.owner, predicate_revision_id: `${item.claim.predicate_id}:initial`, identity_name: item.claim.predicate, display_name: item.claim.predicate, lifecycle: "canonical" as const, slot_ids: item.claim.arguments.map((argument) => argument.slot_id).sort() } }] : [];
+    const predicate = item.claim.predicate_id ? (() => {
+      const revision = predicateRevisionForStoredObservation({
+        owner_account_id: input.owner,
+        predicate_id: item.claim.predicate_id!,
+        display_name: item.claim.predicate,
+        roles: item.claim.arguments.map((argument) => argument.role),
+        legacy_slot_ids: item.claim.arguments.map((argument) => argument.slot_id),
+      });
+      return [{ kind: "predicate" as const, revision_id: revision.revision_id, predicate: revision.predicate }];
+    })() : [];
     const revisions: AtomicGraphTransition["revisions"] = [...predicate, provisional, ...(canonical ? [{ kind: "claim" as const, revision_id: canonicalId, claim: canonical, placement_status: "canonical" as const }] : [])];
     const head = input.ledger.graphHead(input.owner);
     const derivation = prepareDerivation({
@@ -231,12 +313,29 @@ export const runSqliteDreamCycle = async (input: {
     // Chunked promotion reuses one adjudication per trigger: later chunks set
     // adjudicate_identity=false so we do not re-pay full-graph identity each slice.
     const adjudicate = input.adjudicate_identity !== false;
+    const identityContract = identityContractFor(input.model_version ?? DEFAULT_DREAM_MODEL_VERSION);
     const proposal = adjudicate
-      ? await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [], ...(promptShapedBudget() ? { profile_cost: identityAdjudicationCost } : {}) })
+      ? await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [], adjudication_contract: identityContract, settled_cluster_digests: state.settledClusters(input.owner_account_id), ...(promptShapedBudget() ? { profile_cost: identityAdjudicationCost } : {}) })
       : { partition_hash: `partition:deferred:${input.cycle_id}`, same_groups: [] as string[][], same_group_who: [] as (string | null)[], same_group_kind: [] as (string | null)[], same_group_lane: [] as ("verified" | "recurrence" | "producer")[], uncertain_pairs: [] as [string, string][], rejected_same_groups: [] };
-    const predicateAssertions = adjudicate
-      ? await invokePredicateAlignment(input.model, (before.predicates ?? []).map((item) => item.predicate), String(before.graph_generation ?? 0))
-      : [];
+    const predicateContract = predicateContractFor(input.model_version ?? DEFAULT_DREAM_MODEL_VERSION);
+    const predicateVocabulary = (before.predicates ?? []).map((item) => item.predicate);
+    const predicateAlignment = adjudicate
+      ? await invokePredicateAlignment(
+        input.model,
+        predicateVocabulary,
+        {
+          owner_account_id: input.owner_account_id,
+          batch_prompt_budget: 20_000,
+          model_concurrency: 4,
+          prompt_cost: predicateAlignmentPromptCost,
+          adjudication_contract: predicateContract,
+          settled_batch_digests: state.settledPredicateBatches(input.owner_account_id),
+        },
+      )
+      : { assertions: [], batch_outcomes: [], skipped_settled_batch_digests: [], excluded_predicates: [] };
+    for (const exclusion of predicateAlignment.excluded_predicates) {
+      state.recordPredicateExclusion(input.cycle_id, input.owner_account_id, exclusion);
+    }
     const gate = runDreamCycle({ cycle_id: input.cycle_id, facts, previous_split_keys: contradictions.map((item) => `${item.entity_id}:${item.claim_revision_ids.join(":")}`), proposals: adjudicate ? [{ proposal_id: proposal.partition_hash, partition_hash: proposal.partition_hash, prior_partition_hash: state.priorPartitions(input.owner_account_id).includes(proposal.partition_hash) ? proposal.partition_hash : undefined, new_evidence: true }] : [] });
     // Promotion is content-gated (sufficiency → subject/trust → boundary →
     // durable scope) and intentionally not identity-gated: unresolved
@@ -261,11 +360,43 @@ export const runSqliteDreamCycle = async (input: {
       await input.ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: {}, results: [] }, derivation, revisions, adjacency: [], artifacts: [] });
       afterPromotion = input.ledger.snapshot(input.owner_account_id);
     }
-    if (predicateAssertions.length) {
-      const revisions: AtomicGraphTransition["revisions"] = predicateAssertions.map((assertion) => ({ kind: "predicate_assertion" as const, revision_id: `predicate-assertion:${assertion.assertion_id}`, assertion }));
+    for (const outcome of predicateAlignment.batch_outcomes) {
+      if (outcome.kind === "retryable_error") {
+        state.recordPredicateBatchOutcome(input.cycle_id, input.owner_account_id, outcome);
+        continue;
+      }
+      const revisions: AtomicGraphTransition["revisions"] = outcome.assertions.map((assertion) => ({ kind: "predicate_assertion" as const, revision_id: `predicate-assertion:${assertion.assertion_id}`, assertion }));
       const head = input.ledger.graphHead(input.owner_account_id);
-      const derivation = prepareDerivation({ attempt_id: `dream-predicate-attempt:${input.cycle_id}`, commit_id: `dream-predicate:${input.cycle_id}`, owner_account_id: input.owner_account_id, parent_commit: head?.commit_id ?? null, idempotency_key: `dream-predicate:${input.owner_account_id}:${input.cycle_id}`, input_revisions: [], output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: payload(revision) })), versions, success_kind: "success" });
+      const batchCoordinate = outcome.batch_question_digest.slice(0, 24);
+      const derivation = prepareDerivation({
+        attempt_id: `dream-predicate-attempt:${batchCoordinate}`,
+        commit_id: `dream-predicate:${batchCoordinate}`,
+        owner_account_id: input.owner_account_id,
+        parent_commit: head?.commit_id ?? null,
+        idempotency_key: `dream-predicate:${input.owner_account_id}:${outcome.batch_question_digest}`,
+        input_revisions: [{
+          revision_id: `predicate-batch-input:${outcome.batch_question_digest}`,
+          content: {
+            batch_question_digest: outcome.batch_question_digest,
+            response_digest: outcome.response_digest,
+            result_digest: outcome.result_digest,
+            predicate_frontier: outcome.predicate_frontier,
+            adjudication_contract: predicateContract,
+          },
+        }],
+        output_revisions: revisions.map((revision) => ({ revision_id: revision.revision_id, content: payload(revision) })),
+        versions,
+        success_kind: revisions.length ? "success" : "successful_empty",
+      });
       await input.ledger.appendTransitionPlan({ placement: { offline_experiment: true, allocations: {}, results: [] }, derivation, revisions, adjacency: [], artifacts: [] });
+      // SQLite is the offline/QA reference, not production authority. This is
+      // deliberately after the graph append: a crash in between re-asks and
+      // idempotently resumes the exact result (or fails loudly on drift), while
+      // recording settlement first could strand assertions forever.
+      input.db.transaction(() => {
+        state.recordPredicateBatchOutcome(input.cycle_id, input.owner_account_id, outcome);
+        state.recordSettledPredicateBatch(input.owner_account_id, outcome.settleable_batch_digest);
+      })();
       afterPromotion = input.ledger.snapshot(input.owner_account_id);
     }
 
@@ -435,6 +566,10 @@ export const runSqliteDreamCycle = async (input: {
     // variance guard still holds for terminally-processed partitions, and a
     // partition with pending work stays re-proposable next cycle.
     if (!skippedMerges.some((item) => item.retryable)) state.recordPartition(input.owner_account_id, proposal.partition_hash);
+    state.recordSettledClusters(input.owner_account_id, selectSettleableIdentityClusterDigests({
+      proposal,
+      retryable_group_mention_ids: skippedMerges.filter((item) => item.retryable).map((item) => item.group_mention_ids),
+    }));
     const after = input.ledger.snapshot(input.owner_account_id);
     const report: DreamCycleReport = { cycle_id: input.cycle_id, promoted, deferred, reprojected, committed_merges: committedMerges, skipped_merges: skippedMerges, trajectory: diffGraphSnapshots(before, after) };
     state.recordCycle(report, input.owner_account_id, input.trigger_kind, Number(before.graph_generation ?? 0), Number(after.graph_generation ?? 0));

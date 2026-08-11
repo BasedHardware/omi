@@ -223,17 +223,36 @@ export const EntitySchema = Type.Object({
 }, { additionalProperties: false });
 export type Entity = Static<typeof EntitySchema>;
 
-/** Predicates are vocabulary objects. `predicate_id`, not display text, is claim identity. */
-export const PredicateSchema = Type.Object({
+const PredicateBaseSchema = {
   predicate_id: OpaqueId(),
   owner_account_id: OpaqueId(),
   predicate_revision_id: OpaqueId(),
-  /** Identity is the normalized relation name plus this object's slot set, never its rendering. */
   identity_name: Type.String({ minLength: 1 }),
   display_name: Type.String({ minLength: 1 }),
   lifecycle: Type.Union([Type.Literal("provisional"), Type.Literal("canonical")]),
-  slot_ids: Type.Array(OpaqueId()),
-}, { additionalProperties: false });
+} as const;
+
+/**
+ * Predicates are vocabulary objects. The discriminated union keeps legacy
+ * window-slot rows readable without allowing a `name-v2` row to smuggle those
+ * ordinals into the new name-only identity contract.
+ */
+export const PredicateSchema = Type.Union([
+  Type.Object({
+    ...PredicateBaseSchema,
+    /** Missing on historical rows is equivalent to the explicit legacy tag. */
+    identity_version: Type.Optional(Type.Literal("name-slots-v1")),
+    slot_ids: Type.Array(OpaqueId()),
+    observed_roles: Type.Optional(Type.Never()),
+  }, { additionalProperties: false }),
+  Type.Object({
+    ...PredicateBaseSchema,
+    identity_version: Type.Literal("name-v2"),
+    /** New identity never carries window-local slot ordinals. */
+    slot_ids: Type.Tuple([]),
+    observed_roles: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
+  }, { additionalProperties: false }),
+]);
 export type Predicate = Static<typeof PredicateSchema>;
 
 /** Append-only vocabulary assertions; they do not assert real-world identity. */

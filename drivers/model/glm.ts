@@ -508,6 +508,10 @@ const promptForPredicateAlignment = (input: PredicateAlignmentRequest): string =
   ],
 }, null, 2);
 
+/** Adapter-owned exact character cost for the bytes this edge sends. */
+export const predicateAlignmentPromptCost = (input: PredicateAlignmentRequest): number =>
+  promptForPredicateAlignment(input).length;
+
 const parsePredicateAlignment = (content: string, input: PredicateAlignmentRequest): unknown => {
   const root = parseJsonObject(content, "predicate-alignment");
   assertKeys(root, ["aliases"], [], "predicate-alignment");
