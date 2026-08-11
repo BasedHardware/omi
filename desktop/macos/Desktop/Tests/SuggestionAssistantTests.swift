@@ -404,6 +404,22 @@ final class SuggestionCommitmentGuardTests: XCTestCase {
     }
   }
 
+  /// A long commitment is not a higher bar. This is Nik's real task, ten content words
+  /// long; a concise nudge naming the distinctive part of it must be admitted, and under
+  /// pure proportional coverage it was not.
+  func testConciseNudgeForALongCommitmentIsAdmitted() {
+    let long = ["Exchange weekly tasks with accountability partner and update the shared Google Doc tracker"]
+    XCTAssertTrue(isGrounded("Still owe the weekly exchange with your accountability partner", commitments: long))
+    XCTAssertTrue(isGrounded("The Google Doc tracker is still not updated", commitments: long))
+  }
+
+  /// Length must not be gameable in the other direction either: sharing only doing-words
+  /// with a long task is still not a reference to it.
+  func testGenericOverlapWithALongCommitmentIsStillRejected() {
+    let long = ["Exchange weekly tasks with accountability partner and update the shared Google Doc tracker"]
+    XCTAssertFalse(isGrounded("You should send an update", commitments: long))
+  }
+
   /// "send" and "update" appear in most commitments. Echoing a commitment's two most
   /// generic words while dropping everything that identifies it — quarterly, board, deck,
   /// investors — is not a reference to it.

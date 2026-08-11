@@ -392,15 +392,27 @@ enum SuggestionDwellAnchor {
 /// Only `commitment` is checked. The other categories are about what is on screen, which is
 /// evidence the model can see and this guard cannot.
 enum SuggestionCommitmentGuard {
-  /// Share of a commitment's own content words the suggestion must carry. A nudge phrases
-  /// the task in fewer words than the task itself ("Send the Instagram walkthrough" for
-  /// "Record the Instagram demo video walkthrough"), so this measures coverage of the
-  /// commitment rather than similarity between the two.
+  /// Share of a commitment's own content words the suggestion must carry, used only as the
+  /// fallback when nothing distinctive is shared.
+  ///
+  /// Coverage alone was the whole rule and it punished long tasks: "Exchange weekly tasks
+  /// with accountability partner and update the shared Google Doc tracker" has ten content
+  /// words, so a perfectly good "you still owe the weekly exchange" cleared two of them and
+  /// was thrown out as ungrounded. Length of the task is not evidence about the nudge.
   static let requiredCoverage = 0.5
 
   /// One shared word is a coincidence — "update", "send" and "follow" appear in most
   /// commitments. Two is a reference.
   static let minimumSharedTokens = 2
+
+  /// Words that describe *doing* rather than *what* — they appear across most commitments,
+  /// so sharing only these identifies nothing. "Send the update" could be any task; "send
+  /// the Figma comments" could not.
+  private static let genericTaskWords: Set<String> = [
+    "send", "sent", "update", "updates", "follow", "followup", "check", "review", "reply",
+    "respond", "call", "make", "made", "get", "finish", "ship", "add", "fix", "ask", "tell",
+    "write", "read", "post", "share", "start", "record", "task", "tasks", "email", "message",
+  ]
 
   /// Words that carry no identifying signal, so they cannot vouch for a commitment.
   /// `SuggestionDeduplication.normalize` already drops tokens of 1-2 characters.
@@ -436,6 +448,12 @@ enum SuggestionCommitmentGuard {
       guard !commitmentTokens.isEmpty else { return false }
       let shared = commitmentTokens.intersection(suggestionTokens)
       guard shared.count >= minimumSharedTokens else { return false }
+
+      // Naming something only that commitment contains is a reference, however short the
+      // nudge and however long the task. Otherwise fall back to proportional coverage,
+      // which is what stops "send the update" from matching every commitment that happens
+      // to contain both words.
+      if !shared.subtracting(genericTaskWords).isEmpty { return true }
       return Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage
     }
   }
