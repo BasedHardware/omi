@@ -52,13 +52,13 @@ import { createClientReadCounter } from "./client-counter";
 import { createQaBackend, type QaFixturePlan } from "./compose";
 import { assertFixtureTimezone } from "./fixture-clock";
 import { BACKEND_PROCESS_STAMP } from "./provenance";
+import { parseIntegrationPort } from "./port";
 
 /** Request header a launcher sends on every bridge request so served reads are joinable to the run that made them — see provenance.ts and client-counter.ts. */
 const CLIENT_ID_HEADER = "x-omi-client-id";
 
 // The direct service door is fixed at 4851. The adversarial child may use a
 // test-owned loopback port, but only within the bounded user-port range below.
-const DEFAULT_PORT = 4851;
 const HOSTNAME = "127.0.0.1";
 const DEFAULT_PLAN: QaFixturePlan = Object.freeze({ visibleCount: 7, hiddenCount: 0 });
 
@@ -118,11 +118,7 @@ async function mcpServedAPage(response: Response): Promise<boolean> {
   }
 }
 
-const rawPort = process.env.OMI_INTEGRATION_PORT;
-const port = rawPort === undefined ? DEFAULT_PORT : Number(rawPort);
-if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-  throw new Error("OMI_INTEGRATION_PORT must be an integer between 1024 and 65535");
-}
+const port = parseIntegrationPort(process.env.OMI_INTEGRATION_PORT);
 
 const server = Bun.serve({
   hostname: HOSTNAME,
