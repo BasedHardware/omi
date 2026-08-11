@@ -61,11 +61,21 @@ def assert_public_http_url(url: str) -> str:
     swapped between this check and the real connect (DNS rebinding), and
     this validation is worthless.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in ('http', 'https'):
-        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {parsed.scheme!r}')
+    # A malformed URL (`http://[::1`, `http://h:notaport`) makes urlparse and
+    # its hostname/port properties raise ValueError. That is an invalid target,
+    # not a server error: report it through the same rejection path so callers
+    # only ever have to handle UnsafeWebhookURLError.
+    try:
+        parsed = urlparse(url)
+        scheme = parsed.scheme
+        hostname = parsed.hostname
+        parsed.port  # validates the port component
+    except ValueError as e:
+        raise UnsafeWebhookURLError(f'Malformed URL: {e}')
 
-    hostname = parsed.hostname
+    if scheme not in ('http', 'https'):
+        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {scheme!r}')
+
     if not hostname:
         raise UnsafeWebhookURLError('URL has no hostname')
 
@@ -100,11 +110,21 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """
     parsed = urlparse(url)
     hostname = parsed.hostname
+    original_authority = parsed.netloc.rpartition('@')
+    userinfo = original_authority[0]
+    # Host must reproduce the original authority minus any userinfo: strict
+    # virtual hosts reject a bare hostname when the request went to a
+    # non-default port, and an IPv6 literal has to keep its brackets.
+    host_header = original_authority[2]
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
         netloc += f':{parsed.port}'
+    if userinfo:
+        # Credentials embedded in the URL are what authenticates the request
+        # (httpx turns them into Basic auth); dropping them breaks the callback.
+        netloc = f'{userinfo}@{netloc}'
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': hostname}}
     return pinned_url, extra
 
 
