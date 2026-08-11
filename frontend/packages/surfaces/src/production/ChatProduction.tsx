@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
 import type {
   ProductionChatStore,
@@ -19,6 +19,20 @@ import "./chat.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
+type ChatScrollAnchor = { readonly scrollHeight: number; readonly scrollTop: number };
+
+const CHAT_LIVE_EDGE_PX = 24;
+
+function chatScrollTarget(list: HTMLOListElement): HTMLElement {
+  if (list.ownerDocument.documentElement.dataset["platform"] === "mobile") {
+    return list.ownerDocument.scrollingElement as HTMLElement | null ?? list;
+  }
+  return list;
+}
+
+function isAtChatLiveEdge(target: HTMLElement): boolean {
+  return target.scrollHeight - target.scrollTop - target.clientHeight <= CHAT_LIVE_EDGE_PX;
+}
 
 function roleLabel(role: ChatMessage["role"], locale: Locale): string {
   return role === "user" ? t(locale, "chat.roleUser") : t(locale, "chat.roleAssistant");
@@ -113,25 +127,90 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const [sending, setSending] = useState(false);
   const [staging, setStaging] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const messageListRef = useRef<HTMLOListElement>(null);
   const historyRequestRef = useRef(0);
   const sendInFlightRef = useRef(false);
   const stagingInFlightRef = useRef(false);
+  const followingLatestRef = useRef(true);
+  const olderAnchorRef = useRef<ChatScrollAnchor | null>(null);
+  const previousMessagesRef = useRef<readonly ChatMessage[]>([]);
+  const touchYRef = useRef<number | null>(null);
   const attachmentsRef = useRef<readonly StagedChatAttachment[]>(attachments);
   const capabilitiesRef = useRef(capabilities);
   attachmentsRef.current = attachments;
   capabilitiesRef.current = capabilities;
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
-  // A chat opens on its newest message. Landing at the top of history means the reader
-  // sees the oldest thing said and has to scroll to find the answer they just asked for.
-  // Reads layout only — no timers, no wall clock.
+  const jumpToLatest = useCallback((): void => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const target = chatScrollTarget(list);
+    target.scrollTop = target.scrollHeight;
+    followingLatestRef.current = true;
+    setShowLatest(false);
+  }, []);
+
+  const leaveLiveEdge = useCallback((): void => {
+    followingLatestRef.current = false;
+    setShowLatest(true);
+  }, []);
+
+  const updateFollowingFromTarget = useCallback((target: HTMLElement): void => {
+    const atEdge = isAtChatLiveEdge(target);
+    followingLatestRef.current = atEdge;
+    setShowLatest(!atEdge);
+  }, []);
+
+  // Follow growing output only while the reader remains at the live edge. Loading an
+  // older page instead restores the exact visual anchor so prepended rows do not jump.
+  useLayoutEffect(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const target = chatScrollTarget(list);
+    const olderAnchor = olderAnchorRef.current;
+    if (olderAnchor) {
+      target.scrollTop = olderAnchor.scrollTop + target.scrollHeight - olderAnchor.scrollHeight;
+      olderAnchorRef.current = null;
+      followingLatestRef.current = false;
+      setShowLatest(true);
+    } else if (followingLatestRef.current) {
+      target.scrollTop = target.scrollHeight;
+      setShowLatest(false);
+    } else if (previousMessagesRef.current !== messages) {
+      setShowLatest(true);
+    }
+    previousMessagesRef.current = messages;
+  }, [messages]);
+
+  // Streaming content can grow without changing the message array (fonts, wrapping,
+  // attachments). ResizeObserver keeps that growth pinned only for an opted-in reader.
   useEffect(() => {
     const list = messageListRef.current;
-    if (list) list.scrollTop = list.scrollHeight;
-  }, [messages]);
+    const ResizeObserverConstructor = list?.ownerDocument.defaultView?.ResizeObserver;
+    if (!list || !ResizeObserverConstructor) return;
+    const observer = new ResizeObserverConstructor(() => {
+      if (followingLatestRef.current) jumpToLatest();
+    });
+    observer.observe(list);
+    for (const message of list.children) observer.observe(message);
+    return () => observer.disconnect();
+  }, [jumpToLatest, messages.length]);
+
+  // Mobile Chat uses the document scroller rather than a nested message scroller.
+  // Listening there preserves scrollbar/accessibility-scroll behavior in addition to
+  // the explicit wheel, touch, and keyboard intent handlers on the message list.
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const target = chatScrollTarget(list);
+    if (target === list) return;
+    const update = (): void => updateFollowingFromTarget(target);
+    target.addEventListener("scroll", update, { passive: true });
+    return () => target.removeEventListener("scroll", update);
+  }, [messages.length, updateFollowingFromTarget]);
 
   const reload = useCallback(async (): Promise<void> => {
     const request = ++historyRequestRef.current;
@@ -200,6 +279,8 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
       return;
     }
     sendInFlightRef.current = true;
+    followingLatestRef.current = true;
+    setShowLatest(false);
     setSending(true);
     setOperationError(null);
     let postSendHistoryRequest: number | null = null;
@@ -242,6 +323,12 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
 
   const loadOlder = async (): Promise<void> => {
     if (!olderCursor || loadingOlder) return;
+    const list = messageListRef.current;
+    if (list) {
+      const target = chatScrollTarget(list);
+      olderAnchorRef.current = { scrollHeight: target.scrollHeight, scrollTop: target.scrollTop };
+      followingLatestRef.current = false;
+    }
     setLoadingOlder(true);
     setOperationError(null);
     try {
@@ -251,6 +338,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
       setOlderCursor(page.olderCursor);
       setStatus(store.status());
     } catch {
+      olderAnchorRef.current = null;
       setOperationError(t(locale, "chat.error"));
       setStatus(store.status());
     } finally {
@@ -356,7 +444,24 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 <p className="chat-history-start">{t(locale, "chat.historyStart")}</p>
               )}
             </div>
-            <ol className="chat-message-list" ref={messageListRef}>
+            <ol
+              className="chat-message-list"
+              ref={messageListRef}
+              tabIndex={0}
+              onScroll={(event) => {
+                updateFollowingFromTarget(chatScrollTarget(event.currentTarget));
+              }}
+              onWheel={(event) => { if (event.deltaY < 0) leaveLiveEdge(); }}
+              onTouchStart={(event) => { touchYRef.current = event.touches[0]?.clientY ?? null; }}
+              onTouchMove={(event) => {
+                const nextY = event.touches[0]?.clientY ?? null;
+                if (nextY !== null && touchYRef.current !== null && nextY > touchYRef.current) leaveLiveEdge();
+                touchYRef.current = nextY;
+              }}
+              onKeyDown={(event) => {
+                if (["ArrowUp", "PageUp", "Home"].includes(event.key)) leaveLiveEdge();
+              }}
+            >
               {messages.map((message) => {
                 const statusLabel = deliveryLabel(message, locale);
                 const busy = message.delivery.kind === "streaming";
@@ -406,6 +511,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 );
               })}
             </ol>
+            {showLatest && (
+              <button type="button" className="chat-jump-latest" onClick={jumpToLatest}>
+                {t(locale, "chat.latest")}
+              </button>
+            )}
           </section>
         )}
         {deadLetters.length > 0 && (

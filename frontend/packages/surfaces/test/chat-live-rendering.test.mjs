@@ -56,6 +56,7 @@ class RenderedDomainChat {
   sendGate = null;
   window = { hasOlder: false, olderCursor: null };
   olderRows = [];
+  olderGate = null;
   admittedAttachments = [];
 
   status() { return status(); }
@@ -63,6 +64,7 @@ class RenderedDomainChat {
   async refresh() {}
   historyPage() { return this.window; }
   async loadOlder() {
+    if (this.olderGate) await this.olderGate;
     this.window = { hasOlder: false, olderCursor: null };
     return this.olderRows;
   }
@@ -220,6 +222,92 @@ async function click(rendered, element) {
     for (let index = 0; index < 8; index += 1) await Promise.resolve();
   });
 }
+
+test("Chat preserves the reader's live-edge choice and older-history anchor", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [
+    row("current-human", "human", "Current question"),
+    row("current-answer", "ai", "Current answer"),
+  ];
+  domain.window = { hasOlder: true, olderCursor: "older-cursor" };
+  domain.olderRows = [row("older-human", "human", "Earlier question")];
+  let releaseOlder;
+  domain.olderGate = new Promise((resolve) => { releaseOlder = resolve; });
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    await rendered.act(async () => {
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    });
+    const list = rendered.container.querySelector(".chat-message-list");
+    assert.ok(list);
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollHeight: { configurable: true, value: 1_000, writable: true },
+      scrollTop: { configurable: true, value: 180, writable: true },
+    });
+    await rendered.act(async () => {
+      list.dispatchEvent(new rendered.window.Event("scroll", { bubbles: true }));
+    });
+    assert.ok(rendered.container.querySelector(".chat-jump-latest"), "leaving the edge reveals Latest");
+
+    const loadOlder = rendered.container.querySelector(".chat-history-controls button");
+    assert.ok(loadOlder);
+    await rendered.act(async () => {
+      loadOlder.dispatchEvent(new rendered.window.MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    list.scrollHeight = 1_300;
+    await rendered.act(async () => {
+      releaseOlder();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(list.scrollTop, 480, "prepending 300px keeps the same visible history anchored");
+
+    list.scrollHeight = 1_500;
+    await rendered.act(async () => {
+      domain.rows = [...domain.rows, row("new-answer", "ai", "A newer answer")];
+      domain.notify();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(list.scrollTop, 480, "new output never yanks a reader who moved upward");
+    const latest = rendered.container.querySelector(".chat-jump-latest");
+    assert.ok(latest);
+    await click(rendered, latest);
+    assert.equal(list.scrollTop, 1_500, "Latest explicitly resumes the live edge");
+    assert.equal(rendered.container.querySelector(".chat-jump-latest"), null);
+
+    await rendered.act(async () => {
+      list.dispatchEvent(new rendered.window.WheelEvent("wheel", { bubbles: true, deltaY: -1 }));
+    });
+    assert.ok(rendered.container.querySelector(".chat-jump-latest"), "upward wheel intent releases follow");
+    await click(rendered, rendered.container.querySelector(".chat-jump-latest"));
+
+    await rendered.act(async () => {
+      list.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { bubbles: true, key: "PageUp" }));
+    });
+    assert.ok(rendered.container.querySelector(".chat-jump-latest"), "keyboard history navigation releases follow");
+    await click(rendered, rendered.container.querySelector(".chat-jump-latest"));
+
+    const touchStart = new rendered.window.Event("touchstart", { bubbles: true });
+    const touchMove = new rendered.window.Event("touchmove", { bubbles: true });
+    Object.defineProperty(touchStart, "touches", { value: [{ clientY: 100 }] });
+    Object.defineProperty(touchMove, "touches", { value: [{ clientY: 140 }] });
+    await rendered.act(async () => {
+      list.dispatchEvent(touchStart);
+      list.dispatchEvent(touchMove);
+    });
+    assert.ok(rendered.container.querySelector(".chat-jump-latest"), "touch history navigation releases follow");
+  } finally {
+    await rendered.cleanup();
+  }
+});
 
 test("rendered live Chat streams changing assistant text and converges without duplicate bubbles", async () => {
   // red-proof: omit activeGenerations() from projectedHistory. The rendered

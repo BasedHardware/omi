@@ -250,6 +250,7 @@ export const EN_MESSAGES = {
   "chat.loadOlder": "Load older messages",
   "chat.loadingOlder": "Loading older messages",
   "chat.historyStart": "This is the beginning of the conversation.",
+  "chat.latest": "Latest",
   "chat.attach": "Attach file",
   "chat.attachments": "Attachments",
   "chat.attachmentRemove": "Remove attachment",
