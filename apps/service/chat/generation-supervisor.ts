@@ -147,13 +147,7 @@ export const createChatGenerationSupervisor = (
     state.terminal = true;
     cancelRun(state);
     try {
-      // Cancellation always has a canonical retained assistant row, even when
-      // it lands before the first provider byte. The empty text is the honest
-      // retained partial and lets the wire state the explicit cancelled
-      // outcome instead of emitting an unparseable null terminal.
-      const message = kind === "cancelled"
-        ? assistantMessage(state, text)
-        : text.length === 0 ? null : assistantMessage(state, text);
+      const message = text.length === 0 ? null : assistantMessage(state, text);
       const prior = deps.events.listAfter(state.accountId, state.generationId, null);
       if (prior === null) throw new TypeError("chat generation event log disappeared");
       deps.finalization.finalize({

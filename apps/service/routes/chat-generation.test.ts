@@ -500,7 +500,7 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
-  test("cancellation before context or provider start retains one empty cancelled assistant", async () => {
+  test("cancellation before context or provider start retains no assistant content", async () => {
     let releaseContext: ((value: readonly string[]) => void) | null = null;
     const context: ChatGenerationContextSource = Object.freeze({
       load: (): Promise<readonly string[]> => new Promise((resolve) => {
@@ -540,13 +540,11 @@ describe("ratified chat generation wire red proofs", () => {
     const response = await generationEvents(local, admission.generation.id);
     const frames = parseSse(await response.text());
     expect(frames).toHaveLength(1);
-    expect(frames[0]?.data).toMatchObject({
-      kind: "cancelled",
-      message: { sender: "ai", text: "", generationOutcome: "cancelled" },
-    });
-    if (frames[0]?.data.kind !== "cancelled") throw new TypeError("missing cancellation");
-    const canonical = (await history(local)).find((message) => message.sender === "ai");
-    expect(JSON.stringify(canonical)).toBe(JSON.stringify(frames[0].data.message));
+    expect(frames[0]?.data).toEqual({ kind: "cancelled", message: null });
+    expect((await history(local)).map((message) => [
+      message.sender,
+      (message as ChatWireMessage).generationOutcome,
+    ])).toEqual([["human", null]]);
     expect(starts).toBe(0);
     expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)?.map(
       (event) => event.frame.kind,
@@ -1053,10 +1051,7 @@ describe("ratified chat generation wire red proofs", () => {
         );
         const frames = parseSse(await replay.text());
         expect(frames.map((frame) => frame.event)).toEqual(["cancelled"]);
-        expect(frames[0]?.data).toMatchObject({
-          kind: "cancelled",
-          message: { sender: "ai", text: "", generationOutcome: "cancelled" },
-        });
+        expect(frames[0]?.data).toEqual({ kind: "cancelled", message: null });
         expect(starts).toBe(0);
         expect((await history(local)).map((entry) => [
           entry.sender,
@@ -1064,7 +1059,6 @@ describe("ratified chat generation wire red proofs", () => {
           (entry as ChatWireMessage).generationOutcome,
         ])).toEqual([
           ["human", "cancel after restart", null],
-          ["ai", "", "cancelled"],
         ]);
         expect((await local.app.request("/v1/chat-generations/generation-restart-cancel", {
           method: "DELETE",

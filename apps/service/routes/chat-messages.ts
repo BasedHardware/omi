@@ -318,6 +318,7 @@ const projectExternalFrame = (
   message: ChatWireMessage;
 }> => {
   if (frame.kind !== "done" && frame.kind !== "cancelled") return frame;
+  if (frame.kind === "cancelled" && frame.message === null) return frame;
   if (frame.message === null || frame.message.sender !== "ai") {
     throw new TypeError("terminal Chat frame has no canonical assistant message");
   }
