@@ -39,9 +39,10 @@ The closed states are `pending`, `leased`, `retryable_failed`, `succeeded`, and
 `dead_letter`.
 
 - Acceptance creates `pending`, attempt zero, fence zero, and no lease or outcome.
-- A lease is eligible only from `pending`, an eligible `retryable_failed`, or an expired
-  `leased` state. It increments both attempt and fence and uses a half-open
-  `[leased_at, expires_at)` interval.
+- A lease is eligible only from `pending` or an eligible `retryable_failed` state. An
+  expired lease must first record a typed `worker_lost` retry/dead outcome; it is never
+  silently overwritten. A new lease increments both attempt and fence and uses a
+  half-open `[leased_at, expires_at)` interval.
 - Only the exact unexpired fence may finish or fail work. A stale worker cannot extend,
   succeed, fail, emit an outbox record, or consume accepted input.
 - A retryable failure carries only a closed error code and a future eligibility time.
@@ -74,8 +75,8 @@ cannot make an uncommitted result visible.
 
 The core slice succeeds only if adversarial tests prove:
 
-- exact-shape acceptance rejects proxies, accessors, sparse/decorated arrays, extras,
-  unbounded tokens, non-digests, and invalid lifetimes before inspecting content;
+- exact-shape acceptance rejects proxies, accessors, extras, unbounded tokens,
+  non-digests, and invalid lifetimes before inspecting content;
 - changed owner, epoch, deletion coordinate, frontier, input, or contract changes the
   accepted-work digest;
 - pending lease, retry lease, and expired-lease reclamation advance fences
