@@ -112,10 +112,11 @@ def test_quota_route_exposes_remaining_platform_allowance(memory_platform_router
 def test_search_over_quota_returns_429_naming_the_plan(memory_platform_router, monkeypatch):
     from fastapi import HTTPException
 
+    monkeypatch.setattr(memory_platform_router, 'get_firestore_client', lambda: object())
     monkeypatch.setattr(
         memory_platform_router,
         '_require_product_authorization',
-        lambda _uid: types.SimpleNamespace(policy=object(), global_gate=object(), observability={}),
+        lambda _uid, _db: types.SimpleNamespace(policy=object(), global_gate=object(), observability={}),
     )
 
     def _over_quota(_uid):
@@ -131,3 +132,28 @@ def test_search_over_quota_returns_429_naming_the_plan(memory_platform_router, m
     assert response.status_code == 429
     assert response.json()['detail']['plan_type'] == 'basic'
     assert response.json()['detail']['limit'] == 1000
+
+
+@pytest.mark.parametrize(
+    'params',
+    [
+        {'query': 'x' * 501},
+        {'limit': '0'},
+        {'limit': '100000'},
+        {'offset': '-1'},
+        {'offset': '100001'},
+    ],
+)
+def test_search_returns_the_documented_400_for_invalid_bounds(memory_platform_router, monkeypatch, params):
+    """Invalid bounds must 400 over real HTTP, not FastAPI's framework 422.
+
+    Declaring the bounds as Query constraints made FastAPI reject the request
+    before the handler ran, so the published contract promised a 400 that no real
+    client could ever observe.
+    """
+    monkeypatch.setattr(memory_platform_router, 'get_firestore_client', lambda: object())
+
+    response = _client(memory_platform_router).get('/v1/memory/platform/search', params=params)
+
+    assert response.status_code == 400
+    assert 'must be' in str(response.json()['detail'])
