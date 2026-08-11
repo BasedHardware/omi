@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
-import { ArrowUp, Paperclip, AudioLines } from 'lucide-react';
+import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
 import { OmiOrb } from '@/components/ui/OmiOrb';
@@ -279,11 +279,13 @@ export function ChatComposer({
               recording.isActive ? 'Stop conversation' : 'Start a live conversation'
             }
           >
-            {recording.isActive ? (
-              <OmiOrb state="listening" level={recording.level} size={20} />
-            ) : (
-              <AudioLines className="h-[18px] w-[18px]" />
-            )}
+            <OmiOrb
+              state={recording.isActive ? 'listening' : 'idle'}
+              motion="pulse"
+              level={recording.isActive ? Math.min(0.3, Math.max(0, recording.level)) : 0}
+              size={20}
+              paused={!recording.isActive}
+            />
           </button>
         )}
 

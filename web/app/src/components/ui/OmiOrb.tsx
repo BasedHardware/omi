@@ -88,6 +88,7 @@ export function OmiOrb({
 }: OmiOrbProps) {
   const active: OmiOrbMotion = motion ?? omiMotionForState(state, seed);
   const reduced = useReducedMotion();
+  const usesCompositorPulse = active === 'pulse';
 
   const dots = useRef<(SVGCircleElement | null)[]>([]);
   const levelRef = useRef(level);
@@ -138,6 +139,11 @@ export function OmiOrb({
           level: smoothedLevelRef.current,
           burst: omiBurstForTurn(active, turn),
         });
+        if (usesCompositorPulse) {
+          node.style.transform = `scale(${dot.scale})`;
+          node.style.opacity = String(Math.max(0, Math.min(1, dot.alpha)));
+          continue;
+        }
         // Mutating attributes directly keeps the tree from re-rendering 60
         // times a second for what is purely a paint change.
         node.setAttribute('cx', String(centre + dot.offset.x * unit));
@@ -150,7 +156,7 @@ export function OmiOrb({
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [active, reduced, paused, centre, unit]);
+  }, [active, reduced, paused, centre, unit, usesCompositorPulse]);
 
   return (
     <svg
@@ -161,19 +167,32 @@ export function OmiOrb({
       role="img"
       aria-label="Omi"
     >
-      {restFrame.map((dot, i) => (
-        <circle
-          key={i}
-          ref={(node) => {
-            dots.current[i] = node;
-          }}
-          cx={centre + dot.offset.x * unit}
-          cy={centre + dot.offset.y * unit}
-          r={OmiMarkGeometry.dotRadius * unit * dot.scale}
-          opacity={Math.max(0, Math.min(1, dot.alpha))}
-          fill="currentColor"
-        />
-      ))}
+      {restFrame.map((dot, i) => {
+        const opacity = Math.max(0, Math.min(1, dot.alpha));
+        return (
+          <circle
+            key={i}
+            ref={(node) => {
+              dots.current[i] = node;
+            }}
+            cx={centre + dot.offset.x * unit}
+            cy={centre + dot.offset.y * unit}
+            r={OmiMarkGeometry.dotRadius * unit * (usesCompositorPulse ? 1 : dot.scale)}
+            opacity={usesCompositorPulse ? undefined : opacity}
+            fill="currentColor"
+            style={
+              usesCompositorPulse
+                ? {
+                    opacity,
+                    transform: `scale(${dot.scale})`,
+                    transformBox: 'fill-box',
+                    transformOrigin: 'center',
+                  }
+                : undefined
+            }
+          />
+        );
+      })}
     </svg>
   );
 }

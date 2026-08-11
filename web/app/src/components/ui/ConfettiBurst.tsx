@@ -38,17 +38,17 @@ export function ConfettiBurst({ seed = 0, count = 22, className }: ConfettiBurst
       {pieces.map((piece, index) => (
         <motion.span
           key={index}
-          initial={{ x: '-50%', y: '-50%', scale: 0, opacity: 1, rotate: 0 }}
+          initial={{
+            transform: 'translate(-50%, -50%) scale(0.92) rotate(0deg)',
+            opacity: 0,
+          }}
           animate={{
-            x: `calc(-50% + ${piece.x}px)`,
-            y: `calc(-50% + ${piece.y}px)`,
-            scale: [0, 1, 0.9, 0],
-            opacity: [1, 1, 1, 0],
-            rotate: piece.rotate,
+            transform: `translate(calc(-50% + ${piece.x}px), calc(-50% + ${piece.y}px)) scale(0.96) rotate(${piece.rotate}deg)`,
+            opacity: [0, 1, 1, 0],
           }}
           transition={{
             duration: piece.duration,
-            ease: 'easeOut',
+            ease: [0.23, 1, 0.32, 1],
             times: [0, 0.2, 0.7, 1],
           }}
           className="absolute left-1/2 top-1/2 block rounded-[1px]"

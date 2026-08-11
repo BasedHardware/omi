@@ -22,6 +22,10 @@ import { openRecordingWidget, openTranscriptWindow } from '@/lib/popout';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
+import {
+  getRecordControlRightOffset,
+  RECORD_CONTROL_EDGE_OFFSET,
+} from '@/lib/desktopChrome';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -60,7 +64,8 @@ export function HeaderRecordingIndicator() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Calculate right offset based on which panels are open (panel width is ~404px each)
-  const rightOffset = 16 + (isChatOpen ? 404 : 0) + (isNotificationOpen ? 404 : 0);
+  const rightOffset = getRecordControlRightOffset(isChatOpen, isNotificationOpen);
+  const horizontalShift = rightOffset - RECORD_CONTROL_EDGE_OFFSET;
 
   const isRecording = state === 'recording';
   const isPaused = state === 'paused';
@@ -99,8 +104,9 @@ export function HeaderRecordingIndicator() {
 
   return (
     <motion.div
-      className="fixed top-4 z-[9999]"
-      animate={{ right: rightOffset }}
+      className="fixed top-6 z-[9999]"
+      style={{ right: RECORD_CONTROL_EDGE_OFFSET }}
+      animate={{ transform: `translateX(-${horizontalShift}px)` }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
     >
       <div className="relative" ref={dropdownRef}>

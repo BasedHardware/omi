@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { usePathname } from '@tschk/moonshine-next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import {
   GanttChartSquare,
   House,
@@ -56,6 +57,7 @@ import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
 
 /** How long the banner takes to swell and pop, and the burst to clear it. */
 const BANNER_BURST_MS = 420;
+const BANNER_CONFETTI_COLORS = ['#FFFFFF', '#E5E5E5', '#B0B0B0', '#888888'];
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -255,6 +257,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // then the banner pops out. Collapsing them into one state would unmount the
   // banner — and the burst anchored to it — on the same frame.
   const [bannerBursting, setBannerBursting] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
   const isDesktop = useIsDesktop();
   const sidebarRef = useRef<HTMLElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -312,6 +315,42 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     await signOut();
     onClose();
   }, [signOut, onClose]);
+
+  const handleDismissMobileApp = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const reduceMotionNow =
+        shouldReduceMotion ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (!reduceMotionNow) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        confetti({
+          particleCount: 48,
+          spread: 360,
+          startVelocity: 28,
+          decay: 0.9,
+          gravity: 0.65,
+          scalar: 0.72,
+          ticks: 90,
+          origin: {
+            x: (rect.left + rect.width / 2) / window.innerWidth,
+            y: (rect.top + rect.height / 2) / window.innerHeight,
+          },
+          colors: BANNER_CONFETTI_COLORS,
+          disableForReducedMotion: true,
+          zIndex: 10000,
+        });
+      }
+
+      setBannerBursting(true);
+      localStorage.setItem('mobile-app-banner-dismissed', 'true');
+      window.setTimeout(() => setMobileAppDismissed(true), BANNER_BURST_MS);
+    },
+    [shouldReduceMotion],
+  );
 
   // Collapsed width (icon only) vs expanded width
   const sidebarWidth = isExpanded ? 280 : 72;
@@ -495,7 +534,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     // the moment the width starts moving; holding the row
                     // still and letting the label fade out under the clip is
                     // what makes the collapse read as one motion.
-                    'relative flex items-center gap-3 rounded-chip px-4 py-3',
+                    'relative flex items-center gap-3 rounded-chip px-[18px] py-3',
                     'transition-colors duration-150',
                     isActive
                       ? 'text-bg-primary'
@@ -549,61 +588,67 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   initial={false}
                   animate={
                     bannerBursting
-                      ? { scale: [1, 1.06, 0], opacity: [1, 1, 0] }
-                      : { scale: 1, opacity: 1 }
+                      ? shouldReduceMotion
+                        ? { opacity: 0 }
+                        : {
+                            transform: ['scale(1)', 'scale(1.06)', 'scale(0.96)'],
+                            opacity: [1, 1, 0],
+                          }
+                      : { transform: 'scale(1)', opacity: 1 }
                   }
-                  exit={{ scale: 0, opacity: 0 }}
+                  exit={
+                    shouldReduceMotion
+                      ? { opacity: 0 }
+                      : { transform: 'scale(0.96)', opacity: 0 }
+                  }
                   transition={
                     bannerBursting
-                      ? { duration: BANNER_BURST_MS / 1000, times: [0, 0.35, 1] }
+                      ? {
+                          duration: shouldReduceMotion ? 0.15 : BANNER_BURST_MS / 1000,
+                          times: [0, 0.35, 1],
+                          ease: [0.23, 1, 0.32, 1],
+                        }
                       : { type: 'spring', stiffness: 520, damping: 26 }
                   }
                   className={cn('relative px-3 pt-2 pb-2', !showText && 'px-2')}
                 >
                   {bannerBursting && <ConfettiBurst />}
-                  <a
-                    href={bannerHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                      'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
-                      showText ? 'p-3 pr-9' : 'justify-center p-3',
-                    )}
-                  >
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
-                      {isMac ? (
-                        <AppleLogo className="w-4 h-4 text-text-tertiary" />
-                      ) : (
-                        <Smartphone className="w-4 h-4 text-text-tertiary" />
+                  <div className="relative">
+                    <a
+                      href={bannerHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
+                        showText ? 'p-3 pr-9' : 'justify-center p-3',
                       )}
-                    </div>
-                    {showText && (
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-text-primary">
-                          {bannerTitle}
-                        </p>
-                        <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                    >
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+                        {isMac ? (
+                          <AppleLogo className="w-4 h-4 text-text-tertiary" />
+                        ) : (
+                          <Smartphone className="w-4 h-4 text-text-tertiary" />
+                        )}
                       </div>
-                    )}
+                      {showText && (
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-text-primary">
+                            {bannerTitle}
+                          </p>
+                          <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                        </div>
+                      )}
+                    </a>
                     {showText && (
                       <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setBannerBursting(true);
-                          localStorage.setItem('mobile-app-banner-dismissed', 'true');
-                          window.setTimeout(
-                            () => setMobileAppDismissed(true),
-                            BANNER_BURST_MS,
-                          );
-                        }}
+                        onClick={handleDismissMobileApp}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
                         aria-label="Dismiss"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     )}
-                  </a>
+                  </div>
                 </motion.div>
               );
             })()}
@@ -623,7 +668,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             // flex-shrink-0: the rail is a flex column whose nav takes the
             // slack, so without this the footer is the item that gives way and
             // the opened menu is silently squeezed back to the profile row.
-            'relative m-3 flex-shrink-0',
+            'relative flex-shrink-0',
+            showText ? 'm-3' : 'mx-2 mb-3 mt-3',
             // Collapsed, the avatar is the whole control and stands on the raw
             // window; the card would be chrome drawn around a single circle.
             showText && 'overflow-hidden rounded-card border border-stroke bg-bg-raised',
@@ -668,7 +714,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className={cn(
-              'flex w-full items-center gap-3 overflow-hidden p-3 transition-colors',
+              'flex w-full items-center gap-3 overflow-hidden transition-colors',
+              showText ? 'p-3' : 'h-12 justify-center p-0',
               showText && 'hover:bg-bg-tertiary/60',
             )}
             title={!showText ? 'Settings' : undefined}
