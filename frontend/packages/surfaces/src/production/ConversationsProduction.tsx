@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Folder } from "@omi-core/contracts";
 import { formatDate, formatDuration, t } from "@omi-core/i18n";
-import type { StoreStatus } from "@omi-core/domain";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./conversation-fixtures.js";
 import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionFilterChips, ProductionSearchField, type ProductionFilterOption } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import "./conversations.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type ConversationFilter = "all" | "starred" | `folder:${string}`;
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 function visibilityLabel(value: Conversation["visibility"], locale: Locale): string {
   if (value === "public") return t(locale, "conversations.public");
@@ -275,15 +268,6 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
     return () => { active = false; unsubscribe(); unsubscribeFolders(); };
   }, [foldersStore, locale, reload, store]);
 
-  const notice = phaseLabel(status, locale);
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return t(locale, "queue.paused");
-    if (status.queue.phase === "retrying") return t(locale, "queue.retrying");
-    if (status.queue.phase === "sending") return t(locale, "queue.sending", { count });
-    return t(locale, "queue.queuedCount", { count });
-  }, [locale, status]);
   const selected = detailId ? rows.find((row) => row.id === detailId) : undefined;
   const visibleRows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -319,6 +303,9 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
     rowCount: rows.length,
     visibleCount: visibleRows.length,
   });
+  const source = (fixture
+    ? { kind: "fixture", fixture }
+    : { kind: "live", origin: "bridge" }) satisfies SurfaceDataSource;
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`conversations:visible:${visibleRows.length}:total:${rows.length}:folders:${folders.length}:detail:${selected ? "shown" : detailId ? "missing" : "none"}`}>
@@ -327,17 +314,25 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       <ProductionLibrarySegment locale={locale} active="conversations" />
       <header className="production-header">
         <div><p className="eyebrow">{t(locale, "nav.conversations")}</p><h1>{t(locale, "conversations.title")}</h1><p>{t(locale, "conversations.subtitle")}</p></div>
-        {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
       </header>
-      {fixture && <p className="qa-label">{t(locale, "qa.fixtureLabel", { name: t(locale, "qa.syntheticData"), fixture })}</p>}
-      {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-      {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-      {operationError && <div className="operation-error" role="alert">{operationError}</div>}
+      <ProductionDataSourceBadge source={source} locale={locale} />
+      <ProductionLifecycleRegion
+        className="surface-notices"
+        phase={status.refresh.phase}
+        hasSavedData={status.refresh.hasSavedData}
+        locale={locale}
+        queue={status.queue}
+        deadLetterCount={dead.length}
+        operationError={operationError}
+        nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+        retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+      />
       {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state" data-empty-kind="detail-not-found">{t(locale, "conversations.detailNotFound")}</p> : <>
         <div className="conversation-controls">
           <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>
         <ProductionFilterChips className="conversation-filter" label={t(locale, "conversations.title")} value={filter} options={filterOptions} onValueChange={setFilter} />
+        <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleRows.length })} />
         {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state" data-empty-kind="empty-projection"><strong>{t(locale, "conversations.emptyTitle")}</strong><p>{t(locale, "conversations.emptyBody")}</p></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
             <h2>{group.label}</h2>

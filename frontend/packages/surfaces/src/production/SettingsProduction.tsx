@@ -5,9 +5,8 @@ import type { AppearanceSelection, EntitlementState, SettingsSnapshot } from "./
 import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement } from "./ProductionPrimitives.js";
 import "./settings.css";
 
 type Locale = string;
@@ -16,11 +15,6 @@ type SavePhase = "idle" | "saving" | "saved" | "failed";
 type AccountPresentation = "loading" | "unavailable" | "signed-out" | "signed-in";
 type PlanPresentation = "metered" | "unmetered" | "absent";
 type LimitPresentation = "ok" | "reached-upgrade" | "reached-no-upgrade";
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 const APPEARANCE_OPTIONS: AppearanceSelection[] = ["default", "system", "light", "dark"];
 
@@ -121,16 +115,6 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
 
-  const notice = phaseLabel(status, locale);
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return t(locale, "queue.paused");
-    if (status.queue.phase === "retrying") return t(locale, "queue.retrying");
-    if (status.queue.phase === "sending") return t(locale, "queue.sending", { count });
-    return t(locale, "queue.queuedCount", { count });
-  }, [locale, status]);
-
   const canRouteUpgrade = typeof onUpgrade === "function";
   const phase = status.refresh.phase;
   const identity = snapshot?.identity ?? null;
@@ -181,20 +165,24 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
             <h1>{t(locale, "settings.title")}</h1>
             <p>{t(locale, "settings.subtitle")}</p>
           </div>
-          {status.refresh.phase !== "ready" && (
-            <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>
-              {t(locale, "common.retry")}
-            </button>
-          )}
         </header>
-        {fixture && <ProductionDataSourceBadge source={{ kind: "fixture", fixture }} locale={locale} />}
-        <div className="surface-notices" aria-live="polite">
-          {notice && account !== "unavailable" && <div className={"status-notice " + status.refresh.phase} role="status">{notice}</div>}
-          {queueLabel && <div className={"queue-notice " + status.queue.phase} role="status">{queueLabel}</div>}
+        <ProductionDataSourceBadge source={fixture ? { kind: "fixture", fixture } : { kind: "live", origin: "bridge" }} locale={locale} />
+        <ProductionLifecycleRegion
+          className="surface-notices"
+          phase={status.refresh.phase}
+          hasSavedData={status.refresh.hasSavedData}
+          locale={locale}
+          queue={status.queue}
+          deadLetterCount={dead.length}
+          operationError={operationError}
+          nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+          retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+        />
+        <ProductionLiveAnnouncement message={saveNotice ?? signedOutNotice} />
+        {(saveNotice || signedOutNotice) && <div className="surface-notices">
           {saveNotice && <div className="settings-save-notice" role="status">{saveNotice}</div>}
           {signedOutNotice && <div className="settings-sign-out-notice" role="status">{signedOutNotice}</div>}
-          {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-        </div>
+        </div>}
         <section className="settings-section" aria-labelledby="settings-account-heading">
           <h2 id="settings-account-heading">{t(locale, "settings.accountSection")}</h2>
           {account === "loading" ? (

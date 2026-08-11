@@ -30,6 +30,17 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   // fixture or leaves the production Tasks navigation pointing at Memories.
 });
 
+test("bridge-unavailable state gives a distinct recovery step and executable retry", async () => {
+  const source = await read("src/production/main.tsx");
+  const homeStyles = await read("src/production/home.css");
+  assert.match(source, /nextAction=\{t\(locale, "qa\.bridgeNext"\)\}/);
+  assert.match(source, /className="bridge-unavailable-retry"/);
+  assert.match(source, /window\.location\.reload\(\)/);
+  assert.doesNotMatch(homeStyles, /home-search input:focus-visible/);
+  // red-proof: repeating the bridge diagnosis as the next action, omitting the
+  // recovery control, or restoring Home's outline reset fails this guard.
+});
+
 test("production and lab surfaces do not teach navigation into the dev rig", async () => {
   const [production, lab] = await Promise.all([
     read("src/production/main.tsx"),

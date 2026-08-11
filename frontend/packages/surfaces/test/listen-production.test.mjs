@@ -112,7 +112,7 @@ function stateStore(capture, options = {}) {
     subscribe: () => () => {},
     async refresh() { refreshes += 1; },
     captureState: () => capture,
-    transcriptSegments: () => [],
+    transcriptSegments: () => options.segments ?? [],
     entitlementState: () => options.entitlement ?? null,
     async start() {},
     async stop() {},
@@ -142,7 +142,10 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
       const panel = rendered.container.querySelector(".listen-state-panel");
       assert.ok(panel, `${capture.kind} renders a state panel`);
       assert.equal(panel.getAttribute("data-presentation"), capture.kind);
-      assert.equal(panel.getAttribute("role"), loud ? "alert" : "status");
+      assert.equal(panel.getAttribute("role"), null, "elapsed/buffered counters are not a live region");
+      const announcement = rendered.container.querySelector('[data-live-region="true"]');
+      assert.ok(announcement, "capture state has one deduplicated live announcement");
+      assert.equal(announcement.getAttribute("role"), "status");
       assert.ok(panel.querySelector(`.listen-state-glyph.is-${capture.kind}`), `${capture.kind} renders its designed state glyph`);
       const title = panel.querySelector(".listen-state-title")?.textContent;
       assert.equal(title, EN_MESSAGES[titleKey]);
@@ -175,6 +178,30 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
   assert.equal(new Set(renderedTitles).size, 6);
   // red-proof: remove any state-specific data-presentation/glyph/title branch;
   // the rendered DOM assertion for that arm fails, even if describeCapture remains correct.
+});
+
+test("Listen batches transcript text into the single state announcement", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const callbacks = [];
+  const scheduler = {
+    setTimeout(callback) { callbacks.push(callback); return callback; },
+    clearTimeout() {},
+  };
+  const rendered = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "capturing", elapsedSeconds: 4 }, {
+      segments: [segment("one", "A short transcript", 0, 1), segment("two", "with a second phrase", 1, 2)],
+    }),
+    announcementScheduler: scheduler,
+  });
+  try {
+    assert.equal(callbacks.length, 1, "the initial state and transcript are one debounced update");
+    await rendered.act(async () => callbacks[0]());
+    const announcement = rendered.container.querySelector('[data-live-region="true"]');
+    assert.ok(announcement?.textContent?.includes("A short transcript with a second phrase"));
+    assert.equal(rendered.container.querySelector(".listen-state-panel")?.getAttribute("role"), null);
+  } finally {
+    await rendered.cleanup();
+  }
 });
 
 test("reconnect redelivery renders one row with the revision text", async () => {
@@ -293,7 +320,7 @@ test("entitlement pause and ceiling stop stay distinct and neither renders idle"
     assert.equal(panel?.getAttribute("data-presentation"), "stopped-at-ceiling");
     assert.equal(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateStoppedAtCeiling"]);
     assert.notEqual(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateIdle"]);
-    assert.equal(panel?.getAttribute("role"), "alert");
+    assert.equal(panel?.getAttribute("role"), null);
     assert.equal(panel?.getAttribute("data-capturing"), "false");
   } finally {
     await stoppedRender.cleanup();

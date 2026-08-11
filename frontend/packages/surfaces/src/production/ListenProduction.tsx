@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDuration, t } from "@omi-core/i18n";
-import type { StoreStatus } from "@omi-core/domain";
 import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
 import "./listen.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 function elapsedSeconds(state: CaptureState): number | null {
   switch (state.kind) {
@@ -62,10 +56,19 @@ function transcriptKey(segment: TranscriptSegment, index: number): string {
     : `anonymous-${segment.start}-${segment.end}-${index}`;
 }
 
-export function ListenProduction({ store, locale = "en", onReady }: {
+function transcriptAnnouncement(segments: readonly TranscriptSegment[]): string | null {
+  if (segments.length === 0) return null;
+  const text = segments.slice(-3).map((segment) => segment.text.trim()).filter(Boolean).join(" ");
+  if (!text) return null;
+  const bounded = Array.from(text).slice(0, 240).join("");
+  return bounded === text ? bounded : `${bounded}…`;
+}
+
+export function ListenProduction({ store, locale = "en", onReady, announcementScheduler }: {
   store: ProductionListenStore;
   locale?: Locale;
   onReady?: () => void;
+  announcementScheduler?: ProductionAnnouncementScheduler;
 }): React.JSX.Element {
   const [capture, setCapture] = useState<CaptureState>(() => store.captureState());
   const [segments, setSegments] = useState<readonly TranscriptSegment[]>(() => store.transcriptSegments());
@@ -121,16 +124,6 @@ export function ListenProduction({ store, locale = "en", onReady }: {
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
 
-  const notice = phaseLabel(status, locale);
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return t(locale, "queue.paused");
-    if (status.queue.phase === "retrying") return t(locale, "queue.retrying");
-    if (status.queue.phase === "sending") return t(locale, "queue.sending", { count });
-    return t(locale, "queue.queuedCount", { count });
-  }, [locale, status]);
-
   const presentedCapture: CaptureState =
     (status.refresh.phase === "initial-loading" || status.refresh.phase === "refreshing")
     && capture.kind === "idle"
@@ -145,6 +138,11 @@ export function ListenProduction({ store, locale = "en", onReady }: {
     presentedCapture.kind === "stopped-at-ceiling"
     || (presentedCapture.kind === "error" && !presentedCapture.retryable)
   );
+  const listenAnnouncement = [
+    t(locale, description.titleKey),
+    segments.length > 0 ? t(locale, "lifecycle.resultsCount", { count: segments.length }) : null,
+    transcriptAnnouncement(segments),
+  ].filter(Boolean).join(" · ");
 
   return (
     <main
@@ -165,26 +163,24 @@ export function ListenProduction({ store, locale = "en", onReady }: {
             <h1>{t(locale, "listen.title")}</h1>
             <p>{t(locale, "listen.subtitle")}</p>
           </div>
-          <div className="header-actions">
-            {status.refresh.phase !== "ready" && canRetryRefresh && (
-              <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>
-                {t(locale, "common.retry")}
-              </button>
-            )}
-          </div>
         </header>
-        <div className="surface-notices" aria-live="polite">
-          {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-          {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-          {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-        </div>
+        <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
+        <ProductionLifecycleRegion
+          className="surface-notices"
+          phase={status.refresh.phase}
+          hasSavedData={status.refresh.hasSavedData}
+          locale={locale}
+          queue={status.queue}
+          operationError={operationError}
+          nextAction={status.refresh.phase !== "ready" && canRetryRefresh ? t(locale, "common.retry") : null}
+          retry={status.refresh.phase !== "ready" && canRetryRefresh ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+        />
         <section
           className={`listen-state-panel${description.loud ? " is-loud" : ""}${description.capturing ? " is-capturing" : ""}`}
           aria-label={t(locale, "listen.stateLabel")}
           data-loud={description.loud ? "true" : "false"}
           data-capturing={description.capturing ? "true" : "false"}
           data-presentation={presentedCapture.kind}
-          role={description.loud ? "alert" : "status"}
         >
           <div className={`listen-state-glyph is-${presentedCapture.kind}`} aria-hidden="true">
             <span className="listen-state-glyph-core" />
@@ -210,6 +206,7 @@ export function ListenProduction({ store, locale = "en", onReady }: {
             </span>
           </div>
         </section>
+        <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
         {segments.length > 0 && (
           <section
             className="listen-transcript"

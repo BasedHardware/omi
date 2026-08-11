@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Memory } from "@omi-core/contracts";
 import { formatDate, t } from "@omi-core/i18n";
-import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionMemoryStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
-import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
+import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { createProductionCommandRegistry, dispatchProductionCommand } from "./command-registry.js";
@@ -14,11 +12,6 @@ import { createProductionCommandRegistry, dispatchProductionCommand } from "./co
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 const commandRegistry = createProductionCommandRegistry();
-
-function phaseLabel(status: StoreStatus, locale: Locale): string | null {
-  const key = refreshPhaseNoticeKey(status.refresh.phase);
-  return key === null ? null : t(locale, key);
-}
 
 function MemoryCard({ memory, store, locale, run }: {
   memory: Memory;
@@ -163,16 +156,6 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
     return () => { active = false; unsubscribe(); };
   }, [locale, reload, store]);
 
-  const notice = phaseLabel(status, locale);
-  const queueLabel = useMemo(() => {
-    const count = status.queue.pendingCount;
-    if (!count) return null;
-    if (status.queue.phase === "needs-auth") return t(locale, "queue.paused");
-    if (status.queue.phase === "retrying") return t(locale, "queue.retrying");
-    if (status.queue.phase === "sending") return t(locale, "queue.sending", { count });
-    return t(locale, "queue.queuedCount", { count });
-  }, [locale, status]);
-
   const add = async (): Promise<void> => {
     const content = draft.trim();
     if (!content) return;
@@ -193,6 +176,9 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
     rowCount: rows.length,
     visibleCount: visibleRows.length,
   });
+  const source = (fixture
+    ? { kind: "fixture", fixture }
+    : { kind: "live", origin: "bridge" }) satisfies SurfaceDataSource;
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`memories:visible:${visibleRows.length}:total:${rows.length}`}>
@@ -201,16 +187,19 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
       <ProductionLibrarySegment locale={locale} active="memories" />
       <header className="production-header memories-header">
         <div><p className="eyebrow">{t(locale, "nav.memories")}</p><h1>{t(locale, "memories.title")}</h1><p>{t(locale, "memories.subtitle")}</p></div>
-        <div className="header-actions">
-          {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
-        </div>
       </header>
-      <div className="surface-notices" aria-live="polite">
-        {fixture && <p className="qa-label">{t(locale, "qa.fixtureLabel", { name: t(locale, "qa.syntheticData"), fixture })}</p>}
-        {notice && <div className={`status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
-        {queueLabel && <div className={`queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
-        {operationError && <div className="operation-error" role="alert">{operationError}</div>}
-      </div>
+      <ProductionDataSourceBadge source={source} locale={locale} />
+      <ProductionLifecycleRegion
+        className="surface-notices"
+        phase={status.refresh.phase}
+        hasSavedData={status.refresh.hasSavedData}
+        locale={locale}
+        queue={status.queue}
+        deadLetterCount={dead.length}
+        operationError={operationError}
+        nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+        retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
+      />
       {composerOpen && <form className="memory-create" aria-label={t(locale, "memories.create")} onSubmit={(event) => { event.preventDefault(); void add(); }}>
         <textarea autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t(locale, "memories.create")} aria-label={t(locale, "memories.create")} />
         <label className="visibility-control">{t(locale, "memories.visibility")}
@@ -239,6 +228,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
           <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}>•••</button>
         </div>
       </div>
+      <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleRows.length })} />
       {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state" data-empty-kind="empty-projection"><strong>{t(locale, "memories.emptyTitle")}</strong><p>{t(locale, "memories.emptyBody")}</p></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{visibleRows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
       {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map(deadLetterView).map((view) => <div className="dead-letter" key={view.opId}><span>{t(locale, view.messageKey)}</span>{view.savedEdit !== null && <pre className="dead-letter-payload">{view.savedEdit}</pre>}{/* Discard only — a retry resubmits an envelope the epoch fence refuses forever (dead-letter-presentation.ts). */}<button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(view.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
       </section>

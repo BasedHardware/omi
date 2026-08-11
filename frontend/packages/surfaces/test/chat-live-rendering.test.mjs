@@ -703,6 +703,30 @@ test("empty cancellation retains the human without fabricating a stopped assista
   }
 });
 
+test("Chat announces the latest terminal delivery without rereading the thread", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const fixtureChatStore = await loadProductionExport("chat-fixtures.ts", "fixtureChatStore");
+  const callbacks = [];
+  const scheduler = {
+    setTimeout(callback) { callbacks.push(callback); return callback; },
+    clearTimeout() {},
+  };
+  const rendered = await renderComponent(ChatProduction, {
+    store: fixtureChatStore("cancelled"),
+    fixture: "cancelled",
+    announcementScheduler: scheduler,
+  });
+  try {
+    assert.equal(callbacks.length, 1);
+    await rendered.act(async () => callbacks[0]());
+    const announcement = rendered.container.querySelector('[data-live-region="true"]');
+    assert.ok(announcement?.textContent?.includes(EN_MESSAGES["chat.stopped"]));
+    assert.equal(announcement?.textContent?.includes(EN_MESSAGES["lifecycle.resultsCount"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("retained dead send shows exact authored text and ordered ids with discard only", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(

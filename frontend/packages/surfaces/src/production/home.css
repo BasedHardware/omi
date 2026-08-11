@@ -4,7 +4,6 @@
 .home-search { position: relative; display: flex; align-items: center; }
 .home-search input { width: 100%; min-height: 38px; padding: var(--space-xs) var(--space-xxxl) var(--space-xs) 44px; border: 0; border-radius: 0; color: var(--content-primary); background: transparent; font: inherit; }
 .home-search input::placeholder { color: var(--content-tertiary); }
-.home-search input:focus-visible { outline: 0; }
 .home-query-mark { position: absolute; left: 0; z-index: 1; display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; border: 1.5px solid var(--content-secondary); border-radius: 50%; pointer-events: none; }
 .home-query-mark span { width: 6px; height: 6px; border-radius: 50%; background: var(--content-secondary); box-shadow: 7px 0 0 -2px var(--content-secondary), -7px 0 0 -2px var(--content-secondary); }
 .home-search-clear { position: absolute; right: 0; z-index: 1; min-width: 32px; min-height: 32px; padding: 0; border-color: transparent; border-radius: 50%; background: transparent; }

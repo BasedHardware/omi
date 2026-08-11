@@ -58,7 +58,7 @@ test("production surfaces consume the shared presenter, not a local switch", asy
   ];
   for (const relative of consumers) {
     const source = await read(relative);
-    assert.match(source, /refreshPhaseNoticeKey/, `${relative} must call the shared presenter`);
+    assert.match(source, /refreshPhaseNoticeKey|ProductionLifecycleRegion/, `${relative} must call the shared presenter`);
     assert.doesNotMatch(
       source,
       /case "initial-loading":\s*return (?:t\(|translate\()/,
