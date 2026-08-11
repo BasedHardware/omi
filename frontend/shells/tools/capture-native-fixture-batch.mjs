@@ -9,7 +9,7 @@
  * manifest is written only after every requested coordinate succeeds. A
  * separate coordinator assembles the time-bound ledger receipt afterward.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
   copyFileSync,
@@ -563,6 +563,59 @@ function terminateIosApp(device, bundleId, env, label) {
   }
 }
 
+function iosAppDataContainer(device, bundleId, env, runId) {
+  const result = runCommand(
+    commandSpec("xcrun", ["simctl", "get_app_container", device, bundleId, "data"], coreRoot, env, 30),
+    `${runId}: resolve capture app data container`,
+  );
+  const container = result.stdout.trim();
+  const expectedContainer = new RegExp(
+    `^/Users/[^/]+/Library/Developer/CoreSimulator/Devices/${device.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/data/Containers/Data/Application/[A-F0-9-]+$`,
+  );
+  if (!path.isAbsolute(container) || !expectedContainer.test(container)) {
+    fail(`${runId}: simulator returned an unbound app data container`);
+  }
+  return container;
+}
+
+function readIosReadiness(device, markerPath, env) {
+  const result = spawnSync("xcrun", ["simctl", "spawn", device, "/bin/cat", markerPath], {
+    cwd: coreRoot,
+    env,
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  if (result.error?.code === "ETIMEDOUT") fail(`${device}: capture readiness read timed out`);
+  if (result.status !== 0) return null;
+  try { return JSON.parse(result.stdout); } catch { return null; }
+}
+
+function waitForIosReadiness(coordinate, artifact, markerPath, nonce, waitSeconds) {
+  const deadline = Date.now() + waitSeconds * 1000;
+  while (Date.now() <= deadline) {
+    const marker = readIosReadiness(coordinate.device.udid, markerPath, artifact.env);
+    if (marker &&
+        Object.keys(marker).sort().join(",") === "fixture,nonce,route,run_id,state" &&
+        marker.nonce === nonce &&
+        marker.run_id === coordinate.run_id &&
+        marker.route === coordinate.domain &&
+        marker.fixture === `polish:${coordinate.domain}` &&
+        typeof marker.state === "string" &&
+        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(marker.state)) {
+      return;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    spawnSync("sleep", [String(Math.min(0.25, remaining / 1000))], {
+      cwd: coreRoot,
+      env: artifact.env,
+      encoding: "utf8",
+      timeout: 2_000,
+    });
+  }
+  fail(`${coordinate.run_id}: capture app did not publish the run-bound readiness record`);
+}
+
 function captureMac(coordinate, artifact, output, timeoutSeconds) {
   const env = { ...artifact.env };
   env.OMI_SURFACE_QUERY = coordinate.surface_query;
@@ -593,16 +646,20 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: terminate prior app`);
   const stdoutPath = `${output}.app.stdout`;
   const stderrPath = `${output}.app.stderr`;
+  const readinessNonce = randomBytes(32).toString("hex");
+  const markerPath = path.join(
+    iosAppDataContainer(coordinate.device.udid, artifact.bundleId, artifact.env, coordinate.run_id),
+    "Library",
+    "Caches",
+    "omi-native-capture-ready.json",
+  );
   rmSync(stdoutPath, { force: true });
   rmSync(stderrPath, { force: true });
   let launched = false;
   try {
     launched = true;
-    runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
-    runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
-    const appOutput = `${existsSync(stdoutPath) ? readFileSync(stdoutPath, "utf8") : ""}\n${existsSync(stderrPath) ? readFileSync(stderrPath, "utf8") : ""}`;
-    const readyMarker = `NATIVE_CAPTURE_READY run_id=${coordinate.run_id} `;
-    if (!appOutput.includes(readyMarker)) fail(`${coordinate.run_id}: capture app did not emit the typed readiness marker`);
+    runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`, `--omi-capture-nonce=${readinessNonce}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
+    waitForIosReadiness(coordinate, artifact, markerPath, readinessNonce, waitSeconds);
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
   } finally {
     if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);

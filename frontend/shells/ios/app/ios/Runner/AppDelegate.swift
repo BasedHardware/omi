@@ -242,6 +242,7 @@ extension WKWebView {
         return
       }
       if call.method == "ready" {
+        let noncePrefix = "--omi-capture-nonce="
         guard
           let payload = call.arguments as? [String: String],
           Set(payload.keys) == Set(["run_id", "route", "fixture", "state"]),
@@ -253,9 +254,38 @@ extension WKWebView {
           route.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
           fixture.range(of: "^polish:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
           state.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
-          ProcessInfo.processInfo.arguments.contains("--omi-capture-run-id=\(runId)")
+          ProcessInfo.processInfo.arguments.contains("--omi-capture-run-id=\(runId)"),
+          let nonceArgument = ProcessInfo.processInfo.arguments.first(where: {
+            $0.hasPrefix(noncePrefix)
+          })
         else {
           result(FlutterError(code: "capture-ready-invalid", message: nil, details: nil))
+          return
+        }
+        let nonce = String(nonceArgument.dropFirst(noncePrefix.count))
+        guard nonce.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+          result(FlutterError(code: "capture-ready-invalid", message: nil, details: nil))
+          return
+        }
+        let marker: [String: String] = [
+          "fixture": fixture,
+          "nonce": nonce,
+          "route": route,
+          "run_id": runId,
+          "state": state,
+        ]
+        do {
+          guard let cache = FileManager.default.urls(
+            for: .cachesDirectory, in: .userDomainMask
+          ).first else {
+            throw CocoaError(.fileNoSuchFile)
+          }
+          let data = try JSONSerialization.data(withJSONObject: marker, options: [.sortedKeys])
+          try data.write(
+            to: cache.appendingPathComponent("omi-native-capture-ready.json"),
+            options: .atomic)
+        } catch {
+          result(FlutterError(code: "capture-ready-write-failed", message: nil, details: nil))
           return
         }
         NSLog(

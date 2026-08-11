@@ -183,9 +183,14 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /flutter, \["config", `--build-dir=/);
   assert.match(source, /found nothing to terminate/);
   assert.match(source, /--omi-capture-run-id=/);
-  assert.match(source, /NATIVE_CAPTURE_READY/);
+  assert.match(source, /--omi-capture-nonce=/);
+  assert.match(source, /omi-native-capture-ready\.json/);
+  assert.match(source, /simctl", "spawn"/);
+  assert.match(source, /marker\.nonce === nonce/);
   assert.match(appDelegate, /name: "omi\/capture-launch"/);
   assert.match(appDelegate, /capture-ready-invalid/);
+  assert.match(appDelegate, /capture-ready-write-failed/);
+  assert.match(appDelegate, /omi-native-capture-ready\.json/);
   assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
