@@ -30,11 +30,11 @@
 //    strand a user in a window with no visible close control *and* no keyboard one.
 //  - **Moving has two handles, deliberately.** `.hiddenTitleBar` keeps a real (transparent) title bar
 //    over the top band, which still drags — that band is why the shell reserves
-//    `GlassShell.titlebarClearance` and draws nothing in it. SwiftUI's window-drag gesture covers the
-//    rest of the window. The native `isMovableByWindowBackground` switch cannot do that safely:
+//    `GlassShell.titlebarClearance` and draws nothing in it. A simultaneous SwiftUI drag gesture is
+//    confined to the visible top bar. The native `isMovableByWindowBackground` switch cannot do that safely:
 //    AppKit sees a SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background,
-//    and steals its click. Keeping both recognition paths in SwiftUI lets its gesture arena give an
-//    ordinary click to the Button and a drag to the window without intercepting either event.
+//    and steals its click. A root SwiftUI gesture also competes with every Button, Menu, search field,
+//    and filter in the shell. The top-bar-only simultaneous gesture preserves those child controls.
 //
 //  ## The two presentations, and why there are two
 //
@@ -144,7 +144,7 @@ enum ShellWindowChrome {
     hideStandardButtons(in: window)
     // AppKit cannot see SwiftUI controls inside an NSHostingView. The hosting view reports that a
     // mouse-down may move the window even when the point is a Button, so this native switch turns
-    // ordinary clicks into window drags. `ShellWindowDragSurface` keeps that ownership in SwiftUI.
+    // ordinary clicks into window drags. `ShellWindowDragHandle` keeps the explicit top-bar handle in SwiftUI.
     window.isMovableByWindowBackground = false
     window.level = presentation == .summoned ? .floating : .normal
     // Onboarding and sign-in must survive trips to a browser or System Settings. Once the shell is a
@@ -205,21 +205,22 @@ enum ShellWindowChrome {
   }
 }
 
-/// Keeps click recognition and window-drag recognition in SwiftUI's gesture arena. This is the
-/// platform boundary AppKit's background-drag switch cannot see through an `NSHostingView`.
+/// A drag handle for the visible top bar. It is intentionally not attached to the shell root: a root
+/// gesture can participate in every Button, Menu, and TextField event sequence. Simultaneous
+/// recognition keeps top-bar controls clickable while preserving drag-to-move on the bar's empty area.
 @MainActor
-struct ShellWindowDragSurface: ViewModifier {
+struct ShellWindowDragHandle: ViewModifier {
   @State private var windowOrigin: NSPoint?
 
   @ViewBuilder
   func body(content: Content) -> some View {
     if #available(macOS 15.0, *) {
-      content.gesture(WindowDragGesture(), including: .gesture)
+      content.simultaneousGesture(WindowDragGesture())
     } else {
       // `WindowDragGesture` was introduced in macOS 15. Keep the macOS 14 deployment floor usable
       // with a lower-precedence gesture: child controls keep their own clicks and drags, while the
       // shell's non-control surfaces remain window handles.
-      content.gesture(
+      content.simultaneousGesture(
         DragGesture(minimumDistance: 3)
           .onChanged { value in
             guard let window = ShellSummon.shellWindow() else { return }
@@ -228,15 +229,14 @@ struct ShellWindowDragSurface: ViewModifier {
             window.setFrameOrigin(
               ShellWindowChrome.draggedOrigin(windowOrigin: origin, translation: value.translation))
           }
-          .onEnded { _ in windowOrigin = nil },
-        including: .gesture)
+          .onEnded { _ in windowOrigin = nil })
     }
   }
 }
 
 extension View {
-  func shellWindowDragSurface() -> some View {
-    modifier(ShellWindowDragSurface())
+  func shellWindowDragHandle() -> some View {
+    modifier(ShellWindowDragHandle())
   }
 }
 

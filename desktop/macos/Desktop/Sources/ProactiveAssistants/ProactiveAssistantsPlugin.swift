@@ -89,7 +89,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   // Eliminates continuous polling when the user stays on the same app/window.
   private var distributionGate = ProactiveFrameDistributionGate()
   private var distributionDebounceTimer: Timer?
-  private var latestCapturedFrame: CapturedFrame?
+  private(set) var latestCapturedFrame: CapturedFrame?
   /// Fallback interval: re-distribute even without context change to catch visual-only updates.
   private let distributionFallbackInterval: TimeInterval = 60
   private let messagingDistributionFallbackInterval: TimeInterval = 15

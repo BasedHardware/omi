@@ -199,8 +199,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var draggableBarCancellable: AnyCancellable?
   private let cursorScreenTracker = CursorScreenTracker()
   private var pttHintCancellable: AnyCancellable?
+  var mouseInterceptionReconciler: FloatingBarMouseInterceptionReconciler?
   private var previousVoiceResponseGlowActive = false
   private var resizeWorkItem: DispatchWorkItem?
+  var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
+  var notchRetractionCancellation: DelayedActionCancellation?
+  var notchRetractionGeneration = 0
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -218,7 +222,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
-  private var frameAnimationToken: Int = 0
+  var frameAnimationToken: Int = 0
   private var pendingFrameAnimationTarget: NSRect?
   private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
   /// In-process NSMenus (bar context menus, the model picker) render at
@@ -463,12 +467,33 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else {
       centerOnMainScreen()
     }
+    syncMouseInterception()
     scheduleStartupDisplayRevalidation()
   }
 
   deinit {
     menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
-    interceptionMonitors.forEach(NSEvent.removeMonitor)
+  }
+
+  override func makeKeyAndOrderFront(_ sender: Any?) {
+    cancelPendingRetraction()
+    super.makeKeyAndOrderFront(sender)
+    syncMouseInterception()
+  }
+
+  override func orderFrontRegardless() {
+    cancelPendingRetraction()
+    super.orderFrontRegardless()
+    syncMouseInterception()
+  }
+
+  override func orderOut(_ sender: Any?) {
+    notchRetractionGeneration &+= 1
+    notchRetractionCancellation?.cancel()
+    notchRetractionCancellation = nil
+    state.notchRevealProgress = 1
+    super.orderOut(sender)
+    syncMouseInterception()
   }
 
   // MARK: - Window Level
@@ -1001,50 +1026,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   // an invisible click sink over everything beneath it — other apps, and Omi's own centered shell
   // (dead top-bar pills). The window-level mechanism is `ignoresMouseEvents`, kept in sync with
   // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
-  // Two monitors are required — the local one sees moves while we are interactive; the global one
-  // while we are ignored (events then belong to the window below).
-  private nonisolated(unsafe) var interceptionMonitors: [Any] = []
-
-  fileprivate func syncMouseInterception() {
-    let mouse = NSEvent.mouseLocation
-    let shouldInteract: Bool
-    if frame.contains(mouse) {
-      let local = NSPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
-      shouldInteract = acceptsMouseHit(inContentPoint: local)
-    } else {
-      // Pointer elsewhere: stay interactive so tracking areas fire the moment it arrives.
-      shouldInteract = true
-    }
-    if ignoresMouseEvents == shouldInteract {
-      ignoresMouseEvents = !shouldInteract
-    }
-  }
-
-  private func installMouseInterceptionSync() {
-    // Monitor handlers are delivered on the main thread; hop back into MainActor explicitly.
-    let sync: @Sendable () -> Void = { [weak self] in
-      DispatchQueue.main.async { self?.syncMouseInterception() }
-    }
-    let global = NSEvent.addGlobalMonitorForEvents(
-      matching: [.mouseMoved, .leftMouseDragged],
-      handler: { _ in sync() })
-    if let global { interceptionMonitors.append(global) }
-    let local = NSEvent.addLocalMonitorForEvents(
-      matching: [.mouseMoved],
-      handler: { event in
-        sync()
-        return event
-      })
-    if let local { interceptionMonitors.append(local) }
-    syncMouseInterception()
-  }
-
   /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
   func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     acceptsMouseHit(inContentPoint: point)
   }
 
-  fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
+  func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     guard notchModeEnabled else { return true }
     // Only content that visibly fills the window may own the whole frame: an expanded
     // response panel or a notification card. A conversation that is merely open (ask input,
@@ -1385,7 +1372,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // AI conversation instead of leaving the compact pill visible — unless a
       // queued notification was just flushed; hiding now would swallow it, and
       // its dismissal re-hides the bar anyway.
-      if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
+      if self.shouldOrderOutAfterConversationClose {
         self.orderOut(nil)
       }
     }
@@ -2026,6 +2013,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
   func resizeForPTTState(expanded: Bool) {
+    if expanded { cancelPendingRetraction() }
     if notchModeEnabled {
       if state.showingAIConversation {
         return
@@ -2050,7 +2038,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       animationDuration: 0.18
     )
   }
-
   /// Size the notch to fit the "thinking" indicator (active width) while a PTT
   /// query is being processed, then collapse it back once the response takes
   /// over. Voice listening and the open conversation surface own sizing while
@@ -2134,22 +2121,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       completion()
       return
     }
-    frameAnimationToken += 1
-    let token = frameAnimationToken
-    OmiMotion.withGated(.easeIn(duration: 0.18)) {
-      state.notchRevealProgress = 0.01
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-      guard let self, self.frameAnimationToken == token else { return }
-      completion()
-      // Leave the island ready to render for show paths that skip the
-      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
-      self.state.notchRevealProgress = 1
-    }
+    beginNotchRetraction(then: completion)
+  }
+
+  private func cancelPendingRetraction() {
+    notchRetractionGeneration &+= 1
+    notchRetractionCancellation?.cancel()
+    notchRetractionCancellation = nil
+    state.notchRevealProgress = 1
   }
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
     guard !state.showingAIConversation else { return }
+    cancelPendingRetraction()
     state.currentNotification = notification
     let barHeight =
       notchModeEnabled
@@ -2433,6 +2417,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   @objc func windowDidMove(_ notification: Notification) {
+    syncMouseInterception()
     // Only persist position when the user is physically dragging the bar.
     // Programmatic moves (resize animations, chat open/close) should not
     // overwrite the saved position — that causes silent drift.
@@ -2463,6 +2448,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func windowDidResize(_ notification: Notification) {
+    syncMouseInterception()
     // Response size persistence is committed when the user finishes dragging
     // the resize grip. Persisting ordinary resize notifications here records
     // programmatic min-height transitions as user preferences because AppKit
