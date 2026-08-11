@@ -21,6 +21,8 @@ function manifest(overrides = {}) {
     schema: "omi.polish.matrix-coordinate/v1", kind: "runtime_trace", domain: "chat", shell: "macos",
     state: "ready", theme: "dark", width: "regular", accessibility: "none", run_id: "runtime-test-1",
     capture_class: "native_fixture", source_tier: "native_shell", source_shas: { core: coreSha, platform: platformSha },
+    surface_query: "polish=1&qa=chat&state=ready&platform=desktop&theme=dark&width=regular&accessibility=none&locale=en-US",
+    device: { udid: "macos-local", model: "Mac17,7", orientation: "landscape" },
     viewport: { width: 960, height: 671, scale: 2 }, ...overrides,
   };
 }
@@ -35,6 +37,8 @@ test("runtime manifest is immutable and cannot be relabelled as browser or unsup
   assert.throws(() => validateManifest(manifest({ domain: "settings", state: "cancelled" })), /not applicable/);
   assert.throws(() => validateManifest(manifest({ accessibility: "voiceover" })), /unsupported coordinate/);
   assert.throws(() => validateManifest(manifest({ accessibility: "reduced_motion", state: "busy" })), /state=ready/);
+  assert.throws(() => validateManifest(manifest({ surface_query: "polish=1&qa=chat&state=busy" })), /surface_query/);
+  assert.throws(() => validateManifest(manifest({ device: { udid: "other", model: "Mac17,7", orientation: "landscape" } })), /device/);
 });
 
 test("native shell custody is explicit and browser shortcuts are absent", () => {

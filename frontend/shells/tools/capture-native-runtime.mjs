@@ -107,7 +107,7 @@ function gitHead(root) {
 }
 
 export function validateManifest(manifest) {
-  const expected = ["accessibility", "capture_class", "domain", "kind", "run_id", "schema", "shell", "source_shas", "source_tier", "state", "theme", "viewport", "width"];
+  const expected = ["accessibility", "capture_class", "device", "domain", "kind", "run_id", "schema", "shell", "source_shas", "source_tier", "state", "surface_query", "theme", "viewport", "width"];
   if (!manifest || Object.keys(manifest).sort().join(",") !== expected.sort().join(",")) throw new Error("manifest has unexpected or missing keys");
   if (manifest.schema !== "omi.polish.matrix-coordinate/v1" || manifest.kind !== "runtime_trace") throw new Error("manifest must be a runtime_trace matrix coordinate");
   if (!domains.has(manifest.domain) || !shells.has(manifest.shell) || !states.has(manifest.state) || !themes.has(manifest.theme) || !accessibilities.has(manifest.accessibility)) throw new Error("manifest has an unsupported coordinate value");
@@ -118,6 +118,11 @@ export function validateManifest(manifest) {
   if (manifest.capture_class !== "native_fixture" || manifest.source_tier !== "native_shell") throw new Error("runtime matrix capture must be native_fixture/native_shell");
   if (!manifest.source_shas || Object.keys(manifest.source_shas).sort().join(",") !== "core,platform" || !sha.test(manifest.source_shas.core) || !sha.test(manifest.source_shas.platform)) throw new Error("source_shas.core/platform must be full SHAs");
   if (!manifest.viewport || Object.keys(manifest.viewport).sort().join(",") !== "height,scale,width" || !Number.isInteger(manifest.viewport.width) || !Number.isInteger(manifest.viewport.height) || !Number.isFinite(manifest.viewport.scale) || manifest.viewport.width < 320 || manifest.viewport.width > 2400 || manifest.viewport.height < 320 || manifest.viewport.height > 2800 || manifest.viewport.scale <= 0 || manifest.viewport.scale > 4) throw new Error("viewport must contain bounded width, height and scale");
+  if (!manifest.device || Object.keys(manifest.device).sort().join(",") !== "model,orientation,udid" || typeof manifest.device.model !== "string" || !/^[A-Za-z0-9][A-Za-z0-9 .(),_-]{0,95}$/.test(manifest.device.model) || !["portrait", "landscape"].includes(manifest.device.orientation) || typeof manifest.device.udid !== "string" || !/^(?:[A-F0-9-]{36}|macos-local)$/.test(manifest.device.udid)) throw new Error("device must contain exact model/orientation/udid binding");
+  if (typeof manifest.surface_query !== "string" || manifest.surface_query.length < 1 || manifest.surface_query.length > 512) throw new Error("surface_query must be a bounded string");
+  const query = new URLSearchParams(manifest.surface_query);
+  const queryKeys = [...query.keys()].sort();
+  if (queryKeys.join(",") !== "accessibility,locale,platform,polish,qa,state,theme,width" || query.get("polish") !== "1" || query.get("qa") !== manifest.domain || query.get("state") !== manifest.state || query.get("theme") !== manifest.theme || query.get("width") !== manifest.width || query.get("accessibility") !== manifest.accessibility || query.get("locale") !== "en-US" || query.get("platform") !== (manifest.shell === "ios" ? "mobile" : "desktop")) throw new Error("surface_query does not match the runtime coordinate");
   return manifest;
 }
 
@@ -278,7 +283,7 @@ export function gateReplay(manifest, manifestPath, inputPath, outputPath, output
 }
 
 function runIos(manifest, outputDir) {
-  const device = process.env.OMI_IOS_SIMULATOR_UDID || "7F64F7EE-5F25-44C3-9BA1-030E0FD6CDAD";
+  const device = manifest.device.udid;
   const project = path.join(iosRoot, "app/ios/Runner.xcodeproj");
   const testOnly = "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
   const resultBundle = path.join(outputDir, "Runner.xcresult");
@@ -291,7 +296,13 @@ function runIos(manifest, outputDir) {
   env.SURFACES_DIST = resolvedSurfacesDist;
   const nodeBin = env.NODE_BIN || process.execPath;
   const flutterBin = env.FLUTTER_BIN || path.join(process.env.HOME || "/Users/dazheng", ".local/share/mise/installs/flutter/3.44.5/bin/flutter");
-  const query = new URLSearchParams({ qa: manifest.domain, polish: "1", state: manifest.state, theme: manifest.theme, platform: "mobile", accessibility: manifest.accessibility }).toString();
+  const inventory = spawnSync("xcrun", ["simctl", "list", "devices", "-j"], { cwd: coreRoot, env, encoding: "utf8", timeout: 30_000 });
+  if (inventory.status !== 0) throw new Error("iOS simulator inventory is unavailable");
+  let inventoryDocument;
+  try { inventoryDocument = JSON.parse(inventory.stdout); } catch { throw new Error("iOS simulator inventory is malformed"); }
+  const boundDevice = Object.values(inventoryDocument.devices || {}).flat().find((candidate) => candidate.udid === device);
+  if (!boundDevice || boundDevice.state !== "Booted" || boundDevice.name !== manifest.device.model) throw new Error("manifest iOS simulator is not the exact booted device");
+  const query = manifest.surface_query;
   const bundle = spawnSync(nodeBin, [path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], { cwd: coreRoot, env, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
   if (bundle.status !== 0) throw new Error(`iOS surfaces bundle preparation failed (${bundle.status ?? "signal"})`);
   const flutterArgs = ["build", "ios", "--simulator", "--debug", "--dart-define=SURFACE_MODE=scheme", "--dart-define=SCHEME_BUNDLE=surfaces", `--dart-define=SURFACE_QUERY=${query}`];
