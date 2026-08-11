@@ -19,6 +19,11 @@ type ChromeIconName = "home" | "library" | "tasks" | "rewind" | "apps" | "conver
 type ThemeSelection = "default" | "system" | "light" | "dark";
 
 type CommandHandler = (event?: KeyboardEvent) => void | Promise<void>;
+type ShellIsolationRecord = {
+  element: HTMLElement;
+  inert: boolean;
+  ariaHidden: string | null;
+};
 
 const commandRegistry = createProductionCommandRegistry();
 const commandPopupRole: "dialog" = "dialog";
@@ -96,6 +101,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
   const paletteTriggerRef = React.useRef<HTMLButtonElement>(null);
   const paletteRef = React.useRef<HTMLDivElement>(null);
   const navRef = React.useRef<HTMLElement>(null);
+  const shellIsolationRef = React.useRef<ShellIsolationRecord[]>([]);
   const paletteReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const paletteWasOpenRef = React.useRef(false);
   const navigate = React.useCallback((route: ProductionRoute): void => {
@@ -133,10 +139,70 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [context, top]);
 
+  const restoreShellIsolation = React.useCallback((): void => {
+    const records = shellIsolationRef.current;
+    shellIsolationRef.current = [];
+    for (const record of records) {
+      const inertElement = record.element as HTMLElement & { inert?: boolean };
+      inertElement.inert = record.inert;
+      if (record.ariaHidden === null) record.element.removeAttribute("aria-hidden");
+      else record.element.setAttribute("aria-hidden", record.ariaHidden);
+    }
+  }, []);
+
+  const isolateShell = React.useCallback((): HTMLElement | null => {
+    const shell = navRef.current?.closest<HTMLElement>("[data-production-shell='true']") ?? null;
+    if (!shell) return null;
+    restoreShellIsolation();
+    const backdrop = shell.querySelector<HTMLElement>(".command-palette-backdrop");
+    const siblings = Array.from(shell.children).filter((element): element is HTMLElement => (
+      element instanceof HTMLElement && element !== backdrop
+    ));
+    shellIsolationRef.current = siblings.map((element) => {
+      const inertElement = element as HTMLElement & { inert?: boolean };
+      const record = {
+        element,
+        inert: Boolean(inertElement.inert),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      } satisfies ShellIsolationRecord;
+      inertElement.inert = true;
+      element.setAttribute("aria-hidden", "true");
+      return record;
+    });
+    return shell;
+  }, [restoreShellIsolation]);
+
   React.useEffect(() => {
-    const nav = navRef.current as (HTMLElement & { inert?: boolean }) | null;
-    if (nav) nav.inert = paletteOpen;
-  }, [paletteOpen]);
+    if (!paletteOpen) {
+      restoreShellIsolation();
+      return undefined;
+    }
+    const shell = isolateShell();
+    if (!shell) return undefined;
+    const isPaletteTarget = (target: EventTarget | null): boolean => {
+      const backdrop = shell.querySelector<HTMLElement>(".command-palette-backdrop");
+      return target instanceof HTMLElement && Boolean(backdrop?.contains(target));
+    };
+    const blockBackgroundEvent = (event: Event): void => {
+      if (isPaletteTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const redirectBackgroundFocus = (event: FocusEvent): void => {
+      if (isPaletteTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      paletteRef.current?.focus();
+    };
+    const blockedEventTypes = ["click", "pointerdown", "pointerup", "keydown", "keyup", "input", "change", "submit"] as const;
+    for (const type of blockedEventTypes) shell.addEventListener(type, blockBackgroundEvent, true);
+    shell.addEventListener("focusin", redirectBackgroundFocus, true);
+    return () => {
+      for (const type of blockedEventTypes) shell.removeEventListener(type, blockBackgroundEvent, true);
+      shell.removeEventListener("focusin", redirectBackgroundFocus, true);
+      restoreShellIsolation();
+    };
+  }, [isolateShell, paletteOpen, restoreShellIsolation]);
 
   React.useEffect(() => {
     if (!paletteOpen && paletteWasOpenRef.current) {
@@ -175,7 +241,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
 
   return (
     <>
-      <nav ref={navRef} className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-hidden={paletteOpen ? "true" : undefined} aria-label={t(locale, top ? "nav.primary" : "nav.mobile")}>
+      <nav ref={navRef} className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-label={t(locale, top ? "nav.primary" : "nav.mobile")}>
         {top ? (
           <div className="nav-desktop">
             <div className="nav-primary">
