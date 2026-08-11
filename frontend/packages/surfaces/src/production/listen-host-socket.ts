@@ -10,6 +10,7 @@ import type {
   PlatformListenSocketFactory,
   PlatformListenSocketMessageEvent,
 } from "@omi-core/adapters-platform";
+import { UNAVAILABLE_LISTEN_PREFLIGHT } from "@omi-core/adapters-platform";
 
 const CHANNEL = "omiListenSocket";
 
@@ -208,7 +209,17 @@ export function createProductionListenHostPreflightProvider(
   };
   host.__omiListenPreflightEvent = (requestId, rawEvent): void => {
     const event = parsePreflightEvent(rawEvent);
-    if (event === null || event.requestId !== requestId) return;
+    const settle = pending.get(requestId);
+    if (event === null) {
+      if (settle !== undefined) {
+        snapshot = UNAVAILABLE_LISTEN_PREFLIGHT;
+        for (const listener of listeners) listener();
+        pending.delete(requestId);
+        settle();
+      }
+      return;
+    }
+    if (event.requestId !== requestId) return;
     const label = typeof event.deviceLabel === "string" && event.deviceLabel.trim() !== ""
       ? event.deviceLabel.trim().slice(0, 80)
       : null;
@@ -218,7 +229,7 @@ export function createProductionListenHostPreflightProvider(
       recovery: event.recovery ?? null,
     };
     for (const listener of listeners) listener();
-    pending.get(requestId)?.();
+    settle?.();
     pending.delete(requestId);
   };
   return {
