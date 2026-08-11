@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.163",
+      "date": "2026-08-11",
+      "changes": [
+        "Advice analysis now keeps working when notifications are muted, and automatic update checks no longer show a failure just because your Mac is offline."
+      ]
+    },
+    {
       "version": "0.12.162",
       "date": "2026-08-11",
       "changes": [
