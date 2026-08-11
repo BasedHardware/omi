@@ -149,6 +149,7 @@ extension WKWebView {
     if configuration.urlSchemeHandler(forURLScheme: OmiSchemeHandler.scheme) == nil {
       configuration.setURLSchemeHandler(OmiSchemeHandler.shared, forURLScheme: OmiSchemeHandler.scheme)
     }
+    OmiRuntimeProbeHandler.installIfRequested(on: configuration)
     return omi_initWithFrame(frame, configuration: configuration)
   }
 

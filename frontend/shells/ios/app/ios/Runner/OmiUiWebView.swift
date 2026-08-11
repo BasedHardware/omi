@@ -1,4 +1,5 @@
 import Flutter
+import ObjectiveC.runtime
 import UIKit
 import WebKit
 
@@ -39,7 +40,6 @@ final class OmiUiWebViewFactory: NSObject, FlutterPlatformViewFactory {
 final class OmiUiWebView: NSObject, FlutterPlatformView {
   private let webView: WKWebView
   private let channel: FlutterMethodChannel
-  private var runtimeProbeHandler: OmiRuntimeProbeHandler?
 
   init(
     frame: CGRect,
@@ -56,19 +56,7 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     // This is a capture-only, opt-in host return path.  It is intentionally
     // absent from normal launches and retains only typed lifecycle/style
     // values (never labels, field values, URLs, or credentials).
-    var configuredRuntimeHandler: OmiRuntimeProbeHandler?
-    if ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1" {
-      let handler = OmiRuntimeProbeHandler()
-      configuration.userContentController.add(handler, name: "omiRuntimeProbe")
-      configuration.userContentController.addUserScript(
-        WKUserScript(
-          source: OmiRuntimeProbeHandler.script,
-          injectionTime: .atDocumentEnd,
-          forMainFrameOnly: true
-        )
-      )
-      configuredRuntimeHandler = handler
-    }
+    OmiRuntimeProbeHandler.installIfRequested(on: configuration)
     NSLog(
       "[scheme] handler registered on owned configuration for %@:// (viewId=%lld)",
       OmiSchemeHandler.scheme,
@@ -76,7 +64,6 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     )
 
     webView = WKWebView(frame: frame, configuration: configuration)
-    runtimeProbeHandler = configuredRuntimeHandler
     webView.scrollView.contentInsetAdjustmentBehavior = .never
 
     channel = FlutterMethodChannel(
@@ -136,28 +123,52 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
 /// Redacted and allowlisted runtime result from the real WKWebView.  The
 /// marker is surfaced through the native accessibility identifier only for the
 /// fixture UI test; the production WebView never installs this handler.
-private final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
+final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
+  private static var installedKey: UInt8 = 0
+
+  static func installIfRequested(on configuration: WKWebViewConfiguration) {
+    guard ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1",
+          objc_getAssociatedObject(configuration, &installedKey) == nil else { return }
+    let handler = OmiRuntimeProbeHandler()
+    configuration.userContentController.add(handler, name: "omiRuntimeProbe")
+    configuration.userContentController.addUserScript(
+      WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+    )
+    objc_setAssociatedObject(
+      configuration, &installedKey, handler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+  }
+
   static let script = #"""
   (() => {
-    const url = new URL(location.href);
-    const domain = url.searchParams.get("qa") || "";
-    const theme = url.searchParams.get("theme") || "";
-    const accessibility = url.searchParams.get("accessibility") || "none";
-    const root = document.querySelector("main[data-production-shell]");
-    if (!root || root.dataset.route !== domain || document.documentElement.dataset.themeSelection !== theme) return;
-    const target = root.querySelector("*") || root;
-    const style = getComputedStyle(target);
-    const events = [];
-    if (accessibility === "none") {
-      events.push({type: "lifecycle", name: "state", value: root.dataset.surfaceState || "", passed: true});
-    } else if (accessibility === "reduced_motion") {
-      events.push({type: "computed_style", name: "transition_duration", value: style.transitionDuration || "", passed: true});
-      events.push({type: "computed_style", name: "animation_name", value: style.animationName || "", passed: true});
-      events.push({type: "computed_style", name: "animation_duration", value: style.animationDuration || "", passed: true});
-    } else if (accessibility === "reduced_transparency") {
-      events.push({type: "computed_style", name: "backdrop_filter", value: style.backdropFilter || "", passed: true});
-    }
-    window.webkit.messageHandlers.omiRuntimeProbe.postMessage({schema: "omi.native-runtime-marker/v1", domain, theme, accessibility, events});
+    let attempts = 0;
+    const probe = () => {
+      const url = new URL(location.href);
+      const domain = url.searchParams.get("qa") || "";
+      const wantedState = url.searchParams.get("state") || "";
+      const theme = url.searchParams.get("theme") || "";
+      const accessibility = url.searchParams.get("accessibility") || "none";
+      const root = document.querySelector("main[data-production-shell]");
+      const polishState = document.documentElement.dataset.polishState || "";
+      if (!root || root.dataset.route !== domain || polishState !== wantedState || document.documentElement.dataset.themeSelection !== theme) {
+        attempts += 1;
+        if (attempts < 80) setTimeout(probe, 100);
+        return;
+      }
+      const target = root.querySelector("*") || root;
+      const style = getComputedStyle(target);
+      const events = [];
+      if (accessibility === "none") {
+        events.push({type: "lifecycle", name: "state", value: polishState, passed: true});
+      } else if (accessibility === "reduced_motion") {
+        events.push({type: "computed_style", name: "transition_duration", value: style.transitionDuration || "", passed: true});
+        events.push({type: "computed_style", name: "animation_name", value: style.animationName || "", passed: true});
+        events.push({type: "computed_style", name: "animation_duration", value: style.animationDuration || "", passed: true});
+      } else if (accessibility === "reduced_transparency") {
+        events.push({type: "computed_style", name: "backdrop_filter", value: style.backdropFilter || "", passed: true});
+      }
+      window.webkit.messageHandlers.omiRuntimeProbe.postMessage({schema: "omi.native-runtime-marker/v1", domain, theme, accessibility, events});
+    };
+    probe();
   })();
   """#
 

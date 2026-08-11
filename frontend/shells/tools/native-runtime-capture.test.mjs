@@ -44,6 +44,7 @@ test("runtime manifest is immutable and cannot be relabelled as browser or unsup
 test("native shell custody is explicit and browser shortcuts are absent", () => {
   const source = readFileSync(producer, "utf8");
   const iosHook = readFileSync(path.join(root, "shells/ios/app/ios/Runner/OmiUiWebView.swift"), "utf8");
+  const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
   assert.match(source, /dev-run-macos\.sh/);
   assert.match(source, /OMI_PROBE_JS/);
   assert.match(source, /xcodebuild/);
@@ -52,9 +53,12 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(source, /--emit-gate-records false/);
   assert.doesNotMatch(source, /core_browser_preview/);
   assert.match(iosHook, /OMI_POLISH_RUNTIME_PROBE/);
+  assert.match(appDelegate, /OmiRuntimeProbeHandler\.installIfRequested/);
   assert.match(iosHook, /omiRuntimeProbe/);
   assert.match(iosHook, /omi\.native-runtime-marker\/v1/);
   assert.match(iosHook, /computed_style/);
+  assert.match(iosHook, /attempts < 80/);
+  assert.match(iosHook, /polishState !== wantedState/);
   assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
 });
 
