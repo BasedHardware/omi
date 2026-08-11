@@ -165,7 +165,7 @@ export const validateChatGenerationAttachmentDescriptors = (
     if (source === undefined || descriptor === null || typeof descriptor !== "object"
       || descriptor.id !== source.id || descriptor.displayName !== source.displayName
       || descriptor.mediaType !== source.mediaType || descriptor.sizeBytes !== source.sizeBytes
-      || (descriptor.contentReference !== source.contentReference && descriptor.contentReference !== null)
+      || !(descriptor.contentReference === null || typeof descriptor.contentReference === "string")
       || seen.has(descriptor.id)
       || !(descriptor.content === null || descriptor.content instanceof Uint8Array)
       || (descriptor.content !== null && descriptor.content.byteLength !== descriptor.sizeBytes)) {
