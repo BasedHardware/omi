@@ -62,10 +62,12 @@ export interface DurableMemoryWorkRunnerDependencies {
     job: Readonly<DurableMemoryWorkJob>,
   ) => Promise<RegisteredMemoryStrategy | null>;
   readonly produce: (
+    context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<DurableMemoryWorkProduceOutcome>;
   readonly materialize: (
+    context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
     staged: StagedDurableMemoryWorkResult,
     strategy: Readonly<RegisteredMemoryStrategy>,
@@ -84,20 +86,20 @@ export type DurableMemoryWorkRunOutcome =
   | Readonly<{
       kind: "succeeded";
       outcome: Extract<DurableMemoryWorkSuccessOutcome, { kind: "committed" | "replayed" }>;
-      model_calls: 0 | 1;
+      producer_calls: 0 | 1;
       materialization_attempts: number;
     }>
   | Readonly<{
       kind: "failure_recorded";
       error_code: DurableMemoryWorkErrorCode;
       outcome: DurableMemoryWorkFailureOutcome;
-      model_calls: 0 | 1;
+      producer_calls: 0 | 1;
       materialization_attempts: number;
     }>
   | Readonly<{
       kind: "stopped";
       stop_code: DurableMemoryWorkRunStopCode;
-      model_calls: 0 | 1;
+      producer_calls: 0 | 1;
       materialization_attempts: number;
     }>;
 
@@ -202,7 +204,7 @@ export const defineDurableMemoryWorkRunner = (
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
     code: DurableMemoryWorkErrorCode,
-    modelCalls: 0 | 1,
+    producerCalls: 0 | 1,
     materializationAttempts: number,
   ): Promise<DurableMemoryWorkRunOutcome> => {
     const outcome = await dependencies.work_repository.recordFailure(context, {
@@ -214,7 +216,7 @@ export const defineDurableMemoryWorkRunner = (
       return Object.freeze({
         kind: "stopped" as const,
         stop_code: stopCodeFor(outcome.kind),
-        model_calls: modelCalls,
+        producer_calls: producerCalls,
         materialization_attempts: materializationAttempts,
       });
     }
@@ -222,7 +224,7 @@ export const defineDurableMemoryWorkRunner = (
       kind: "failure_recorded" as const,
       error_code: code,
       outcome,
-      model_calls: modelCalls,
+      producer_calls: producerCalls,
       materialization_attempts: materializationAttempts,
     });
   };
@@ -233,40 +235,40 @@ export const defineDurableMemoryWorkRunner = (
       context: AuthorizedLedgerWriteContext,
       leasedJob: Readonly<DurableMemoryWorkJob>,
     ): Promise<DurableMemoryWorkRunOutcome> {
-      let modelCalls: 0 | 1 = 0;
+      let producerCalls: 0 | 1 = 0;
       let materializationAttempts = 0;
       let resolvedStrategy: Readonly<RegisteredMemoryStrategy>;
       try {
         const candidate = await dependencies.resolve_strategy(leasedJob);
         if (candidate === null) {
-          return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+          return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
         }
         resolvedStrategy = parseRegisteredMemoryStrategy(candidate);
       } catch {
-        return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+        return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
       }
       if (resolvedStrategy.work_kind !== leasedJob.work_kind
         || resolvedStrategy.execution_contract_digest !== leasedJob.execution_contract_digest) {
-        return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+        return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
       }
       const loaded = await dependencies.result_repository.load(context, { leased_job: leasedJob });
       let staged: StagedDurableMemoryWorkResult;
       if (loaded.kind === "found") {
         staged = loaded.result;
       } else if (loaded.kind === "missing") {
-        modelCalls = 1;
+        producerCalls = 1;
         let rawProduced: unknown;
         try {
-          rawProduced = await dependencies.produce(leasedJob, resolvedStrategy);
+          rawProduced = await dependencies.produce(context, leasedJob, resolvedStrategy);
         } catch {
-          return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+          return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
         }
         const produced = parseProduce(rawProduced);
         if (produced.kind === "failed") {
-          return recordFailure(context, leasedJob, produced.error_code, modelCalls, 0);
+          return recordFailure(context, leasedJob, produced.error_code, producerCalls, 0);
         }
         if (produced.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
-          return recordFailure(context, leasedJob, "model_response_invalid", modelCalls, 0);
+          return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
         }
         const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
           produced.result_contract_version,
@@ -287,7 +289,7 @@ export const defineDurableMemoryWorkRunner = (
           return Object.freeze({
             kind: "stopped" as const,
             stop_code: stopCodeFor(stagedOutcome.kind),
-            model_calls: modelCalls,
+            producer_calls: producerCalls,
             materialization_attempts: 0,
           });
         }
@@ -296,29 +298,31 @@ export const defineDurableMemoryWorkRunner = (
         return Object.freeze({
           kind: "stopped" as const,
           stop_code: stopCodeFor(loaded.kind),
-          model_calls: modelCalls,
+          producer_calls: producerCalls,
           materialization_attempts: 0,
         });
       }
 
       if (staged.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
-        return recordFailure(context, leasedJob, "model_response_invalid", modelCalls, 0);
+        return recordFailure(context, leasedJob, "model_response_invalid", producerCalls, 0);
       }
 
       for (let attempt = 0; attempt < dependencies.max_parent_rematerializations; attempt += 1) {
         materializationAttempts += 1;
         let rawMaterialized: unknown;
         try {
-          rawMaterialized = await dependencies.materialize(leasedJob, staged, resolvedStrategy);
+          rawMaterialized = await dependencies.materialize(
+            context, leasedJob, staged, resolvedStrategy,
+          );
         } catch {
           return recordFailure(
-            context, leasedJob, "dependency_unavailable", modelCalls, materializationAttempts,
+            context, leasedJob, "dependency_unavailable", producerCalls, materializationAttempts,
           );
         }
         const materialized = parseMaterialize(rawMaterialized);
         if (materialized.kind === "failed") {
           return recordFailure(
-            context, leasedJob, materialized.error_code, modelCalls, materializationAttempts,
+            context, leasedJob, materialized.error_code, producerCalls, materializationAttempts,
           );
         }
         const resultDigest = materialized.authoritative_append?.append_attempt.request_digest
@@ -339,7 +343,7 @@ export const defineDurableMemoryWorkRunner = (
           return Object.freeze({
             kind: "succeeded" as const,
             outcome,
-            model_calls: modelCalls,
+            producer_calls: producerCalls,
             materialization_attempts: materializationAttempts,
           });
         }
@@ -347,13 +351,13 @@ export const defineDurableMemoryWorkRunner = (
           return Object.freeze({
             kind: "stopped" as const,
             stop_code: stopCodeFor(outcome.kind),
-            model_calls: modelCalls,
+            producer_calls: producerCalls,
             materialization_attempts: materializationAttempts,
           });
         }
       }
       return recordFailure(
-        context, leasedJob, "serialization_retryable", modelCalls, materializationAttempts,
+        context, leasedJob, "serialization_retryable", producerCalls, materializationAttempts,
       );
     },
   });

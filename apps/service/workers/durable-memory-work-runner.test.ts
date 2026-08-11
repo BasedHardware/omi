@@ -160,7 +160,7 @@ const successRepository = (staleParents: { remaining: number }) =>
   });
 
 describe("production-neutral durable memory work runner", () => {
-  test("stage miss calls the model once and stale parent rematerializes without calling it again", async () => {
+  test("stage miss calls the producer once and stale parent rematerializes without calling it again", async () => {
     let stored: StagedDurableMemoryWorkResult | null = null;
     let modelCalls = 0;
     let materializations = 0;
@@ -176,7 +176,10 @@ describe("production-neutral durable memory work runner", () => {
       result_repository: resultRepository,
       success_repository: successRepository({ remaining: 1 }),
       resolve_strategy: async () => registeredStrategy,
-      produce: async () => {
+      produce: async (authorized, job, strategy) => {
+        expect(authorized).toEqual(context());
+        expect(job.job_id).toBe(leased().job_id);
+        expect(strategy).toEqual(registeredStrategy);
         modelCalls += 1;
         return {
           kind: "produced",
@@ -185,7 +188,10 @@ describe("production-neutral durable memory work runner", () => {
           normalized_result: { boundary_decision: "accept_ltm" },
         };
       },
-      materialize: async () => {
+      materialize: async (authorized, job, _staged, strategy) => {
+        expect(authorized).toEqual(context());
+        expect(job.job_id).toBe(leased().job_id);
+        expect(strategy).toEqual(registeredStrategy);
         materializations += 1;
         return {
           kind: "ready",
@@ -198,7 +204,7 @@ describe("production-neutral durable memory work runner", () => {
 
     await expect(runner.run(context(), leased())).resolves.toMatchObject({
       kind: "succeeded",
-      model_calls: 1,
+      producer_calls: 1,
       materialization_attempts: 2,
       outcome: { commit_id: "commit:promotion:2", sequence: 2 },
     });
@@ -208,7 +214,7 @@ describe("production-neutral durable memory work runner", () => {
     expect(Object.keys(runner)).toEqual(["run"]);
   });
 
-  test("restart under a later lease reuses the committed stage with zero model calls", async () => {
+  test("restart under a later lease reuses the committed stage with zero producer calls", async () => {
     const firstLease = leased();
     let stored: StagedDurableMemoryWorkResult | null = null;
     const bootstrap = defineDurableMemoryWorkResultRepository({
@@ -257,13 +263,13 @@ describe("production-neutral durable memory work runner", () => {
       max_parent_rematerializations: 1,
     });
     await expect(replayRunner.run(context("worker:two"), laterLease)).resolves.toMatchObject({
-      kind: "succeeded", model_calls: 0, materialization_attempts: 1,
+      kind: "succeeded", producer_calls: 0, materialization_attempts: 1,
       outcome: { commit_id: null, sequence: null },
     });
     expect(modelCalls).toBe(0);
   });
 
-  test("bounded stale-parent exhaustion records a closed failure without another model call", async () => {
+  test("bounded stale-parent exhaustion records a closed failure without another producer call", async () => {
     const failures: string[] = [];
     let materializations = 0;
     const runner = defineDurableMemoryWorkRunner({
@@ -289,7 +295,7 @@ describe("production-neutral durable memory work runner", () => {
     await expect(runner.run(context(), leased())).resolves.toMatchObject({
       kind: "failure_recorded",
       error_code: "serialization_retryable",
-      model_calls: 1,
+      producer_calls: 1,
       materialization_attempts: 2,
     });
     expect(failures).toEqual(["serialization_retryable"]);
@@ -320,7 +326,7 @@ describe("production-neutral durable memory work runner", () => {
       max_parent_rematerializations: 1,
     });
     await expect(runner.run(context(), leased())).resolves.toMatchObject({
-      kind: "failure_recorded", error_code: "dependency_unavailable", model_calls: 0,
+      kind: "failure_recorded", error_code: "dependency_unavailable", producer_calls: 0,
     });
     expect(modelCalls).toBe(0);
     expect(failures).toEqual(["dependency_unavailable"]);
@@ -344,7 +350,7 @@ describe("production-neutral durable memory work runner", () => {
       max_parent_rematerializations: 1,
     });
     await expect(runner.run(context(), leased())).resolves.toMatchObject({
-      kind: "failure_recorded", error_code: "model_response_invalid", model_calls: 1,
+      kind: "failure_recorded", error_code: "model_response_invalid", producer_calls: 1,
       materialization_attempts: 0,
     });
     expect(failures).toEqual(["model_response_invalid"]);

@@ -1,5 +1,5 @@
 import { buildFlywheelArtifacts } from "../../core/scope/flywheel";
-import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition, type DerivationVersions, type LedgerPort } from "../../core/ledger";
+import { prepareDerivation, sha256CanonicalRedacted, type AtomicGraphTransition, type CanonicalJson, type DerivationVersions, type LedgerPort, type RevisionContent } from "../../core/ledger";
 import { hasDistinctArgumentSlotIds, type CoreferenceSupport, type Entity, type Evidence, type IdentityAuthorization, type L1Event, type Mention, type PersistedValidTime, type ProvisionalClaim, type SourceIdentityRef } from "../../core/schema";
 import { predicateRevisionForStoredObservation } from "../../core/consolidate/predicate-identity";
 import { durableRoleSlotBindings, isForcedUnresolvedMention } from "../../core/resolve/mention-detection";
@@ -19,6 +19,10 @@ export interface SessionStmLtmRequest {
   formation_work_id: string;
   owner_account_id: string;
   provisionals: readonly ProvisionalClaim[];
+  /** Grounded extraction may supply its source-local mentions directly. This
+   * avoids a second information-extraction call and preserves its exact speaker
+   * authority decision. */
+  mentions?: readonly Mention[];
   entities: readonly Entity[];
   evidence: readonly Evidence[];
   /** L1 inputs are committed with their dependent evidence so later grounded
@@ -29,6 +33,9 @@ export interface SessionStmLtmRequest {
   /** Graph head/frontier read by the caller before planning this transition. */
   graph_frontier: number;
   versions: DerivationVersions;
+  /** Explicit registered boundary version for durable work. Legacy callers may
+   * omit it and retain the existing environment-selected QA behavior. */
+  boundary_version?: "v4" | "v5";
   /** I2 authority inputs are immutable records supplied by the caller/ledger, never model output. */
   identity_authorizations?: readonly IdentityAuthorization[];
   identity_authority_context?: IdentityAuthorityContext;
@@ -53,7 +60,13 @@ const sourceIdentityForMention = (request: SessionStmLtmPlanningRequest, mention
   // identity here upgraded every named bystander or repaired speaker slot into
   // the diarized speaker and could make an unrelated owner authorization fit.
   mention.source_identity_ref ?? unscopedIdentity(request.session_id, mention);
-const revisionContent = (revision: AtomicGraphTransition["revisions"][number]) => revision.kind === "claim" ? revision.claim : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "mention" ? revision.mention : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "coreference_support" ? revision.support : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "predicate" ? revision.predicate : revision.assertion;
+const revisionContent = (revision: AtomicGraphTransition["revisions"][number]): CanonicalJson =>
+  (revision.kind === "claim" ? revision.claim : revision.kind === "event" ? revision.event
+    : revision.kind === "evidence" ? revision.evidence : revision.kind === "mention" ? revision.mention
+      : revision.kind === "identity_authorization" ? revision.authorization
+        : revision.kind === "coreference_support" ? revision.support
+          : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint
+            : revision.kind === "predicate" ? revision.predicate : revision.assertion) as unknown as CanonicalJson;
 
 const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
   if (!request.session_id || !request.formation_work_id || !request.owner_account_id) throw new Error("session transition requires stable session, formation work, and owner ids");
@@ -66,6 +79,19 @@ const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
     ids.add(claim.claim_revision_id);
     if (!request.valid_times[claim.claim_revision_id]) throw new Error(`session canonical construction lacks valid_time: ${claim.claim_revision_id}`);
   }
+  if (request.mentions) {
+    const mentionIds = new Set<string>();
+    const evidenceIds = new Set(request.evidence.map((item) => item.evidence_id));
+    for (const mention of request.mentions) {
+      if (mention.owner_account_id !== request.owner_account_id
+        || !ids.has(mention.claim_revision_id)
+        || !evidenceIds.has(mention.evidence_id)
+        || mentionIds.has(mention.mention_id)) {
+        throw new Error("session mentions must be unique, owner-local, and grounded in this work");
+      }
+      mentionIds.add(mention.mention_id);
+    }
+  }
   const decisionInputDigest = sha256CanonicalRedacted({
     parent_commit: request.parent_commit,
     graph_frontier: request.graph_frontier ?? 0,
@@ -73,13 +99,15 @@ const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
     valid_times: request.valid_times,
     identity_authorizations: request.identity_authorizations ?? [],
     identity_authority_context: request.identity_authority_context ?? null,
-  });
+    mentions: request.mentions ?? null,
+    boundary_version: request.boundary_version ?? null,
+  } as unknown as CanonicalJson);
   const inputRevisions = [
     ...request.provisionals.map((claim) => ({ revision_id: claim.claim_revision_id, content: claim })),
     ...(request.events ?? []).map((event) => ({ revision_id: event.event_revision_id, content: event })),
     ...request.evidence.map((evidence) => ({ revision_id: `evidence-revision:${evidence.evidence_id}`, content: evidence })),
     { revision_id: `formation-decision-input:${coordinate}`, content: { decision_input_digest: decisionInputDigest } },
-  ];
+  ] as unknown as RevisionContent[];
   const preflight = prepareDerivation({
     attempt_id: `attempt:session:${coordinate}`,
     commit_id: `commit:session:${coordinate}`,
@@ -94,6 +122,10 @@ const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
   return { coordinate, key, inputRevisions, preflight };
 };
 
+export const sessionStmLtmPlanningInputRevisions = (
+  request: SessionStmLtmPlanningRequest,
+): readonly RevisionContent[] => sessionPreflight(request).inputRevisions;
+
 /**
  * The cold-run transition boundary: it makes all decisions first, constructs
  * canonical facts from those outputs, then writes the whole session once.
@@ -101,7 +133,11 @@ const sessionPreflight = (request: SessionStmLtmPlanningRequest) => {
 export const planSessionStmToLtmTransition = async (request: SessionStmLtmPlanningRequest): Promise<AtomicGraphTransition> => {
   const { coordinate, key, inputRevisions } = sessionPreflight(request);
 
-  const mentioned = await invokeClaimMentionStrategy(request.model, request.owner_account_id, request.provisionals, request.evidence);
+  const mentioned = request.mentions
+    ? [...request.mentions]
+    : await invokeClaimMentionStrategy(
+      request.model, request.owner_account_id, request.provisionals, request.evidence,
+    );
   const mentions: Mention[] = [];
   const sessionEntities: Entity[] = [...request.entities];
   const localBindings = new Map<string, { entity_id: string; mention_id: string; discourse_unit_ref: string }>();
@@ -194,7 +230,9 @@ export const planSessionStmToLtmTransition = async (request: SessionStmLtmPlanni
     const bound = durableRoleSlotBindings(claimMentions);
     const claimForScope: ProvisionalClaim = { ...provisional, arguments: provisional.arguments.map((argument) => bound.has(argument.slot_id) ? { ...argument, value: { kind: "entity_ref" as const, ref: bound.get(argument.slot_id)! } } : argument) };
     const scope_plan = await invokeScopeStrategy(request.model, claimForScope, sessionEntities, request.evidence);
-    const unit_boundary = await invokeUnitBoundaryStrategy(request.model, claimForScope, request.evidence);
+    const unit_boundary = await invokeUnitBoundaryStrategy(
+      request.model, claimForScope, request.evidence, request.boundary_version,
+    );
     const allRoleSlotsResolved = provisional.arguments.every((argument) => {
       const entityId = bound.get(argument.slot_id);
       return entityId !== undefined && ownerEntityIds.has(entityId) && scope_plan.bindings[argument.slot_id] === entityId;
