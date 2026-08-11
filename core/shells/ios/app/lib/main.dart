@@ -216,6 +216,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
+            _http?.beginDocument();
             unawaited(_listen?.resetForNavigation());
             unawaited(_chatStream?.resetForNavigation());
             unawaited(_chatStaging?.resetForNavigation());
