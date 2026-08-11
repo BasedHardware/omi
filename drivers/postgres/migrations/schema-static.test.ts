@@ -107,6 +107,11 @@ const expectedTables = [
   "memory_predicate_revisions",
   "memory_revisions",
   "memory_source_local_claim_roles",
+  "memory_strategy_assignment_bundles",
+  "memory_strategy_assignment_policies",
+  "memory_strategy_definitions",
+  "memory_strategy_policy_shadows",
+  "memory_strategy_shadow_assignments",
   "platform_accounts",
   "platform_schema_migrations",
 ] as const;
@@ -328,6 +333,37 @@ describe("P2/P3/P4 PostgreSQL schema contract", () => {
     expect(allSql).toContain("result_digest = staged_result_digest");
     expect(allSql).toContain("Deliberately no application or worker grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_work_staged_results/s);
+  });
+
+  test("binds accepted work to one authority strategy while shadows remain non-authoritative", () => {
+    const definitions = tables.find((table) => table.name === "memory_strategy_definitions")!;
+    expect(definitions.body).toContain("execution_contract_digest text NOT NULL");
+    expect(definitions.body).toContain("result_contract_version text NOT NULL");
+    expect(definitions.body).toContain("speaker_strategy_version text NOT NULL");
+    expect(definitions.body).toContain("boundary_strategy_version text NOT NULL");
+
+    const policy = tables.find((table) => table.name === "memory_strategy_assignment_policies")!;
+    expect(policy.body).toContain("policy_version = 'memory-strategy-assignment-policy-v1'");
+    expect(policy.body).toContain("unit_kind IN ('account', 'session', 'work')");
+    expect(policy.body).toContain("key_version text NOT NULL");
+    const policyShadows = tables.find((table) => table.name === "memory_strategy_policy_shadows")!;
+    expect(policyShadows.body).toContain("basis_points BETWEEN 0 AND 10000");
+
+    const bundles = tables.find((table) => table.name === "memory_strategy_assignment_bundles")!;
+    expect(bundles.body).toContain("assignment_bundle_id ~ '^msb1_[0-9a-f]{64}$'");
+    expect(bundles.body).toContain("unit_digest text NOT NULL");
+    expect(bundles.body).not.toMatch(/unit_ref|session_id|prompt|transcript|evidence|query|answer|model_output/i);
+
+    const shadows = tables.find((table) => table.name === "memory_strategy_shadow_assignments")!;
+    expect(shadows.body).toContain("CHECK (bucket < basis_points)");
+    expect(shadows.body).not.toMatch(/job_id|commit_id|revision_id|projection/i);
+
+    const acceptance = tables.find((table) => table.name === "memory_work_acceptances")!;
+    expect(allSql).toContain("memory_work_acceptances_authority_assignment_fk");
+    expect(allSql).toContain("authority_strategy_id, execution_contract_digest");
+    expect(acceptance.body).not.toContain("shadow");
+    expect(allSql).toContain("Deliberately no application, worker, experiment, or migration-runner grant");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_/s);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {

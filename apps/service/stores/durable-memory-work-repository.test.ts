@@ -10,6 +10,12 @@ import {
   type AcceptedDurableMemoryWork,
 } from "../../../core/consolidate/state-machine";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
+import {
+  MEMORY_STRATEGY_VERSION,
+  createMemoryStrategyAssigner,
+  defineMemoryStrategyAssignmentPolicy,
+  registerMemoryStrategy,
+} from "../../../core/consolidate/strategy-assignment";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
   defineDurableMemoryWorkAcceptanceRepository,
@@ -21,6 +27,33 @@ import {
 } from "./durable-memory-work-repository";
 
 const digest = (character: string): string => character.repeat(64);
+
+const strategyAssignment = (
+  owner = "account:alice",
+  workKind: "formation" | "promotion" | "identity_cluster" | "predicate_batch" = "formation",
+) => {
+  const strategy = registerMemoryStrategy({
+    version: MEMORY_STRATEGY_VERSION,
+    strategy_id: `strategy:${workKind}:authority`,
+    work_kind: workKind,
+    coordinates: {
+      strategy_version: "strategy:v1", model_version: "model:v1",
+      prompt_version: "prompt:v1", policy_version: "policy:v1",
+      code_version: "code:v1", schema_version: "schema:v1",
+      tokenizer_version: "tokenizer:v1", tool_version: "none",
+      result_contract_version: "result:v1", speaker_strategy_version: "none",
+      boundary_strategy_version: "none",
+    },
+  });
+  const policy = defineMemoryStrategyAssignmentPolicy({
+    policy_id: `policy:${workKind}:v1`, work_kind: workKind, unit_kind: "session",
+    key_version: "assignment-key:v1", authority_strategy_id: strategy.strategy_id,
+    shadow_candidates: [],
+  }, [strategy]);
+  return createMemoryStrategyAssigner(new Uint8Array(32).fill(3)).assign({
+    owner_account_id: owner, unit_ref: "session:one", policy, strategies: [strategy],
+  });
+};
 
 const context = (
   capability: "memories.work.accept" | "memories.work.execute",
@@ -73,7 +106,7 @@ const accepted = (
   work_kind: "formation",
   input_frontier: "frontier:one",
   input_digest: durableMemoryWorkInputManifestDigest(inputs),
-  execution_contract_digest: digest("c"),
+  execution_contract_digest: strategyAssignment().authority.execution_contract_digest,
   accepted_at_event_time: 100,
   max_attempts: 2,
   ...overrides,
@@ -84,10 +117,12 @@ const acceptanceRequest = (
   inputs = manifest(),
 ): DurableMemoryWorkAcceptanceRequest => {
   const pending = acceptDurableMemoryWork(work);
+  const assignment = strategyAssignment(work.owner_account_id, work.work_kind);
   return {
     accepted_work: work,
     input_manifest: inputs,
-    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs),
+    strategy_assignment: assignment,
+    request_digest: durableMemoryWorkAcceptanceRequestDigest(pending, inputs, assignment),
   };
 };
 
@@ -118,9 +153,9 @@ describe("durable work acceptance repository", () => {
     expect(durableMemoryWorkInputManifestDigest(forward))
       .toBe(durableMemoryWorkInputManifestDigest(reversed));
     expect(durableMemoryWorkAcceptanceRequestDigest(
-      acceptDurableMemoryWork(accepted({}, forward)), forward,
+      acceptDurableMemoryWork(accepted({}, forward)), forward, strategyAssignment(),
     )).toBe(durableMemoryWorkAcceptanceRequestDigest(
-      acceptDurableMemoryWork(accepted({}, reversed)), reversed,
+      acceptDurableMemoryWork(accepted({}, reversed)), reversed, strategyAssignment(),
     ));
     const changed = forward.map((item) => item.input_kind === "evidence_revision"
       ? { ...item, input_digest: digest("d") }
@@ -152,6 +187,7 @@ describe("durable work acceptance repository", () => {
     await expect(repository.accept(context("memories.work.accept"), {
       accepted_work: accepted(),
       input_manifest: duplicate,
+      strategy_assignment: strategyAssignment(),
       request_digest: digest("0"),
     })).rejects.toThrow("invalid_manifest");
 
@@ -165,6 +201,38 @@ describe("durable work acceptance repository", () => {
       accepted_work: { ...request.accepted_work, input_digest: digest("f") },
       request_digest: digest("0"),
     })).rejects.toThrow("manifest_digest_mismatch");
+    expect(calls).toBe(0);
+  });
+
+  test("only the deterministic authority assignment can enter the work queue", async () => {
+    let calls = 0;
+    const repository = defineDurableMemoryWorkAcceptanceRepository(async (_context, request) => {
+      calls += 1;
+      return { kind: "accepted", job: request.pending_job };
+    });
+    const request = acceptanceRequest();
+    await expect(repository.accept(context("memories.work.accept"), {
+      ...request,
+      strategy_assignment: { ...request.strategy_assignment },
+    })).rejects.toThrow("unminted_assignment");
+
+    const wrongOwner = strategyAssignment("account:bob");
+    await expect(repository.accept(context("memories.work.accept"), {
+      ...request,
+      strategy_assignment: wrongOwner,
+      request_digest: digest("0"),
+    })).rejects.toThrow("assignment_owner_mismatch");
+
+    const wrongKind = strategyAssignment("account:alice", "promotion");
+    await expect(repository.accept(context("memories.work.accept"), {
+      ...request,
+      strategy_assignment: wrongKind,
+      request_digest: digest("0"),
+    })).rejects.toThrow("assignment_work_kind_mismatch");
+
+    await expect(repository.accept(context("memories.work.accept"), acceptanceRequest(
+      accepted({ execution_contract_digest: digest("f") }),
+    ))).rejects.toThrow("assignment_execution_contract_mismatch");
     expect(calls).toBe(0);
   });
 

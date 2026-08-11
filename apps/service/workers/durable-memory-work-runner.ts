@@ -5,6 +5,10 @@ import type {
   DurableMemoryWorkJob,
   DurableMemoryWorkResultKind,
 } from "../../../core/consolidate/state-machine";
+import {
+  parseRegisteredMemoryStrategy,
+  type RegisteredMemoryStrategy,
+} from "../../../core/consolidate/strategy-assignment";
 import type { CanonicalJson } from "../../../core/ledger";
 import type { AuthorizedLedgerWriteContext } from "../auth/authorized-context";
 import type { AuthoritativeLedgerAppend } from "../stores/authoritative-ledger-repository";
@@ -54,12 +58,17 @@ export interface DurableMemoryWorkRunnerDependencies {
   readonly work_repository: DurableMemoryWorkExecutionRepository;
   readonly result_repository: DurableMemoryWorkResultRepository;
   readonly success_repository: DurableMemoryWorkSuccessRepository;
+  readonly resolve_strategy: (
+    job: Readonly<DurableMemoryWorkJob>,
+  ) => Promise<RegisteredMemoryStrategy | null>;
   readonly produce: (
     job: Readonly<DurableMemoryWorkJob>,
+    strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<DurableMemoryWorkProduceOutcome>;
   readonly materialize: (
     job: Readonly<DurableMemoryWorkJob>,
     staged: StagedDurableMemoryWorkResult,
+    strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<DurableMemoryWorkMaterializeOutcome>;
   readonly max_parent_rematerializations: number;
 }
@@ -226,6 +235,20 @@ export const defineDurableMemoryWorkRunner = (
     ): Promise<DurableMemoryWorkRunOutcome> {
       let modelCalls: 0 | 1 = 0;
       let materializationAttempts = 0;
+      let resolvedStrategy: Readonly<RegisteredMemoryStrategy>;
+      try {
+        const candidate = await dependencies.resolve_strategy(leasedJob);
+        if (candidate === null) {
+          return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+        }
+        resolvedStrategy = parseRegisteredMemoryStrategy(candidate);
+      } catch {
+        return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+      }
+      if (resolvedStrategy.work_kind !== leasedJob.work_kind
+        || resolvedStrategy.execution_contract_digest !== leasedJob.execution_contract_digest) {
+        return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
+      }
       const loaded = await dependencies.result_repository.load(context, { leased_job: leasedJob });
       let staged: StagedDurableMemoryWorkResult;
       if (loaded.kind === "found") {
@@ -234,13 +257,16 @@ export const defineDurableMemoryWorkRunner = (
         modelCalls = 1;
         let rawProduced: unknown;
         try {
-          rawProduced = await dependencies.produce(leasedJob);
+          rawProduced = await dependencies.produce(leasedJob, resolvedStrategy);
         } catch {
           return recordFailure(context, leasedJob, "dependency_unavailable", modelCalls, 0);
         }
         const produced = parseProduce(rawProduced);
         if (produced.kind === "failed") {
           return recordFailure(context, leasedJob, produced.error_code, modelCalls, 0);
+        }
+        if (produced.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
+          return recordFailure(context, leasedJob, "model_response_invalid", modelCalls, 0);
         }
         const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
           produced.result_contract_version,
@@ -275,11 +301,15 @@ export const defineDurableMemoryWorkRunner = (
         });
       }
 
+      if (staged.result_contract_version !== resolvedStrategy.coordinates.result_contract_version) {
+        return recordFailure(context, leasedJob, "model_response_invalid", modelCalls, 0);
+      }
+
       for (let attempt = 0; attempt < dependencies.max_parent_rematerializations; attempt += 1) {
         materializationAttempts += 1;
         let rawMaterialized: unknown;
         try {
-          rawMaterialized = await dependencies.materialize(leasedJob, staged);
+          rawMaterialized = await dependencies.materialize(leasedJob, staged, resolvedStrategy);
         } catch {
           return recordFailure(
             context, leasedJob, "dependency_unavailable", modelCalls, materializationAttempts,

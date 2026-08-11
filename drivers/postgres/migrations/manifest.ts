@@ -49,4 +49,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0007-durable-work-result-staging.sql",
     sha256: "bcc3131f3c7da923d1faaaa6d2874ad963e90579d105c48cb19eb65d7f304a36",
   }),
+  Object.freeze({
+    version: 8,
+    name: "memory-strategy-assignments",
+    fileName: "0008-memory-strategy-assignments.sql",
+    sha256: "1d0d76885d5edb6f35bac57df7f05f86e5126bd7f8e9c9f0cfb14c15c0a0e141",
+  }),
 ]);

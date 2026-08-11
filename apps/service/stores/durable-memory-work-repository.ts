@@ -9,6 +9,10 @@ import {
   type DurableMemoryWorkJob,
   type DurableMemoryWorkKind,
 } from "../../../core/consolidate/state-machine";
+import {
+  assertMintedMemoryStrategyAssignment,
+  type MemoryStrategyAssignmentBundle,
+} from "../../../core/consolidate/strategy-assignment";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import {
   assertAuthorizedLedgerWriteContext,
@@ -58,6 +62,7 @@ export interface DurableMemoryWorkInputManifestEntry {
 export interface DurableMemoryWorkAcceptanceRequest {
   readonly accepted_work: AcceptedDurableMemoryWork;
   readonly input_manifest: readonly DurableMemoryWorkInputManifestEntry[];
+  readonly strategy_assignment: Readonly<MemoryStrategyAssignmentBundle>;
   readonly request_digest: string;
 }
 
@@ -251,10 +256,12 @@ export const durableMemoryWorkInputManifestDigest = (
 export const durableMemoryWorkAcceptanceRequestDigest = (
   pendingJob: DurableMemoryWorkJob,
   manifest: readonly DurableMemoryWorkInputManifestEntry[],
+  strategyAssignment: Readonly<MemoryStrategyAssignmentBundle>,
 ): string => sha256CanonicalContent({
-  contract_version: "durable-memory-work-acceptance-repository-v1",
+  contract_version: "durable-memory-work-acceptance-repository-v2",
   pending_job: parseDurableMemoryWorkJob(pendingJob),
   input_manifest: normalizeManifest(manifest),
+  strategy_assignment: assertMintedMemoryStrategyAssignment(strategyAssignment),
 });
 
 export const assertDurableMemoryWorkAcceptanceRequest = (
@@ -263,7 +270,9 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
 ): NormalizedDurableMemoryWorkAcceptanceRequest => {
   const context = assertAuthorizedLedgerWriteContext(contextValue);
   if (context.capability !== ACCEPT_CAPABILITY) fail("capability_denied");
-  const root = exactRecord(value, ["accepted_work", "input_manifest", "request_digest"], "invalid_acceptance");
+  const root = exactRecord(value, [
+    "accepted_work", "input_manifest", "strategy_assignment", "request_digest",
+  ], "invalid_acceptance");
   let pendingJob: Readonly<DurableMemoryWorkJob>;
   try {
     pendingJob = acceptDurableMemoryWork(root["accepted_work"] as AcceptedDurableMemoryWork);
@@ -277,8 +286,14 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
   if (frontierWitnesses.length !== 1
     || frontierWitnesses[0]!.input_ref !== pendingJob.input_frontier) fail("frontier_mismatch");
   if (durableMemoryWorkInputManifestDigest(manifest) !== pendingJob.input_digest) fail("manifest_digest_mismatch");
+  const strategyAssignment = assertMintedMemoryStrategyAssignment(root["strategy_assignment"]);
+  if (strategyAssignment.owner_account_id !== pendingJob.owner_account_id) fail("assignment_owner_mismatch");
+  if (strategyAssignment.work_kind !== pendingJob.work_kind) fail("assignment_work_kind_mismatch");
+  if (strategyAssignment.authority.execution_contract_digest !== pendingJob.execution_contract_digest) {
+    fail("assignment_execution_contract_mismatch");
+  }
   const requestDigest = digest(root["request_digest"], "invalid_acceptance");
-  if (durableMemoryWorkAcceptanceRequestDigest(pendingJob, manifest) !== requestDigest) {
+  if (durableMemoryWorkAcceptanceRequestDigest(pendingJob, manifest, strategyAssignment) !== requestDigest) {
     fail("request_digest_mismatch");
   }
   return Object.freeze({
@@ -297,6 +312,7 @@ export const assertDurableMemoryWorkAcceptanceRequest = (
       max_attempts: pendingJob.max_attempts,
     }),
     input_manifest: manifest,
+    strategy_assignment: strategyAssignment,
     request_digest: requestDigest,
     pending_job: pendingJob,
     state_digest: durableMemoryWorkStateDigest(pendingJob),
@@ -496,7 +512,10 @@ export const defineDurableMemoryWorkAcceptanceRepository = (
   implementation: DurableMemoryWorkAcceptanceImplementation,
 ): DurableMemoryWorkAcceptanceRepository => Object.freeze({
   [ACCEPTANCE_PORT]: true as const,
-  async accept(contextValue, requestValue): Promise<DurableMemoryWorkAcceptanceOutcome> {
+  async accept(
+    contextValue: AuthorizedLedgerWriteContext,
+    requestValue: DurableMemoryWorkAcceptanceRequest,
+  ): Promise<DurableMemoryWorkAcceptanceOutcome> {
     const context = assertContext(contextValue, ACCEPT_CAPABILITY);
     const request = assertDurableMemoryWorkAcceptanceRequest(context, requestValue);
     return parseAcceptanceOutcome(await implementation(context, request), context, request);
@@ -507,22 +526,34 @@ export const defineDurableMemoryWorkExecutionRepository = (
   implementation: DurableMemoryWorkExecutionImplementation,
 ): DurableMemoryWorkExecutionRepository => Object.freeze({
   [EXECUTION_PORT]: true as const,
-  async leaseNext(contextValue, requestValue): Promise<DurableMemoryWorkLeaseNextOutcome> {
+  async leaseNext(
+    contextValue: AuthorizedLedgerWriteContext,
+    requestValue: DurableMemoryWorkLeaseNextRequest,
+  ): Promise<DurableMemoryWorkLeaseNextOutcome> {
     const context = assertContext(contextValue, EXECUTE_CAPABILITY);
     const request = parseLeaseRequest(requestValue);
     return parseLeaseOutcome(await implementation.leaseNext(context, request), context, request);
   },
-  async load(contextValue, requestValue): Promise<DurableMemoryWorkLoadOutcome> {
+  async load(
+    contextValue: AuthorizedLedgerWriteContext,
+    requestValue: DurableMemoryWorkJobRequest,
+  ): Promise<DurableMemoryWorkLoadOutcome> {
     const context = assertContext(contextValue, EXECUTE_CAPABILITY);
     const request = parseJobRequest(requestValue);
     return parseLoadOutcome(await implementation.load(context, request), context, request);
   },
-  async recordFailure(contextValue, requestValue): Promise<DurableMemoryWorkFailureOutcome> {
+  async recordFailure(
+    contextValue: AuthorizedLedgerWriteContext,
+    requestValue: DurableMemoryWorkFailureRequest,
+  ): Promise<DurableMemoryWorkFailureOutcome> {
     const context = assertContext(contextValue, EXECUTE_CAPABILITY);
     const request = parseFailureRequest(requestValue);
     return parseFailureOutcome(await implementation.recordFailure(context, request), context, request);
   },
-  async recoverExpired(contextValue, requestValue): Promise<DurableMemoryWorkRecoveryOutcome> {
+  async recoverExpired(
+    contextValue: AuthorizedLedgerWriteContext,
+    requestValue: DurableMemoryWorkJobRequest,
+  ): Promise<DurableMemoryWorkRecoveryOutcome> {
     const context = assertContext(contextValue, EXECUTE_CAPABILITY);
     const request = parseJobRequest(requestValue);
     return parseRecoveryOutcome(await implementation.recoverExpired(context, request), context, request);

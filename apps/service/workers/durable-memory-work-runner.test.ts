@@ -8,6 +8,10 @@ import {
   leaseDurableMemoryWork,
   succeedDurableMemoryWork,
 } from "../../../core/consolidate/state-machine";
+import {
+  MEMORY_STRATEGY_VERSION,
+  registerMemoryStrategy,
+} from "../../../core/consolidate/strategy-assignment";
 import { prepareDerivation, type AtomicGraphTransition } from "../../../core/ledger";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import {
@@ -27,6 +31,20 @@ import {
 import { defineDurableMemoryWorkRunner } from "./durable-memory-work-runner";
 
 const digest = (character: string): string => character.repeat(64);
+
+const registeredStrategy = registerMemoryStrategy({
+  version: MEMORY_STRATEGY_VERSION,
+  strategy_id: "strategy:promotion:authority",
+  work_kind: "promotion",
+  coordinates: {
+    strategy_version: "strategy:v1", model_version: "model:v1",
+    prompt_version: "prompt:v1", policy_version: "policy:v1",
+    code_version: "code:v1", schema_version: "schema:v1",
+    tokenizer_version: "tokenizer:v1", tool_version: "tool:v1",
+    result_contract_version: "promotion-result:v1",
+    speaker_strategy_version: "none", boundary_strategy_version: "none",
+  },
+});
 
 const context = (principal = "worker:one") => createAuthorizedLedgerWriteContextIssuer().issue({
   context_version: "authorized-ledger-write-context-v1",
@@ -58,7 +76,7 @@ const leased = () => leaseDurableMemoryWork(acceptDurableMemoryWork({
   work_kind: "promotion",
   input_frontier: "frontier:one",
   input_digest: digest("b"),
-  execution_contract_digest: digest("c"),
+  execution_contract_digest: registeredStrategy.execution_contract_digest,
   accepted_at_event_time: 100,
   max_attempts: 3,
 }), "worker:one", 101, 20);
@@ -157,6 +175,7 @@ describe("production-neutral durable memory work runner", () => {
       work_repository: workRepository([]),
       result_repository: resultRepository,
       success_repository: successRepository({ remaining: 1 }),
+      resolve_strategy: async () => registeredStrategy,
       produce: async () => {
         modelCalls += 1;
         return {
@@ -203,6 +222,7 @@ describe("production-neutral durable memory work runner", () => {
       work_repository: workRepository([]),
       result_repository: bootstrap,
       success_repository: defineDurableMemoryWorkSuccessRepository(async () => ({ kind: "stale_lease" })),
+      resolve_strategy: async () => registeredStrategy,
       produce: async () => ({
         kind: "produced", result_contract_version: "promotion-result:v1",
         response_digest: digest("d"), normalized_result: { boundary_decision: "accept_ltm" },
@@ -226,6 +246,7 @@ describe("production-neutral durable memory work runner", () => {
       work_repository: workRepository([]),
       result_repository: replayRepository,
       success_repository: successRepository({ remaining: 0 }),
+      resolve_strategy: async () => registeredStrategy,
       produce: async () => {
         modelCalls += 1;
         throw new Error("must not call model");
@@ -254,6 +275,7 @@ describe("production-neutral durable memory work runner", () => {
         }),
       }),
       success_repository: successRepository({ remaining: 5 }),
+      resolve_strategy: async () => registeredStrategy,
       produce: async () => ({
         kind: "produced", result_contract_version: "promotion-result:v1",
         response_digest: digest("d"), normalized_result: { boundary_decision: "accept_ltm" },
@@ -271,5 +293,60 @@ describe("production-neutral durable memory work runner", () => {
       materialization_attempts: 2,
     });
     expect(failures).toEqual(["serialization_retryable"]);
+  });
+
+  test("worker resolves the exact registered strategy before model or staged-result use", async () => {
+    const failures: string[] = [];
+    let modelCalls = 0;
+    const wrongStrategy = registerMemoryStrategy({
+      version: MEMORY_STRATEGY_VERSION,
+      strategy_id: "strategy:promotion:wrong",
+      work_kind: "promotion",
+      coordinates: { ...registeredStrategy.coordinates, prompt_version: "prompt:wrong" },
+    });
+    const runner = defineDurableMemoryWorkRunner({
+      work_repository: workRepository(failures),
+      result_repository: defineDurableMemoryWorkResultRepository({
+        load: async () => { throw new Error("must not inspect staged result"); },
+        stage: async () => { throw new Error("must not stage"); },
+      }),
+      success_repository: successRepository({ remaining: 0 }),
+      resolve_strategy: async () => wrongStrategy,
+      produce: async () => {
+        modelCalls += 1;
+        throw new Error("must not call model");
+      },
+      materialize: async () => { throw new Error("must not materialize"); },
+      max_parent_rematerializations: 1,
+    });
+    await expect(runner.run(context(), leased())).resolves.toMatchObject({
+      kind: "failure_recorded", error_code: "dependency_unavailable", model_calls: 0,
+    });
+    expect(modelCalls).toBe(0);
+    expect(failures).toEqual(["dependency_unavailable"]);
+  });
+
+  test("worker rejects a producer result parsed under another result contract", async () => {
+    const failures: string[] = [];
+    const runner = defineDurableMemoryWorkRunner({
+      work_repository: workRepository(failures),
+      result_repository: defineDurableMemoryWorkResultRepository({
+        load: async () => ({ kind: "missing" }),
+        stage: async () => { throw new Error("must not stage mismatched bytes"); },
+      }),
+      success_repository: successRepository({ remaining: 0 }),
+      resolve_strategy: async () => registeredStrategy,
+      produce: async () => ({
+        kind: "produced", result_contract_version: "promotion-result:wrong",
+        response_digest: digest("d"), normalized_result: { boundary_decision: "accept_ltm" },
+      }),
+      materialize: async () => { throw new Error("must not materialize"); },
+      max_parent_rematerializations: 1,
+    });
+    await expect(runner.run(context(), leased())).resolves.toMatchObject({
+      kind: "failure_recorded", error_code: "model_response_invalid", model_calls: 1,
+      materialization_attempts: 0,
+    });
+    expect(failures).toEqual(["model_response_invalid"]);
   });
 });
