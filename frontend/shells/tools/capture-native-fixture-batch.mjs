@@ -405,7 +405,15 @@ function buildIos(manifest, outRoot, batchId) {
     "--dart-define=OMI_CAPTURE_ONLY=true",
     `--dart-define=SURFACE_QUERY=${fallbackQuery}`,
   ];
-  runCommand(commandSpec(flutter, ["build", "ios", "--simulator", "--debug", `--build-dir=${buildDir}`, ...defines], path.join(appRoot, "app"), env, 600), "iOS one-time build");
+  const flutterAppRoot = path.join(appRoot, "app");
+  const relativeBuildDir = path.relative(flutterAppRoot, buildDir);
+  if (!relativeBuildDir || path.isAbsolute(relativeBuildDir)) fail("iOS build directory must be relative to the Flutter app");
+  // Flutter 3.44 removed the build subcommand's --build-dir option. Configure
+  // it inside the already-isolated scratch HOME, then perform the build. This
+  // keeps generated output under the declared core authority without changing
+  // the operator's global Flutter configuration.
+  runCommand(commandSpec(flutter, ["config", `--build-dir=${relativeBuildDir}`], flutterAppRoot, env, 30), "iOS scratch build directory");
+  runCommand(commandSpec(flutter, ["build", "ios", "--simulator", "--debug", ...defines], flutterAppRoot, env, 600), "iOS one-time build");
   const bundle = path.join(buildDir, "ios/iphonesimulator/Runner.app");
   if (!existsSync(bundle)) fail("iOS build did not produce Runner.app");
   const bundleId = "me.omi.proto.omiWebviewProto";
