@@ -1,0 +1,8 @@
+{
+  "version": "0.12.159",
+  "date": "2026-08-11",
+  "changes": [
+    "Stopped the reserved account-migration prompt from flashing and blocking clicks during normal app launch",
+    "Reduced macOS candidate build time while preserving signed Beta verification"
+  ]
+}
