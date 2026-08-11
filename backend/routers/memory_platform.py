@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from database._client import db
 from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
-from models.memory_platform import MemoryPlatformCapability, MemoryPlatformIngestResponse
+from models.memory_platform import (
+    MemoryPlatformCapability,
+    MemoryPlatformIngestResponse,
+    MemoryPlatformQuota,
+)
 from utils.client_device import resolve_client_device_from_request
 from utils.memory.canonical_activation import canonical_write_decision
 from utils.memory.memory_service import MemoryService
@@ -21,6 +25,7 @@ from utils.memory.product_memory_read_service import (
 from utils.other import endpoints as auth
 
 from utils.memory.platform import build_memory_platform_capability
+from utils.memory.platform_quota import enforce_platform_quota, get_platform_quota_snapshot
 
 router = APIRouter()
 MAX_PLATFORM_SEARCH_QUERY_LENGTH = 500
@@ -88,6 +93,16 @@ def get_memory_platform(uid: str = Depends(auth.get_current_user_uid)) -> Memory
 
 
 @router.get(
+    '/v1/memory/platform/quota',
+    tags=['v1', 'memory'],
+    response_model=MemoryPlatformQuota,
+)
+def get_memory_platform_quota(uid: str = Depends(auth.get_current_user_uid)) -> MemoryPlatformQuota:
+    """Remaining metered allowance, so a client can render usage before it 429s."""
+    return MemoryPlatformQuota(**get_platform_quota_snapshot(uid))
+
+
+@router.get(
     '/v1/memory/platform/search',
     tags=['v1', 'memory'],
     response_model=ProductMemorySearchResponse,
@@ -103,6 +118,9 @@ def search_memory_platform(
     policy = authz.policy
     if policy is None or authz.global_gate is None:
         raise HTTPException(status_code=503, detail='Service temporarily unavailable')
+    # Metered after validation and authorization so a rejected request never
+    # burns a caller's monthly allowance.
+    enforce_platform_quota(uid)
     try:
         response = fetch_default_product_memory_search(
             uid=uid,
@@ -143,6 +161,10 @@ def ingest_memory_platform(
             detail={'reason': decision.reason, 'memory_system': decision.memory_system.value},
         )
 
+    # Metered after validation and the canonical-write decision so a rejected
+    # request never burns a caller's monthly allowance.
+    enforce_platform_quota(uid)
+
     memory_db = MemoryDB.from_memory(
         memory,
         uid,
@@ -171,4 +193,10 @@ def ingest_memory_platform(
     return MemoryPlatformIngestResponse(memory_id=created.id)
 
 
-__all__ = ['get_memory_platform', 'ingest_memory_platform', 'router', 'search_memory_platform']
+__all__ = [
+    'get_memory_platform',
+    'get_memory_platform_quota',
+    'ingest_memory_platform',
+    'router',
+    'search_memory_platform',
+]
