@@ -50,6 +50,7 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(source, /OMI_PROBE_JS/);
   assert.match(source, /OMI_PROBE_PENDING_VALUE/);
   assert.match(source, /OMI_PROBE_MAX_ATTEMPTS/);
+  assert.match(source, /OMI_ACCEPTANCE_WAIT_SECONDS = "30"/);
   assert.match(source, /xcodebuild/);
   assert.match(source, /xcresulttool/);
   assert.match(source, /OMI_NATIVE_IOS_RUNTIME_JSON\(\?:_\\d\+_\[0-9A-F-\]\{36\}\)\?/);
