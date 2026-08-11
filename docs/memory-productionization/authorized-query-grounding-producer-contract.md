@@ -92,9 +92,9 @@ part of this unit.
 
 ## Replay and pairing
 
-This unit produces one role/repeat result. A later paired coordinator may call
-it sequentially for authority plus selected shadows, then use the existing
-verified pair repository. It must not stage the generic result separately: the
+This unit produces one role/repeat result. The landed paired coordinator calls
+it sequentially for authority plus selected shadows, then uses the existing
+verified pair repository. It never stages the generic result separately: the
 grounding repository is the only success path for read evaluations because it
 atomically owns both sensitive objects.
 

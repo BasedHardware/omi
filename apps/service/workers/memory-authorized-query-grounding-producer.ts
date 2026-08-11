@@ -160,6 +160,20 @@ export interface MemoryAuthorizedQueryGroundingDependencies {
 const fail = (code: string): never => { throw new TypeError(`memory authorized query grounding ${code}`); };
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
+export const assertMemoryAuthorizedQueryGroundingProducer = (
+  value: unknown,
+): MemoryAuthorizedQueryGroundingProducer => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail("unverified_producer");
+  const brand = Object.getOwnPropertyDescriptor(value, PORT);
+  const run = Object.getOwnPropertyDescriptor(value, "run");
+  if (!brand || !("value" in brand) || brand.value !== true
+    || !run || !("value" in run) || typeof run.value !== "function" || !run.enumerable) {
+    fail("unverified_producer");
+  }
+  return value as MemoryAuthorizedQueryGroundingProducer;
+};
+
 const exactRecord = (value: unknown, keys: readonly string[], code: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail(code);

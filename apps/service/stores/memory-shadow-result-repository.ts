@@ -134,6 +134,21 @@ export interface MemoryShadowResultImplementation {
 
 const fail = (code: string): never => { throw new TypeError(`memory shadow result repository ${code}`); };
 
+export const assertMemoryShadowResultRepository = (
+  value: unknown,
+): MemoryShadowResultRepository => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail("unverified_repository");
+  const brand = Object.getOwnPropertyDescriptor(value, SHADOW_RESULT_PORT);
+  const methods = ["load", "stage", "recordPair"].map((name) => Object.getOwnPropertyDescriptor(value, name));
+  if (!brand || !("value" in brand) || brand.value !== true
+    || methods.some((descriptor) => !descriptor || !("value" in descriptor)
+      || typeof descriptor.value !== "function" || !descriptor.enumerable)) {
+    fail("unverified_repository");
+  }
+  return value as MemoryShadowResultRepository;
+};
+
 const exactRecord = (value: unknown, keys: readonly string[], code: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) fail(code);
   const objectValue = value as object;

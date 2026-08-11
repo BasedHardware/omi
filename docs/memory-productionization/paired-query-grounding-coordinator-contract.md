@@ -1,6 +1,7 @@
 # Paired query-grounding coordinator contract
 
-Status: P5 preregistration, 2026-08-11; implementation and activation absent
+Status: P5 preregistration plus production-neutral coordinator kernel,
+2026-08-11; concrete adapters, service composition, and activation absent
 
 ## Purpose
 
@@ -121,6 +122,31 @@ hermetic run records four verified pairs with peak concurrency one, while exact
 restart performs zero model calls and returns byte-identical opaque pair refs.
 This proves orchestration and replay safety only. It is not answer-quality,
 contamination, truth, or production-read evidence.
+
+## Landed kernel
+
+`memory-paired-query-grounding-coordinator.ts` implements the sealed sequential
+bridge. It accepts only the branded atomic grounding producer and isolated pair
+repository, validates the complete run before dependency access, invokes
+baseline then selected shadows for each explicit repeat, pairs only verified
+same-input results, persists each pair before advancing, and returns only opaque
+pair receipts plus closed counters/outcomes. Full verified pair rows remain
+inside isolated storage.
+
+The pre-registered two-repeat/two-shadow run completed six attempts, recorded
+four pairs, and held peak producer concurrency at one. Exact restart returned
+the same four opaque pair refs with zero model calls and six replayed results.
+Empty authorized projections also recorded all four pairs with zero model calls.
+
+Verification: 8 focused coordinator tests passed with 51 expectations; the
+combined coordinator/producer/result/grounding suite passed 24 tests with 124
+expectations. The broad platform gate passed 1,289 tests with 9,372 expectations
+across 177 files; the isolated epoch suite passed 18 tests with 141
+expectations; migration checks passed 19 tests with 1,192 expectations. Import
+graph and diff checks passed. The first epoch run was deliberately attempted in
+parallel with the broad gate and hit its known cleanup timeout; the required
+isolated rerun passed. The occupied fixed-port dev-server test remained
+excluded.
 
 ## Explicit exclusions
 
