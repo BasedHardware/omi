@@ -54,9 +54,168 @@ const String _consumerEvidenceFilename = String.fromEnvironment('OMI_CONSUMER_EV
 // scheme URL, never interpolated into page JavaScript or logs.
 const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
 const String _surfaceProfile = String.fromEnvironment('SURFACE_PROFILE', defaultValue: '');
-const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: false);
-const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
-const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
+// Capture-only builds may receive one per-coordinate query at process launch.
+// This is deliberately compile-time gated: production builds ignore the
+// argument entirely, while capture builds fail closed on an absent, repeated,
+// malformed, or out-of-contract query.
+const bool _captureOnly = bool.fromEnvironment(
+  'OMI_CAPTURE_ONLY',
+  defaultValue: false,
+);
+const bool _acceptance = bool.fromEnvironment(
+  'OMI_ACCEPTANCE',
+  defaultValue: false,
+);
+const bool _acceptanceExit = bool.fromEnvironment(
+  'OMI_ACCEPTANCE_EXIT',
+  defaultValue: false,
+);
+const bool _consumerEvidenceExit = bool.fromEnvironment(
+  'OMI_CONSUMER_EVIDENCE_EXIT',
+  defaultValue: false,
+);
+
+const Set<String> _captureDomains = {
+  'memories',
+  'memories-platform',
+  'tasks',
+  'conversations',
+  'folders',
+  'listen',
+  'chat',
+  'settings',
+};
+const Set<String> _captureStates = {
+  'loading',
+  'empty',
+  'ready',
+  'error',
+  'offline',
+  'busy',
+  'complete',
+  'cancelled',
+};
+const Set<String> _captureAccessibilities = {
+  'none',
+  'keyboard',
+  'voiceover',
+  'high_contrast',
+  'reduced_motion',
+  'reduced_transparency',
+  'rtl',
+  'text_scale_200',
+};
+
+/// Resolve the one launch query accepted by a capture-only build.
+///
+/// The native runner passes `--omi-capture-query=<query>` as one argument.
+/// Every key is parsed manually so duplicate keys, unknown keys, malformed
+/// escapes, fragments, and unbounded values cannot silently select another
+/// fixture. The non-capture path returns the compile-time query and never
+/// inspects launch arguments.
+String surfaceQueryForLaunch({
+  required bool captureOnly,
+  required String compileQuery,
+  required List<String> arguments,
+}) {
+  if (!captureOnly) return compileQuery;
+  const prefix = '--omi-capture-query=';
+  final matches = arguments
+      .where((argument) => argument.startsWith(prefix))
+      .toList();
+  if (matches.length != 1) {
+    throw const FormatException(
+      'capture build requires exactly one --omi-capture-query argument',
+    );
+  }
+  final raw = matches.single.substring(prefix.length);
+  if (raw.isEmpty || raw.length > 1024 || raw.contains('#')) {
+    throw const FormatException(
+      'capture query is empty, too long, or contains a fragment',
+    );
+  }
+  final values = <String, String>{};
+  for (final part in raw.split('&')) {
+    if (part.isEmpty || !part.contains('=')) {
+      throw const FormatException(
+        'capture query contains an empty or valueless pair',
+      );
+    }
+    final separator = part.indexOf('=');
+    final encodedKey = part.substring(0, separator);
+    final encodedValue = part.substring(separator + 1);
+    String key;
+    String value;
+    try {
+      key = Uri.decodeQueryComponent(encodedKey);
+      value = Uri.decodeQueryComponent(encodedValue);
+    } on FormatException {
+      throw const FormatException(
+        'capture query contains invalid percent encoding',
+      );
+    } on ArgumentError {
+      throw const FormatException(
+        'capture query contains invalid percent encoding',
+      );
+    }
+    if (key.isEmpty || value.isEmpty || values.containsKey(key)) {
+      throw const FormatException(
+        'capture query contains an empty or duplicate key',
+      );
+    }
+    values[key] = value;
+  }
+  const expectedKeys = {
+    'polish',
+    'qa',
+    'state',
+    'platform',
+    'theme',
+    'width',
+    'accessibility',
+    'locale',
+  };
+  if (!values.keys.toSet().containsAll(expectedKeys) ||
+      values.length != expectedKeys.length) {
+    throw const FormatException(
+      'capture query keys do not match the capture contract',
+    );
+  }
+  if (values['polish'] != '1' ||
+      !_captureDomains.contains(values['qa']) ||
+      !_captureStates.contains(values['state']) ||
+      values['platform'] != 'mobile' ||
+      !{'light', 'dark'}.contains(values['theme']) ||
+      !{'compact', 'regular', 'wide'}.contains(values['width']) ||
+      !_captureAccessibilities.contains(values['accessibility']) ||
+      !RegExp(
+        r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$',
+      ).hasMatch(values['locale']!)) {
+    throw const FormatException('capture query contains an unsupported value');
+  }
+  const order = [
+    'polish',
+    'qa',
+    'state',
+    'platform',
+    'theme',
+    'width',
+    'accessibility',
+    'locale',
+  ];
+  return order
+      .map(
+        (key) =>
+            '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(values[key]!)}',
+      )
+      .join('&');
+}
+
+String get _activeSurfaceQuery => surfaceQueryForLaunch(
+  captureOnly: _captureOnly,
+  compileQuery: _surfaceQuery,
+  arguments: Platform.executableArguments,
+);
 
 ThemeMode shellThemeModeForSurfaceQuery(String raw) {
   var query = raw.trim();
@@ -94,7 +253,7 @@ class OmiApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = shellThemeModeForSurfaceQuery(_surfaceQuery);
+    final themeMode = shellThemeModeForSurfaceQuery(_activeSurfaceQuery);
     return MaterialApp(
       title: 'Omi',
       debugShowCheckedModeBanner: false,
@@ -136,7 +295,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   bool _acceptanceEmitted = false;
 
   String get _surfaceQuerySuffix {
-    var raw = _surfaceQuery.trim();
+    var raw = _activeSurfaceQuery.trim();
     if (raw.startsWith('?')) raw = raw.substring(1);
     final params = <String, String>{};
     if (raw.isNotEmpty) {
@@ -201,7 +360,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // Privileged HTTP: register BEFORE any load so the page sees the channel on
     // its first script evaluation and picks bridge mode rather than DEV.
     final apiBase = Uri.tryParse(_apiBaseUrl);
-    if (_apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
+    if (!_captureOnly && _apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
       final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
       _http = authority.makeHttpHost();
       _listen = authority.makeListenHost(evidenceAudioEnabled: _consumerEvidenceFilename.isNotEmpty);
@@ -232,7 +391,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(shellBackgroundForSurfaceQuery(
-        _surfaceQuery,
+        _activeSurfaceQuery,
         WidgetsBinding.instance.platformDispatcher.platformBrightness,
       ))
       // Surface console -> flutter logs, so headless runs can read bench output.
@@ -804,9 +963,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
 
   @override
   void didChangePlatformBrightness() {
-    if (shellThemeModeForSurfaceQuery(_surfaceQuery) != ThemeMode.system) return;
+    if (shellThemeModeForSurfaceQuery(_activeSurfaceQuery) != ThemeMode.system) return;
     unawaited(_controller.setBackgroundColor(shellBackgroundForSurfaceQuery(
-      _surfaceQuery,
+      _activeSurfaceQuery,
       WidgetsBinding.instance.platformDispatcher.platformBrightness,
     )));
     if (mounted) setState(() {});
@@ -816,7 +975,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: shellBackgroundForSurfaceQuery(
-        _surfaceQuery,
+        _activeSurfaceQuery,
         Theme.of(context).brightness,
       ),
       // Shell-level inset ownership: SafeArea keeps the WKWebView out of the
