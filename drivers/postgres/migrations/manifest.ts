@@ -67,4 +67,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0010-read-side-experiment-strategies.sql",
     sha256: "f3918ca5844602670a12678f2aef13ab7eef5c8a8caae2487829ace042673690",
   }),
+  Object.freeze({
+    version: 11,
+    name: "memory-read-grounding-artifacts",
+    fileName: "0011-memory-read-grounding-artifacts.sql",
+    sha256: "455b9ca2f2902b62d692d78aee414881eed62b8e2792568fffe688a774d90a39",
+  }),
 ]);

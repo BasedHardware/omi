@@ -9,6 +9,7 @@ import {
   assertVerifiedMemoryEvaluationResult,
   type MemoryEvaluationResult,
 } from "../stores/memory-shadow-result-repository";
+import type { MemoryReadGroundingRepository } from "../stores/memory-read-grounding-repository";
 import {
   parseMemoryEvaluationCohort,
   type MemoryEvaluationCohortManifest,
@@ -246,6 +247,27 @@ export const defineMemoryReadProvenanceSource = (
     if (common) return common;
     return Object.freeze({ kind: "found" as const, manifest: normalizeManifest(result, read, raw) });
   },
+});
+
+/**
+ * Adapts the sealed finalized-grounding store to the audit's narrow read port.
+ * The repository performs authority, result-coordinate, and artifact-digest
+ * validation before any rows reach this facade.
+ */
+export const memoryReadProvenanceSourceFromGroundingRepository = (
+  repository: MemoryReadGroundingRepository,
+): MemoryReadProvenanceSource => defineMemoryReadProvenanceSource(async (context, result) => {
+  const loaded = await repository.load(context, result);
+  if (loaded.kind === "found") {
+    return Object.freeze({
+      kind: "found" as const,
+      evaluation_result_ref: loaded.artifact.evaluation_result_ref,
+      normalized_result_digest: loaded.artifact.normalized_result_digest,
+      rows: loaded.artifact.rows,
+    });
+  }
+  if (loaded.kind === "missing") return Object.freeze({ kind: "not_found" as const });
+  return loaded;
 });
 
 export const auditMemoryReadContamination = (

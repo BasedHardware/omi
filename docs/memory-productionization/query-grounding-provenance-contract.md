@@ -1,7 +1,8 @@
 # Finalized query grounding and provenance contract
 
-Status: P5 contract plus legacy compatibility gate, 2026-08-11; no authorized
-producer, persistence adapter, route, or runtime activation landed
+Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, and
+sealed repository boundary, 2026-08-11; no authorized producer, concrete
+PostgreSQL adapter, route, grant, or runtime activation landed
 
 ## Purpose
 
@@ -32,6 +33,13 @@ The canonical tree has the pieces, but no producer currently owns all of them:
   coherent reload, reader-scoped codecs, and final revalidation discipline, but
   serves synthesized pages rather than query answers; and
 - the current provenance-source implementation has hermetic fixtures only.
+
+The inert artifact schema and repository boundary now make total closure,
+result-coordinate equality, immutable replay, and one atomic adapter call
+mechanical. The exported materializer is a structural validator, not authority
+to invent subject classes. Nothing composes it with query execution yet; the
+future authorized producer must derive the rows inside the exact projected
+attempt described below.
 
 Therefore the production source must be built at a new query-bearing evaluation
 composition that combines the application-read authorization discipline with
@@ -172,6 +180,14 @@ Landed sub-units:
   calls, and reproduces voice-off 21/39, voice-on 11/37, 15/5 discordance over
   41 paired cells, and p=`0.04138946533203125`. Report digest:
   `6307b3f1f0da796578d43b14d7117d3db08cdad7a406ae44f613a736c68bd59a`.
+- Migration `0011-memory-read-grounding-artifacts.sql` adds physically isolated
+  baseline/candidate artifact tables with exact one-to-one result foreign keys
+  and no grant. `memory-read-grounding-repository.ts` validates the branded
+  result, total grounded-reference rows, projection coordinates, artifact
+  digest, replay bytes, owner/epoch/capability, and exposes only one atomic
+  result-plus-artifact stage call. The contamination audit consumes it through
+  a narrow adapter. There is deliberately no concrete PostgreSQL implementation
+  or authorized row-producing composition.
 
 ## Pre-registered acceptance tests
 

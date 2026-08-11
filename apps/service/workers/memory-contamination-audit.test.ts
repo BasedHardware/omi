@@ -12,6 +12,10 @@ import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-con
 import { durableMemoryWorkNormalizedResultDigest } from "../stores/durable-memory-work-result-repository";
 import { defineMemoryEvaluationEvidenceSource, type CopiedMemoryEvaluationInput } from "../stores/memory-evaluation-evidence-source";
 import {
+  defineMemoryReadGroundingRepository,
+  materializeFinalizedMemoryReadGrounding,
+} from "../stores/memory-read-grounding-repository";
+import {
   materializeMemoryEvaluationResult,
   memoryEvaluationStageRequestDigest,
   pairMemoryEvaluationResults,
@@ -22,11 +26,12 @@ import {
   analyzeMemoryContaminationFindings,
   auditMemoryReadContamination,
   defineMemoryReadProvenanceSource,
+  memoryReadProvenanceSourceFromGroundingRepository,
   type MemoryContaminationFinding,
 } from "./memory-contamination-audit";
 import { buildMemoryEvaluationExport } from "./memory-evaluation-export";
 import { buildMemoryEvaluationCohort } from "./memory-evaluation-statistics";
-import { buildMemoryReadEvaluationResult } from "./memory-read-evaluation-result";
+import { buildMemoryReadEvaluationResult, parseMemoryReadEvaluationResult } from "./memory-read-evaluation-result";
 
 const hex = (character: string): string => character.repeat(64);
 const issuer = createAuthorizedLedgerWriteContextIssuer();
@@ -241,6 +246,43 @@ describe("zero-model memory contamination audit", () => {
     await expect(source(new Proxy([], {})).load(context(), result)).rejects.toThrow("invalid_provenance_rows");
     await expect(source([]).load(context("memories.work.execute"), result)).rejects.toThrow("capability_denied");
     await expect(source([]).load(context(), { ...result } as never)).rejects.toThrow("unverified_result");
+  });
+
+  test("consumes only a finalized repository artifact and preserves closed outcomes", async () => {
+    const fixture = await buildFixture(defaultUnits());
+    const result = fixture.results[0]!;
+    const read = parseMemoryReadEvaluationResult(result.normalized_result);
+    const artifact = materializeFinalizedMemoryReadGrounding({
+      evaluation_result: result,
+      projection_authorization_digest: hex("c"),
+      reader_projection_digest: hex("d"),
+      projected_content_digest: hex("e"),
+      rows: [...read.recall_trace.stages.grounded].sort().map((trace_ref) => ({
+        trace_ref,
+        contributing_subject_classes: fixture.classesByResult.get(result.evaluation_result_id)!.get(trace_ref)!,
+      })),
+    });
+    const repository = defineMemoryReadGroundingRepository({
+      stage: async () => ({ kind: "idempotency_conflict" }),
+      load: async (_authorized, selected) => selected.evaluation_result_id === result.evaluation_result_id
+        ? { kind: "found", artifact: JSON.parse(JSON.stringify(artifact)) }
+        : { kind: "missing" },
+    });
+    const source = memoryReadProvenanceSourceFromGroundingRepository(repository);
+    const loaded = await source.load(context(), result);
+    expect(loaded).toMatchObject({
+      kind: "found",
+      manifest: { evaluation_result_ref: result.evaluation_result_id, grounded_reference_count: 2 },
+    });
+    if (loaded.kind !== "found") throw new Error("fixture provenance unavailable");
+    expect(auditMemoryReadContamination(result, loaded.manifest)).toMatchObject({ contaminated: true });
+
+    const absentRepository = defineMemoryReadGroundingRepository({
+      stage: async () => ({ kind: "idempotency_conflict" }),
+      load: async () => ({ kind: "missing" }),
+    });
+    await expect(memoryReadProvenanceSourceFromGroundingRepository(absentRepository).load(context(), result))
+      .resolves.toEqual({ kind: "not_found" });
   });
 
   test("findings and aggregate report are content-safe and repeats do not inflate primary N", async () => {

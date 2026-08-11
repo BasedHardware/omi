@@ -109,6 +109,8 @@ const expectedTables = [
   "memory_source_local_claim_roles",
   "memory_strategy_assignment_bundles",
   "memory_strategy_assignment_policies",
+  "memory_strategy_baseline_read_groundings",
+  "memory_strategy_candidate_read_groundings",
   "memory_strategy_definitions",
   "memory_strategy_evaluation_baselines",
   "memory_strategy_evaluation_pairs",
@@ -412,6 +414,26 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     const acceptance = tables.find((table) => table.name === "memory_work_acceptances")!;
     expect(acceptance.body).toContain("'formation', 'promotion', 'identity_cluster', 'predicate_batch'");
     expect(acceptance.body).not.toMatch(/retrieval|composition/);
+  });
+
+  test("keeps finalized read grounding one-to-one, sensitive, and outside authority", () => {
+    const baseline = tables.find((table) => table.name === "memory_strategy_baseline_read_groundings")!;
+    const candidate = tables.find((table) => table.name === "memory_strategy_candidate_read_groundings")!;
+    for (const table of [baseline, candidate]) {
+      expect(table.body).toContain("artifact_version = 'finalized-query-grounding-v1'");
+      expect(table.body).toContain("result_contract_version = 'memory-read-evaluation-result-v1'");
+      expect(table.body).toContain("UNIQUE (account_id, evaluation_result_id)");
+      expect(table.body).toContain("jsonb_array_length(rows_json) = grounded_reference_count");
+      expect(table.body).toContain("projection_authorization_digest text NOT NULL");
+      expect(table.body).toContain("reader_projection_digest text NOT NULL");
+      expect(table.body).toContain("projected_content_digest text NOT NULL");
+      expect(table.body).not.toMatch(/\b(?:query_text|answer_text|transcript|excerpt|evidence_id|claim_revision_id)\b/i);
+      expect(table.body).not.toMatch(/graph_commit|projection_revision|memory_work_success/i);
+    }
+    expect(baseline.body).toContain("memory_strategy_evaluation_baselines");
+    expect(candidate.body).toContain("memory_strategy_shadow_results");
+    expect(allSql).toContain("A grounding artifact cannot authorize a graph/product/read result or memory work");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:baseline|candidate)_read_groundings/s);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {
