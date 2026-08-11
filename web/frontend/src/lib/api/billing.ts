@@ -1,7 +1,12 @@
 import { browserApiBase as apiBase } from '@/src/lib/api/browser-base';
 
 export type PlanId =
-  'basic' | 'unlimited' | 'architect' | 'operator' | 'plus' | 'unlimited_v2';
+  | 'basic'
+  | 'unlimited'
+  | 'architect'
+  | 'operator'
+  | 'plus'
+  | 'unlimited_v2';
 
 export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
   basic: 'Free',
@@ -70,11 +75,19 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-/** LIVE: GET /v1/payments/available-plans */
+/**
+ * LIVE: GET /v1/payments/available-plans
+ *
+ * The platform header is required, not decorative. `should_show_new_plans`
+ * returns false for an absent platform, so an unidentified caller is treated as
+ * a legacy client: the catalog drops Operator and exposes the deprecated Neo
+ * entry. This storefront is always current, so it identifies itself as web.
+ */
 export async function getAvailablePlans(token: string): Promise<PricingOption[]> {
   const data = await request<{ plans: PricingOption[] }>(
     '/v1/payments/available-plans',
     token,
+    { headers: { 'X-App-Platform': 'web' } },
   );
   return data?.plans ?? [];
 }

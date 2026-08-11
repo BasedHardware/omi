@@ -179,10 +179,15 @@ describe('backend seams are isolated to one client function each', () => {
     );
     assert.match(client, /\/v1\/memory\/platform\/quota/);
     for (const file of SOURCE_FILES) {
+      const source = read(file);
+      // Scan for the endpoint this seam actually protects, plus the payments
+      // paths the panel also reads. Checking only /v1/payments/ let a direct
+      // call to the quota route through undetected.
       assert.ok(
-        !/v1\/payments\//.test(read(file)),
-        `${file} calls the payments API directly`,
+        !/v1\/memory\/platform\/quota/.test(source),
+        `${file} calls the platform quota API directly`,
       );
+      assert.ok(!/v1\/payments\//.test(source), `${file} calls the payments API directly`);
     }
   });
 });
