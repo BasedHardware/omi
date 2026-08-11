@@ -200,7 +200,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                 HapticFeedback.mediumImpact();
                 await _loadCapabilityApps();
               },
-              color: Colors.deepPurpleAccent,
+              color: Colors.white,
               backgroundColor: Colors.white,
               child: _totalCount == 0
                   ? Center(

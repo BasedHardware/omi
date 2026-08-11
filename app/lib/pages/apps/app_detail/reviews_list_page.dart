@@ -136,7 +136,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           isSubmitting.value = false;
                         }
                       },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
                 child: submitting
                     ? const SizedBox(
                         width: 16,
@@ -273,9 +273,9 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.deepPurple : Colors.grey.shade800.withValues(alpha: 0.5),
+          color: selected ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? Colors.deepPurple : Colors.grey.shade700, width: 1),
+          border: Border.all(color: selected ? Colors.white : Colors.grey.shade700, width: 1),
         ),
         child: Text(
           label,
@@ -336,7 +336,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),
@@ -397,11 +397,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 icon: FaIcon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
-                  color: Colors.deepPurple,
+                  color: Colors.white,
                 ),
                 label: Text(
                   review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
-                  style: const TextStyle(color: Colors.deepPurple, fontSize: 13),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
             ),
