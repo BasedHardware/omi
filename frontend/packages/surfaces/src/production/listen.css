@@ -253,6 +253,21 @@
   font-weight: var(--type-button-weight);
 }
 
+.listen-announcement-control {
+  min-height: var(--min-tap-target);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-secondary);
+  background: transparent;
+  font-size: var(--type-label-size);
+}
+
+.listen-announcement-control[aria-pressed="true"] {
+  color: var(--content-primary);
+  background: var(--surface-elevated);
+}
+
 .listen-primary-control:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus);
   outline-offset: 2px;
@@ -316,5 +331,9 @@ html[data-platform="mobile"] .listen-controls {
 html[data-platform="mobile"] .listen-primary-control {
   flex: 1;
   min-height: var(--min-tap-target);
+  width: 100%;
+}
+
+html[data-platform="mobile"] .listen-announcement-control {
   width: 100%;
 }

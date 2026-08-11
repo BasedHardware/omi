@@ -89,11 +89,15 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
   const [showLatest, setShowLatest] = useState(false);
+  const [announceTranscript, setAnnounceTranscript] = useState(true);
+  const [listenAnnouncement, setListenAnnouncement] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const transcriptRef = useRef<HTMLElement>(null);
   const followingLatestRef = useRef(true);
   const touchYRef = useRef<number | null>(null);
+  const announcedCaptureKindRef = useRef<CaptureState["kind"] | null>(null);
+  const announcedSegmentsRef = useRef(new Map<string, string>());
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -201,11 +205,23 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
     presentedCapture.kind === "stopped-at-ceiling"
     || (presentedCapture.kind === "error" && !presentedCapture.retryable)
   );
-  const listenAnnouncement = [
-    t(locale, description.titleKey),
-    segments.length > 0 ? t(locale, "lifecycle.resultsCount", { count: segments.length }) : null,
-    transcriptAnnouncement(segments),
-  ].filter(Boolean).join(" · ");
+  useEffect(() => {
+    const nextSegmentMap = new Map<string, string>();
+    const changedSegments: TranscriptSegment[] = [];
+    for (const [index, segment] of segments.entries()) {
+      const key = transcriptKey(segment, index);
+      nextSegmentMap.set(key, segment.text);
+      if (announcedSegmentsRef.current.get(key) !== segment.text) changedSegments.push(segment);
+    }
+    announcedSegmentsRef.current = nextSegmentMap;
+    const stateChanged = announcedCaptureKindRef.current !== presentedCapture.kind;
+    announcedCaptureKindRef.current = presentedCapture.kind;
+    const parts = [
+      stateChanged && !description.loud ? t(locale, description.titleKey) : null,
+      announceTranscript ? transcriptAnnouncement(changedSegments) : null,
+    ].filter((part): part is string => Boolean(part));
+    if (parts.length > 0) setListenAnnouncement(parts.join(" · "));
+  }, [announceTranscript, description.loud, description.titleKey, locale, presentedCapture.kind, segments]);
 
   return (
     <main
@@ -261,9 +277,12 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             </div>
           )}
         </section>
+        {description.loud && (
+          <p className="visually-hidden" role="alert">{t(locale, description.titleKey)}</p>
+        )}
         <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
         {presentedCapture.kind === "capturing" && segments.length === 0 && (
-          <p className="listen-transcript-waiting" role="status">{t(locale, "listen.transcriptWaiting")}</p>
+          <p className="listen-transcript-waiting">{t(locale, "listen.transcriptWaiting")}</p>
         )}
         {segments.length > 0 && (
           <section
@@ -325,6 +344,14 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
               {t(locale, "listen.stop")}
             </button>
           )}
+          <button
+            type="button"
+            className="listen-announcement-control"
+            aria-pressed={announceTranscript}
+            onClick={() => setAnnounceTranscript((current) => !current)}
+          >
+            {t(locale, announceTranscript ? "listen.transcriptAnnouncementsOn" : "listen.transcriptAnnouncementsOff")}
+          </button>
         </div>
       </section>
       <ProductionChrome locale={locale} active="listen" placement="bottom" />

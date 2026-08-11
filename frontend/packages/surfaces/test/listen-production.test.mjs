@@ -180,17 +180,20 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
   // the rendered DOM assertion for that arm fails, even if describeCapture remains correct.
 });
 
-test("Listen batches transcript text into the single state announcement", async () => {
+test("Listen announces only changed transcript text and exposes a verbosity control", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const callbacks = [];
   const scheduler = {
     setTimeout(callback) { callbacks.push(callback); return callback; },
     clearTimeout() {},
   };
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  wire.sockets[0].message(JSON.stringify([segment("one", "A short transcript", 0, 1), segment("two", "with a second phrase", 1, 2)]));
   const rendered = await renderComponent(ListenProduction, {
-    store: stateStore({ kind: "capturing", elapsedSeconds: 4, untranscribedSeconds: 0 }, {
-      segments: [segment("one", "A short transcript", 0, 1), segment("two", "with a second phrase", 1, 2)],
-    }),
+    store: wire.store,
     announcementScheduler: scheduler,
   });
   try {
@@ -199,6 +202,24 @@ test("Listen batches transcript text into the single state announcement", async 
     const announcement = rendered.container.querySelector('[data-live-region="true"]');
     assert.ok(announcement?.textContent?.includes("A short transcript with a second phrase"));
     assert.equal(rendered.container.querySelector(".listen-state-panel")?.getAttribute("role"), null);
+    await rendered.act(async () => {
+      wire.sockets[0].message(JSON.stringify([
+        segment("one", "A short transcript", 0, 1),
+        segment("two", "with a second phrase", 1, 2),
+        segment("three", "Only this phrase is new", 2, 3),
+      ]));
+    });
+    assert.equal(callbacks.length, 2);
+    await rendered.act(async () => callbacks[1]());
+    assert.equal(announcement?.textContent, "Only this phrase is new", "overlapping transcript rows are not reread");
+    const verbosity = rendered.container.querySelector(".listen-announcement-control");
+    assert.equal(verbosity?.getAttribute("aria-pressed"), "true");
+    await rendered.act(async () => { verbosity?.click(); });
+    assert.equal(verbosity?.getAttribute("aria-pressed"), "false");
+    await rendered.act(async () => {
+      wire.sockets[0].message(JSON.stringify([segment("four", "This stays visual", 3, 4)]));
+    });
+    assert.equal(callbacks.length, 2, "disabled transcript verbosity does not schedule another announcement");
   } finally {
     await rendered.cleanup();
   }
@@ -251,6 +272,40 @@ test("Listen follows new transcript only at the live edge and offers Latest afte
       rendered.container.querySelector(".listen-jump-latest")?.click();
     });
     assert.equal(transcript.scrollTop, 900);
+    assert.equal(rendered.container.querySelector(".listen-jump-latest"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Listen mobile follow observes the document scroller and Latest restores its edge", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  wire.sockets[0].message(JSON.stringify([segment("one", "First", 0, 1)]));
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const documentElement = rendered.window.document.documentElement;
+    documentElement.dataset.platform = "mobile";
+    Object.defineProperties(documentElement, {
+      scrollHeight: { configurable: true, value: 1_200 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 250 },
+    });
+    Object.defineProperty(rendered.window.document, "scrollingElement", { configurable: true, value: documentElement });
+    await rendered.act(async () => {
+      wire.sockets[0].message(JSON.stringify([segment("two", "Second", 1, 2)]));
+    });
+    documentElement.scrollTop = 250;
+    await rendered.act(async () => {
+      documentElement.dispatchEvent(new rendered.window.Event("scroll"));
+    });
+    const latest = rendered.container.querySelector(".listen-jump-latest");
+    assert.ok(latest);
+    await rendered.act(async () => { latest.click(); });
+    assert.equal(documentElement.scrollTop, 1_200);
     assert.equal(rendered.container.querySelector(".listen-jump-latest"), null);
   } finally {
     await rendered.cleanup();
