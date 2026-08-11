@@ -44,6 +44,11 @@ class AudioCaptureService: @unchecked Sendable {
     }
   }
 
+  enum SilentMicWatchdogSynchronizationEvent {
+    case resetWillLock
+    case evaluationDidLock
+  }
+
   enum AudioCaptureError: LocalizedError {
     case noInputAvailable
     case engineStartFailed(Error)
@@ -114,8 +119,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// Human-readable description of the capture device currently in use — for
   /// diagnostics (which mic a turn was recorded from).
   var currentDeviceDescription: String {
-    let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
-    return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    Self.deviceDescription(for: deviceID)
   }
   /// Whether the active capture device is on a Bluetooth transport (A2DP/HFP),
   /// the known profile-conflict case that feeds zeros. Exposed so the PTT
@@ -166,7 +170,9 @@ class AudioCaptureService: @unchecked Sendable {
   // so we can detect a Bluetooth mic that's alive-but-silent (A2DP profile conflict).
   private var watchdogWindowPeak: Int16 = 0
   private var watchdogWindowStart: CFAbsoluteTime = 0
+  private var silentMicWatchdogGeneration: UInt64 = 0
   private let silentMicWatchdogLock = NSLock()
+  var watchdogSynchronizationHookForTesting: (@Sendable (SilentMicWatchdogSynchronizationEvent) -> Void)?
 
   /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
   /// to avoid blocking the main thread on AudioDeviceStart/Stop calls.
@@ -175,8 +181,10 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Public Methods
 
   func resetSilentMicWatchdog() {
+    watchdogSynchronizationHookForTesting?(.resetWillLock)
     silentMicWatchdogLock.lock()
     defer { silentMicWatchdogLock.unlock() }
+    silentMicWatchdogGeneration &+= 1
     consecutiveSilentWindows = 0
     silentMicDetectedFired = false
     silentMicFireCount = 0
@@ -198,16 +206,46 @@ class AudioCaptureService: @unchecked Sendable {
   /// `internal` (not `private`) so the recover-more-than-once-per-session contract can be
   /// unit-tested without driving real CoreAudio buffers.
   func evaluateSilentMicWindow(peak: Int16, isBluetooth: Bool, now: CFAbsoluteTime) -> SilentMicDetection? {
+    evaluateSilentMicWindow(
+      peak: peak,
+      isBluetooth: isBluetooth,
+      now: now,
+      expectedGeneration: nil,
+      deviceID: nil
+    )
+  }
+
+  private func evaluateSilentMicWindow(
+    peak: Int16,
+    isBluetooth: Bool,
+    now: CFAbsoluteTime,
+    expectedGeneration: UInt64?,
+    deviceID: AudioDeviceID?
+  ) -> SilentMicDetection? {
+    let firedWindows: Int?
+    let detectionDeviceID: AudioDeviceID
     silentMicWatchdogLock.lock()
-    defer { silentMicWatchdogLock.unlock() }
-    return evaluateSilentMicWindowLocked(peak: peak, isBluetooth: isBluetooth, now: now)
+    guard expectedGeneration == nil || expectedGeneration == silentMicWatchdogGeneration else {
+      silentMicWatchdogLock.unlock()
+      return nil
+    }
+    watchdogSynchronizationHookForTesting?(.evaluationDidLock)
+    detectionDeviceID = deviceID ?? self.deviceID
+    firedWindows = evaluateSilentMicWindowLocked(peak: peak, isBluetooth: isBluetooth, now: now)
+    silentMicWatchdogLock.unlock()
+    guard let firedWindows else { return nil }
+    return Self.makeSilentMicDetection(
+      deviceID: detectionDeviceID,
+      consecutiveSilentWindows: firedWindows,
+      isBluetoothTransport: isBluetooth
+    )
   }
 
   private func evaluateSilentMicWindowLocked(
     peak: Int16,
     isBluetooth: Bool,
     now: CFAbsoluteTime
-  ) -> SilentMicDetection? {
+  ) -> Int? {
     // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
     if peak <= 5 {
       consecutiveSilentWindows += 1
@@ -236,12 +274,7 @@ class AudioCaptureService: @unchecked Sendable {
     // on the very next window.
     consecutiveSilentWindows = 0
 
-    return SilentMicDetection(
-      deviceID: deviceID,
-      deviceDescription: currentDeviceDescription,
-      consecutiveSilentWindows: firedWindows,
-      isBluetoothTransport: isBluetooth
-    )
+    return firedWindows
   }
 
   /// Check if microphone permission is granted
@@ -615,6 +648,12 @@ class AudioCaptureService: @unchecked Sendable {
     return defaultDeviceID
   }
 
+  private func silentMicWatchdogGenerationSnapshot() -> UInt64 {
+    silentMicWatchdogLock.lock()
+    defer { silentMicWatchdogLock.unlock() }
+    return silentMicWatchdogGeneration
+  }
+
   static func currentDefaultInputDeviceID() -> AudioDeviceID? {
     var deviceID: AudioDeviceID = kAudioObjectUnknown
     var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -742,6 +781,7 @@ class AudioCaptureService: @unchecked Sendable {
     guard bytesPerFrame > 0 else { return }
     let frameCount = buffer.mDataByteSize / bytesPerFrame
     guard frameCount > 0 else { return }
+    let watchdogGeneration = silentMicWatchdogGenerationSnapshot()
 
     // Create mono input buffer for converter
     guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFmt, frameCapacity: frameCount) else { return }
@@ -823,21 +863,34 @@ class AudioCaptureService: @unchecked Sendable {
     // one-shot latch) so the watchdog observes recovery and can re-arm for a second
     // episode — see `evaluateSilentMicWindow`.
     let nowAbs = CFAbsoluteTimeGetCurrent()
-    let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
+    let evaluationDeviceID = deviceID
+    var windowPeakForEvaluation: Int16?
     silentMicWatchdogLock.lock()
-    if windowPeak > watchdogWindowPeak { watchdogWindowPeak = windowPeak }
-    if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
+    if watchdogGeneration == silentMicWatchdogGeneration {
+      if windowPeak > watchdogWindowPeak { watchdogWindowPeak = windowPeak }
+      if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
+      if nowAbs - watchdogWindowStart >= 1.0 {
+        windowPeakForEvaluation = watchdogWindowPeak
+        watchdogWindowPeak = 0
+        watchdogWindowStart = nowAbs
+      }
+    }
+    silentMicWatchdogLock.unlock()
     let detection: SilentMicDetection?
-    if nowAbs - watchdogWindowStart >= 1.0 {
-      detection = evaluateSilentMicWindowLocked(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs)
-      watchdogWindowPeak = 0
-      watchdogWindowStart = nowAbs
+    if let windowPeakForEvaluation {
+      let isBluetooth = Self.isBluetoothTransport(deviceID: evaluationDeviceID)
+      detection = evaluateSilentMicWindow(
+        peak: windowPeakForEvaluation,
+        isBluetooth: isBluetooth,
+        now: nowAbs,
+        expectedGeneration: watchdogGeneration,
+        deviceID: evaluationDeviceID
+      )
     } else {
       detection = nil
     }
-    silentMicWatchdogLock.unlock()
     if let detection {
-      if isBluetooth {
+      if detection.isBluetoothTransport {
         log(
           "AudioCapture: Bluetooth mic returning silence for \(detection.consecutiveSilentWindows)s — falling back to built-in mic"
         )
@@ -1142,6 +1195,24 @@ class AudioCaptureService: @unchecked Sendable {
   }
 
   // MARK: - Static helpers for silent-mic fallback
+
+  private static func deviceDescription(for deviceID: AudioDeviceID) -> String {
+    let isBuiltIn = (deviceID == findBuiltInMicDeviceID())
+    return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+  }
+
+  private static func makeSilentMicDetection(
+    deviceID: AudioDeviceID,
+    consecutiveSilentWindows: Int,
+    isBluetoothTransport: Bool
+  ) -> SilentMicDetection {
+    SilentMicDetection(
+      deviceID: deviceID,
+      deviceDescription: deviceDescription(for: deviceID),
+      consecutiveSilentWindows: consecutiveSilentWindows,
+      isBluetoothTransport: isBluetoothTransport
+    )
+  }
 
   /// Return true if the given CoreAudio device transports over Bluetooth.
   /// Used by the silent-mic watchdog to decide whether a dead input stream

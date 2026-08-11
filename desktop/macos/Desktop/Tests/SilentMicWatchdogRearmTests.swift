@@ -3,11 +3,102 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class SilentMicWatchdogRaceBarrier: @unchecked Sendable {
+  private let stateLock = NSLock()
+  private let releaseEvaluation = DispatchSemaphore(value: 0)
+  private var evaluationDidLock = false
+  private var resetWillLock = false
+  private var evaluationWaiters: [CheckedContinuation<Void, Never>] = []
+  private var resetWaiters: [CheckedContinuation<Void, Never>] = []
+
+  func evaluationLocked() {
+    let waiters = stateLock.withLock { () -> [CheckedContinuation<Void, Never>] in
+      evaluationDidLock = true
+      defer { evaluationWaiters.removeAll() }
+      return evaluationWaiters
+    }
+    for waiter in waiters { waiter.resume() }
+  }
+
+  func resetStarted() {
+    let waiters = stateLock.withLock { () -> [CheckedContinuation<Void, Never>] in
+      resetWillLock = true
+      defer { resetWaiters.removeAll() }
+      return resetWaiters
+    }
+    for waiter in waiters { waiter.resume() }
+  }
+
+  func waitForEvaluationRelease() {
+    releaseEvaluation.wait()
+  }
+
+  func releaseEvaluationLock() {
+    releaseEvaluation.signal()
+  }
+
+  func waitUntilEvaluationLocked() async {
+    if stateLock.withLock({ evaluationDidLock }) { return }
+    await withCheckedContinuation { continuation in
+      let shouldResume = stateLock.withLock {
+        if evaluationDidLock { return true }
+        evaluationWaiters.append(continuation)
+        return false
+      }
+      if shouldResume { continuation.resume() }
+    }
+  }
+
+  func waitUntilResetStarted() async {
+    if stateLock.withLock({ resetWillLock }) { return }
+    await withCheckedContinuation { continuation in
+      let shouldResume = stateLock.withLock {
+        if resetWillLock { return true }
+        resetWaiters.append(continuation)
+        return false
+      }
+      if shouldResume { continuation.resume() }
+    }
+  }
+}
+
 /// BL-015 / MIC-05 — the silent-mic watchdog must detect and recover a silent mic more than
 /// once within a single capture session, not latch after the first episode. These tests drive
 /// `AudioCaptureService.evaluateSilentMicWindow` (the per-window decision extracted from the
 /// audio callback) so the fire-more-than-once contract is verified without real CoreAudio buffers.
 final class SilentMicWatchdogRearmTests: XCTestCase {
+
+  func testResetClearsStateAfterOverlappingEvaluation() async {
+    let svc = makeWatchdog()
+    let barrier = SilentMicWatchdogRaceBarrier()
+    svc.watchdogSynchronizationHookForTesting = { event in
+      switch event {
+      case .evaluationDidLock:
+        barrier.evaluationLocked()
+        barrier.waitForEvaluationRelease()
+      case .resetWillLock:
+        barrier.resetStarted()
+      }
+    }
+
+    let evaluationTask = Task.detached {
+      _ = svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 0)
+    }
+    await barrier.waitUntilEvaluationLocked()
+
+    let resetTask = Task.detached {
+      svc.resetSilentMicWatchdog()
+    }
+    await barrier.waitUntilResetStarted()
+    barrier.releaseEvaluationLock()
+
+    await evaluationTask.value
+    await resetTask.value
+    svc.watchdogSynchronizationHookForTesting = nil
+
+    XCTAssertNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 1))
+    XCTAssertNotNil(svc.evaluateSilentMicWindow(peak: 0, isBluetooth: false, now: 2))
+  }
 
   func testResetClearsWatchdogEvaluationState() {
     let svc = AudioCaptureService()
