@@ -80,7 +80,20 @@ const expectedTables = [
   "memory_identity_constraint_entity_endpoints",
   "memory_identity_revisions",
   "memory_identity_support",
+  "memory_legacy_proposition_mappings",
   "memory_mention_revisions",
+  "memory_migration_item_tombstones",
+  "memory_product_group_members",
+  "memory_product_group_projections",
+  "memory_product_membership_claim_lineages",
+  "memory_product_membership_revisions",
+  "memory_product_projection_citation_evidence_refs",
+  "memory_product_projection_citations",
+  "memory_product_projection_payloads",
+  "memory_product_projection_revisions",
+  "memory_product_propositions",
+  "memory_product_redirect_successors",
+  "memory_product_redirects",
   "memory_work_acceptances",
   "memory_work_heads",
   "memory_work_input_manifest",
@@ -96,10 +109,10 @@ const expectedTables = [
   "platform_schema_migrations",
 ] as const;
 
-describe("P2/P3 PostgreSQL schema contract", () => {
+describe("P2/P3/P4 PostgreSQL schema contract", () => {
   test("contains exactly the reviewed expand-only surface", () => {
     expect(tables.map((table) => table.name).sort()).toEqual([...expectedTables].sort());
-    expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:proposition|projection|citation|search|embedding|experiment)/i);
+    expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:search|embedding|experiment)/i);
     expect(allSql).not.toMatch(/\b(?:pgvector|tsvector|CREATE\s+ROLE|server_version|postgres:\d+)\b/i);
     expect(allSql).not.toContain("ON DELETE CASCADE");
   });
@@ -233,6 +246,7 @@ describe("P2/P3 PostgreSQL schema contract", () => {
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
     expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_work_/);
+    expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/);
   });
 
   test("persists only closed, fenced, content-safe P3 work and outbox coordinates", () => {
@@ -260,5 +274,74 @@ describe("P2/P3 PostgreSQL schema contract", () => {
     expect(outbox.body).toContain("terminal_state = 'succeeded' AND result_digest IS NOT NULL");
     expect(outbox.body).toContain("terminal_state = 'dead_letter' AND result_digest IS NULL");
     expect(outbox.body).not.toMatch(/payload|body|model|prompt|evidence|query|answer|error/i);
+  });
+
+  test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {
+    const mapping = tables.find((table) => table.name === "memory_legacy_proposition_mappings")!;
+    expect(mapping.body).toContain("PRIMARY KEY (account_id, legacy_source_id)");
+    expect(mapping.body).toContain("allocation_contract = 'random_opaque_v1'");
+    expect(mapping.body).toContain("UNIQUE (account_id, proposition_id)");
+
+    const tombstone = tables.find((table) => table.name === "memory_migration_item_tombstones")!;
+    expect(tombstone.body).toContain("PRIMARY KEY (account_id, legacy_source_id)");
+    expect(tombstone.body).toContain("tombstone_operation_id text NOT NULL");
+
+    const proposition = tables.find((table) => table.name === "memory_product_propositions")!;
+    expect(proposition.body).toContain("product_contract_version = 'product-projection-v1'");
+    expect(proposition.body).toContain("birth_claim_lineage_id text NOT NULL");
+    expect(proposition.body).toContain("FOREIGN KEY (account_id, birth_commit_id, birth_commit_sequence)");
+    expect(proposition.body).toContain("origin IN ('native', 'legacy_mapping')");
+    expect(proposition.body).toContain("memory_legacy_proposition_mappings");
+    expect(proposition.body).toContain("proposition_id !~ '^grp1_[0-9a-f]{64}$'");
+
+    const membership = tables.find((table) => table.name === "memory_product_membership_revisions")!;
+    expect(membership.body).toContain("membership_revision_id ~ '^pmr1_[0-9a-f]{64}$'");
+    expect(membership.body).toContain("'birth', 'ledger_consolidation', 'correction', 'product_successor'");
+    expect(membership.body).toContain("FOREIGN KEY (account_id, proposition_id, parent_membership_revision_id)");
+    expect(membership.body).toContain("FOREIGN KEY (account_id, graph_commit_id, graph_commit_sequence)");
+    expect(membership.body).toContain("cause = 'birth' AND revision_sequence = 1");
+
+    const membershipLineages = tables.find((table) => table.name === "memory_product_membership_claim_lineages")!;
+    expect(membershipLineages.body).toContain("FOREIGN KEY (account_id, claim_lineage_id)");
+    expect(membershipLineages.body).toContain("UNIQUE (account_id, membership_revision_id, claim_lineage_id)");
+
+    const projection = tables.find((table) => table.name === "memory_product_projection_revisions")!;
+    expect(projection.body).toContain("projection_revision_id ~ '^pvr1_[0-9a-f]{64}$'");
+    expect(projection.body).toContain("UNIQUE (account_id, proposition_id, projection_sequence)");
+    expect(projection.body).toContain("account_id, proposition_id, membership_revision_id, graph_frontier");
+    expect(projection.body).toContain("graph_commit_id, graph_commit_sequence");
+    expect(allSql).toContain("memory_product_projection_revisions_payload_fk");
+    expect(allSql).toContain("DEFERRABLE INITIALLY DEFERRED");
+
+    const payload = tables.find((table) => table.name === "memory_product_projection_payloads")!;
+    expect(payload.body).toContain("rendered_content_json jsonb NOT NULL");
+    expect(payload.body).toContain("rendered_content_digest text NOT NULL");
+
+    const citations = tables.find((table) => table.name === "memory_product_projection_citations")!;
+    expect(citations.body).toContain("memory_product_membership_claim_lineages");
+    expect(citations.body).toContain("account_id, claim_lineage_id, claim_revision_id");
+    const citationEvidence = tables.find((table) => table.name === "memory_product_projection_citation_evidence_refs")!;
+    expect(citationEvidence.body).toContain("account_id, claim_revision_id, evidence_id");
+    expect(citationEvidence.body).toContain("memory_claim_evidence_refs");
+
+    const redirects = tables.find((table) => table.name === "memory_product_redirects")!;
+    expect(redirects.body).toContain("UNIQUE (account_id, source_proposition_id)");
+    expect(redirects.body).toContain("operation IN ('merge', 'split')");
+    const successors = tables.find((table) => table.name === "memory_product_redirect_successors")!;
+    expect(successors.body).toContain("CHECK (source_proposition_id <> successor_proposition_id)");
+
+    const groups = tables.filter((table) => table.name.startsWith("memory_product_group_"));
+    expect(groups).toHaveLength(2);
+    expect(groups.map((table) => table.name).sort()).toEqual([
+      "memory_product_group_members", "memory_product_group_projections",
+    ]);
+    expect(groups.find((table) => table.name === "memory_product_group_projections")!.body)
+      .toContain("FOREIGN KEY (account_id, graph_commit_id, graph_commit_sequence)");
+    for (const table of tables.filter((candidate) => !candidate.name.startsWith("memory_product_group_"))) {
+      expect(table.body, `${table.name} cannot depend on grouping`).not.toContain("group_projection_id");
+    }
+
+    expect(allSql).toContain("Deliberately no application, migration-copier, projector, or worker grant");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_(?:product_|legacy_proposition|migration_item)/s);
   });
 });
