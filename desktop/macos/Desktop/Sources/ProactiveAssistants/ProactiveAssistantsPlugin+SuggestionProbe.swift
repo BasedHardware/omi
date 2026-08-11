@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Automation entry point for the suggestion nudge.
@@ -32,14 +33,15 @@ extension ProactiveAssistantsPlugin {
         captureTime: latest.captureTime,
         screenshotId: latest.screenshotId
       )
-    } else if let jpeg = await ScreenCaptureService().captureActiveWindowAsync() {
-      let (activeApp, activeTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-      frame = CapturedFrame(
-        jpegData: jpeg,
-        appName: appOverride ?? activeApp ?? "Unknown",
-        windowTitle: windowTitleOverride ?? activeTitle,
-        frameNumber: 0
-      )
+    } else if let fallback = await captureActiveWindowRespectingExclusions(
+      appOverride: appOverride,
+      windowTitleOverride: windowTitleOverride
+    ) {
+      frame = fallback
+    } else if activeAppIsExcluded {
+      // Refuse rather than fall through to "no frame": the two are different answers and
+      // conflating them would read as a capture hiccup instead of a privacy decision.
+      return ["outcome": "excluded_app"]
     } else {
       return ["outcome": "no_frame_captured"]
     }
@@ -47,5 +49,46 @@ extension ProactiveAssistantsPlugin {
     // The probe's own delivery does not need to fan out assistant events; the observable
     // result is the notification itself plus the returned outcome.
     return await assistant.probeEvaluateAndDeliver(frame: frame) { _, _ in }
+  }
+
+  /// Whether the frontmost app is one the user has excluded from capture.
+  private var activeAppIsExcluded: Bool {
+    guard let app = NSWorkspace.shared.frontmostApplication?.localizedName else { return false }
+    return SuggestionProbePrivacy.isExcluded(app)
+  }
+
+  /// Capture the active window for the probe, honouring the same privacy exclusions the
+  /// normal capture path does.
+  ///
+  /// This fallback exists because `latestCapturedFrame` is nil whenever the user is moving
+  /// around — but it is *also* nil precisely when the frontmost app is excluded, since the
+  /// capture gate refuses those. Without this check the probe would reach for the shutter
+  /// exactly in the apps the user asked Omi never to look at, and send the result to a
+  /// model. The excluded case must be decided before anything is captured, not filtered
+  /// afterwards.
+  private func captureActiveWindowRespectingExclusions(
+    appOverride: String?,
+    windowTitleOverride: String?
+  ) async -> CapturedFrame? {
+    let (activeApp, activeTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+    if let activeApp, SuggestionProbePrivacy.isExcluded(activeApp) { return nil }
+    if activeAppIsExcluded { return nil }
+    guard let jpeg = await ScreenCaptureService().captureActiveWindowAsync() else { return nil }
+    return CapturedFrame(
+      jpegData: jpeg,
+      appName: appOverride ?? activeApp ?? "Unknown",
+      windowTitle: windowTitleOverride ?? activeTitle,
+      frameNumber: 0
+    )
+  }
+}
+
+/// The exclusion predicate the probe's fallback capture must satisfy, factored out so it can
+/// be exercised without a running app or a real screen.
+enum SuggestionProbePrivacy {
+  @MainActor
+  static func isExcluded(_ appName: String) -> Bool {
+    RewindSettings.shared.isAppExcluded(appName)
+      || SuggestionAssistantSettings.shared.isAppExcluded(appName)
   }
 }

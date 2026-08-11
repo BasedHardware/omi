@@ -267,8 +267,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     return grounding
   }
 
-  /// Describe a commitment the way a person would say it out loud.
-  ///
   /// Fire-and-forget goal refresh. Never awaited by grounding: the next evaluation gets the
   /// fresher list, this one is not delayed for it.
   ///

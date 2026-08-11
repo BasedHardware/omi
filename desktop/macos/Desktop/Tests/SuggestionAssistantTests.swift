@@ -694,3 +694,42 @@ final class SuggestionGoalOwnerScopingTests: XCTestCase {
     XCTAssertFalse(authority.isCurrent(snapshot, ownerID: "owner-a"))
   }
 }
+
+/// The automation probe falls back to capturing the active window when no frame is pending.
+/// `latestCapturedFrame` is nil whenever the user is moving around — but it is *also* nil
+/// precisely when the frontmost app is privacy-excluded, because the capture gate refuses
+/// those. Without an exclusion check the probe would photograph exactly the apps the user
+/// told Omi never to look at and send them to a model.
+@MainActor
+final class SuggestionProbePrivacyTests: XCTestCase {
+  /// Exclusions live in shared settings, so each test restores what it found. Done inline
+  /// rather than in setUp/tearDown, which are nonisolated and cannot touch MainActor state.
+  private func withExclusions(_ apps: Set<String>, _ body: () -> Void) {
+    let saved = RewindSettings.shared.excludedApps
+    defer { RewindSettings.shared.excludedApps = saved }
+    RewindSettings.shared.excludedApps = apps
+    body()
+  }
+
+  func testExcludedAppIsRefusedByTheProbePredicate() {
+    withExclusions(["1Password"]) {
+      XCTAssertTrue(
+        SuggestionProbePrivacy.isExcluded("1Password"),
+        "the probe must not capture an app the user excluded from recording")
+    }
+  }
+
+  func testNonExcludedAppIsAllowed() {
+    withExclusions(["1Password"]) {
+      XCTAssertFalse(SuggestionProbePrivacy.isExcluded("Google Chrome"))
+    }
+  }
+
+  /// Exclusion is exact-name, so the predicate must not be fooled by a near-miss either way.
+  func testExclusionIsExactName() {
+    withExclusions(["Messages"]) {
+      XCTAssertTrue(SuggestionProbePrivacy.isExcluded("Messages"))
+      XCTAssertFalse(SuggestionProbePrivacy.isExcluded("Messages Beta"))
+    }
+  }
+}
