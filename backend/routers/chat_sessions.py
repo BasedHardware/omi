@@ -25,9 +25,12 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.executors import db_executor, llm_executor, run_blocking
+from utils.llm import agent_pill_title as agent_pill_title_llm
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
+from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 
@@ -337,13 +340,6 @@ async def generate_agent_pill_title(
     Does not write Firestore. Desktop AgentPill should call this instead of inventing
     title/ack via Anthropic Haiku chat completions.
     """
-    # Deferred with the LLM helper: this router is covered by module-isolation tests that
-    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
-    # in at import time.
-    from utils.executors import db_executor, llm_executor, run_blocking
-    from utils.llm import agent_pill_title as agent_pill_title_llm
-    from utils.subscription import is_trial_paywalled
-
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     result = await run_blocking(

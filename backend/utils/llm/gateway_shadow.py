@@ -135,7 +135,7 @@ class GatewayShadowChatModel(BaseChatModel):
             messages,
             stop=stop,
             feature=_shadow_feature(self.feature),
-            **kwargs,
+            **_gateway_kwargs(kwargs),
         )
         return result
 
@@ -149,7 +149,11 @@ class GatewayShadowChatModel(BaseChatModel):
         result = await self.legacy_model._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
         start_background_task(
             _run_async_shadow(
-                self.gateway_model._agenerate, messages, stop=stop, feature=_shadow_feature(self.feature), **kwargs
+                self.gateway_model._agenerate,
+                messages,
+                stop=stop,
+                feature=_shadow_feature(self.feature),
+                **_gateway_kwargs(kwargs),
             ),
             name=f'llm-gateway-shadow:{self.feature}',
         )
@@ -188,6 +192,13 @@ class GatewayShadowRunnable(Runnable):
             name=f'llm-gateway-shadow:{self._feature}',
         )
         return result
+
+
+def _gateway_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    result = dict(kwargs)
+    if 'max_output_tokens' in result:
+        result['max_tokens'] = result.pop('max_output_tokens')
+    return result
 
 
 def _submit_sync_shadow(fn, *args, feature: str, legacy_result: Any = None, **kwargs: Any) -> None:

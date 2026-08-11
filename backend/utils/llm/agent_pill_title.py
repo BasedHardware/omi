@@ -66,6 +66,8 @@ def generate_agent_pill_title_ack(uid: str, query: str) -> Optional[AgentPillTit
                 'session_titles',
                 request_timeout=AGENT_PILL_TITLE_TIMEOUT_SECONDS,
                 max_tokens=MAX_OUTPUT_TOKENS,
+                max_retries=0,
+                allow_byok=False,
             ).invoke(prompt)
         try:
             parsed = parser.parse(cast(str, cast(Any, response).content))

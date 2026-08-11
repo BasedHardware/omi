@@ -40,7 +40,7 @@ def test_generate_agent_pill_title_ack_parses_llm_json(monkeypatch):
     assert result.ack == 'Got it, on it.'
     assert captured == {
         'feature': 'session_titles',
-        'kwargs': {'request_timeout': 8.0, 'max_tokens': 120},
+        'kwargs': {'request_timeout': 8.0, 'max_tokens': 120, 'max_retries': 0, 'allow_byok': False},
     }
 
 

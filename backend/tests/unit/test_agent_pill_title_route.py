@@ -13,9 +13,7 @@ UID = 'uid-agent-pill-title'
 
 @pytest.fixture(autouse=True)
 def _entitled(monkeypatch):
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: False)
+    monkeypatch.setattr(chat_sessions_router, 'is_trial_paywalled', lambda uid, platform: False)
 
 
 async def test_generate_agent_pill_title_returns_without_persisting(monkeypatch):
@@ -55,9 +53,7 @@ async def test_generate_agent_pill_title_fails_closed_when_generation_returns_no
 
 
 async def test_generate_agent_pill_title_blocks_a_trial_expired_account(monkeypatch):
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: True)
+    monkeypatch.setattr(chat_sessions_router, 'is_trial_paywalled', lambda uid, platform: True)
 
     with pytest.raises(HTTPException) as exc:
         await chat_sessions_router.generate_agent_pill_title(

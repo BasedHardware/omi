@@ -177,6 +177,7 @@ def get_or_create_gemini_llm(
     streaming: bool = False,
     thinking_budget: Optional[int] = None,
     request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> BaseChatModel:
     """Get or create a cached ChatGoogleGenerativeAI for a Gemini model via native SDK.
 
@@ -196,12 +197,13 @@ def get_or_create_gemini_llm(
     ) or bool(os.environ.get('GEMINI_API_KEY', ''))
     cache_budget = thinking_budget if _has_gemini_creds else None
     timeout = request_timeout if request_timeout is not None else 120
-    key = (model_name, streaming, 'gemini', cache_budget, timeout)
+    retries = max_retries if max_retries is not None else 1
+    key = (model_name, streaming, 'gemini', cache_budget, timeout, retries)
     if key not in _llm_cache:
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
         gemini_key = os.environ.get('GEMINI_API_KEY', '')
-        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': timeout, 'max_retries': 1}
+        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': timeout, 'max_retries': retries}
         if streaming:
             kwargs['streaming'] = True
         if thinking_budget is not None and model_name.startswith('gemini-2.5'):
@@ -244,5 +246,6 @@ def get_default_client(
             streaming,
             thinking_budget=options.get('thinking_budget'),
             request_timeout=options.get('request_timeout'),
+            max_retries=options.get('max_retries'),
         )
     return get_or_create_openai_compatible_llm(provider, model, streaming, options)
