@@ -546,6 +546,23 @@ function restoreIosDevice(device, artifact) {
   }
 }
 
+function terminateIosApp(device, bundleId, env, label) {
+  const result = spawnSync("xcrun", ["simctl", "terminate", device, bundleId], {
+    cwd: coreRoot,
+    env,
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  if (result.error?.code === "ETIMEDOUT") fail(`${label}: simulator app termination timed out`);
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+  // A clean capture starts with no app process. simctl reports that expected
+  // state as POSIX ESRCH instead of success; accept only its exact bounded
+  // diagnostic and reject every other nonzero termination result.
+  if (result.status !== 0 && !output.includes("found nothing to terminate")) {
+    fail(`${label}: simulator app termination failed (exit ${result.status ?? "signal"})`);
+  }
+}
+
 function captureMac(coordinate, artifact, output, timeoutSeconds) {
   const env = { ...artifact.env };
   env.OMI_SURFACE_QUERY = coordinate.surface_query;
@@ -573,7 +590,7 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   if (!artifact.geometryByDevice.has(coordinate.device.udid)) artifact.geometryByDevice.set(coordinate.device.udid, queryIosGeometry(coordinate.device.udid, artifact.env));
   setIosAppearance(coordinate.device.udid, coordinate.theme, artifact.env);
   setIosGeometry(coordinate.device.udid, coordinate.viewport, artifact.env);
-  runCommand(commandSpec("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], coreRoot, artifact.env, 30), `${coordinate.run_id}: terminate prior app`);
+  terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: terminate prior app`);
   let launched = false;
   try {
     launched = true;
@@ -581,7 +598,7 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
     runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
   } finally {
-    if (launched) spawnSync("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], { cwd: coreRoot, env: artifact.env, stdio: "ignore", timeout: 30_000 });
+    if (launched) terminateIosApp(coordinate.device.udid, artifact.bundleId, artifact.env, `${coordinate.run_id}: cleanup app`);
   }
 }
 
