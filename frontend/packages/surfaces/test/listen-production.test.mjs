@@ -297,6 +297,29 @@ test("Listen preflight blocks capture until permission and device are truthful, 
   }
 });
 
+test("platform Listen client refuses a start that bypasses a denied native preflight", async () => {
+  let state = {
+    permission: "denied",
+    device: { state: "unavailable", label: null },
+    recovery: "open-settings",
+  };
+  const env = { now: () => 0, random: () => 0.25, fallbackSink: { record() {} }, delay: () => () => {} };
+  const preflight = {
+    snapshot: () => state,
+    subscribe: () => () => {},
+    async refresh() {},
+  };
+  const client = createPlatformListenCaptureClient({
+    env,
+    schema,
+    preflight,
+    openSocket() { throw new Error("socket must not open before preflight"); },
+  });
+  await assert.rejects(client.start(), (error) => error.code === "permission-required");
+  state = { permission: "granted", device: { state: "available", label: "Default microphone" }, recovery: null };
+  await assert.rejects(client.start(), /socket must not open/);
+});
+
 test("Listen follows new transcript only at the live edge and offers Latest after history intent", async () => {
   // red-proof: unconditional scroll-to-bottom makes the second scrollTop assertion
   // change after upward intent; omitting the recovery control makes Latest absent.
