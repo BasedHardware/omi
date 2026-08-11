@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 MAX_QUERY_CHARS = 2_000
 MAX_TITLE_CHARS = 40
 MAX_ACK_CHARS = 120
+MAX_OUTPUT_TOKENS = 120
+AGENT_PILL_TITLE_TIMEOUT_SECONDS = 8.0
 
 
 class AgentPillTitleAck(BaseModel):
@@ -60,7 +62,11 @@ def generate_agent_pill_title_ack(uid: str, query: str) -> Optional[AgentPillTit
             format_instructions=parser.get_format_instructions(),
         )
         with track_usage(uid, Features.CHAT):
-            response = get_llm('session_titles').invoke(prompt)
+            response = get_llm(
+                'session_titles',
+                request_timeout=AGENT_PILL_TITLE_TIMEOUT_SECONDS,
+                max_tokens=MAX_OUTPUT_TOKENS,
+            ).invoke(prompt)
         try:
             parsed = parser.parse(cast(str, cast(Any, response).content))
         except Exception as e:
@@ -71,5 +77,5 @@ def generate_agent_pill_title_ack(uid: str, query: str) -> Optional[AgentPillTit
         return None
 
     title = parsed.title.strip()[:MAX_TITLE_CHARS]
-    ack = parsed.ack.strip()[:MAX_ACK_CHARS]
+    ack = ' '.join(parsed.ack.strip().split()[:7])[:MAX_ACK_CHARS]
     return AgentPillTitleAck(title=title, ack=ack)

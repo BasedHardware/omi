@@ -243,7 +243,7 @@ def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
     monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
 
-    clients.get_llm("memory_l2", request_timeout=20.0)
+    clients.get_llm("memory_l2", request_timeout=20.0, max_tokens=120).invoke('hello')
 
     assert captured == {
         "lane_id": "omi:auto:memory-l2",
@@ -251,6 +251,59 @@ def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
         "options": {"request_timeout": 20.0},
         "feature": "memory_l2",
     }
+
+
+def test_get_llm_binds_gateway_output_limit(monkeypatch):
+    gateway = FakeChatModel(name='gateway', calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: gateway)
+
+    clients.get_llm('memory_l2', max_tokens=120).invoke('hello')
+
+    assert gateway.calls[0]['kwargs']['max_tokens'] == 120
+
+
+def test_get_llm_forwards_explicit_direct_provider_timeout(monkeypatch):
+    captured = {}
+
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.setattr(clients, 'get_byok_key', lambda _provider: None)
+
+    def fake_default_client(model, provider, streaming, options=None):
+        result = FakeChatModel(name='direct', calls=[])
+        captured.update(model=model, provider=provider, streaming=streaming, options=options, result=result)
+        return result
+
+    monkeypatch.setattr(clients, 'get_default_client', fake_default_client)
+
+    result = clients.get_llm('session_titles', request_timeout=8.0, max_tokens=120)
+    result.invoke('hello')
+
+    assert captured['options']['request_timeout'] == 8.0
+    assert captured['result'].calls[0]['kwargs']['max_output_tokens'] == 120
+
+
+def test_get_llm_forwards_explicit_byok_timeout(monkeypatch):
+    captured = {}
+
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'AIza-byok' if provider == 'gemini' else None)
+
+    def fake_byok(*args, **kwargs):
+        result = FakeChatModel(name='byok', calls=[])
+        captured.update(args=args, kwargs=kwargs, result=result)
+        return result
+
+    monkeypatch.setattr(clients, '_create_byok_client', fake_byok)
+
+    result = clients.get_llm('session_titles', request_timeout=8.0, max_tokens=120)
+    result.invoke('hello')
+
+    assert captured['kwargs']['request_timeout'] == 8.0
+    assert captured['result'].calls[0]['kwargs']['max_tokens'] == 120
 
 
 def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):
