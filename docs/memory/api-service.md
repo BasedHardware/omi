@@ -40,6 +40,33 @@ curl -X POST https://api.omi.me/v1/memory/platform/ingest \
 
 The hosted MCP server exposes a read-only `memory_platform` tool with `memories.read`. It reports the same contract without returning memory content or credentials. Use `get_memories`, `search_memories`, and the write tools for scoped memory operations.
 
+```json
+{
+  "mcpServers": {
+    "omi": {
+      "url": "https://api.omi.me/mcp",
+      "headers": { "Authorization": "Bearer ${OMI_MCP_KEY}" }
+    }
+  }
+}
+```
+
+## Keys
+
+Manage MCP keys at [`/memory-platform/keys`](https://h.omi.me/memory-platform/keys), or through the session-authenticated endpoints:
+
+- `GET /v1/mcp/keys` — list keys. Returns `key_prefix`, `created_at`, and `last_used_at`; never the key.
+- `POST /v1/mcp/keys` — create a key. The raw key is returned **once**, in the create response, and cannot be retrieved afterwards.
+- `DELETE /v1/mcp/keys/{key_id}` — revoke a key.
+
+Available MCP scopes are dot-form: `memories.read`, `memories.write`, `conversations.read`, `action_items.read`, `action_items.write`, `goals.read`, `chat.read`, `screen_activity.read`, `people.read`. Default to `memories.read` and grant a write scope only when the integration writes.
+
+Store keys in a server-side secret store. Do not place them in source, browser storage, or a public environment variable. If a key may have leaked, revoke it — a revoked key stops working immediately.
+
+## Plan and quota
+
+Platform API access follows the Omi subscription. `GET /v1/payments/overage-info` reports the current plan, included usage, consumed usage, and any overage. Plan and usage are also shown at [`/memory-platform/billing`](https://h.omi.me/memory-platform/billing), alongside the upgrade path through Stripe checkout.
+
 ## zkr replicas
 
 zkr speaks the local evidence-backed replica side of the boundary. Keep its export high-water mark stable, apply only backend-acknowledged records, and rebuild local projections. A local zkr commit is not authoritative until it has passed backend ingestion and canonical apply.
