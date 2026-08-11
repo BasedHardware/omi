@@ -6,7 +6,7 @@
 # scripts/dev-stack.sh, not just by a human.
 #
 #   ./scripts/dev-run-macos.sh --route chat        # LIVE Chat against the local backend
-#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4747 --route home
+#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4801 --route home
 #   ./scripts/dev-run-macos.sh --accept            # headless acceptance, exits nonzero on zero traffic
 #
 # Env (all overridable, all with local-sane defaults — nothing is hardcoded at

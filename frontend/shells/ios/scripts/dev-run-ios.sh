@@ -3,7 +3,7 @@
 # local backend. Stable entry point for the top-level dev stack launcher.
 #
 #   ./scripts/dev-run-ios.sh                      # LIVE against the default backend
-#   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4747
+#   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4801
 #   ./scripts/dev-run-ios.sh --route chat
 #   ./scripts/dev-run-ios.sh --fixture conversations   # FIXTURE, bridge bypassed
 #   ./scripts/dev-run-ios.sh --device <udid>
