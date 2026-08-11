@@ -52,6 +52,14 @@ export const BRIDGE_HTTP_CHANNEL = "omiHttp";
 export const BRIDGE_HTTP_REPLY_FUNCTION = "__omiHttpReply";
 
 /**
+ * Reserved local-navigation query parameter carrying a shell-minted,
+ * non-secret document coordinate. One-way hosts use it to distinguish the
+ * same document-local request id (for example `h1`) across WebView
+ * navigations. It identifies neither a user nor a backend authority.
+ */
+export const BRIDGE_HTTP_DOCUMENT_QUERY = "__omiHttpDocument";
+
+/**
  * Header names a surface may NEVER set: the shell owns auth and identity.
  * The shell drops these (case-insensitively) instead of trusting callers —
  * a compromised or buggy surface must not be able to forge or override
@@ -68,6 +76,12 @@ export interface BridgeHttpRequest {
    * binding.
    */
   id: string;
+  /**
+   * The current page's non-secret, shell-minted document coordinate. A
+   * one-way host rejects requests whose coordinate is not owned by the active
+   * navigation before performing any HTTP side effect.
+   */
+  documentId: string;
   method: BridgeHttpMethod;
   /**
    * ORIGIN-RELATIVE path including any query string — a leading `/` followed by
