@@ -113,6 +113,7 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
           : {
               kind: "failed",
               generationId: active.generationId,
+              clientMessageId: active.clientMessageId,
               source: "observer",
               retryable: false,
             },
@@ -128,6 +129,7 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
           delivery: {
             kind: "failed",
             generationId: failure.generationId,
+            clientMessageId: failure.clientMessageId,
             source: "provider",
             retryable: failure.terminal.error.retryable,
           },
@@ -146,6 +148,7 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
         : {
             kind: "failed",
             generationId: active.generationId,
+            clientMessageId: active.clientMessageId,
             source: "observer",
             retryable: false,
           },
