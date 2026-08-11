@@ -429,7 +429,7 @@ function resolvePreparedArtifact(descriptor, name) {
   if (!item || typeof item.app !== "string" || !item.app.startsWith("core:")) fail(`prepared input set is missing ${name} app`);
   const app = ensureCoreDirectory(item.app.slice("core:".length), `${name} app`);
   const buildDir = ensureCoreDirectory(String(item.build_dir || "").replace(/^core:/, ""), `${name} build_dir`);
-  const stamp = corePath(String(item.stamp || "").replace(/^core:/, ""), `${name} stamp`);
+  const stamp = ensureCoreFile(String(item.stamp || "").replace(/^core:/, ""), `${name} stamp`);
   if (!existsSync(app) || !lstatSync(app).isDirectory()) fail(`prepared ${name} app is unavailable`);
   if (!existsSync(stamp) || !lstatSync(stamp).isFile()) fail(`prepared ${name} build stamp is unavailable`);
   if (item.stamp_sha256 && hashFile(stamp) !== item.stamp_sha256) fail(`prepared ${name} build stamp changed`);
