@@ -908,11 +908,9 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
     For main chat (app_id=None), matches sessions where plugin_id is None.
     """
-    col = db.collection('users').document(uid).collection('chat_sessions')
-    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        return docs[0].id
+    session = get_chat_session(uid, app_id=app_id)
+    if session:
+        return session['id']
     session = create_chat_session(uid, app_id=app_id)
     return session['id']
 
