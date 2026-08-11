@@ -17,7 +17,6 @@ import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
 import { HomeTaskList } from './HomeTaskList';
-import { restingMode } from '@/lib/homeStage';
 import { cn } from '@/lib/utils';
 
 /**
@@ -46,7 +45,7 @@ export function HomePage() {
   const { user } = useAuth();
   // Home renders the same transcript the panel does, so it reads the same
   // selected session rather than pinning itself to the shared thread.
-  const { chat, selectedAppId } = useChatContext();
+  const { chat, selectedAppId, selectedChatSessionId } = useChatContext();
   const {
     messages,
     isLoading,
@@ -92,7 +91,9 @@ export function HomePage() {
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [openGoalId, setOpenGoalId] = useState<string | null>(null);
+  const [exchangeStart, setExchangeStart] = useState<number | null>(null);
   const askRef = useRef<ChatComposerHandle>(null);
+  const currentsRef = useRef<HTMLDivElement>(null);
   const { ref: scrollRef, edges } = useScrollEdges<HTMLDivElement>();
 
   // Track the goal by id, not by value, so the sheet keeps showing live data
@@ -100,8 +101,18 @@ export function HomePage() {
   const openGoal = goals.find((goal) => goal.id === openGoalId) ?? null;
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    let active = true;
+    setExchangeStart(null);
+    void loadHistory().finally(() => {
+      if (!active) return;
+      window.requestAnimationFrame(() =>
+        currentsRef.current?.scrollIntoView?.({ block: 'start' }),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadHistory, selectedAppId, selectedChatSessionId]);
 
   useEffect(() => {
     askRef.current?.focus();
@@ -111,16 +122,15 @@ export function HomePage() {
     document.title = 'Omi - Your AI Companion';
   }, []);
 
-  const hasMeaningfulHistory = messages.some(
-    (message) => message.sender === 'human' || message.from_external_integration,
-  );
-  const inChat = restingMode({ isLoading, hasMeaningfulHistory, isStreaming }) === 'chat';
-
   const handleSend = async (text: string, fileIds: string[]) => {
+    setExchangeStart((current) => current ?? messages.length);
     await sendMessage(text, fileIds);
   };
 
   const name = firstName(user?.displayName);
+  const historyMessages =
+    exchangeStart === null ? messages : messages.slice(0, exchangeStart);
+  const exchangeMessages = exchangeStart === null ? [] : messages.slice(exchangeStart);
 
   return (
     <div className="flex h-full flex-col">
@@ -155,114 +165,150 @@ export function HomePage() {
           )}
         />
         <div ref={scrollRef} className="no-scrollbar h-full overflow-y-auto">
-          {inChat ? (
+          {isLoading && messages.length === 0 ? (
             <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-6">
               <ChatTranscript
-                messages={messages}
+                messages={[]}
                 isLoading={isLoading}
-                isStreaming={isStreaming}
-                streamingText={streamingText}
-                currentThinking={currentThinking}
+                isStreaming={false}
+                streamingText=""
+                currentThinking=""
               />
             </div>
           ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12"
-            >
-              <Image
-                src="/logo.png"
-                alt="Omi"
-                width={40}
-                height={40}
-                className="rounded-full"
-              />
-              <h1 className="mt-5 text-center text-2xl font-semibold text-text-primary">
-                {name ? `Hey ${name}. I'm ready.` : "I'm ready."}
-              </h1>
-
-              <div className="mt-8 w-full">
-                <HomeTaskList
-                  items={tasks}
-                  loading={tasksLoading}
-                  error={tasksError}
-                  onComplete={completeTask}
+            <>
+              {historyMessages.length > 0 && (
+                <section
+                  aria-label="Chat history"
+                  className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10"
+                >
+                  <ChatTranscript
+                    messages={historyMessages}
+                    isLoading={false}
+                    isStreaming={false}
+                    streamingText=""
+                    currentThinking=""
+                    autoScroll={false}
+                  />
+                </section>
+              )}
+              <motion.section
+                ref={currentsRef}
+                aria-label="Currents"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12"
+              >
+                <Image
+                  src="/logo.png"
+                  alt="Omi"
+                  width={40}
+                  height={40}
+                  className="rounded-full"
                 />
-              </div>
+                <h1 className="mt-5 text-center text-2xl font-semibold text-text-primary">
+                  {name ? `Hey ${name}. I'm ready.` : "I'm ready."}
+                </h1>
 
-              <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">
-                {quickPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    onClick={() => void handleSend(prompt, [])}
-                    disabled={isLoading || isStreaming}
-                    className={cn(
-                      'flex min-h-11 items-center justify-center rounded-full px-3 py-2 text-center text-sm sm:min-h-0 sm:px-4',
-                      'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
-                      'text-text-secondary hover:text-text-primary',
-                      'transition-colors',
-                      'disabled:cursor-not-allowed disabled:opacity-50',
-                    )}
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-
-              <section className="mt-12 w-full">
-                <header className="flex items-baseline justify-between gap-4">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
-                    Goals
+                <div className="mt-8 w-full">
+                  <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
+                    Currents
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setComposerOpen(true)}
-                    className="flex items-center gap-1.5 rounded-element px-2 py-1 text-xs text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Set a goal
-                  </button>
-                </header>
+                  <HomeTaskList
+                    items={tasks}
+                    loading={tasksLoading}
+                    error={tasksError}
+                    onComplete={completeTask}
+                  />
+                </div>
 
-                {goalsLoading && goals.length === 0 ? (
-                  <div className="mt-4 space-y-3">
-                    {[0, 1].map((key) => (
-                      <div
-                        key={key}
-                        className="h-32 animate-pulse rounded-card border border-stroke bg-bg-raised"
-                      />
-                    ))}
-                  </div>
-                ) : goals.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setComposerOpen(true)}
-                    className="mt-4 w-full rounded-card border border-dashed border-stroke bg-bg-raised/40 px-6 py-8 text-center transition-colors hover:bg-bg-raised/70"
-                  >
-                    <Target className="mx-auto h-6 w-6 text-text-quaternary" />
-                    <p className="mt-2 text-sm text-text-quaternary">
-                      Set a goal and Omi will track progress against it.
-                    </p>
-                  </button>
-                ) : (
-                  <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {goals.map((goal) => (
-                      <GoalCard
-                        key={goal.id}
-                        goal={goal}
-                        onSetProgress={setProgress}
-                        onRename={renameGoal}
-                        onRemove={removeGoal}
-                        onOpen={(selected) => setOpenGoalId(selected.id)}
-                      />
-                    ))}
-                  </ul>
-                )}
-                {goalsError && <p className="mt-3 text-sm text-error">{goalsError}</p>}
-              </section>
-            </motion.div>
+                <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">
+                  {quickPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => void handleSend(prompt, [])}
+                      disabled={isLoading || isStreaming}
+                      className={cn(
+                        'flex min-h-11 items-center justify-center rounded-full px-3 py-2 text-center text-sm sm:min-h-0 sm:px-4',
+                        'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
+                        'text-text-secondary hover:text-text-primary',
+                        'transition-colors',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                      )}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+
+                <section className="mt-12 w-full">
+                  <header className="flex items-baseline justify-between gap-4">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
+                      Goals
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setComposerOpen(true)}
+                      className="flex items-center gap-1.5 rounded-element px-2 py-1 text-xs text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Set a goal
+                    </button>
+                  </header>
+
+                  {goalsLoading && goals.length === 0 ? (
+                    <div className="mt-4 space-y-3">
+                      {[0, 1].map((key) => (
+                        <div
+                          key={key}
+                          className="h-32 animate-pulse rounded-card border border-stroke bg-bg-raised"
+                        />
+                      ))}
+                    </div>
+                  ) : goals.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setComposerOpen(true)}
+                      className="mt-4 w-full rounded-card border border-dashed border-stroke bg-bg-raised/40 px-6 py-8 text-center transition-colors hover:bg-bg-raised/70"
+                    >
+                      <Target className="mx-auto h-6 w-6 text-text-quaternary" />
+                      <p className="mt-2 text-sm text-text-quaternary">
+                        Set a goal and Omi will track progress against it.
+                      </p>
+                    </button>
+                  ) : (
+                    <ul className="mt-4 grid gap-3">
+                      {goals.map((goal) => (
+                        <GoalCard
+                          key={goal.id}
+                          goal={goal}
+                          onSetProgress={setProgress}
+                          onRename={renameGoal}
+                          onRemove={removeGoal}
+                          onOpen={(selected) => setOpenGoalId(selected.id)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                  {goalsError && <p className="mt-3 text-sm text-error">{goalsError}</p>}
+                </section>
+              </motion.section>
+              {(exchangeStart !== null || isStreaming) && (
+                <section
+                  aria-label="Current chat"
+                  className="mx-auto flex min-h-full max-w-3xl flex-col justify-end px-4 py-8 sm:px-6 sm:py-10"
+                >
+                  <ChatTranscript
+                    messages={exchangeMessages}
+                    isLoading={false}
+                    isStreaming={isStreaming}
+                    streamingText={streamingText}
+                    currentThinking={currentThinking}
+                  />
+                </section>
+              )}
+            </>
           )}
         </div>
       </div>

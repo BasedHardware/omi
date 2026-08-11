@@ -53,6 +53,7 @@ interface ChatTranscriptProps {
   isStreaming: boolean;
   streamingText: string;
   currentThinking: string;
+  autoScroll?: boolean;
 }
 
 export function ChatTranscript({
@@ -61,13 +62,14 @@ export function ChatTranscript({
   isStreaming,
   streamingText,
   currentThinking,
+  autoScroll = true,
 }: ChatTranscriptProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change or streaming text updates
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingText]);
+    if (autoScroll) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [autoScroll, messages, streamingText]);
 
   if (isLoading && messages.length === 0) {
     return (
