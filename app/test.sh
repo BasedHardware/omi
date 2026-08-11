@@ -50,4 +50,11 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
+# Hermetic shell tests for setup.sh helpers. Fast, no network, no simulator.
+for shell_test in test/shell/*_test.sh; do
+  [[ -f "$shell_test" ]] || continue
+  echo "Running $shell_test"
+  bash "$shell_test"
+done
+
 flutter test "$@"
