@@ -72,12 +72,12 @@ function dateInputValue(timestamp: number | null): string {
 
 function groupFor(task: Task, now: number, calendarDay: (timestamp: number) => string): GroupKey {
   if (task.dueAt === null) return "noDeadline";
+  if (task.dueAt < now) return "overdue";
   const current = calendarDay(now);
   const due = calendarDay(task.dueAt);
   if (due === current) return "today";
   const tomorrow = calendarDay(now + 86_400_000);
   if (due === tomorrow) return "tomorrow";
-  if (task.dueAt < now) return "overdue";
   return "later";
 }
 

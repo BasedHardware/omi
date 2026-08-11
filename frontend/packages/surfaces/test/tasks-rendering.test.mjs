@@ -212,6 +212,32 @@ test("Tasks empty state starts a focused first task", async () => {
   }
 });
 
+test("Tasks treats an earlier due time today as overdue", async () => {
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const store = fixtureStore("normal", now);
+  const rows = await store.list();
+  const task = rows.find((row) => row.dueAt !== null && row.dueAt > now);
+  assert.ok(task, "fixture exposes a future task that can cross the same-day boundary");
+  await store.patch(task.id, { dueAt: now - 60 * 60 * 1000 });
+
+  const rendered = await renderComponent(TasksProduction, {
+    store,
+    fixture: "normal",
+    translate,
+    now,
+  });
+  try {
+    const overdue = rendered.container.querySelector(".tasks-group-overdue");
+    const today = rendered.container.querySelector(".tasks-group-today");
+    assert.ok(overdue?.textContent?.includes(task.description));
+    assert.equal(today?.textContent?.includes(task.description) ?? false, false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("Tasks arrow navigation preserves focus on nested controls and shell links", async () => {
   const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
   const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");

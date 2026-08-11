@@ -128,9 +128,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const [staging, setStaging] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [showLatest, setShowLatest] = useState(false);
+  const [composerBlockSize, setComposerBlockSize] = useState(0);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const messageListRef = useRef<HTMLOListElement>(null);
+  const composerRef = useRef<HTMLFormElement>(null);
   const historyRequestRef = useRef(0);
   const sendInFlightRef = useRef(false);
   const stagingInFlightRef = useRef(false);
@@ -211,6 +213,28 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     target.addEventListener("scroll", update, { passive: true });
     return () => target.removeEventListener("scroll", update);
   }, [messages.length, updateFollowingFromTarget]);
+
+  // Mobile scrolls the document, so the Latest control must be viewport-fixed rather
+  // than anchored to the end of a potentially very tall thread. Measure the sticky
+  // composer so the control remains reachable without covering its actions.
+  useLayoutEffect(() => {
+    const composer = composerRef.current;
+    const view = composer?.ownerDocument.defaultView;
+    if (!composer || !view) return;
+    const update = (): void => {
+      const next = Math.ceil(composer.getBoundingClientRect().height);
+      setComposerBlockSize((current) => current === next ? current : next);
+    };
+    update();
+    view.addEventListener("resize", update);
+    const ResizeObserverConstructor = view.ResizeObserver;
+    const observer = ResizeObserverConstructor ? new ResizeObserverConstructor(update) : null;
+    observer?.observe(composer);
+    return () => {
+      observer?.disconnect();
+      view.removeEventListener("resize", update);
+    };
+  }, []);
 
   const reload = useCallback(async (): Promise<void> => {
     const request = ++historyRequestRef.current;
@@ -512,7 +536,12 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               })}
             </ol>
             {showLatest && (
-              <button type="button" className="chat-jump-latest" onClick={jumpToLatest}>
+              <button
+                type="button"
+                className="chat-jump-latest"
+                style={{ "--chat-mobile-composer-height": `${composerBlockSize}px` } as React.CSSProperties}
+                onClick={jumpToLatest}
+              >
                 {t(locale, "chat.latest")}
               </button>
             )}
@@ -542,6 +571,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           </section>
         )}
         <form
+          ref={composerRef}
           className="chat-composer"
           aria-label={t(locale, "chat.composerLabel")}
           onSubmit={(event) => {
