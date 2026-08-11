@@ -731,8 +731,12 @@ extension AppState {
 
     audioCaptureService?.stopCapture()
     // Rebuilding must not silently move the user back onto a route already proven dead.
-    if let healed = silentMicHealedDeviceID {
-      audioCaptureService = AudioCaptureService(overrideDeviceID: healed)
+    // The choice is `SilentMicRoutePolicy`'s so the contract has one tested home; a nil
+    // result means "follow the system default", which is what the plain initialiser does.
+    if let deviceID = SilentMicRoutePolicy.captureDeviceID(
+      healed: silentMicHealedDeviceID, systemDefault: nil)
+    {
+      audioCaptureService = AudioCaptureService(overrideDeviceID: deviceID)
     } else {
       audioCaptureService = AudioCaptureService()
     }

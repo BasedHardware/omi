@@ -606,6 +606,11 @@ class AppState: ObservableObject {
   }
 
   init() {
+    // Fold any legacy PTT-only microphone choice into the shared preference before
+    // anything reads it. Running this only from PTT routing meant a user who had picked a
+    // PTT microphone saw "System Default" in Transcription — and was recorded by it —
+    // until they happened to take a push-to-talk turn.
+    ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
     ownerChangeObserver = NotificationCenter.default.addObserver(

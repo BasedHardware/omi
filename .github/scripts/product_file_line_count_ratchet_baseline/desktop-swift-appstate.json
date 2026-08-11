@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1620
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1623
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "silentMicHealedDeviceID: the healed input route must survive a CoreAudio rebuild, otherwise the rebuild re-resolves the system default back onto the silent device and the fallback loops into a user-facing alert every 60-90s."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "silentMicHealedDeviceID plus the SilentMicRoutePolicy call at the rebuild site: the healed input route must survive a CoreAudio rebuild, otherwise the rebuild re-resolves the system default back onto the silent device and the fallback loops into a user-facing alert."
   },
   "threshold": 1500
 }

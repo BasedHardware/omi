@@ -379,7 +379,7 @@ class ShortcutSettings: ObservableObject {
 
   /// Carry a PTT-only choice into the shared setting once, so unifying does not silently
   /// discard a microphone the user deliberately picked.
-  private static func migratePTTMicrophoneChoiceIfNeeded() {
+  static func migratePTTMicrophoneChoiceIfNeeded() {
     let defaults = UserDefaults.standard
     guard !defaults.bool(forKey: .shortcutPTTMicrophoneMergedIntoPreferred) else { return }
     defaults.set(true, forKey: .shortcutPTTMicrophoneMergedIntoPreferred)
