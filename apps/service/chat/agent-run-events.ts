@@ -568,10 +568,14 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
           throw new TypeError("invalid agent run snapshot row");
         }
         const events: AgentRunEvent[] = [];
+        const eventIds = new Set<string>();
         for (const rawEvent of run.value.events) {
           const parsed = parseAgentRunEvent(rawEvent);
           if (!parsed.ok || parsed.event.runId !== run.value.runId
-            || parsed.event.sequence !== events.length + 1) throw new TypeError("invalid agent run snapshot event");
+            || parsed.event.sequence !== events.length + 1 || eventIds.has(parsed.event.eventId)) {
+            throw new TypeError("invalid agent run snapshot event");
+          }
+          eventIds.add(parsed.event.eventId);
           events.push(parsed.event);
         }
         if (events.length === 0 || events[0]!.kind !== "run_accepted"
@@ -626,13 +630,14 @@ export interface AgentRunVisibleTimeline {
 }
 
 const REDACTED_KEYS = new Set([
-  "prompt", "rawPrompt", "args", "arguments", "rawArguments", "attachment", "attachments",
-  "attachmentId", "attachmentIds", "credential", "credentials", "accessToken", "password",
-  "secret", "token", "apiKey", "authorization", "auth", "reasoning", "chainOfThought", "hiddenReasoning",
+  "prompt", "rawprompt", "args", "arguments", "rawarguments", "attachment", "attachments",
+  "attachmentid", "attachmentids", "fileid", "fileids", "credential", "credentials", "accesstoken", "password",
+  "secret", "token", "apikey", "authorization", "auth", "reasoning", "chainofthought", "hiddenreasoning",
 ]);
 const REDACTED_STRING = /(?:Bearer\s+|sk-[A-Za-z0-9]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
 const REDACTED_VALUE_STRING = /(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]\s*\S+/iu;
-const REDACTED_ATTACHMENT_STRING = /(?:attachment(?:[_ -]?id)?|file[_ -]?id)\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
+const REDACTED_ATTACHMENT_STRING = /(?:attachment(?:[_ -]?id)?|file[_ -]?id|opaque(?:[_ -]?id)?|reference(?:[_ -]?id)?)\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
+const normalizedRedactionKey = (key: string): string => key.replace(/[^A-Za-z0-9]/gu, "").toLowerCase();
 
 /** Returns scanner findings rather than exposing sensitive values. */
 export const scanAgentRunRedactions = (value: unknown): readonly string[] => {
@@ -658,7 +663,7 @@ export const scanAgentRunRedactions = (value: unknown): readonly string[] => {
     }
     for (const [key, nested] of Object.entries(recordResult.value)) {
       const nestedPath = path === "" ? key : `${path}.${key}`;
-      if (REDACTED_KEYS.has(key)) findings.push(nestedPath);
+      if (REDACTED_KEYS.has(normalizedRedactionKey(key))) findings.push(nestedPath);
       else visit(nested, nestedPath);
     }
   };

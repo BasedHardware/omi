@@ -132,6 +132,17 @@ describe("versioned agent run events", () => {
       .toBe("rejected");
   });
 
+  test("restore rejects duplicate event IDs instead of silently overwriting replay identity", () => {
+    const first = runAgentRunScenario({ terminal: scenario.terminal });
+    const store = createInMemoryAgentRunEventStore();
+    const accepted = first.events[0]!;
+    const duplicate = { ...first.events[1]!, eventId: accepted.eventId, sequence: 3 };
+    expect(() => store.restore({
+      runs: [{ runId: accepted.runId, events: [accepted, first.events[1]!, duplicate] }],
+    })).toThrow("invalid agent run snapshot event");
+    expect(store.list(accepted.runId)).toEqual([]);
+  });
+
   test("UI projection drops internal events and redaction scanner catches forbidden fields", () => {
     const first = runAgentRunScenario({ terminal: scenario.terminal });
     const internal = { ...first.events[1]!, visibility: "internal" as const };
@@ -145,5 +156,20 @@ describe("versioned agent run events", () => {
       expect(scanAgentRunRedactions({ [field]: "attachmentId=opaque-123 api_key=secret-value" }).length)
         .toBeGreaterThan(0);
     }
+    expect(scanAgentRunRedactions({
+      nested: {
+        api_key: "secret-value",
+        access_token: "opaque-token",
+        attachment_id: "opaque-attachment",
+        file_id: "opaque-file",
+        safeSummary: "authorization: Basic abc token=opaque",
+      },
+    })).toEqual([
+      "nested.api_key",
+      "nested.access_token",
+      "nested.attachment_id",
+      "nested.file_id",
+      "nested.safeSummary",
+    ]);
   });
 });
