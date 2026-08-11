@@ -13,7 +13,9 @@ The desktop passes its own URL scheme as success_redirect_url, so dev
 themselves without the backend needing to know which is calling.
 """
 
+import json
 import logging
+from html import escape
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -50,6 +52,10 @@ def _is_valid_redirect_scheme(scheme: str) -> bool:
 def is_allowed_success_redirect_url(redirect_uri: str) -> bool:
     """Return True when redirect_uri is a safe native/loopback deep link."""
     if not redirect_uri:
+        return False
+    # No legitimate deep link contains markup delimiters, quotes, or control
+    # characters; they only appear when someone is aiming at the callback page.
+    if any(c in redirect_uri for c in '<>"\'`') or any(c.isspace() or ord(c) < 0x20 for c in redirect_uri):
         return False
     parsed = urlparse(redirect_uri)
     scheme = (parsed.scheme or "").strip().lower()
@@ -129,16 +135,22 @@ def x_oauth_url(
 
 def _redirect_html(deep_link: str, ok: bool, message: str) -> HTMLResponse:
     icon = '✓' if ok else '⚠️'
-    safe_link = deep_link.replace('"', '%22')
+    # The link reaches here from a client-supplied success_redirect_url. Escaping
+    # only quotes is not enough: a `</script>` inside the value closes the script
+    # element and the rest executes as markup on the backend origin. Escape for
+    # the attribute context, and serialize as JSON for the script context (with
+    # `<` escaped so no substring can terminate the element).
+    attr_link = escape(deep_link, quote=True)
+    script_link = json.dumps(deep_link).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>X · Omi</title>
-<meta http-equiv="refresh" content="0;url={safe_link}">
+<meta http-equiv="refresh" content="0;url={attr_link}">
 <style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0b0f;color:#eaeaea;
 display:flex;height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}}
 .c{{max-width:360px}}.i{{font-size:42px}}</style></head>
-<body><div class="c"><div class="i">{icon}</div><h2>{message}</h2>
+<body><div class="c"><div class="i">{icon}</div><h2>{escape(message)}</h2>
 <p>Returning to Omi…</p></div>
-<script>setTimeout(function(){{window.location.href="{safe_link}";}},150);</script>
+<script>setTimeout(function(){{window.location.href={script_link};}},150);</script>
 </body></html>"""
     return HTMLResponse(content=html)
 

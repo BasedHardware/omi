@@ -1,66 +1,20 @@
-"""Tests for X OAuth success_redirect_url allowlist.
+"""X OAuth callback: redirect allowlist + callback-page escaping.
 
-Proves https://evil.example is rejected and native deep links
-(omi://, omi-computer-dev://) are accepted — same policy as auth redirect_uri.
+The callback page interpolates a client-supplied value (`success_redirect_url`
+kept in the OAuth state, and the `error` query parameter) into an HTML
+attribute and an inline <script>. Both the allowlist and the escaping are
+covered here, against the real router module -- routers.x_connector imports
+under tests/conftest.py's environment, so no sys.modules stubbing is needed
+(backend/AGENTS.md: never mutate sys.modules at module scope).
 """
 
 from __future__ import annotations
 
-import sys
-import types
-from pathlib import Path
-
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-def _ensure_package(name, path):
-    module = sys.modules.get(name)
-    if module is None or not hasattr(module, "__path__"):
-        module = types.ModuleType(name)
-        sys.modules[name] = module
-    module.__path__ = [str(path)]
-    if "." in name:
-        parent_name, attr_name = name.rsplit(".", 1)
-        parent = sys.modules.get(parent_name)
-        if parent is not None:
-            setattr(parent, attr_name, module)
-    return module
-
-
-def _install_module(name):
-    module = types.ModuleType(name)
-    sys.modules[name] = module
-    parent_name, _, attr_name = name.rpartition(".")
-    parent = sys.modules.get(parent_name)
-    if parent is not None:
-        setattr(parent, attr_name, module)
-    return module
-
-
-# Lightweight stubs so routers.x_connector imports without heavy deps.
-_ensure_package("database", BACKEND_DIR / "database")
-_ensure_package("utils", BACKEND_DIR / "utils")
-_ensure_package("routers", BACKEND_DIR / "routers")
-
-x_posts_stub = _install_module("database.x_posts")
-x_posts_stub.KIND_TWEET = "tweet"
-x_posts_stub.KIND_BOOKMARK = "bookmark"
-x_posts_stub.KIND_LIKE = "like"
-
-x_connector_util_stub = _install_module("utils.x_connector")
-executors_stub = _install_module("utils.executors")
-executors_stub.start_background_task = lambda *a, **k: None
-_ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
-endpoints_stub = _install_module("utils.other.endpoints")
-endpoints_stub.get_current_user_uid = lambda: "uid"
-
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
-from routers.x_connector import (  # noqa: E402
+from routers.x_connector import (
     DEFAULT_DEEP_LINK,
+    _redirect_html,
     _validated_success_redirect,
     is_allowed_success_redirect_url,
 )
@@ -90,6 +44,10 @@ def test_allowed_success_redirect_urls(uri):
         "data:text/html,hi",
         "",
         "://missing-scheme",
+        # Markup delimiters: the callback page is the sink.
+        "omi://x/</script><script>alert(1)</script>",
+        'omi://x/"onload="alert(1)',
+        "omi://x/callback\n<script>alert(1)</script>",
     ],
 )
 def test_rejected_success_redirect_urls(uri):
@@ -112,3 +70,27 @@ def test_callback_keeps_dev_scheme():
 def test_empty_falls_back_to_default():
     assert _validated_success_redirect(None) == DEFAULT_DEEP_LINK
     assert _validated_success_redirect("") == DEFAULT_DEEP_LINK
+
+
+def test_callback_page_never_lets_a_link_close_the_script_element():
+    """Second line of defence: even a link that reached the sink must not be
+    able to terminate <script> or open a tag."""
+    body = _redirect_html('omi://x/</script><script>alert(1)</script>', True, 'X connected').body.decode()
+    assert '<script>alert(1)</script>' not in body
+    # Exactly one script element -- the page's own.
+    assert body.count('<script>') == 1
+    assert body.count('</script>') == 1
+
+
+def test_callback_page_escapes_the_error_query_value():
+    """`error` is an unauthenticated query parameter on the callback route."""
+    body = _redirect_html(f'{DEFAULT_DEEP_LINK}?error=" onload="alert(1)', False, 'Connection cancelled').body.decode()
+    meta = body.split('<style>')[0]
+    # The injected quote must not close the content attribute.
+    assert '" onload=' not in meta
+    assert '&quot; onload=' in meta
+
+
+def test_callback_page_escapes_the_message():
+    body = _redirect_html(DEFAULT_DEEP_LINK, False, '<img src=x onerror=alert(1)>').body.decode()
+    assert '<img' not in body
