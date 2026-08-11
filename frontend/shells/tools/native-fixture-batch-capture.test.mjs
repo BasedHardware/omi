@@ -293,12 +293,16 @@ test("one manifest-scoped prepared app can capture a later coordinate determinis
     const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /NATIVE_FIXTURE_BATCH_COMPLETE members=1/);
-    const result = JSON.parse(readFileSync(path.join(outRoot, "batch-result.json"), "utf8"));
+    const result = JSON.parse(readFileSync(path.join(outRoot, "batch-result-macos-1-1.json"), "utf8"));
     assert.equal(result.schema, "omi.polish.native-fixture-batch-result/v1");
     assert.equal(result.batch_id, undefined);
     assert.equal(Object.keys(result.members).length, 1);
     const image = path.join(outRoot, "captures/macos/assembly-fake-dark.png");
     assert.equal(readFileSync(image).length, fixturePng(960, 671).length);
+    const firstRange = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    assert.equal(firstRange.status, 0, firstRange.stderr);
+    assert.equal(readFileSync(path.join(outRoot, "batch-result-macos-0-1.json"), "utf8").length > 0, true);
+    assert.equal(readFileSync(path.join(outRoot, "batch-result-macos-1-1.json"), "utf8").length > 0, true);
     descriptor.coordinate_run_ids = [secondCoordinate.run_id];
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
     const narrowed = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });

@@ -944,7 +944,9 @@ function main() {
     evidence: { root: "core", path: authorityRelative(path.join(capturesRoot, record.shell, `${record.run_id}.png`)), sha256: record.evidence.image_sha256 },
     sidecar: { root: "core", path: authorityRelative(path.join(capturesRoot, record.shell, `${record.run_id}.png.sidecar.json`)), sha256: hashFile(path.join(capturesRoot, record.shell, `${record.run_id}.png.sidecar.json`)) },
   }]));
-  const resultPath = path.join(outRoot, "batch-result.json");
+  // Each bounded range owns a stable result path. Reusing one generic file
+  // would make an earlier batch receipt false as soon as the next range ran.
+  const resultPath = path.join(outRoot, `batch-result-${shell}-${offset}-${limit}.json`);
   const captureArgv = ["node", "shells/tools/capture-native-fixture-batch.mjs", "--manifest", authorityRelative(manifestPath), "--out-root", authorityRelative(outRoot), "--shell", shell, "--offset", String(offset), "--limit", String(limit), "--prepared-input-set", authorityRelative(preparedPath), ...(args.replay_proof ? ["--replay-proof"] : []), "--timeout-seconds", String(timeoutSeconds), "--wait-seconds", String(waitSeconds)];
   const stdoutLine = `NATIVE_FIXTURE_BATCH_COMPLETE members=${records.length}\n`;
   const result = {
