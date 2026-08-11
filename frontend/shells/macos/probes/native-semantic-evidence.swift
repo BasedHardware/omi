@@ -28,6 +28,10 @@ private struct AXNode: Codable, Equatable {
   let identifier: String?
   let value: String?
   let enabled: Bool?
+
+  var focusIdentity: [String?] {
+    [role, subrole, title, description, identifier]
+  }
 }
 
 private struct KeyObservation: Codable {
@@ -242,6 +246,14 @@ private func focusedElement(_ application: AXUIElement, windows: [AXUIElement]) 
   return nil
 }
 
+private func sameFocus(_ first: AXNode?, _ second: AXNode?) -> Bool {
+  guard let first, let second else { return false }
+  // Values and enabled state can legitimately change while a command palette
+  // opens and closes. Focus restoration is an identity assertion, not a stale
+  // value snapshot.
+  return first.focusIdentity == second.focusIdentity
+}
+
 private struct KeySpec {
   let label: String
   let keyCode: CGKeyCode
@@ -342,8 +354,18 @@ private func run(_ options: Options) throws -> Evidence {
   }
   let application = AXUIElementCreateApplication(app.processIdentifier)
   let axWindows = elementArrayAttribute(application, kAXWindowsAttribute)
+  if options.activate {
+    for window in axWindows where stringAttribute(window, kAXRoleAttribute) == kAXWindowRole {
+      _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+    }
+    usleep(120_000)
+  }
   let windows = windowObservations(application)
   guard !windows.isEmpty else { throw ProbeError.noAccessibleWindow }
+  if !options.keys.isEmpty {
+    let isActive = NSRunningApplication(processIdentifier: app.processIdentifier)?.isActive ?? false
+    guard isActive else { throw ProbeError.targetNotActive }
+  }
   let beforeElement = focusedElement(application, windows: axWindows)
   let before = node(beforeElement)
   var observations: [KeyObservation] = []
@@ -361,7 +383,7 @@ private func run(_ options: Options) throws -> Evidence {
       focusedAfter: keyAfter))
   }
   let after = node(focusedElement(application, windows: axWindows))
-  let restored = options.keys.isEmpty ? nil : (before != nil && before == after)
+  let restored = options.keys.isEmpty ? nil : sameFocus(before, after)
   return Evidence(
     schema: schema,
     shell: "macos",
