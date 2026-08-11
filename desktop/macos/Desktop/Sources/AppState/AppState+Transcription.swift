@@ -5,6 +5,42 @@ import SwiftUI
 
 @MainActor
 extension AppState {
+  func toggleConversationListening(source: String = "ui") {
+    setConversationListening(!isConversationListening, source: source)
+  }
+
+  func setConversationListening(_ on: Bool, source: String = "ui") {
+    let previous = isConversationListening
+    guard previous != on else { return }
+
+    if !on && isTranscribing {
+      stopTranscription()
+    }
+
+    isConversationListening = on
+    persistedConversationListening = on
+    setConversationListeningSnapshot(on)
+
+    if on && !isTranscribing {
+      startTranscription()
+    }
+
+    AnalyticsManager.shared.listeningToggled(isListening: on, source: source)
+    log("listening: \(previous ? "on" : "off") -> \(on ? "on" : "off") (source=\(source))")
+  }
+
+  nonisolated private func snapshotIsConversationListening() -> Bool {
+    conversationListeningSnapshotLock.lock()
+    defer { conversationListeningSnapshotLock.unlock() }
+    return conversationListeningSnapshot
+  }
+
+  nonisolated func setConversationListeningSnapshot(_ value: Bool) {
+    conversationListeningSnapshotLock.lock()
+    conversationListeningSnapshot = value
+    conversationListeningSnapshotLock.unlock()
+  }
+
   func toggleTranscription() {
     if isTranscribing {
       AssistantSettings.shared.audioRecordingMode = .off
@@ -26,6 +62,10 @@ extension AppState {
     conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
     userInitiated: Bool = true
   ) {
+    guard isConversationListening else {
+      log("Transcription: Start ignored while conversation listening is paused")
+      return
+    }
     guard !isTranscribing else { return }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
       log("Transcription: start ignored because Audio Recording is Off")
@@ -461,8 +501,9 @@ extension AppState {
     // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
     // instances so transcripts are diarized by source (mic = you, system = another speaker).
     if !sttSession.useLocalSTT {
-      audioMixer?.start { [weak self] monoMixed in
-        self?.transcriptionService?.sendAudio(monoMixed)
+      audioMixer?.start { [weak self, weak transcriptionService] monoMixed in
+        guard self?.snapshotIsConversationListening() == true else { return }
+        transcriptionService?.sendAudio(monoMixed)
       }
     }
 
@@ -939,12 +980,16 @@ extension AppState {
     // Start BLE audio processing and pipe directly to transcription
     await BleAudioService.shared.startProcessing(
       from: connection,
-      transcriptionService: transcriptionService,
+      transcriptionService: nil,
       audioDataHandler: { _ in
         // Audio level is updated by BleAudioService
         Task { @MainActor in
           AudioLevelMonitor.shared.updateMicrophoneLevel(BleAudioService.shared.audioLevel)
         }
+      },
+      conversationAudioHandler: { [weak self, weak transcriptionService] audioData in
+        guard self?.snapshotIsConversationListening() == true else { return }
+        transcriptionService?.sendAudio(audioData)
       }
     )
 
