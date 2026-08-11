@@ -4,14 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
 
-USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)")
+USES_RE = re.compile(r"^\s*-?\s*uses:\s*['\"]?([^\s#'\"]+)")
 FLUTTER_CACHE_KEY_RE = re.compile(r"key:\s*.*flutter-buildrunner")
 SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
-OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*github\.event\.inputs\.")
+# `github.event.inputs.*` is the workflow_dispatch payload; `inputs.*` is the
+# same operator selection in workflow_dispatch/workflow_call context. Both name
+# a ref the operator chose, which is not what the run SHA describes.
+OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*(?:github\.event\.)?inputs\.")
+WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*github\.event\.inputs\.")
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
+JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
+TRAILING_COMMENT_RE = re.compile(r"\s+#.*$")
 
 # Mutable refs that have already caused (or clearly invite) supply-chain risk.
 FORBIDDEN_USES_SUBSTRINGS = (
@@ -23,9 +30,50 @@ FORBIDDEN_USES_SUBSTRINGS = (
     "Entelligence-AI/entelligence-pr-reviewer",
 )
 
-NESTED_WORKFLOW_DIRS = (
-    "backend/.github/workflows",
+# Directory names that hold vendored/third-party trees. Workflows inside them
+# belong to the upstream project and are not this repository's entrypoints.
+PRUNED_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".pio",
+        "node_modules",
+        "Pods",
+        "build",
+        "dist",
+        ".dart_tool",
+        "venv",
+        ".venv",
+        "third_party",
+        "vendor",
+    }
 )
+
+# Ratchet: nested workflow directories that predate this guard. GitHub only ever
+# runs `.github/workflows` at the repository root, so everything listed here is
+# unreachable-by-construction and must shrink, never grow.
+# Tracking: https://github.com/BasedHardware/omi/issues/11408
+KNOWN_NESTED_WORKFLOW_DIRS = frozenset(
+    {
+        "desktop/macos/.github/workflows",
+        "plugins/omi-github-app/.github/workflows",
+    }
+)
+
+
+def _nested_workflow_dirs(root: Path) -> list[str]:
+    """Every in-repo `.github/workflows` directory other than the root one."""
+    found: list[str] = []
+    for dirpath, dirnames, _filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in PRUNED_DIR_NAMES]
+        current = Path(dirpath)
+        if current.name != "workflows" or current.parent.name != ".github":
+            continue
+        rel = current.relative_to(root).as_posix()
+        if rel == ".github/workflows":
+            continue
+        if any(current.glob("*.yml")) or any(current.glob("*.yaml")):
+            found.append(rel)
+    return sorted(found)
 
 
 def _workflow_paths(root: Path) -> list[Path]:
@@ -40,24 +88,62 @@ def _action_paths(root: Path) -> list[Path]:
     return sorted(actions.glob("*/action.y*ml"))
 
 
+def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) -> set[int]:
+    """Line numbers belonging to a scope that checks out an operator-selected ref.
+
+    A job owns one workspace, so provenance is a per-job property: a sibling job
+    that checks out the default ref may legitimately use the run SHA.
+    """
+    lines = text.splitlines()
+    if not is_workflow:
+        return set(range(1, len(lines) + 1)) if ref_re.search(text) else set()
+
+    scopes: set[int] = set()
+    in_jobs = False
+    start = 0
+    selected = False
+
+    def close(end: int) -> None:
+        if selected and start:
+            scopes.update(range(start, end + 1))
+
+    for index, line in enumerate(lines, start=1):
+        if not in_jobs:
+            if line.rstrip().startswith("jobs:") and not line.startswith(" "):
+                in_jobs = True
+            continue
+        if JOB_START_RE.match(line):
+            close(index - 1)
+            start, selected = index, False
+        elif ref_re.search(line):
+            selected = True
+    close(len(lines))
+    return scopes
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
 
-    for nested in NESTED_WORKFLOW_DIRS:
-        nested_path = root / nested
-        if nested_path.is_dir() and any(nested_path.glob("*.y*ml")):
-            errors.append(
-                f"{nested}: nested GitHub Actions workflows are forbidden; "
-                "root .github/workflows/ is the only Actions entrypoint (stale "
-                "deploy templates have previously looked like live prod pipelines)"
-            )
+    for nested in _nested_workflow_dirs(root):
+        if nested in KNOWN_NESTED_WORKFLOW_DIRS:
+            continue
+        errors.append(
+            f"{nested}: nested GitHub Actions workflows are forbidden; "
+            "root .github/workflows/ is the only Actions entrypoint (stale "
+            "deploy templates have previously looked like live prod pipelines)"
+        )
 
     for path in (*_workflow_paths(root), *_action_paths(root)):
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
-        operator_ref_checkout = bool(OPERATOR_REF_CHECKOUT_RE.search(text))
+        is_workflow = path.parent.name == "workflows"
+        # A composite action's `inputs.*` are supplied by the calling workflow,
+        # not by an operator, so only the dispatch payload counts there.
+        ref_re = OPERATOR_REF_CHECKOUT_RE if is_workflow else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
+        operator_ref_scopes = _operator_ref_scopes(text, ref_re, is_workflow)
         for line_number, line in enumerate(text.splitlines(), start=1):
-            if operator_ref_checkout and RUN_SHA_RE.search(line) and not line.lstrip().startswith("#"):
+            code = TRAILING_COMMENT_RE.sub("", line)
+            if line_number in operator_ref_scopes and RUN_SHA_RE.search(code) and not code.lstrip().startswith("#"):
                 errors.append(
                     f"{rel}:{line_number}: workflow checks out an operator-selected "
                     "ref, so the run SHA is not the checked-out commit; derive "

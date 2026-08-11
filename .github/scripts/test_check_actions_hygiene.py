@@ -129,6 +129,104 @@ class ActionsHygieneTests(unittest.TestCase):
             )
             self.assertEqual(validate(root), [])
 
+    def test_rejects_any_nested_component_workflow_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".github/workflows/noop.yml", "name: noop\n")
+            write(root, "some-component/.github/workflows/local.yml", "name: local\n")
+            errors = validate(root)
+            self.assertTrue(any("some-component/.github/workflows" in e for e in errors))
+
+    def test_ignores_vendored_nested_workflow_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".github/workflows/noop.yml", "name: noop\n")
+            write(root, "fw/.pio/libdeps/dep/.github/workflows/build.yml", "name: upstream\n")
+            write(root, "web/node_modules/dep/.github/workflows/ci.yml", "name: upstream\n")
+            self.assertEqual(validate(root), [])
+
+    def test_rejects_quoted_third_party_branch_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/bad.yml",
+                "jobs:\n  t:\n    steps:\n      - uses: 'some-org/tool@main'\n",
+            )
+            self.assertTrue(any("@main" in e for e in validate(root)))
+
+    def test_rejects_run_sha_with_workflow_level_inputs_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ inputs.release_tag }}\n"
+                "      - run: echo \"tag=${GITHUB_SHA::7}\"\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_accepts_composite_action_inputs_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".github/workflows/noop.yml", "name: noop\n")
+            write(
+                root,
+                ".github/actions/deploy/action.yml",
+                "runs:\n"
+                "  using: composite\n"
+                "  steps:\n"
+                "    - uses: actions/checkout@v7\n"
+                "      with:\n"
+                "        ref: ${{ inputs.admitted_sha }}\n"
+                "    - run: echo \"${{ github.sha }}\"\n"
+                "      shell: bash\n",
+            )
+            self.assertEqual(validate(root), [])
+
+    def test_accepts_run_sha_in_sibling_job_without_operator_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  deploy:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ github.event.inputs.branch }}\n"
+                "      - run: echo \"tag=$(git rev-parse --short=7 HEAD)\"\n"
+                "  notify:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "      - run: echo \"built ${{ github.sha }}\"\n",
+            )
+            self.assertEqual(validate(root), [])
+
+    def test_ignores_run_sha_in_trailing_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ github.event.inputs.branch }}\n"
+                "      - run: echo ok  # never tag from GITHUB_SHA here\n",
+            )
+            self.assertEqual(validate(root), [])
+
     def test_rejects_third_party_master_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
