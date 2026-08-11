@@ -45,6 +45,13 @@ Therefore the production source must be built at a new query-bearing evaluation
 composition that combines the application-read authorization discipline with
 assertion-local compose/entailment. Post-hoc joining is forbidden.
 
+The producer seam audit refined “combines” here: it reuses P4's ordering and
+coherent-revalidation discipline, not P4's external-application data plane.
+That plane intentionally admits only the generic default policy view and would
+erase owner/bystander classes. The separate owner-scoped shadow source is frozen
+in `authorized-query-grounding-producer-contract.md`; P4 policy remains
+unchanged.
+
 ## Sensitive finalized artifact
 
 The producer creates exactly one immutable artifact for each staged sensitive
