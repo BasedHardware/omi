@@ -111,6 +111,8 @@ function validateCoordinate(coordinate, index, sourceShas, captureClass) {
   if (coordinate.schema !== "omi.polish.matrix-coordinate/v1") fail(`${coordinate.run_id || index}: coordinate schema is invalid`);
   if (![`ax_snapshot`, `keyboard_trace`].includes(coordinate.kind)) fail(`${coordinate.run_id}: kind must be ax_snapshot or keyboard_trace`);
   if (!domains.has(coordinate.domain) || !states.has(coordinate.state) || !themes.has(coordinate.theme) || !widths.has(coordinate.width) || coordinate.shell !== "macos") fail(`${coordinate.run_id}: unsupported matrix coordinate`);
+  if (coordinate.kind === "ax_snapshot" && !["ready", "error"].includes(coordinate.state)) fail(`${coordinate.run_id}: AX snapshot state is not applicable`);
+  if (coordinate.kind === "keyboard_trace" && !["ready", "error", "empty"].includes(coordinate.state)) fail(`${coordinate.run_id}: keyboard trace state is not applicable`);
   if (coordinate.kind === "ax_snapshot" ? !axAccess.has(coordinate.accessibility) : coordinate.accessibility !== "keyboard") fail(`${coordinate.run_id}: accessibility does not match kind`);
   if (!runId.test(coordinate.run_id) || coordinate.run_id.startsWith("__")) fail(`${coordinate.run_id}: unsafe run_id`);
   if (!names.has(coordinate.landmark)) fail(`${coordinate.run_id}: landmark is not allowlisted`);
