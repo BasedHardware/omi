@@ -4,6 +4,7 @@
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-CHAT-REV-001)
 // domain-pending(DIV-CHAT-HASH-001)
+// domain-pending(DIV-DOMTASK-001)
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
@@ -77,6 +78,10 @@ import {
   registerChatMessagesRoutes,
 } from "./routes/chat-messages";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
+import {
+  isActionItemsCompatInvocation,
+  registerActionItemsCompatRoutes,
+} from "./routes/action-items-compat";
 import { CONVERSATIONS_PATH, registerConversationRoutes } from "./routes/conversations";
 import { registerCurrentSessionRoutes } from "./routes/current-session";
 import { FOLDERS_PATH, registerFolderRoutes } from "./routes/folders";
@@ -203,6 +208,8 @@ export interface LocalServiceOptions {
   readonly nowEpochMilliseconds?: () => number;
   readonly attachmentId?: () => string;
   readonly attachmentContentReference?: () => string;
+  /** Server-owned id seam for the dated legacy action-items create route. */
+  readonly actionItemId?: () => string;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -413,6 +420,7 @@ const successfulHttpDomain = (
   }
   if ((method === "GET" && path === TASKS_READ_PATH)
     || (method === "POST" && path === TASKS_OPS_PATH)) return "tasks";
+  if (isActionItemsCompatInvocation(method, path)) return "tasks";
   if (["GET", "PATCH", "DELETE"].includes(method)
     && (path === CONVERSATIONS_PATH || path.startsWith(`${CONVERSATIONS_PATH}/`))) {
     return "conversations";
@@ -743,6 +751,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     prepareRead: prepareTasksReadFor,
     fence: { store: controlStore },
     counter,
+  });
+  registerActionItemsCompatRoutes(app, {
+    resolvePrincipal,
+    store: tasks,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    createId: options.actionItemId ?? (() => `action-item_${randomUUID()}`),
   });
   registerSettingsRoutes(app, {
     resolvePrincipal,
