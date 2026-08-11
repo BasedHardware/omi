@@ -1,4 +1,4 @@
-import envConfig from '@/src/constants/envConfig';
+import { browserApiBase as apiBase } from '@/src/lib/api/browser-base';
 
 export const MEMORY_PLATFORM_LIMITS = {
   maxQueryLength: 500,
@@ -23,13 +23,19 @@ export interface PlatformMemoryItem {
   created_at?: string;
 }
 
+/**
+ * Mirrors backend `ProductMemorySearchResponse`. The page of results is `items`;
+ * there is no `memories` field on the wire.
+ */
 export interface PlatformSearchResponse {
-  memories?: PlatformMemoryItem[];
+  uid?: string;
+  query?: string;
+  items?: PlatformMemoryItem[];
+  total_count?: number;
+  returned_count?: number;
+  limit?: number;
+  offset?: number;
   [key: string]: unknown;
-}
-
-function apiBase(): string {
-  return envConfig.API_URL ?? '';
 }
 
 async function authorizedJson<T>(

@@ -145,3 +145,57 @@ def test_web_billing_client_calls_the_route_that_exists():
 
     assert '/v1/memory/platform/quota' in client
     assert 'platform-api-quota' not in client
+
+
+def test_web_search_client_type_matches_the_response_model():
+    """The web search client must name the field the search route actually returns.
+
+    STATIC CHECKER: this reads the TypeScript source rather than executing it.
+    It exists because the client declared `memories` while
+    `ProductMemorySearchResponse` returns `items`, so every successful search
+    decoded to nothing and the widget rendered an empty result list. The model
+    side is real introspection, so renaming the results field on the response
+    model fails here until the client follows.
+    """
+    import re
+    from pathlib import Path
+
+    from models.memory_product import ProductMemorySearchResponse
+
+    root = Path(__file__).resolve().parents[3]
+    client = (root / 'web' / 'frontend' / 'src' / 'lib' / 'api' / 'memory-platform.ts').read_text(encoding='utf-8')
+
+    body = re.search(r'export interface PlatformSearchResponse \{(.*?)\n\}', client, re.S)
+    assert body, 'PlatformSearchResponse interface not found in web/frontend/src/lib/api/memory-platform.ts'
+    declared = set(re.findall(r'^\s*(\w+)\??:', body.group(1), re.M))
+
+    model_fields = set(ProductMemorySearchResponse.model_fields)
+    unknown = declared - model_fields
+    assert not unknown, f'client declares fields the response model does not return: {sorted(unknown)}'
+    assert 'items' in declared, 'the client must decode the results page from `items`'
+
+    # The consumer has to read the same field the interface declares.
+    widget = (
+        root / 'web' / 'frontend' / 'src' / 'app' / 'memory-platform' / 'components' / 'memory-widget.tsx'
+    ).read_text(encoding='utf-8')
+    assert 'response?.items' in widget
+    assert 'response?.memories' not in widget
+
+
+def test_web_browser_clients_do_not_read_the_server_only_api_url():
+    """STATIC CHECKER: browser API modules must use the public backend origin.
+
+    `API_URL` is not a `NEXT_PUBLIC_*` variable, so Next.js does not inline it
+    into the client bundle. A browser module reading it resolves every request to
+    a relative path against the web origin instead of the backend.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    api_dir = root / 'web' / 'frontend' / 'src' / 'lib' / 'api'
+    browser_clients = ['billing.ts', 'mcp-keys.ts', 'memory-platform.ts']
+
+    for name in browser_clients:
+        source = (api_dir / name).read_text(encoding='utf-8')
+        assert 'envConfig.API_URL' not in source, f'{name} reads the server-only API_URL in a browser module'
+        assert 'browserApiBase' in source, f'{name} must resolve its base through browserApiBase'
