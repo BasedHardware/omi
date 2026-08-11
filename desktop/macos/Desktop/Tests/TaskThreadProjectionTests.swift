@@ -611,6 +611,69 @@ import XCTest
         "A coalesced streaming write must send the row as it stands when the write runs")
     }
 
+    /// Stop stays offered until the send lock clears. When the reveal ticks had
+    /// already emptied the buffer before `query()` returned, the drain loop was
+    /// skipped and nothing re-read `isStopping`, so a cancelled turn settled as
+    /// a completed answer.
+    func testStopDuringAnEmptyRevealDrainDoesNotSettleTheSuccessfulAnswer() async {
+      let owner = TaskChatOwnerBox("owner-a")
+      let stopTarget = TaskChatStateBox()
+      let state = TaskChatState(
+        taskId: "task-stop-window",
+        workstreamId: "workstream-stop-\(UUID().uuidString)",
+        workspacePath: "/tmp",
+        ownerIDProvider: { owner.value },
+        recordJournalExchangeOperation: { workstreamId, _, _, writes in
+          AgentRuntimeProcess.JournalOperationResult(
+            operation: "record_exchange",
+            conversationId: "conversation-stop",
+            turn: nil,
+            turns: writes.map { Self.acceptedTurn(for: $0, workstreamId: workstreamId) },
+            clearedCount: 0,
+            highWaterTurnSeq: 2,
+            conversationGeneration: 1,
+            generationBaseTurnSeq: 0
+          )
+        },
+        updateJournalMessageOperation: { _, _, _, _, _ in
+          throw BridgeError.agentError("journal write stubbed")
+        },
+        queryOperation: { _, _, _, _, _, _, _, _, _, _, _, _, _ in
+          // The user presses Stop while the query is still awaited; the buffer is
+          // already empty because the reveal ticks drained it.
+          await MainActor.run { stopTarget.value?.isStopping = true }
+          return AgentBridge.QueryResult(
+            text: "STOPPED-BUT-ANSWERED",
+            costUsd: 0,
+            omiSessionId: "session",
+            runId: "run-1",
+            attemptId: "attempt-1",
+            adapterSessionId: nil,
+            terminalStatus: "succeeded",
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0
+          )
+        },
+        terminalizeJournalMessageOperation: { workstreamId, _, _, message, _, _, disposition in
+          XCTAssertEqual(disposition, .discard, "A stopped turn terminalizes as discarded, not accepted")
+          return Self.acceptedTurn(
+            for: message.journalWrite(origin: "workstream", status: .failed),
+            workstreamId: workstreamId)
+        }
+      )
+      stopTarget.value = state
+
+      await state.sendMessage("Answer then stop")
+
+      let assistant = state.messages.first { $0.sender == .ai }
+      XCTAssertNotEqual(
+        assistant?.text, "STOPPED-BUT-ANSWERED",
+        "A turn stopped before settlement must not be accepted as the completed answer")
+      XCTAssertEqual(assistant?.isStreaming, false)
+    }
+
     private static func acceptedTurn(
       for write: KernelJournalTurnWrite,
       workstreamId: String

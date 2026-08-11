@@ -825,7 +825,12 @@ class TaskChatState: ObservableObject {
       // exhausted: a fast terminal response (large delta then immediate
       // terminal) must still render progressively instead of jumping to the
       // full settled text.
-      while streamingBuffer.hasPendingSegments {
+      // Stop authority is re-read on every suspension point between the
+      // returned result and settlement. Stop stays offered while the reveal
+      // backlog drains and while `callbackQueue.drain()` is suspended, so a
+      // successful-but-cancelled turn must terminalize as discarded rather
+      // than be accepted as completed.
+      func yieldToStopAuthority() async throws {
         guard isCurrent(lease), !isStopping else {
           streamingBuffer.discardAllPendingSegments()
           if isStopping,
@@ -845,15 +850,19 @@ class TaskChatState: ObservableObject {
           }
           throw BridgeError.stopped
         }
+      }
+
+      while streamingBuffer.hasPendingSegments {
+        try await yieldToStopAuthority()
         flushStreamingBuffer(revealAll: false)
         if streamingBuffer.hasPendingSegments {
           try? await Task.sleep(nanoseconds: 100_000_000)
-          guard isCurrent(lease), !isStopping else {
-            streamingBuffer.discardAllPendingSegments()
-            throw BridgeError.stopped
-          }
+          try await yieldToStopAuthority()
         }
       }
+      // The reveal ticks may have emptied the buffer before the query returned,
+      // skipping the loop entirely. Settlement is still a Stop boundary.
+      try await yieldToStopAuthority()
       streamingBuffer.cancelPendingFlush()
       streamingBuffer.discardAllPendingSegments()
 
