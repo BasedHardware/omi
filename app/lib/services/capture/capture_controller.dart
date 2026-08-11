@@ -530,8 +530,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     // Only re-enable native streaming when turning batch OFF, a device with a
     // native BLE route is connected, and background mode is opted in.
-    final enableNativeStreaming =
-        !enabled && hasNativeBackgroundStreamRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    final enableNativeStreaming = _shouldEnableNativeBackgroundStreaming;
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
     await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
@@ -599,6 +598,7 @@ class CaptureController extends ChangeNotifier
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
+    await _reconcileNativeBackgroundStreamingPolicy();
 
     // Handle device recording
     if (_recordingDevice != null) {
@@ -745,7 +745,9 @@ class CaptureController extends ChangeNotifier
         } catch (e, stack) {
           Logger.error('[CustomSTT] Failed to stop the previous socket after blocking Omi fallback: $e\n$stack');
         }
+        await _reconcileNativeBackgroundStreamingPolicy();
         notifyListeners();
+        _startKeepAliveServices();
         return;
       }
       Logger.debug('[CustomSTT] Codec $codec not supported, falling back to Omi');
@@ -1184,7 +1186,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool(
       'nativeBleStreamingEnabled',
-      !batchMode && SharedPreferencesUtil().backgroundModeEnabled && device.type != DeviceType.limitless,
+      _shouldEnableNativeBackgroundStreaming,
     );
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
@@ -1229,6 +1231,24 @@ class CaptureController extends ChangeNotifier
   /// devices: limitless has a route for batch capture (flash drain), but its
   /// background streaming lands with the native drain engine follow-up.
   bool get hasNativeBackgroundStreamRoute => hasNativeBleAudioRoute && _recordingDevice?.type != DeviceType.limitless;
+
+  bool get _nativeOmiRawAudioAllowed {
+    final config = SharedPreferencesUtil().customSttConfig;
+    return !config.isEnabled || config.sendRawAudioToOmi;
+  }
+
+  bool get _shouldEnableNativeBackgroundStreaming =>
+      !SharedPreferencesUtil().batchModeEnabled &&
+      hasNativeBackgroundStreamRoute &&
+      SharedPreferencesUtil().backgroundModeEnabled &&
+      _nativeOmiRawAudioAllowed;
+
+  Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
+    await SharedPreferencesUtil().saveBool(
+      'nativeBleStreamingEnabled',
+      _shouldEnableNativeBackgroundStreaming,
+    );
+  }
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
   /// can validate against the actual native BLE route before committing prefs.
