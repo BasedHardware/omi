@@ -180,3 +180,61 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
   assert.match(styles, /data-source-badge/);
   assert.doesNotMatch(styles, /\.data-source-badge\s*\{[^}]*display:\s*none/i);
 });
+
+test("shared visual gallery renders one coherent semantic component vocabulary", async () => {
+  const ProductionPageHeader = await loadProductionExport("ProductionPrimitives.tsx", "ProductionPageHeader");
+  const ProductionSection = await loadProductionExport("ProductionPrimitives.tsx", "ProductionSection");
+  const ProductionNotice = await loadProductionExport("ProductionPrimitives.tsx", "ProductionNotice");
+  const ProductionEmptyState = await loadProductionExport("ProductionPrimitives.tsx", "ProductionEmptyState");
+  const ProductionIconButton = await loadProductionExport("ProductionPrimitives.tsx", "ProductionIconButton");
+  function Gallery() {
+    return createElement("main", { className: "production-component-gallery" },
+      createElement(ProductionPageHeader, {
+        eyebrow: "Component gallery",
+        title: "Memories",
+        description: "A single hierarchy shared by every production route.",
+        actions: createElement(ProductionIconButton, { icon: "plus", label: "Add memory", tone: "primary" }),
+      }),
+      createElement(ProductionSection, {
+        title: "Saved memories",
+        description: "3 items",
+        actions: createElement(ProductionIconButton, { icon: "refresh", label: "Refresh" }),
+        children: createElement("div", null,
+          createElement(ProductionNotice, { tone: "success", title: "Up to date", detail: "Last checked just now" }),
+          createElement(ProductionNotice, { tone: "warning", title: "Working offline", detail: "Changes will sync later" }),
+        ),
+      }),
+      createElement(ProductionEmptyState, {
+        icon: "inbox",
+        title: "Nothing here yet",
+        detail: "Create the first item when you are ready.",
+        action: createElement("button", { type: "button" }, "Create item"),
+      }),
+    );
+  }
+  const rendered = await renderComponent(Gallery, {});
+  try {
+    assert.equal(rendered.container.querySelectorAll("h1").length, 1);
+    assert.equal(rendered.container.querySelectorAll(".production-section").length, 1);
+    assert.equal(rendered.container.querySelectorAll(".production-notice").length, 2);
+    assert.equal(rendered.container.querySelectorAll(".production-icon").length, 5);
+    for (const button of rendered.container.querySelectorAll(".production-icon-button")) {
+      assert.ok(button.getAttribute("aria-label"));
+      assert.equal(button.getAttribute("aria-label"), button.getAttribute("title"));
+    }
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("production icon vocabulary is explicit and chrome/search do not draw one-off glyphs", async () => {
+  const icons = await read("src/production/ProductionIcon.tsx");
+  const chrome = await read("src/production/ProductionChrome.tsx");
+  const primitives = await read("src/production/ProductionPrimitives.tsx");
+  const styles = await read("src/production/styles.css");
+  assert.match(icons, /Readonly<Record<ProductionIconName, LucideIcon>>/);
+  assert.match(chrome, /<ProductionIcon className="nav-icon"/);
+  assert.doesNotMatch(chrome, /<svg|<path|<circle|<rect/);
+  assert.match(primitives, /<ProductionIcon name="search"/);
+  assert.doesNotMatch(styles, /\.production-search-icon::after/);
+});

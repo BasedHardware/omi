@@ -3,6 +3,7 @@ import type { RefreshPhase } from "@omi-core/domain";
 import { t } from "@omi-core/i18n";
 import type { QueueStatus } from "@omi-core/sync";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
+import { ProductionIcon, type ProductionIconName } from "./ProductionIcon.js";
 
 /**
  * Where the rows on this surface came from.
@@ -57,7 +58,7 @@ export function ProductionSearchField({
 }): React.JSX.Element {
   return (
     <label className={`production-search-field is-compact${className ? ` ${className}` : ""}`}>
-      <span className="production-search-icon" aria-hidden="true" />
+      <ProductionIcon name="search" className="production-search-icon" size={17} />
       <span className="visually-hidden">{label}</span>
       <input
         ref={inputRef}
@@ -322,5 +323,128 @@ export function ProductionFilterChips<Value extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+export function ProductionPageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <header className="production-page-header">
+      <div className="production-page-heading">
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h1>{title}</h1>
+        {description && <p className="production-page-description">{description}</p>}
+      </div>
+      {actions && <div className="production-page-actions">{actions}</div>}
+    </header>
+  );
+}
+
+export function ProductionSection({
+  title,
+  description,
+  actions,
+  children,
+  className = "",
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}): React.JSX.Element {
+  const titleId = `production-section-${useId().replaceAll(":", "")}`;
+  return (
+    <section className={`production-section${className ? ` ${className}` : ""}`} aria-labelledby={titleId}>
+      <header className="production-section-header">
+        <div>
+          <h2 id={titleId}>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {actions && <div className="production-section-actions">{actions}</div>}
+      </header>
+      <div className="production-section-content">{children}</div>
+    </section>
+  );
+}
+
+export function ProductionIconButton({
+  icon,
+  label,
+  tone = "neutral",
+  disabled = false,
+  onClick,
+}: {
+  icon: ProductionIconName;
+  label: string;
+  tone?: "neutral" | "primary" | "danger";
+  disabled?: boolean;
+  onClick?: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`production-icon-button tone-${tone}`}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <ProductionIcon name={icon} />
+    </button>
+  );
+}
+
+export function ProductionNotice({
+  tone,
+  title,
+  detail,
+  action,
+}: {
+  tone: "info" | "success" | "warning" | "error";
+  title: string;
+  detail?: string;
+  action?: ReactNode;
+}): React.JSX.Element {
+  const icon: ProductionIconName = tone === "success" ? "check" : tone === "warning" || tone === "error" ? "alert" : "inbox";
+  return (
+    <aside className={`production-notice tone-${tone}`}>
+      <ProductionIcon name={icon} />
+      <div className="production-notice-copy">
+        <strong>{title}</strong>
+        {detail && <p>{detail}</p>}
+      </div>
+      {action && <div className="production-notice-action">{action}</div>}
+    </aside>
+  );
+}
+
+export function ProductionEmptyState({
+  icon = "inbox",
+  title,
+  detail,
+  action,
+}: {
+  icon?: ProductionIconName;
+  title: string;
+  detail: string;
+  action?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <section className="production-empty-state">
+      <span className="production-empty-state-icon"><ProductionIcon name={icon} size={24} /></span>
+      <h2>{title}</h2>
+      <p>{detail}</p>
+      {action && <div className="production-empty-state-action">{action}</div>}
+    </section>
   );
 }

@@ -8,6 +8,7 @@ import {
   type ProductionCommandContext,
   type ProductionCommandId,
 } from "./command-registry.js";
+import { ProductionIcon, type ProductionIconName } from "./ProductionIcon.js";
 
 type Locale = string;
 // Chat, Settings and Listen are real routes (board ruling PR-7) but they are NOT yet
@@ -35,20 +36,19 @@ function paletteFocusableElements(root: HTMLElement): HTMLElement[] {
 }
 
 function ChromeIcon({ name }: { name: ChromeIconName }): React.JSX.Element {
-  const paths: Record<ChromeIconName, React.JSX.Element> = {
-    // PR #11117 makes Home the query shell, so its persistent destination is
-    // search-shaped rather than a second dashboard/house metaphor.
-    home: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></>,
-    library: <><path d="M4 4h4v16H4zM10 7h4v13h-4zM16 3h4v17h-4z" /></>,
-    tasks: <><path d="m4 7 2 2 3-4M11 7h9M4 14l2 2 3-4M11 14h9" /></>,
-    rewind: <><path d="M4 8V3m0 0h5M4 3l4 4" /><path d="M5 13a8 8 0 1 0 2-6" /><path d="M12 7v5l3 2" /></>,
-    apps: <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></>,
-    conversations: <><path d="M20 12a7 7 0 0 1-8 7l-4 2 1-4a7 7 0 1 1 11-5Z" /></>,
-    microphone: <><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6" /></>,
-    screen: <><rect x="3" y="4" width="18" height="13" rx="3" /><path d="M8 21h8M12 17v4" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
+  const iconByChromeName: Record<ChromeIconName, ProductionIconName> = {
+    // Home is the query shell, so its persistent destination remains search-shaped.
+    home: "search",
+    library: "library",
+    tasks: "tasks",
+    rewind: "history",
+    apps: "apps",
+    conversations: "conversations",
+    microphone: "microphone",
+    screen: "screen",
+    settings: "settings",
   };
-  return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{paths[name]}</svg>;
+  return <ProductionIcon className="nav-icon" name={iconByChromeName[name]} size={22} />;
 }
 
 function href(route: ProductionRoute): string {

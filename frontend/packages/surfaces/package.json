@@ -22,6 +22,7 @@
     "@omi-core/sync": "workspace:*",
     "@omi-core/tokens": "workspace:*",
     "@omi-core/wire-listen": "workspace:*",
+    "lucide-react": "1.24.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },
