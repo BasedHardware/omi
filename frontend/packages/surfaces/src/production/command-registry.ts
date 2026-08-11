@@ -32,6 +32,8 @@ export type ProductionCommandId =
   | "close-command-palette";
 
 export type TextEntryPolicy = "ignore" | "allow" | "text-only";
+/** Whether a command may run while focus is inside an interactive control. */
+export type InteractiveControlPolicy = "allow" | "ignore";
 export type CommandRepeatPolicy = "allow" | "ignore";
 
 export type CommandChord = {
@@ -58,6 +60,7 @@ export type ProductionCommand = {
   readonly chords?: readonly CommandChord[];
   readonly routeScope: ProductionRoute | "global";
   readonly textEntryPolicy: TextEntryPolicy;
+  readonly interactiveControlPolicy?: InteractiveControlPolicy;
   readonly repeatPolicy: CommandRepeatPolicy;
   readonly isEnabled: (context: ProductionCommandContext) => boolean;
   readonly invoke: (context: ProductionCommandContext, event?: KeyboardEvent) => void | Promise<void>;
@@ -133,6 +136,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chords: [{ key: "ArrowDown" }, { key: "ArrowUp" }],
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
       repeatPolicy: "allow",
     }),
     handlerCommand({
@@ -199,7 +203,20 @@ function normalizedKey(key: string): string {
 }
 
 export function isTextEntryTarget(target: EventTarget | null): boolean {
-  return typeof HTMLElement !== "undefined" && target instanceof HTMLElement && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+  return typeof Element !== "undefined" && target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+/**
+ * Focus on a nested action must remain with that action. In particular, plain
+ * ArrowUp/ArrowDown on a task card's check/edit/delete controls must not be
+ * reinterpreted as card navigation by the window-level command listener.
+ * Keep this separate from text-entry detection so commands intentionally
+ * allowed in fields (save/cancel/send/search) retain their existing policy.
+ */
+export function isInteractiveControlTarget(target: EventTarget | null): boolean {
+  return typeof Element !== "undefined" && target instanceof Element && Boolean(
+    target.closest("button, a, input, textarea, select, option, [contenteditable='true'], [role='button'], [role='link'], [role='textbox'], [role='combobox']"),
+  );
 }
 
 export function chordMatches(event: KeyboardEvent, chord: CommandChord): boolean {
@@ -242,6 +259,7 @@ export function dispatchProductionCommand(
     const textEntry = isTextEntryTarget(event.target);
     if (textEntry && command.textEntryPolicy === "ignore") continue;
     if (!textEntry && command.textEntryPolicy === "text-only") continue;
+    if (command.interactiveControlPolicy === "ignore" && isInteractiveControlTarget(event.target)) continue;
     if (event.repeat && command.repeatPolicy === "ignore") continue;
     if (!command.isEnabled(context)) continue;
     event.preventDefault();
