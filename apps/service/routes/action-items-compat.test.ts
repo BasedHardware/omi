@@ -159,6 +159,7 @@ const bootComposition = (
     readonly owner?: string;
     readonly now?: () => number;
     readonly ids?: readonly string[];
+    readonly createId?: () => string;
   } = {},
 ): {
   readonly service: LocalService;
@@ -179,7 +180,8 @@ const bootComposition = (
     stores,
     persistentQaStores: true,
     nowEpochMilliseconds: options.now ?? (() => NOW),
-    actionItemId: () => options.ids?.[nextId++] ?? `compat-proof-${String(nextId).padStart(3, "0")}`,
+    actionItemId: options.createId
+      ?? (() => options.ids?.[nextId++] ?? `compat-proof-${String(nextId).padStart(3, "0")}`),
   });
   return Object.freeze({ service, stores, close: () => db.close() });
 };
@@ -899,6 +901,12 @@ describe("legacy action-items historical request validation", () => {
         expect(booted.stores.tasks.readRecord(OWNER, "compat-early-year")?.content["dueAt"])
           .toBe(Date.parse("0001-01-02T03:04:05.000Z"));
 
+        const lowerSafeOffset = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+          due_at: "0001-01-01T01:00:00+01:00",
+        });
+        expect(lowerSafeOffset.status).toBe(200);
+        expect((await json(lowerSafeOffset))["due_at"]).toBe("0001-01-01T00:00:00.000Z");
+
         const year99 = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
           due_at: "0099-06-07T08:09:10Z",
         });
@@ -918,6 +926,12 @@ describe("legacy action-items historical request validation", () => {
         });
         expect(year9999.status).toBe(200);
         expect((await json(year9999))["due_at"]).toBe("9999-12-31T23:59:59.999Z");
+
+        const upperSafeOffset = await request(booted.service, `${PATH}/compat-early-year`, "PATCH", {
+          due_at: "9999-12-31T22:59:59-01:00",
+        });
+        expect(upperSafeOffset.status).toBe(200);
+        expect((await json(upperSafeOffset))["due_at"]).toBe("9999-12-31T23:59:59.000Z");
 
         for (const dueAt of [
           "0000-01-01T00:00:00Z",
@@ -994,4 +1008,63 @@ describe("legacy action-items exact producer-evidence classification", () => {
       expect(evidenceCount(service)).toBe(1);
     }
   });
+});
+
+describe("legacy action-items normalized datetime year bounds", () => {
+  for (const composition of ["in-memory", "sqlite"] as const) {
+    test(`${composition}: crossing offsets refuse create and patch before clock, id, or store mutation`, async () => {
+      let clockSamples = 0;
+      let idSamples = 0;
+      const booted = bootComposition(composition, {
+        now: () => {
+          clockSamples += 1;
+          return NOW;
+        },
+        createId: () => {
+          idSamples += 1;
+          return "compat-normalized-bound";
+        },
+      });
+      try {
+        const crossingOffsets = [
+          "0001-01-01T00:00:00+01:00",
+          "9999-12-31T23:30:00-01:00",
+        ];
+        for (const dueAt of crossingOffsets) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, PATH, "POST", {
+            description: `crossing create ${dueAt}`,
+            due_at: dueAt,
+          });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+          expect(clockSamples).toBe(0);
+          expect(idSamples).toBe(0);
+        }
+
+        booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: "compat-normalized-bound",
+          content: canonicalBag("normalized bound"),
+        });
+        for (const dueAt of crossingOffsets) {
+          const before = storeBytes(booted.stores);
+          const response = await request(
+            booted.service,
+            `${PATH}/compat-normalized-bound`,
+            "PATCH",
+            { due_at: dueAt },
+          );
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+          expect(clockSamples).toBe(0);
+          expect(idSamples).toBe(0);
+        }
+      } finally {
+        booted.close();
+      }
+    });
+  }
 });

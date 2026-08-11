@@ -227,7 +227,10 @@ const parseIsoEpochMilliseconds = (value: unknown): number | undefined => {
   }
   const epoch = wall - offsetMinutes * 60_000;
   if (!Number.isSafeInteger(epoch)) return undefined;
-  const projected = new Date(epoch).toISOString();
+  const normalized = new Date(epoch);
+  const normalizedYear = normalized.getUTCFullYear();
+  if (normalizedYear < 1 || normalizedYear > 9_999) return undefined;
+  const projected = normalized.toISOString();
   return /^\d{4}-/.test(projected) ? epoch : undefined;
 };
 
