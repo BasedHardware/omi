@@ -24,7 +24,12 @@ extension ProactiveAssistantsPlugin {
     // with the user 18 times running. Fall back to capturing the active window here so the
     // probe tests the suggestion path rather than the capture pipeline's timing.
     let frame: CapturedFrame
-    if let latest = latestCapturedFrame {
+    // A cached frame predates the current exclusion list: the user can add an app to it
+    // after that app's frame was captured, and replaying it would leak what they just asked
+    // to be forgotten. Re-check against the list as it stands now, not as it stood then.
+    if let latest = latestCapturedFrame, SuggestionProbePrivacy.isExcluded(latest.appName) {
+      return ["outcome": "excluded_app"]
+    } else if let latest = latestCapturedFrame {
       frame = CapturedFrame(
         jpegData: latest.jpegData,
         appName: appOverride ?? latest.appName,
@@ -70,14 +75,27 @@ extension ProactiveAssistantsPlugin {
     appOverride: String?,
     windowTitleOverride: String?
   ) async -> CapturedFrame? {
-    let (activeApp, activeTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-    if let activeApp, SuggestionProbePrivacy.isExcluded(activeApp) { return nil }
+    let (beforeApp, beforeTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+    if let beforeApp, SuggestionProbePrivacy.isExcluded(beforeApp) { return nil }
     if activeAppIsExcluded { return nil }
+
     guard let jpeg = await ScreenCaptureService().captureActiveWindowAsync() else { return nil }
+
+    // Re-resolve after the shutter: the capture is async and the user can switch into an
+    // excluded app while it runs.
+    let (afterApp, afterTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+    guard
+      SuggestionProbePrivacy.allowsCapture(
+        before: beforeApp,
+        after: afterApp,
+        isExcluded: SuggestionProbePrivacy.isExcluded
+      )
+    else { return nil }
+
     return CapturedFrame(
       jpegData: jpeg,
-      appName: appOverride ?? activeApp ?? "Unknown",
-      windowTitle: windowTitleOverride ?? activeTitle,
+      appName: appOverride ?? afterApp ?? beforeApp ?? "Unknown",
+      windowTitle: windowTitleOverride ?? afterTitle ?? beforeTitle,
       frameNumber: 0
     )
   }
@@ -90,5 +108,25 @@ enum SuggestionProbePrivacy {
   static func isExcluded(_ appName: String) -> Bool {
     RewindSettings.shared.isAppExcluded(appName)
       || SuggestionAssistantSettings.shared.isAppExcluded(appName)
+  }
+
+  /// Whether a fallback capture may be used, given which app was frontmost before the
+  /// shutter and which was frontmost after it.
+  ///
+  /// Checking only before the capture leaves a window: `captureActiveWindowAsync()` is
+  /// async, and the user can cmd-tab into an excluded app while it runs, so the pixels that
+  /// come back can belong to an app that was never allowed. Both ends must be clear, and a
+  /// change of app across the capture is refused outright — at that point the frame cannot
+  /// be attributed to either app with confidence, and an unattributable frame is exactly
+  /// what must not reach a model.
+  static func allowsCapture(
+    before: String?,
+    after: String?,
+    isExcluded: (String) -> Bool
+  ) -> Bool {
+    if let before, isExcluded(before) { return false }
+    if let after, isExcluded(after) { return false }
+    if let before, let after, before != after { return false }
+    return true
   }
 }

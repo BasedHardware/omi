@@ -733,3 +733,41 @@ final class SuggestionProbePrivacyTests: XCTestCase {
     }
   }
 }
+
+/// `captureActiveWindowAsync()` is async, so checking exclusions only before the shutter
+/// leaves a window in which the user cmd-tabs into an excluded app and its pixels come back
+/// anyway. Both ends must be clear.
+final class SuggestionProbeCaptureRaceTests: XCTestCase {
+  private func allows(before: String?, after: String?, excluded: Set<String> = ["1Password"]) -> Bool {
+    SuggestionProbePrivacy.allowsCapture(
+      before: before, after: after, isExcluded: { excluded.contains($0) })
+  }
+
+  func testAllowsWhenBothEndsAreTheSameAllowedApp() {
+    XCTAssertTrue(allows(before: "Google Chrome", after: "Google Chrome"))
+  }
+
+  func testRefusesWhenTheAppWasExcludedBeforeTheCapture() {
+    XCTAssertFalse(allows(before: "1Password", after: "1Password"))
+  }
+
+  /// The race the reviewer caught: allowed at the shutter, excluded by the time the pixels
+  /// arrived.
+  func testRefusesWhenAnExcludedAppBecameFrontmostDuringTheCapture() {
+    XCTAssertFalse(allows(before: "Google Chrome", after: "1Password"))
+  }
+
+  /// Even between two permitted apps, a switch mid-capture means the frame cannot be
+  /// attributed with confidence — and an unattributable frame must not reach a model.
+  func testRefusesWhenTheAppChangedMidCaptureEvenIfBothAreAllowed() {
+    XCTAssertFalse(allows(before: "Google Chrome", after: "Warp"))
+  }
+
+  /// An unresolvable app name is not evidence of permission on the excluded side, but it
+  /// must not block an otherwise clean capture either.
+  func testUnknownAppNamesDoNotFabricateAMismatch() {
+    XCTAssertTrue(allows(before: nil, after: nil))
+    XCTAssertTrue(allows(before: "Google Chrome", after: nil))
+    XCTAssertFalse(allows(before: nil, after: "1Password"))
+  }
+}
