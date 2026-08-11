@@ -143,7 +143,8 @@ final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
     let attempts = 0;
     const probe = () => {
       const url = new URL(location.href);
-      const domain = url.searchParams.get("qa") || "";
+      const requestedQa = url.searchParams.get("qa") || "";
+      const domain = requestedQa === "memories-platform" ? "memories" : requestedQa;
       const wantedState = url.searchParams.get("state") || "";
       const theme = url.searchParams.get("theme") || "";
       const accessibility = url.searchParams.get("accessibility") || "none";
