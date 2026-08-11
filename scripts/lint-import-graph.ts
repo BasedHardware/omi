@@ -472,6 +472,7 @@ const sourceImpactLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']
 const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/durable-memory-work-runner(?:\.ts)?["']/;
 const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
 const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
+const productConflictCoreImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/product-conflict(?:\.ts)?["']/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -548,6 +549,11 @@ for (const file of files(root)) {
     if (shown.startsWith("apps/service/routes/") && productProjectionMaterializerImport.test(code)) {
       failures.push(
         `${shown}: product projection materialization is worker-only; routes consume authorized projections through the registered read composition`,
+      );
+    }
+    if (shown.startsWith("apps/") && productConflictCoreImport.test(code)) {
+      failures.push(
+        `${shown}: product conflict references are internal structural records; no application composition, route, or public lifecycle is ratified`,
       );
     }
   }

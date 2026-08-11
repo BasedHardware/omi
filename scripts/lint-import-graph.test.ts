@@ -124,6 +124,22 @@ test("source-impact core is private to the final-fenced composition", () => {
   }
 });
 
+test("product conflict references have no application composition or public lifecycle", () => {
+  const routeFixture = join(platformRoot, "apps", "service", "routes", "product-conflict-tripwire-fixture.ts");
+  try {
+    writeFileSync(routeFixture, [
+      'import { buildProductConflictOccurrence } from "../../../core/retrieve/product-conflict";',
+      "export const bypass = buildProductConflictOccurrence;",
+    ].join("\n"));
+    const rejected = runLint();
+    expect(rejected.status).not.toBe(0);
+    expect(`${rejected.stdout}${rejected.stderr}`)
+      .toContain("product conflict references are internal structural records");
+  } finally {
+    rmSync(routeFixture, { force: true });
+  }
+});
+
 test("consolidation work has one composition and no route-level executor", () => {
   const routeFixture = join(platformRoot, "apps", "service", "routes", "consolidation-tripwire-fixture.ts");
   const workerFixture = join(platformRoot, "apps", "service", "workers", "consolidation-caller-fixture.ts");
