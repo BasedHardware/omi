@@ -39,27 +39,51 @@ Your server should authenticate the visitor, validate the tenant, bound the quer
 
 ## postMessage
 
-If the frame needs to resize or notify the parent, use typed events and verify `event.origin` before accepting them. Send UI state such as `omi.memory.embed.ready` or `omi.memory.embed.resize`; do not send bearer tokens or unrestricted memory payloads.
+If the frame needs to resize or notify the parent, use typed events. Send UI state such as `omi.memory.embed.ready` or `omi.memory.embed.resize`; do not send unrestricted memory payloads.
 
-A frame sandboxed without `allow-same-origin` posts from the opaque origin `"null"`, so check for that value explicitly rather than loosening the sandbox:
+**Validate the sender, not the origin.** A frame sandboxed without `allow-same-origin` has an opaque origin, so every message it posts carries `event.origin === "null"` — never your Omi origin. An origin allowlist therefore cannot tell the frame apart from any other opaque-origin sender, and comparing against an `https://` literal silently drops every event. The effective control is `event.source === frame.contentWindow`, because only that frame's window can be its own `contentWindow`.
 
 ```js
-const OMI_ORIGIN = 'https://h.omi.me';
+const frame = document.querySelector('#omi-memory');
 
 window.addEventListener('message', (event) => {
-  if (event.origin !== OMI_ORIGIN && event.origin !== 'null') return;
+  // The sandboxed frame's origin is the opaque 'null', so validate the SENDER.
   if (event.source !== frame.contentWindow) return;
   if (event.data?.type !== 'omi.memory.embed.resize') return;
   frame.style.height = `${Number(event.data.height) || 560}px`;
 });
 ```
 
+## Sessions
+
+The same opaque origin that makes origin checks useless also denies the frame cookies, `localStorage`, and IndexedDB, so the framed widget **cannot establish a session on its own**. Do not relax the sandbox to fix this: a document granted both `allow-scripts` and `allow-same-origin` can rewrite its own `sandbox` attribute and escape the restriction entirely.
+
+Instead the host page owns the credential. The frame asks for one with `omi.memory.embed.session-request`; the host mints a short-lived token server-side for the visitor it has already authenticated and replies with `omi.memory.embed.session`:
+
+```js
+window.addEventListener('message', async (event) => {
+  if (event.source !== frame.contentWindow) return;
+  if (event.data?.type !== 'omi.memory.embed.session-request') return;
+
+  // Minted server-side for the visitor you already authenticated.
+  const { token } = await fetch('/api/omi-session').then((r) => r.json());
+  frame.contentWindow.postMessage(
+    { type: 'omi.memory.embed.session', token },
+    '*', // an opaque-origin frame cannot be addressed by origin
+  );
+});
+```
+
+The frame holds the token in memory for its lifetime only and never writes it to durable storage.
+
 ## Credentials
 
-The embedded surface must never hold a durable Omi API key. Issue MCP keys at
-`/memory-platform/keys`, keep them in your server's secret store, and let the proxy
-attach them. The raw key is shown exactly once, at creation; after that only its prefix
-is visible.
+The embedded surface must never hold a durable Omi API key. `/v1/memory/platform/*`
+authenticates with Firebase ID tokens and rejects MCP and Developer key families, so
+there is no durable server key for it — forward the visitor's own refreshable session.
+MCP keys, issued at `/memory-platform/keys`, are for MCP clients; keep them in your
+server's secret store. The raw key is shown exactly once, at creation; after that only
+its prefix is visible.
 
 ## zkr and local state
 

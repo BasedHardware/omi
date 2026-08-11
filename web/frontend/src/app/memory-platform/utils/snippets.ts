@@ -23,10 +23,12 @@ export const boundsSummary = `query ≤ ${
   MEMORY_PLATFORM_LIMITS.minOffset
 }–${MEMORY_PLATFORM_LIMITS.maxOffset.toLocaleString('en-US')}`;
 
+export const MCP_ENDPOINT = `${API_HOST}/v1/mcp/sse`;
+
 export const mcpClientSnippet = `{
   "mcpServers": {
     "omi": {
-      "url": "https://api.omi.me/mcp",
+      "url": "${MCP_ENDPOINT}",
       "headers": { "Authorization": "Bearer \${OMI_MCP_KEY}" }
     }
   }
@@ -37,6 +39,7 @@ export const mcpClientSnippet = `{
  * framed document granted both can remove its own sandbox attribute.
  */
 export const iframeSnippet = `<iframe
+  id="omi-memory"
   src="https://your-app.example/omi-memory"
   title="Omi memory"
   loading="lazy"
@@ -45,15 +48,21 @@ export const iframeSnippet = `<iframe
   style="width:100%;height:560px;border:0"
 ></iframe>`;
 
+// /v1/memory/platform/* authenticates with get_current_user_uid, which accepts
+// only Firebase ID tokens — it rejects MCP and Developer key families. There is
+// no durable server key for this route, so the proxy forwards the *visitor's*
+// own refreshable session rather than a static credential.
 export const proxySnippet = `// app/api/memory/route.ts — runs on your server, never in the browser
 export async function GET(request: Request) {
-  const session = await requireSession(request); // your auth, your tenant check
+  // Your auth and your tenant check. omiIdToken is the visitor's current Omi
+  // Firebase ID token, refreshed by your session layer — never a durable key.
+  const { omiIdToken } = await requireSession(request);
   const q = new URL(request.url).searchParams.get('q') ?? '';
 
   const upstream = await fetch(
     '${API_HOST}/v1/memory/platform/search?' +
       new URLSearchParams({ query: q.slice(0, ${MEMORY_PLATFORM_LIMITS.maxQueryLength}), limit: '20' }),
-    { headers: { Authorization: \`Bearer \${process.env.OMI_SERVER_KEY}\` } },
+    { headers: { Authorization: \`Bearer \${omiIdToken}\` } },
   );
 
   return new Response(await upstream.text(), {
@@ -62,11 +71,30 @@ export async function GET(request: Request) {
   });
 }`;
 
-export const postMessageSnippet = `const OMI_ORIGIN = 'https://h.omi.me';
+// The sandboxed frame has an opaque origin, so every message it sends carries
+// event.origin === 'null'. An origin allowlist cannot identify the sender;
+// event.source can, because only that frame's window is its contentWindow.
+export const postMessageSnippet = `const frame = document.querySelector('#omi-memory');
 
 window.addEventListener('message', (event) => {
-  if (event.origin !== OMI_ORIGIN) return;          // validate the origin
+  // The sandboxed frame's origin is the opaque 'null', so validate the SENDER.
+  if (event.source !== frame.contentWindow) return;
   const data = event.data;
+
+  // Hand the frame a session it cannot obtain itself: no storage, no cookies.
+  if (data?.type === 'omi.memory.embed.session-request') {
+    // Minted server-side for the visitor you already authenticated.
+    fetch('/api/omi-session')
+      .then((response) => response.json())
+      .then(({ token }) => {
+        frame.contentWindow.postMessage(
+          { type: 'omi.memory.embed.session', token },
+          '*', // an opaque-origin frame cannot be addressed by origin
+        );
+      });
+    return;
+  }
+
   if (data?.type !== 'omi.memory.embed.resize') return;
   frame.style.height = \`\${Number(data.height) || 560}px\`;
 });`;
@@ -76,7 +104,7 @@ export const cspSnippet = `Content-Security-Policy: frame-ancestors https://your
 export const securityChecklist = [
   'Use a server-side proxy or a short-lived, narrowly scoped session.',
   'Never place Omi API keys in source, browser storage, or public environment variables.',
-  'Validate origin on every postMessage event and send only typed UI events.',
+  'Validate event.source on every postMessage event; a sandboxed frame reports origin "null".',
   'Set frame-ancestors to the exact parent origins you control.',
   'Keep writes explicit and user-initiated; default to memories.read.',
   'Treat local zkr or SQLite as a cache or pending buffer, never as authority.',
