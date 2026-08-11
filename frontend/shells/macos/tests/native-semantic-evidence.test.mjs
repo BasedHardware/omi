@@ -80,6 +80,7 @@ test(
         assert.equal(document.axTrusted, true);
         assert.equal(document.evidenceClass, "supplementary_observation");
         assert.equal(document.matrixEligible, false);
+        assert.equal(document.domainLandmarkFound, false);
         assert.ok(document.windows.every((window) => !Object.hasOwn(window, "title")));
         assert.ok(document.nodes.every((node) => !Object.hasOwn(node, "title") && !Object.hasOwn(node, "description") && !Object.hasOwn(node, "value") && !Object.hasOwn(node, "focusWindowContext")));
         assert.deepEqual(document.keys, []);
