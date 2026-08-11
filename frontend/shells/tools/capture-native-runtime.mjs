@@ -174,7 +174,7 @@ export function validateRuntimeArtifact(document, manifest) {
   return document;
 }
 
-function probeScript(manifest) {
+export function runtimeProbeScript(manifest) {
   // Return one JSON string, rather than a JS object, because the AppKit shell's
   // diagnostic line is intentionally text-only.  Only allowlisted DOM state or
   // computed style values are retained; labels, values, and credentials never
@@ -219,7 +219,7 @@ function runMac(manifest, outputDir) {
   // deterministic digest instead of weakening that native-shell boundary.
   env.OMI_APP_NAME = macRuntimeAppName(manifest.run_id);
   env.OMI_SURFACE_PORT = "5290"; env.OMI_FIXTURE_CAPTURE_WAIT_SECONDS = "5";
-  env.OMI_PROBE_JS = probeScript(manifest); env.OMI_PROBE_DELAY = "5"; env.OMI_PROBE_SETTLE = "1";
+  env.OMI_PROBE_JS = runtimeProbeScript(manifest); env.OMI_PROBE_DELAY = "5"; env.OMI_PROBE_SETTLE = "1";
   env.OMI_PROBE_PENDING_VALUE = "OMI_RUNTIME_PENDING";
   env.OMI_PROBE_MAX_ATTEMPTS = "50";
   env.OMI_PROBE_RETRY_INTERVAL = "0.1";
@@ -235,7 +235,7 @@ function runMac(manifest, outputDir) {
   // The PNG exists only to drive the fixture launcher's bounded exit path; it
   // is deliberately not retained or presented as runtime evidence.
   rmSync(screenshot, { force: true });
-  return { marker, started, finished, argv: ["/bin/bash", launcher, ...args], stdout: result.stdout || "", stderr: result.stderr || "", probe: probeScript(manifest) };
+  return { marker, started, finished, argv: ["/bin/bash", launcher, ...args], stdout: result.stdout || "", stderr: result.stderr || "", probe: runtimeProbeScript(manifest) };
 }
 
 function inputEntry(file, relative) {
