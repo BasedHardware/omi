@@ -22,8 +22,6 @@ from routers import (
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
 
-load_backend_env()
-
 
 def _initialize_firebase_admin() -> None:
     """Initialize token verification without selecting the Google data project.
@@ -62,9 +60,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await close_all_clients()
 
 
-app = FastAPI(lifespan=lifespan)
-
-
 def _cors_allowed_origins_from_env() -> list[str]:
     origins = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
     if '*' in origins:
@@ -72,21 +67,30 @@ def _cors_allowed_origins_from_env() -> list[str]:
     return origins
 
 
-_cors_allowed_origins = _cors_allowed_origins_from_env()
+def _build_app() -> FastAPI:
+    app = FastAPI(lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_allowed_origins_from_env(),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.include_router(desktop_core.router)
+    app.include_router(auth.router)
+    app.include_router(desktop_agent_vm.router)
+    app.include_router(desktop_chat.router)
+    app.include_router(desktop_proxy.router)
+    app.include_router(desktop_realtime.router)
+    app.include_router(desktop_screen_crisp.router)
+    app.include_router(desktop_tts_updates.router)
+    app.include_router(desktop_deprecated.router)
+    return app
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_allowed_origins,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.include_router(desktop_core.router)
-app.include_router(auth.router)
-app.include_router(desktop_agent_vm.router)
-app.include_router(desktop_chat.router)
-app.include_router(desktop_proxy.router)
-app.include_router(desktop_realtime.router)
-app.include_router(desktop_screen_crisp.router)
-app.include_router(desktop_tts_updates.router)
-app.include_router(desktop_deprecated.router)
+
+def create_app() -> FastAPI:
+    load_backend_env()
+    return _build_app()
+
+
+app = _build_app()
