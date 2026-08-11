@@ -84,7 +84,7 @@ for ((i = 1; i <= ready_timeout; i++)); do
   # In acceptance-exit mode, preserve a child that fails before readiness as
   # the authoritative exit status rather than turning it into a generic curl
   # timeout. A zombie is still waitable, so inspect its process state first.
-  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
+  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" || -n "${OMI_PROBE_EXIT:-}" ]]; then
     child_state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
     if [[ -z "$child_state" || "$child_state" == Z* ]]; then
       set +e
@@ -98,7 +98,7 @@ for ((i = 1; i <= ready_timeout; i++)); do
   sleep 1
 done
 if (( ready == 0 )); then
-  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
+  if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" || -n "${OMI_PROBE_EXIT:-}" ]]; then
     child_state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
     if [[ -z "$child_state" || "$child_state" == Z* ]]; then
       set +e
@@ -122,11 +122,12 @@ if [[ -n "${OMI_SURFACE_PROFILE:-}" ]]; then
   echo "profile: URL namespace provided (value withheld)"
 fi
 
-# Interactive mode intentionally returns after HTTP readiness. Acceptance-exit
-# mode is different: the app emits its host-observed verdict and exits itself;
-# wait for that exact child status, but bound the wait so a wedged probe cannot
-# leave CI hanging. The watchdog targets only this PID and is reaped below.
-if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" ]]; then
+# Interactive mode intentionally returns after HTTP readiness. Acceptance and
+# fixture-probe modes are different: the app emits its host-observed verdict or
+# snapshot and exits itself; wait for that exact child status, but bound the
+# wait so a wedged probe cannot leave CI hanging. The watchdog targets only this
+# PID and is reaped below.
+if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" || -n "${OMI_PROBE_EXIT:-}" ]]; then
   timeout_marker="$out/${app_name}.acceptance-timeout.$$"
   rm -f "$timeout_marker"
   (

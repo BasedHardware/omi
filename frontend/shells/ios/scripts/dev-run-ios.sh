@@ -29,11 +29,15 @@ app="$here/app"
 
 api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4851}"
 fixture=""
+fixture_state="normal"
+fixture_theme="light"
+fixture_accessibility="none"
 device=""
 accept=0
 route="home"
 evidence_out=""
 run_id_arg=""
+capture_out=""
 launched=0
 bundle_id="me.omi.proto.omiWebviewProto"
 evidence_tmp=""
@@ -53,10 +57,14 @@ while (( $# )); do
   case "$1" in
     --api) api_base="${2:?--api needs a URL}"; shift 2 ;;
     --fixture) fixture="${2:?--fixture needs a name}"; shift 2 ;;
+    --state) fixture_state="${2:?--state needs a lifecycle state}"; shift 2 ;;
+    --theme) fixture_theme="${2:?--theme needs light or dark}"; shift 2 ;;
+    --accessibility) fixture_accessibility="${2:?--accessibility needs a mode}"; shift 2 ;;
     --device) device="${2:?--device needs a udid}"; shift 2 ;;
     --route) route="${2:?--route needs a production route}"; shift 2 ;;
     --evidence-out) evidence_out="${2:?--evidence-out needs a host path}"; shift 2 ;;
     --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
+    --capture-out) capture_out="${2:?--capture-out needs a PNG path}"; shift 2 ;;
     --accept) accept=1; shift ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
@@ -79,8 +87,54 @@ if [[ -n "$evidence_out" ]]; then
   }
 fi
 if [[ -n "$evidence_out" && -z "$run_id_arg" ]] || [[ -z "$evidence_out" && -n "$run_id_arg" ]]; then
-  echo "ERROR: --evidence-out and --run-id must be supplied together." >&2
+  if [[ -z "$fixture" || -z "$capture_out" ]]; then
+    echo "ERROR: --evidence-out and --run-id must be supplied together." >&2
+    exit 2
+  fi
+fi
+
+capture_mode=0
+if [[ -n "$capture_out" ]]; then
+  capture_mode=1
+fi
+if [[ -n "$capture_out" && -z "$fixture" ]]; then
+  echo "ERROR: --capture-out is fixture-only; supply --fixture." >&2
   exit 2
+fi
+if (( capture_mode )); then
+  if [[ -z "$fixture" || -z "$capture_out" || -z "$run_id_arg" ]]; then
+    echo "ERROR: fixture capture requires --fixture, --capture-out, and --run-id." >&2
+    exit 2
+  fi
+  if [[ -n "$evidence_out" || $accept -eq 1 ]]; then
+    echo "ERROR: fixture capture cannot be combined with consumer evidence or --accept." >&2
+    exit 2
+  fi
+  if [[ ! "$fixture" =~ ^(memories|tasks|conversations|folders|listen|chat|settings)$ ]]; then
+    echo "ERROR: unknown fixture domain '$fixture'." >&2
+    exit 2
+  fi
+  if [[ ! "$fixture_state" =~ ^(loading|empty|ready|error|offline|busy|complete|cancelled|normal)$ ]]; then
+    echo "ERROR: unknown fixture state '$fixture_state'." >&2
+    exit 2
+  fi
+  if [[ "$fixture_theme" != "light" && "$fixture_theme" != "dark" ]]; then
+    echo "ERROR: fixture theme must be light or dark." >&2
+    exit 2
+  fi
+  if [[ ! "$fixture_accessibility" =~ ^(none|keyboard|voiceover|high_contrast|reduced_motion|reduced_transparency|rtl|text_scale_200)$ ]]; then
+    echo "ERROR: unknown fixture accessibility mode '$fixture_accessibility'." >&2
+    exit 2
+  fi
+  if [[ ! "$run_id_arg" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]]; then
+    echo "ERROR: fixture capture run id is unsafe." >&2
+    exit 2
+  fi
+  if [[ ! "$capture_out" = /* || ! -d "$(dirname "$capture_out")" ]]; then
+    echo "ERROR: --capture-out must be an absolute path in an existing directory." >&2
+    exit 2
+  fi
+  rm -f -- "$capture_out"
 fi
 
 case "$route" in
@@ -146,8 +200,14 @@ if [[ -n "$fixture" ]]; then
     echo "ERROR: consumer evidence requires LIVE mode; --fixture is forbidden." >&2
     exit 2
   fi
-  defines+=( --dart-define=SURFACE_QUERY="qa=${fixture}&state=normal&platform=mobile" )
-  echo "MODE: FIXTURE (qa=${fixture}) — bridge is NOT exercised; no backend traffic."
+  if (( capture_mode )); then
+    defines+=( --dart-define=SURFACE_QUERY="qa=${fixture}&polish=1&state=${fixture_state}&theme=${fixture_theme}&platform=mobile&accessibility=${fixture_accessibility}" )
+  else
+    # Preserve the established interactive fixture contract; polished matrix
+    # coordinates are explicit capture-only inputs.
+    defines+=( --dart-define=SURFACE_QUERY="qa=${fixture}&state=normal&platform=mobile" )
+  fi
+  echo "MODE: FIXTURE (qa=${fixture}, state=${fixture_state}) — bridge is NOT exercised; no backend traffic."
   echo "      Nothing seen in this mode is evidence about the backend."
 else
   run_id="${run_id_arg:-${OMI_RUN_CLIENT_ID:-run-ios-$(date -u +%Y%m%dT%H%M%SZ)-$$}}"
@@ -213,8 +273,31 @@ fi
 ( cd "$here" && "$node_bin" tools/build-surfaces-bundle.mjs )
 
 cd "$app"
-if [[ -z "$evidence_out" ]]; then
+if [[ -z "$evidence_out" && -z "$capture_out" ]]; then
   exec "$flutter_bin" run -d "$device" "${defines[@]}"
+fi
+
+if [[ -n "$capture_out" ]]; then
+  echo "CAPTURE: build -> install -> launch -> simulator screenshot"
+  "$flutter_bin" build ios --simulator --debug "${defines[@]}"
+  app_bundle="$app/build/ios/iphonesimulator/Runner.app"
+  if [[ ! -d "$app_bundle" ]]; then
+    echo "ERROR: Flutter build did not produce $app_bundle" >&2
+    exit 1
+  fi
+  xcrun simctl install "$device" "$app_bundle"
+  xcrun simctl launch "$device" "$bundle_id" >/dev/null
+  launched=1
+  wait_seconds="${OMI_FIXTURE_CAPTURE_WAIT_SECONDS:-5}"
+  if [[ ! "$wait_seconds" =~ ^[0-9]+$ ]] || (( wait_seconds < 1 || wait_seconds > 30 )); then
+    echo "ERROR: OMI_FIXTURE_CAPTURE_WAIT_SECONDS must be 1..30." >&2
+    exit 2
+  fi
+  sleep "$wait_seconds"
+  xcrun simctl io "$device" screenshot "$capture_out" >/dev/null
+  [[ -s "$capture_out" ]] || { echo "ERROR: simulator did not write $capture_out" >&2; exit 1; }
+  echo "CAPTURE: wrote $capture_out"
+  exit 0
 fi
 
 echo "EVIDENCE: build -> install -> launch -> collect native result"
