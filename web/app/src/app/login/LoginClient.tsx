@@ -164,7 +164,7 @@ export function LoginClient() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
         >
-          <div className="w-full max-w-xs flex flex-col items-center">
+          <div className="relative flex w-full max-w-xs flex-col items-center">
             {/* Headline */}
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
@@ -230,7 +230,7 @@ export function LoginClient() {
             </div>
 
             {/* Reserves the space the pinned mark used to occupy in flow. */}
-            <div aria-hidden="true" className="mb-8 hidden h-16 w-16 sm:block" />
+            <div aria-hidden="true" className="mb-16 hidden h-16 w-16 sm:block" />
 
             {/* Auth buttons */}
             <motion.div
@@ -245,7 +245,7 @@ export function LoginClient() {
                 disabled={isSigningIn !== null || signInUnavailable}
                 aria-label="Sign in with Apple"
                 className={cn(
-                  'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
+                  'flex h-12 w-full items-center justify-center gap-3 rounded-lg px-4',
                   'bg-black text-white font-medium border border-white/10',
                   'transition-all duration-150',
                   'hover:bg-gray-900',
@@ -271,7 +271,7 @@ export function LoginClient() {
                 disabled={isSigningIn !== null || signInUnavailable}
                 aria-label="Sign in with Google"
                 className={cn(
-                  'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
+                  'flex h-12 w-full items-center justify-center gap-3 rounded-lg px-4',
                   'bg-white text-black font-medium',
                   'transition-all duration-150',
                   'hover:bg-gray-100',
@@ -307,7 +307,11 @@ export function LoginClient() {
               </button>
             </motion.div>
 
-            <div aria-live="polite" className="mt-3 min-h-[52px] w-full">
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-x-0 top-full mt-3 h-[72px] w-full"
+            >
               {statusMessage && (
                 <motion.p
                   initial={{ opacity: 0 }}

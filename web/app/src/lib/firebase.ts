@@ -42,7 +42,7 @@ export const isFirebaseAuthConfigured =
 
 // Initialize Firebase (prevent multiple initializations)
 const app =
-  typeof window === 'undefined'
+  typeof window === 'undefined' || !isFirebaseAuthConfigured
     ? null
     : getApps().length === 0
       ? initializeApp(firebaseConfig)
