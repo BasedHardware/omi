@@ -101,6 +101,7 @@ export class DurableMemoryWorkTransitionError extends Error {
 
 const TOKEN = /^[\x21-\x7e]{1,256}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
+const MAX_ATTEMPTS = 100;
 const WORK_KINDS = new Set<DurableMemoryWorkKind>([
   "formation", "promotion", "identity_cluster", "predicate_batch",
 ]);
@@ -152,6 +153,12 @@ const positive = (value: unknown): number => {
   return value as number;
 };
 
+const boundedAttempts = (value: unknown): number => {
+  const attempts = positive(value);
+  if (attempts > MAX_ATTEMPTS) return failShape();
+  return attempts;
+};
+
 const safeAdd = (left: number, right: number): number => {
   const value = left + right;
   if (!Number.isSafeInteger(value)) throw new DurableMemoryWorkTransitionError("invalid_transition");
@@ -180,7 +187,7 @@ const acceptedFields = (value: unknown): AcceptedDurableMemoryWork => {
     input_digest: digest(input["input_digest"]),
     execution_contract_digest: digest(input["execution_contract_digest"]),
     accepted_at_event_time: nonnegative(input["accepted_at_event_time"]),
-    max_attempts: positive(input["max_attempts"]),
+    max_attempts: boundedAttempts(input["max_attempts"]),
   });
 };
 

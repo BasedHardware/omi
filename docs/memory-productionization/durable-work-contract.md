@@ -23,6 +23,10 @@ digest. A changed input, frontier, model/prompt/policy/code/schema contract, or 
 gets different work identity. Raw transcript, memory, model output, query, provider
 error, or prompt text is never job metadata.
 
+Attempt budgets are structurally bounded to 1–100. Strategy-specific production values
+remain versioned execution-contract decisions; neither a caller nor an environment
+variable can select an unbounded retry loop.
+
 P3 initially supports four closed work kinds:
 
 - `formation`;
@@ -70,6 +74,12 @@ Later P3 migrations and the real adapter must make each of these one transaction
 Outbox rows contain only a closed event kind, owner/work/result coordinates, and digest.
 They never copy model output or raw evidence. Delivery acknowledgement is idempotent and
 cannot make an uncommitted result visible.
+
+The inert first migration stores terminal outbox events but grants no application or
+worker access. A success event carries the exact result digest; a dead-letter event has
+no fabricated result digest and binds only the terminal state digest. Delivery lease and
+acknowledgement persistence land with the real worker adapter rather than guessing its
+runtime authority in SQL.
 
 ## Pre-registered tests
 

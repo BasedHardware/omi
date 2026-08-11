@@ -81,6 +81,11 @@ const expectedTables = [
   "memory_identity_revisions",
   "memory_identity_support",
   "memory_mention_revisions",
+  "memory_work_acceptances",
+  "memory_work_heads",
+  "memory_work_input_manifest",
+  "memory_work_outbox_events",
+  "memory_work_state_revisions",
   "memory_placement_artifacts",
   "memory_predicate_assertion_revisions",
   "memory_predicate_identities",
@@ -91,10 +96,10 @@ const expectedTables = [
   "platform_schema_migrations",
 ] as const;
 
-describe("P2.1 PostgreSQL schema contract", () => {
+describe("P2/P3 PostgreSQL schema contract", () => {
   test("contains exactly the reviewed expand-only surface", () => {
     expect(tables.map((table) => table.name).sort()).toEqual([...expectedTables].sort());
-    expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:job|outbox|proposition|projection|citation|search|embedding|experiment)/i);
+    expect(allSql).not.toMatch(/CREATE\s+(?:TABLE|TYPE).*\b(?:proposition|projection|citation|search|embedding|experiment)/i);
     expect(allSql).not.toMatch(/\b(?:pgvector|tsvector|CREATE\s+ROLE|server_version|postgres:\d+)\b/i);
     expect(allSql).not.toContain("ON DELETE CASCADE");
   });
@@ -227,5 +232,33 @@ describe("P2.1 PostgreSQL schema contract", () => {
     expect(updateGrants[1]).toContain("UPDATE (state, commit_id, finalized_at)");
     expect(updateGrants[1]).toContain("omi_memory.memory_idempotency_receipts");
     expect(grants.join("\n")).not.toContain("omi_memory.platform_schema_migrations TO omi_platform_application");
+    expect(grants.join("\n")).not.toMatch(/omi_memory\.memory_work_/);
+  });
+
+  test("persists only closed, fenced, content-safe P3 work and outbox coordinates", () => {
+    const acceptance = tables.find((table) => table.name === "memory_work_acceptances")!;
+    expect(acceptance.body).toContain("work_version = 'durable-memory-work-v1'");
+    expect(acceptance.body).toContain("'formation', 'promotion', 'identity_cluster', 'predicate_batch'");
+    expect(acceptance.body).toContain("accepted_work_digest text NOT NULL");
+    expect(acceptance.body).toContain("execution_contract_digest text NOT NULL");
+    expect(acceptance.body).toContain("max_attempts BETWEEN 1 AND 100");
+    expect(acceptance.body).toContain("lifecycle_state = 'active'");
+    expect(acceptance.body).toContain("deletion_epoch IS NULL");
+
+    const state = tables.find((table) => table.name === "memory_work_state_revisions")!;
+    expect(state.body).toContain("'pending', 'leased', 'retryable_failed', 'succeeded', 'dead_letter'");
+    expect(state.body).toContain("CHECK (lease_fence = attempt)");
+    expect(state.body).toContain("lease_expires_at_event_time > leased_at_event_time");
+    expect(state.body).toContain("next_eligible_event_time > failed_at_event_time");
+    expect(state.body).toContain("'successful', 'successful_empty'");
+    expect(state.body).not.toMatch(/model_output|last_error|error_message|raw_|payload|jsonb/i);
+
+    const outbox = tables.find((table) => table.name === "memory_work_outbox_events")!;
+    expect(outbox.body).toContain("'memory_work_succeeded', 'memory_work_dead_letter'");
+    expect(outbox.body).toContain("terminal_state_digest text NOT NULL");
+    expect(outbox.body).toContain("terminal_state IN ('succeeded', 'dead_letter')");
+    expect(outbox.body).toContain("terminal_state = 'succeeded' AND result_digest IS NOT NULL");
+    expect(outbox.body).toContain("terminal_state = 'dead_letter' AND result_digest IS NULL");
+    expect(outbox.body).not.toMatch(/payload|body|model|prompt|evidence|query|answer|error/i);
   });
 });

@@ -42,6 +42,7 @@ test("P3 accepted work is exact, frozen, digest-bound, and contains no raw outpu
   expect(() => acceptDurableMemoryWork({ ...accepted(), extra: true } as never)).toThrow(expectCode("invalid_job"));
   expect(() => acceptDurableMemoryWork({ ...accepted(), input_digest: "raw transcript" })).toThrow(expectCode("invalid_job"));
   expect(() => acceptDurableMemoryWork({ ...accepted(), max_attempts: 0 })).toThrow(expectCode("invalid_job"));
+  expect(() => acceptDurableMemoryWork({ ...accepted(), max_attempts: 101 })).toThrow(expectCode("invalid_job"));
   const accessor = accepted() as unknown as Record<string, unknown>;
   Object.defineProperty(accessor, "job_id", { enumerable: true, get: () => { throw new Error("must not run"); } });
   expect(() => acceptDurableMemoryWork(accessor as never)).toThrow(expectCode("invalid_job"));
