@@ -9,6 +9,7 @@ import {
   macRuntimeAppName,
   parseMacProbe,
   runtimeProbeScript,
+  runtimeFixtureName,
   validateHostMarker,
   validateManifest,
 } from "./capture-native-runtime.mjs";
@@ -50,6 +51,8 @@ test("Memories runtime binds the platform fixture alias to the normalized domain
     surface_query: "polish=1&qa=memories-platform&state=busy&platform=desktop&theme=dark&width=regular&accessibility=none&locale=en-US",
   });
   assert.doesNotThrow(() => validateManifest(memories));
+  assert.equal(runtimeFixtureName(memories.domain), "memories-platform");
+  assert.equal(runtimeFixtureName("chat"), "chat");
   const probe = runtimeProbeScript(memories);
   assert.match(probe, /expectedQa = "memories-platform"/);
   assert.match(probe, /domain:expectedDomain/);

@@ -67,6 +67,7 @@ const valuePattern = /^[A-Za-z0-9][A-Za-z0-9 ._():,/%+-]{0,255}$/;
 const secretPattern = /(?:api[_-]?key|authorization|bearer|password|secret|access[_-]?token|cookie|private[_-]?key)/i;
 
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
+export function runtimeFixtureName(domain) { return domain === "memories" ? "memories-platform" : domain; }
 function stable(value) { return `${JSON.stringify(value)}\n`; }
 function canonicalValue(value) {
   if (Array.isArray(value)) return value.map(canonicalValue);
@@ -122,7 +123,7 @@ export function validateManifest(manifest) {
   if (typeof manifest.surface_query !== "string" || manifest.surface_query.length < 1 || manifest.surface_query.length > 512) throw new Error("surface_query must be a bounded string");
   const query = new URLSearchParams(manifest.surface_query);
   const queryKeys = [...query.keys()].sort();
-  const expectedQa = manifest.domain === "memories" ? "memories-platform" : manifest.domain;
+  const expectedQa = runtimeFixtureName(manifest.domain);
   if (queryKeys.join(",") !== "accessibility,locale,platform,polish,qa,state,theme,width" || query.get("polish") !== "1" || query.get("qa") !== expectedQa || query.get("state") !== manifest.state || query.get("theme") !== manifest.theme || query.get("width") !== manifest.width || query.get("accessibility") !== manifest.accessibility || query.get("locale") !== "en-US" || query.get("platform") !== (manifest.shell === "ios" ? "mobile" : "desktop")) throw new Error("surface_query does not match the runtime coordinate");
   return manifest;
 }
@@ -181,7 +182,7 @@ export function runtimeProbeScript(manifest) {
   // computed style values are retained; labels, values, and credentials never
   // cross the shell boundary.
   const domain = JSON.stringify(manifest.domain);
-  const qa = JSON.stringify(manifest.domain === "memories" ? "memories-platform" : manifest.domain);
+  const qa = JSON.stringify(runtimeFixtureName(manifest.domain));
   const access = JSON.stringify(manifest.accessibility);
   const state = JSON.stringify(manifest.state);
   const theme = JSON.stringify(manifest.theme);
@@ -227,7 +228,7 @@ function runMac(manifest, outputDir) {
   env.OMI_PROBE_MAX_ATTEMPTS = "50";
   env.OMI_PROBE_RETRY_INTERVAL = "0.1";
   env.OMI_ACCEPTANCE_WAIT_SECONDS = "30";
-  const args = ["--fixture", manifest.domain, "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", screenshot, "--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height)];
+  const args = ["--fixture", runtimeFixtureName(manifest.domain), "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", screenshot, "--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height)];
   const started = new Date();
   const result = spawnSync("/bin/bash", [launcher, ...args], { cwd: coreRoot, env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
   const finished = new Date();
