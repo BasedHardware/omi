@@ -13,6 +13,7 @@ const APP = "app:desktop";
 const CAPABILITY = "memories.write";
 
 const identity = (overrides: Record<string, unknown> = {}) => ({
+  firebase_project_id: "omi-fixture-project",
   firebase_uid: "firebase-user-alice",
   authentication_strength: "firebase-id-token",
   expires_at_epoch_seconds: 400,
@@ -21,6 +22,7 @@ const identity = (overrides: Record<string, unknown> = {}) => ({
 
 const authorizationRow = (overrides: Record<string, unknown> = {}) => ({
   status: "current",
+  firebase_project_id: "omi-fixture-project",
   firebase_uid: "firebase-user-alice",
   principal_id: "principal:alice",
   account_id: ACCOUNT,
@@ -121,6 +123,7 @@ describe("single Firebase application-authorization composition", () => {
     const result = await fixture.authorizer.authorize("header.payload.signature", NOW);
     expect(fixture.order).toEqual(["identity", "authorization", "control"]);
     expect(fixture.requests).toEqual([{
+      firebase_project_id: "omi-fixture-project",
       firebase_uid: "firebase-user-alice",
       application_id: APP,
       capability: CAPABILITY,
@@ -187,6 +190,7 @@ describe("single Firebase application-authorization composition", () => {
     const candidates: unknown[] = [
       { status: "absent" },
       { status: "current" },
+      authorizationRow({ firebase_project_id: "other-project" }),
       authorizationRow({ firebase_uid: "other-user" }),
       authorizationRow({ principal_id: "bad principal" }),
       authorizationRow({ account_id: "" }),

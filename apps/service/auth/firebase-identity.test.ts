@@ -56,6 +56,7 @@ describe("Firebase identity-only verification", () => {
 
     expect(calls).toEqual({ value: 1, checkRevoked: true });
     expect(identity).toEqual({
+      firebase_project_id: PROJECT,
       firebase_uid: "firebase-user-1",
       authentication_strength: "firebase-id-token",
       expires_at_epoch_seconds: NOW + 3_600,
@@ -169,6 +170,7 @@ describe("Firebase identity-only verification", () => {
       "firebase_auth_emulator",
     ), "local_test"));
     expect(await local.resolve(UNSIGNED_TOKEN, NOW)).toEqual({
+      firebase_project_id: PROJECT,
       firebase_uid: "firebase-user-1",
       authentication_strength: "firebase-id-token",
       expires_at_epoch_seconds: NOW + 3_600,
@@ -217,6 +219,7 @@ describe("Firebase identity-only verification", () => {
     decoded.uid = "mutated";
     decoded.exp = NOW + 99_999;
     expect(identity).toEqual({
+      firebase_project_id: PROJECT,
       firebase_uid: "firebase-user-1",
       authentication_strength: "firebase-id-token",
       expires_at_epoch_seconds: NOW + 3_600,

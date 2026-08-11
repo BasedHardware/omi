@@ -19,6 +19,7 @@ const PRINTABLE_TOKEN = /^[\x21-\x7e]+$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 
 export interface FirebaseApplicationAuthorizationSourceRequest {
+  readonly firebase_project_id: string;
   readonly firebase_uid: string;
   readonly application_id: string;
   readonly capability: string;
@@ -55,6 +56,7 @@ export interface FirebaseApplicationAuthorizer {
 type DataDescriptors = Readonly<Record<string, PropertyDescriptor & { readonly value: unknown }>>;
 
 interface CurrentAuthorization {
+  readonly firebase_project_id: string;
   readonly firebase_uid: string;
   readonly principal_id: string;
   readonly account_id: string;
@@ -137,24 +139,31 @@ const snapshotMethod = <Method extends (...args: never[]) => unknown>(
 };
 
 const parseIdentity = (value: unknown, now: number): Readonly<{
+  readonly firebase_project_id: string;
   readonly firebase_uid: string;
   readonly expires_at_epoch_seconds: number;
 }> | null => {
   const fields = exactDescriptors(
     value,
-    ["firebase_uid", "authentication_strength", "expires_at_epoch_seconds"],
+    ["firebase_project_id", "firebase_uid", "authentication_strength", "expires_at_epoch_seconds"],
   );
   if (fields === null) return null;
+  const projectId = fields.firebase_project_id!.value;
   const uid = fields.firebase_uid!.value;
   const expiresAt = fields.expires_at_epoch_seconds!.value;
-  if (!firebaseUid(uid)
+  if (!boundedToken(projectId) || !firebaseUid(uid)
     || fields.authentication_strength!.value !== "firebase-id-token"
     || !counter(expiresAt) || expiresAt <= now) return null;
-  return Object.freeze({ firebase_uid: uid, expires_at_epoch_seconds: expiresAt });
+  return Object.freeze({
+    firebase_project_id: projectId,
+    firebase_uid: uid,
+    expires_at_epoch_seconds: expiresAt,
+  });
 };
 
 const CURRENT_KEYS = Object.freeze([
   "status",
+  "firebase_project_id",
   "firebase_uid",
   "principal_id",
   "account_id",
@@ -194,6 +203,7 @@ const parseAuthorizationSource = (
     ? null
     : counter(credentialExpiry) && credentialExpiry > now ? credentialExpiry : undefined;
   if (normalizedCredentialExpiry === undefined
+    || fields.firebase_project_id!.value !== request.firebase_project_id
     || fields.firebase_uid!.value !== request.firebase_uid
     || !boundedToken(fields.principal_id!.value)
     || !isWellFormedAccountId(fields.account_id!.value)
@@ -214,6 +224,7 @@ const parseAuthorizationSource = (
     || !counter(fields.destination_activation_revision!.value)) return "invalid";
 
   return Object.freeze({
+    firebase_project_id: request.firebase_project_id,
     firebase_uid: request.firebase_uid,
     principal_id: fields.principal_id!.value as string,
     account_id: fields.account_id!.value as string,
@@ -292,6 +303,7 @@ export const composeFirebaseApplicationAuthorization = (
       if (verified === null) return denyAuthentication;
 
       const request = Object.freeze({
+        firebase_project_id: verified.firebase_project_id,
         firebase_uid: verified.firebase_uid,
         application_id: applicationId,
         capability,

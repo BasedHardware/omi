@@ -22,6 +22,7 @@ export interface FirebaseIdentityVerifierConfig {
 }
 
 export interface FirebaseIdentity {
+  readonly firebase_project_id: string;
   readonly firebase_uid: string;
   readonly authentication_strength: "firebase-id-token";
   readonly expires_at_epoch_seconds: number;
@@ -131,6 +132,7 @@ const parseIdentity = (
     || !safeEpoch(authenticatedAt) || authenticatedAt > nowEpochSeconds) return null;
 
   return Object.freeze({
+    firebase_project_id: projectId,
     firebase_uid: subject,
     authentication_strength: "firebase-id-token",
     expires_at_epoch_seconds: expiresAt,
