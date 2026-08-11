@@ -597,8 +597,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    final normalizedDevice = pairedDevice ?? device;
     if (captureProvider != null) {
-      captureProvider?.updateRecordingDevice(device);
+      captureProvider?.updateRecordingDevice(normalizedDevice);
     }
 
     setisDeviceStorageSupport();
@@ -623,7 +624,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
+    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;

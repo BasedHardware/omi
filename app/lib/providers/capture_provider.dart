@@ -6,5 +6,6 @@ class CaptureProvider extends CaptureController {
     super.conversationLocationCapture,
     super.inProgressConversationLoader,
     super.audioCodecLoader,
+    super.speakerHaptic,
   });
 }
