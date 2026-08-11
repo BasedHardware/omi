@@ -10,7 +10,10 @@ import type {
   PlatformListenSocketFactory,
   PlatformListenSocketMessageEvent,
 } from "@omi-core/adapters-platform";
-import { UNAVAILABLE_LISTEN_PREFLIGHT } from "@omi-core/adapters-platform";
+import {
+  freezeListenPreflightSnapshot,
+  UNAVAILABLE_LISTEN_PREFLIGHT,
+} from "@omi-core/adapters-platform";
 
 const CHANNEL = "omiListenSocket";
 
@@ -72,23 +75,32 @@ function parsePreflightEvent(event: ListenPreflightEvent | string): ListenPrefli
   try {
     const parsed: unknown = typeof event === "string" ? JSON.parse(event) : event;
     if (parsed === null || typeof parsed !== "object") return null;
-    const candidate = parsed as Record<string, unknown>;
-    const permission = candidate["permission"];
-    const deviceState = candidate["deviceState"];
-    const requestId = candidate["requestId"];
-    const recovery = candidate["recovery"];
-    if (candidate["type"] !== "preflight" || typeof requestId !== "string") return null;
-    if (typeof permission !== "string" || !["unknown", "checking", "granted", "denied", "restricted", "unavailable"].includes(permission)) return null;
-    if (typeof deviceState !== "string" || !["unknown", "checking", "available", "unavailable"].includes(deviceState)) return null;
-    if (recovery !== undefined && recovery !== null && recovery !== "request-permission" && recovery !== "open-settings") return null;
-    if (candidate["deviceLabel"] !== undefined && candidate["deviceLabel"] !== null && typeof candidate["deviceLabel"] !== "string") return null;
+    const prototype = Object.getPrototypeOf(parsed);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const ownData = (key: string): { present: boolean; value: unknown } => {
+      const descriptor = Object.getOwnPropertyDescriptor(parsed, key);
+      if (descriptor === undefined) return { present: false, value: undefined };
+      if (!("value" in descriptor)) return { present: true, value: undefined };
+      return { present: true, value: descriptor.value };
+    };
+    const type = ownData("type");
+    const permission = ownData("permission");
+    const deviceState = ownData("deviceState");
+    const requestId = ownData("requestId");
+    const recovery = ownData("recovery");
+    const deviceLabel = ownData("deviceLabel");
+    if (type.value !== "preflight" || !requestId.present || typeof requestId.value !== "string") return null;
+    if (typeof permission.value !== "string" || !["unknown", "checking", "granted", "denied", "restricted", "unavailable"].includes(permission.value)) return null;
+    if (typeof deviceState.value !== "string" || !["unknown", "checking", "available", "unavailable"].includes(deviceState.value)) return null;
+    if (recovery.present && recovery.value !== null && recovery.value !== "request-permission" && recovery.value !== "open-settings") return null;
+    if (deviceLabel.present && deviceLabel.value !== null && typeof deviceLabel.value !== "string") return null;
     return {
       type: "preflight",
-      requestId,
-      permission: permission as PlatformListenPermissionState,
-      deviceState: deviceState as PlatformListenInputDeviceState,
-      ...(candidate["deviceLabel"] === undefined ? {} : { deviceLabel: candidate["deviceLabel"] as string | null }),
-      ...(recovery === undefined ? {} : { recovery: recovery as "request-permission" | "open-settings" | null }),
+      requestId: requestId.value,
+      permission: permission.value as PlatformListenPermissionState,
+      deviceState: deviceState.value as PlatformListenInputDeviceState,
+      ...(deviceLabel.present ? { deviceLabel: deviceLabel.value as string | null } : {}),
+      ...(recovery.present ? { recovery: recovery.value as "request-permission" | "open-settings" | null } : {}),
     };
   } catch {
     return null;
@@ -184,22 +196,22 @@ export function createProductionListenHostPreflightProvider(
   host: ListenHostGlobals = globalThis as ListenHostGlobals,
 ): PlatformListenPreflightProvider {
   const channel = channelFrom(host);
-  let snapshot: PlatformListenPreflightSnapshot = {
+  let snapshot: PlatformListenPreflightSnapshot = freezeListenPreflightSnapshot({
     permission: "unknown",
     device: { state: "unknown", label: null },
     recovery: null,
-  };
+  });
   let nextId = 0;
   const listeners = new Set<() => void>();
   const pending = new Map<string, () => void>();
   const post = (operation: "check" | "request-permission" | "open-settings"): Promise<void> => {
     const requestId = `listen-preflight-${++nextId}`;
     if (operation !== "open-settings") {
-      snapshot = {
+      snapshot = freezeListenPreflightSnapshot({
         ...snapshot,
         permission: "checking",
         device: { state: "checking", label: null },
-      };
+      });
       for (const listener of listeners) listener();
     }
     return new Promise((resolve) => {
@@ -223,11 +235,11 @@ export function createProductionListenHostPreflightProvider(
     const label = typeof event.deviceLabel === "string" && event.deviceLabel.trim() !== ""
       ? event.deviceLabel.trim().slice(0, 80)
       : null;
-    snapshot = {
+    snapshot = freezeListenPreflightSnapshot({
       permission: event.permission,
       device: { state: event.deviceState, label },
       recovery: event.recovery ?? null,
-    };
+    });
     for (const listener of listeners) listener();
     settle?.();
     pending.delete(requestId);

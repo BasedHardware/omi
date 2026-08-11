@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { formatDuration, t, type MessageKey } from "@omi-core/i18n";
+import { formatDuration, t } from "@omi-core/i18n";
 import type { PlatformListenPreflightSnapshot } from "@omi-core/adapters-platform";
 import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { ProductionListenStore } from "./ProductionListenStore.js";
@@ -20,14 +20,41 @@ const LEGACY_PREFLIGHT: PlatformListenPreflightSnapshot = {
   recovery: null,
 };
 
+type PreflightPermissionMessageKey =
+  | "listen.permission.unknown"
+  | "listen.permission.checking"
+  | "listen.permission.granted"
+  | "listen.permission.denied"
+  | "listen.permission.restricted"
+  | "listen.permission.unavailable";
+type PreflightDeviceMessageKey =
+  | "listen.device.unknown"
+  | "listen.device.checking"
+  | "listen.device.available"
+  | "listen.device.unavailable";
+
+const PREFLIGHT_PERMISSION_KEYS: Record<PlatformListenPreflightSnapshot["permission"], PreflightPermissionMessageKey> = {
+  unknown: "listen.permission.unknown",
+  checking: "listen.permission.checking",
+  granted: "listen.permission.granted",
+  denied: "listen.permission.denied",
+  restricted: "listen.permission.restricted",
+  unavailable: "listen.permission.unavailable",
+};
+
+const PREFLIGHT_DEVICE_KEYS: Record<PlatformListenPreflightSnapshot["device"]["state"], PreflightDeviceMessageKey> = {
+  unknown: "listen.device.unknown",
+  checking: "listen.device.checking",
+  available: "listen.device.available",
+  unavailable: "listen.device.unavailable",
+};
+
 function preflightPermissionLabel(locale: Locale, state: PlatformListenPreflightSnapshot["permission"]): string {
-  const key = `listen.permission.${state}` as MessageKey;
-  return t(locale, key, {} as never);
+  return t(locale, PREFLIGHT_PERMISSION_KEYS[state]);
 }
 
 function preflightDeviceLabel(locale: Locale, state: PlatformListenPreflightSnapshot["device"]["state"]): string {
-  const key = `listen.device.${state}` as MessageKey;
-  return t(locale, key, {} as never);
+  return t(locale, PREFLIGHT_DEVICE_KEYS[state]);
 }
 
 function listenScrollTarget(transcript: HTMLElement): HTMLElement {

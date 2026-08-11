@@ -59,6 +59,10 @@ for (const shell of ["macos", "ios"]) {
     });
     await pending;
     await valid;
+    const ready = provider.snapshot();
+    assert.ok(Object.isFrozen(ready));
+    assert.ok(Object.isFrozen(ready.device));
+    assert.throws(() => { ready.permission = "denied"; }, TypeError);
     assert.deepEqual(provider.snapshot(), {
       permission: "granted",
       device: { state: "available", label: "Default microphone" },
@@ -66,5 +70,29 @@ for (const shell of ["macos", "ios"]) {
     });
     assert.equal(JSON.stringify(provider.snapshot()).includes("deviceId"), false);
     assert.equal(changed.length, 4, "refreshes expose checking and fail-closed transitions");
+  });
+
+  test(`${shell} preflight rejects accessor-backed host replies without invoking getters`, async () => {
+    const createProvider = await loadProductionExport(
+      "listen-host-socket.ts",
+      "createProductionListenHostPreflightProvider",
+    );
+    const channel = { postMessage() {} };
+    const host = shell === "macos"
+      ? { webkit: { messageHandlers: { omiListenSocket: channel } } }
+      : { omiListenSocket: channel };
+    const provider = createProvider(host);
+    const pending = provider.refresh();
+    let touched = false;
+    const hostile = Object.create(Object.prototype, {
+      type: { value: "preflight", enumerable: true },
+      requestId: { value: "listen-preflight-1", enumerable: true },
+      permission: { get() { touched = true; throw new Error("getter executed"); }, enumerable: true },
+      deviceState: { value: "available", enumerable: true },
+    });
+    host.__omiListenPreflightEvent("listen-preflight-1", hostile);
+    await pending;
+    assert.equal(touched, false, "parser reads own data descriptors only");
+    assert.equal(provider.snapshot().permission, "unavailable", "accessor-backed state fails closed");
   });
 }

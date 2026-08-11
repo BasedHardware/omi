@@ -114,6 +114,60 @@ export interface PlatformListenPreflightSnapshot {
   readonly recovery: "request-permission" | "open-settings" | null;
 }
 
+const PREFLIGHT_PERMISSIONS = ["unknown", "checking", "granted", "denied", "restricted", "unavailable"] as const;
+const PREFLIGHT_DEVICES = ["unknown", "checking", "available", "unavailable"] as const;
+const PREFLIGHT_RECOVERY = ["request-permission", "open-settings"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+/**
+ * Read one own data property without invoking an accessor. Native/host values
+ * cross an untrusted boundary here, so malformed or hostile descriptors fail
+ * closed instead of changing the client readiness state.
+ */
+function ownData(value: unknown, key: string): unknown {
+  if (!isRecord(value)) return undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Return a detached, immutable snapshot at every adapter boundary. This
+ * prevents a caller from mutating a host-owned object between `preflight()`
+ * and `start()` to bypass permission/device checks.
+ */
+export function freezeListenPreflightSnapshot(
+  value: unknown,
+): PlatformListenPreflightSnapshot {
+  const permission = ownData(value, "permission");
+  const deviceValue = ownData(value, "device");
+  const deviceState = ownData(deviceValue, "state");
+  const deviceLabel = ownData(deviceValue, "label");
+  const recovery = ownData(value, "recovery");
+  if (
+    !PREFLIGHT_PERMISSIONS.includes(permission as PlatformListenPermissionState)
+    || !PREFLIGHT_DEVICES.includes(deviceState as PlatformListenInputDeviceState)
+    || (deviceLabel !== null && typeof deviceLabel !== "string")
+    || (recovery !== null && !PREFLIGHT_RECOVERY.includes(recovery as typeof PREFLIGHT_RECOVERY[number]))
+  ) {
+    return UNAVAILABLE_LISTEN_PREFLIGHT;
+  }
+  return Object.freeze({
+    permission: permission as PlatformListenPermissionState,
+    device: Object.freeze({
+      state: deviceState as PlatformListenInputDeviceState,
+      label: deviceLabel as string | null,
+    }),
+    recovery: recovery as "request-permission" | "open-settings" | null,
+  });
+}
+
 export interface PlatformListenPreflightProvider {
   snapshot(): PlatformListenPreflightSnapshot;
   subscribe(listener: () => void): () => void;
@@ -122,11 +176,11 @@ export interface PlatformListenPreflightProvider {
   openSettings?: () => Promise<void>;
 }
 
-export const UNAVAILABLE_LISTEN_PREFLIGHT: PlatformListenPreflightSnapshot = {
+export const UNAVAILABLE_LISTEN_PREFLIGHT: PlatformListenPreflightSnapshot = Object.freeze({
   permission: "unavailable",
-  device: { state: "unavailable", label: null },
+  device: Object.freeze({ state: "unavailable", label: null }),
   recovery: null,
-};
+});
 
 export function createUnavailableListenPreflightProvider(): PlatformListenPreflightProvider {
   return {
@@ -239,8 +293,14 @@ export function createPlatformListenCaptureClient(
     for (const listener of listeners) listener();
   };
 
-  const preflightSnapshot = (): PlatformListenPreflightSnapshot =>
-    preflight?.snapshot() ?? UNAVAILABLE_LISTEN_PREFLIGHT;
+  const preflightSnapshot = (): PlatformListenPreflightSnapshot => {
+    if (preflight === undefined) return UNAVAILABLE_LISTEN_PREFLIGHT;
+    try {
+      return freezeListenPreflightSnapshot(preflight.snapshot());
+    } catch {
+      return UNAVAILABLE_LISTEN_PREFLIGHT;
+    }
+  };
 
   const assertPreflightReady = (): void => {
     // Existing direct adapter consumers may not have a native preflight seam
@@ -248,7 +308,7 @@ export function createPlatformListenCaptureClient(
     // only for an explicitly supplied provider keeps older fixtures truthful
     // while preventing a shell from starting before its checks complete.
     if (preflight === undefined) return;
-    const state = preflight.snapshot();
+    const state = preflightSnapshot();
     if (state.permission !== "granted") {
       throw new PlatformListenPreflightError("permission-required");
     }
