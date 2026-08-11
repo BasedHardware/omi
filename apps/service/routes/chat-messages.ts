@@ -46,7 +46,6 @@ import type {
   ChatGenerationRetentionMetadata,
   ChatGenerationRetentionPolicy,
 } from "../stores/chat-generation-events-store";
-import { DEFAULT_CHAT_GENERATION_RETENTION_POLICY } from "../stores/chat-generation-events-store";
 
 export const CHAT_MESSAGES_PATH = "/v1/chat-messages";
 export const CHAT_GENERATIONS_PATH = "/v1/chat-generations";
@@ -131,6 +130,15 @@ export const normalizeChatGenerationStreamPolicy = (
   }
   return Object.freeze({ ...policy });
 };
+
+export const boundedChatGenerationPollDelay = (
+  pollIntervalMs: number,
+  nowEpochMilliseconds: number,
+  lastActivityAt: number,
+  hasPendingEvents: boolean,
+): number => hasPendingEvents
+  ? 0
+  : Math.max(1, pollIntervalMs - (nowEpochMilliseconds - lastActivityAt));
 
 interface ParsedCreate {
   readonly id: string;
@@ -487,9 +495,12 @@ const streamEvents = (input: {
         }
         const delay = controller.desiredSize !== null && controller.desiredSize <= 0
           ? input.policy.backpressurePollIntervalMs
-          : pending.length > 0
-            ? 0
-            : Math.max(0, input.policy.pollIntervalMs - (input.nowEpochMilliseconds() - lastActivityAt));
+          : boundedChatGenerationPollDelay(
+            input.policy.pollIntervalMs,
+            input.nowEpochMilliseconds(),
+            lastActivityAt,
+            pending.length > 0,
+          );
         timer = input.scheduler.setTimeout(poll, delay);
       };
       poll();
@@ -741,12 +752,11 @@ export const registerChatMessagesRoutes = (
     let retention: ChatGenerationRetentionMetadata | null = null;
     try {
       retention = deps.events.retentionMetadata?.(principal.uid, generationId) ?? null;
-      if (lifecycle.state === "terminal" && deps.events.compact !== undefined
+      if (lifecycle.state === "terminal" && deps.events.compact !== undefined && deps.retentionPolicy !== undefined
         && (retention === null || deps.nowEpochMilliseconds() >= retention.expiresAt)) {
-        const policy = deps.retentionPolicy ?? DEFAULT_CHAT_GENERATION_RETENTION_POLICY;
         deps.events.compact(principal.uid, generationId, deps.nowEpochMilliseconds(), {
-          ttlMs: retention?.ttlMs ?? policy.ttlMs,
-          maxDetailEvents: policy.maxDetailEvents,
+          ttlMs: retention?.ttlMs ?? deps.retentionPolicy.ttlMs,
+          maxDetailEvents: deps.retentionPolicy.maxDetailEvents,
         });
         retention = deps.events.retentionMetadata?.(principal.uid, generationId) ?? retention;
       }

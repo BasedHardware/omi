@@ -33,11 +33,13 @@ import {
 } from "../chat/generation-source";
 import type { ChatGenerationLivenessPolicy } from "../chat/generation-supervisor";
 import {
+  boundedChatGenerationPollDelay,
   normalizeChatGenerationStreamPolicy,
   type ChatGenerationStreamPolicy,
 } from "./chat-messages";
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
+import type { ChatGenerationRetentionPolicy } from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import { createInMemoryChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
@@ -72,6 +74,7 @@ const boot = (
   generationStreamPolicy?: ChatGenerationStreamPolicy,
   generationStreamScheduler?: ChatGenerationScheduler,
   generationLiveness?: ChatGenerationLivenessPolicy,
+  generationRetentionPolicy?: ChatGenerationRetentionPolicy,
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -86,6 +89,7 @@ const boot = (
     generationStreamPolicy,
     generationStreamScheduler,
     generationLiveness,
+    generationRetentionPolicy,
   });
   return { db, local, stores };
 };
@@ -237,6 +241,7 @@ describe("ratified chat generation wire red proofs", () => {
       maxBufferedEvents: 1,
       backpressurePollIntervalMs: 1,
     }).pollIntervalMs).toBe(1);
+    expect([0, 5, 25].map((now) => boundedChatGenerationPollDelay(5, now, 0, false))).toEqual([5, 1, 1]);
   });
 
   test("same-process concurrent replay re-drives a dispatch throw exactly once", async () => {
@@ -1776,7 +1781,16 @@ describe("ratified chat generation wire red proofs", () => {
   });
 
   test("compacted replay cursors heal an older SSE cursor from the terminal", async () => {
-    const { db, local, stores } = boot();
+    const { db, local, stores } = boot(
+      createInMemoryLocalServiceStores(),
+      undefined,
+      "chat-retention-policy-proof",
+      createEmptyChatGenerationContextSource(),
+      undefined,
+      undefined,
+      undefined,
+      { ttlMs: 86_400_000, maxDetailEvents: 128 },
+    );
     const { admission, eventsResponse } = await admitAndOpen(local, create("retention-replay"));
     await eventsResponse.text();
     await (await generationEvents(local, admission.generation.id)).text();
@@ -1805,6 +1819,15 @@ describe("ratified chat generation wire red proofs", () => {
     const { eventsResponse } = await admitAndOpen(local, create("default-liveness"));
     const frames = parseSse(await eventsResponse.text());
     expect(frames.at(-1)?.data).toEqual({ kind: "failed", error: { code: "generation_timeout", retryable: true } });
+    db.close();
+  });
+
+  test("retention compaction stays dormant until an explicit policy is injected", async () => {
+    const { db, local, stores } = boot();
+    const { admission, eventsResponse } = await admitAndOpen(local, create("retention-policy-omitted"));
+    await eventsResponse.text();
+    await (await generationEvents(local, admission.generation.id)).text();
+    expect(stores.chatEvents.retentionMetadata!(ACCOUNT, admission.generation.id)).toBeNull();
     db.close();
   });
 });

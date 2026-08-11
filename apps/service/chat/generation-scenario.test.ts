@@ -272,7 +272,10 @@ describe("deterministic Chat generation scenarios", () => {
   });
 
   test("usage receipts fail closed on credential or opaque-reference values", async () => {
-    for (const provider of ["sk-live-secret", "jwt:eyJ.fake", "oauth:token", "credential:secret", "token:secret"]) {
+    for (const provider of [
+      "sk-live-secret", "jwt:eyJ.fake", "oauth:token", "credential:secret", "token:secret",
+      "bearerToken", "authorizationHeader", "passwordHint", "secretKey", "oauth2", "jwtToken", "credentialId",
+    ]) {
       const result = await runChatGenerationScenario({
         prompt: "unsafe usage",
         script: [{
