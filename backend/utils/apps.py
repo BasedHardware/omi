@@ -1616,12 +1616,6 @@ def fetch_app_chat_tools_from_manifest(
         return None
 
 
-def _is_path_relative_endpoint(endpoint: str) -> bool:
-    """True for "/tools/x" but not for "//evil.example/x" (a scheme-relative
-    URL, which resolves to another origin rather than the app's own host)."""
-    return endpoint.startswith('/') and not endpoint.startswith('//')
-
-
 def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     """
     Validate and normalize a single tool definition from the manifest.
@@ -1651,11 +1645,11 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         return None
 
     endpoint = endpoint.strip()
-    # A path-relative endpoint ("/tools/add_to_playlist") is the documented
-    # manifest format; routers.apps._process_chat_tools_manifest resolves it
-    # against app_home_url, and invocation validates the resolved absolute URL
-    # through safe_request_target. Only absolute endpoints can be checked here.
-    if not _is_path_relative_endpoint(endpoint):
+    # "/tools/x" is the documented manifest format: routers.apps
+    # ._process_chat_tools_manifest resolves it against app_home_url and
+    # invocation pins the result via safe_request_target. "//host/x" is not
+    # app-relative, so it is still validated here.
+    if not (endpoint.startswith('/') and not endpoint.startswith('//')):
         try:
             assert_public_http_url(endpoint)
         except UnsafeWebhookURLError as e:
