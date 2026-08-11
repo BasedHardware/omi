@@ -10,13 +10,14 @@ import "./folders.css";
 const FOLDER_NOTICE_TONE = "info" as const;
 const FOLDER_EMPTY_ICON = "library" as const;
 
-function folderHref(folderId: Folder["id"]): string {
-  const params = new URLSearchParams(location.search);
+export function foldersConversationHref(search: string, folderId?: Folder["id"]): string {
+  const params = new URLSearchParams(search);
   params.delete("conversation");
   params.delete("qa");
   params.delete("state");
+  params.delete("folder");
   params.set("route", "conversations");
-  params.set("folder", folderId);
+  if (folderId) params.set("folder", folderId);
   return `?${params.toString()}`;
 }
 
@@ -106,14 +107,14 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
             icon={FOLDER_EMPTY_ICON}
             title={t(locale, "folders.emptyTitle")}
             detail={t(locale, "folders.emptyDetail")}
-            action={<a className="folders-all-link" href="?route=conversations">{t(locale, "folders.openConversations")}</a>}
+            action={<a className="folders-all-link" href={foldersConversationHref(location.search)}>{t(locale, "folders.openConversations")}</a>}
           />
         )}
         {visible.length > 0 && (
           <ul className="folders-list" aria-label={t(locale, "nav.folders")}>
             {visible.map((folder) => (
               <li key={folder.id}>
-                <a className="folder-row" href={folderHref(folder.id)}>
+                <a className="folder-row" href={foldersConversationHref(location.search, folder.id)}>
                   <span className="folder-row-icon"><ProductionIcon name="library" /></span>
                   <span className="folder-row-copy">
                     <strong>{folder.name}</strong>

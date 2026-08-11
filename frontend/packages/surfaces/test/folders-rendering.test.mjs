@@ -44,6 +44,19 @@ test("Folders exposes source, lifecycle, result semantics, and system-folder fil
     await rendered.cleanup();
   }
 });
+
+test("Folders links preserve shell context while clearing obsolete detail and fixture state", async () => {
+  const foldersConversationHref = await loadProductionExport("FoldersProduction.tsx", "foldersConversationHref");
+  const context = "?theme=dark&locale=ar&platform=mobile&conversation=old&qa=folders&state=empty&folder=old";
+  assert.equal(
+    foldersConversationHref(context, "work-folder-one"),
+    "?theme=dark&locale=ar&platform=mobile&route=conversations&folder=work-folder-one",
+  );
+  assert.equal(
+    foldersConversationHref(context),
+    "?theme=dark&locale=ar&platform=mobile&route=conversations",
+  );
+});
 test("Folders keeps saved rows visible when a later list read fails", async () => {
   const FoldersProduction = await loadProductionExport("FoldersProduction.tsx", "FoldersProduction");
   const fixtureFolderStore = await loadProductionExport("conversation-fixtures.ts", "fixtureFolderStore");
