@@ -571,8 +571,7 @@ class TasksViewModel: ObservableObject {
     return displayTasks.map(\.id)
   }
 
-  /// IDs fetched specifically for selection remain authoritative even though
-  /// the presentation store intentionally keeps No Deadline rows paginated.
+  /// Selection snapshots remain authoritative despite paginated presentation rows.
   var authoritativeSelectionTaskIDs = Set<String>()
   var selectedAllScope: SelectionScope?
   var selectedAllScopeTaskIDs = Set<String>()
@@ -729,9 +728,7 @@ class TasksViewModel: ObservableObject {
       RuntimeOwnerIdentity.currentOwnerId()
     },
     sortOrderSyncOperations: SortOrderSyncOperations = .live,
-    selectionSnapshotLoader: @escaping SelectionSnapshotLoader = { completed in
-      try await TasksStore.shared.selectionSnapshotIDs(completed: completed)
-    },
+    selectionSnapshotLoader: SelectionSnapshotLoader? = nil,
     searchLoader: SearchLoader? = nil,
     bulkDeleteOperation: BulkDeleteOperation? = nil,
     bulkDeleteConfirmation: ((Int) -> Bool)? = nil,
@@ -739,7 +736,10 @@ class TasksViewModel: ObservableObject {
   ) {
     self.ownerIDProvider = ownerIDProvider
     self.sortOrderSyncOperations = sortOrderSyncOperations
-    self.selectionSnapshotLoader = selectionSnapshotLoader
+    self.selectionSnapshotLoader =
+      selectionSnapshotLoader ?? { completed in
+        try await TasksStore.shared.selectionSnapshotIDs(completed: completed)
+      }
     self.searchLoader =
       searchLoader ?? { query, includeDeleted in
         try await ActionItemStorage.shared.searchLocalActionItems(
