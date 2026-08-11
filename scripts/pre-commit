@@ -86,10 +86,14 @@ if [ -n "$STAGED_WEB_FILES" ]; then
       # prettier then rejects.
       PINNED_PRETTIER=$(node -p "require('./$dir/package.json').devDependencies.prettier" 2>/dev/null)
       if [ -z "$PINNED_PRETTIER" ] || [ "$PINNED_PRETTIER" = "undefined" ]; then
-        echo "Could not read the prettier version pinned by $dir/package.json. Run 'npm install' in $dir." >&2
-        exit 1
+        # The directory pins no prettier at all (web/app). Formatting it is
+        # still better than refusing the commit: a hook that can block every
+        # JS/TS commit in a clean checkout is worse than unpinned output.
+        echo "$dir/package.json pins no prettier version; using the default npx prettier." >&2
+        echo "$DIR_FILES" | xargs npx --yes prettier --write
+      else
+        echo "$DIR_FILES" | xargs npx --yes "prettier@$PINNED_PRETTIER" --write
       fi
-      echo "$DIR_FILES" | xargs npx --yes "prettier@$PINNED_PRETTIER" --write
     else
       echo "prettier not found for $dir. Run 'npm install' in $dir." >&2
       exit 1
