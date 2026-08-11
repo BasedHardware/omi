@@ -128,7 +128,7 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const cases = [
     [{ kind: "idle" }, "listen.stateIdle", false],
-    [{ kind: "capturing", elapsedSeconds: 10 }, "listen.stateCapturing", false],
+    [{ kind: "capturing", elapsedSeconds: 10, untranscribedSeconds: 10 }, "listen.stateCapturing", false],
     [{ kind: "paused-for-entitlement", elapsedSeconds: 20, untranscribedSeconds: 30 }, "listen.statePausedEntitlement", false],
     [{ kind: "offline-buffering", elapsedSeconds: 40, bufferedSeconds: 10, untranscribedSeconds: 50 }, "listen.stateOfflineBuffering", false],
     [{ kind: "stopped-at-ceiling", untranscribedSeconds: 70 }, "listen.stateStoppedAtCeiling", true],
@@ -188,7 +188,7 @@ test("Listen batches transcript text into the single state announcement", async 
     clearTimeout() {},
   };
   const rendered = await renderComponent(ListenProduction, {
-    store: stateStore({ kind: "capturing", elapsedSeconds: 4 }, {
+    store: stateStore({ kind: "capturing", elapsedSeconds: 4, untranscribedSeconds: 0 }, {
       segments: [segment("one", "A short transcript", 0, 1), segment("two", "with a second phrase", 1, 2)],
     }),
     announcementScheduler: scheduler,
@@ -454,6 +454,11 @@ test("elapsed and buffered clocks tick while live, then ceiling backlog freezes"
       rendered.container.querySelector(".listen-elapsed")?.textContent,
       t("en", "listen.elapsed", { duration: formatDuration(60, "en") }),
     );
+    assert.equal(
+      rendered.container.querySelector(".listen-backlog-value")?.textContent,
+      t("en", "listen.backlogHours", { hours: 1 }),
+      "active capture reports elapsed audio that has not yet appeared in the transcript",
+    );
 
     await rendered.act(async () => wire.sockets[0].serverClose(1001));
     wire.setNow(72_000);
@@ -528,7 +533,7 @@ test("loading and unknown entitlement limits make distinct honest claims", async
     suggestedAction: null,
   };
   const unknown = await renderComponent(ListenProduction, {
-    store: stateStore({ kind: "capturing", elapsedSeconds: 90 }, { entitlement }),
+    store: stateStore({ kind: "capturing", elapsedSeconds: 90, untranscribedSeconds: 90 }, { entitlement }),
   });
   try {
     const label = unknown.container.querySelector(".listen-entitlement-usage")?.textContent;

@@ -6,7 +6,11 @@
 export type CaptureState =
   | { readonly kind: "loading" }
   | { readonly kind: "idle" }
-  | { readonly kind: "capturing"; readonly elapsedSeconds: number }
+  | {
+      readonly kind: "capturing";
+      readonly elapsedSeconds: number;
+      readonly untranscribedSeconds: number;
+    }
   | {
       readonly kind: "paused-for-entitlement";
       readonly elapsedSeconds: number;
@@ -94,7 +98,7 @@ export function describeCapture(state: CaptureState): CaptureDescription {
         bodyKey: "listen.stateCapturingBody",
         capturing: true,
         loud: false,
-        backlogSeconds: 0,
+        backlogSeconds: state.untranscribedSeconds,
         canStart: false,
         canStop: true,
       };

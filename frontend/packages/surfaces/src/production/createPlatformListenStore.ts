@@ -92,7 +92,7 @@ export function platformListenCaptureState(
     };
   }
 
-  return { kind: "capturing", elapsedSeconds: elapsed };
+  return { kind: "capturing", elapsedSeconds: elapsed, untranscribedSeconds: backlog };
 }
 
 function status(client: PlatformListenCaptureClient): StoreStatus {
