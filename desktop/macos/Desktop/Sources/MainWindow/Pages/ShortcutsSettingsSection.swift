@@ -15,12 +15,14 @@ struct ShortcutsSettingsSection: View {
 
   private enum ShortcutTarget {
     case askOmi
+    case toggleListening
     case pushToTalk
   }
 
   var body: some View {
     VStack(spacing: OmiSpacing.xl) {
       askOmiKeyCard
+      toggleListeningKeyCard
       pttKeyCard
       doubleTapCard
       pttSoundsCard
@@ -88,6 +90,68 @@ struct ShortcutsSettingsSection: View {
     return Button {
       stopShortcutCapture()
       settings.updateAskOmiRegistration(enabled: true, shortcut: shortcut)
+    } label: {
+      shortcutSelectionLabel(tokens: shortcut.displayTokens, isSelected: isSelected)
+    }
+    .buttonStyle(.plain)
+  }
+
+  private var toggleListeningKeyCard: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Toggle Listening")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text("Global shortcut to pause or resume conversation listening.")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      HStack(spacing: OmiSpacing.md) {
+        ForEach(ShortcutSettings.toggleListeningPresets, id: \.self) { shortcut in
+          toggleListeningKeyButton(shortcut)
+        }
+        customShortcutButton(
+          for: .toggleListening,
+          isSelected: settings.toggleListeningEnabled && settings.toggleListeningUsesCustomShortcut)
+        disableShortcutButton(isDisabled: !settings.toggleListeningEnabled) {
+          stopShortcutCapture()
+          settings.toggleListeningEnabled = false
+        }
+        Spacer()
+      }
+
+      if settings.toggleListeningEnabled
+        && (recordingTarget == .toggleListening || settings.toggleListeningUsesCustomShortcut
+          || (captureError != nil && recordingTarget == .toggleListening))
+      {
+        shortcutRecorderCard(
+          title: recordingTarget == .toggleListening
+            ? "Press your custom Toggle Listening shortcut now" : "Custom Toggle Listening shortcut",
+          shortcut: settings.toggleListeningShortcut,
+          isRecording: recordingTarget == .toggleListening,
+          action: { startShortcutCapture(.toggleListening) },
+          helperText: "Use at least one non-modifier key."
+        )
+      }
+    }
+    .padding(OmiSpacing.xl)
+    .background(
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(Ink.rowFill)
+    )
+    .modifier(
+      SettingHighlightModifier(
+        settingId: "floatingbar.togglelistening", highlightedSettingId: $highlightedSettingId))
+  }
+
+  private func toggleListeningKeyButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
+    let isSelected =
+      settings.toggleListeningEnabled && settings.toggleListeningShortcut == shortcut
+      && !settings.toggleListeningUsesCustomShortcut
+    return Button {
+      stopShortcutCapture()
+      settings.updateToggleListeningRegistration(enabled: true, shortcut: shortcut)
     } label: {
       shortcutSelectionLabel(tokens: shortcut.displayTokens, isSelected: isSelected)
     }
@@ -242,6 +306,9 @@ struct ShortcutsSettingsSection: View {
       shortcutRow(
         label: "Open Omi",
         keys: settings.askOmiEnabled ? settings.askOmiShortcut.displayLabel : "Disabled")
+      shortcutRow(
+        label: "Toggle listening",
+        keys: settings.toggleListeningEnabled ? settings.toggleListeningShortcut.displayLabel : "Disabled")
       shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
       shortcutRow(
         label: "Push to talk",
@@ -279,6 +346,8 @@ struct ShortcutsSettingsSection: View {
       switch target {
       case .askOmi:
         settings.askOmiEnabled = true
+      case .toggleListening:
+        settings.toggleListeningEnabled = true
       case .pushToTalk:
         settings.pttEnabled = true
       }
@@ -442,6 +511,18 @@ struct ShortcutsSettingsSection: View {
         return false
       }
       settings.updateAskOmiRegistration(enabled: true, shortcut: shortcut)
+    case .toggleListening:
+      if event.type == .flagsChanged {
+        captureError = "Toggle Listening needs a non-modifier key."
+        return true
+      }
+      guard
+        let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+          event, allowModifierOnly: false)
+      else {
+        return false
+      }
+      settings.updateToggleListeningRegistration(enabled: true, shortcut: shortcut)
     case .pushToTalk:
       if event.type == .flagsChanged {
         let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)

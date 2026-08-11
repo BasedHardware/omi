@@ -37,6 +37,7 @@ final class BleAudioService: ObservableObject {
   // Audio delivery
   private var transcriptionService: TranscriptionService?
   private var audioDataHandler: ((Data) -> Void)?
+  private var conversationAudioHandler: ((Data) -> Void)?
   private var rawFrameHandler: ((Data) -> Void)?
 
   // Statistics
@@ -54,11 +55,13 @@ final class BleAudioService: ObservableObject {
   ///   - connection: The device connection to get audio from
   ///   - transcriptionService: Optional transcription service to send audio to
   ///   - audioDataHandler: Optional handler for decoded PCM data (alternative to transcription)
+  ///   - conversationAudioHandler: Optional handler for conversation transcription audio
   ///   - rawFrameHandler: Optional handler for raw encoded frames (for WAL recording)
   func startProcessing(
     from connection: DeviceConnection,
     transcriptionService: TranscriptionService? = nil,
     audioDataHandler: ((Data) -> Void)? = nil,
+    conversationAudioHandler: ((Data) -> Void)? = nil,
     rawFrameHandler: ((Data) -> Void)? = nil
   ) async {
     guard !isProcessing else {
@@ -74,6 +77,7 @@ final class BleAudioService: ObservableObject {
 
     self.transcriptionService = transcriptionService
     self.audioDataHandler = audioDataHandler
+    self.conversationAudioHandler = conversationAudioHandler
     self.rawFrameHandler = rawFrameHandler
 
     // Get codec from device. For Omi/OpenGlass this awaits a BLE characteristic
@@ -165,6 +169,7 @@ final class BleAudioService: ObservableObject {
     isProcessing = false
     transcriptionService = nil
     audioDataHandler = nil
+    conversationAudioHandler = nil
     rawFrameHandler = nil
 
     // Log statistics
@@ -237,6 +242,8 @@ final class BleAudioService: ObservableObject {
     if let transcription = transcriptionService {
       transcription.sendAudio(pcmData)
     }
+
+    conversationAudioHandler?(pcmData)
 
     // Send to custom handler
     audioDataHandler?(pcmData)

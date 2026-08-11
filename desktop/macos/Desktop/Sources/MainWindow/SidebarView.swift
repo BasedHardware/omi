@@ -177,6 +177,11 @@ struct SidebarView: View {
             }
           }
 
+          if !isCollapsed {
+            listeningToggleButton
+              .padding(.top, OmiSpacing.sm)
+          }
+
           Spacer()
 
           // Subscription upgrade banner
@@ -379,6 +384,39 @@ struct SidebarView: View {
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
     .help("Expand sidebar")
+  }
+
+  private var listeningToggleButton: some View {
+    let isListening = appState.isConversationListening
+    let color = isListening ? Ink.listeningGreen : PageGlass.warning
+
+    return Button {
+      appState.toggleConversationListening(source: "ui")
+    } label: {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: isListening ? "ear.fill" : "ear.slash.fill")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(color)
+          .frame(width: 16)
+
+        Text(isListening ? "Listening" : "Paused")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Spacer(minLength: 0)
+
+        Circle()
+          .fill(color)
+          .frame(width: 7, height: 7)
+      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(Capsule().fill(color.opacity(0.14)))
+      .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help(isListening ? "Pause conversation listening" : "Resume conversation listening")
   }
 
   private var proBadge: some View {
