@@ -4,7 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createAgentRunEventSupervisor } from "../../../apps/service/chat/agent-run-events";
+import {
+  createAgentRunEventSupervisor,
+  type AgentRunEventStore,
+} from "../../../apps/service/chat/agent-run-events";
 import { createSqliteAgentRunEventStore } from "./agent-run-events-store";
 
 const RUN = "generation-sqlite";
@@ -102,17 +105,37 @@ describe("SQLite AgentRunEventStore", () => {
     try {
       const first = createSqliteAgentRunEventStore(firstDb);
       const second = createSqliteAgentRunEventStore(secondDb);
-      const firstSupervisor = createAgentRunEventSupervisor({
+      const acceptedSupervisor = createAgentRunEventSupervisor({
         events: first,
         nowEpochMilliseconds: () => 1_786_352_400_000,
         eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
       });
-      const secondSupervisor = createAgentRunEventSupervisor({
-        events: second,
+      acceptedSupervisor.accepted({ runId: RUN, attemptId: ATTEMPT, admissionId: "admission-sqlite" });
+      // Hold both supervisors on the same pre-write cursor to model two
+      // processes that read before either writer enters its immediate append.
+      // The second writer must retry with a new sequence and event id after the
+      // first transaction commits, rather than dropping its distinct status.
+      const stale = first.list(RUN);
+      const staleView = (store: AgentRunEventStore): AgentRunEventStore => {
+        let reads = 0;
+        return {
+          append: (input) => store.append(input),
+          list: (runId) => reads++ === 0 ? stale : store.list(runId),
+          snapshot: () => store.snapshot(),
+          restore: (snapshot) => store.restore(snapshot),
+          reset: () => store.reset(),
+        };
+      };
+      const firstSupervisor = createAgentRunEventSupervisor({
+        events: staleView(first),
         nowEpochMilliseconds: () => 1_786_352_400_000,
         eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
       });
-      firstSupervisor.accepted({ runId: RUN, attemptId: ATTEMPT, admissionId: "admission-sqlite" });
+      const secondSupervisor = createAgentRunEventSupervisor({
+        events: staleView(second),
+        nowEpochMilliseconds: () => 1_786_352_400_000,
+        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+      });
       await Promise.all([
         Promise.resolve().then(() => firstSupervisor.status({
           runId: RUN, attemptId: ATTEMPT, status: "generating", progressPct: 10,
@@ -125,6 +148,18 @@ describe("SQLite AgentRunEventStore", () => {
       expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
       expect(new Set(events.map((event) => event.eventId)).size).toBe(3);
       expect(events.filter((event) => event.kind === "status")).toHaveLength(2);
+      expect(events.filter((event) => event.kind === "status").map((event) => event.progressPct))
+        .toEqual([10, 20]);
+
+      // Repeating an identical stale write remains an idempotent replay, not a
+      // fourth status event.
+      const replay = createAgentRunEventSupervisor({
+        events: staleView(first),
+        nowEpochMilliseconds: () => 1_786_352_400_000,
+        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+      }).status({ runId: RUN, attemptId: ATTEMPT, status: "generating", progressPct: 10 });
+      expect(replay.eventId).toBe(events[1]!.eventId);
+      expect(first.list(RUN)).toHaveLength(3);
     } finally {
       secondDb.close();
       firstDb.close();

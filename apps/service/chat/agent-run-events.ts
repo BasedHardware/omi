@@ -814,35 +814,51 @@ const defaultSummary = (kind: AgentRunEventKind): string => kind.replace(/_/gu, 
 export const createAgentRunEventSupervisor = (
   deps: AgentRunEventSupervisorDependencies,
 ): AgentRunEventSupervisor => {
+  const MAX_APPEND_RETRIES = 8;
   const append = (
     kind: AgentRunEventKind,
     input: Record<string, unknown>,
   ): AgentRunEvent => {
     const runId = input.runId;
     if (typeof runId !== "string") throw new TypeError("agent run event missing run id");
-    const prior = deps.events.list(runId);
-    const sequence = prior.length + 1;
     const attemptId = input.attemptId;
     if (typeof attemptId !== "string") throw new TypeError("agent run event missing attempt id");
-    const eventId = deps.eventId?.(runId, sequence, kind) ?? `${runId}:${sequence}:${kind}`;
     const payload = { ...input };
     for (const reserved of ["schemaVersion", "runId", "attemptId", "eventId", "sequence",
       "visibility", "createdAt", "safeSummary", "kind"]) delete payload[reserved];
-    const candidate = {
-      schemaVersion: CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION,
-      runId,
-      attemptId,
-      eventId,
-      sequence,
-      visibility: input.visibility ?? "ui",
-      createdAt: deps.nowEpochMilliseconds(),
-      safeSummary: defaultSummary(kind),
-      kind,
-      ...payload,
-    };
-    const result = deps.events.append(candidate);
-    if (result.kind !== "appended") throw new TypeError(`agent run event append ${result.kind}`);
-    return result.event;
+    let forceFreshEventId = false;
+    for (let retry = 0; retry < MAX_APPEND_RETRIES; retry += 1) {
+      const prior = deps.events.list(runId);
+      const sequence = prior.length + 1;
+      const preferredEventId = deps.eventId?.(runId, sequence, kind)
+        ?? `${runId}:${sequence}:${kind}`;
+      // A stale read can race another process that used the same deterministic
+      // sequence-based id. Once that id conflicts, retain idempotent replay for
+      // an identical candidate but derive a fresh safe id for a distinct event.
+      const eventId = forceFreshEventId && prior.some((event) => event.eventId === preferredEventId)
+        ? `${runId}:event:${sequence}:${kind}:retry${retry + 1}`
+        : preferredEventId;
+      const candidate = {
+        schemaVersion: CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION,
+        runId,
+        attemptId,
+        eventId,
+        sequence,
+        visibility: input.visibility ?? "ui",
+        createdAt: deps.nowEpochMilliseconds(),
+        safeSummary: defaultSummary(kind),
+        kind,
+        ...payload,
+      };
+      const result = deps.events.append(candidate);
+      if (result.kind === "appended" || result.kind === "replay") return result.event;
+      if (result.kind === "conflict" || (result.kind === "rejected" && result.reason === "sequence")) {
+        forceFreshEventId = true;
+        continue;
+      }
+      throw new TypeError(`agent run event append ${result.kind}`);
+    }
+    throw new TypeError("agent run event append conflict retry exhausted");
   };
   const withDefaults = <Input extends Record<string, unknown>>(kind: AgentRunEventKind, extra: Input) =>
     append(kind, extra);
