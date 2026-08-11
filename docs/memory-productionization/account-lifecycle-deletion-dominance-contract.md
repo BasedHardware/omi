@@ -112,11 +112,13 @@ retention or disposal.
 
 ## Output and content safety
 
-The frozen output contains only the contract version, closed mode, booleans,
+The frozen output contains only the contract version, closed mode, explicit
+lifecycle-fence booleans,
 bounded counts, closed obligation/surface codes, exact non-content coordinates,
 and content digests. It contains no transcript, memory, prompt, answer, model
 output, evidence excerpt, user-facing account state, provider error, SQL, path,
-or free-form reason.
+or free-form reason. A `false` fence means only that lifecycle does not block
+that surface; it never grants application authority.
 
 The plan is deterministic and byte-stable for the same detached input. It does
 not read the clock, environment, filesystem, database, network, or model.
