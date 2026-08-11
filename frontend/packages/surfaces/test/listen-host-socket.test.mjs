@@ -50,18 +50,21 @@ for (const shell of ["macos", "ios"]) {
       type: "preflight", requestId: "listen-preflight-1", permission: "granted",
       deviceState: "available", deviceLabel: { toString() { throw new Error("hostile getter"); } }, recovery: null,
     });
-    assert.equal(provider.snapshot().permission, "checking", "malformed host state cannot mint granted");
-    host.__omiListenPreflightEvent("listen-preflight-1", {
-      type: "preflight", requestId: "listen-preflight-1", permission: "granted",
+    assert.equal(provider.snapshot().permission, "unavailable", "malformed host state fails closed");
+    const valid = provider.refresh();
+    assert.deepEqual(posted[1], { id: "listen-preflight-2", action: "preflight", operation: "check" });
+    host.__omiListenPreflightEvent("listen-preflight-2", {
+      type: "preflight", requestId: "listen-preflight-2", permission: "granted",
       deviceState: "available", deviceLabel: "Default microphone", recovery: null,
     });
     await pending;
+    await valid;
     assert.deepEqual(provider.snapshot(), {
       permission: "granted",
       device: { state: "available", label: "Default microphone" },
       recovery: null,
     });
     assert.equal(JSON.stringify(provider.snapshot()).includes("deviceId"), false);
-    assert.equal(changed.length, 2, "refresh exposes checking before the native result");
+    assert.equal(changed.length, 4, "refreshes expose checking and fail-closed transitions");
   });
 }
