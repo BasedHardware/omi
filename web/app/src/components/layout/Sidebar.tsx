@@ -138,7 +138,7 @@ function MenuRow({
   onNavigate: () => void;
 }) {
   const className = cn(
-    'group flex items-center gap-3 rounded-element px-3 py-2',
+    'group flex items-center gap-3 rounded-card px-3 py-2',
     'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
     'transition-colors',
   );
@@ -228,7 +228,7 @@ function ProfileMenuRows({
         <button
           onClick={onSignOut}
           className={cn(
-            'w-full flex items-center gap-3 rounded-element px-3 py-2',
+            'w-full flex items-center gap-3 rounded-card px-3 py-2',
             'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
             'transition-colors',
           )}

@@ -63,6 +63,33 @@ describe('collapsed desktop sidebar alignment', () => {
   });
 });
 
+describe('profile menu row shape', () => {
+  it('matches every item radius to the outer menu container', async () => {
+    localStorage.setItem('sidebar-expanded', 'true');
+    render(<Sidebar isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Omi User/ }));
+
+    const items = [
+      'Connectors',
+      'Privacy',
+      'Developer',
+      'Account',
+      'Download',
+      'Help',
+      'Feedback',
+      'Discord',
+      'Sign Out',
+    ];
+
+    for (const name of items) {
+      expect(
+        screen.getByRole(name === 'Sign Out' ? 'button' : 'link', { name }),
+      ).toHaveClass('rounded-card');
+    }
+  });
+});
+
 describe('macOS promotion dismissal', () => {
   it('fires one neutral canvas explosion before dismissing permanently', async () => {
     localStorage.setItem('sidebar-expanded', 'true');
