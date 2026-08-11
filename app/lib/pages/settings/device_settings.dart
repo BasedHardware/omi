@@ -720,7 +720,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               trailing: Switch(
                 value: _omiButtonActionsEnabled,
                 activeThumbColor: Colors.white,
-                activeTrackColor: Colors.white,
+                activeTrackColor: const Color(0xFF636366),
                 onChanged: (value) {
                   setState(() => _omiButtonActionsEnabled = value);
                   SharedPreferencesUtil().omiButtonActionsEnabled = value;
