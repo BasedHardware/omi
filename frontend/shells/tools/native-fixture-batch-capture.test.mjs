@@ -265,12 +265,13 @@ test("assemble-receipt binds result manifest separately from replay artifacts", 
   }
 });
 
-test("prepared one-coordinate capture recreates PNG, sidecar, and result deterministically", () => {
+test("one manifest-scoped prepared app can capture a later coordinate deterministically", () => {
   const outRoot = path.join(root, ".build", `native-fixture-fake-capture-${process.pid}`);
   const matrix = path.join(root, ".build", `native-fixture-fake-capture-matrix-${process.pid}.json`);
   try {
     const coordinate = coordinateForAssembly();
-    writeFileSync(matrix, JSON.stringify(manifest([coordinate])));
+    const secondCoordinate = { ...coordinate, run_id: "assembly-fake-dark", theme: "dark", surface_query: coordinate.surface_query.replace("theme=light", "theme=dark") };
+    writeFileSync(matrix, JSON.stringify(manifest([coordinate, secondCoordinate])));
     const app = path.join(outRoot, "build/macos/omi-on-polish-batch.app");
     const executable = path.join(app, "Contents/MacOS/omi-on-polish-batch");
     const resources = path.join(app, "Contents/Resources");
@@ -282,22 +283,27 @@ test("prepared one-coordinate capture recreates PNG, sidecar, and result determi
     chmodSync(executable, 0o755);
     const preparedPath = path.join(outRoot, "prepared-input-set.json");
     const descriptor = {
-      schema: "omi.polish.native-fixture-prepared/v1", source_shas: { core: coreSha, platform: platformSha }, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), shell: "macos", offset: 0, limit: 1, coordinate_run_ids: [coordinate.run_id],
+      schema: "omi.polish.native-fixture-prepared/v1", source_shas: { core: coreSha, platform: platformSha }, manifest_path: `core:${path.relative(root, matrix)}`, manifest_sha256: sha256(readFileSync(matrix)), shell: "macos", scope: "manifest-shell", coordinate_run_ids: [coordinate.run_id, secondCoordinate.run_id],
       artifacts: { macos: { shell: "macos", app: `core:${path.relative(root, app)}`, build_dir: `core:${path.relative(root, path.join(outRoot, "build/macos"))}`, stamp: `core:${path.relative(root, path.join(app, "Contents/Resources/omi-build-stamp.json"))}`, stamp_sha256: sha256(readFileSync(path.join(app, "Contents/Resources/omi-build-stamp.json"))), bundle_id: null } },
       authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
     };
     descriptor.input_set = inputEntriesForFake(matrix, app);
     mkdirSync(outRoot, { recursive: true });
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
-    const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
+    const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /NATIVE_FIXTURE_BATCH_COMPLETE members=1/);
     const result = JSON.parse(readFileSync(path.join(outRoot, "batch-result.json"), "utf8"));
     assert.equal(result.schema, "omi.polish.native-fixture-batch-result/v1");
     assert.equal(result.batch_id, undefined);
     assert.equal(Object.keys(result.members).length, 1);
-    const image = path.join(outRoot, "captures/macos/assembly-fake.png");
+    const image = path.join(outRoot, "captures/macos/assembly-fake-dark.png");
     assert.equal(readFileSync(image).length, fixturePng(960, 671).length);
+    descriptor.coordinate_run_ids = [secondCoordinate.run_id];
+    writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
+    const narrowed = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "1", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    assert.notEqual(narrowed.status, 0);
+    assert.match(narrowed.stderr, /coordinate scope is stale/);
   } finally {
     rmSync(outRoot, { recursive: true, force: true });
     rmSync(matrix, { force: true });
