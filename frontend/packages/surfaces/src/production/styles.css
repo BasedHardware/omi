@@ -10,10 +10,29 @@
 * { box-sizing: border-box; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 body { margin: 0; min-width: 320px; overflow-x: hidden; color: var(--content-primary); background: var(--surface-canvas); }
-button, textarea, select { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button, select { min-height: var(--min-tap-target); border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); color: var(--content-primary); background: var(--surface-raised); cursor: pointer; }
-button:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: var(--focus-ring-width) solid var(--focus); outline-offset: 2px; }
-button:disabled { opacity: .45; cursor: default; }
+/* One focus contract for native controls, links, cards, and ARIA custom controls. */
+.production-shell :where(input, textarea, select, button, a, [tabindex]:not([tabindex="-1"]), [role="button"], [role="option"], [role="tab"], [role="menuitem"]):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+/* Keep a direct selector for host/component styles that otherwise suppress an
+   input outline (for example the borderless Home search field). */
+.production-shell input:focus-visible,
+.production-shell textarea:focus-visible,
+.production-shell select:focus-visible,
+.production-shell button:focus-visible,
+.production-shell a:focus-visible,
+.production-shell [tabindex]:not([tabindex="-1"]):focus-visible,
+.production-shell [role="button"]:focus-visible,
+.production-shell [role="option"]:focus-visible,
+.production-shell [role="tab"]:focus-visible,
+.production-shell [role="menuitem"]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus) !important;
+  outline-offset: 2px !important;
+}
+button:disabled, [aria-disabled="true"] { opacity: .45; cursor: default; }
 a { color: var(--accent); }
 #root { min-height: 100vh; padding: calc(var(--space-xl) + env(safe-area-inset-top, 0px)) calc(var(--space-lg) + env(safe-area-inset-right, 0px)) calc(var(--space-xxl) + env(safe-area-inset-bottom, 0px)) calc(var(--space-lg) + env(safe-area-inset-left, 0px)); }
 .production-shell { width: 100%; min-width: 0; max-width: 960px; margin: 0 auto; }
@@ -25,6 +44,17 @@ a { color: var(--accent); }
 .eyebrow, .memory-meta, .qa-label { color: var(--content-tertiary); font-family: var(--type-label-family); font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; }
 .surface-notices:empty { display: none; }
 .qa-label, .status-notice, .queue-notice, .operation-error { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); margin: var(--space-sm) 0; background: var(--surface-elevated); }
+.production-lifecycle-region { display: grid; gap: var(--space-xs); margin: 0 0 var(--space-md); }
+.production-lifecycle-region > :where(.status-notice, .queue-notice, .production-operation-error, .lifecycle-last-success, .lifecycle-saved-data, .lifecycle-dead-letters) { margin: 0; }
+.production-lifecycle-region[aria-busy="true"] { cursor: progress; }
+.lifecycle-next-action { margin: 0; color: var(--content-secondary); font-size: var(--type-label-size); }
+.lifecycle-retry { justify-self: start; }
+.production-operation-error { padding: var(--space-sm) var(--space-md); border: 1px solid var(--danger); border-radius: var(--radius-control); color: var(--danger); background: var(--surface-elevated); }
+.production-live-announcement { pointer-events: none; }
+.production-disabled-control-wrap { display: inline-flex; align-items: center; }
+.production-disabled-control { min-height: var(--min-tap-target); }
+.production-disabled-control[role="button"] { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); color: var(--content-primary); background: var(--surface-raised); }
+.production-disabled-control[role="button"]:focus-visible { opacity: .7; }
 .status-notice.saved-but-refresh-failed { border: 1px solid var(--warning); }
 .status-notice.unavailable, .operation-error { border: 1px solid var(--danger); }
 .queue-notice.needs-auth { border: 1px solid var(--warning); }
@@ -118,6 +148,10 @@ a { color: var(--accent); }
 .production-filter-chips::-webkit-scrollbar { display: none; }
 .production-filter-chips button { flex: 0 0 auto; border-radius: var(--radius-circular); }
 .production-filter-chips button[aria-pressed="true"] { color: var(--content-primary); border-color: var(--focus); background: var(--surface-elevated); font-weight: var(--type-button-weight); }
+button:hover:not(:disabled), a:hover, [role="button"]:hover:not([aria-disabled="true"]) { border-color: var(--focus); }
+button:active:not(:disabled), [role="button"]:active:not([aria-disabled="true"]) { transform: translateY(1px); }
+[aria-pressed="true"], [aria-selected="true"], .is-selected { border-color: var(--focus); }
+[aria-busy="true"] { cursor: progress; }
 
 .theme-mode-control { position: relative; display: inline-flex; width: 38px; min-width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 50%; color: var(--content-secondary); background: var(--surface-elevated); }
 .theme-mode-control .nav-icon { margin: 0; }
@@ -174,6 +208,24 @@ html[data-platform="mobile"] .memory-card { padding: var(--space-lg); }
 html[data-platform="mobile"] .memory-card-header { display: block; }
 html[data-platform="mobile"] .memory-provenance { display: inline-flex; margin-bottom: var(--space-sm); }
 html[data-platform="mobile"] .memory-actions button { flex: 1 1 auto; }
+
+/* State changes remain understandable without animation or glass translucency. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  html, body, .production-shell, .production-nav, .desktop-page-panel, .home-search-hero, .home-results-panel,
+  html[data-platform="mobile"] .production-shell > .production-nav:last-child {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: var(--surface-raised) !important;
+  }
+}
 
 /* Desktop Ink composition --------------------------------------------------
  * Two independent glass islands mirror the native Swift redesign: a compact
