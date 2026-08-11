@@ -66,13 +66,18 @@ export function ConversationSplitView() {
   const urlConversationId = searchParams.get('id');
   const urlRecapId = searchParams.get('recap');
 
-  const [selection, setSelection] = useState<Selection>(
+  const [selection, setSelectionState] = useState<Selection>(
     urlRecapId
       ? { kind: 'recap', id: urlRecapId }
       : urlConversationId
         ? { kind: 'conversation', id: urlConversationId }
         : null,
   );
+  const selectionRef = useRef(selection);
+  const setSelection = useCallback((nextSelection: Selection) => {
+    selectionRef.current = nextSelection;
+    setSelectionState(nextSelection);
+  }, []);
   const [selectedRecap, setSelectedRecap] = useState<DailySummary | null>(null);
 
   const selectedConversationId = selection?.kind === 'conversation' ? selection.id : null;
@@ -82,6 +87,7 @@ export function ConversationSplitView() {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState('');
   const {
     results: searchResults,
     loading: searchLoading,
@@ -228,8 +234,10 @@ export function ConversationSplitView() {
     if (!urlRecapId) {
       if (prevUrlRecapId !== null) {
         setSelectedRecap(null);
-        setSelection(null);
-        preventAutoSelect.current = true;
+        if (!urlConversationId) {
+          setSelection(null);
+          preventAutoSelect.current = true;
+        }
       }
       return;
     }
@@ -239,16 +247,19 @@ export function ConversationSplitView() {
     const known = recaps.find((r) => r.id === urlRecapId);
     setSelectedRecap(known ?? null);
     void getRecapDetail(urlRecapId).then((fullRecap) => {
-      if (fullRecap) {
-        setSelectedRecap((current) =>
-          current?.id === fullRecap.id ? fullRecap : current,
-        );
+      const activeSelection = selectionRef.current;
+      if (
+        fullRecap &&
+        activeSelection?.kind === 'recap' &&
+        activeSelection.id === fullRecap.id
+      ) {
+        setSelectedRecap(fullRecap);
       }
     });
-  }, [urlRecapId, recaps, getRecapDetail]);
+  }, [urlConversationId, urlRecapId, recaps, getRecapDetail]);
 
   // Determine if we're showing search results or regular list
-  const isSearching = searchQuery.trim().length > 0;
+  const isSearching = submittedSearchQuery.length > 0;
 
   // Filter conversations for the starred folder (client-side, like folders' All)
   const visibleConversations = useMemo(() => {
@@ -281,7 +292,9 @@ export function ConversationSplitView() {
   // Auto-select the newest tile on load (only if no URL param and not explicitly showing the gallery)
   useEffect(() => {
     if (selection || urlConversationId || urlRecapId) return;
-    if (listLoading || preventAutoSelect.current) return;
+    const waitingForRecaps =
+      !isSearching && !filterDate && selectedFolderId === FOLDER_ALL && recapsLoading;
+    if (listLoading || waitingForRecaps || preventAutoSelect.current) return;
 
     const firstItem = dayGroups[0]?.items[0];
     if (!firstItem) return;
@@ -292,7 +305,17 @@ export function ConversationSplitView() {
     } else {
       setSelection({ kind: 'conversation', id: firstItem.id });
     }
-  }, [dayGroups, listLoading, selection, urlConversationId, urlRecapId]);
+  }, [
+    dayGroups,
+    filterDate,
+    isSearching,
+    listLoading,
+    recapsLoading,
+    selectedFolderId,
+    selection,
+    urlConversationId,
+    urlRecapId,
+  ]);
 
   // Clear folder switching state when loading completes
   useEffect(() => {
@@ -366,10 +389,23 @@ export function ConversationSplitView() {
   );
 
   // Handle search
+  const handleSearchQueryChange = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      if (!query.trim() && submittedSearchQuery) {
+        setSubmittedSearchQuery('');
+        clearSearch();
+      }
+    },
+    [submittedSearchQuery, clearSearch],
+  );
+
   const handleSearch = useCallback(
     (query: string) => {
-      if (query.trim()) {
-        performSearch(query);
+      const submittedQuery = query.trim();
+      setSubmittedSearchQuery(submittedQuery);
+      if (submittedQuery) {
+        performSearch(submittedQuery);
       } else {
         clearSearch();
       }
@@ -383,12 +419,13 @@ export function ConversationSplitView() {
       setFilterDate(date);
       setSelection(null); // Reset selection to auto-select first from new results
       // Clear search when changing date filter
-      if (searchQuery) {
+      if (searchQuery || submittedSearchQuery) {
         setSearchQuery('');
+        setSubmittedSearchQuery('');
         clearSearch();
       }
     },
-    [searchQuery, clearSearch],
+    [searchQuery, submittedSearchQuery, clearSearch],
   );
 
   // Handle resize. The detail pane sits on the right, so dragging the handle
@@ -634,7 +671,7 @@ export function ConversationSplitView() {
       <PageToolbar
         search={{
           value: searchQuery,
-          onChange: setSearchQuery,
+          onChange: handleSearchQueryChange,
           onSubmit: handleSearch,
           placeholder: 'Search conversations...',
         }}
