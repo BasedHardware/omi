@@ -152,6 +152,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   // comparison would make simulator time and animation bytes silently drift.
   const source = readFileSync(producer, "utf8");
   const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
+  const dartHost = readFileSync(path.join(root, "shells/ios/app/lib/main.dart"), "utf8");
   assert.match(source, /const maxCoordinates = 1236/);
   assert.match(source, /OMI_SURFACE_PORT = "5290"/);
   assert.match(source, /credentials: false/);
@@ -191,6 +192,9 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(appDelegate, /capture-ready-invalid/);
   assert.match(appDelegate, /capture-ready-write-failed/);
   assert.match(appDelegate, /omi-native-capture-ready\.json/);
+  assert.match(dartHost, /_captureOnly && msg\.message\.contains\('OMI_PRODUCTION_READY'\)/);
+  assert.match(dartHost, /_beginCaptureReadiness\(\)/);
+  assert.match(dartHost, /page-finished callback precedes React's typed fixture root/);
   assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
