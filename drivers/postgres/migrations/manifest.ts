@@ -73,4 +73,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0011-memory-read-grounding-artifacts.sql",
     sha256: "455b9ca2f2902b62d692d78aee414881eed62b8e2792568fffe688a774d90a39",
   }),
+  Object.freeze({
+    version: 12,
+    name: "firebase-credential-bindings",
+    fileName: "0012-firebase-credential-bindings.sql",
+    sha256: "4f1fc55e079f0c58e424c4cd6bf9b85a7d420b6627997cf1a9bf960723649b26",
+  }),
 ]);

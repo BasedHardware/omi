@@ -46,6 +46,8 @@ const expectedTables = [
   "application_credential_revisions",
   "application_grant_heads",
   "application_grant_revisions",
+  "firebase_application_credential_bindings",
+  "firebase_identity_bindings",
   "memory_candidate_derivation_artifacts",
   "memory_claim_evidence_refs",
   "memory_claim_lineages",
@@ -133,10 +135,19 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     for (const table of tables) {
       if (table.name === "platform_schema_migrations") continue;
       expect(table.body, table.name).toMatch(/\baccount_id\s+text\b/);
-      expect(table.body, table.name).toMatch(/account_id\s+text\s+PRIMARY KEY|PRIMARY KEY\s*\(\s*account_id\b/);
+      if (table.name === "firebase_identity_bindings") {
+        expect(table.body).toContain("PRIMARY KEY (firebase_project_id, firebase_uid)");
+      } else {
+        expect(table.body, table.name)
+          .toMatch(/account_id\s+text\s+PRIMARY KEY|PRIMARY KEY\s*\(\s*account_id\b/);
+      }
 
-      for (const key of table.body.matchAll(/\b(?:PRIMARY KEY|UNIQUE)\s*\(([^)]*)\)/g)) {
-        expect(key[1]!.split(",")[0]!.trim(), `${table.name} key`).toBe("account_id");
+      for (const key of table.body.matchAll(/\b(PRIMARY KEY|UNIQUE)\s*\(([^)]*)\)/g)) {
+        const firstCoordinate = key[2]!.split(",")[0]!.trim();
+        if (table.name === "firebase_identity_bindings"
+          && key[1] === "PRIMARY KEY"
+          && firstCoordinate === "firebase_project_id") continue;
+        expect(firstCoordinate, `${table.name} key`).toBe("account_id");
       }
       for (const foreignKey of table.body.matchAll(
         /FOREIGN KEY\s*\(([^)]*)\)\s+REFERENCES\s+(omi_memory\.[a-z0-9_]+)\s*\(([^)]*)\)/g,
@@ -159,6 +170,77 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(grant.body).toContain("grant_id text NOT NULL");
     expect(grant.body).toContain("grant_version bigint NOT NULL");
     expect(grant.body).toContain("lifecycle IN ('active', 'inactive', 'revoked')");
+  });
+
+  test("binds one global Firebase identity to one account and one account-scoped credential", () => {
+    const identity = tables.find((table) => table.name === "firebase_identity_bindings")!;
+    expect(identity.body).toContain("PRIMARY KEY (firebase_project_id, firebase_uid)");
+    expect(identity.body).toContain(
+      "UNIQUE (account_id, firebase_project_id, firebase_uid, principal_id)",
+    );
+    expect(identity.body).toContain("FOREIGN KEY (account_id, source_control_revision)");
+    expect(identity.body).toContain(
+      "REFERENCES omi_memory.account_control_revisions (account_id, control_revision)",
+    );
+
+    const application = tables.find(
+      (table) => table.name === "firebase_application_credential_bindings",
+    )!;
+    expect(application.body).toContain(
+      "PRIMARY KEY (account_id, firebase_project_id, firebase_uid, application_id)",
+    );
+    expect(application.body).toContain(
+      "FOREIGN KEY (account_id, firebase_project_id, firebase_uid, principal_id)",
+    );
+    expect(application.body).toContain(
+      "(account_id, firebase_project_id, firebase_uid, principal_id)",
+    );
+    expect(application.body).toContain(
+      "FOREIGN KEY (account_id, application_id, credential_id)",
+    );
+    expect(application.body).toContain(
+      "REFERENCES omi_memory.application_credential_heads",
+    );
+  });
+
+  test("exposes only the fixed Firebase authorization lookup for the new binding tables", () => {
+    const signature = "omi_memory.lookup_firebase_application_authorization(text, text, text, text)";
+    const functionSql = migrationSql.find((migration) => migration.version === 12)!.sql;
+    expect(allSql).toContain("CREATE FUNCTION omi_memory.lookup_firebase_application_authorization(");
+    expect(allSql).toContain("SECURITY DEFINER\nSET search_path = pg_catalog, omi_memory");
+    expect(functionSql).not.toContain("FOR SHARE");
+    expect(allSql).toContain(`REVOKE ALL ON FUNCTION ${signature}`);
+    expect(allSql).toContain(`GRANT EXECUTE ON FUNCTION ${signature}`);
+    expect(allSql).not.toMatch(
+      /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*omi_memory\.firebase_(?:identity|application_credential)_bindings/i,
+    );
+    const parameters = functionSql.slice(
+      functionSql.indexOf("CREATE FUNCTION"),
+      functionSql.indexOf(")\nRETURNS TABLE"),
+    );
+    expect(parameters).toContain("requested_firebase_project_id text");
+    expect(parameters).toContain("requested_firebase_uid text");
+    expect(parameters).toContain("requested_application_id text");
+    expect(parameters).toContain("requested_capability text");
+    for (const forbidden of [
+      "requested_account_id",
+      "requested_principal_id",
+      "requested_credential_id",
+      "requested_grant_id",
+      "requested_account_epoch",
+      "requested_control_revision",
+    ]) expect(parameters).not.toContain(forbidden);
+    for (const relation of [
+      "firebase_identity_bindings",
+      "firebase_application_credential_bindings",
+      "platform_accounts",
+      "account_control_heads",
+      "account_control_revisions",
+      "application_credential_heads",
+      "application_credential_revisions",
+      "application_grant_heads",
+      "application_grant_revisions",
+    ]) expect(functionSql).toContain(`omi_memory.${relation}`);
   });
 
   test("locks authority through one fixed security-definer function without table mutation grants", () => {
