@@ -28,7 +28,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?\+[1-9][0-9]*-macos$' || {
+          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$' || {
             echo 'release_tag must be an exact immutable macOS candidate tag' >&2
             exit 1
           }

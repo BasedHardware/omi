@@ -19,6 +19,7 @@ REQUIRED = (
     '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
     "manifest_sha256",
     "Read current pointers and capture workflow-owned CAS inputs",
+    "Stable promotion requires the exact current qualified Beta release ID",
     '"$BASE/macos-beta"',
     "EXPECTED_RELEASE_ID",
     "EXPECTED_GENERATION",

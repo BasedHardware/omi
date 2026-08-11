@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from utils.http_client import get_web_fetch_client
 
 REPOSITORY = "BasedHardware/omi"
-TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+(?P<build>[1-9][0-9]*)-macos$")
+TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\+(?P<build>[1-9][0-9]*)-macos$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 UTC_RFC3339_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$")
 _EXACT_DATETIME_TYPE = datetime
@@ -67,7 +67,7 @@ def _is_fresh(timestamp: datetime, now: datetime) -> bool:
 
 
 def _max_age_seconds() -> int:
-    raw = os.getenv("QUALIFIED_BETA_MAX_AGE_SECONDS", "604800")
+    raw = os.getenv("BETA_CANDIDATE_MAX_AGE_SECONDS", "604800")
     try:
         value = int(raw)
     except ValueError:

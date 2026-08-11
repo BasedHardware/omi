@@ -90,7 +90,7 @@ class BetaCandidatePromotionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$")
 
 
 class BetaAdmissionControlRequest(BaseModel):

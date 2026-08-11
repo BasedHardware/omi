@@ -130,7 +130,12 @@
   "allOf": [
     {
       "if": { "properties": { "qualification_tier": { "const": "T2" } } },
-      "then": { "properties": { "qualification_passed": { "const": true } } },
+      "then": {
+        "properties": {
+          "qualification_passed": { "const": true },
+          "qualification_evidence_asset": { "pattern": "^qualification-evidence-[^/]+\\.json$" }
+        }
+      },
       "else": {
         "properties": {
           "qualification_passed": { "const": false }
