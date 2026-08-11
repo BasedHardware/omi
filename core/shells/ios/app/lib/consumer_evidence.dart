@@ -213,17 +213,25 @@ final class ConsumerEvidenceDriver {
   int _routeIndex = 0;
   bool _polling = false;
   bool _closed = false;
+  Uri? _expectedFinishedUri;
 
   static Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
 
-  Future<void> start() async => navigate(consumerEvidenceRouteUri(ConsumerEvidenceRoute.values.first));
+  Future<void> start() async => _navigateTo(ConsumerEvidenceRoute.values.first);
 
-  Future<void> pageFinished() async {
+  Future<void> pageFinished(String? finishedUrl, {Future<void> Function()? prepareOwnedDocument}) async {
     if (_closed || _polling || _routeIndex >= ConsumerEvidenceRoute.values.length) {
       return;
     }
+    final expectedFinishedUri = _expectedFinishedUri;
+    final finishedUri = finishedUrl == null ? null : Uri.tryParse(finishedUrl);
+    if (expectedFinishedUri == null || finishedUri != expectedFinishedUri) {
+      return;
+    }
+    _expectedFinishedUri = null;
     _polling = true;
     try {
+      await prepareOwnedDocument?.call();
       final expected = ConsumerEvidenceRoute.values[_routeIndex];
       var listenStarted = false;
       int? chatAdmissionBaseline;
@@ -261,7 +269,7 @@ final class ConsumerEvidenceDriver {
             await collector.finish();
             _closed = true;
           } else {
-            await navigate(consumerEvidenceRouteUri(ConsumerEvidenceRoute.values[_routeIndex]));
+            await _navigateTo(ConsumerEvidenceRoute.values[_routeIndex]);
           }
           return;
         }
@@ -279,7 +287,21 @@ final class ConsumerEvidenceDriver {
 
   Future<void> teardown() async {
     _closed = true;
+    _expectedFinishedUri = null;
     await collector.teardown();
+  }
+
+  Future<void> _navigateTo(ConsumerEvidenceRoute route) async {
+    final uri = consumerEvidenceRouteUri(route);
+    _expectedFinishedUri = uri;
+    try {
+      await navigate(uri);
+    } catch (_) {
+      if (_expectedFinishedUri == uri) {
+        _expectedFinishedUri = null;
+      }
+      rethrow;
+    }
   }
 }
 
