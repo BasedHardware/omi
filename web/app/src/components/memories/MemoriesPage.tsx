@@ -10,7 +10,7 @@ import {
   lazy,
   Suspense,
 } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   List,
   Network,
@@ -69,6 +69,7 @@ export function MemoriesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const {
     memories,
@@ -596,29 +597,59 @@ export function MemoriesPage() {
                 )}
 
                 {/* Memory list */}
-                {(loading && memories.length === 0) || isPending ? (
-                  <MemoryListSkeleton />
-                ) : (
-                  <MemoryList
-                    memories={filteredMemories}
-                    loading={loading}
-                    hasMore={hasMore && !searchQuery && !selectedTag}
-                    onLoadMore={loadMore}
-                    onEdit={editMemory}
-                    onDelete={removeMemory}
-                    onToggleVisibility={toggleVisibility}
-                    onAccept={acceptMemory}
-                    onReject={rejectMemory}
-                    highlightedMemoryId={highlightedMemoryId}
-                    // Only pass selection props when in select mode
-                    selectedIds={isSelectMode ? selectedIds : undefined}
-                    onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
-                    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
-                    onEnterSelectionMode={
-                      !isSelectMode ? enterSelectionModeWithId : undefined
-                    }
-                  />
-                )}
+                <div data-testid="memory-list-transition" className="grid flex-1 min-h-0">
+                  <AnimatePresence mode="sync" initial={false}>
+                    {(loading && memories.length === 0) || isPending ? (
+                      <motion.div
+                        key="memory-list-skeleton"
+                        data-testid="memory-list-skeleton-state"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{
+                          duration: reduceMotion ? 0.08 : 0.18,
+                          ease: [0.23, 1, 0.32, 1],
+                        }}
+                        className="col-start-1 row-start-1 min-h-0 overflow-hidden"
+                      >
+                        <MemoryListSkeleton />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="memory-list-content"
+                        data-testid="memory-list-content-state"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{
+                          duration: reduceMotion ? 0.08 : 0.18,
+                          ease: [0.23, 1, 0.32, 1],
+                        }}
+                        className="col-start-1 row-start-1 flex min-h-0 flex-col"
+                      >
+                        <MemoryList
+                          memories={filteredMemories}
+                          loading={loading}
+                          hasMore={hasMore && !searchQuery && !selectedTag}
+                          onLoadMore={loadMore}
+                          onEdit={editMemory}
+                          onDelete={removeMemory}
+                          onToggleVisibility={toggleVisibility}
+                          onAccept={acceptMemory}
+                          onReject={rejectMemory}
+                          highlightedMemoryId={highlightedMemoryId}
+                          // Only pass selection props when in select mode
+                          selectedIds={isSelectMode ? selectedIds : undefined}
+                          onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
+                          // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+                          onEnterSelectionMode={
+                            !isSelectMode ? enterSelectionModeWithId : undefined
+                          }
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </>
             ) : viewMode === 'graph' ? (
               <Suspense

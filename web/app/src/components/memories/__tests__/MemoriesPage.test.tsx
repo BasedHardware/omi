@@ -1,11 +1,51 @@
+import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoriesPage } from '@/components/memories/MemoriesPage';
+
+const mocks = vi.hoisted(() => ({
+  loading: false,
+  reducedMotion: false,
+}));
+
+vi.mock('framer-motion', async () => {
+  const ReactModule = await import('react');
+  const MotionDiv = ReactModule.forwardRef<
+    HTMLDivElement,
+    React.HTMLAttributes<HTMLDivElement> & {
+      initial?: unknown;
+      animate?: unknown;
+      exit?: unknown;
+      transition?: { duration?: number };
+    }
+  >(
+    (
+      { initial: _initial, animate: _animate, exit: _exit, transition, ...props },
+      ref,
+    ) => <div ref={ref} data-motion-duration={transition?.duration} {...props} />,
+  );
+
+  return {
+    AnimatePresence: ({
+      children,
+      mode,
+    }: {
+      children: React.ReactNode;
+      mode?: string;
+    }) => (
+      <div data-testid={mode ? 'memory-list-presence' : undefined} data-mode={mode}>
+        {children}
+      </div>
+    ),
+    motion: { div: MotionDiv },
+    useReducedMotion: () => mocks.reducedMotion,
+  };
+});
 
 vi.mock('@/hooks/useMemories', () => ({
   useMemories: () => ({
     memories: [],
-    loading: false,
+    loading: mocks.loading,
     error: null,
     hasMore: false,
     loadMore: vi.fn(),
@@ -47,6 +87,11 @@ vi.mock('@/components/memories/MemoryList', () => ({
 }));
 
 describe('MemoriesPage list layout', () => {
+  beforeEach(() => {
+    mocks.loading = false;
+    mocks.reducedMotion = false;
+  });
+
   it('gives the desktop list column the remaining height without changing mobile flow', () => {
     render(<MemoriesPage />);
 
@@ -59,5 +104,46 @@ describe('MemoriesPage list layout', () => {
       'lg:flex-col',
     );
     expect(screen.getByTestId('memory-list')).toBeInTheDocument();
+  });
+
+  it('crossfades the skeleton and content in the same layout cell', () => {
+    mocks.loading = true;
+    const { rerender } = render(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list-presence')).toHaveAttribute(
+      'data-mode',
+      'sync',
+    );
+    expect(screen.getByTestId('memory-list-transition')).toHaveClass('grid');
+    expect(screen.getByTestId('memory-list-skeleton-state')).toHaveClass(
+      'col-start-1',
+      'row-start-1',
+    );
+    expect(screen.getByTestId('memory-list-skeleton-state')).toHaveAttribute(
+      'data-motion-duration',
+      '0.18',
+    );
+
+    mocks.loading = false;
+    rerender(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list-content-state')).toHaveClass(
+      'col-start-1',
+      'row-start-1',
+    );
+    expect(screen.getByTestId('memory-list-content-state')).toHaveAttribute(
+      'data-motion-duration',
+      '0.18',
+    );
+  });
+
+  it('shortens the opacity crossfade when reduced motion is preferred', () => {
+    mocks.reducedMotion = true;
+    render(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list-content-state')).toHaveAttribute(
+      'data-motion-duration',
+      '0.08',
+    );
   });
 });

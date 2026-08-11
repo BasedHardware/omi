@@ -111,7 +111,7 @@ export function MemoryList({
       ref={containerRef}
       role="region"
       aria-label="Memories list"
-      className="flex flex-col overflow-y-auto max-h-[calc(100dvh-350px)] lg:max-h-none lg:flex-1 lg:min-h-0 scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
+      className="flex flex-col overflow-y-auto max-h-[calc(100dvh-350px)] lg:max-h-none lg:flex-1 lg:min-h-0 pr-2 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.12)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb:hover]:bg-white/20"
     >
       {/* Virtual scrolling container */}
       <div
@@ -185,7 +185,7 @@ export function MemoryListSkeleton() {
           className={cn(
             'rounded-xl p-4',
             'bg-bg-tertiary border border-bg-quaternary',
-            'animate-pulse',
+            'animate-pulse motion-reduce:animate-none',
           )}
         >
           <div className="flex items-start gap-3">

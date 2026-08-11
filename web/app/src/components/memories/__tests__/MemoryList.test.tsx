@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Memory } from '@/types/conversation';
-import { MemoryList } from '@/components/memories/MemoryList';
+import { MemoryList, MemoryListSkeleton } from '@/components/memories/MemoryList';
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: () => ({
@@ -39,6 +39,18 @@ describe('MemoryList layout', () => {
       'lg:max-h-none',
       'lg:flex-1',
       'lg:min-h-0',
+      'pr-2',
+      '[scrollbar-gutter:stable]',
+      '[&::-webkit-scrollbar]:w-1.5',
+    );
+  });
+
+  it('keeps skeleton shimmer still when reduced motion is preferred', () => {
+    const { container } = render(<MemoryListSkeleton />);
+
+    expect(container.firstElementChild?.firstElementChild).toHaveClass(
+      'animate-pulse',
+      'motion-reduce:animate-none',
     );
   });
 });
