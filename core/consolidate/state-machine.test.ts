@@ -5,6 +5,7 @@ import {
   DurableMemoryWorkTransitionError,
   acceptDurableMemoryWork,
   acceptedDurableMemoryWorkDigest,
+  durableMemoryWorkStateDigest,
   expireDurableMemoryWorkLease,
   failDurableMemoryWork,
   leaseDurableMemoryWork,
@@ -139,6 +140,9 @@ test("P3 successful-empty is a terminal durable result and persisted rows revali
   );
   expect(succeeded).toMatchObject({ state: "succeeded", lease: null, outcome: { kind: "succeeded", result_kind: "successful_empty" } });
   expect(parseDurableMemoryWorkJob(structuredClone(succeeded))).toEqual(succeeded);
+  expect(durableMemoryWorkStateDigest(structuredClone(succeeded)))
+    .toBe(durableMemoryWorkStateDigest(succeeded));
+  expect(durableMemoryWorkStateDigest(leased)).not.toBe(durableMemoryWorkStateDigest(succeeded));
   expect(() => leaseDurableMemoryWork(succeeded, "worker:two", 200, 10)).toThrow(expectCode("ineligible_state"));
   expect(() => parseDurableMemoryWorkJob({ ...succeeded, accepted_work_digest: "5".repeat(64) })).toThrow(expectCode("invalid_job"));
   expect(() => parseDurableMemoryWorkJob({ ...succeeded, outcome: { ...succeeded.outcome, raw_error: "secret" } })).toThrow(expectCode("invalid_job"));

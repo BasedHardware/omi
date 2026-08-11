@@ -316,6 +316,10 @@ export const parseDurableMemoryWorkJob = (value: unknown): Readonly<DurableMemor
   });
 };
 
+/** Stable CAS/content coordinate for one fully validated persisted state. */
+export const durableMemoryWorkStateDigest = (value: DurableMemoryWorkJob): string =>
+  createHash("sha256").update(JSON.stringify(parseDurableMemoryWorkJob(value))).digest("hex");
+
 export const acceptDurableMemoryWork = (input: AcceptedDurableMemoryWork): Readonly<DurableMemoryWorkJob> => {
   const accepted = acceptedFields(input);
   return parseDurableMemoryWorkJob({
