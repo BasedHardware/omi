@@ -81,6 +81,7 @@ const boot = (
   generationLiveness?: ChatGenerationLivenessPolicy,
   generationRetentionPolicy?: ChatGenerationRetentionPolicy,
   agentRunEvents?: AgentRunEventStore,
+  chatSupervisor?: ChatGenerationSupervisor,
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -97,6 +98,7 @@ const boot = (
     generationLiveness,
     generationRetentionPolicy,
     agentRunEvents,
+    chatSupervisor,
   });
   return { db, local, stores };
 };
@@ -1854,8 +1856,14 @@ describe("ratified chat generation wire red proofs", () => {
 
   test("agent timeline transport projects reload-stable tool, approval, recovery, usage, and terminal events", async () => {
     const agentStore = createInMemoryAgentRunEventStore();
+    const detachedSupervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted: (): void => {},
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
+    });
     const { db, local } = boot(createInMemoryLocalServiceStores(), undefined, "agent-timeline-proof",
-      createEmptyChatGenerationContextSource(), undefined, undefined, undefined, undefined, agentStore);
+      createEmptyChatGenerationContextSource(), undefined, undefined, undefined, undefined, agentStore,
+      detachedSupervisor);
     const admission = await post(local, create("agent-timeline"));
     const accepted = await readAdmission(admission);
     const runId = accepted.generation.id;
@@ -1928,14 +1936,95 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("real scripted generation emits a joined agent timeline that reloads and replays", async () => {
+    const agentStore = createInMemoryAgentRunEventStore();
+    const source = createScriptedChatGenerationSource([{
+      delayMs: 1,
+      text: "scripted answer",
+      progressPct: 35,
+      usage: {
+        usageId: "usage-scripted",
+        provider: "local",
+        model: "deterministic",
+        inputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 3,
+      },
+    }]);
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source,
+      "agent-real-scripted-proof", createEmptyChatGenerationContextSource(),
+      undefined, undefined, undefined, undefined, agentStore);
+    const admission = await readAdmission(await post(local, create("agent-real-scripted")));
+    const generation = await generationEvents(local, admission.generation.id);
+    expect((await generation.text())).toContain("event: done");
+    const events = agentStore.list(admission.generation.id);
+    expect(events.map((event) => event.kind)).toEqual([
+      "run_accepted", "capability_receipt", "status", "status", "context_receipt", "status", "status", "usage", "terminal",
+    ]);
+    expect(events.find((event) => event.kind === "status" && event.progressPct === 35)).toBeDefined();
+    expect(events.find((event) => event.kind === "usage" && event.usageId === "usage-scripted")).toBeDefined();
+    expect(events.every((event) => event.runId === admission.generation.id)).toBe(true);
+    expect(events.filter((event) => event.kind === "terminal")).toHaveLength(1);
+    expect(events.some((event) => event.kind === "tool_request" || event.kind === "approval_requested")).toBe(false);
+    const timeline = await agentEvents(local, admission.generation.id);
+    const body = await timeline.text();
+    expect(body).toContain(`id: ${events.at(-1)!.eventId}`);
+    expect(body).toContain("event: terminal");
+
+    const snapshot = agentStore.snapshot();
+    const reloaded = createInMemoryAgentRunEventStore();
+    reloaded.restore(snapshot);
+    expect(reloaded.list(admission.generation.id)).toEqual(events);
+    const replay = await agentEvents(local, admission.generation.id, events.at(-1)!.eventId);
+    expect((await replay.text())).toContain("event: terminal");
+    db.close();
+  });
+
+  test("real provider failure emits one failed agent terminal with no tool or approval claims", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onError({ code: "generation_provider_failed", retryable: false }));
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const agentStore = createInMemoryAgentRunEventStore();
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source,
+      "agent-real-failure-proof", createEmptyChatGenerationContextSource(),
+      undefined, undefined, undefined, undefined, agentStore);
+    const admission = await readAdmission(await post(local, create("agent-real-failure")));
+    const generation = await generationEvents(local, admission.generation.id);
+    expect((await generation.text())).toContain("event: failed");
+    const events = agentStore.list(admission.generation.id);
+    const terminal = events.at(-1);
+    expect(events.every((event) => event.runId === admission.generation.id)).toBe(true);
+    expect(events.filter((event) => event.kind === "terminal")).toHaveLength(1);
+    expect(terminal).toMatchObject({
+      kind: "terminal",
+      terminalOutcome: "failed",
+      terminalCode: "generation_provider_failed",
+      retryable: false,
+      recoveryAction: null,
+    });
+    expect(events.some((event) => event.kind === "tool_request" || event.kind === "approval_requested")).toBe(false);
+    expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+    const replay = await agentEvents(local, admission.generation.id);
+    expect((await replay.text())).toContain("event: terminal");
+    db.close();
+  });
+
   test("agent timeline closes a live reader after auth revocation on the next bounded poll", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start: () => Object.freeze({ cancel: (): void => {} }),
     });
     const agentStore = createInMemoryAgentRunEventStore();
+    const detachedSupervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted: (): void => {},
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
+    });
     const { db, local } = boot(createInMemoryLocalServiceStores(), hanging,
       "agent-timeline-auth-lease-proof", createEmptyChatGenerationContextSource(),
-      undefined, undefined, undefined, undefined, agentStore);
+      undefined, undefined, undefined, undefined, agentStore, detachedSupervisor);
     const admission = await readAdmission(await post(local, create("agent-auth-lease")));
     const supervisor = createAgentRunEventSupervisor({
       events: agentStore,
@@ -1981,9 +2070,14 @@ describe("ratified chat generation wire red proofs", () => {
       start: () => Object.freeze({ cancel: (): void => {} }),
     });
     const agentStore = createInMemoryAgentRunEventStore();
+    const detachedSupervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted: (): void => {},
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
+    });
     const { db, local } = boot(createInMemoryLocalServiceStores(), hanging,
       "agent-timeline-backpressure-proof", createEmptyChatGenerationContextSource(),
-      undefined, scheduler, undefined, undefined, agentStore);
+      undefined, scheduler, undefined, undefined, agentStore, detachedSupervisor);
     const admission = await readAdmission(await post(local, create("agent-backpressure")));
     const runId = admission.generation.id;
     const attemptId = `${runId}:attempt:1`;

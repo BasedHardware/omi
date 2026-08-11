@@ -478,6 +478,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     throw new TypeError("persistentQaStores requires an externally owned store set");
   }
   const stores = options.stores ?? createInMemoryLocalServiceStores();
+  const agentRunEvents = options.agentRunEvents ?? createInMemoryAgentRunEventStore();
   const conversations = stores.conversations;
   const folders = stores.folders;
   const folderDeletion = stores.folderDeletion;
@@ -498,6 +499,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     stores.settings.reset();
     stores.currentSession.reset();
     stores.accountLifecycle.reset();
+    agentRunEvents.reset();
   };
 
   const seedServiceStores = (): void => {
@@ -609,7 +611,6 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       .digest("hex")}`;
   const chatNowEpochMilliseconds = options.nowEpochMilliseconds
     ?? (() => anchorEpochSeconds * 1_000);
-  const agentRunEvents = options.agentRunEvents ?? createInMemoryAgentRunEventStore();
   const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
     source: options.generationSource,
     context: options.generationContext,
@@ -626,6 +627,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       opaqueChatId("event", accountId, generationId, kind, String(sequence)),
     revision: (accountId, messageId, payloadHash) =>
       opaqueChatId("revision", accountId, messageId, payloadHash),
+    agentRunEvents,
   });
   chatSupervisor.recoverInterrupted();
 

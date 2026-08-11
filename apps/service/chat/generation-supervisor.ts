@@ -19,12 +19,18 @@ import type {
 } from "./attachment-content";
 import {
   realtimeChatGenerationScheduler,
+  readChatGenerationSourceCapability,
   type ChatGenerationProgress,
   type ChatGenerationScheduler,
   type ChatGenerationSource,
   type ChatGenerationSourceRun,
   type ChatGenerationUsage,
 } from "./generation-source";
+import {
+  createAgentRunEventSupervisor,
+  type AgentRunEventStore,
+  type AgentRunEventSupervisor,
+} from "./agent-run-events";
 import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
@@ -69,6 +75,8 @@ export interface ChatGenerationSupervisorDependencies {
     sequence: number,
   ) => string;
   readonly revision: (accountId: string, messageId: string, payloadHash: string) => string;
+  /** Optional privacy-safe lifecycle ledger; text-generation remains authoritative. */
+  readonly agentRunEvents?: AgentRunEventStore;
 }
 
 export interface ChatGenerationLivenessPolicy {
@@ -91,6 +99,7 @@ interface ActiveGeneration {
   readonly generationId: string;
   readonly admitted: StoredChatMessage;
   readonly attemptId: string;
+  readonly admissionId: string;
   text: string;
   run: ChatGenerationSourceRun | null;
   runCancelled: boolean;
@@ -324,8 +333,113 @@ export const createChatGenerationSupervisor = (
   const active = new Map<string, ActiveGeneration>();
   const scheduler = deps.scheduler ?? realtimeChatGenerationScheduler;
   const liveness = validateLivenessPolicy(deps.liveness);
+  const agentEvents: AgentRunEventSupervisor | null = deps.agentRunEvents === undefined
+    ? null
+    : createAgentRunEventSupervisor({
+        events: deps.agentRunEvents,
+        nowEpochMilliseconds: deps.nowEpochMilliseconds,
+        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+      });
   const keyOf = (accountId: string, generationId: string): string =>
     `${accountId.length}:${accountId}:${generationId}`;
+
+  const recordAgent = (
+    operation: () => void,
+  ): void => {
+    if (agentEvents === null) return;
+    try {
+      operation();
+    } catch {
+      // The agent timeline is a privacy-safe observability sidecar. A malformed
+      // or unavailable sidecar must never change canonical text-generation
+      // admission, cancellation, or finalization semantics.
+    }
+  };
+
+  const recordAgentAccepted = (state: ActiveGeneration): void => {
+    recordAgent(() => agentEvents!.accepted({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      admissionId: state.admissionId,
+    }));
+  };
+
+  const recordAgentCapability = (state: ActiveGeneration): void => {
+    const capability = readChatGenerationSourceCapability(deps.source);
+    recordAgent(() => agentEvents!.capability({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      capabilityId: `capability:${capability.tier}`,
+      tier: capability.tier,
+      adapter: capability.adapter,
+      deterministic: capability.deterministic,
+    }));
+  };
+
+  const recordAgentContext = (
+    state: ActiveGeneration,
+    packet: ChatGenerationContextPacket,
+  ): void => {
+    const policyDecision = packet.items.length > 0 && packet.budget.usedTokens > 0 ? "included" : "degraded";
+    recordAgent(() => agentEvents!.context({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      contextReceiptId: packet.packetHash,
+      sourceKind: "context-packet",
+      sourceRef: packet.packetHash,
+      sourceHash: packet.packetHash,
+      ownerRef: packet.ownerAccountId,
+      expiresAt: null,
+      redactedPreview: "structured context packet",
+      tokenEstimate: packet.budget.usedTokens,
+      inclusionReason: "structured context packet",
+      policyDecision,
+    }));
+  };
+
+  const recordAgentStatus = (state: ActiveGeneration, status: "queued" | "gathering_context" | "generating",
+    progressPct: number | null): void => {
+    recordAgent(() => agentEvents!.status({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      status,
+      progressPct,
+    }));
+  };
+
+  const recordAgentUsage = (state: ActiveGeneration, usage: ChatGenerationUsage): void => {
+    recordAgent(() => agentEvents!.usage({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      usageId: usage.usageId,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      durationMs: Math.max(0, deps.nowEpochMilliseconds() - (state.providerStartedAt ?? deps.nowEpochMilliseconds())),
+    }));
+  };
+
+  const recordAgentTerminal = (
+    state: ActiveGeneration,
+    kind: "done" | "cancelled" | "failed",
+    failure: ChatGenerationFailure | null,
+  ): void => {
+    const terminalOutcome = kind === "done" ? "completed" : kind;
+    const terminalCode = kind === "done"
+      ? "completed"
+      : kind === "cancelled"
+        ? "cancelled"
+        : (failure?.code ?? "generation_interrupted");
+    recordAgent(() => agentEvents!.terminal({
+      runId: state.generationId,
+      attemptId: state.attemptId,
+      terminalOutcome,
+      terminalCode,
+      retryable: kind === "failed" ? (failure?.retryable ?? true) : false,
+      // No retry/recovery route exists at this layer; do not advertise one.
+      recoveryAction: null,
+    }));
+  };
 
   const append = (
     state: Pick<ActiveGeneration, "accountId" | "generationId">,
@@ -505,6 +619,7 @@ export const createChatGenerationSupervisor = (
             ? { kind: "done", message: message ?? assistantMessage(state, FALLBACK_TEXT) }
             : { kind: "cancelled", message },
       });
+      recordAgentTerminal(state, kind, kind === "failed" ? state.failure : null);
     } catch {
       state.terminal = false;
       return false;
@@ -550,6 +665,7 @@ export const createChatGenerationSupervisor = (
       generationId,
       admitted,
       attemptId: `${generationId}:attempt:recovery`,
+      admissionId: admitted.message.id,
       text: accumulatedText(events),
       run: null,
       runCancelled: false,
@@ -587,6 +703,7 @@ export const createChatGenerationSupervisor = (
         generationId,
         admitted: input.stored,
         attemptId: `${generationId}:attempt:1`,
+        admissionId: input.acceptedEvent.id,
         text: "",
         run: null,
         runCancelled: false,
@@ -603,6 +720,9 @@ export const createChatGenerationSupervisor = (
         usage: null,
       };
       active.set(key, state);
+      recordAgentAccepted(state);
+      recordAgentCapability(state);
+      recordAgentStatus(state, "queued", 0);
       try {
         append(state, { kind: "snapshot", text: "" });
       } catch (error) {
@@ -610,6 +730,7 @@ export const createChatGenerationSupervisor = (
         throw error;
       }
       void (async (): Promise<void> => {
+        recordAgentStatus(state, "gathering_context", null);
         let context: ChatGenerationContextPacket;
         try {
           const nowEpochMilliseconds = deps.nowEpochMilliseconds();
@@ -633,6 +754,7 @@ export const createChatGenerationSupervisor = (
             generationId,
             nowEpochMilliseconds,
           });
+          recordAgentContext(state, context);
         } catch (error) {
           void finalize(state, "failed", "", classifyFailure(error, "context"));
           return;
@@ -654,6 +776,7 @@ export const createChatGenerationSupervisor = (
         if (state.terminal || state.cancelRequested) return;
         try {
           state.providerStartedAt = deps.nowEpochMilliseconds();
+          recordAgentStatus(state, "generating", null);
           const run = deps.source.start({
             generationId,
             attemptId: state.attemptId,
@@ -686,6 +809,8 @@ export const createChatGenerationSupervisor = (
                 }
                 state.progressPct = safe.progressPct;
                 if (safe.usage !== null) state.usage = safe.usage;
+                recordAgentStatus(state, "generating", state.progressPct);
+                if (safe.usage !== null) recordAgentUsage(state, safe.usage);
                 append(state, {
                   kind: "progress",
                   attemptId: state.attemptId,
@@ -707,6 +832,8 @@ export const createChatGenerationSupervisor = (
                   return;
                 }
                 state.usage = safe;
+                recordAgentStatus(state, "generating", state.progressPct);
+                recordAgentUsage(state, safe);
                 append(state, {
                   kind: "progress",
                   attemptId: state.attemptId,
