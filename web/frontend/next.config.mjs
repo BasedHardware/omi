@@ -65,11 +65,31 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)?', // Matches all pages
+        // Every page except the embeddable widget. The negative lookahead is
+        // load-bearing: `X-Frame-Options: DENY` cannot be relaxed per-route by a
+        // later rule, so the widget must be excluded here rather than overridden.
+        source: '/((?!memory-platform/widget).*)',
         headers: [
           {
             key: 'X-Frame-Options',
             value: 'DENY',
+          },
+        ],
+      },
+      {
+        // The memory widget exists to be embedded in a host product's page, so
+        // it is the one route that must be framable. It is safe to frame from
+        // any origin because it carries no ambient authority: the published
+        // embed sandboxes it without `allow-same-origin`, giving it an opaque
+        // origin with no cookies and no durable storage, so it holds no session
+        // a framing page could exercise. It is inert until the host explicitly
+        // hands it a short-lived token over postMessage. Hosts still restrict
+        // who may frame *their* page with their own frame-ancestors policy.
+        source: '/memory-platform/widget',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: 'frame-ancestors *',
           },
         ],
       },

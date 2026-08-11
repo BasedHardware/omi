@@ -101,6 +101,33 @@ describe('iframe sandbox cannot be removed by the framed document', () => {
   }
 });
 
+describe('the embeddable widget is the one framable route', () => {
+  // STATIC CHECKER: reads next.config.mjs rather than issuing requests.
+  // The app sent `X-Frame-Options: DENY` on every route, which made the
+  // embeddable widget — the entire point of this product — impossible to frame
+  // in dev and in production. X-Frame-Options cannot be relaxed per-route by a
+  // later rule, so the catch-all must exclude the widget path.
+  const config = readFileSync(path.join(FRONTEND_SRC, '..', 'next.config.mjs'), 'utf8');
+
+  it('excludes the widget from the deny-all frame policy', () => {
+    assert.match(
+      config,
+      /source: '\/\(\(\?!memory-platform\/widget\)\.\*\)'/,
+      'the X-Frame-Options catch-all must exclude /memory-platform/widget',
+    );
+  });
+
+  it('lets the widget be framed by a host page', () => {
+    assert.match(config, /source: '\/memory-platform\/widget'/);
+    assert.match(config, /frame-ancestors \*/);
+  });
+
+  it('still denies framing everywhere else', () => {
+    assert.match(config, /'X-Frame-Options'/);
+    assert.match(config, /value: 'DENY'/);
+  });
+});
+
 describe('raw API keys never reach durable browser storage', () => {
   it('no localStorage / sessionStorage / cookie writes on the surface', () => {
     for (const file of SOURCE_FILES) {
