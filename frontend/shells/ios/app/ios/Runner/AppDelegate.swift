@@ -226,6 +226,24 @@ extension WKWebView {
       }
     }
 
+    // Capture-only builds obtain their per-coordinate values from the native
+    // process arguments. Dart's Platform.executableArguments does not expose
+    // UIKit launch arguments, so this narrow host channel returns only the two
+    // allowlisted capture prefixes; it never exposes ambient arguments or
+    // credentials to the surface JavaScript.
+    let captureLaunch = FlutterMethodChannel(
+      name: "omi/capture-launch", binaryMessenger: registrar.messenger())
+    captureLaunch.setMethodCallHandler { call, result in
+      guard call.method == "arguments" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let prefixes = ["--omi-capture-query=", "--omi-capture-run-id="]
+      result(ProcessInfo.processInfo.arguments.filter { argument in
+        prefixes.contains { argument.hasPrefix($0) }
+      })
+    }
+
     let listenPreflight = FlutterMethodChannel(
       name: "omi/listen-preflight", binaryMessenger: registrar.messenger())
     listenPreflight.setMethodCallHandler { [weak self] call, result in

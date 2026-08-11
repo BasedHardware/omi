@@ -595,15 +595,10 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   const stderrPath = `${output}.app.stderr`;
   rmSync(stdoutPath, { force: true });
   rmSync(stderrPath, { force: true });
-  const launchEnv = {
-    ...artifact.env,
-    SIMCTL_CHILD_OMI_CAPTURE_QUERY: coordinate.surface_query,
-    SIMCTL_CHILD_OMI_CAPTURE_RUN_ID: coordinate.run_id,
-  };
   let launched = false;
   try {
     launched = true;
-    runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId], coreRoot, launchEnv, 30), `${coordinate.run_id}: launch capture app`);
+    runCommand(commandSpec("xcrun", ["simctl", "launch", `--stdout=${stdoutPath}`, `--stderr=${stderrPath}`, coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`, `--omi-capture-run-id=${coordinate.run_id}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
     runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
     const appOutput = `${existsSync(stdoutPath) ? readFileSync(stdoutPath, "utf8") : ""}\n${existsSync(stderrPath) ? readFileSync(stderrPath, "utf8") : ""}`;
     const readyMarker = `NATIVE_CAPTURE_READY run_id=${coordinate.run_id} `;
