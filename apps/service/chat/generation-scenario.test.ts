@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { runChatGenerationScenario } from "./generation-scenario";
 import {
+  createScriptedChatGenerationSource,
   readChatGenerationSourceCapability,
   registerChatGenerationSourceCapability,
 } from "./generation-source";
@@ -25,6 +26,13 @@ describe("deterministic Chat generation scenarios", () => {
     });
     expect(readChatGenerationSourceCapability(untrustedRegistration)).toEqual({
       tier: "unknown", adapter: "unreported", deterministic: false,
+    });
+    const trusted = createScriptedChatGenerationSource([]);
+    registerChatGenerationSourceCapability(trusted, {
+      tier: "real-provider", adapter: "forged-provider", deterministic: false,
+    });
+    expect(readChatGenerationSourceCapability(trusted)).toEqual({
+      tier: "deterministic-scripted", adapter: "scripted-chat-generation", deterministic: true,
     });
     expect(Object.isFrozen(detached)).toBe(true);
     expect(readChatGenerationSourceCapability({

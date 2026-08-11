@@ -133,9 +133,6 @@ export const registerChatGenerationSourceCapability = (
   source: ChatGenerationSource,
   _capability: unknown,
 ): ChatGenerationSource => {
-  if ((typeof source === "object" || typeof source === "function") && source !== null) {
-    REGISTERED_CAPABILITIES.set(source, unknownCapability());
-  }
   return source;
 };
 
