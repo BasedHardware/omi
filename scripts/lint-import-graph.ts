@@ -228,8 +228,8 @@ const PORT_COMPOSITION_HATCHES: readonly PortCompositionHatchRow[] = [];
  *
  * WHY RULE 16 COULD NOT SEE THE DEFECT THIS EXISTS FOR. Rule 16 keys on
  * REGISTERED PORT TYPES. `integration/server/serve.ts` answered `/v1/memories`
- * — the settled client recall route, the one `make stack` and HOW-TO-RUN.md
- * boot — from a hand-rolled handler over a hand-rolled `McpProtocolPorts`. It
+ * — the settled client recall route — from a hand-rolled handler over a
+ * hand-rolled `McpProtocolPorts`. It
  * composed no registered port, so it was invisible to rule 16 BY
  * CONSTRUCTION, and the checker was green the entire time the door was serving
  * raw fixture row ids as public item ids. A door that composes nothing
@@ -359,17 +359,7 @@ interface WirePathHatchRow {
   readonly line: number;
   readonly reason: string;
 }
-const WIRE_PATH_HATCHES: readonly WirePathHatchRow[] = [
-  {
-    file: "integration/adversarial/live-server.ts",
-    line: 67,
-    reason:
-      "A port probe that answers a constant empty body to every request and is stopped "
-      + "before it is used. The `/v1/memories` reference below it is this file CALLING "
-      + "the route as a client; nothing here serves that path, and a test-support client "
-      + "cannot hand anyone a divergent public id.",
-  },
-];
+const WIRE_PATH_HATCHES: readonly WirePathHatchRow[] = [];
 /**
  * `code.includes("/v1/memories")` also matches `/v1/memories-legacy-export`,
  * which is a DIFFERENT route that merely starts with the registered one. Found

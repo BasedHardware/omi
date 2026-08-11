@@ -25,13 +25,10 @@ describe("assertPortInRange", () => {
     expect(() => assertPortInRange(4851)).not.toThrow();
   });
 
-  test("allows the caller-selected fixed 5290 QA port", () => {
-    expect(() => assertPortInRange(5290)).not.toThrow();
-  });
-
-  test("rejects ports outside the BE-SURFACE agent range with TypeError", () => {
-    // red-proof: accept port 3000 and this test fails
+  test("rejects every non-fixed app-facing port with TypeError", () => {
+    // red-proof: accept any alternate port and this test fails
     expect(() => assertPortInRange(3000)).toThrow(TypeError);
+    expect(() => assertPortInRange(5290)).toThrow(TypeError);
     expect(() => assertPortInRange(4850)).toThrow(TypeError);
     expect(() => assertPortInRange(4852)).toThrow(TypeError);
   });

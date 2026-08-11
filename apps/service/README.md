@@ -209,7 +209,7 @@ All are optional.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OMI_PORT` | `4851` | The one app-facing listen port; bounded QA choices are `4851` and caller-selected `5290`. |
+| `OMI_PORT` | `4851` | The one fixed app-facing listen port. |
 | `OMI_SEED_OWNER` | `local-dev-user` | Owner account id written into the QA seed. |
 | `OMI_SEED_MEMORIES` | `12` | Number of visible seeded memories. |
 | `OMI_ACCOUNT_TIMEZONE` | `America/Los_Angeles` | IANA timezone for local-day grouping in the seed and read path. |

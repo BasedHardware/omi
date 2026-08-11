@@ -12,7 +12,7 @@
  *
  * This is the LIVE-WIRE half, and it is not redundant with the in-process one:
  * the in-process test proves one composition can serve both doors, while this
- * proves the process `make stack` actually boots did bind it that way. The
+ * proves the live adversarial server process did bind it that way. The
  * whole W4 ruling exists because a harness can be wired differently from the
  * thing it claims to be interchangeable with, and no in-process assertion can
  * see that.

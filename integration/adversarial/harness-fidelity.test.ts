@@ -1,10 +1,10 @@
 /**
  * The harness must refuse what the real backend refuses.
  *
- * `integration/server/serve.ts` is what `make stack` and HOW-TO-RUN.md actually
- * boot, so it is the backend every human impression and every dogfooding session
- * is formed against. Its own header claims it is interchangeable with the real
- * backend "by base URL alone". That claim is a behavioural one, and nothing was
+ * `integration/server/serve.ts` is the live adversarial harness target. The
+ * product stack is launched by the core integration entrypoint, while this
+ * harness's own header claims it is interchangeable with the real backend "by
+ * base URL alone". That claim is a behavioural one, and nothing was
  * checking it: the recall route dispatched on `url.pathname` and never looked at
  * `request.method`, so POST/PUT/PATCH/DELETE each returned 200 with the full read
  * payload while `apps/service/routes/memories.ts` — GET-only, pinned by

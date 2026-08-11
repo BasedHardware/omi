@@ -71,7 +71,7 @@ const boot = () => {
 const body = async (response: Response): Promise<unknown> => response.json();
 
 describe("GET /v1/conversations", () => {
-  test("is registered in the default real composition with the prototype seed", async () => {
+  test("is registered in the default real composition with the compatibility seed", async () => {
     const db = new Database(":memory:");
     const service = createLocalDevService({
       db,
@@ -108,7 +108,7 @@ describe("GET /v1/conversations", () => {
     }
   });
 
-  test("serves the decided record shape with prototype limit/offset parsing", async () => {
+  test("serves the decided record shape with compatibility limit/offset parsing", async () => {
     const { db, request } = boot();
     try {
       const page = await request("/v1/conversations?limit=1junk&offset=1");
@@ -123,7 +123,7 @@ describe("GET /v1/conversations", () => {
     }
   });
 
-  test("requires the same bearer authorization as the prototype", async () => {
+  test("requires the same bearer authorization as the compatibility contract", async () => {
     const { db, service } = boot();
     try {
       const response = await service.app.request("/v1/conversations");
@@ -135,7 +135,7 @@ describe("GET /v1/conversations", () => {
   });
 });
 
-describe("conversation mutation conformance to qa-api-server/server.mjs:552-645", () => {
+describe("conversation mutation compatibility conformance", () => {
   test("pins every documented validation code plus unknown/nested path 404s", async () => {
     const { db, request } = boot();
     try {
@@ -211,7 +211,7 @@ describe("conversation mutation conformance to qa-api-server/server.mjs:552-645"
     }
   });
 
-  test("preserves the prototype's null-body qa_server_error wart", async () => {
+  test("preserves the compatibility null-body qa_server_error behavior", async () => {
     const { db, request } = boot();
     try {
       const response = await request("/v1/conversations/conversation-a/folder", {

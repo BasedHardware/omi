@@ -73,7 +73,7 @@ const json = (value: unknown): RequestInit => ({
 });
 
 describe("GET /v1/folders", () => {
-  test("returns the prototype's unpaginated bare seed array", async () => {
+  test("returns the compatibility unpaginated bare seed array", async () => {
     const { db, request } = boot();
     try {
       const response = await request("/v1/folders?limit=1&offset=1");
@@ -360,7 +360,7 @@ describe("DELETE /v1/folders/:id", () => {
     }
   });
 
-  test("falls back to default, but preserves the prototype's dangling reference without one", async () => {
+  test("falls back to default, but preserves the compatibility dangling reference without one", async () => {
     const withDefault = boot(true);
     try {
       withDefault.stores.folders.upsert(OWNER, folder("default", { is_default: true }));

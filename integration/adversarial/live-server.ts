@@ -10,6 +10,7 @@
  */
 
 import { FIXTURE_TIMEZONE } from "../server/fixture-clock";
+import { freeLoopbackPort } from "../lib/free-port";
 
 const READY_TIMEOUT_MS = 20_000;
 
@@ -19,7 +20,7 @@ export interface LiveServer {
 }
 
 export async function startLiveServer(): Promise<LiveServer> {
-  const port = await freePort();
+  const port = await freeLoopbackPort();
   const child = Bun.spawn({
     cmd: ["bun", "run", "integration/server/serve.ts"],
     cwd: new URL("../..", import.meta.url).pathname,
@@ -57,17 +58,6 @@ export async function startLiveServer(): Promise<LiveServer> {
   child.kill();
   await child.exited;
   throw new Error(`backend did not become ready within ${READY_TIMEOUT_MS}ms`);
-}
-
-async function freePort(): Promise<number> {
-  // Exempt from rule 17 — see WIRE_PATH_HATCHES in scripts/lint-import-graph.ts.
-  // This pointer is NOT read by the checker; the exemption lives in that table,
-  // keyed by (file, line), because four rounds of audit broke every version of a
-  // comment marker. A comment that does no work cannot be forged into doing any.
-  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
-  const port = probe.port;
-  await probe.stop(true);
-  return port;
 }
 
 export const QA_KEY = "omi-integration-qa-key-v1";

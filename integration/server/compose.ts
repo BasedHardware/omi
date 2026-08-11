@@ -5,9 +5,9 @@
  * ---------------------------------------------------------
  * Until 2026-08-08 this module built its own `McpProtocolPorts` around a
  * hand-rolled in-memory `QaStore`, and `serve.ts` built its own `/v1/memories`
- * handler on top of it. That made this the THIRD read door in the tree — and
- * the one `make stack` and `HOW-TO-RUN.md` actually boot, so every human
- * impression and every dogfooding session was formed against it.
+ * handler on top of it. That made this the THIRD read door in the tree. The
+ * product stack is launched by the core integration entrypoint; this module is
+ * only the adversarial live-server harness used by integration tests.
  *
  * It had drifted, exactly the way wave 1 measured two doors drifting:
  *
@@ -79,8 +79,8 @@ import { fixtureSecret } from "./fixture-secret";
  * QA-only dev credentials. Local loopback runtime only (board ruling PR-4):
  * no cloud, no real issuer, no production credential ever reaches this file.
  *
- * The spellings are unchanged from the retired door because `dev-stack.sh`,
- * `HOW-TO-RUN.md` and the cross-side wire-agreement test all hand
+ * The spellings are unchanged from the retired door because the adversarial
+ * live-server harness and the cross-side wire-agreement test hand
  * `omi-integration-qa-key-v1` to a real client as a bearer token.
  */
 export interface QaCredentialRecord {
