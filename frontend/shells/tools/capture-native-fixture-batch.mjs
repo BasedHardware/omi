@@ -53,7 +53,10 @@ const widthPolicy = {
   ios: {
     compact: { width: 402, height: 874, scale: 3, orientation: "portrait" },
     regular: { width: 820, height: 1180, scale: 2, orientation: "portrait" },
-    wide: { width: 1366, height: 1024, scale: 2, orientation: "landscape" },
+    // Current managed iPad Pro 13-inch simulators expose a native 1032x1376
+    // logical portrait mode. It clears the shared-core wide breakpoint without
+    // requiring an unobservable Simulator.app rotation side effect.
+    wide: { width: 1032, height: 1376, scale: 2, orientation: "portrait" },
   },
 };
 
@@ -514,7 +517,12 @@ function queryIosGeometry(device, env) {
 }
 
 function setIosGeometry(device, viewport, env) {
-  runCommand(commandSpec("xcrun", ["simctl", "io", device, "screenConfig", "geometry", `${viewport.width}x${viewport.height}@${viewport.scale}`], coreRoot, env, 30), `${device}: set screenshot geometry`);
+  // simctl takes framebuffer pixels, while the manifest records the logical
+  // viewport plus scale. Passing logical points makes every real managed
+  // simulator reject an otherwise correct binding.
+  const pixelWidth = viewport.width * viewport.scale;
+  const pixelHeight = viewport.height * viewport.scale;
+  runCommand(commandSpec("xcrun", ["simctl", "io", device, "screenConfig", "geometry", `${pixelWidth}x${pixelHeight}@${viewport.scale}`], coreRoot, env, 30), `${device}: set screenshot geometry`);
 }
 
 function restoreIosDevice(device, artifact) {
