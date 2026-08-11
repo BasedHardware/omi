@@ -828,8 +828,7 @@ import XCTest
     window.notchRetractionScheduler = scheduler
     var staleRetractionCompletionCount = 0
 
-    window.makeKeyAndOrderFront(nil)
-    window.retractIntoNotch { staleRetractionCompletionCount += 1 }
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
     window.showNotification(
       FloatingBarNotification(
         ownerID: "owner",
@@ -878,8 +877,7 @@ import XCTest
     window.notchRetractionScheduler = scheduler
     var staleRetractionCompletionCount = 0
 
-    window.makeKeyAndOrderFront(nil)
-    window.retractIntoNotch { staleRetractionCompletionCount += 1 }
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
     window.resizeForPTTState(expanded: true)
     scheduler.fire()
 

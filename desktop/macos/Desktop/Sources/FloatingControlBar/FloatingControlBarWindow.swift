@@ -203,8 +203,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var previousVoiceResponseGlowActive = false
   private var resizeWorkItem: DispatchWorkItem?
   var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
-  private var notchRetractionCancellation: DelayedActionCancellation?
-  private var notchRetractionGeneration = 0
+  var notchRetractionCancellation: DelayedActionCancellation?
+  var notchRetractionGeneration = 0
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -222,7 +222,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
-  private var frameAnimationToken: Int = 0
+  var frameAnimationToken: Int = 0
   private var pendingFrameAnimationTarget: NSRect?
   private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
   /// In-process NSMenus (bar context menus, the model picker) render at
@@ -2121,21 +2121,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       completion()
       return
     }
-    notchRetractionCancellation?.cancel()
-    frameAnimationToken += 1
-    notchRetractionGeneration &+= 1
-    let generation = notchRetractionGeneration
-    OmiMotion.withGated(.easeIn(duration: 0.18)) {
-      state.notchRevealProgress = 0.01
-    }
-    notchRetractionCancellation = notchRetractionScheduler.schedule(after: 0.18) { [weak self] in
-      guard let self, self.notchRetractionGeneration == generation else { return }
-      completion()
-      // Leave the island ready to render for show paths that skip the
-      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
-      self.state.notchRevealProgress = 1
-      self.notchRetractionCancellation = nil
-    }
+    beginNotchRetraction(then: completion)
   }
 
   private func cancelPendingRetraction() {
