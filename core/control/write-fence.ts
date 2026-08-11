@@ -63,6 +63,10 @@
  */
 
 import type { AccountControlProjection } from "./account-control";
+import {
+  evaluateAccountControlAdmission,
+  type AccountControlAdmissionReason,
+} from "./application-admission";
 
 /** `backend:ADR-010` §3's four, plus the availability signal — see the header. */
 export type WriteFenceOutcome =
@@ -74,13 +78,7 @@ export type WriteFenceOutcome =
 
 /** Internal. Never reaches a wire — it describes control and grant state. */
 export type WriteFenceReason =
-  | "control_state_absent"
-  | "control_state_conflicting"
-  | "control_state_not_activated"
-  | "account_generation_legacy"
-  | "account_generation_migrating"
-  | "account_generation_rolled_back_stranded"
-  | "account_lifecycle_not_active"
+  | AccountControlAdmissionReason
   | "request_epoch_absent"
   | "request_epoch_behind"
   | "request_epoch_ahead";
@@ -137,64 +135,19 @@ export const evaluateWriteFence = (
   projection: AccountControlProjection | null,
   request: WriteFenceRequest,
 ): WriteFenceDecision => {
-  // 1. "Missing ... control state denies writes." (ADR-010 §1)
-  if (projection === null) {
-    return refuse("control_unavailable", "control_state_absent", "record_nothing");
-  }
-  // "...conflicting, or unordered..." — both land in the projection's conflict.
-  if (projection.conflict !== null) {
-    return refuse("control_unavailable", "control_state_conflicting", "record_nothing");
-  }
-
-  // 2. LIFECYCLE FIRST. Mapped to `authorization` rather than to a distinct
-  //    "deleted" outcome on purpose: ADR-012 §4 requires that "account existence
-  //    must not be probeable through response differences", and a deleted
-  //    account must therefore be indistinguishable from one whose grant is
-  //    missing. `deletion_pending` is included because ADR-010 §5 fences
-  //    "migration, activation and background work" from the moment deletion
-  //    arrives, not from the moment it completes.
-  if (projection.lifecycle_state !== "active") {
-    return refuse("authorization", "account_lifecycle_not_active", "record_nothing");
-  }
-
-  // 3. Generation. None of these three is a statement about the caller.
-  switch (projection.account_generation) {
-    case "legacy":
-      // Authority has not moved. The client's op belongs to legacy and will
-      // drain there; nothing is lost, so nothing is retained.
-      return refuse("control_unavailable", "account_generation_legacy", "record_nothing");
-    case "migrating":
-      // ADR-007 §4's write fence, and the ratified migration window: "writes are
-      // BLOCKED for the duration (a maintenance notice, not a local buffer)".
-      // Deliberately records nothing — this is backpressure, not evidence.
-      return refuse("control_unavailable", "account_generation_migrating", "record_nothing");
-    case "rolled_back_stranded":
-      // ADR-007 §6 restores the legacy account. The op resolves against legacy
-      // once the client refreshes control state, so this is not a straggler and
-      // must not accumulate user content during an incident.
-      return refuse(
-        "control_unavailable",
-        "account_generation_rolled_back_stranded",
-        "record_nothing",
-      );
-    case "new":
-      break;
-  }
-
-  // 4. The destination must have activated EXACTLY this epoch (ADR-010 §1 step
-  //    4). Generation `new` without activation is stale control state on this
-  //    side, and it is also the state the rollback order deliberately creates
-  //    before legacy moves.
-  if (
-    projection.account_epoch === null
-    || projection.activation === null
-    || projection.activation.activated_epoch !== projection.account_epoch
-  ) {
-    return refuse("control_unavailable", "control_state_not_activated", "record_nothing");
+  const control = evaluateAccountControlAdmission(projection);
+  if (control.admitted === false) {
+    // Lifecycle stays authorization-shaped so account existence is not exposed;
+    // every other common control denial retains its availability mapping.
+    return refuse(
+      control.reason === "account_lifecycle_not_active" ? "authorization" : "control_unavailable",
+      control.reason,
+      "record_nothing",
+    );
   }
 
   // 5. The epoch the client presented.
-  const active = projection.account_epoch;
+  const active = control.account_epoch;
   if (request.request_epoch === null) {
     // A straggler carries the epoch it was created under; a request with none is
     // a client that never held control state. Correct instruction ("refresh
