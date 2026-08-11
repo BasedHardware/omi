@@ -1,12 +1,7 @@
-import envConfig from '@/src/constants/envConfig';
+import { browserApiBase as apiBase } from '@/src/lib/api/browser-base';
 
 export type PlanId =
-  | 'basic'
-  | 'unlimited'
-  | 'architect'
-  | 'operator'
-  | 'plus'
-  | 'unlimited_v2';
+  'basic' | 'unlimited' | 'architect' | 'operator' | 'plus' | 'unlimited_v2';
 
 export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
   basic: 'Free',
@@ -53,10 +48,6 @@ export interface PlatformApiQuota {
   remaining: number | null;
   allowed: boolean;
   reset_at: number;
-}
-
-function apiBase(): string {
-  return envConfig.API_URL ?? '';
 }
 
 async function request<T>(

@@ -1,4 +1,4 @@
-import envConfig from '@/src/constants/envConfig';
+import { browserApiBase as apiBase } from '@/src/lib/api/browser-base';
 
 /**
  * MCP scopes are dot-form on the MCP surface. Developer API keys use colon-form.
@@ -31,10 +31,6 @@ export interface McpApiKey {
 export interface McpApiKeyCreated extends McpApiKey {
   /** Returned exactly once, at creation. Never persisted by the client. */
   key: string;
-}
-
-function apiBase(): string {
-  return envConfig.API_URL ?? '';
 }
 
 async function request<T>(
