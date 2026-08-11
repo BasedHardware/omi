@@ -1168,8 +1168,12 @@ def search_transcript_chunks(
         return []
     vector = embeddings.embed_query(query)
     filter_data: Dict[str, Any] = {'uid': uid}
-    if starts_at is not None and ends_at is not None:
-        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
+    # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
     xc = index.query(
         vector=vector,
         top_k=limit,

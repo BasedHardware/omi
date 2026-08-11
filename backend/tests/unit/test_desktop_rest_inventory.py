@@ -120,7 +120,8 @@ def _normalize_for_match(path: str) -> str:
 DESKTOP_NAMED_MODEL_RESPONSE_CONTRACTS = {
     ('post', '/v1/conversations/search'): {
         'response_schema': 'SearchConversationsResponse',
-        'array_properties': {'items': 'Conversation'},
+        # Search returns ConversationSearchItem (Conversation + optional match_snippets), not bare Conversation.
+        'array_properties': {'items': 'ConversationSearchItem'},
         'desktop_decode': 'ConversationSearchResult.items -> [ServerConversation] -> OmiAPI.Conversation',
     },
 }
