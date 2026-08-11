@@ -1933,7 +1933,7 @@ export interface FullConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
@@ -3169,7 +3169,7 @@ export interface SimpleConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
 }
@@ -4024,6 +4024,16 @@ export interface WrappedStatusResponse {
   year?: number;
 }
 
+export interface routers__mcp__TranscriptMatchSnippet {
+  end?: number | null;
+  end_ms?: number | null;
+  segment_id?: string | null;
+  speaker_id?: number | null;
+  start?: number | null;
+  start_ms?: number | null;
+  text: string;
+}
+
 export interface routers__memories__BatchMemoriesRequest {
   memories: Array<Memory>;
 }
@@ -4597,6 +4607,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
   "routers__memories__BatchMemoriesResponse": routers__memories__BatchMemoriesResponse;
   "routers__payment__PricingOption": routers__payment__PricingOption;
