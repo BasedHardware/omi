@@ -66,15 +66,14 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
-    DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
-    DirectUse('utils/other/chat_file.py', 'openai.beta'),
-    DirectUse('utils/other/chat_file.py', 'openai.files'),
+    DirectUse('utils/llm/file_chat.py', 'AsyncOpenAI'),
+    DirectUse('utils/llm/file_chat.py', 'OpenAI'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
-    'utils/other/chat_file.py',
+    'utils/llm/file_chat.py',
     'routers/omni_relay.py',
 }
 

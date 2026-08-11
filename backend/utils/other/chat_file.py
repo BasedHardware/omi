@@ -2,22 +2,24 @@ import base64
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
-import openai
-from openai import AsyncOpenAI, AssistantEventHandler
-from openai.types.beta.threads import TextContentBlock
-from openai.types.chat import (
-    ChatCompletionContentPartParam,
-    ChatCompletionMessageParam,
-)
 from PIL import Image
 from pydantic import ValidationError
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
 from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.llm.file_chat import (
+    assert_direct_file_chat_allowed,
+    get_assistant_response_text,
+    get_async_file_chat_client,
+    get_file_chat_assistant_create_params,
+    get_file_chat_client,
+    get_file_chat_vision_model,
+    new_file_chat_stream_event_handler,
+    upload_file,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -57,18 +59,8 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
     return ids
 
 
-_async_openai: AsyncOpenAI | None = None
-
-
-def _get_async_openai() -> AsyncOpenAI:
-    global _async_openai
-    if _async_openai is None:
-        _async_openai = AsyncOpenAI(timeout=120.0, max_retries=1)
-    return _async_openai
-
-
 def _assert_direct_file_chat_allowed() -> None:
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files_assistants_vision')
+    assert_direct_file_chat_allowed()
 
 
 class _StreamingCallbackProtocol:
@@ -91,7 +83,7 @@ class File:
         self.thumbnail_name = ""
         self.mime_type = ""
         self.file_name = ""
-        self.purpose = "assistants"
+        self.purpose: Literal['assistants', 'vision'] = 'assistants'
 
     def generate_thumbnail(self, size: Tuple[int, int] = (128, 128)) -> None:
         with Image.open(self.file_path) as img:
@@ -151,7 +143,7 @@ class FileChatTool:
 
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
-            response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+            response = upload_file(f, purpose=file.purpose)
             if response:
                 file.file_id = response.id
                 file.file_name = response.filename
@@ -224,28 +216,23 @@ class FileChatTool:
         assert callback is not None
         output_list: List[str] = []
         try:
-            contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
-            openai_client = _get_async_openai()
+            contents: List[Dict[str, Any]] = [{"type": "text", "text": question}]
+            openai_client = get_async_file_chat_client()
             for file in files:
                 file_content = await openai_client.files.content(file.openai_file_id)
                 b64 = base64.b64encode(file_content.read()).decode('utf-8')
                 mime = file.mime_type or 'image/png'
                 contents.append(
-                    cast(
-                        ChatCompletionContentPartParam,
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
-                        },
-                    )
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
+                    }
                 )
 
-            messages: List[ChatCompletionMessageParam] = [
-                cast(ChatCompletionMessageParam, {"role": "user", "content": contents})
-            ]
+            messages: List[Dict[str, Any]] = [{"role": "user", "content": contents}]
             stream = await openai_client.chat.completions.create(
-                model="gpt-5.6-luna",
-                messages=messages,
+                model=get_file_chat_vision_model(),
+                messages=cast(Any, messages),
                 stream=True,
                 max_tokens=2048,
             )
@@ -264,10 +251,11 @@ class FileChatTool:
         timeout = 30.0  # 30 seconds timeout
 
         # Handle thread
+        openai_client = get_file_chat_client()
         if self.thread_id:
             # Try to retrieve existing thread
             try:
-                thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                thread = openai_client.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing thread: {thread.id}")
             except Exception as error:
                 logger.error('file chat thread retrieval failed error_type=%s', type(error).__name__)
@@ -275,7 +263,7 @@ class FileChatTool:
 
         if not self.thread_id:
             try:
-                thread = openai.beta.threads.create(timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                thread = openai_client.beta.threads.create(timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 self.thread_id = thread.id
                 created_new = True
                 logger.info(f"Created new thread: {self.thread_id}")
@@ -286,7 +274,7 @@ class FileChatTool:
         if self.assistant_id:
             # Try to retrieve existing assistant
             try:
-                assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                assistant = openai_client.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing assistant: {assistant.id}")
             except Exception as error:
                 logger.error('file chat assistant retrieval failed error_type=%s', type(error).__name__)
@@ -294,12 +282,8 @@ class FileChatTool:
 
         if not self.assistant_id:
             try:
-                assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
-                    name="File Reader",
-                    instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    model="gpt-5.6-luna",
-                    tools=[{"type": "file_search"}],
-                    timeout=timeout,
+                assistant = openai_client.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
+                    **get_file_chat_assistant_create_params(timeout=timeout)
                 )
                 self.assistant_id = assistant.id
                 created_new = True
@@ -337,7 +321,7 @@ class FileChatTool:
                 attachments.append({"file_id": file.openai_file_id, "tools": [{"type": "file_search"}]})
 
         # ask question
-        openai.beta.threads.messages.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
+        get_file_chat_client().beta.threads.messages.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
             thread_id=thread_id,
             role="user",
             content=contents,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here
@@ -357,7 +341,8 @@ class FileChatTool:
         self._fill_question(uid, question, file_ids, thread_id)
 
         # Create run and poll for completion (with 2 minute timeout)
-        run = openai.beta.threads.runs.create_and_poll(  # type: ignore[reportDeprecated]  # Assistants API still in use
+        openai_client = get_file_chat_client()
+        run = openai_client.beta.threads.runs.create_and_poll(  # type: ignore[reportDeprecated]  # Assistants API still in use
             thread_id=thread_id,
             assistant_id=assistant_id,
             timeout=120.0,  # 2 minutes total timeout
@@ -366,18 +351,8 @@ class FileChatTool:
         # Check terminal status
         if run.status == 'completed':
             # Get the messages
-            messages = openai.beta.threads.messages.list(thread_id=thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-
-            # Return the latest assistant response
-            if messages.data and len(messages.data) > 0:
-                first_block = messages.data[0].content[0]
-                if isinstance(first_block, TextContentBlock):
-                    return first_block.text.value
-                # Fall back to the original attribute access for any non-text block,
-                # which raises AttributeError — matching the prior behavior.
-                return first_block.text.value  # type: ignore[union-attr]  # preserve prior crash semantics for non-text blocks
-
-            raise Exception("No response received from assistant")
+            messages = openai_client.beta.threads.messages.list(thread_id=thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+            return get_assistant_response_text(messages)
         else:
             # Handle failed states
             error_msg = f"Run {run.status}"
@@ -401,10 +376,10 @@ class FileChatTool:
         try:
             self._fill_question(uid, question, file_ids, thread_id)
 
-            with openai.beta.threads.runs.stream(  # type: ignore[reportDeprecated]  # Assistants API still in use
+            with get_file_chat_client().beta.threads.runs.stream(  # type: ignore[reportDeprecated]  # Assistants API still in use
                 thread_id=thread_id,
                 assistant_id=assistant_id,
-                event_handler=AssistantEventHandler(),
+                event_handler=new_file_chat_stream_event_handler(),
                 timeout=30.0,
             ) as stream:
                 for text in stream.text_deltas:
@@ -425,18 +400,18 @@ class FileChatTool:
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).
             for openai_file_id in _openai_file_ids(files):
                 try:
-                    openai.files.delete(openai_file_id, timeout=30.0)
+                    get_file_chat_client().files.delete(openai_file_id, timeout=30.0)
                 except Exception as error:
                     logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
             chat_db.delete_multi_files(self.uid, files)
 
         if self.thread_id:
             try:
-                openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                get_file_chat_client().beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
             except Exception as error:
                 logger.error('file chat thread deletion failed error_type=%s', type(error).__name__)
         if self.assistant_id:
             try:
-                openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
+                get_file_chat_client().beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
             except Exception as error:
                 logger.error('file chat assistant deletion failed error_type=%s', type(error).__name__)

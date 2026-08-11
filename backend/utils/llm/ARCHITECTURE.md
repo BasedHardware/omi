@@ -33,6 +33,7 @@ The shared plumbing every feature call goes through.
 ## Chat & conversation
 
 - `chat.py` — chat prompt assembly, context handling, response normalization.
+- `file_chat.py` — direct OpenAI file-chat lifecycle client construction, prompt, and model selection.
 - `conversation_processing.py` — post-conversation structuring (speaker id
   matching, discard detection, summarization).
 - `conversation_folder.py` — conversation → folder assignment.

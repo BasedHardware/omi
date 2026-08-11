@@ -107,6 +107,11 @@ _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
     'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.6-luna').strip() or 'gpt-5.6-luna', 'openai'),
 }
 
+_DIRECT_OPENAI_SURFACE_MODELS: Dict[str, str] = {
+    'file_chat_assistant': 'gpt-5.6-luna',
+    'file_chat_vision': 'gpt-5.6-luna',
+}
+
 # Resolve active profile once at startup.
 _active_profile_name = os.environ.get('MODEL_QOS', 'premium').strip().lower()
 if _active_profile_name not in MODEL_QOS_PROFILES:
@@ -194,6 +199,13 @@ def get_model(feature: str) -> str:
         Model name string (e.g. 'gpt-5.6-luna', 'claude-sonnet-4-6').
     """
     return _get_model_config(feature)[0]
+
+
+def get_direct_openai_surface_model(surface: str) -> str:
+    try:
+        return _DIRECT_OPENAI_SURFACE_MODELS[surface]
+    except KeyError as error:
+        raise ValueError(f"Unknown direct OpenAI surface '{surface}'") from error
 
 
 def get_provider(feature: str) -> str:

@@ -111,14 +111,14 @@ surfaces:
     migration_status: gateway_only_fail_closed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
   - surface: file_chat_vision
-    code_path: backend/utils/other/chat_file.py:_ask_vision_stream
+    code_path: backend/utils/llm/file_chat.py:get_file_chat_vision_model
     current_provider_model: openai/gpt-5.6-luna
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
     migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: file_chat_assistants
-    code_path: backend/utils/other/chat_file.py:FileChatTool
+    code_path: backend/utils/llm/file_chat.py:get_file_chat_assistant_create_params
     current_provider_model: openai/gpt-5.6-luna with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
