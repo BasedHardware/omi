@@ -314,7 +314,7 @@ export const EN_MESSAGES = {
   // Where the rows on screen came from. Rendered at every width, on purpose: a QA label
   // that desktop CSS hides is exactly how a fixture render gets mistaken for real data.
   "dataSource.fixture": "Fixture data — not from your account",
-  "dataSource.live": "Live backend",
+  "dataSource.live": "Your account data",
   "dataSource.detail": "{source} · {detail}",
 
   // Platform-generation Memories (synthesized read model). This surface renders

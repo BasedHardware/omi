@@ -182,8 +182,11 @@ test("every production surface declares where its rows came from, and never hide
 
   // One implementation, shared by all four surfaces.
   assert.match(primitives, /export function ProductionDataSourceBadge/);
-  assert.match(primitives, /"dataSource\.live"\s*:\s*"dataSource\.fixture"/);
+  assert.match(primitives, /live\s*\?\s*t\(locale, "dataSource\.live"\)/);
+  assert.match(primitives, /data-source-origin=\{live \? source\.origin : undefined\}/);
   assert.match(EN_MESSAGES["dataSource.fixture"], /not from your account/);
+  assert.match(EN_MESSAGES["dataSource.live"], /your account/i);
+  assert.doesNotMatch(EN_MESSAGES["dataSource.live"], /backend|bridge/i);
   assert.notEqual(EN_MESSAGES["dataSource.fixture"], EN_MESSAGES["dataSource.live"]);
 
   // The badge must never be hidden the way .qa-label is. The first assertion pins that

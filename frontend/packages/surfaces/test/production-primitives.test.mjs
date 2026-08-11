@@ -71,6 +71,20 @@ test("data-source badge exposes the exact visible provenance at every source kin
       await rendered.cleanup();
     }
   }
+
+  const live = await renderComponent(ProductionDataSourceBadge, {
+    source: { kind: "live", origin: "bridge" },
+    locale: "en",
+  });
+  try {
+    const badge = live.container.querySelector(".data-source-badge");
+    assert.equal(badge?.textContent, "Your account data");
+    assert.equal(badge?.getAttribute("aria-label"), "Your account data");
+    assert.equal(badge?.getAttribute("data-source-origin"), "bridge");
+    assert.doesNotMatch(badge?.textContent ?? "", /backend|bridge/i);
+  } finally {
+    await live.cleanup();
+  }
 });
 
 test("operation errors announce once and unchanged store rerenders are quiet", async () => {
@@ -179,6 +193,23 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
   assert.match(styles, /prefers-reduced-transparency/);
   assert.match(styles, /data-source-badge/);
   assert.doesNotMatch(styles, /\.data-source-badge\s*\{[^}]*display:\s*none/i);
+});
+
+test("desktop route polish preserves semantic themes and 44-point interaction targets", async () => {
+  const files = ["styles.css", "home.css", "tasks.css", "conversations.css", "memories-platform.css"];
+  const sources = await Promise.all(files.map((file) => read(`src/production/${file}`)));
+  const routes = sources.slice(1).join("\n");
+  const all = sources.join("\n");
+  assert.match(sources[0], /--glass-surface-soft:/);
+  assert.match(sources[0], /--accent-soft:/);
+  assert.doesNotMatch(
+    routes,
+    /(?:button|input|select|textarea|task-check|trigger|control)[^{]*\{[^}]*min-height:\s*(?:2\d|3\d|4[0-3])px/i,
+    "route controls keep the shared 44-point target even when their glyph is visually compact",
+  );
+  assert.doesNotMatch(routes, /background:\s*rgba\(255,\s*255,\s*255/i, "route surfaces use semantic theme roles");
+  assert.match(all, /prefers-reduced-motion/);
+  assert.match(all, /prefers-reduced-transparency/);
 });
 
 test("shared visual gallery renders one coherent semantic component vocabulary", async () => {
