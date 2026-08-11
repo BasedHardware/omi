@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_9bf02ac268a514::t_5f5a720f78dd3e 1047-1054
+desktop/macos/Desktop/Sources/MemoryExportExecutor.swift
+  s_9bf02ac268a514::t_2e012afaf8d8f6 410-452,455,462-469
+desktop/macos/Desktop/Tests/ClaudeCodeSessionsTests.swift
+  s_9bf02ac268a514::t_cd4141efecbf57 27-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c9d721c9b460f33d2a0c8fe84be1aac97ccab72d",
+  "prompts": {},
+  "sessions": {
+    "s_9bf02ac268a514": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "49b8b473-2d58-4fe1-8e79-7cda33bb834e",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
