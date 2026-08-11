@@ -112,6 +112,27 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  /// Remember a newly observed rollover without allowing duplicate stale
+  /// callbacks to evict a different guard entry.
+  static func rememberingRotatedBackendId(
+    _ backendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>,
+    maxCount: Int
+  ) -> Set<String> {
+    guard let activeBackendId,
+      activeBackendId != backendId,
+      !ignoredRotatedBackendIds.contains(backendId)
+    else { return ignoredRotatedBackendIds }
+
+    var updated = ignoredRotatedBackendIds
+    if updated.count >= maxCount, let evicted = updated.first {
+      updated.remove(evicted)
+    }
+    updated.insert(backendId)
+    return updated
+  }
+
   /// Identified listen sessions may only consume lifecycle events produced by
   /// their own recording. Older backend versions omit `recording_session_id`,
   /// so the matching conversation id remains the compatibility proof.

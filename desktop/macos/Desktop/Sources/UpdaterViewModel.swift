@@ -414,6 +414,9 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         ? checkAttemptTracker.finish(result: .noUpdate)
         : checkAttemptTracker.finishFailure(diagnostics: diagnostics)
     } else {
+      // Sparkle's cycle-finish callback does not identify whether the cycle
+      // was scheduled, dismissed, or skipped. Keep the nil-error fallback
+      // unknown rather than claiming a no-update result.
       terminal = checkAttemptTracker.finish(result: .callbackMissing)
     }
     if let terminal {
@@ -513,7 +516,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       diagnostics.reason == .noUpdate
       ? finishCheck(result: .noUpdate)
       : finishFailedCheck(diagnostics: diagnostics)
-    let isExpectedAutomaticOffline = terminal?.result == .networkUnavailable
+    let isExpectedAutomaticOffline =
+      terminal?.result == .networkUnavailable
+      || (terminal == nil
+        && checkAttemptTracker.lastCompletedWasExpectedAutomaticOffline(for: diagnostics))
     // Always drop a quiet-moment wait on abort so the deferred install cannot
     // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
     discardDeferredInstall()

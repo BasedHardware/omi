@@ -604,6 +604,16 @@ final class StopReconciliationTests: XCTestCase {
       ))
   }
 
+  func testRepeatedRejectedRolloverDoesNotEvictAnotherGuardEntry() {
+    let ignored = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+      "previous-conversation",
+      activeBackendId: "active-conversation",
+      ignoredRotatedBackendIds: ["previous-conversation", "other-conversation"],
+      maxCount: 2
+    )
+    XCTAssertEqual(ignored, ["previous-conversation", "other-conversation"])
+  }
+
   func testNewBackendConversationIdAfterRotationCanBindFreshSession() {
     XCTAssertTrue(
       DesktopConversationMatchPolicy.shouldBindConversationSession(

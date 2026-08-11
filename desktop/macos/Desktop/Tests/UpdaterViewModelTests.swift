@@ -58,6 +58,14 @@ final class UpdaterViewModelTests: XCTestCase {
     XCTAssertNil(tracker.finish(result: .failed))
   }
 
+  func testMissingTerminalCallbackRemainsUnknown() {
+    let tracker = UpdateCheckAttemptTracker(makeID: { "check-missing-terminal" })
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+
+    let terminal = tracker.finish(result: .callbackMissing)
+    XCTAssertEqual(terminal?.result, .callbackMissing)
+  }
+
   func testFailedOutcomeCarriesBoundedFailureDiagnostics() {
     let error = NSError(
       domain: "SUSparkleErrorDomain",
@@ -123,6 +131,29 @@ final class UpdaterViewModelTests: XCTestCase {
     let manual = UpdateCheckAttemptTracker(makeID: { "manual-offline" })
     _ = manual.begin(trigger: .manual, context: analyticsContext())
     XCTAssertEqual(manual.finishFailure(diagnostics: offline)?.result, .failed)
+  }
+
+  func testDuplicateAutomaticOfflineTerminalRetainsExpectedClassification() {
+    let offline = UpdateFailureDiagnostics.classify(
+      error: NSError(
+        domain: "SUSparkleErrorDomain",
+        code: 2001,
+        userInfo: [
+          NSUnderlyingErrorKey: NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorNotConnectedToInternet
+          )
+        ]
+      ),
+      updateChannel: "stable",
+      bundlePath: "/Applications/Omi.app"
+    )
+    let tracker = UpdateCheckAttemptTracker(makeID: { "automatic-offline-duplicate" })
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+
+    XCTAssertEqual(tracker.finishFailure(diagnostics: offline)?.result, .networkUnavailable)
+    XCTAssertNil(tracker.finishFailure(diagnostics: offline), "A duplicate callback must not emit a second terminal")
+    XCTAssertTrue(tracker.lastCompletedWasExpectedAutomaticOffline(for: offline))
   }
 
   func testManualCheckIsUnavailableWhileBackgroundUpdateSessionIsInProgress() {

@@ -245,12 +245,18 @@ actor InsightAssistant: ProactiveAssistant {
     // Allocate the opaque join key at the point the model has produced a qualifying advice
     // item. Every path below must resolve this generated item to exactly one delivery outcome.
     let deliveryIdentity = InsightAssistantTelemetry.DeliveryIdentity()
-    await MainActor.run {
+    let ownerStillCurrent = await MainActor.run { () -> Bool in
+      // Keep the owner check and generated event on the same actor turn. An
+      // account switch can otherwise land between the check above and this
+      // closure, attributing stale advice to the new account.
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
       AnalyticsManager.shared.insightGenerated(
         category: extractedInsight.category.rawValue,
         deliveryID: deliveryIdentity.deliveryID
       )
+      return true
     }
+    guard ownerStillCurrent else { return }
 
     // Add to previous insights (keep last N for context)
     previousInsights.insert(extractedInsight, at: 0)

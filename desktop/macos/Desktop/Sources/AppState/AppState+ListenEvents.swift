@@ -189,14 +189,15 @@ extension AppState {
       )
     else {
       pendingBackendConversationId = nil
-      if let currentBackendConversationId, currentBackendConversationId != backendId {
-        if ignoredRotatedBackendConversationIds.count >= Self.maxIgnoredRotatedBackendConversationIds,
-          let evicted = ignoredRotatedBackendConversationIds.first
-        {
-          ignoredRotatedBackendConversationIds.remove(evicted)
-        }
-        ignoredRotatedBackendConversationIds.insert(backendId)
-      }
+      // A repeated callback for an already-ignored rollover is harmless. Do
+      // not evict an unrelated guard entry just because that stale callback
+      // arrived again; eviction is reserved for a newly observed rotation.
+      ignoredRotatedBackendConversationIds = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+        backendId,
+        activeBackendId: currentBackendConversationId,
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds,
+        maxCount: Self.maxIgnoredRotatedBackendConversationIds
+      )
       log("Transcription: Ignoring non-matching backend conversation id \(backendId) for current local session")
       return
     }

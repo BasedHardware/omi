@@ -138,6 +138,7 @@ class DesktopReleaseDoctorTests(unittest.TestCase):
         proactive = next(item for item in report["metrics"] if item["id"] == "proactive_delivery")
         self.assertEqual(report["overall"], "FAIL")
         self.assertEqual(metrics["status"], "FAIL")
+        self.assertEqual(metrics["classification"], "customer_visible_split")
         self.assertEqual(proactive["health_status"], "unhealthy")
         self.assertEqual(proactive["numerator"], 0)
         self.assertEqual(proactive["alarm_reason"], "advice_users_exactly_zero")

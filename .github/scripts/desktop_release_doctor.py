@@ -282,7 +282,7 @@ def collect_snapshot(
     metrics = {name: _unavailable("metric collection is advisory work not yet wired") for name in METRIC_CONTRACTS}
     try:
         metrics["proactive_delivery"] = doctor_metric(collect_from_env())
-    except (PostHogQueryError, ValueError) as error:
+    except (PostHogQueryError, ValueError, OSError) as error:
         metrics["proactive_delivery"] = _unavailable(
             f"proactive delivery query unavailable: {type(error).__name__}"
         )

@@ -91,6 +91,10 @@ final class UpdateCheckAttemptTracker: @unchecked Sendable {
   private let now: () -> Date
   private let makeID: () -> String
   private var active: UpdateCheckAttempt?
+  /// Retain the most recent real terminal so Sparkle's duplicate callbacks
+  /// can be classified from the original attempt rather than from a nil
+  /// consume result.
+  private var lastTerminal: UpdateCheckTerminal?
 
   init(
     now: @escaping () -> Date = Date.init,
@@ -140,12 +144,14 @@ final class UpdateCheckAttemptTracker: @unchecked Sendable {
     guard let attempt = active else { return nil }
     active = nil
     let duration = max(0, now().timeIntervalSince(attempt.startedAt))
-    return UpdateCheckTerminal(
+    let terminal = UpdateCheckTerminal(
       attempt: attempt,
       result: result,
       durationSeconds: duration,
       diagnostics: diagnostics
     )
+    lastTerminal = terminal
+    return terminal
   }
 
   /// Finish a failed Sparkle callback while separating expected automatic
@@ -160,12 +166,29 @@ final class UpdateCheckAttemptTracker: @unchecked Sendable {
     let result: UpdateCheckResult =
       attempt.trigger == .automatic && diagnostics.nsurlErrorCode == NSURLErrorNotConnectedToInternet
       ? .networkUnavailable : .failed
-    return UpdateCheckTerminal(
+    let terminal = UpdateCheckTerminal(
       attempt: attempt,
       result: result,
       durationSeconds: max(0, now().timeIntervalSince(attempt.startedAt)),
       diagnostics: diagnostics
     )
+    lastTerminal = terminal
+    return terminal
+  }
+
+  /// Sparkle may deliver a duplicate abort after the first failure callback
+  /// consumed the active attempt. Preserve the original trigger classification
+  /// so an automatic offline check cannot be replayed as a user-visible error.
+  func lastCompletedWasExpectedAutomaticOffline(for diagnostics: UpdateFailureDiagnostics) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+
+    guard let terminal = lastTerminal,
+      terminal.result == .networkUnavailable,
+      terminal.attempt.trigger == .automatic,
+      diagnostics.nsurlErrorCode == NSURLErrorNotConnectedToInternet
+    else { return false }
+    return terminal.diagnostics?.nsurlErrorCode == diagnostics.nsurlErrorCode
   }
 
 }

@@ -394,7 +394,11 @@ def _operational_surfaces(snapshot: dict[str, object]) -> tuple[list[dict[str, o
         _surface(
             "operational_metrics",
             metric_surface_status,
-            "divergent" if unhealthy else "unknown" if unavailable or unknown else "aligned",
+            # Keep the classification vocabulary closed: an unhealthy metric is
+            # customer-visible drift, not a new schema value.  The evidence
+            # report is consumed by release automation, so an undeclared label
+            # here would turn a useful failure into an invalid artifact.
+            "customer_visible_split" if unhealthy else "unknown" if unavailable or unknown else "aligned",
             {"all_metrics_available": True, "unhealthy_metrics": []},
             {
                 "unavailable_metrics": unavailable,
