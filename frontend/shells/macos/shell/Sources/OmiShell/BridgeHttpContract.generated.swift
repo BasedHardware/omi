@@ -6,6 +6,9 @@ enum BridgeHttpContract {
   /// BRIDGE_HTTP_CHANNEL — the message-handler name the surface feature-detects.
   static let channel = "omiHttp"
 
+  /// BRIDGE_HTTP_DOCUMENT_QUERY — reserved non-secret navigation coordinate.
+  static let documentQuery = "__omiHttpDocument"
+
   /// BRIDGE_HTTP_FORBIDDEN_HEADERS — stripped from caller headers, case-insensitively,
   /// BEFORE the shell adds its own credential. Enforced, never trusted.
   static let forbiddenHeaders: Set<String> = [

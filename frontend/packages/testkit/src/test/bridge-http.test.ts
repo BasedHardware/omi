@@ -78,6 +78,8 @@ test("a real reply becomes an HttpResponse with a parsed body", async () => {
     const res = await bridgeHttpClient().request("GET", "/v1/action-items?limit=2");
     assert.equal(res.status, 200);
     assert.deepEqual(res.json, { action_items: [1, 2] });
+    assert.equal(typeof shell.seen[0]!.documentId, "string", "every request carries its document coordinate");
+    assert.notEqual(shell.seen[0]!.documentId, "", "the document coordinate is never empty");
     assert.equal(shell.seen[0]!.path, "/v1/action-items?limit=2", "the path crosses unchanged");
     assert.equal(shell.seen[0]!.method, "GET");
   } finally {

@@ -165,7 +165,7 @@ try {
   console.error(`  source: ${SOURCE_REL}`);
   process.exit(1);
 }
-const { channel, forbiddenHeaders, reasons, failureStatus } = contract;
+const { channel, documentQuery, forbiddenHeaders, reasons, failureStatus } = contract;
 const swiftSet = (values, indent = "    ") => values.map((value) => `${indent}"${value}",`);
 const requiredGenerationFields = nativeChat.generationParams.filter((field) => !field.optional).map((field) => field.name);
 const optionalGenerationFields = nativeChat.generationParams.filter((field) => field.optional).map((field) => field.name);
@@ -179,6 +179,9 @@ const content =
     "enum BridgeHttpContract {",
     "  /// BRIDGE_HTTP_CHANNEL — the message-handler name the surface feature-detects.",
     `  static let channel = "${channel}"`,
+    "",
+    "  /// BRIDGE_HTTP_DOCUMENT_QUERY — reserved non-secret navigation coordinate.",
+    `  static let documentQuery = "${documentQuery}"`,
     "",
     "  /// BRIDGE_HTTP_FORBIDDEN_HEADERS — stripped from caller headers, case-insensitively,",
     "  /// BEFORE the shell adds its own credential. Enforced, never trusted.",

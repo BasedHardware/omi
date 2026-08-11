@@ -46,7 +46,7 @@ try {
   console.error(`  source: ${SOURCE_REL}`);
   process.exit(1);
 }
-const { channel, replyFunction, forbiddenHeaders, reasons, failureStatus } = contract;
+const { channel, replyFunction, documentQuery, forbiddenHeaders, reasons, failureStatus } = contract;
 const toShellMessages = [...bridgeContracts.toShell.keys()];
 const fromShellMessages = [...bridgeContracts.fromShell.keys()];
 if (toShellMessages.length !== 3 || fromShellMessages.length !== 3) {
@@ -100,6 +100,10 @@ const content =
     "  /// one-way channels. A Flutter JavaScriptChannel cannot reply, so the",
     "  /// host delivers each reply by invoking this with (id, replyJson).",
     `  static const String replyFunction = '${replyFunction}';`,
+    "",
+    "  /// BRIDGE_HTTP_DOCUMENT_QUERY — reserved non-secret navigation",
+    "  /// coordinate used to fence document-local request ids.",
+    `  static const String documentQuery = '${documentQuery}';`,
     "",
     "  /// BRIDGE_HTTP_FORBIDDEN_HEADERS — stripped from caller headers,",
     "  /// case-insensitively, BEFORE the shell adds its own credential.",

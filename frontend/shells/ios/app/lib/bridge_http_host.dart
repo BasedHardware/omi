@@ -92,36 +92,34 @@ class BridgeHttpNormalizedResponse {
   bool get exposesResponseHeaders => false;
 }
 
-/// Correlation gate for the one-way channel: an id can produce at most one
-/// reply in the document that issued it. The bridge-web request sequence is
-/// document-local and restarts at `h1` after navigation, while this host lives
-/// for the process. Capturing the epoch at request receipt both permits the new
-/// document's `h1` and prevents a late prior-document reply from targeting it.
+/// Correlation gate for the one-way channel: an id can be admitted at most once
+/// in the shell-owned document that issued it. The sender carries the document
+/// coordinate on the wire, so an outgoing page that posts after the next
+/// provisional navigation cannot be mistaken for that next page.
 class BridgeHttpReplyGate {
   BridgeHttpReplyGate({this.maxEntries = 256}) : assert(maxEntries > 0);
 
   final int maxEntries;
-  final Set<(int, String)> _settled = <(int, String)>{};
-  final Queue<(int, String)> _order = Queue<(int, String)>();
-  int _documentEpoch = 0;
+  final Set<(String, String)> _admitted = <(String, String)>{};
+  final Queue<(String, String)> _order = Queue<(String, String)>();
+  String? _documentId;
 
-  int get documentEpoch => _documentEpoch;
+  String? get documentId => _documentId;
 
-  int beginDocument() {
-    _documentEpoch += 1;
-    return _documentEpoch;
-  }
+  void beginDocument(String? documentId) => _documentId = documentId == null || documentId.isEmpty ? null : documentId;
 
-  bool accept(int documentEpoch, String id) {
-    if (documentEpoch != _documentEpoch) return false;
-    final key = (documentEpoch, id);
-    if (!_settled.add(key)) return false;
+  bool accept(String documentId, String id) {
+    if (_documentId == null || documentId != _documentId) return false;
+    final key = (documentId, id);
+    if (!_admitted.add(key)) return false;
     _order.addLast(key);
     while (_order.length > maxEntries) {
-      _settled.remove(_order.removeFirst());
+      _admitted.remove(_order.removeFirst());
     }
     return true;
   }
+
+  bool owns(String documentId) => _documentId != null && documentId == _documentId;
 }
 
 /// One mutable in-process bearer authority shared by every privileged host for
@@ -251,6 +249,7 @@ class BridgeHttpHost {
   final String? clientIdentity;
   final HttpClient _client;
   final BridgeHttpReplyGate _replyGate = BridgeHttpReplyGate();
+  int _nextDocumentId = 0;
 
   /// Requests actually dispatched, for verification output. No URLs, no tokens.
   int servedCount = 0;
@@ -277,8 +276,23 @@ class BridgeHttpHost {
 
   void close() => _client.close(force: true);
 
-  /// Fence every in-flight reply to the document that created its request.
-  void beginDocument() => _replyGate.beginDocument();
+  /// Mint a non-secret coordinate into a shell-controlled local navigation.
+  /// Any caller-supplied copy is overwritten, so only this host chooses the
+  /// coordinate against which incoming requests are fenced.
+  Uri ownDocument(Uri uri) {
+    final documentId = 'd${++_nextDocumentId}';
+    return uri.replace(
+      queryParameters: <String, String>{...uri.queryParameters, BridgeHttpContract.documentQuery: documentId},
+    );
+  }
+
+  /// Activate the coordinate carried by the provisional navigation URL. A URL
+  /// without a shell-owned coordinate accepts no privileged HTTP requests.
+  void beginDocument(String? rawUrl) {
+    final uri = rawUrl == null ? null : Uri.tryParse(rawUrl);
+    final documentId = uri?.queryParameters[BridgeHttpContract.documentQuery];
+    _replyGate.beginDocument(documentId);
+  }
 
   /// Public only for the generated fixture runner; the live message handler
   /// calls this exact policy before opening a socket.
@@ -327,18 +341,12 @@ class BridgeHttpHost {
   }
 
   Future<void> _handle(WebViewController controller, String raw) async {
-    final documentEpoch = _replyGate.documentEpoch;
     String id = '?';
+    String? documentId;
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        return _fail(
-          controller,
-          documentEpoch,
-          id,
-          BridgeHttpFailureReason.shellError,
-          'malformed bridge http request',
-        );
+        return;
       }
       final rawId = decoded['id'];
       if (rawId is! String) {
@@ -346,13 +354,25 @@ class BridgeHttpHost {
         return;
       }
       id = rawId;
+      final rawDocumentId = decoded['documentId'];
+      if (rawDocumentId is! String || rawDocumentId.isEmpty) {
+        // Without a sender-bound coordinate, replying could resolve the same
+        // document-local id in a different page. Drop without dispatch/reply.
+        return;
+      }
+      documentId = rawDocumentId;
+      if (!_replyGate.accept(documentId, id)) {
+        // Reject before any socket side effect. In particular, an outgoing
+        // document may still post after the next onPageStarted callback.
+        return;
+      }
 
       final method = decoded['method'];
       final path = decoded['path'];
       if (method is! String || path is! String) {
         return _fail(
           controller,
-          documentEpoch,
+          documentId,
           id,
           BridgeHttpFailureReason.shellError,
           'missing or unsupported method/path',
@@ -379,7 +399,7 @@ class BridgeHttpHost {
         clientIdentity: clientIdentity,
       );
       if (decision.request == null) {
-        return _fail(controller, documentEpoch, id, decision.failureReason!, decision.detail!);
+        return _fail(controller, documentId, id, decision.failureReason!, decision.detail!);
       }
       servedCount += 1;
       final prepared = decision.request!;
@@ -413,22 +433,30 @@ class BridgeHttpHost {
       // An environment token can be loaded again only by a later process.
       _observeResponse(method: prepared.method, path: prepared.path, status: response.statusCode);
 
-      await _reply(controller, documentEpoch, id, <String, dynamic>{'ok': true, 'response': out});
+      await _reply(controller, documentId, id, <String, dynamic>{'ok': true, 'response': out});
     } on TimeoutException {
-      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.timeout, 'request timed out');
+      if (documentId != null) {
+        await _fail(controller, documentId, id, BridgeHttpFailureReason.timeout, 'request timed out');
+      }
     } on SocketException catch (e) {
       // Detail carries the OS error code only — never the URL or the token.
-      await _fail(
-        controller,
-        documentEpoch,
-        id,
-        BridgeHttpFailureReason.offline,
-        'socket error ${e.osError?.errorCode ?? -1}',
-      );
+      if (documentId != null) {
+        await _fail(
+          controller,
+          documentId,
+          id,
+          BridgeHttpFailureReason.offline,
+          'socket error ${e.osError?.errorCode ?? -1}',
+        );
+      }
     } on HttpException {
-      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.offline, 'http exception');
+      if (documentId != null) {
+        await _fail(controller, documentId, id, BridgeHttpFailureReason.offline, 'http exception');
+      }
     } catch (_) {
-      await _fail(controller, documentEpoch, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
+      if (documentId != null) {
+        await _fail(controller, documentId, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
+      }
     }
   }
 
@@ -438,12 +466,12 @@ class BridgeHttpHost {
 
   Future<void> _fail(
     WebViewController controller,
-    int documentEpoch,
+    String documentId,
     String id,
     BridgeHttpFailureReason reason,
     String detail,
   ) {
-    return _reply(controller, documentEpoch, id, <String, dynamic>{
+    return _reply(controller, documentId, id, <String, dynamic>{
       'ok': false,
       'failure': <String, dynamic>{'id': id, 'reason': reason.wire, 'detail': detail},
     });
@@ -452,8 +480,8 @@ class BridgeHttpHost {
   /// Deliver exactly one reply per id by invoking the page's reply function.
   /// Both arguments are JSON-encoded, so nothing in a path or body can break out
   /// of the expression.
-  Future<void> _reply(WebViewController controller, int documentEpoch, String id, Map<String, dynamic> reply) async {
-    if (!_replyGate.accept(documentEpoch, id)) return;
+  Future<void> _reply(WebViewController controller, String documentId, String id, Map<String, dynamic> reply) async {
+    if (!_replyGate.owns(documentId)) return;
     final js =
         '${BridgeHttpContract.replyFunction}('
         '${jsonEncode(id)},'

@@ -181,6 +181,7 @@ Uri consumerEvidenceRouteUri(ConsumerEvidenceRoute route) => Uri(
   queryParameters: {'route': route.wireName, 'platform': 'mobile', 'generation': 'platform'},
 );
 
+typedef EvidenceOwnNavigation = Uri Function(Uri uri);
 typedef EvidenceNavigate = Future<void> Function(Uri uri);
 typedef EvidenceObserve = Future<String?> Function();
 typedef EvidenceStartListen = Future<bool> Function();
@@ -191,6 +192,7 @@ typedef EvidenceObserveChatAfterAdmission = Future<String?> Function(int baselin
 final class ConsumerEvidenceDriver {
   ConsumerEvidenceDriver({
     required this.collector,
+    this.ownNavigation = _identityNavigation,
     required this.navigate,
     required this.observe,
     required this.startListen,
@@ -202,6 +204,7 @@ final class ConsumerEvidenceDriver {
   });
 
   final ConsumerEvidenceCollector collector;
+  final EvidenceOwnNavigation ownNavigation;
   final EvidenceNavigate navigate;
   final EvidenceObserve observe;
   final EvidenceStartListen startListen;
@@ -216,6 +219,7 @@ final class ConsumerEvidenceDriver {
   Uri? _expectedFinishedUri;
 
   static Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
+  static Uri _identityNavigation(Uri uri) => uri;
 
   Future<void> start() async => _navigateTo(ConsumerEvidenceRoute.values.first);
 
@@ -292,7 +296,7 @@ final class ConsumerEvidenceDriver {
   }
 
   Future<void> _navigateTo(ConsumerEvidenceRoute route) async {
-    final uri = consumerEvidenceRouteUri(route);
+    final uri = ownNavigation(consumerEvidenceRouteUri(route));
     _expectedFinishedUri = uri;
     try {
       await navigate(uri);

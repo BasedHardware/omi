@@ -27,6 +27,7 @@
 
 import {
   BRIDGE_HTTP_CHANNEL,
+  BRIDGE_HTTP_DOCUMENT_QUERY,
   BRIDGE_HTTP_FAILURE_STATUS,
   BRIDGE_HTTP_REPLY_FUNCTION,
   type BridgeHttpMethod,
@@ -101,6 +102,25 @@ export function isBridgeHttpAvailable(): boolean {
 
 /** Monotonic per-document correlation ids. No randomness needed or wanted. */
 let seq = 0;
+
+/**
+ * Read the shell-minted coordinate from this document's local URL. Non-native
+ * test/browser hosts have no such query parameter; their reply-capable
+ * transport does not need cross-document correlation, but the wire shape stays
+ * total with an explicitly unowned coordinate.
+ */
+const documentId = (() => {
+  try {
+    const href = (globalThis as unknown as { location?: { href?: unknown } }).location?.href;
+    if (typeof href === "string") {
+      const owned = new URL(href).searchParams.get(BRIDGE_HTTP_DOCUMENT_QUERY);
+      if (owned !== null && owned.length > 0) return owned;
+    }
+  } catch {
+    // An unavailable/malformed location is an unowned non-native document.
+  }
+  return "unowned";
+})();
 
 function parseBody(body: string | null): unknown {
   if (body === null || body === "") return null;
@@ -198,6 +218,7 @@ export function bridgeHttpClient(replyTimeoutMs: number = DEFAULT_REPLY_TIMEOUT_
         // shared failure taxonomy.
         const message: BridgeHttpRequest = {
           id,
+          documentId,
           method,
           path,
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

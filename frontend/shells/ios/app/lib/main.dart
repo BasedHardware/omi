@@ -158,6 +158,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     _ => SurfaceMode.ship,
   };
 
+  Uri _ownDocument(Uri uri) => _http?.ownDocument(uri) ?? uri;
+
+  Future<void> _loadOwnedDocument(Uri uri) => _controller.loadRequest(_ownDocument(uri));
+
   @override
   void initState() {
     super.initState();
@@ -215,8 +219,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       })
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) {
-            _http?.beginDocument();
+          onPageStarted: (url) {
+            _http?.beginDocument(url);
             unawaited(_listen?.resetForNavigation());
             unawaited(_chatStream?.resetForNavigation());
             unawaited(_chatStaging?.resetForNavigation());
@@ -294,13 +298,13 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await _chatStaging?.register(_controller);
     switch (_mode) {
       case SurfaceMode.dev:
-        await _controller.loadRequest(Uri.parse('http://$_devHost/'));
+        await _loadOwnedDocument(Uri.parse('http://$_devHost/'));
       case SurfaceMode.loop:
         _loopA = LoopServer('assets/surface-loop');
         await _loopA!.start(port: _loopPort);
         _loopPhase = 1;
         debugPrint('[loop] phase 1: loading from port ${_loopA!.port}');
-        await _controller.loadRequest(Uri.parse('http://127.0.0.1:${_loopA!.port}/'));
+        await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopA!.port}/'));
       case SurfaceMode.scheme:
         _scheme = SchemeSpike();
         await _scheme!.init();
@@ -350,6 +354,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await collector.prepare();
     _consumerEvidence = ConsumerEvidenceDriver(
       collector: collector,
+      ownNavigation: _ownDocument,
       navigate: _controller.loadRequest,
       observe: () async {
         final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
@@ -405,7 +410,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       'NAVIGATE bundle=$version -> omi-ui://local/index.html '
       'queryPresent=${_surfaceQuerySuffix.isNotEmpty}',
     );
-    await _controller.loadRequest(Uri.parse(target));
+    await _loadOwnedDocument(Uri.parse(target));
     return true;
   }
 
@@ -468,7 +473,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     _loopB = LoopServer('assets/surface-loop');
     await _loopB!.start(port: 0);
     debugPrint('[loop] phase 2: reloading from port ${_loopB!.port} (was ${_loopA!.port})');
-    await _controller.loadRequest(Uri.parse('http://127.0.0.1:${_loopB!.port}/'));
+    await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopB!.port}/'));
   }
 
   // AUTODRIVE custody probes for the privileged-HTTP bridge (wave 9), mirroring
