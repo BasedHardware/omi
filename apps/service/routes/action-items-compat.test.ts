@@ -1068,3 +1068,74 @@ describe("legacy action-items normalized datetime year bounds", () => {
     });
   }
 });
+
+describe("legacy action-items Unicode code-point length parity", () => {
+  for (const composition of ["in-memory", "sqlite"] as const) {
+    test(`${composition}: source and description limits count code points without changing wire values`, async () => {
+      const booted = bootComposition(composition, {
+        ids: [
+          "compat-unicode-source",
+          "compat-ascii-source",
+          "compat-unicode-description",
+          "compat-ascii-description",
+        ],
+      });
+      try {
+        const validSources = ["😀".repeat(64), "s".repeat(64)];
+        for (const [index, source] of validSources.entries()) {
+          const response = await request(booted.service, PATH, "POST", {
+            description: `valid source ${index}`,
+            source,
+          });
+          expect(response.status).toBe(200);
+          expect((await json(response))["source"]).toBe(source);
+        }
+        for (const source of ["😀".repeat(65), "s".repeat(65)]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, PATH, "POST", {
+            description: "invalid source boundary",
+            source,
+          });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+
+        const validDescriptions = ["😀".repeat(4_096), "d".repeat(4_096)];
+        for (const description of validDescriptions) {
+          const response = await request(booted.service, PATH, "POST", { description });
+          expect(response.status).toBe(200);
+          expect((await json(response))["description"]).toBe(description);
+        }
+        for (const description of ["😀".repeat(4_097), "d".repeat(4_097)]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, PATH, "POST", { description });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+
+        const patchId = "compat-unicode-patch";
+        booted.stores.tasks.apply(OWNER, {
+          op: "create",
+          record_id: patchId,
+          content: canonicalBag("patch boundary"),
+        });
+        for (const description of validDescriptions) {
+          const response = await request(booted.service, `${PATH}/${patchId}`, "PATCH", { description });
+          expect(response.status).toBe(200);
+          expect((await json(response))["description"]).toBe(description);
+        }
+        for (const description of ["😀".repeat(4_097), "d".repeat(4_097)]) {
+          const before = storeBytes(booted.stores);
+          const response = await request(booted.service, `${PATH}/${patchId}`, "PATCH", { description });
+          expect(response.status).toBe(400);
+          expect(await response.text()).toBe(BAD_REQUEST_WIRE);
+          expect(storeBytes(booted.stores)).toBe(before);
+        }
+      } finally {
+        booted.close();
+      }
+    });
+  }
+});

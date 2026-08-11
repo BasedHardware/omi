@@ -176,6 +176,15 @@ const hasExactAllowedKeys = (
   && !["__proto__", "constructor", "prototype"].some((key) =>
     Object.prototype.hasOwnProperty.call(value, key));
 
+const hasCodePointLength = (value: string, minimum: number, maximum: number): boolean => {
+  let length = 0;
+  for (const _codePoint of value) {
+    length += 1;
+    if (length > maximum) return false;
+  }
+  return length >= minimum;
+};
+
 /** Adapter-emitted ISO 8601 with an explicit UTC offset, losslessly reducible to epoch milliseconds. */
 const parseIsoEpochMilliseconds = (value: unknown): number | undefined => {
   if (typeof value !== "string") return undefined;
@@ -237,8 +246,7 @@ const parseIsoEpochMilliseconds = (value: unknown): number | undefined => {
 const parseCreate = (body: Readonly<Record<string, unknown>>): CreateInput | null => {
   if (!hasExactAllowedKeys(body, new Set(["description", "due_at", "source"]))) return null;
   const description = body["description"];
-  if (typeof description !== "string" || description.length < 1
-    || description.length > 4_096) return null;
+  if (typeof description !== "string" || !hasCodePointLength(description, 1, 4_096)) return null;
   let dueAt: number | null = null;
   const dueAtValue = body["due_at"];
   if (Object.prototype.hasOwnProperty.call(body, "due_at") && dueAtValue !== null) {
@@ -247,7 +255,7 @@ const parseCreate = (body: Readonly<Record<string, unknown>>): CreateInput | nul
     dueAt = parsed;
   }
   const source = Object.prototype.hasOwnProperty.call(body, "source") ? body["source"] : "manual";
-  if (typeof source !== "string" || source.length < 1 || source.length > 64) return null;
+  if (typeof source !== "string" || !hasCodePointLength(source, 1, 64)) return null;
   return Object.freeze({ description, dueAt, source });
 };
 
@@ -271,8 +279,7 @@ const parsePatch = (body: Readonly<Record<string, unknown>>): PatchInput | null 
   } = {};
   if (Object.prototype.hasOwnProperty.call(body, "description")) {
     const description = body["description"];
-    if (typeof description !== "string" || description.length < 1
-      || description.length > 4_096) return null;
+    if (typeof description !== "string" || !hasCodePointLength(description, 1, 4_096)) return null;
     patch.description = description;
   }
   if (Object.prototype.hasOwnProperty.call(body, "completed")) {
