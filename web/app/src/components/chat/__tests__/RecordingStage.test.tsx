@@ -112,10 +112,11 @@ describe('RecordingStage transcript', () => {
 describe('RecordingStage Omi ring', () => {
   function geometry() {
     return Array.from(
-      screen.getByRole('img', { name: 'Omi' }).querySelectorAll('circle'),
+      screen.getByRole('img', { name: 'Omi live' }).querySelectorAll('circle'),
     ).map((circle) => [
       circle.getAttribute('cx'),
       circle.getAttribute('cy'),
+      circle.getAttribute('r'),
       circle.getAttribute('opacity'),
     ]);
   }
@@ -151,7 +152,11 @@ describe('RecordingStage Omi ring', () => {
 
     expect(listening).toEqual(starting);
     expect(geometry()).toEqual(starting);
-    expect(starting.every((dot) => dot[2] === '0.84')).toBe(true);
+    expect(starting).toEqual([
+      ['20', '20', '15', '0.18'],
+      ['20', '20', '10', '0.1'],
+      ['20', '20', '3.5', '0.92'],
+    ]);
   });
 
   it('keeps the ring stationary with reduced motion', () => {

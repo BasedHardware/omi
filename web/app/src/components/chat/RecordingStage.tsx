@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Pause, Play, Square } from 'lucide-react';
-import { OmiOrb } from '@/components/ui/OmiOrb';
 import type { TranscriptSegment } from '@/components/recording/RecordingContext';
 import { cn } from '@/lib/utils';
 
@@ -83,14 +82,25 @@ export function RecordingStage({
           }}
           transition={{ duration: reducedMotion ? 0 : 0.08, ease: 'easeOut' }}
         >
-          <OmiOrb
-            state={isInitializing ? 'loading' : isPaused ? 'idle' : 'listening'}
-            motion="spin"
-            level={0}
-            size={40}
+          <svg
+            width="40"
+            height="40"
+            viewBox="0 0 40 40"
             className="text-text-primary"
-            paused
-          />
+            role="img"
+            aria-label="Omi live"
+          >
+            <circle
+              cx="20"
+              cy="20"
+              r="15"
+              fill="none"
+              stroke="currentColor"
+              opacity="0.18"
+            />
+            <circle cx="20" cy="20" r="10" fill="currentColor" opacity="0.1" />
+            <circle cx="20" cy="20" r="3.5" fill="currentColor" opacity="0.92" />
+          </svg>
         </motion.div>
 
         <div className="min-w-0 flex-1">
