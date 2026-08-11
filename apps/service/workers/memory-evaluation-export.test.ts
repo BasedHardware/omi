@@ -5,6 +5,7 @@ import {
   createMemoryStrategyAssigner,
   defineMemoryStrategyAssignmentPolicy,
   registerMemoryStrategy,
+  type MemoryStrategyAssignmentBundle,
 } from "../../../core/consolidate/strategy-assignment";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
 import { durableMemoryWorkNormalizedResultDigest } from "../stores/durable-memory-work-result-repository";
@@ -30,7 +31,7 @@ const context = (capability = "memories.experiments.shadow") => issuer.issue({
   authorization_state_digest: digest("a"),
 }, 150);
 
-const bundle = (() => {
+const assignmentSetup = (() => {
   const strategy = (id: string, prompt: string) => registerMemoryStrategy({
     version: MEMORY_STRATEGY_VERSION, strategy_id: id, work_kind: "formation",
     coordinates: {
@@ -48,22 +49,30 @@ const bundle = (() => {
     key_version: "assignment-key:v1", authority_strategy_id: authority.strategy_id,
     shadow_candidates: [{ strategy_id: candidate.strategy_id, basis_points: 10_000 }],
   }, [authority, candidate]);
-  return createMemoryStrategyAssigner(new Uint8Array(32).fill(5)).assign({
-    owner_account_id: "account:alice", unit_ref: "session:one",
-    policy, strategies: [authority, candidate],
-  });
+  return {
+    assigner: createMemoryStrategyAssigner(new Uint8Array(32).fill(5)),
+    policy,
+    strategies: [authority, candidate],
+  };
 })();
+const assignedBundle = (unitRef: string) => assignmentSetup.assigner.assign({
+  owner_account_id: "account:alice", unit_ref: unitRef,
+  policy: assignmentSetup.policy, strategies: assignmentSetup.strategies,
+});
+const bundle = assignedBundle("session:one");
+const alternateBundle = assignedBundle("session:two");
 
 const result = (
   role: MemoryEvaluationRole,
   repeat: number,
   run = `mer1_${digest("b")}`,
   contentTag = "one",
+  evaluationBundle: Readonly<MemoryStrategyAssignmentBundle> = bundle,
 ) => {
-  const selected = role === "baseline" ? bundle.authority : bundle.shadows[0]!;
+  const selected = role === "baseline" ? evaluationBundle.authority : evaluationBundle.shadows[0]!;
   const normalized = { secret_claims: [{ person: "David", content_tag: contentTag }] };
   const body = {
-    assignment_bundle: bundle,
+    assignment_bundle: evaluationBundle,
     assignment_id: selected.assignment_id,
     account_epoch: 7,
     evaluation_role: role,
@@ -84,8 +93,11 @@ const result = (
   return materializeMemoryEvaluationResult(context(), request);
 };
 
-const pair = (repeat: number, run?: string) =>
-  pairMemoryEvaluationResults(result("baseline", repeat, run), result("candidate", repeat, run));
+const pair = (repeat: number, run?: string, evaluationBundle = bundle) =>
+  pairMemoryEvaluationResults(
+    result("baseline", repeat, run, "one", evaluationBundle),
+    result("candidate", repeat, run, "one", evaluationBundle),
+  );
 
 describe("content-safe memory evaluation export", () => {
   test("is deterministic, opaque, and sufficient to join paired repeats", () => {
@@ -104,6 +116,14 @@ describe("content-safe memory evaluation export", () => {
       first.input_digest, first.baseline_result_digest, first.candidate_result_digest,
     ]) expect(serialized).not.toContain(forbidden);
     expect(manifest.export_digest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("strategy references stay stable across assignment bundles", () => {
+    const first = buildMemoryEvaluationExport(context(), [pair(0, undefined, bundle)]);
+    const second = buildMemoryEvaluationExport(context(), [pair(0, undefined, alternateBundle)]);
+    expect(first.assignment_bundle_ref).not.toBe(second.assignment_bundle_ref);
+    expect(first.pairs[0]!.baseline_strategy_ref).toBe(second.pairs[0]!.baseline_strategy_ref);
+    expect(first.pairs[0]!.candidate_strategy_ref).toBe(second.pairs[0]!.candidate_strategy_ref);
   });
 
   test("forged, duplicated, mixed-run, and wrong-capability inputs fail closed", () => {

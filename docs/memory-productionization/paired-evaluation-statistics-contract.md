@@ -36,7 +36,7 @@ fragment a strategy into a new analysis arm.
 
 ### Cohort manifest
 
-A deterministic content-safe cohort manifest joins two or more verified unit
+A deterministic content-safe cohort manifest joins two or more digest-valid unit
 exports from one evaluation run. It requires:
 
 - one evaluation mode, run reference, authority strategy reference, and
@@ -47,6 +47,9 @@ exports from one evaluation run. It requires:
   later repeat;
 - opaque unit/input/pair/result/strategy references and counts only;
 - a canonical cohort digest.
+
+The cohort has hard unit and total-pair bounds. Label order is normalized before
+digesting, so file or UI ordering cannot change the analysis identity.
 
 Multi-candidate experiments are split into one cohort per authority/candidate
 comparison so the sample set and missingness are explicit.
@@ -84,9 +87,10 @@ answer, evidence, strategy id, promotion decision, or human note.
    including zero-discordant and strongly asymmetric cases.
 4. `unsure` excludes only its primary pair; `empty` remains a primary
    nonsuccess; all five grades remain visible in arm-level counts.
-5. Missing, duplicate, extra, forged, accessor/proxy, mixed-run, mixed-strategy,
-   duplicate-input, uneven-repeat, and same-input-coordinate artifacts fail
-   before a report is returned.
+5. Missing, duplicate, extra, digest-forged, accessor/proxy, mixed-run,
+   mixed-strategy, duplicate-input, uneven-repeat, and same-input-coordinate
+   artifacts fail before a report is returned. A byte-identical plain-data copy
+   is intentionally equivalent; this content-digest boundary is not a signature.
 6. Serialized cohort and report contain none of the planted owner, strategy,
    question, answer, evidence, frontier, source, or free-form note sentinels.
 7. The implementation performs no model call, self-grading, label inference,

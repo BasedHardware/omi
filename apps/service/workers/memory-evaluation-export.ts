@@ -12,6 +12,13 @@ import {
 
 const EXPORT_VERSION = "memory-evaluation-export-v1" as const;
 const MAX_PAIRS = 10_000;
+const DIGEST = /^[a-f0-9]{64}$/;
+const EVALUATION_RUN_REF = /^mer1_[a-f0-9]{64}$/;
+const ASSIGNMENT_REF = /^mea1_[a-f0-9]{64}$/;
+const INPUT_REF = /^mei1_[a-f0-9]{64}$/;
+const PAIR_REF = /^mep1_[a-f0-9]{64}$/;
+const RESULT_REF = /^msr1_[a-f0-9]{64}$/;
+const STRATEGY_REF = /^mes1_[a-f0-9]{64}$/;
 
 export interface MemoryEvaluationExportPair {
   readonly ordinal: number;
@@ -39,6 +46,29 @@ export interface MemoryEvaluationExportManifest {
 const fail = (code: string): never => { throw new TypeError(`memory evaluation export ${code}`); };
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
+const exactRecord = (value: unknown, keys: readonly string[], code: string): Record<string, unknown> => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail(code);
+  const objectValue = value as object;
+  const ownKeys = Reflect.ownKeys(objectValue);
+  if (ownKeys.length !== keys.length || ownKeys.some((key) => typeof key !== "string" || !keys.includes(key))) fail(code);
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) fail(code);
+  }
+  return value as Record<string, unknown>;
+};
+
+const ref = (value: unknown, pattern: RegExp, code: string): string => {
+  if (typeof value !== "string" || !pattern.test(value)) fail(code);
+  return value as string;
+};
+
+const integer = (value: unknown, maximum: number, code: string): number => {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > maximum) fail(code);
+  return value as number;
+};
+
 const exactPairArray = (value: unknown): readonly unknown[] => {
   if (!Array.isArray(value) || isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype
     || value.length < 1 || value.length > MAX_PAIRS) fail("invalid_pairs");
@@ -60,13 +90,67 @@ const strategyRef = (
   role: "baseline" | "candidate",
   strategyId: string,
 ): string => `mes1_${sha256CanonicalContent({
-  contract_version: "memory-evaluation-export-strategy-ref-v1",
+  contract_version: "memory-evaluation-export-strategy-ref-v2",
   owner_account_id: pair.owner_account_id,
   account_epoch: pair.account_epoch,
-  assignment_bundle_id: pair.assignment_bundle_id,
   evaluation_role: role,
   strategy_id: strategyId,
 })}`;
+
+export const parseMemoryEvaluationExport = (
+  value: unknown,
+): Readonly<MemoryEvaluationExportManifest> => {
+  const root = exactRecord(value, [
+    "version", "evaluation_mode", "evaluation_run_ref", "assignment_bundle_ref",
+    "input_ref", "pair_count", "repeat_count", "candidate_strategy_count",
+    "pairs", "export_digest",
+  ], "invalid_manifest");
+  if (root["version"] !== EXPORT_VERSION
+    || (root["evaluation_mode"] !== "live_shadow" && root["evaluation_mode"] !== "offline_replay")) {
+    fail("invalid_manifest");
+  }
+  const pairValues = exactPairArray(root["pairs"]);
+  const rows = Object.freeze(pairValues.map((value, index) => {
+    const row = exactRecord(value, [
+      "ordinal", "pair_ref", "repeat_ordinal", "baseline_result_ref",
+      "baseline_strategy_ref", "candidate_result_ref", "candidate_strategy_ref",
+    ], "invalid_pair_row");
+    const ordinal = integer(row["ordinal"], MAX_PAIRS - 1, "invalid_pair_row");
+    if (ordinal !== index) fail("invalid_pair_row");
+    return Object.freeze({
+      ordinal,
+      pair_ref: ref(row["pair_ref"], PAIR_REF, "invalid_pair_row"),
+      repeat_ordinal: integer(row["repeat_ordinal"], 999, "invalid_pair_row"),
+      baseline_result_ref: ref(row["baseline_result_ref"], RESULT_REF, "invalid_pair_row"),
+      baseline_strategy_ref: ref(row["baseline_strategy_ref"], STRATEGY_REF, "invalid_pair_row"),
+      candidate_result_ref: ref(row["candidate_result_ref"], RESULT_REF, "invalid_pair_row"),
+      candidate_strategy_ref: ref(row["candidate_strategy_ref"], STRATEGY_REF, "invalid_pair_row"),
+    });
+  }));
+  const pairCount = integer(root["pair_count"], MAX_PAIRS, "invalid_manifest");
+  const repeatCount = integer(root["repeat_count"], MAX_PAIRS, "invalid_manifest");
+  const candidateCount = integer(root["candidate_strategy_count"], MAX_PAIRS, "invalid_manifest");
+  if (pairCount !== rows.length
+    || repeatCount !== new Set(rows.map((row) => row.repeat_ordinal)).size
+    || candidateCount !== new Set(rows.map((row) => row.candidate_strategy_ref)).size
+    || new Set(rows.map((row) => row.pair_ref)).size !== rows.length
+    || new Set(rows.map((row) => `${row.repeat_ordinal}:${row.candidate_strategy_ref}`)).size !== rows.length
+    || new Set(rows.map((row) => row.baseline_strategy_ref)).size !== 1) fail("invalid_manifest");
+  const core = Object.freeze({
+    version: EXPORT_VERSION,
+    evaluation_mode: root["evaluation_mode"] as "live_shadow" | "offline_replay",
+    evaluation_run_ref: ref(root["evaluation_run_ref"], EVALUATION_RUN_REF, "invalid_manifest"),
+    assignment_bundle_ref: ref(root["assignment_bundle_ref"], ASSIGNMENT_REF, "invalid_manifest"),
+    input_ref: ref(root["input_ref"], INPUT_REF, "invalid_manifest"),
+    pair_count: pairCount,
+    repeat_count: repeatCount,
+    candidate_strategy_count: candidateCount,
+    pairs: rows,
+  });
+  const exportDigest = ref(root["export_digest"], DIGEST, "invalid_manifest");
+  if (exportDigest !== sha256CanonicalContent(core)) fail("invalid_manifest_digest");
+  return Object.freeze({ ...core, export_digest: exportDigest });
+};
 
 export const buildMemoryEvaluationExport = (
   contextValue: AuthorizedLedgerWriteContext,
@@ -126,10 +210,10 @@ export const buildMemoryEvaluationExport = (
     candidate_strategy_count: new Set(rows.map((row) => row.candidate_strategy_ref)).size,
     pairs: rows,
   });
-  return Object.freeze({
+  return parseMemoryEvaluationExport(Object.freeze({
     ...core,
     export_digest: sha256CanonicalContent(core),
-  });
+  }));
 };
 
 export const MEMORY_EVALUATION_EXPORT_VERSION = EXPORT_VERSION;
