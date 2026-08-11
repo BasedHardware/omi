@@ -20,7 +20,9 @@ import pytest
 from utils.stt import vad
 from utils.stt.vad import (
     VADAudioDecodeError,
+    VADEmptyError,
     VADProcessingError,
+    apply_vad_for_speech_profile,
     vad_is_empty,
     _run_file_vad,
     _get_ort_session,
@@ -75,6 +77,12 @@ def _write_wav_file(path: str, duration_sec: float, freq_hz: float = 0.0):
     data = _make_wav_bytes(duration_sec, freq_hz)
     with open(path, 'wb') as f:
         f.write(data)
+
+
+def test_apply_vad_for_speech_profile_raises_domain_error_for_empty_vad():
+    with patch.object(vad, 'vad_is_empty', return_value=[]):
+        with pytest.raises(VADEmptyError, match='Audio is empty'):
+            apply_vad_for_speech_profile('/tmp/silent-profile.wav')
 
 
 def _mock_run_vad_window_speech(window, state, context):

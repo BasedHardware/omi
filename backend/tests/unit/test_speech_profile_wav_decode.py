@@ -83,14 +83,11 @@ finally:
     sys.modules.update(_saved)
 
 from fastapi import HTTPException  # noqa: E402  (import after the finder block)
+from utils.stt.vad import VADEmptyError  # noqa: E402  (import after the finder block)
 
 
 class _FakeDecodeError(Exception):
     """Stand-in for pydub.exceptions.CouldntDecodeError (pydub is stubbed here)."""
-
-
-class _FakeVADEmptyError(ValueError):
-    pass
 
 
 def _fake_upload_file(content: bytes, filename: str = "speech_profile.wav"):
@@ -142,8 +139,8 @@ class TestUploadProfileWavDecodeGuard:
 
         with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
             mod, "AudioSegment"
-        ) as mock_aseg, patch.object(mod, "VADEmptyError", _FakeVADEmptyError), patch.object(
-            mod, "apply_vad_for_speech_profile", side_effect=_FakeVADEmptyError("Audio is empty")
+        ) as mock_aseg, patch.object(mod, "VADEmptyError", VADEmptyError), patch.object(
+            mod, "apply_vad_for_speech_profile", side_effect=VADEmptyError("Audio is empty")
         ) as mock_vad, patch.object(
             mod, "upload_profile_audio"
         ) as mock_upload:
