@@ -296,6 +296,11 @@ async def _mcp_post(
         # Capture session ID from response
         new_session_id = resp.headers.get("mcp-session-id", session_id)
 
+        # Redirects are not followed (the target is IP-pinned); a 3xx with an
+        # empty body would otherwise be mistaken for an empty notification ack.
+        if 300 <= resp.status_code < 400:
+            resp.raise_for_status()
+
         # Notifications (no "id" in request) may return 202/204 with no body
         if resp.status_code in (202, 204) or not resp.text.strip():
             return {}, new_session_id
@@ -429,13 +434,19 @@ async def _sse_send_and_receive_inner(
                             if access_token:
                                 post_headers["Authorization"] = f"Bearer {access_token}"
                             for payload in payloads:
-                                await client.post(
+                                post_resp = await client.post(
                                     pinned_post_url,
                                     json=payload,
                                     headers=post_headers,
                                     extensions=post_pin_kwargs['extensions'],
                                     follow_redirects=False,
                                 )
+                                # Redirects stay disabled (pinning is what closes
+                                # the DNS-rebinding hole), but a discarded 3xx/4xx
+                                # response would leave the caller waiting for
+                                # replies that never arrive on the SSE stream
+                                # until the 30s timeout. Fail immediately instead.
+                                post_resp.raise_for_status()
 
                         elif event_type == "message" and data_str:
                             try:

@@ -398,3 +398,78 @@ async def test_mcp_post_uses_pinned_url_and_no_redirects():
     assert mock_client.post.await_args.args[0] == pinned
     assert mock_client.post.await_args.kwargs['follow_redirects'] is False
     assert mock_client.post.await_args.kwargs['headers']['Host'] == 'mcp.example.com'
+
+
+@pytest.mark.asyncio
+async def test_mcp_post_surfaces_redirect_instead_of_empty_result():
+    """With redirects disabled, a 3xx has an empty body -- returning {} would
+    look like a successful notification ack and silently drop the tool call."""
+    import httpx
+
+    pinned, pin_kwargs = _pin('https://mcp.example.com/http')
+    redirect = httpx.Response(
+        307,
+        headers={'location': 'https://elsewhere.example.com/http'},
+        request=httpx.Request('POST', pinned),
+    )
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=redirect)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch.object(mcp_mod, '_safe_request_target', return_value=(pinned, pin_kwargs)),
+        patch('utils.mcp_client.httpx.AsyncClient', return_value=mock_client),
+    ):
+        with pytest.raises(httpx.HTTPStatusError):
+            await mcp_mod._mcp_post('https://mcp.example.com/http', {'jsonrpc': '2.0', 'method': 'x', 'id': 1})
+
+
+@pytest.mark.asyncio
+async def test_sse_post_redirect_fails_fast_instead_of_waiting_for_the_timeout():
+    """A redirected SSE POST endpoint never delivers replies on the stream;
+    discarding its 3xx made the caller wait out the 30s SSE timeout."""
+    import httpx
+
+    sse_url = 'https://mcp.example.com/sse'
+    pinned_sse, sse_pin = _pin(sse_url)
+    pinned_post, post_pin = _pin('https://mcp.example.com/messages')
+
+    class _Stream:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def aiter_text(self):
+            yield 'event: endpoint\ndata: /messages\n\n'
+            # Server sends nothing further -- the reply would have come via the
+            # POST target we were redirected away from.
+
+    redirect = httpx.Response(
+        307,
+        headers={'location': 'https://elsewhere.example.com/messages'},
+        request=httpx.Request('POST', pinned_post),
+    )
+
+    mock_client = AsyncMock()
+    mock_client.stream = MagicMock(return_value=_Stream())
+    mock_client.post = AsyncMock(return_value=redirect)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    def _resolve(url):
+        return (pinned_sse, sse_pin) if url == sse_url else (pinned_post, post_pin)
+
+    with (
+        patch.object(mcp_mod, '_safe_request_target', side_effect=_resolve),
+        patch('utils.mcp_client.httpx.AsyncClient', return_value=mock_client),
+    ):
+        with pytest.raises(httpx.HTTPStatusError):
+            await mcp_mod._sse_send_and_receive_inner(sse_url, [{'jsonrpc': '2.0', 'method': 'x', 'id': 1}])
+
+    assert mock_client.post.await_args.kwargs['follow_redirects'] is False
