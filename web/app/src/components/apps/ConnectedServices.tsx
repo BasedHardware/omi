@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Puzzle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -63,24 +63,96 @@ export function ConnectedServices() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const pollingRunRef = useRef(0);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollingDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refresh = useCallback(async () => {
-    const loaded = await getIntegrations().catch(() => []);
-    setIntegrations(loaded);
+  const refresh = useCallback(async (): Promise<Integration[]> => {
+    const loaded = await getIntegrations();
+    if (mountedRef.current) setIntegrations(loaded);
+    return loaded;
   }, []);
+
+  const stopPolling = useCallback(() => {
+    pollingRunRef.current += 1;
+    if (pollingTimeoutRef.current !== null) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+    if (pollingDeadlineRef.current !== null) {
+      clearTimeout(pollingDeadlineRef.current);
+      pollingDeadlineRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback(
+    (integrationId: string) => {
+      stopPolling();
+      const run = pollingRunRef.current;
+
+      const poll = async () => {
+        if (!mountedRef.current || pollingRunRef.current !== run) return;
+
+        try {
+          const loaded = await refresh();
+          if (!mountedRef.current || pollingRunRef.current !== run) return;
+          setError(null);
+          if (
+            loaded.some(
+              (integration) => integration.id === integrationId && integration.connected,
+            )
+          ) {
+            stopPolling();
+            return;
+          }
+        } catch (error) {
+          if (!mountedRef.current || pollingRunRef.current !== run) return;
+          console.error('Failed to refresh integrations:', error);
+          setError('Could not refresh external services. Please try again.');
+        }
+
+        if (!mountedRef.current || pollingRunRef.current !== run) return;
+        pollingTimeoutRef.current = setTimeout(poll, 3000);
+      };
+
+      pollingTimeoutRef.current = setTimeout(poll, 3000);
+      pollingDeadlineRef.current = setTimeout(() => {
+        if (!mountedRef.current || pollingRunRef.current !== run) return;
+        stopPolling();
+        setError('Connection timed out. Please try again.');
+      }, 120000);
+    },
+    [refresh, stopPolling],
+  );
 
   useEffect(() => {
     let active = true;
-    refresh().finally(() => {
-      if (active) setIsLoading(false);
-    });
+    mountedRef.current = true;
+    refresh()
+      .catch((error) => {
+        if (!active) return;
+        console.error('Failed to load integrations:', error);
+        setError('Could not load external services. Please try again.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
     return () => {
       active = false;
+      mountedRef.current = false;
+      stopPolling();
     };
-  }, [refresh]);
+  }, [refresh, stopPolling]);
 
   const handleConnect = async (integration: Integration) => {
     if (integration.coming_soon || loadingId) return;
+
+    const popup = window.open('', '_blank', 'width=600,height=700');
+    if (!popup) {
+      setError('Pop-up was blocked. Allow pop-ups and try again.');
+      return;
+    }
 
     setLoadingId(integration.id);
     setError(null);
@@ -88,15 +160,13 @@ export function ConnectedServices() {
       const authUrl = await getIntegrationOAuthUrl(integration.id);
       if (!authUrl) throw new Error('Could not start the connection.');
       // Open OAuth URL in new window
-      window.open(authUrl, '_blank', 'width=600,height=700');
+      popup.location.href = authUrl;
       // Note: User will complete OAuth in the popup, then we need to refresh
       // Set up a listener for when they return
-      const checkConnection = setInterval(async () => {
-        await refresh();
-      }, 3000);
       // Stop checking after 2 minutes
-      setTimeout(() => clearInterval(checkConnection), 120000);
+      startPolling(integration.id);
     } catch (error) {
+      if (!popup.closed) popup.close();
       console.error('Failed to get OAuth URL:', error);
       setError(
         error instanceof Error ? error.message : 'Could not start the connection.',
