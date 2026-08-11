@@ -3,7 +3,7 @@ import Foundation
 let consumerEvidenceSchema = "omi.consumer-evidence.v1"
 
 struct ConsumerEvidenceRouteDriveState {
-  private var expected: ObjectIdentifier?
+  private var expected: AnyObject?
   var pollCount = 0
   var listenStartRequested = false
   var chatAdmissionBaseline: Int?
@@ -14,7 +14,7 @@ struct ConsumerEvidenceRouteDriveState {
       expected = nil
       return false
     }
-    expected = ObjectIdentifier(navigation)
+    expected = navigation
     pollCount = 0
     listenStartRequested = false
     chatAdmissionBaseline = nil
@@ -23,11 +23,15 @@ struct ConsumerEvidenceRouteDriveState {
   }
 
   mutating func acceptFinished(_ navigation: AnyObject?) -> Bool {
-    guard let expected, let navigation, ObjectIdentifier(navigation) == expected else {
+    guard let expected, let navigation, navigation === expected else {
       return false
     }
     self.expected = nil
     return true
+  }
+
+  mutating func failCurrentRoute() {
+    expected = nil
   }
 }
 

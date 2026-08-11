@@ -29,6 +29,9 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /routeDriveState\.begin\(navigation\)/);
   const finishBody = driver.match(/func pageDidFinish[\s\S]*?\n  \}/u)?.[0] ?? "";
   assert.doesNotMatch(finishBody, /\.begin\(|listenStartRequested = false|chatAdmissionBaseline = nil|chatSubmitted = false/);
+  const consumer = readFileSync(source, "utf8");
+  assert.doesNotMatch(consumer, /ObjectIdentifier/);
+  assert.match(consumer, /navigation === expected/);
 });
 
 function hasSwiftc() {
@@ -55,6 +58,11 @@ func rejects(_ name: String, _ operation: () throws -> Void) {
   catch { print("OK: \(name)") }
 }
 
+final class WeakBox<T: AnyObject> {
+  weak var value: T?
+  init(_ value: T) { self.value = value }
+}
+
 let scratch = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let result = scratch.appendingPathComponent("result.json")
 let shellStamp = scratch.appendingPathComponent("shell.json")
@@ -64,13 +72,25 @@ try! Data("{\"artifact\":\"surfaces-dist\",\"treeHash\":\"2222222222222222222222
 let hashes = try! ConsumerEvidenceTreeHashes.load(shellStamp: shellStamp, surfaceStamp: surfaceStamp)
 
 var routeDriveState = ConsumerEvidenceRouteDriveState()
-let listenNavigation = NSObject()
+var listenNavigation: NSObject? = NSObject()
+let retainedListenNavigation = WeakBox(listenNavigation!)
 let chatNavigation = NSObject()
 check("owned Listen navigation begins", routeDriveState.begin(listenNavigation))
+listenNavigation = nil
+check("caller-released owned navigation remains live", retainedListenNavigation.value != nil)
 routeDriveState.listenStartRequested = true
-check("owned Listen completion advances", routeDriveState.acceptFinished(listenNavigation))
-check("duplicate Listen completion cannot replay", !routeDriveState.acceptFinished(listenNavigation))
-check("duplicate Listen completion preserves action state", routeDriveState.listenStartRequested)
+let unrelatedNavigation = NSObject()
+check("different navigation is rejected", !routeDriveState.acceptFinished(unrelatedNavigation))
+check("rejected navigation preserves exact ownership", retainedListenNavigation.value != nil)
+if let exactListenNavigation = retainedListenNavigation.value {
+  check("owned Listen completion advances", routeDriveState.acceptFinished(exactListenNavigation))
+  check("duplicate Listen completion cannot replay", !routeDriveState.acceptFinished(exactListenNavigation))
+  check("duplicate Listen completion preserves action state", routeDriveState.listenStartRequested)
+} else {
+  print("FAIL: retained Listen navigation is available for exact completion")
+  failed = true
+}
+check("accepted navigation releases ownership", retainedListenNavigation.value == nil)
 check("owned Chat navigation begins", routeDriveState.begin(chatNavigation))
 check("new owned route resets prior action state", !routeDriveState.listenStartRequested)
 routeDriveState.chatAdmissionBaseline = 2
