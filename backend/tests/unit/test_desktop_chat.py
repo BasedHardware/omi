@@ -8,8 +8,14 @@ import pytest
 from routers import desktop_chat
 
 
+def _authorized_request(body, *, web_search_allowed: bool = True):
+    """Translate a body as an authorized principal, so these cases keep asserting
+    the non-authorization conditions that gate server-side web search."""
+    return desktop_chat._request(body, web_search_allowed=web_search_allowed)
+
+
 def test_request_translates_openai_tool_history_and_alias():
-    public_model, payload = desktop_chat._request(
+    public_model, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'max_completion_tokens': 20_000,
@@ -40,7 +46,7 @@ def test_request_translates_openai_tool_history_and_alias():
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
@@ -57,7 +63,7 @@ def test_request_injects_web_search_for_desktop_opt_in():
 
 
 def test_request_keeps_private_turns_off_public_web_search():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'From my conversations, what did I say about the trip?'}],
@@ -66,7 +72,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -84,7 +90,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -102,7 +108,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -116,7 +122,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     )
     assert 'tools' not in payload
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': "Don't use web search; answer from memory."}],
@@ -140,7 +146,7 @@ def test_request_keeps_private_turns_off_public_web_search():
     ],
 )
 def test_request_recognizes_common_public_web_opt_outs(content):
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': content}],
@@ -159,7 +165,7 @@ def test_request_recognizes_common_public_web_opt_outs(content):
     ],
 )
 def test_request_does_not_invert_double_negated_web_requirement(content):
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': content}],
@@ -170,7 +176,7 @@ def test_request_does_not_invert_double_negated_web_requirement(content):
 
 
 def test_request_scopes_without_searching_to_public_web_objects():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -186,7 +192,7 @@ def test_request_scopes_without_searching_to_public_web_objects():
 
 
 def test_request_allows_retry_after_reported_missing_search_results():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'I got no web search results; search the web again.'}],
@@ -197,7 +203,7 @@ def test_request_allows_retry_after_reported_missing_search_results():
 
 
 def test_request_classifies_only_trusted_query_before_tool_context():
-    _, private_payload = desktop_chat._request(
+    _, private_payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -214,7 +220,10 @@ def test_request_classifies_only_trusted_query_before_tool_context():
     )
     assert 'tools' not in private_payload
 
-    _, public_payload = desktop_chat._request(
+    # A public-looking trusted query no longer earns server-side web search once
+    # tool output is inlined behind the untrusted marker: that inlined text is the
+    # private context the Anthropic-side query could carry out (issue #11412).
+    _, public_payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -229,17 +238,26 @@ def test_request_classifies_only_trusted_query_before_tool_context():
             'omi_web_search': True,
         }
     )
-    assert public_payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+    assert 'tools' not in public_payload
+
+    _, clean_payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
+            'omi_web_search': True,
+        }
+    )
+    assert clean_payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
 
 
-def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_none():
+def test_request_keeps_client_tools_without_web_search_and_skips_haiku_or_none():
     client_tools = [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}]
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'Plan my day'}], 'tools': client_tools}
     )
-    assert [tool['name'] for tool in payload['tools']] == ['web_search', 'weather']
+    assert [tool['name'] for tool in payload['tools']] == ['weather']
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use the weather tool'}],
@@ -250,7 +268,7 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
     assert [tool['name'] for tool in payload['tools']] == ['weather']
     assert payload['tool_choice'] == {'type': 'any'}
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use the weather tool'}],
@@ -261,7 +279,7 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
     assert [tool['name'] for tool in payload['tools']] == ['weather']
     assert payload['tool_choice'] == {'type': 'tool', 'name': 'weather'}
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'Search the web for this'}],
@@ -270,7 +288,7 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
     )
     assert 'tools' not in payload
 
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Use no tools'}],
@@ -283,7 +301,7 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
 
 
 def test_request_does_not_inject_server_search_on_client_tool_continuation():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -308,7 +326,7 @@ def test_request_does_not_inject_server_search_on_client_tool_continuation():
 
 
 def test_request_binds_public_web_privacy_policy_to_anthropic_system():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -322,7 +340,7 @@ def test_request_binds_public_web_privacy_policy_to_anthropic_system():
 
 
 def test_request_recognizes_pi_public_web_routing_policy():
-    _, payload = desktop_chat._request(
+    _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
             'messages': [
@@ -339,7 +357,7 @@ def test_request_recognizes_pi_public_web_routing_policy():
 def test_request_reports_web_search_capability_fallback(monkeypatch):
     fallbacks = []
     monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
-    desktop_chat._request(
+    _authorized_request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'What happened today?'}],
@@ -357,7 +375,7 @@ def test_request_reports_web_search_capability_fallback(monkeypatch):
     ]
 
     fallbacks.clear()
-    desktop_chat._request(
+    _authorized_request(
         {
             'model': 'claude-haiku-4-5',
             'messages': [{'role': 'user', 'content': 'From my conversations, what did I say?'}],
@@ -1607,3 +1625,217 @@ async def test_server_metering_rejects_exhausted_user(monkeypatch):
         await desktop_chat._meter_server_request('user')
     assert error.value.status_code == 429
     assert error.value.headers == {'Retry-After': '37'}
+
+
+def test_request_does_not_let_client_tools_alone_enable_server_side_web_search():
+    client_tools = [{'type': 'function', 'function': {'name': 'search_memories', 'parameters': {'type': 'object'}}}]
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
+            'tools': client_tools,
+        }
+    )
+    assert [tool['name'] for tool in payload['tools']] == ['search_memories']
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION not in str(payload.get('system', ''))
+
+
+def test_request_withholds_web_search_from_an_unauthorized_principal(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
+            'omi_web_search': True,
+        },
+        web_search_allowed=False,
+    )
+    assert 'tools' not in payload
+    assert [fallback['reason'] for fallback in fallbacks] == ['not_authorized']
+
+
+def test_request_withholds_web_search_when_private_tool_output_is_in_context(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'What did I say about the acquisition?'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'search_memories', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'secret: board deck passphrase'},
+                {'role': 'assistant', 'content': 'You discussed the acquisition.'},
+                {'role': 'user', 'content': 'Now search the web for the latest news.'},
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+    assert [fallback['reason'] for fallback in fallbacks] == ['private_tool_output_in_context']
+
+
+def test_request_allows_web_search_when_only_public_safe_tool_output_is_in_context():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'Add a task'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'create_action_item', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'created'},
+                {'role': 'user', 'content': 'Now search the web for the latest news.'},
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert [tool['name'] for tool in payload['tools']] == ['web_search']
+
+
+def test_request_withholds_web_search_when_tool_output_is_inlined_in_the_user_turn():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': (
+                        'Search the web for current news.'
+                        f'{desktop_chat._UNTRUSTED_TOOL_CONTEXT_DELIMITER}'
+                        'screen: recovery code 998811'
+                    ),
+                }
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+
+
+def test_request_treats_unrecognized_tool_output_as_private():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'Check my mail'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'some_future_connector', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'inbox contents'},
+                {'role': 'user', 'content': 'Now search the web.'},
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_search(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+
+    class Messages:
+        async def create(self, **payload):
+            assert desktop_chat._WEB_SEARCH_TOOL not in payload.get('tools', [])
+            return SimpleNamespace(
+                id='msg_private',
+                content=[SimpleNamespace(type='text', text='answered')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=Messages()),
+    )
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'What did I read on screen?'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'search_screen_history', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'recovery code 998811'},
+                {'role': 'user', 'content': 'Search the web for current news.'},
+            ],
+            'omi_web_search': True,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+    assert b'answered' in response.body
+
+
+@pytest.mark.asyncio
+async def test_web_search_authorized_allows_a_principal_that_predates_the_gate(monkeypatch):
+    # Legacy principal: no user doc, therefore no stored web_search decision.
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {})
+    assert await desktop_chat._web_search_authorized('legacy-user') is True
+
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'focus': {'enabled': True}})
+    assert await desktop_chat._web_search_authorized('legacy-user') is True
+
+
+@pytest.mark.asyncio
+async def test_web_search_authorized_denies_only_a_stored_decision(monkeypatch):
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': False}})
+    assert await desktop_chat._web_search_authorized('opted-out') is False
+
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': True}})
+    assert await desktop_chat._web_search_authorized('opted-in') is True
+
+
+@pytest.mark.asyncio
+async def test_web_search_authorized_fails_closed_when_the_lookup_breaks(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+
+    def _boom(uid):
+        raise RuntimeError('firestore down')
+
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', _boom)
+    assert await desktop_chat._web_search_authorized('user') is False
+    assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']

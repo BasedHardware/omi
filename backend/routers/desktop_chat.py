@@ -16,6 +16,7 @@ from fastapi.routing import APIRoute
 
 from database import llm_usage as llm_usage_db
 from database import redis_db
+from database import users as users_db
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -63,6 +64,30 @@ _PUBLIC_WEB_ROUTING_INSTRUCTION = (
     'access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless '
     'the user explicitly asks for it.</omi_retrieval_policy>'
 )
+
+# Anthropic runs `web_search` on its own servers, so its query strings escape the
+# `fetch_url` allowlist and SSRF guard entirely. Any client tool result already in
+# the request is private context the search query could carry out, so server-side
+# search is only offered when every tool result in the transcript comes from this
+# allowlist of write/permission tools that return no user data. Unknown tool names
+# are treated as private.
+_PUBLIC_SAFE_CLIENT_TOOLS = frozenset(
+    {
+        'cancel_agent_run',
+        'check_permission_status',
+        'create_action_item',
+        'create_calendar_event',
+        'point_click',
+        'request_permission',
+        'set_desktop_attention_override',
+        'update_action_item',
+        'update_agent_artifact_lifecycle',
+    }
+)
+# Per-user capability record under `assistant_settings`. Absent means allowed:
+# principals that predate this gate keep the behavior they shipped with, and a
+# denial has to be a stored decision.
+_WEB_SEARCH_SETTINGS_SECTION = 'web_search'
 
 _EXPLICIT_WEB_REQUESTS = (
     'search the web',
@@ -336,6 +361,56 @@ def _direct_web_search_requested(body: Mapping[str, object]) -> bool:
     )
 
 
+def _web_search_requested(body: Mapping[str, object]) -> bool:
+    messages = body.get('messages')
+    client_tools = _anthropic_client_tools(body.get('tools'))
+    requested_tool_choice = body.get('tool_choice')
+    required_client_tools = bool(client_tools) and (
+        requested_tool_choice == 'required'
+        or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
+    )
+    return bool(
+        requested_tool_choice != 'none'
+        and _last_message_is_user(messages)
+        and not required_client_tools
+        and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
+    )
+
+
+def _carries_private_tool_output(messages: object) -> bool:
+    if not isinstance(messages, list):
+        return False
+    tool_name_by_call_id: dict[str, object] = {}
+    for message in messages:
+        if not isinstance(message, Mapping):
+            continue
+        tool_calls = message.get('tool_calls')
+        if not isinstance(tool_calls, list):
+            continue
+        for call in tool_calls:
+            if (
+                isinstance(call, Mapping)
+                and isinstance(call.get('id'), str)
+                and isinstance(call.get('function'), Mapping)
+            ):
+                tool_name_by_call_id[call['id']] = call['function'].get('name')
+    for message in messages:
+        if not isinstance(message, Mapping) or message.get('role') != 'tool':
+            continue
+        name = tool_name_by_call_id.get(cast(str, message.get('tool_call_id')))
+        if not isinstance(name, str) or name not in _PUBLIC_SAFE_CLIENT_TOOLS:
+            return True
+    # The desktop hub also inlines tool output into the user turn behind this
+    # literal marker instead of sending an OpenAI `tool` message, so the same
+    # private data reaches the request without a tool_call_id to classify.
+    return any(
+        isinstance(message, Mapping)
+        and message.get('role') == 'user'
+        and _UNTRUSTED_TOOL_CONTEXT_DELIMITER in _text(message.get('content'))
+        for message in messages
+    )
+
+
 def _strip_public_web_routing_instruction(text: str) -> str:
     trimmed = text.lstrip()
     opening = '<omi_retrieval_policy>'
@@ -471,7 +546,7 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
     ]
 
 
-def _request(body: object) -> tuple[str, dict[str, object]]:
+def _request(body: object, *, web_search_allowed: bool = False) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
         raise ValueError('request body must be an object')
     model = body.get('model')
@@ -541,23 +616,7 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
     client_tools = _anthropic_client_tools(tools)
     upstream_model = cast(str, result['model'])
     public_web_prohibited = _public_web_is_prohibited(messages)
-    requested_tool_choice = body.get('tool_choice')
-    required_client_tools = bool(client_tools) and (
-        requested_tool_choice == 'required'
-        or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
-    )
-    web_search_requested = (
-        body.get('tool_choice') != 'none'
-        and _last_message_is_user(messages)
-        and (
-            not required_client_tools
-            and (
-                body.get('omi_web_search') is True
-                or bool(client_tools)
-                or _has_public_web_routing_instruction(messages)
-            )
-        )
-    )
+    web_search_requested = _web_search_requested(body)
     web_search_supported = not upstream_model.startswith('claude-haiku')
     if web_search_requested and not web_search_supported and not public_web_prohibited:
         record_fallback(
@@ -567,11 +626,31 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
             reason='capability_mismatch',
             outcome='degraded',
         )
+    private_context_present = _carries_private_tool_output(messages)
+    if web_search_requested and web_search_supported and not public_web_prohibited:
+        if private_context_present:
+            record_fallback(
+                component='other',
+                from_mode='anthropic_web_search',
+                to_mode='model_knowledge',
+                reason='private_tool_output_in_context',
+                outcome='degraded',
+            )
+        elif not web_search_allowed:
+            record_fallback(
+                component='other',
+                from_mode='anthropic_web_search',
+                to_mode='model_knowledge',
+                reason='not_authorized',
+                outcome='degraded',
+            )
     inject_web_search = (
         web_search_supported
         and body.get('tool_choice') != 'none'
         and not public_web_prohibited
         and web_search_requested
+        and web_search_allowed
+        and not private_context_present
     )
     if inject_web_search:
         existing_system = result.get('system')
@@ -1211,6 +1290,24 @@ async def _meter_server_request(uid: str) -> None:
         )
 
 
+async def _web_search_authorized(uid: str) -> bool:
+    try:
+        settings = await run_blocking(db_executor, users_db.get_assistant_settings, uid)
+    except Exception:
+        record_fallback(
+            component='other',
+            from_mode='anthropic_web_search',
+            to_mode='model_knowledge',
+            reason='authorization_unavailable',
+            outcome='degraded',
+        )
+        return False
+    section = settings.get(_WEB_SEARCH_SETTINGS_SECTION) if isinstance(settings, Mapping) else None
+    if isinstance(section, Mapping) and section.get('enabled') is False:
+        return False
+    return True
+
+
 @router.post('/v2/chat/completions', response_model=None)
 async def chat_completions(
     body: dict[str, object],
@@ -1258,7 +1355,8 @@ async def chat_completions(
             public_model = _managed_lane_id(body)
             gateway_payload = _gateway_body(body, public_model)
         else:
-            public_model, payload = _request(body)
+            web_search_allowed = _web_search_requested(body) and await _web_search_authorized(uid)
+            public_model, payload = _request(body, web_search_allowed=web_search_allowed)
             gateway_payload = {}
         enforce_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
