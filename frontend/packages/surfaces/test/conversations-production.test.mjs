@@ -17,6 +17,8 @@ test("conversation discovery uses only available title, overview, star, and fold
   assert.match(source, /row\.folderId !== folderId/);
   assert.match(source, /folders\.filter\(\(folder\) => !folder\.isSystem\)/);
   assert.doesNotMatch(source, /participant|speaker|transcript|store\.create/i);
+  assert.doesNotMatch(source, /globalThis\.confirm|window\.confirm/, "destructive recovery is rendered and testable inside the surface");
+  assert.match(source, /<ProductionEmptyState/, "empty and missing detail states share the production hierarchy");
   // red-proof: searching or filtering a fabricated participant/transcript field
   // makes this fail; these fields are absent from the ratified list contract.
 });

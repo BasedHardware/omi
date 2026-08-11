@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Conversation, Folder } from "@omi-core/contracts";
 import { formatDate, formatDuration, t } from "@omi-core/i18n";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./conversation-fixtures.js";
@@ -6,13 +6,14 @@ import type { ProductionConversationStore, ProductionFolderStore } from "./Produ
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import "./conversations.css";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type ConversationFilter = "all" | "starred" | `folder:${string}`;
+const CONVERSATION_EMPTY_ICON = "conversations" as const;
 
 function visibilityLabel(value: Conversation["visibility"], locale: Locale): string {
   if (value === "public") return t(locale, "conversations.public");
@@ -139,17 +140,48 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   const [titleDraft, setTitleDraft] = useState(conversation.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const restoreTitleFocusRef = useRef(false);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const restoreDeleteFocusRef = useRef(false);
+  const deleteTitleId = useId();
+  const deleteBodyId = useId();
   useEffect(() => { setTitleDraft(conversation.title); }, [conversation.title]);
+  useEffect(() => {
+    if (!editingTitle && restoreTitleFocusRef.current) {
+      restoreTitleFocusRef.current = false;
+      editTriggerRef.current?.focus();
+    }
+  }, [editingTitle]);
+  useEffect(() => {
+    if (!confirmingDelete && restoreDeleteFocusRef.current) {
+      restoreDeleteFocusRef.current = false;
+      deleteTriggerRef.current?.focus();
+    }
+  }, [confirmingDelete]);
   const canPatch = !conversation.isLocked && !conversation.discarded;
   const title = conversation.title.trim() || t(locale, "conversations.untitled");
   const summary = conversation.overview.trim() || t(locale, "conversations.noSummary");
   const timestamp = displayTimestamp(conversation);
   const attribution = sourceAttribution(conversation.source, locale);
   const isLong = summary.length > 320;
+  const closeTitleEditor = (resetDraft = false): void => {
+    if (resetDraft) setTitleDraft(conversation.title);
+    restoreTitleFocusRef.current = true;
+    setEditingTitle(false);
+  };
   const saveTitle = async (): Promise<void> => {
     const next = titleDraft.trim();
-    if (!canPatch || !next || next === conversation.title) { setEditingTitle(false); return; }
-    if (await run(() => store.patch(conversation.id, { title: next }))) setEditingTitle(false);
+    if (!canPatch || !next || next === conversation.title) { closeTitleEditor(); return; }
+    if (await run(() => store.patch(conversation.id, { title: next }))) closeTitleEditor();
+  };
+  const cancelDelete = (): void => {
+    restoreDeleteFocusRef.current = true;
+    setConfirmingDelete(false);
+  };
+  const deleteConversation = async (): Promise<void> => {
+    if (await run(() => store.delete(conversation.id))) location.assign(listHref(fixture));
   };
   return (
     <section className="conversation-detail" data-conversation-detail={conversation.id}>
@@ -165,17 +197,17 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
                 onChange={(event) => setTitleDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void saveTitle();
-                  if (event.key === "Escape") { setTitleDraft(conversation.title); setEditingTitle(false); }
+                  if (event.key === "Escape") closeTitleEditor(true);
                 }}
               />
               <div className="conversation-detail-actions">
                 <button type="button" onClick={() => void saveTitle()} disabled={!canPatch || !titleDraft.trim()}>{t(locale, "conversations.saveTitle")}</button>
-                <button type="button" onClick={() => { setTitleDraft(conversation.title); setEditingTitle(false); }}>{t(locale, "common.cancel")}</button>
+                <button type="button" onClick={() => closeTitleEditor(true)}>{t(locale, "common.cancel")}</button>
               </div>
             </>
           ) : <h2>{title}</h2>}
         </div>
-        {!conversation.isLocked && !conversation.discarded && <button type="button" onClick={() => setEditingTitle(true)}>{t(locale, "conversations.editTitle")}</button>}
+        {!conversation.isLocked && !conversation.discarded && <button ref={editTriggerRef} type="button" onClick={() => setEditingTitle(true)}>{t(locale, "conversations.editTitle")}</button>}
       </header>
       {conversation.isLocked && <p className="locked-explanation">{t(locale, "conversations.lockedBody")}</p>}
       {conversation.discarded && <p className="locked-explanation">{t(locale, "conversations.discardedBody")}</p>}
@@ -208,11 +240,24 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
             </select>
           </label>
         </>
-        <button type="button" onClick={() => {
-          if (!globalThis.confirm(t(locale, "conversations.deleteConfirm"))) return;
-          void run(async () => { await store.delete(conversation.id); location.assign(listHref(fixture)); });
-        }}>{t(locale, "conversations.delete")}</button>
+        <button ref={deleteTriggerRef} type="button" className="conversation-delete-trigger" onClick={() => setConfirmingDelete(true)}>{t(locale, "conversations.delete")}</button>
       </div>}
+      {canPatch && confirmingDelete && (
+        <section
+          className="conversation-delete-confirmation"
+          role="alertdialog"
+          aria-labelledby={deleteTitleId}
+          aria-describedby={deleteBodyId}
+          onKeyDown={(event) => { if (event.key === "Escape") cancelDelete(); }}
+        >
+          <h3 id={deleteTitleId}>{t(locale, "conversations.deleteConfirm")}</h3>
+          <p id={deleteBodyId}>{t(locale, "conversations.deleteBody")}</p>
+          <div className="conversation-delete-confirmation-actions">
+            <button type="button" autoFocus onClick={cancelDelete}>{t(locale, "common.cancel")}</button>
+            <button type="button" className="is-destructive" onClick={() => void deleteConversation()}>{t(locale, "conversations.delete")}</button>
+          </div>
+        </section>
+      )}
     </section>
   );
 }
@@ -327,13 +372,13 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
         nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
         retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
       />
-      {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state" data-empty-kind="detail-not-found">{t(locale, "conversations.detailNotFound")}</p> : <>
+      {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <div data-empty-kind="detail-not-found"><ProductionEmptyState title={t(locale, "conversations.detailNotFound")} detail={t(locale, "conversations.detailNotFoundBody")} action={<a className="conversation-back" href={listHref(fixture)}><ProductionIcon name="back" />{t(locale, "conversation.detail.back")}</a>} /></div> : <>
         <div className="conversation-controls">
           <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>
         <ProductionFilterChips className="conversation-filter" label={t(locale, "conversations.title")} value={filter} options={filterOptions} onValueChange={setFilter} />
         <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleRows.length })} />
-        {status.refresh.phase === "ready" && rows.length === 0 ? <div className="empty-state" data-empty-kind="empty-projection"><strong>{t(locale, "conversations.emptyTitle")}</strong><p>{t(locale, "conversations.emptyBody")}</p></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
+        {status.refresh.phase === "ready" && rows.length === 0 ? <div data-empty-kind="empty-projection"><ProductionEmptyState icon={CONVERSATION_EMPTY_ICON} title={t(locale, "conversations.emptyTitle")} detail={t(locale, "conversations.emptyBody")} /></div> : emptyKind === "filtered-out" ? <p className="empty-state" data-empty-kind="filtered-out">{t(locale, "common.noResults")}</p> : visibleRows.length === 0 ? null : <section className="conversation-list" aria-label={t(locale, "conversations.title")}>
           {dayGroups.map((group) => <section className="conversation-day-group" key={group.label} aria-label={group.label}>
             <h2>{group.label}</h2>
             {group.rows.map((conversation) => <ConversationRow key={conversation.id} conversation={conversation} locale={locale} run={run} store={store} fixture={fixture} />)}

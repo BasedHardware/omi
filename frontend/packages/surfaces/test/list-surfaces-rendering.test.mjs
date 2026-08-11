@@ -101,7 +101,9 @@ test("ConversationsProduction renders loading, true-empty, filter-miss, and deta
   try {
     const miss = detailMiss.container.querySelector('[data-empty-kind="detail-not-found"]');
     assert.ok(miss);
-    assert.equal(miss.textContent?.trim(), EN_MESSAGES["conversations.detailNotFound"]);
+    assert.ok(miss.textContent?.includes(EN_MESSAGES["conversations.detailNotFound"]));
+    assert.ok(miss.textContent?.includes(EN_MESSAGES["conversations.detailNotFoundBody"]));
+    assert.ok(miss.querySelector("a.conversation-back"), "missing detail offers a real path back to the list");
   } finally {
     await detailMiss.cleanup();
   }
