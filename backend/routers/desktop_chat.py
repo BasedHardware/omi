@@ -1302,7 +1302,7 @@ async def _web_search_authorized(uid: str) -> bool:
             outcome='degraded',
         )
         return False
-    section = settings.get(_WEB_SEARCH_SETTINGS_SECTION) if isinstance(settings, Mapping) else None
+    section = cast(Mapping[str, object], settings or {}).get(_WEB_SEARCH_SETTINGS_SECTION)
     if isinstance(section, Mapping) and section.get('enabled') is False:
         return False
     return True
