@@ -2300,12 +2300,24 @@ final class AgentPillsManager: ObservableObject {
       let ack = response.ack.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !title.isEmpty, !ack.isEmpty else {
         log("AgentPill: title gen empty response")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "agent_pill_title",
+          from: "backend_title_service",
+          to: "heuristic_title",
+          reason: "empty_response",
+          outcome: .recovered)
         return nil
       }
       log("AgentPill: title gen ok — title=\"\(title)\" ack=\"\(ack)\"")
       return (title: String(title.prefix(40)), ack: String(ack.prefix(120)))
     } catch {
       log("AgentPill: title gen threw — \(error.localizedDescription)")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "agent_pill_title",
+        from: "backend_title_service",
+        to: "heuristic_title",
+        reason: "request_failed",
+        outcome: .recovered)
       return nil
     }
   }

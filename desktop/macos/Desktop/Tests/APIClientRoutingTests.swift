@@ -589,6 +589,43 @@ final class APIClientRoutingTests: XCTestCase {
     }
   }
 
+  func testGenerateAgentPillTitleUsesManagedRouteWithoutBYOK() async throws {
+    let previousOwner = UserDefaults.standard.object(forKey: .authUserId)
+    UserDefaults.standard.set("agent-pill-owner", forKey: .authUserId)
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("sk-test-\(provider.rawValue)", forKey: provider.storageKey)
+    }
+    defer {
+      if let previousOwner {
+        UserDefaults.standard.set(previousOwner, forKey: .authUserId)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .authUserId)
+      }
+      for provider in BYOKProvider.allCases {
+        UserDefaults.standard.removeObject(forKey: provider.storageKey)
+      }
+    }
+
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"title":"Build Mario Level","ack":"Got it, on it."}"#.utf8))
+    let client = await makeTestClient()
+
+    let result = try await client.generateAgentPillTitle(
+      query: "build a mario level",
+      expectedOwnerId: "agent-pill-owner")
+
+    XCTAssertEqual(result.title, "Build Mario Level")
+    XCTAssertEqual(result.ack, "Got it, on it.")
+    let request = try XCTUnwrap(URLCapture.capturedRequests.first)
+    XCTAssertEqual(request.url.path, "/v1/desktop/agent-pill/title")
+    XCTAssertEqual(request.method, "POST")
+    let body = try XCTUnwrap(request.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+    XCTAssertEqual(json["query"], "build a mario level")
+    for provider in BYOKProvider.allCases {
+      XCTAssertNil(request.headers[provider.headerName])
+    }
+  }
+
   // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
 
   private func makeTestClient() async -> APIClient {
