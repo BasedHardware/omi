@@ -4,20 +4,32 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+// The row icons here were bare SF Symbols in `Ink.accent`, and both halves of that were wrong on
+// this pane.
+//
+// *Bare* is a layout bug you can see: `rectangle.dashed.badge.record`, `mic.fill`, `bell.fill`,
+// `speaker.wave.2.fill` and `textformat.size` have wildly different optical widths, so the column of
+// titles beside them stepped left and right down the page instead of lining up. That is the exact
+// failure `SettingsIconTile` exists to fix — a fixed 26 pt ground is what makes a column of symbols
+// stop shimmering — and Notifications & Privacy already used it, so General and its neighbour were
+// two different designs.
+//
+// *Accent* spends the one accent on decoration. `Ink.accent` is reserved for the thing that is
+// actionable and is not already a control, which on this surface is the sidebar's selected row; with
+// every icon on the pane in the same blue, the selection had nothing left to say. The tile's default
+// tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "rectangle.dashed.badge.record")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+          SettingsIconTile(symbol: "rectangle.dashed.badge.record")
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Screen Capture")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(
               permissionError
@@ -27,7 +39,7 @@ extension SettingsContentView {
             .foregroundColor(
               permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
                 || screenCaptureHealth == .recovering
-                ? OmiColors.warning : OmiColors.textTertiary
+                ? SettingsInk.notice : Ink.secondary
             )
           }
 
@@ -58,14 +70,12 @@ extension SettingsContentView {
       // Audio Recording toggle
       settingsCard(settingId: "general.audiorecording") {
         HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "mic.fill")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+          SettingsIconTile(symbol: "mic.fill")
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Audio Recording")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(
               transcriptionError
@@ -75,7 +85,7 @@ extension SettingsContentView {
                   : "Audio recording is paused")
             )
             .scaledFont(size: OmiType.body)
-            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+            .foregroundColor(transcriptionError != nil ? SettingsInk.notice : Ink.secondary)
           }
 
           Spacer()
@@ -106,19 +116,17 @@ extension SettingsContentView {
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "bell.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.info)
+            SettingsIconTile(symbol: "bell.fill")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Notifications")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(notificationStatusText)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(
-                  appState.isNotificationBannerDisabled ? OmiColors.warning : OmiColors.textTertiary
+                  appState.isNotificationBannerDisabled ? SettingsInk.notice : Ink.secondary
                 )
             }
 
@@ -163,20 +171,20 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.warning)
+                .foregroundColor(SettingsInk.notice)
 
               Text(
                 "Banners disabled - you won't see visual alerts. Set style to \"Banners\" in System Settings."
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(SettingsInk.notice)
 
               Spacer()
             }
             .padding(OmiSpacing.sm)
             .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(OmiColors.warning.opacity(0.1))
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(SettingsInk.notice.opacity(0.1))
             )
           }
         }
@@ -187,18 +195,16 @@ extension SettingsContentView {
         settingsCard(settingId: "general.systemaudio") {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack(spacing: OmiSpacing.lg) {
-              Image(systemName: "speaker.wave.2.fill")
-                .scaledFont(size: OmiType.subheading)
-                .foregroundColor(OmiColors.info)
+              SettingsIconTile(symbol: "speaker.wave.2.fill")
 
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("System Audio")
                   .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
 
                 Text("Choose when Omi records audio from other apps (calls, videos, music).")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
 
               Spacer()
@@ -224,30 +230,32 @@ extension SettingsContentView {
                 "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
             }
           }
         }
       }
 
+      // Interface Sounds
+      settingsCard(settingId: "general.interfacesounds") {
+        InterfaceSoundsRow()
+      }
+
       // Font Size
       settingsCard(settingId: "general.fontsize") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "textformat.size")
-              .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(OmiColors.info)
-              .frame(width: 12)
+            SettingsIconTile(symbol: "textformat.size")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Font Size")
                 .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -265,22 +273,22 @@ extension SettingsContentView {
             // original 12/18 ratio rather than the type registers.
             Text("A")
               .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(OmiColors.info)
+              .tint(Ink.accent)
               .onChange(of: fontScaleSettings.scale) { _, _ in
                 performStepHaptic()
               }
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Text("The quick brown fox jumps over the lazy dog")
             .scaledFont(size: 14)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
 
@@ -302,4 +310,49 @@ extension SettingsContentView {
     }
   }
 
+}
+
+/// The app's mute for its own interface sounds.
+///
+/// Its own view, and not another `@State` on `SettingsContentView`, because the value it edits does
+/// not live in this pane: `OmiUISound.isEnabled` is persisted by the sound controller, so the row
+/// only needs somewhere local to hold the last read for SwiftUI to diff against.
+///
+/// Deliberately separate from macOS's "Play user interface sound effects": that switch governs the
+/// swooshes, and this one governs everything Omi plays, including the completion chimes the system
+/// switch has no say over.
+private struct InterfaceSoundsRow: View {
+  @State private var isEnabled = OmiUISound.isEnabled
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      SettingsIconTile(symbol: "speaker.wave.2")
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Interface Sounds")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text("Sounds for important arrivals and completions.")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      Toggle(
+        "",
+        isOn: Binding(
+          get: { isEnabled },
+          set: { newValue in
+            isEnabled = newValue
+            OmiUISound.isEnabled = newValue
+          }
+        )
+      )
+      .toggleStyle(OmiToggleStyle())
+      .labelsHidden()
+      .frame(width: 36, height: 20)
+    }
+  }
 }

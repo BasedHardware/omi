@@ -130,11 +130,6 @@ class CaptureController extends ChangeNotifier
   // active. Distinct from the Live phone-mic path (_phoneMicWalActive).
   bool _phoneMicBatchActive = false;
 
-  // Completes when the native phone-mic batch teardown is fully drained.
-  // Used to serialize reconnect/device transitions so we never resume before
-  // finalization is complete.
-  Completer<void>? _phoneMicBatchStopCompleter;
-
   bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
 
   bool _isLoadingInProgressConversation = false;
@@ -261,6 +256,17 @@ class CaptureController extends ChangeNotifier
     if (recordingState == RecordingState.interrupted) {
       _restartPhoneMicRecording();
     }
+  }
+
+  /// Foreground return hook for phone-mic capture (#4706).
+  ///
+  /// Native `appBecameActive` owns dead-engine rebuild. Dart only soft-rearms
+  /// the stall clock so suspended timers don't false-trigger stop→start (which
+  /// would race native recovery and restart a healthy session).
+  void onAppResumed() {
+    if (_activeSource is! PhoneMicSource && !_phoneMicBatchActive) return;
+    if (_micInterrupted || _phoneMicRestartInFlight) return;
+    ServiceManager.instance().phoneMic.probeStallAfterForeground();
   }
 
   void updateExternalActions(CaptureExternalActions? actions) {
@@ -461,7 +467,7 @@ class CaptureController extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
-    if (device == null && !_phoneMicBatchActive) _endOfflineSession();
+    if (device == null) _endOfflineSession();
     notifyListeners();
   }
 
@@ -1016,7 +1022,8 @@ class CaptureController extends ChangeNotifier
     if (language != _socket?.language ||
         codec != _socket?.codec ||
         _socket?.state != SocketServiceState.connected ||
-        _socket?.sttConfigId != sttConfigId) {
+        _socket?.sttConfigId != sttConfigId ||
+        _sessionGeolocationDiffersFromSocket()) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
@@ -1339,16 +1346,34 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> _captureSessionLocation() async {
+  Future<void> _captureSessionLocation({bool uploadCompatibility = true}) async {
     final generation = ++_sessionGeolocationGeneration;
     // Do not let a prior session's snapshot cover the interval while the new
     // capture is waiting on the location service.
     _sessionGeolocation = null;
     _wal.getSyncs().phone.setSessionGeolocation(null);
-    final geolocation = await _conversationLocationCapture.captureAndUpload();
+    final geolocation = uploadCompatibility
+        ? await _conversationLocationCapture.captureAndUpload()
+        : await _conversationLocationCapture.capture();
     if (generation != _sessionGeolocationGeneration) return;
     _sessionGeolocation = geolocation;
     _wal.getSyncs().phone.setSessionGeolocation(geolocation);
+  }
+
+  Future<void> _uploadSessionLocationCompatibility() async {
+    final geolocation = _sessionGeolocation;
+    if (geolocation == null) return;
+    await _conversationLocationCapture.uploadCompatibilitySnapshot(geolocation);
+  }
+
+  bool _sessionGeolocationDiffersFromSocket() {
+    final socketGeo = _socket?.geolocation;
+    final sessionGeo = _sessionGeolocation;
+    if (socketGeo == null && sessionGeo == null) return false;
+    if (socketGeo == null || sessionGeo == null) return true;
+    return socketGeo.time != sessionGeo.time ||
+        socketGeo.latitude != sessionGeo.latitude ||
+        socketGeo.longitude != sessionGeo.longitude;
   }
 
   void _clearSessionLocation() {
@@ -1386,10 +1411,10 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // Capture only after microphone permission is granted. This keeps a
-    // denied microphone request from uploading a location for a recording that
-    // never started.
-    await _captureSessionLocation();
+    // Capture only after microphone permission is granted. Defer the
+    // compatibility upload until native mic start succeeds so a post-permission
+    // engine failure cannot upload a location for a recording that never started.
+    await _captureSessionLocation(uploadCompatibility: false);
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -1431,6 +1456,7 @@ class CaptureController extends ChangeNotifier
             onStalled: _onMicStalled,
             onInterruption: _onMicInterruption,
           );
+      await _uploadSessionLocationCompatibility();
     } catch (e, st) {
       // Typed native failures (permission_denied, engine_start_failed, ...) or
       // mic contention — fail visibly instead of recording silence.
@@ -1497,8 +1523,8 @@ class CaptureController extends ChangeNotifier
 
     // The compatibility upload is intentionally best-effort, but the snapshot
     // still belongs to this recording session and must be captured after the
-    // permission gate above.
-    await _captureSessionLocation();
+    // permission gate above. Upload only after native batch start succeeds.
+    await _captureSessionLocation(uploadCompatibility: false);
 
     // batchAudioDir may never have been written if batch was chosen via the
     // offline auto-switch (setBatchMode was never called with batch on).
@@ -1528,20 +1554,12 @@ class CaptureController extends ChangeNotifier
               if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
                 updateRecordingState(RecordingState.stop);
               }
-
-              // Used to serialize reconnect/device transitions so we never
-              // resume the device stream before the native phone-batch
-              // teardown is fully drained/finalized.
-              final completer = _phoneMicBatchStopCompleter;
-              if (completer != null && !completer.isCompleted) {
-                completer.complete();
-              }
-              _phoneMicBatchStopCompleter = null;
             },
             onInterruption: _onMicInterruption,
             onBatchStalled: _onBatchStalled,
             onError: _onBatchCaptureError,
           );
+      await _uploadSessionLocationCompatibility();
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -1586,29 +1604,6 @@ class CaptureController extends ChangeNotifier
     }
     if (device != null) _updateRecordingDevice(device);
 
-    // A phone batch fallback covers the interval while the wearable was out of
-    // range. Finalize it before opening the device stream again so both capture
-    // paths never own the microphone concurrently.
-    if (_phoneMicBatchActive) {
-      _micInterrupted = true;
-      final completer = Completer<void>();
-      _phoneMicBatchStopCompleter = completer;
-
-      ServiceManager.instance().phoneMic.stop();
-
-      try {
-        await completer.future.timeout(const Duration(seconds: 5));
-      } catch (e, st) {
-        Logger.debug('[CaptureProvider] phone-mic batch stop timed out: $e\n$st');
-      } finally {
-        _phoneMicBatchStopCompleter = null;
-      }
-
-      _phoneMicBatchActive = false;
-      _endOfflineSession();
-      _micInterrupted = false;
-    }
-
     bool wasPaused = _isPaused;
 
     // Ensure even very short device recordings have a location in Redis before
@@ -1625,31 +1620,6 @@ class CaptureController extends ChangeNotifier
     if (wasPaused) {
       await pauseDeviceRecording();
     }
-  }
-
-  Future<void> onRecordingDeviceDisconnected() async {
-    // #7194: if the wearable is already doing its own on-device offline/batch
-    // recording, do not stop it and do not start the phone mic fallback.
-    // Phone fallback is a complementary safety net for live streaming gaps (#11078),
-    // not a replacement for on-device offline capture.
-    final bool isOnDeviceOfflineBatchActive = SharedPreferencesUtil().batchModeEnabled &&
-        _recordingDevice != null &&
-        (_recordingDevice!.type == DeviceType.limitless || _offlineSessionStartSeconds != 0);
-
-    if (!shouldFallbackToPhoneOnDeviceDisconnect(
-      isRecordingDevice: _recordingDevice != null,
-      isRecording: isRecordingDuringDeviceDisconnect(recordingState),
-      supportsBatch: phoneMicSupportsTranscribeLater && deviceSupportsTranscribeLater,
-      batchAlreadyActive: _phoneMicBatchActive,
-      isOnDeviceOfflineBatchActive: isOnDeviceOfflineBatchActive,
-    )) {
-      return;
-    }
-
-    Logger.debug('[CaptureProvider] BLE disconnected during recording; starting phone batch fallback');
-    await _cleanupCurrentState(disableNativeBackground: true);
-    await _socket?.stop(reason: 'BLE disconnected; starting phone batch fallback');
-    await _startPhoneMicBatch(auto: true);
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {

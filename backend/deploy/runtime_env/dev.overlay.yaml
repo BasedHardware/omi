@@ -31,14 +31,33 @@ overlay:
           value: '1.0'
           category: rollout
         MEMORY_MODE:
-          value: read
+          value: 'off'
         MEMORY_ENABLED_USERS:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          value: ''
         MEMORY_V3_GET_ENABLED:
-          value: 'true'
+          value: 'false'
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        OMI_LLM_GATEWAY_URL:
+          value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+          category: service_discovery
+        OMI_ENV_STAGE:
+          value: dev
+          category: runtime_identity
+        OMI_LLM_GATEWAY_FEATURE_MODE:
+          value: gateway
+          category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
+        OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+          value: 'false'
+          category: rollout
+        OMI_LLM_GATEWAY_SERVICE_TOKEN:
+          secret:
+            name: dev-omi-backend-secrets
+            key: OMI_LLM_GATEWAY_SERVICE_TOKEN
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -88,7 +107,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -166,7 +185,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -196,10 +215,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -234,11 +253,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
           # `/v3/memories` and the canonical graph use signed cursors even for
           # the initial page, so an enrolled user must fail closed until this
           # versioned binding is present.
@@ -260,10 +279,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -295,11 +314,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -314,10 +333,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -349,11 +368,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -368,10 +387,10 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
-            value: '1'
+            value: '0'
             category: replay_capture
           OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
             category: replay_capture
           OMI_PARITY_PACK_ROOT:
             value: /tmp/omi-parity-pack
@@ -403,11 +422,11 @@ overlay:
             value: '1.0'
             category: rollout
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -435,12 +454,16 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_MODE:
-            value: read
+            value: 'off'
           MEMORY_ENABLED_USERS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           MEMORY_V3_GET_ENABLED:
-            value: 'true'
+            value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'true'
+            value: 'false'
+          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+            value: 'false'
+          MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
+            value: '25'
           PINECONE_INDEX_NAME:
             value: memories-backend-dev

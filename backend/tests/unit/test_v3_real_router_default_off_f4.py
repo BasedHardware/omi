@@ -145,6 +145,7 @@ def _install_router_stubs(monkeypatch, counters):
 
     executors = types.ModuleType("utils.executors")
     executors.db_executor = object()
+    executors.llm_executor = object()
     executors.postprocess_executor = object()
     executors.run_blocking = mark_mutation("run_blocking")
     executors.submit_with_context = mark_mutation("submit_with_context")
@@ -206,10 +207,14 @@ def _runtime(module, *, enabled=True, response=None):
 def test_production_default_dependency_is_disabled_and_preserves_legacy_get_behavior(monkeypatch):
     client, counters, module = _client(monkeypatch)
 
-    assert client.get("/v3/memories").status_code == 200
-    assert client.get("/v3/memories?limit=17").status_code == 200
-    assert client.get("/v3/memories?limit=17&offset=0").status_code == 200
-    assert client.get("/v3/memories?limit=17&offset=3").status_code == 200
+    responses = [
+        client.get("/v3/memories"),
+        client.get("/v3/memories?limit=17"),
+        client.get("/v3/memories?limit=17&offset=0"),
+        client.get("/v3/memories?limit=17&offset=3"),
+    ]
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.headers["X-Omi-Memory-Default-Delete-Supported"] == "false" for response in responses)
 
     assert counters.legacy_calls == [
         {"uid": "secret-uid-123", "limit": 100, "offset": 0},
@@ -236,6 +241,7 @@ def test_test_enabled_non_enrolled_legacy_primary_calls_legacy_once_and_projecti
     assert counters.legacy_calls == [{"uid": "secret-uid-123", "limit": 22, "offset": 0}]
     assert runtime.service.calls == []
     assert counters.projection_calls == 0
+    assert response.headers["X-Omi-Memory-Default-Delete-Supported"] == "false"
 
 
 @pytest.mark.parametrize(
@@ -273,6 +279,7 @@ def test_enrolled_memory_never_calls_legacy_for_success_or_fail_closed_cases(mon
             assert "memory_only" not in item
         assert "X-Omi-Memory-Read-Source" in result.headers
         assert "X-Omi-Memory-Read-Decision" in result.headers
+        assert result.headers["X-Omi-Memory-Default-Delete-Supported"] == "true"
         assert result.headers["Cache-Control"] == "no-store"
         assert "cursor-token-signature" not in result.text
 

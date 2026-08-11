@@ -12,6 +12,10 @@ enum TaskCategory: String, CaseIterable {
   case tomorrow = "Tomorrow"
   case later = "Later"
   case noDeadline = "No Deadline"
+  /// AI-captured tasks the user has not accepted yet. Renders last and collapsed
+  /// by default so automatic captures never interrupt attention; Accept moves a
+  /// task into the due-date categories above.
+  case suggestions = "Suggestions"
 
   var icon: String {
     switch self {
@@ -19,15 +23,17 @@ enum TaskCategory: String, CaseIterable {
     case .tomorrow: return "sunrise.fill"
     case .later: return "calendar"
     case .noDeadline: return "tray.fill"
+    case .suggestions: return "sparkles"
     }
   }
 
   var color: Color {
     switch self {
-    case .today: return OmiColors.textPrimary
-    case .tomorrow: return OmiColors.textSecondary
-    case .later: return OmiColors.textSecondary
-    case .noDeadline: return OmiColors.textTertiary
+    case .today: return Ink.primary
+    case .tomorrow: return Ink.secondary
+    case .later: return Ink.secondary
+    case .noDeadline: return Ink.secondary
+    case .suggestions: return Ink.secondary
     }
   }
 }
@@ -481,10 +487,23 @@ class TasksViewModel: ObservableObject {
   var lastEnterPressTime: Date?
   var scrollProxy: ScrollViewProxy?
 
+  /// Mirrors the view's `@AppStorage("tasksSuggestionsSectionExpanded")` toggle. Collapsed
+  /// suggestions render no rows, so they must not be reachable by keyboard navigation or
+  /// select-all either — an invisible focused row scrolls to nothing and bulk operations
+  /// would silently hit tasks the user cannot see.
+  var suggestionsSectionExpandedForNavigation: Bool {
+    UserDefaults.standard.bool(forKey: DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
+  }
+
+  /// The categories whose rows are actually rendered in the categorized list.
+  private var renderedCategories: [TaskCategory] {
+    TaskCategory.allCases.filter { $0 != .suggestions || suggestionsSectionExpandedForNavigation }
+  }
+
   /// Flat task list matching visual order (for arrow key navigation)
   var navigationOrder: [TaskActionItem] {
     if !showCompleted && !isMultiSelectMode {
-      return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0) }
+      return renderedCategories.flatMap { getOrderedTasks(for: $0) }
     } else {
       return displayTasks
     }
@@ -509,7 +528,7 @@ class TasksViewModel: ObservableObject {
   var selectedTaskIds: Set<String> { multiSelection.selectedIDs }
   var visibleTaskIDsForSelection: [String] {
     if !showCompleted && !isMultiSelectMode {
-      return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0).map(\.id) }
+      return renderedCategories.flatMap { getOrderedTasks(for: $0).map(\.id) }
     }
     return displayTasks.map(\.id)
   }
@@ -2464,6 +2483,11 @@ class TasksViewModel: ObservableObject {
   // MARK: - Category Helpers
 
   private func categoryFor(task: TaskActionItem, startOfTomorrow: Date, startOfDayAfterTomorrow: Date) -> TaskCategory {
+    // Unaccepted AI captures never enter the due-date categories, whatever their
+    // due date — auto-added work goes to Suggestions until the user accepts it.
+    if task.isPendingSuggestion {
+      return .suggestions
+    }
     guard let dueAt = task.dueAt else {
       return .noDeadline
     }
@@ -3106,6 +3130,7 @@ class TasksViewModel: ObservableObject {
     case "tomorrow": return .tomorrow
     case "later": return .later
     case "nodeadline", "no_deadline", "none": return .noDeadline
+    case "suggestions": return .suggestions
     default: return nil
     }
   }
@@ -3142,6 +3167,15 @@ class TasksViewModel: ObservableObject {
       if clearDueAt && updated.dueAt != nil {
         return
       }
+      updateInDisplay(updated)
+    }
+  }
+
+  /// Accept an AI-suggested task into the normal due-date categories.
+  func acceptSuggestedTask(_ task: TaskActionItem) async {
+    await store.acceptSuggestedTask(task)
+    // Surgical display update, mirroring updateTaskDetails.
+    if let updated = store.tasks.first(where: { $0.id == task.id }) {
       updateInDisplay(updated)
     }
   }
@@ -3257,7 +3291,7 @@ class TasksViewModel: ObservableObject {
     case .today: return cal.date(bySettingHour: 23, minute: 59, second: 0, of: Date())
     case .tomorrow: return cal.date(byAdding: .day, value: 1, to: startOfToday)
     case .later: return cal.date(byAdding: .day, value: 7, to: startOfToday)
-    case .noDeadline: return nil
+    case .noDeadline, .suggestions: return nil
     }
   }
 
@@ -3325,6 +3359,11 @@ struct TasksPage: View {
   /// the default hero view; the list stays for fast keyboard-driven triage.
   @AppStorage("tasksViewIsBoard") private var tasksViewIsBoard = true
 
+  /// Suggestions stay collapsed until the user opens them — AI captures must not
+  /// interrupt attention. Persisted so the choice survives relaunch.
+  @AppStorage(DefaultsKey.tasksSuggestionsSectionExpanded.rawValue)
+  private var suggestionsSectionExpanded = false
+
   // Keyboard navigation state
   @State private var inlineCreateText = ""
   @FocusState private var inlineCreateFocused: Bool
@@ -3352,12 +3391,12 @@ struct TasksPage: View {
         // Draggable divider with handle
         ZStack {
           Rectangle()
-            .fill(isDraggingDivider ? OmiColors.textSecondary.opacity(0.3) : OmiColors.border)
+            .fill(isDraggingDivider ? Ink.secondary.opacity(0.3) : Ink.separator)
             .frame(width: 1)
 
           // Visible drag handle
           RoundedRectangle(cornerRadius: 2)
-            .fill(isDraggingDivider ? OmiColors.textSecondary : OmiColors.textSecondary.opacity(0.4))
+            .fill(isDraggingDivider ? Ink.secondary : Ink.secondary.opacity(0.4))
             .frame(width: 4, height: 36)
         }
         .frame(width: 9)
@@ -3397,7 +3436,7 @@ struct TasksPage: View {
         .transition(.move(edge: .trailing))
       } else if let taskDetailTask {
         Rectangle()
-          .fill(OmiColors.border)
+          .fill(Ink.separator)
           .frame(width: 1)
           .frame(width: 9)
 
@@ -3439,7 +3478,7 @@ struct TasksPage: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.clear)
+    .glassContent()
     .onEscapeKey(priority: .content) { handleEscapeKey() }
     // Modal creation sheet removed — Cmd+N now creates inline at top
     .onAppear {
@@ -3760,8 +3799,8 @@ struct TasksPage: View {
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
       Text("Tasks")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .inkStyle(InkType.firstTitle, color: Ink.primary)
+        .fixedSize()
 
       // Search field
       HStack(spacing: OmiSpacing.sm) {
@@ -3772,27 +3811,26 @@ struct TasksPage: View {
         } else {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         TextField("Search tasks...", text: $viewModel.searchText)
           .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         if !viewModel.searchText.isEmpty {
           Button {
             viewModel.searchText = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
+      .glassField()
 
       if !viewModel.isMultiSelectMode {
         completedToggleButton
@@ -3828,19 +3866,19 @@ struct TasksPage: View {
       viewModeSegment(title: "List", isSelected: !tasksViewIsBoard) { tasksViewIsBoard = false }
     }
     .padding(3)
-    .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius).fill(OmiColors.backgroundSecondary))
+    .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius).fill(Ink.rowFill))
   }
 
   private func viewModeSegment(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, 5)
         .background(
           RoundedRectangle(cornerRadius: max(2, OmiChrome.elementRadius - 3))
-            .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
+            .fill(isSelected ? Ink.rowFillHover : Color.clear)
         )
     }
     .buttonStyle(.plain)
@@ -3853,17 +3891,25 @@ struct TasksPage: View {
     ScrollView(.vertical, showsIndicators: false) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         ForEach(TaskCategory.allCases, id: \.self) { category in
-          boardColumn(category)
+          // An empty Suggestions column is noise on a planning board; the other
+          // columns keep their "Nothing here" placeholders as drop targets.
+          if category != .suggestions || !(viewModel.categorizedTasks[.suggestions] ?? []).isEmpty {
+            boardColumn(category)
+          }
         }
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.top, OmiSpacing.xs)
       .padding(.bottom, OmiSpacing.xxl)
     }
+    .glassScrollFade()
   }
 
   private func boardColumn(_ category: TaskCategory) -> some View {
     let tasks = viewModel.categorizedTasks[category] ?? []
+    // Same collapsed-by-default contract as the list view, sharing the same
+    // persisted flag: AI captures never spread across the board uninvited.
+    let isCollapsedSuggestions = category == .suggestions && !suggestionsSectionExpanded
     return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: category.icon)
@@ -3871,26 +3917,46 @@ struct TasksPage: View {
           .foregroundColor(category.color)
         Text(category.rawValue)
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
+        if category == .suggestions {
+          Image(systemName: isCollapsedSuggestions ? "chevron.right" : "chevron.down")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
         Text("\(tasks.count)")
           .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .padding(.horizontal, 6)
           .padding(.vertical, 1)
-          .background(Capsule().fill(OmiColors.backgroundTertiary))
+          .background(Capsule().fill(Ink.rowFillHover))
         Spacer(minLength: 0)
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.bottom, OmiSpacing.xxs)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        if category == .suggestions { suggestionsSectionExpanded.toggle() }
+      }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(category == .suggestions ? .isButton : [])
+      .accessibilityAction {
+        if category == .suggestions { suggestionsSectionExpanded.toggle() }
+      }
+      .accessibilityIdentifier(
+        category == .suggestions
+          ? "task-board-toggle-\(category.rawValue)" : "task-board-header-\(category.rawValue)"
+      )
 
-      if tasks.isEmpty {
+      if isCollapsedSuggestions {
+        EmptyView()
+      } else if tasks.isEmpty {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(OmiColors.backgroundTertiary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+          .stroke(Ink.rowFillHover.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
           .frame(height: 44)
           .overlay(
             Text("Nothing here")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           )
       } else {
         ForEach(tasks, id: \.id) { task in
@@ -3899,6 +3965,23 @@ struct TasksPage: View {
             onToggle: { await viewModel.toggleTask(task) },
             onOpen: { selectTask(task) }
           )
+          .overlay(alignment: .bottomTrailing) {
+            if category == .suggestions {
+              Button {
+                Task { await viewModel.acceptSuggestedTask(task) }
+              } label: {
+                Text("Accept")
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+                  .foregroundColor(Ink.primary)
+                  .padding(.horizontal, OmiSpacing.xs)
+                  .padding(.vertical, 2)
+                  .background(Capsule().fill(Ink.rowFillHover))
+              }
+              .buttonStyle(.plain)
+              .padding(OmiSpacing.xxs)
+              .accessibilityIdentifier("task-board-accept-\(task.id)")
+            }
+          }
         }
       }
     }
@@ -3912,11 +3995,10 @@ struct TasksPage: View {
     } label: {
       Image(systemName: "plus")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
     }
     .buttonStyle(.plain)
     .help("Add task (⌘N)")
@@ -3930,14 +4012,14 @@ struct TasksPage: View {
     } label: {
       Image(systemName: viewModel.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(viewModel.showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary)
+        .foregroundColor(viewModel.showCompleted ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
+        .background(Ink.rowFill)
         .cornerRadius(OmiChrome.elementRadius)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(viewModel.showCompleted ? OmiColors.border : Color.clear, lineWidth: 1)
+            .stroke(viewModel.showCompleted ? Ink.separator : Color.clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -3958,11 +4040,10 @@ struct TasksPage: View {
         Text(viewModel.isMultiSelectMode ? "Done" : "Select")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(viewModel.isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(viewModel.isMultiSelectMode ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+      .glassChip(isActive: viewModel.isMultiSelectMode)
     }
     .buttonStyle(.plain)
     .help(viewModel.isMultiSelectMode ? "Exit selection" : "Select tasks for bulk actions")
@@ -3983,13 +4064,13 @@ struct TasksPage: View {
           Text(viewModel.allVisibleTasksSelected ? "Deselect All" : "Select All")
             .scaledFont(size: OmiType.body, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
 
       Text("\(viewModel.multiSelection.selectionCount) selected")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -4005,12 +4086,12 @@ struct TasksPage: View {
         Text("Delete \(viewModel.multiSelection.selectionCount)")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(.white)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(Color.red)
+          .fill(Ink.errorRed)
       )
     }
     .buttonStyle(.plain)
@@ -4022,12 +4103,12 @@ struct TasksPage: View {
     } label: {
       Text("Cancel")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
         )
     }
     .buttonStyle(.plain)
@@ -4042,11 +4123,11 @@ struct TasksPage: View {
     } label: {
       Image(systemName: "gearshape")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
         )
     }
     .buttonStyle(.plain)
@@ -4072,11 +4153,11 @@ struct TasksPage: View {
     } label: {
       Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(showChatPanel ? OmiColors.textPrimary : OmiColors.textSecondary)
+        .foregroundColor(showChatPanel ? Ink.primary : Ink.secondary)
         .padding(OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(showChatPanel ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundSecondary)
+            .fill(showChatPanel ? Ink.primary.opacity(0.12) : Ink.rowFill)
         )
     }
     .buttonStyle(.plain)
@@ -4089,11 +4170,11 @@ struct TasksPage: View {
     VStack(spacing: OmiSpacing.lg) {
       ProgressView()
         .scaleEffect(1.2)
-        .tint(OmiColors.textSecondary)
+        .tint(Ink.secondary)
 
       Text("Loading tasks...")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -4104,12 +4185,12 @@ struct TasksPage: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .accessibilityHidden(true)
 
       Text(failure.message)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .lineLimit(2)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -4120,17 +4201,17 @@ struct TasksPage: View {
       }
       .buttonStyle(.bordered)
       .controlSize(.small)
-      .tint(OmiColors.textSecondary)
+      .tint(Ink.secondary)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.rowFill)
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(OmiColors.border, lineWidth: 1)
+        .stroke(Ink.separator, lineWidth: 1)
     )
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.top, OmiSpacing.sm)
@@ -4140,15 +4221,15 @@ struct TasksPage: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("Failed to load tasks")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Check your connection and try again.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, OmiSpacing.section)
 
@@ -4158,7 +4239,7 @@ struct TasksPage: View {
         }
       }
       .buttonStyle(.bordered)
-      .tint(OmiColors.textSecondary)
+      .tint(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -4172,11 +4253,11 @@ struct TasksPage: View {
     return VStack(spacing: OmiSpacing.lg) {
       Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text(isSearchEmpty ? "No Results Found" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
         .scaledFont(size: 24, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(
         isSearchEmpty
@@ -4184,7 +4265,7 @@ struct TasksPage: View {
           : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
       )
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -4222,6 +4303,11 @@ struct TasksPage: View {
                 TaskCategorySection(
                   category: category,
                   orderedTasks: orderedTasks,
+                  isCollapsed: category == .suggestions && !suggestionsSectionExpanded,
+                  onToggleCollapse: category == .suggestions
+                    ? { suggestionsSectionExpanded.toggle() } : nil,
+                  onAccept: category == .suggestions
+                    ? { task in await viewModel.acceptSuggestedTask(task) } : nil,
                   isMultiSelectMode: viewModel.isMultiSelectMode,
                   indentLevelFor: { viewModel.getIndentLevel(for: $0) },
                   isSelectedFor: { viewModel.multiSelection.selectedIDs.contains($0) },
@@ -4393,12 +4479,16 @@ struct TasksPage: View {
           }
         }
         .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
+        .padding(.top, OmiSpacing.sm)
+        // Clearance for the floating hint bar and undo toast. They overlay the scroll rather
+        // than sit under it, so without this the last row is permanently covered.
+        .padding(.bottom, 72)
       }
       .refreshable {
         await viewModel.loadTasks()
         await suggestedStore.load()
       }
+      .glassScrollFade()
       .overlay(alignment: .topTrailing) {
         if SuggestedTasksPresentationPolicy.showsFloatingLoadingIndicator(
           isLoading: suggestedStore.isLoading,
@@ -4494,6 +4584,13 @@ private struct TaskChatSidePanelView: View {
 struct TaskCategorySection: View {
   let category: TaskCategory
   let orderedTasks: [TaskActionItem]
+  /// Collapsed sections render only their header row (used by Suggestions).
+  var isCollapsed: Bool = false
+  /// Present only on collapsible sections; makes the header a disclosure toggle.
+  var onToggleCollapse: (() -> Void)?
+  /// Present only on the Suggestions section; accepts an AI-captured task into
+  /// the normal due-date categories.
+  var onAccept: ((TaskActionItem) async -> Void)?
   var isMultiSelectMode: Bool = false
 
   // Callbacks for row data and actions (passed through to TaskRow)
@@ -4566,7 +4663,13 @@ struct TaskCategorySection: View {
 
         Text(category.rawValue)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
+
+        if onToggleCollapse != nil {
+          Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
 
         Spacer()
 
@@ -4576,7 +4679,7 @@ struct TaskCategorySection: View {
           } label: {
             Image(systemName: "xmark")
               .scaledFont(size: OmiType.micro, weight: .semibold)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 18, height: 18)
           }
           .buttonStyle(.plain)
@@ -4585,26 +4688,38 @@ struct TaskCategorySection: View {
         } else {
           Text("\(orderedTasks.count)")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               Capsule()
-                .fill(OmiColors.textTertiary.opacity(0.1))
+                .fill(Ink.secondary.opacity(0.1))
             )
         }
 
       }
       .padding(.horizontal, OmiSpacing.xxs)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        onToggleCollapse?()
+      }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(onToggleCollapse != nil ? .isButton : [])
+      .accessibilityAction {
+        onToggleCollapse?()
+      }
+      .accessibilityIdentifier(
+        onToggleCollapse != nil ? "task-section-toggle-\(category.rawValue)" : "task-section-\(category.rawValue)"
+      )
 
       // Drop zone at top of category (for dropping at position 0)
-      if !isMultiSelectMode {
+      if !isMultiSelectMode && !isCollapsed {
         Color.clear
           .frame(height: isTopDropTargeted ? 4 : 2)
           .overlay {
             if isTopDropTargeted {
               Rectangle()
-                .fill(Color.accentColor)
+                .fill(Ink.primary)
                 .frame(height: 2)
             }
           }
@@ -4636,41 +4751,58 @@ struct TaskCategorySection: View {
       }
 
       // Tasks in category with drag-and-drop reordering
-      if !isMultiSelectMode {
+      if !isMultiSelectMode && !isCollapsed {
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
-              TaskRow(
-                task: task,
-                category: category,
-                indentLevel: indentLevelFor?(task.id) ?? 0,
-                isMultiSelectMode: isMultiSelectMode,
-                isSelected: isSelectedFor?(task.id) ?? false,
-                isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
-                onToggle: onToggle,
-                onDelete: onDelete,
-                onToggleSelection: onToggleSelection,
-                onUpdateDetails: onUpdateDetails,
-                onUpdateTags: onUpdateTags,
-                onIncrementIndent: onIncrementIndent,
-                onDecrementIndent: onDecrementIndent,
-                onOpenChat: onOpenChat,
-                onInvestigate: onInvestigate,
-                onSelect: onSelect,
-                onOpenDetails: onOpenDetails,
-                onHover: onHover,
-                isTaskDetailPanelActive: isTaskDetailPanelActive,
-                onDragStarted: onDragStarted,
-                onDragEnded: onDragEnded,
-                isBeingDragged: draggedTaskId == task.id,
-                isChatActive: isChatActive,
-                activeChatTaskId: activeChatTaskId,
-                chatCoordinator: chatCoordinator,
-                editingTaskId: editingTaskId,
-                onEditingChanged: onEditingChanged,
-                onStartEditing: onStartEditing,
-                animateToggleTaskId: animateToggleTaskId
-              )
+              HStack(spacing: OmiSpacing.sm) {
+                TaskRow(
+                  task: task,
+                  category: category,
+                  indentLevel: indentLevelFor?(task.id) ?? 0,
+                  isMultiSelectMode: isMultiSelectMode,
+                  isSelected: isSelectedFor?(task.id) ?? false,
+                  isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
+                  onToggle: onToggle,
+                  onDelete: onDelete,
+                  onToggleSelection: onToggleSelection,
+                  onUpdateDetails: onUpdateDetails,
+                  onUpdateTags: onUpdateTags,
+                  onIncrementIndent: onIncrementIndent,
+                  onDecrementIndent: onDecrementIndent,
+                  onOpenChat: onOpenChat,
+                  onInvestigate: onInvestigate,
+                  onSelect: onSelect,
+                  onOpenDetails: onOpenDetails,
+                  onHover: onHover,
+                  isTaskDetailPanelActive: isTaskDetailPanelActive,
+                  onDragStarted: onDragStarted,
+                  onDragEnded: onDragEnded,
+                  isBeingDragged: draggedTaskId == task.id,
+                  isChatActive: isChatActive,
+                  activeChatTaskId: activeChatTaskId,
+                  chatCoordinator: chatCoordinator,
+                  editingTaskId: editingTaskId,
+                  onEditingChanged: onEditingChanged,
+                  onStartEditing: onStartEditing,
+                  animateToggleTaskId: animateToggleTaskId
+                )
+                if let onAccept {
+                  Button {
+                    Task { await onAccept(task) }
+                  } label: {
+                    Text("Accept")
+                      .scaledFont(size: OmiType.caption, weight: .semibold)
+                      .foregroundColor(Ink.primary)
+                      .padding(.horizontal, OmiSpacing.sm)
+                      .padding(.vertical, 3)
+                      .background(Capsule().fill(Ink.rowFillHover))
+                  }
+                  .buttonStyle(.plain)
+                  .padding(.trailing, OmiSpacing.xs)
+                  .accessibilityIdentifier("task-accept-\(task.id)")
+                }
+              }
               .id(task.id)
               .modifier(
                 TaskDragDropModifier(
@@ -4746,7 +4878,7 @@ struct TaskDragDropModifier: ViewModifier {
         .overlay(alignment: dropAbove ? .top : .bottom) {
           if isDropTarget {
             Rectangle()
-              .fill(Color.accentColor)
+              .fill(Ink.primary)
               .frame(height: 2)
               .transition(.opacity)
           }
@@ -4839,19 +4971,19 @@ struct TaskDragPreviewSimple: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "circle")
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text(description)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .lineLimit(1)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundSecondary)
-        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        .fill(Ink.rowFill)
+        .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
     )
     .frame(maxWidth: 300)
   }
@@ -4886,7 +5018,7 @@ struct ChatSessionStatusIndicator: View {
 
           Text(streamingStatus ?? "Responding...")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
         }
       } else if hasUnread {
@@ -4896,12 +5028,12 @@ struct ChatSessionStatusIndicator: View {
         } label: {
           HStack(spacing: OmiSpacing.xxs) {
             Circle()
-              .fill(OmiColors.textPrimary)
+              .fill(Ink.primary)
               .frame(width: 8, height: 8)
 
             Text("New reply")
               .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
           }
         }
         .buttonStyle(.plain)
@@ -4952,15 +5084,15 @@ private struct TaskBoardCard: View {
           } label: {
             Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(task.completed ? OmiColors.textSecondary : OmiColors.textTertiary)
+              .foregroundColor(task.completed ? Ink.primary : Ink.secondary)
           }
           .buttonStyle(.plain)
           .help(task.completed ? "Mark not done" : "Mark done")
 
           Text(task.description)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-            .strikethrough(task.completed, color: OmiColors.textTertiary)
+            .foregroundColor(task.completed ? Ink.secondary : Ink.primary)
+            .strikethrough(task.completed, color: Ink.secondary)
             .lineLimit(4)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -4980,14 +5112,7 @@ private struct TaskBoardCard: View {
       }
       .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-      )
+      .glassCard(cornerRadius: OmiChrome.smallControlRadius, emphasized: isHovering)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -4997,9 +5122,9 @@ private struct TaskBoardCard: View {
   private func priorityChip(_ priority: String) -> some View {
     let color: Color
     switch priority.lowercased() {
-    case "high": color = Color(red: 1.0, green: 0.42, blue: 0.42)
-    case "medium": color = OmiColors.textSecondary
-    default: color = OmiColors.textTertiary
+    case "high": color = Ink.errorRed
+    case "medium": color = PageGlass.warning
+    default: color = Ink.secondary
     }
     return Text(priority.capitalized)
       .scaledFont(size: OmiType.micro, weight: .semibold)
@@ -5017,10 +5142,10 @@ private struct TaskBoardCard: View {
       Text(Self.dueFormatter.string(from: due))
         .scaledFont(size: OmiType.micro, weight: .medium)
     }
-    .foregroundColor(overdue ? Color(red: 1.0, green: 0.42, blue: 0.42) : OmiColors.textTertiary)
+    .foregroundColor(overdue ? PageGlass.warning : Ink.secondary)
     .padding(.horizontal, 7)
     .padding(.vertical, 2)
-    .background(Capsule().fill(OmiColors.backgroundTertiary))
+    .background(Capsule().fill(Ink.rowFillHover))
   }
 
   private static let dueFormatter: DateFormatter = {
@@ -5130,7 +5255,7 @@ struct TaskRow: View {
       if category != nil && !isMultiSelectMode && !isDeletedTask {
         Image(systemName: "line.3.horizontal")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+          .foregroundColor(isHovering ? Ink.secondary : .clear)
           .frame(width: 16, height: 24)
           .contentShape(Rectangle())
           .onDrag {
@@ -5167,11 +5292,11 @@ struct TaskRow: View {
     }
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(isActiveChatTask ? OmiColors.textPrimary.opacity(0.08) : Color.clear)
+        .fill(isActiveChatTask ? Ink.primary.opacity(0.08) : Color.clear)
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(isActiveChatTask ? OmiColors.textPrimary.opacity(0.25) : Color.clear, lineWidth: 1)
+        .stroke(isActiveChatTask ? Ink.primary.opacity(0.25) : Color.clear, lineWidth: 1)
     )
     .overlay(alignment: .topTrailing) {
       if showShareCopiedToast {
@@ -5258,11 +5383,11 @@ struct TaskRow: View {
             .scaledFont(size: OmiType.body, weight: .medium)
         }
       }
-      .foregroundColor(.white)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.xl)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.red)
+    .background(Ink.errorRed)
     .cornerRadius(OmiChrome.elementRadius)
   }
 
@@ -5276,12 +5401,12 @@ struct TaskRow: View {
             .scaledFont(size: OmiType.body, weight: .medium)
         }
       }
-      .foregroundColor(.white)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.xl)
       Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.textSecondary)
+    .background(Ink.secondary)
     .cornerRadius(OmiChrome.elementRadius)
   }
 
@@ -5297,11 +5422,11 @@ struct TaskRow: View {
         Image(systemName: "arrow.left.to.line")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
       }
-      .foregroundColor(.white)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.xl)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.orange)
+    .background(PageGlass.warning)
     .cornerRadius(OmiChrome.elementRadius)
   }
 
@@ -5356,7 +5481,7 @@ struct TaskRow: View {
         HStack(spacing: 0) {
           ForEach(0..<indentLevel, id: \.self) { level in
             Rectangle()
-              .fill(OmiColors.textQuaternary.opacity(0.5))
+              .fill(Ink.secondary.opacity(0.5))
               .frame(width: 2)
               .padding(.leading, level == 0 ? OmiSpacing.sm : 26)
           }
@@ -5368,7 +5493,7 @@ struct TaskRow: View {
         // Deleted tasks: show trash icon instead of checkbox
         Image(systemName: "trash.slash")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 24, height: 24)
       } else if isMultiSelectMode {
         // Multi-select checkbox
@@ -5377,17 +5502,17 @@ struct TaskRow: View {
         } label: {
           ZStack {
             RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .stroke(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5)
+              .stroke(isSelected ? Ink.primary : Ink.secondary, lineWidth: 1.5)
               .frame(width: 20, height: 20)
 
             if isSelected {
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(OmiColors.textPrimary)
+                .fill(Ink.primary)
                 .frame(width: 20, height: 20)
 
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.caption, weight: .bold)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.primary)
             }
           }
           .frame(width: 24, height: 24)
@@ -5403,19 +5528,19 @@ struct TaskRow: View {
           ZStack {
             Circle()
               .stroke(
-                isCompletingAnimation || task.completed ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5
+                isCompletingAnimation || task.completed ? Ink.primary : Ink.secondary, lineWidth: 1.5
               )
               .frame(width: 20, height: 20)
 
             if isCompletingAnimation || task.completed {
               Circle()
-                .fill(OmiColors.textPrimary)
+                .fill(Ink.primary)
                 .frame(width: 20, height: 20)
                 .scaleEffect(checkmarkScale)
 
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.caption, weight: .bold)
-                .foregroundColor(.black)
+                .foregroundColor(Ink.surface)
                 .scaleEffect(checkmarkScale)
             }
           }
@@ -5431,13 +5556,13 @@ struct TaskRow: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(task.description)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
-            .strikethrough(true, color: OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
+            .strikethrough(true, color: Ink.secondary)
 
           if let reason = task.deletedReason {
             Text(reason)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textQuaternary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(2)
           }
         }
@@ -5451,8 +5576,8 @@ struct TaskRow: View {
             TextField("Task description", text: $editText, axis: .vertical)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-              .strikethrough(task.completed, color: OmiColors.textTertiary)
+              .foregroundColor(task.completed ? Ink.secondary : Ink.primary)
+              .strikethrough(task.completed, color: Ink.secondary)
               .lineLimit(1...4)
               .frame(maxWidth: .infinity, alignment: .leading)
               .focused($isTextFieldFocused)
@@ -5496,7 +5621,7 @@ struct TaskRow: View {
                     .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 6))
                     .background(
                       RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                        .fill(OmiColors.backgroundPrimary)
+                        .fill(Color.clear)
                     )
                 }
               }
@@ -5505,8 +5630,8 @@ struct TaskRow: View {
             HStack(spacing: 0) {
               Text(editText.isEmpty ? "Task description" : editText)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                .strikethrough(task.completed, color: OmiColors.textTertiary)
+                .foregroundColor(task.completed ? Ink.secondary : Ink.primary)
+                .strikethrough(task.completed, color: Ink.secondary)
                 .lineLimit(1...4)
                 .onTapGesture {
                   onSelect?(task)
@@ -5524,7 +5649,7 @@ struct TaskRow: View {
                 Image(systemName: "repeat")
                   .scaledFont(size: OmiType.micro)
               }
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
 
             // New badge
@@ -5549,7 +5674,7 @@ struct TaskRow: View {
                     Text("Open thread")
                       .scaledFont(size: OmiType.micro, weight: .medium)
                   }
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                 }
                 .buttonStyle(.plain)
                 .help("Resume this task's ongoing work")
@@ -5563,7 +5688,7 @@ struct TaskRow: View {
                     Text("Work on this with Omi")
                       .scaledFont(size: OmiType.micro, weight: .medium)
                   }
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                 }
                 .buttonStyle(.plain)
                 .help("Create ongoing work only when you choose")
@@ -5612,10 +5737,10 @@ struct TaskRow: View {
                 Text("Execute")
                   .scaledFont(size: OmiType.micro, weight: .semibold)
               }
-              .foregroundColor(.white)
+              .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.xxs)
-              .background(Color.white.opacity(0.18))
+              .background(Ink.primary)
               .clipShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -5630,7 +5755,7 @@ struct TaskRow: View {
             } label: {
               Image(systemName: "calendar.badge.plus")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -5659,7 +5784,7 @@ struct TaskRow: View {
             } label: {
               Image(systemName: "arrow.left.to.line")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -5675,7 +5800,7 @@ struct TaskRow: View {
             } label: {
               Image(systemName: "arrow.right.to.line")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -5688,7 +5813,7 @@ struct TaskRow: View {
           } label: {
             Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "arrowshape.turn.up.right.fill")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 24, height: 24)
           }
           .buttonStyle(.plain)
@@ -5701,7 +5826,7 @@ struct TaskRow: View {
           } label: {
             Image(systemName: "trash")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 24, height: 24)
           }
           .buttonStyle(.plain)
@@ -5713,14 +5838,14 @@ struct TaskRow: View {
           HStack(spacing: 0) {
             LinearGradient(
               colors: [
-                OmiColors.backgroundTertiary.opacity(0),
-                OmiColors.backgroundTertiary,
+                Ink.rowFillHover.opacity(0),
+                Ink.rowFillHover,
               ],
               startPoint: .leading,
               endPoint: .trailing
             )
             .frame(width: 24)
-            Rectangle().fill(OmiColors.backgroundTertiary)
+            Rectangle().fill(Ink.rowFillHover)
           }
         )
         .transition(.opacity)
@@ -5733,18 +5858,18 @@ struct TaskRow: View {
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .fill(
           isKeyboardSelected
-            ? OmiColors.accent.opacity(0.10)
+            ? PageGlass.chipFill(isActive: true)
             : (isHovering || isDragging
-              ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.accent.opacity(0.15) : Color.clear)))
+              ? Ink.rowFillHover : (isNewlyCreated ? Ink.rowFill : Color.clear)))
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(isKeyboardSelected ? OmiColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+        .stroke(isKeyboardSelected ? Ink.hairline : Color.clear, lineWidth: 1)
     )
     .overlay(alignment: .leading) {
       if isKeyboardSelected {
         RoundedRectangle(cornerRadius: 2)
-          .fill(OmiColors.accent)
+          .fill(Ink.primary)
           .frame(width: 3)
           .padding(.vertical, OmiSpacing.xxs)
       }
@@ -5830,18 +5955,10 @@ struct TaskRow: View {
       Text("Sharing link copied")
         .scaledFont(size: OmiType.caption, weight: .semibold)
     }
-    .foregroundColor(OmiColors.textPrimary)
+    .foregroundColor(Ink.primary)
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.xs)
-    .background(
-      Capsule()
-        .fill(OmiColors.backgroundSecondary)
-    )
-    .overlay(
-      Capsule()
-        .stroke(OmiColors.border.opacity(0.8), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 6)
+    .glassFloatingBar(cornerRadius: 999)
     .allowsHitTesting(false)
   }
 
@@ -5870,7 +5987,7 @@ struct TaskRow: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
+        .tint(Ink.primary)
       }
     }
     .padding(OmiSpacing.lg)
@@ -5882,7 +5999,7 @@ struct TaskRow: View {
       HStack {
         Text("Repeat")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
       }
 
@@ -5910,7 +6027,7 @@ struct TaskRow: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
+        .tint(Ink.primary)
       }
     }
     .padding(OmiSpacing.lg)
@@ -6016,7 +6133,7 @@ struct DueDateBadgeInteractive: View {
             .scaledFont(size: 8)
         }
       }
-      .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(isHovering ? Ink.primary : Ink.secondary)
     }
     .buttonStyle(.plain)
     .onHover { hovering in
@@ -6036,10 +6153,10 @@ struct PriorityBadgeInteractive: View {
 
   private var badgeColor: Color {
     switch priority {
-    case "high": return OmiColors.textPrimary
-    case "medium": return OmiColors.textSecondary
-    case "low": return OmiColors.textTertiary
-    default: return OmiColors.textTertiary
+    case "high": return Ink.primary
+    case "medium": return Ink.secondary
+    case "low": return Ink.secondary
+    default: return Ink.secondary
     }
   }
 
@@ -6069,7 +6186,7 @@ struct PriorityBadgeInteractive: View {
           }
         }
         .foregroundColor(
-          badgeHovering ? badgeColor : (priority != nil ? OmiColors.textSecondary : OmiColors.textTertiary))
+          badgeHovering ? badgeColor : (priority != nil ? Ink.primary : Ink.secondary))
       }
       .buttonStyle(.plain)
       .onHover { hovering in
@@ -6080,7 +6197,7 @@ struct PriorityBadgeInteractive: View {
           ForEach(["high", "medium", "low"], id: \.self) { value in
             let color: Color =
               value == "high"
-              ? OmiColors.textPrimary : value == "medium" ? OmiColors.textSecondary : OmiColors.textTertiary
+              ? Ink.errorRed : value == "medium" ? PageGlass.warning : Ink.secondary
             let isSelected = priority == value
 
             Button {
@@ -6094,7 +6211,7 @@ struct PriorityBadgeInteractive: View {
                   .frame(width: 20)
                 Text(value.capitalized)
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                 Spacer()
                 if isSelected {
                   Image(systemName: "checkmark")
@@ -6156,7 +6273,7 @@ struct TagBadgeInteractive: View {
           }
         }
         .foregroundColor(
-          badgeHovering ? OmiColors.textPrimary : (tags.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary))
+          badgeHovering ? Ink.primary : (tags.isEmpty ? Ink.secondary : Ink.primary))
       }
       .buttonStyle(.plain)
       .onHover { hovering in
@@ -6166,7 +6283,7 @@ struct TagBadgeInteractive: View {
         VStack(spacing: OmiSpacing.sm) {
           Text("Tags")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
           let allTags = TaskClassification.allCases
@@ -6177,7 +6294,7 @@ struct TagBadgeInteractive: View {
           ) {
             ForEach(allTags, id: \.rawValue) { classification in
               let isSelected = editingTags.contains(classification.rawValue)
-              let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+              let tagColor = Color(hex: classification.color) ?? Ink.secondary
               Button {
                 if isSelected {
                   editingTags.remove(classification.rawValue)
@@ -6191,7 +6308,7 @@ struct TagBadgeInteractive: View {
                   Text(classification.label)
                     .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .medium)
                 }
-                .foregroundColor(isSelected ? .white : tagColor)
+                .foregroundColor(isSelected ? Ink.surface : tagColor)
                 .padding(.horizontal, OmiSpacing.sm)
                 .padding(.vertical, OmiSpacing.xxs)
                 .background(
@@ -6213,10 +6330,10 @@ struct TagBadgeInteractive: View {
           } label: {
             Text("Done")
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.xs)
-              .background(Capsule().fill(OmiColors.accent))
+              .background(Capsule().fill(Ink.primary))
           }
           .buttonStyle(.plain)
           .frame(maxWidth: .infinity, alignment: .trailing)
@@ -6241,7 +6358,7 @@ struct SourceBadgeCompact: View {
       Text(sourceLabel)
         .scaledFont(size: OmiType.micro, weight: .medium)
     }
-    .foregroundColor(OmiColors.textSecondary)
+    .foregroundColor(Ink.secondary)
     .help(windowTitle ?? sourceLabel)
   }
 }
@@ -6252,11 +6369,10 @@ struct NewBadge: View {
   var body: some View {
     Text("New")
       .scaledFont(size: OmiType.micro, weight: .semibold)
-      .foregroundColor(OmiColors.accent)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.hairline)
-      .background(OmiColors.accent.opacity(0.15))
-      .cornerRadius(OmiChrome.stripRadius)
+      .background(Capsule(style: .continuous).fill(Ink.primary))
   }
 }
 
@@ -6293,7 +6409,7 @@ struct TaskCreateSheet: View {
       HStack {
         Text("New Task")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         DismissButton(action: dismissSheet)
       }
@@ -6301,7 +6417,7 @@ struct TaskCreateSheet: View {
       .padding(.vertical, OmiSpacing.lg)
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       // Content
       ScrollView {
@@ -6310,7 +6426,7 @@ struct TaskCreateSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Description")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             TextField("What needs to be done?", text: $description, axis: .vertical)
               .textFieldStyle(.plain)
@@ -6319,11 +6435,11 @@ struct TaskCreateSheet: View {
               .padding(OmiSpacing.md)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .fill(OmiColors.backgroundSecondary)
+                  .fill(Ink.rowFill)
               )
               .overlay(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .stroke(OmiColors.border, lineWidth: 1)
+                  .stroke(Ink.separator, lineWidth: 1)
               )
           }
 
@@ -6332,7 +6448,7 @@ struct TaskCreateSheet: View {
             HStack {
               Text("Due Date")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
               Spacer()
               Toggle("", isOn: $hasDueDate)
                 .toggleStyle(OmiToggleStyle())
@@ -6344,7 +6460,7 @@ struct TaskCreateSheet: View {
                 .datePickerStyle(.graphical)
                 .labelsHidden()
                 .padding(OmiSpacing.md)
-                .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius).fill(OmiColors.backgroundSecondary))
+                .background(RoundedRectangle(cornerRadius: OmiChrome.elementRadius).fill(Ink.rowFill))
             }
           }
 
@@ -6352,12 +6468,12 @@ struct TaskCreateSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Priority")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             HStack(spacing: OmiSpacing.sm) {
               createPriorityButton(label: "None", value: nil)
-              createPriorityButton(label: "Low", value: "low", color: OmiColors.textTertiary)
-              createPriorityButton(label: "Medium", value: "medium", color: OmiColors.textSecondary)
-              createPriorityButton(label: "High", value: "high", color: OmiColors.textPrimary)
+              createPriorityButton(label: "Low", value: "low", color: Ink.secondary)
+              createPriorityButton(label: "Medium", value: "medium", color: Ink.secondary)
+              createPriorityButton(label: "High", value: "high", color: Ink.primary)
             }
           }
 
@@ -6365,7 +6481,7 @@ struct TaskCreateSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Tags")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             // Flow layout of toggleable tag pills
             let allTags = TaskClassification.allCases
@@ -6376,7 +6492,7 @@ struct TaskCreateSheet: View {
             ) {
               ForEach(allTags, id: \.rawValue) { classification in
                 let isSelected = selectedTags.contains(classification.rawValue)
-                let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+                let tagColor = Color(hex: classification.color) ?? Ink.secondary
                 Button {
                   if isSelected {
                     selectedTags.remove(classification.rawValue)
@@ -6390,7 +6506,7 @@ struct TaskCreateSheet: View {
                     Text(classification.label)
                       .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .medium)
                   }
-                  .foregroundColor(isSelected ? .white : tagColor)
+                  .foregroundColor(isSelected ? Ink.surface : tagColor)
                   .padding(.horizontal, OmiSpacing.sm)
                   .padding(.vertical, OmiSpacing.xs)
                   .background(
@@ -6411,7 +6527,7 @@ struct TaskCreateSheet: View {
       }
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       // Footer
       HStack(spacing: OmiSpacing.md) {
@@ -6429,34 +6545,33 @@ struct TaskCreateSheet: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
+        .tint(Ink.primary)
         .controlSize(.large)
         .disabled(!canSave || isSaving)
       }
       .padding(OmiSpacing.xl)
     }
     .frame(width: 420, height: 500)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
-  private func createPriorityButton(label: String, value: String?, color: Color = OmiColors.textSecondary) -> some View
-  {
+  private func createPriorityButton(label: String, value: String?, color: Color = Ink.secondary) -> some View {
     let isSelected = priority == value
     return Button {
       priority = value
     } label: {
       Text(label)
         .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .medium)
-        .foregroundColor(isSelected ? OmiColors.backgroundPrimary : color)
+        .foregroundColor(isSelected ? Ink.surface : color)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(isSelected ? (value != nil ? color : OmiColors.textSecondary) : Color.clear)
+            .fill(isSelected ? (value != nil ? color : Ink.secondary) : Color.clear)
         )
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSelected ? Color.clear : OmiColors.border, lineWidth: 1)
+            .stroke(isSelected ? Color.clear : Ink.separator, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -6484,17 +6599,17 @@ struct UndoToastView: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: "trash")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(.white.opacity(0.7))
+        .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
 
       Text("Task deleted")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(.white)
+        .foregroundColor(PageGlass.primaryActionLabel)
         .lineLimit(1)
 
       if undoCount > 1 {
         Text("(\(undoCount))")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.white.opacity(0.5))
+          .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
       }
 
       Spacer()
@@ -6504,12 +6619,12 @@ struct UndoToastView: View {
       } label: {
         Text("Undo")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.xs)
           .background(
             Capsule()
-              .fill(.white.opacity(0.2))
+              .fill(Ink.primary)
           )
       }
       .buttonStyle(.plain)
@@ -6518,8 +6633,8 @@ struct UndoToastView: View {
     .padding(.vertical, OmiSpacing.sm)
     .background(
       Capsule()
-        .fill(Color(.darkGray))
-        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        .fill(Ink.primary)
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     )
     .frame(maxWidth: 360)
   }
@@ -6537,14 +6652,14 @@ struct InlineTaskCreationRow: View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
       // Circle placeholder (matches TaskRow checkbox)
       Circle()
-        .stroke(OmiColors.accent.opacity(0.5), lineWidth: 1.5)
+        .stroke(Ink.hairline, lineWidth: 1.5)
         .frame(width: 20, height: 20)
         .padding(.leading, OmiSpacing.md)
 
       TextField("New task...", text: $text)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .focused($isFocused)
         .onSubmit {
           onCommit(text)
@@ -6560,15 +6675,15 @@ struct InlineTaskCreationRow: View {
     .padding(.vertical, OmiSpacing.xs)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.accent.opacity(0.05))
+        .fill(Ink.rowFill)
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(OmiColors.accent.opacity(0.3), lineWidth: 1)
+        .stroke(Ink.hairline, lineWidth: 1)
     )
     .overlay(alignment: .leading) {
       RoundedRectangle(cornerRadius: 2)
-        .fill(OmiColors.accent)
+        .fill(Ink.primary)
         .frame(width: 3)
         .padding(.vertical, OmiSpacing.xxs)
     }
@@ -6608,26 +6723,23 @@ struct KeyboardHintBar: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(
-      Capsule()
-        .fill(OmiColors.backgroundSecondary)
-        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-    )
+    // 19 = half the bar's own height, so the panel is the stadium everything floating is cut to.
+    .glassFloatingBar(cornerRadius: 19)
   }
 
   private func keyboardHint(_ key: String, label: String) -> some View {
     HStack(spacing: OmiSpacing.xs) {
       Text(key)
         .scaledFont(size: OmiType.caption, weight: .medium, design: .monospaced)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.xs)
         .padding(.vertical, OmiSpacing.xxs)
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
         .cornerRadius(OmiChrome.stripRadius)
 
       Text(label)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 }

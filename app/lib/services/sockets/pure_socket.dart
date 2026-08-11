@@ -61,7 +61,8 @@ class PureSocket implements IPureSocket {
   final Map<String, String> _extraHeaders;
 
   PureSocket(this.url, {SocketHeadersProvider? headersProvider, Map<String, String> extraHeaders = const {}})
-      : _headersProvider = headersProvider ?? (() async => buildHeaders(requireAuthCheck: true)),
+      : _headersProvider = headersProvider ??
+            (() => buildHeaders(requireAuthCheck: true, url: url, forWebSocket: true)),
         _extraHeaders = Map.unmodifiable(extraHeaders);
 
   @override

@@ -21,7 +21,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
-      section: .general, icon: "gearshape", settingId: "general.rewind"),
+      section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
       name: "System Audio", subtitle: "When to record audio from other apps",
       keywords: [
@@ -37,13 +37,17 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
       settingId: "general.askomi"),
     SettingsSearchItem(
+      name: "Interface Sounds", subtitle: "Sounds for important arrivals and completions",
+      keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
+      section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
+    SettingsSearchItem(
       name: "Font Size", subtitle: "Adjust text size across the app",
       keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),
     SettingsSearchItem(
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.resetwindow"),
+      settingId: "general.fontsize"),
 
     // Rewind
     SettingsSearchItem(
@@ -53,11 +57,11 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Screen Capture", subtitle: "Toggle screen capture on or off",
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
-      section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
+      section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
       name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind,
-      icon: "mic.fill", settingId: "rewind.audiorecording"),
+      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .general,
+      icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
       keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind,
@@ -79,7 +83,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Transcription Settings", subtitle: "Configure speech-to-text options",
       keywords: ["language", "vocabulary", "speech"], section: .transcription, icon: "waveform",
-      settingId: "transcription.settings"),
+      settingId: "transcription.languagemode"),
     SettingsSearchItem(
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
@@ -109,10 +113,6 @@ struct SettingsSearchItem: Identifiable {
       name: "Notification Frequency", subtitle: "How often to receive notifications",
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
-    SettingsSearchItem(
-      name: "Focus Notifications", subtitle: "Show notification on focus changes",
-      keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
-      settingId: "notifications.focus"),
     SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",
@@ -150,7 +150,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
-      settingId: "privacy.cloudsync"),
+      settingId: "privacy.storerecordings"),
     SettingsSearchItem(
       name: "Encryption", subtitle: "Server-side encryption for your data",
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
@@ -325,9 +325,65 @@ struct SettingsSearchItem: Identifiable {
 }
 
 enum SettingsSidebarMetrics {
-  static let expandedWidth: CGFloat = 260
+  /// The settings sidebar is a **table of contents**, not a content column.
+  ///
+  /// It was 260 — the width of the app's *main* sidebar, which carries conversation titles and has
+  /// something to do with the room. Nine section names do not, and that width spent the difference
+  /// on whitespace to the right of "About" while the pane beside it is the thing anyone reads.
+  ///
+  /// The value is **derived from the longest label rather than chosen**, because this row truncates
+  /// (`lineLimit(1)`, `.tail`) and a truncated item in a table of contents is worse than a wide one.
+  /// "Notifications & Privacy" needs 196 pt including its fixtures — the icon column, the gap after
+  /// it and the row's two side paddings — measured through the real font by
+  /// `SettingsSidebarItemLayoutTests`, at the *selected* weight, which is the wider of the two.
+  ///
+  /// The two numbers below the floor were both tried on a build and both truncated:
+  ///
+  /// - **196**, the settings kit's nominal width, renders "Notifications & P…".
+  /// - **216**, which clears the 196 pt requirement by 4 pt on paper, still renders
+  ///   "Notifications & Priva…" — a bare fit is not a fit once the scroll container and subpixel
+  ///   rounding have taken their share.
+  ///
+  /// So the width carries **`labelSlack`** rather than trusting the arithmetic to the last point,
+  /// and the guard test asserts the slack rather than the fit. 232 is still 28 pt narrower than the
+  /// 260 this started at, which was the app's *main* sidebar width — that one carries conversation
+  /// titles and has something to do with the room; nine section names do not.
+  static let expandedWidth: CGFloat = 232
+
+  /// Headroom over the measured label requirement. See `expandedWidth`: a zero-slack fit truncated
+  /// on a real build, so the fit is held open by this rather than by luck.
+  static let labelSlack: CGFloat = 12
   static let horizontalInset: CGFloat = OmiSpacing.sm
   static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
+}
+
+/// **The rows this list actually shows**, as a value rather than a literal inside a `body`.
+///
+/// `ShellDestination.unreachable()` reads it: `Permissions` and `Help` are established pages whose
+/// only way in is a row here, so "the row exists" has to be something a test can hold. Delete one
+/// and the reachability check names the page that lost its door instead of leaving it to be
+/// discovered in the app (INV-NAV-1).
+enum SettingsSidebarRoutes {
+  /// Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
+  /// too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
+  /// content too). The absorbed cases stay routable for deep links/automation
+  /// and highlight their merged item via `sidebarItem`.
+  ///
+  /// `Permissions` and `Help` sit last, under the settings proper: they are the things you come
+  /// here for when something is wrong, not preferences you scan.
+  static let visibleSections: [SettingsContentView.SettingsSection] = [
+    .general,
+    .account,
+    .transcription,
+    .floatingBar,
+    .notifications,
+    .rewind,
+    .shortcuts,
+    .advanced,
+    .about,
+    .permissions,
+    .help,
+  ]
 }
 
 /// Settings sidebar that replaces the main sidebar when in settings
@@ -339,23 +395,21 @@ struct SettingsSidebar: View {
   @State private var isBackHovered = false
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
+  /// The support thread's unread count. This is the only place it is ever drawn: `CrispManager`
+  /// has polled for founder replies and fired notifications about them all along, while the count
+  /// it kept had no consumer anywhere in the app.
+  @ObservedObject private var crispManager = CrispManager.shared
 
   private let iconWidth: CGFloat = 20
-  // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
-  // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
-  // content too). The absorbed cases stay routable for deep links/automation
-  // and highlight their merged item via `sidebarItem`.
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
-    .general,
-    .account,
-    .transcription,
-    .floatingBar,
-    .notifications,
-    .rewind,
-    .shortcuts,
-    .advanced,
-    .about,
-  ]
+  private let visibleSections = SettingsSidebarRoutes.visibleSections
+
+  /// How many unread things a row is standing in front of. Only `Help` has any: it is a live
+  /// support thread, and a founder reply that arrived while you were elsewhere is the one thing on
+  /// this list you would want to see without opening it. Opening the page clears it — `HelpPage`
+  /// already sets `CrispManager.isViewingHelp`.
+  private func badgeCount(for section: SettingsContentView.SettingsSection) -> Int {
+    section == .help ? crispManager.unreadCount : 0
+  }
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -384,7 +438,7 @@ struct SettingsSidebar: View {
       // Settings title
       Text("Settings")
         .scaledFont(size: OmiType.heading, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.bottom, OmiSpacing.md)
 
@@ -402,6 +456,7 @@ struct SettingsSidebar: View {
                 section: section,
                 isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
+                badgeCount: badgeCount(for: section),
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
@@ -422,20 +477,23 @@ struct SettingsSidebar: View {
       Spacer()
     }
     .frame(width: SettingsSidebarMetrics.expandedWidth)
-    .background(OmiColors.backgroundPrimary)
+    // A half-step of shading, and deliberately not a second material: the window already wears the
+    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
+    // materials in one window, which on light glass reads as a grey slab down the side.
+    .background(Ink.rowFill)
   }
 
   private var searchField: some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
       TextField("Search settings...", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
 
       if !searchQuery.isEmpty {
@@ -444,7 +502,7 @@ struct SettingsSidebar: View {
         } label: {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -452,12 +510,13 @@ struct SettingsSidebar: View {
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundTertiary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(
-              isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            // Focused takes the one accent at full strength; at rest it is a control outline, which
+            // is `Ink.hairline` and not `Ink.separator` — a field is something you type into.
+            .strokeBorder(isSearchFocused ? Ink.accent : Ink.hairline, lineWidth: 1)
         )
     )
   }
@@ -468,7 +527,7 @@ struct SettingsSidebar: View {
         if filteredSearchItems.isEmpty {
           Text("No results")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xl)
         } else {
@@ -494,11 +553,11 @@ struct SettingsSidebar: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "chevron.left")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Back")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
       }
@@ -506,8 +565,8 @@ struct SettingsSidebar: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isBackHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -522,6 +581,9 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
+  /// Unread items waiting behind this row. Zero draws nothing at all — an empty badge shape is a
+  /// permanent claim that there is something to read.
+  var badgeCount: Int = 0
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -540,6 +602,10 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
+    // The same glyphs these two pages already answer to everywhere else in the app
+    // (`SidebarNavItem`, `ChatFirstMorePage`), so a row and the page it opens are one object.
+    case .permissions: return "exclamationmark.triangle"
+    case .help: return "bubble.left"
     }
   }
 
@@ -549,38 +615,82 @@ struct SettingsSidebarItem: View {
         EmptyView()
       } else {
         Button(action: onTap) {
-          HStack(spacing: OmiSpacing.md) {
+          // The settings kit's row metrics rather than generic spacing tokens, so a row in the
+          // table of contents and a row in the pane beside it are the same object at the same
+          // rhythm — and so the narrower sidebar keeps the longest label off its own edge.
+          HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
             Image(systemName: icon)
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+              .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
               .frame(width: iconWidth)
 
             Text(section.displayTitle)
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+              .foregroundColor(isSelected ? Ink.surface : Ink.primary)
               .lineLimit(1)
               .truncationMode(.tail)
               .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 0)
+
+            if badgeCount > 0 {
+              SettingsSidebarBadge(count: badgeCount, isOnSelectedRow: isSelected)
+            }
           }
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
+          .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
+          .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+            // Selection is the one thing on this pane that is actionable and is not already a
+            // button, which is exactly what the single accent is for. A row *shaded* rather than
+            // filled cannot be told apart from a hover on a surface this light — the shading a dark
+            // palette could spend here does not exist on glass.
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
               .fill(
                 isSelected
-                  ? OmiColors.backgroundTertiary.opacity(0.8)
-                  : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+                  ? AnyShapeStyle(Ink.accent)
+                  : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
           )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
           isHovered = hovering
         }
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityLabel(
+          badgeCount > 0
+            ? Text("\(section.displayTitle), \(badgeCount) unread")
+            : Text(section.displayTitle))
       }
     }
+  }
+}
+
+/// The count on a settings row that is standing in front of something unread.
+///
+/// It reads as a count on both grounds a row can have, which is the whole difficulty: an unselected
+/// row sits on the sidebar's wash, a selected one on the accent. Rather than a second colour pair
+/// nobody keeps true, the badge borrows the row's *own* label colour and sets its capsule from the
+/// same value — so it stays legible without introducing a third rung to a ladder that has two on
+/// glass, and without spending a colour on a number.
+private struct SettingsSidebarBadge: View {
+  let count: Int
+  let isOnSelectedRow: Bool
+
+  var body: some View {
+    Text("\(count)")
+      .scaledFont(size: OmiType.micro, weight: .bold)
+      .monospacedDigit()
+      .lineLimit(1)
+      .fixedSize()
+      .foregroundColor(isOnSelectedRow ? Ink.surface : Ink.primary)
+      .padding(.horizontal, 5)
+      .padding(.vertical, 1)
+      .background(
+        Capsule(style: .continuous)
+          .fill(isOnSelectedRow ? Ink.surface.opacity(0.24) : Ink.rowFillHover)
+      )
+      .accessibilityHidden(true)
   }
 }
 
@@ -602,12 +712,12 @@ struct SettingsSubsectionItem: View {
 
         Image(systemName: subsection.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
           .frame(width: 16)
 
         Text(subsection.rawValue)
           .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .foregroundColor(isSelected ? Ink.surface : Ink.primary)
 
         Spacer()
       }
@@ -615,17 +725,18 @@ struct SettingsSubsectionItem: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
           .fill(
             isSelected
-              ? OmiColors.backgroundTertiary.opacity(0.6)
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+              ? AnyShapeStyle(Ink.accent)
+              : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
       )
     }
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovered = hovering
     }
+    .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
   }
 }
 
@@ -641,17 +752,17 @@ struct SettingsSearchResultRow: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: item.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 20)
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(item.name)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(item.breadcrumb)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -660,8 +771,8 @@ struct SettingsSearchResultRow: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -682,8 +793,14 @@ struct SettingHighlightModifier: ViewModifier {
     content
       .id(settingId)
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHighlighted ? OmiColors.accent.opacity(0.12) : Color.clear)
+        // The "here it is" flash after a search jump: a wash of the one accent plus its edge, cut to
+        // the card's own corner so the flash lands on the card rather than beside it.
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+          .fill(isHighlighted ? Ink.accent.opacity(0.12) : Color.clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+              .strokeBorder(isHighlighted ? Ink.accent : Color.clear, lineWidth: 1)
+          )
           .omiAnimation(.easeInOut(duration: 0.3), value: isHighlighted)
           .allowsHitTesting(false)
       )
@@ -706,6 +823,6 @@ struct SettingHighlightModifier: ViewModifier {
       highlightedSettingId: .constant(nil),
       onBack: {}
     )
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(.light)
   }
 #endif

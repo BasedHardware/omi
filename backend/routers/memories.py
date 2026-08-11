@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -91,6 +91,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Next-Cursor',
         'X-Omi-Memory-Device-Scope-Supported',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
         'Link',
         'Cache-Control',
     }
@@ -98,6 +99,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
 
 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
+_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 
 
 @dataclass(frozen=True)
@@ -285,6 +287,7 @@ def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
         headers={
             _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
             _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+            _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
         },
     )
 
@@ -355,6 +358,10 @@ def _set_device_scope_capability_header(http_response: Response, *, supported: b
 
 def _set_canonical_lifecycle_exposure_header(http_response: Response, *, exposed: bool) -> None:
     http_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = 'true' if exposed else 'false'
+
+
+def _set_default_delete_capability_header(http_response: Response, *, supported: bool) -> None:
+    http_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true' if supported else 'false'
 
 
 def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> bool:
@@ -455,6 +462,63 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> Mem
             raise HTTPException(status_code=404, detail='Memory not found')
         return memory_item_to_memorydb(item).dict()
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
+
+
+# Matches the helper's own truncation budget so a caller cannot send text whose tail
+# the extractor would silently drop.
+MAX_EXTRACT_TEXT_CHARS = 40_000
+MAX_EXISTING_MEMORY_CHARS = 1_000
+
+
+class ExtractMemoryLogRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    text: str = Field(..., min_length=1, max_length=MAX_EXTRACT_TEXT_CHARS)
+    text_source: str = Field(default="memory_log", min_length=1, max_length=64)
+    existing_memories: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ExtractMemoryLogResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str]
+    profile: str = ""
+
+
+@router.post('/v1/memories/extract', tags=['memories'], response_model=ExtractMemoryLogResponse)
+async def extract_memory_log(
+    body: ExtractMemoryLogRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
+    ),
+):
+    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+
+    Does not write Firestore. Desktop onboarding/import should call this instead of inventing
+    memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
+    """
+    # Deferred with the LLM helper: this router is covered by a module-isolation test
+    # that stubs a minimal dependency graph, and utils.subscription pulls database.users
+    # in at import time.
+    from utils.llm import memories as memories_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    source = (body.text_source or "memory_log").strip() or "memory_log"
+    existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in body.existing_memories if m.strip()][:200]
+    extraction = await run_blocking(
+        llm_executor,
+        lambda: memories_llm.extract_memory_log_from_text(
+            uid,
+            body.text,
+            text_source=source,
+            existing_memories=existing,
+        ),
+    )
+    if extraction is None:
+        raise HTTPException(status_code=502, detail="memories_extract_failed")
+    return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
@@ -804,6 +868,7 @@ def get_memories(
             headers={
                 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
                 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+                _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
             },
         )
 
@@ -811,6 +876,7 @@ def get_memories(
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
         _set_canonical_lifecycle_exposure_header(response, exposed=True)
+        _set_default_delete_capability_header(response, supported=True)
         # Clamp pagination parameters before handing an eligible account to a
         # canonical reader.
         clamped_offset = max(0, offset)
@@ -842,6 +908,7 @@ def get_memories(
 
     _set_device_scope_capability_header(response, supported=False)
     _set_canonical_lifecycle_exposure_header(response, exposed=False)
+    _set_default_delete_capability_header(response, supported=False)
 
     if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
@@ -858,6 +925,7 @@ def get_memories(
     memory_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = (
         'true' if canonical_lifecycle_exposed else 'false'
     )
+    memory_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true'
     _apply_memory_response_headers(response, memory_response)
     logger.info(
         "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
@@ -1022,13 +1090,20 @@ def delete_memory(
 
 @router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
+    scope: Literal['all', 'default'] = Query(
+        'all',
+        description="Delete all memories or only default-access Short-term and Long-term memories.",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        MemoryService(db_client=db_client).delete_all(uid)
+        if scope == 'default':
+            MemoryService(db_client=db_client).delete_default(uid)
+        else:
+            MemoryService(db_client=db_client).delete_all(uid)
         _mirror_delete_all_into_legacy(uid, db_client=db_client)
         return {'status': 'ok'}
 

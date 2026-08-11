@@ -2876,125 +2876,6 @@ actor RewindDatabase {
     }
   }
 
-  // MARK: - Screenshot Embedding Methods
-
-  /// Store embedding BLOB for a screenshot
-  func updateScreenshotEmbedding(id: Int64, embedding: Data) throws {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    try dbQueue.write { db in
-      try db.execute(
-        sql: "UPDATE screenshots SET embedding = ? WHERE id = ?",
-        arguments: [embedding, id]
-      )
-    }
-  }
-
-  /// Get screenshots missing embeddings (for backfill)
-  func getScreenshotsMissingEmbeddings(limit: Int = 100) throws -> [(
-    id: Int64, ocrText: String, appName: String, windowTitle: String?
-  )] {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id, ocrText, appName, windowTitle FROM screenshots
-              WHERE embedding IS NULL AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
-              ORDER BY id LIMIT ?
-          """, arguments: [limit]
-      ).compactMap { row in
-        guard let id: Int64 = row["id"],
-          let ocrText: String = row["ocrText"],
-          let appName: String = row["appName"]
-        else { return nil }
-        let windowTitle: String? = row["windowTitle"]
-        return (id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
-      }
-    }
-  }
-
-  /// Read screenshot embedding BLOBs in batches for disk-based vector search
-  func readEmbeddingBatch(startDate: Date, endDate: Date, appFilter: String? = nil, limit: Int = 5000, offset: Int = 0)
-    throws -> [(screenshotId: Int64, embedding: Data)]
-  {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      var sql = """
-            SELECT id, embedding FROM screenshots
-            WHERE embedding IS NOT NULL
-              AND timestamp >= ? AND timestamp <= ?
-        """
-      var arguments: [DatabaseValueConvertible] = [startDate, endDate]
-
-      if let app = appFilter {
-        sql += " AND appName = ?"
-        arguments.append(app)
-      }
-
-      sql += " ORDER BY id LIMIT ? OFFSET ?"
-      arguments.append(limit)
-      arguments.append(offset)
-
-      return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(arguments)).compactMap { row in
-        guard let id: Int64 = row["id"],
-          let embedding: Data = row["embedding"]
-        else { return nil }
-        return (screenshotId: id, embedding: embedding)
-      }
-    }
-  }
-
-  /// Check screenshot embedding backfill status
-  func getScreenshotEmbeddingBackfillStatus() throws -> (completed: Bool, processedCount: Int) {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      let completed =
-        try Int64.fetchOne(
-          db,
-          sql: """
-                SELECT completed FROM migration_status WHERE name = 'screenshot_embedding_backfill'
-            """) ?? 1
-      let processedCount =
-        try Int64.fetchOne(
-          db,
-          sql: """
-                SELECT COALESCE(processedCount, 0) FROM migration_status WHERE name = 'screenshot_embedding_backfill'
-            """) ?? 0
-      return (
-        completed: completed == 1,
-        processedCount: Int(processedCount)
-      )
-    }
-  }
-
-  /// Update screenshot embedding backfill progress
-  func updateScreenshotEmbeddingBackfillStatus(completed: Bool, processedCount: Int) throws {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    try dbQueue.write { db in
-      try db.execute(
-        sql: """
-              UPDATE migration_status
-              SET completed = ?, processedCount = ?, completedAt = CASE WHEN ? = 1 THEN datetime('now') ELSE completedAt END
-              WHERE name = 'screenshot_embedding_backfill'
-          """, arguments: [completed ? 1 : 0, processedCount, completed ? 1 : 0])
-    }
-  }
-
   /// Get screenshots for a date range
   func getScreenshots(from startDate: Date, to endDate: Date, limit: Int = 100) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
@@ -3010,48 +2891,91 @@ actor RewindDatabase {
     }
   }
 
+  /// How far back the captured-day walk below will go before it stops asking.
+  ///
+  /// Two years is already past any retention window this app offers and past any capture history
+  /// that exists, and it bounds the walk on a database whose oldest row is a decade old.
+  static let capturedDayCeiling = 800
+
+  /// Every local day that actually holds capture, newest first.
+  ///
+  /// **This is how Rewind knows how far back it goes.** The page shows one day at a time, so
+  /// without this the only way to reach an older day is to guess dates in a calendar that gives no
+  /// hint which of them hold anything — and the days that hold capture are not the days that hold
+  /// conversations, because a day spent entirely at the keyboard says nothing.
+  ///
+  /// It is a walk rather than a `GROUP BY date(timestamp)`: grouping reads the timestamp of every
+  /// frame in the database (hundreds of thousands of rows on a long capture history), whereas each
+  /// step here is a single index seek for the newest capture at or before the cursor. One seek per
+  /// day that exists, none for the days that do not — so the cost is the number of days you have
+  /// used the computer, not the number of frames.
+  ///
+  /// Returns local start-of-day instants. Bucketing in SQL would be wrong: GRDB stores `Date` as a
+  /// UTC string, so `date(timestamp)` puts the user's evening on the following day for most of the
+  /// world, and only `Calendar` gets a day with a DST transition in it right.
+  func capturedDayStarts(calendar: Calendar = .current, ceiling: Int = capturedDayCeiling) throws -> [Date] {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    var days: [Date] = []
+    var cursor = Date()
+    while days.count < ceiling {
+      let upperBound = cursor
+      let newest = try dbQueue.read { db in
+        try Date.fetchOne(
+          db,
+          sql: "SELECT MAX(timestamp) FROM screenshots WHERE timestamp <= ?",
+          arguments: [upperBound]
+        )
+      }
+      guard let newest else { return days }
+      let day = calendar.startOfDay(for: newest)
+      days.append(day)
+      // Step to the instant before this day began, so the next seek can only land on an older day.
+      guard let previous = calendar.date(byAdding: .second, value: -1, to: day) else { return days }
+      cursor = previous
+    }
+    return days
+  }
+
   /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
-  /// If the total count for the range is <= targetCount, returns all rows ASC.
-  /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
-  func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+  /// Returns all rows within `targetCount`; otherwise samples evenly while retaining both endpoints.
+  func getScreenshotsSampled(
+    from startDate: Date, to endDate: Date, targetCount: Int, appFilter: String? = nil
+  ) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.read { db in
-      // Get total count for the range
-      let totalCount =
-        try Screenshot
-        .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-        .fetchCount(db)
+      var request = Screenshot.filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+      if let appFilter {
+        request = request.filter(Column("appName") == appFilter)
+      }
+
+      // Count only rows eligible for the timeline, so sparse app filters get a full sample.
+      let totalCount = try request.fetchCount(db)
 
       if totalCount <= targetCount {
         // Return all, ordered ASC (oldest first)
-        return
-          try Screenshot
-          .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-          .order(Column("timestamp").asc)
-          .fetchAll(db)
+        return try request.order(Column("timestamp").asc).fetchAll(db)
       }
 
       // Fetch all IDs + timestamps ordered ASC, then pick every Nth
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id FROM screenshots
-              WHERE timestamp >= ? AND timestamp <= ?
-              ORDER BY timestamp ASC
-          """, arguments: [startDate, endDate])
+      let idRequest = request.select(Column("id")).order(Column("timestamp").asc)
+      let rows = try Row.fetchAll(db, idRequest)
 
-      let step = Double(totalCount) / Double(targetCount)
-      var sampledIds: [Int64] = []
-      var i: Double = 0
-      while Int(i) < totalCount && sampledIds.count < targetCount {
-        let index = Int(i)
-        if index < rows.count {
-          sampledIds.append(rows[index]["id"])
-        }
-        i += step
+      let sampleCount = max(1, targetCount)
+      let sampledIds: [Int64] = (0..<sampleCount).compactMap { slot in
+        let index =
+          sampleCount == 1
+          ? totalCount - 1
+          : Int(
+            (Double(slot) * Double(totalCount - 1) / Double(sampleCount - 1))
+              .rounded())
+        guard rows.indices.contains(index) else { return nil }
+        return rows[index]["id"]
       }
 
       // Batch-fetch the sampled rows and return in ASC order

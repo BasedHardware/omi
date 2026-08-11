@@ -63,7 +63,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
-from utils.conversations.render import conversation_to_dict, serialize_datetimes
+from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
 from utils.observability.fallback import record_fallback
@@ -213,7 +213,7 @@ async def trigger_external_integrations(
         if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
-        conversation_dict = conversation_to_dict(conversation)
+        conversation_dict = redact_conversation_for_integration(conversation_to_dict(conversation))
 
         # Ignore external data on workflow
         if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:

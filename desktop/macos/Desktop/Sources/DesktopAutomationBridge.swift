@@ -9,6 +9,8 @@ enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
   static let portPrefix = "--automation-port="
   static let captureRootPrefix = "--automation-capture-root="
+  static let uiPresentationPrefix = "--automation-ui="
+  static let uiPresentationEnvironmentKey = "OMI_AUTOMATION_UI_MODE"
   static let defaultPort: UInt16 = 47777
   static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
   static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
@@ -60,6 +62,28 @@ enum DesktopAutomationLaunchOptions {
     }
 
     return defaultPort
+  }
+
+  static var uiPresentationMode: DesktopAutomationUIPresentationMode {
+    uiPresentationMode(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment)
+  }
+
+  static func uiPresentationMode(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> DesktopAutomationUIPresentationMode {
+    guard allowsLocalAutomation else { return .normal }
+    for argument in arguments where argument.hasPrefix(uiPresentationPrefix) {
+      let rawValue = String(argument.dropFirst(uiPresentationPrefix.count)).lowercased()
+      return DesktopAutomationUIPresentationMode(rawValue: rawValue) ?? .normal
+    }
+    let rawValue = environment[uiPresentationEnvironmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    return rawValue.flatMap(DesktopAutomationUIPresentationMode.init(rawValue:)) ?? .normal
   }
 
   static var token: String {
@@ -122,7 +146,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
   var usesLegacyHomeDesign: Bool
-  /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
+  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
+  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
+  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
@@ -732,6 +758,46 @@ final class DesktopAutomationActionRegistry {
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
     register(
+      name: "set_automation_ui_presentation",
+      summary:
+        "Park automation windows quietly, reveal them briefly for Accessibility, or restore normal user presentation",
+      params: ["mode", "activate"],
+      category: "app_control",
+      surfaces: ["app"],
+      safety: "local_ui_state",
+      sideEffects: ["changes non-production window placement and input handling"],
+      examples: [
+        "./scripts/omi-ctl ui quiet",
+        "./scripts/omi-ctl ui interactive --activate",
+        "./scripts/omi-ctl ui normal --activate",
+      ]
+    ) { params in
+      // This registry is reachable only through DesktopAutomationBridge, whose listener cannot start
+      // for production-family or published-preview bundles. Keep the handler itself exercisable in a
+      // hermetic test instead of duplicating the bridge's stronger process boundary here.
+      guard let requested = params["mode"]?.lowercased() else {
+        return [
+          "mode": DesktopAutomationWindowPresentation.currentMode.rawValue,
+          "available_modes": DesktopAutomationUIPresentationMode.allCases.map(\.rawValue).joined(
+            separator: ","),
+        ]
+      }
+      guard let mode = DesktopAutomationUIPresentationMode(rawValue: requested) else {
+        throw DesktopAutomationActionError.invalidParams(
+          "mode must be normal, quiet, or interactive")
+      }
+      let activate = boolParam(params["activate"], default: false)
+      let previous = DesktopAutomationWindowPresentation.setMode(mode, activate: activate)
+      return [
+        "previous_mode": previous.rawValue,
+        "mode": DesktopAutomationWindowPresentation.currentMode.rawValue,
+        "activated": activate ? "true" : "false",
+      ]
+    }
+    // The five cursor-free Home-stage drivers, together because they share a failure mode:
+    // see DesktopAutomationHomeStageActions.swift.
+    registerHomeStageActions()
+    register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
     ) { _ in
@@ -832,7 +898,6 @@ final class DesktopAutomationActionRegistry {
         ]
       }
     }
-
     register(
       name: "task_capture_fixture",
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
@@ -942,6 +1007,19 @@ final class DesktopAutomationActionRegistry {
         "dedupe_hash": trace.dedupeHash,
         "intervention_id": trace.interventionID,
       ]
+    }
+
+    register(
+      name: "probe_suggestion_nudge",
+      summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
+      params: ["app", "window_title"]
+    ) { params in
+      let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
+      let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
+      return await ProactiveAssistantsPlugin.shared.probeSuggestionNudge(
+        appOverride: app,
+        windowTitleOverride: title
+      )
     }
 
     register(
@@ -1541,59 +1619,6 @@ final class DesktopAutomationActionRegistry {
       return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
-    // Drive the redesigned Home stage (inline chat / connect tray) without the
-    // cursor. Each posts the notification DashboardPage observes, which calls
-    // the exact functions the on-screen controls call.
-    register(
-      name: "home_open_chat",
-      summary: "Open the inline chat on Home (same path as clicking the ask bar)"
-    ) { _ in
-      NotificationCenter.default.post(name: .homeStageOpenChat, object: nil)
-      return nil
-    }
-
-    register(
-      name: "home_connect_toggle",
-      summary: "Toggle the Connect tray on Home (same path as the ask-bar Connect button)"
-    ) { _ in
-      NotificationCenter.default.post(name: .homeStageToggleConnect, object: nil)
-      return nil
-    }
-
-    register(
-      name: "home_close_panel",
-      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
-    ) { _ in
-      NotificationCenter.default.post(name: .homeStageClose, object: nil)
-      return nil
-    }
-
-    register(
-      name: "home_ask",
-      summary: "Send a query through the Home ask bar (opens the inline chat and sends)",
-      params: ["query"]
-    ) { params in
-      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
-      NotificationCenter.default.post(
-        name: .homeStageAsk, object: nil, userInfo: ["query": query])
-      return ["sent": query]
-    }
-
-    register(
-      name: "home_attach",
-      summary: "Stage a file in the Home ask bar (same wiring as the paperclip/drag-drop)",
-      params: ["path"]
-    ) { params in
-      let path = (params["path"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
-        return ["error": "missing or nonexistent 'path'"]
-      }
-      NotificationCenter.default.post(
-        name: .homeStageAttach, object: nil, userInfo: ["path": path])
-      return ["staged": path]
-    }
-
     register(
       name: "ask",
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
@@ -1653,6 +1678,61 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
+    // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
+    // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
+    // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
+    register(
+      name: "debug_hit_probe",
+      summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
+      params: ["x", "y"]
+    ) { params in
+      guard let x = Double(params["x"] ?? ""), let y = Double(params["y"] ?? "") else {
+        return ["error": "need x and y (screen top-left coords)"]
+      }
+      guard let primary = NSScreen.screens.first else { return ["error": "no screens"] }
+      let cocoaPoint = NSPoint(x: x, y: primary.frame.maxY - y)
+      var result: [String: String] = [
+        "screen_point_cg": "(\(Int(x)), \(Int(y)))",
+        "screen_point_cocoa": NSStringFromPoint(cocoaPoint),
+        "screens": NSScreen.screens.map { NSStringFromRect($0.frame) }.joined(separator: " | "),
+      ]
+      // Our own windows containing the point, front-to-back. Reliable where the window-server
+      // query is not; foreign overlap is diagnosed from outside via CGWindowList.
+      let containing = NSApp.windows
+        .filter { $0.isVisible && $0.frame.contains(cocoaPoint) }
+        .sorted { $0.orderedIndex < $1.orderedIndex }
+      result["own_windows_at_point"] =
+        containing.isEmpty
+        ? "none"
+        : containing.map { window in
+          var extras = ""
+          if let bar = window as? FloatingControlBarWindow {
+            let local = NSPoint(
+              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
+            extras =
+              " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          }
+          return
+            "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
+        }.joined(separator: " ; ")
+      if let window = containing.first {
+        let inWindow = window.convertPoint(fromScreen: cocoaPoint)
+        result["point_in_window"] = NSStringFromPoint(inWindow)
+        if let root = window.contentView?.superview ?? window.contentView {
+          let inRoot = root.convert(inWindow, from: nil)
+          let hit = root.hitTest(inRoot)
+          var chain: [String] = []
+          var view = hit
+          while let v = view, chain.count < 8 {
+            chain.append(String(describing: type(of: v)))
+            view = v.superview
+          }
+          result["hit_view_chain"] = chain.isEmpty ? "nil (click falls through)" : chain.joined(separator: " < ")
+        }
+      }
+      return result
+    }
+
     register(
       name: "reset_main_chat",
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
@@ -1688,7 +1768,7 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    // Send a message through the real main-window chat pipeline (ChatPage),
+    // Send a message through the real main-window chat pipeline (Home),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
     register(
@@ -1701,11 +1781,24 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
+      // Report the provider's own admission decision. This used to answer
+      // `sent` unconditionally, so a send the busy guard refused was reported
+      // as delivered and the refusal was invisible to every harness.
+      guard provider.canAcceptSend else {
+        return [
+          "accepted": "false",
+          "busy": "true",
+          "is_sending": provider.isSending ? "true" : "false",
+          "is_streaming": provider.messages.contains(where: { $0.isStreaming }) ? "true" : "false",
+          "reason": "already_sending",
+          "query": query,
+        ]
+      }
       let tracer = QueryTracer(query: query, inputMode: .text)
       await QueryTracerContext.$current.withValue(tracer) {
         _ = await provider.sendMessage(query)
       }
-      return ["sent": query]
+      return ["accepted": "true", "sent": query]
     }
 
     // Fire-and-forget main-chat send for race/busy probes. Returns before the
@@ -3123,14 +3216,15 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       do {
         let graph = try await APIClient.shared.getKnowledgeGraph()
+        let atlas = MemoryAtlasProjection(graph: graph.atlasResponse, userName: nil)
         var detail = [
           "node_count": "\(graph.nodes.count)",
           "edge_count": "\(graph.edges.count)",
+          "catalog_memory_count": "\(graph.catalogNodes?.count ?? 0)",
+          "atlas_mark_count": "\(atlas.snapshot.nodes.count)",
           "is_empty": graph.nodes.isEmpty ? "true" : "false",
         ]
-        // `label` resolves a human-typed name to the ids the inspector needs,
-        // so a cursor-free check can both drive a selection and state what it
-        // expects the panel to show.
+        // A label resolves to the ids and citations the inspector needs.
         if let query = params["label"]?.lowercased(), !query.isEmpty {
           if let match = graph.nodes.first(where: { $0.label.lowercased().contains(query) }) {
             let edges = graph.edges.filter { $0.sourceId == match.id || $0.targetId == match.id }
@@ -3406,13 +3500,11 @@ final class DesktopAutomationActionRegistry {
       summary: "Return safe Advanced settings booleans (never raw BYOK keys)",
       params: []
     ) { _ in
-      let focus = FocusAssistantSettings.shared
       let task = TaskAssistantSettings.shared
       let insight = InsightAssistantSettings.shared
       let memory = MemoryAssistantSettings.shared
       let assistant = AssistantSettings.shared
       return [
-        "focus_enabled": focus.isEnabled ? "true" : "false",
         "task_enabled": task.isEnabled ? "true" : "false",
         "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
         "insight_enabled": insight.isEnabled ? "true" : "false",
@@ -4194,16 +4286,16 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   }
 
   private func dispatchNavigation(_ payload: DesktopAutomationNavigationRequest) async throws {
-    await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    let activateApp = DesktopAutomationNavigationDelivery.resolvesActivation(
+      explicit: payload.activateApp)
+    await activateMainWindowIfNeeded(activateApp)
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationNavigateRequested,
         object: nil,
-        userInfo: [
-          "target": payload.target,
-          "settingsSection": payload.settingsSection as Any,
-          "highlightedSettingId": payload.highlightedSettingId as Any,
-        ]
+        userInfo: DesktopAutomationNavigationDelivery.userInfo(
+          for: payload,
+          activateApp: activateApp)
       )
     }
   }
@@ -4224,7 +4316,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   }
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
-    await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    await activateMainWindowIfNeeded(
+      DesktopAutomationNavigationDelivery.resolvesActivation(explicit: payload.activateApp))
     try await ensureConversationsTabVisibleForAutomation()
     await requestAutomationConversationOpen(
       conversationId: payload.conversationId,

@@ -68,6 +68,7 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'agent_tools',
         'conversation_finalization',
+        'agent_vm_reconciler',
         'other',
     }
 )

@@ -48,13 +48,10 @@ class ConversationLocationCapture {
   // after a newer session's write and put the user's cache back in the past.
   Future<void> _uploadTail = Future<void>.value();
 
-  /// Returns the start-time snapshot even when the compatibility upload fails,
-  /// so the caller can persist it with the recording/WAL.
-  Future<Geolocation?> captureAndUpload() async {
-    final stopwatch = Stopwatch()..start();
-    Geolocation? geolocation;
+  /// Returns the start-time snapshot without uploading the compatibility write.
+  Future<Geolocation?> capture() async {
     try {
-      geolocation = await _capture().timeout(totalTimeout);
+      return await _capture().timeout(totalTimeout);
     } on TimeoutException {
       Logger.log('Conversation location capture timed out; recording will continue');
       return null;
@@ -62,6 +59,22 @@ class ConversationLocationCapture {
       Logger.error('Error capturing conversation location: $e');
       return null;
     }
+  }
+
+  /// Best-effort compatibility write for the backend geolocation cache.
+  Future<void> uploadCompatibilitySnapshot(Geolocation geolocation) async {
+    try {
+      await _enqueueUpload(geolocation).timeout(totalTimeout);
+    } catch (e) {
+      Logger.log('Conversation location compatibility upload failed; preserving recording snapshot');
+    }
+  }
+
+  /// Returns the start-time snapshot even when the compatibility upload fails,
+  /// so the caller can persist it with the recording/WAL.
+  Future<Geolocation?> captureAndUpload() async {
+    final stopwatch = Stopwatch()..start();
+    final geolocation = await capture();
     if (geolocation == null) return null;
     try {
       final remaining = totalTimeout - stopwatch.elapsed;

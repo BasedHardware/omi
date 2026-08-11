@@ -60,6 +60,7 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -84,6 +85,26 @@ class HomePageWrapper extends StatefulWidget {
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
+  @override
+  Widget build(BuildContext context) {
+    // Self-gate so onboarding/pushAndRemoveUntil destinations cannot boot
+    // product traffic while cutover enforcement is blocking.
+    return AccountCutoverBlockingGate(
+      productBuilder: (context) => _HomePageProduct(navigateToRoute: widget.navigateToRoute),
+    );
+  }
+}
+
+class _HomePageProduct extends StatefulWidget {
+  const _HomePageProduct({this.navigateToRoute});
+
+  final String? navigateToRoute;
+
+  @override
+  State<_HomePageProduct> createState() => _HomePageProductState();
+}
+
+class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
 
   @override
@@ -194,6 +215,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.refreshInProgressConversations();
+        // Heal phone-mic sessions that went silent while another app played
+        // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
+        captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }

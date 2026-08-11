@@ -486,9 +486,14 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      let sortedOverdue = snapshot.overdue.sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.sorted(by: Self.sortByDueDateThenSource)
+      // Unaccepted AI captures stay out of the dashboard lanes (and out of every
+      // consumer of these lists, e.g. proactive-nudge grounding) until accepted.
+      let sortedOverdue = snapshot.overdue.filter { !$0.isPendingSuggestion }
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedToday = snapshot.today.filter { !$0.isPendingSuggestion }
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedNoDueDate = snapshot.noDueDate.filter { !$0.isPendingSuggestion }
+        .sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
@@ -2354,6 +2359,10 @@ class TasksStore: ObservableObject {
       )
     else { return }
     let ownerID = lease.ownerID
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      log("TasksStore: Skipping retryUnsyncedItems — account cutover offline upload gate closed")
+      return
+    }
     guard activeRetryLease == nil else {
       log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
       return
@@ -2380,6 +2389,10 @@ class TasksStore: ObservableObject {
     var synced = 0
     for item in items {
       guard isCurrent(lease) else { return }
+      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+        log("TasksStore: Interrupted retryUnsyncedItems — account cutover offline upload gate closed")
+        return
+      }
       guard let localId = item.id else { continue }
 
       // Re-check: the normal sync path may have synced this item while we were iterating
@@ -3476,6 +3489,40 @@ class TasksStore: ObservableObject {
       if rolledBack { return .rolledBackAfterRemoteFailure }
       return isCurrent(lease) ? .rollbackFailed : .ownerChanged
     }
+  }
+
+  /// Accept an AI-suggested task: rewrite `source` to "manual" so it leaves the
+  /// Suggestions category and joins the due-date categories on every device.
+  /// Remote-first — a failed accept leaves the suggestion in place with an error.
+  @discardableResult
+  func acceptSuggestedTask(
+    _ task: TaskActionItem,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> TaskUpdateOutcome {
+    await updateTask(
+      task,
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot,
+      operationOverrides: TaskUpdateOperationOverrides(
+        updateLocal: { _ in task },
+        updateRemote: { ownerID in
+          try await APIClient.shared.updateActionItem(
+            id: task.id,
+            source: "manual",
+            expectedOwnerId: ownerID
+          )
+        },
+        syncRemote: { apiResult, _ in
+          guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+          try await ActionItemStorage.shared.syncTaskActionItems(
+            [apiResult],
+            authorization: Self.localMutationAuthorization(snapshot: snapshot)
+          )
+        },
+        rollbackLocal: {}
+      )
+    )
   }
 
   @discardableResult

@@ -40,21 +40,24 @@ from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
+    clamp_conversation_search_pagination,
+    conversation_matches_date_range,
     conversation_matches_speaker,
+    parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -1239,6 +1242,47 @@ def get_shared_conversation_by_id(conversation_id: str):
     return response_dict
 
 
+class ConversationTopicRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    transcript: str = Field(..., min_length=1, max_length=100_000)
+
+
+class ConversationTopicResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    emoji: str = ""
+    title: str = ""
+
+
+@router.post('/v1/conversations/topic', response_model=ConversationTopicResponse, tags=['conversations'])
+async def generate_conversation_topic_endpoint(
+    body: ConversationTopicRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:topic")),
+):
+    """Return-only emoji + short title through the managed conv_structure feature.
+
+    Does not write Firestore. Desktop clients call this for the fast provisional title
+    on a just-saved conversation instead of inventing one via Anthropic Haiku chat
+    completions; full backend processing still overwrites it later.
+    """
+    # Deferred with the LLM helper: this router is covered by module-isolation tests that
+    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
+    # in at import time.
+    from utils.llm import conversation_topic as conversation_topic_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    topic = await run_blocking(
+        llm_executor,
+        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+    )
+    if topic is None:
+        raise HTTPException(status_code=502, detail="conversation_topic_failed")
+    return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")
+
+
 @router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
@@ -1264,6 +1308,31 @@ def search_conversations_endpoint(
             end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
+
+    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
+    if exact_conversation_id:
+        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+        conversations = conversations_db.get_conversations_by_id_without_photos(
+            uid,
+            [exact_conversation_id],
+            include_discarded=bool(search_request.include_discarded),
+        )
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+        conversations = [
+            conversation
+            for conversation in conversations
+            if conversation_matches_speaker(conversation, search_request.speaker_id)
+            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+        ]
+        if exact_page != 1:
+            conversations = []
+        redact_conversations_for_list(conversations)
+        return {
+            'items': conversations[:exact_per_page],
+            'total_pages': 1,
+            'current_page': exact_page,
+            'per_page': exact_per_page,
+        }
 
     try:
         search_results = search_conversations(

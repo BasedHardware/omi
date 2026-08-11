@@ -201,6 +201,14 @@ describe("omi tool manifest", () => {
     );
   });
 
+  it("documents exact conversation IDs and share links as search inputs", () => {
+    const tool = omiToolManifest.find((entry) => entry.name === "search_conversations");
+
+    expect(tool?.capabilityDoc.summary).toContain("exact canonical ID/share link");
+    expect(tool?.capabilityDoc.bullets.join(" ")).toContain("canonical conversation UUID");
+    expect(tool?.inputSchema.properties.query.description).toContain("canonical UUID");
+  });
+
   it("advertises optional positional parameters for execute_sql", () => {
     const executeSql = mcpToolDefinitionsForAdapter("omi-tools-stdio").find(
       (tool) => tool.name === "execute_sql",

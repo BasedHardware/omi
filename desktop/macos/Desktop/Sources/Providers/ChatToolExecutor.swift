@@ -1238,7 +1238,7 @@ class ChatToolExecutor {
     }
     let changes: Int
     do {
-      changes = try await authorization.withCommitLease {
+      changes = try await authorization.withCommitLeaseSuppressingSupersededResult {
         try await dbQueue.write { db -> Int in
           try authorization.require()
           try db.execute(sql: query, arguments: StatementArguments(parameters))
@@ -2400,6 +2400,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 
@@ -2419,6 +2420,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 
@@ -2438,6 +2440,7 @@ class ChatToolExecutor {
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
     else { return false }
+    ShellSummon.suspendForPermissionPrompt()
     return open(url)
   }
 
@@ -2833,10 +2836,36 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-    guard let nodesArray = args["nodes"] as? [[String: Any]] else {
-      return "Error: 'nodes' array is required"
+    var nodesArray = args["nodes"] as? [[String: Any]]
+    var edgesArray = args["edges"] as? [[String: Any]] ?? []
+    // Only the backend-extract path when there is text to extract from. A blank or
+    // whitespace-only `discovery_text` alongside explicit nodes/edges must still save
+    // the provided graph — the manifest keeps nodes/edges accepted for compatibility.
+    let discoveryText =
+      (args["discovery_text"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !discoveryText.isEmpty {
+      switch await KnowledgeGraphToolSupport.resolveDiscoveryText(
+        discoveryText, expectedOwnerId: expectedOwnerID)
+      {
+      case .success(let graph):
+        nodesArray = graph.nodesAsPayload
+        edgesArray = graph.edgesAsPayload
+      case .failure(let message):
+        // Explicit nodes are a usable graph on their own; losing them because the
+        // extract call failed would be a regression of the compatibility path.
+        guard nodesArray != nil else { return message }
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "knowledge_graph",
+          from: "backend_extract",
+          to: "tool_provided_nodes",
+          reason: "extract_failed",
+          outcome: .degraded)
+      }
     }
-    let edgesArray = args["edges"] as? [[String: Any]] ?? []
+    guard let nodesArray else {
+      return "Error: 'discovery_text' or 'nodes' is required"
+    }
 
     let now = Date()
     var nodeRecords: [LocalKGNodeRecord] = []

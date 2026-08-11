@@ -347,7 +347,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Save Knowledge Graph",
       "Save a knowledge graph of entities and relationships extracted from the user's data.",
       [
-        "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
+        "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
         "node_type must be one of: person, organization, place, thing, concept.",
         "Use when exploring the user's files during onboarding to build their knowledge graph.",
         "Deduplication is handled automatically; provide all entities you find.",
@@ -373,12 +373,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Search Conversations",
-      "Semantic search across the user's past conversations.",
-      ["Use for specific topics, decisions, or events discussed in conversations."],
+      "Search the user's past conversations by topic or exact canonical ID/share link.",
+      [
+        "Use for specific topics, decisions, or events discussed in conversations.",
+        "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      ],
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     },
   },
   get_memories: {
@@ -889,11 +892,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
     promptGuidelines: [
       "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Deduplication is handled automatically; include all meaningful entities and relationships you found.",
     ],
-    latency: "fast local",
+    latency: "fast network",
     inputSchema: schema(
       {
+        discovery_text: {
+          type: "string",
+          description: "Raw discovery notes. Backend knowledge_graph SSOT extracts nodes/edges.",
+        },
         nodes: {
           type: "array",
           items: {
@@ -922,10 +928,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
           },
         },
       },
-      ["nodes", "edges"],
+      [],
     ),
     annotations: localWrite,
-    timeoutClass: "normal",
+    // discovery_text makes this a network edge with a 60s backend request; the normal
+    // 30s relay deadline would report failure while that request is still in flight.
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Used by onboarding/knowledge graph flows."],
@@ -954,12 +962,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "search_conversations",
     label: "Search Conversations",
-    description: "Semantic search across conversations. Use for specific events or topics.",
-    promptSnippet: "search_conversations - Find conversations about a topic",
+    description: "Search conversations by topic or exact canonical ID/share link.",
+    promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
     latency: "fast network",
     inputSchema: schema(
       {
-        query: { type: "string", description: "Event or topic to search for" },
+        query: { type: "string", description: "Event/topic, canonical UUID, or https://h.omi.me/conversations/<uuid> link" },
         start_date: { type: "string" },
         end_date: { type: "string" },
         limit: { type: "number", description: "Default 5, max 20" },

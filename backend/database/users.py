@@ -8,6 +8,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from database.account_deletion_policy import normalize_account_deletion_status
 from database.account_deletion_transitions import (
+    adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
@@ -24,7 +25,6 @@ from models.users import (
     LocationContextConsent,
     LocationContextConsentStatus,
     Subscription,
-    PlanLimits,
     PlanType,
     SubscriptionStatus,
 )
@@ -444,10 +444,21 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
-def record_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str) -> bool:
+def record_late_agent_vm_cleanup(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
     doc_ref = db.collection('account_deletions').document(uid)
-    return _record_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone)
+    return _record_late_agent_vm_cleanup_txn(
+        db.transaction(),
+        doc_ref,
+        vm_name,
+        zone,
+        expected_instance_id,
+    )
 
 
 def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
@@ -461,7 +472,23 @@ def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
     zone = pending.get('zone')
     if not isinstance(vm_name, str) or not vm_name or not isinstance(zone, str) or not zone:
         return None
-    return {'vmName': vm_name, 'zone': zone}
+    result = {'vmName': vm_name, 'zone': zone}
+    expected_instance_id = pending.get('expectedInstanceId')
+    if expected_instance_id is not None:
+        if (
+            not isinstance(expected_instance_id, str)
+            or not expected_instance_id.isascii()
+            or not expected_instance_id.isdigit()
+        ):
+            raise RuntimeError('late Agent VM cleanup instance identity is malformed')
+        result['expectedInstanceId'] = expected_instance_id
+    return result
+
+
+def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
+    """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _adopt_legacy_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone, expected_instance_id)
 
 
 def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:

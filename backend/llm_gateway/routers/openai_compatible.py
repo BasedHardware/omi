@@ -252,14 +252,18 @@ def _resolve_credentials(request: Request, caller: ServiceAuthDependency) -> Cre
 
 
 def _error_response(exc: GatewayError) -> JSONResponse:
-    content: dict[str, object] = {
-        'error': {
-            'message': exc.message,
-            'type': _error_type_for_code(exc.code, exc.failure_class),
-            'param': exc.param,
-            'code': exc.code.value,
-        }
+    error: dict[str, object] = {
+        'message': exc.message,
+        'type': _error_type_for_code(exc.code, exc.failure_class),
+        'param': exc.param,
+        'code': exc.code.value,
     }
+    if exc.failure_class is not None:
+        # This is a bounded gateway-owned classifier, never an upstream body.
+        # Backend composition boundaries need it to preserve intentional
+        # credential policy without conflating distinct throttling failures.
+        error['failure_class'] = exc.failure_class.value
+    content: dict[str, object] = {'error': error}
     return JSONResponse(
         status_code=_status_code_for_error(exc),
         content=content,

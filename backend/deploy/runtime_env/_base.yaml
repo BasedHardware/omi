@@ -53,6 +53,9 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
         GOOGLE_CLIENT_ID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -61,7 +64,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -73,6 +76,9 @@ environment_shared:
           value: '900'
           category: reliability
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'off'
+          category: rollout
+        ACCOUNT_CUTOVER_ENFORCEMENT:
           value: 'off'
           category: rollout
         DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -179,6 +185,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
             category: oauth_metadata
@@ -198,6 +207,9 @@ environment_shared:
           MEMORY_MODE:
             category: memory_rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
@@ -253,6 +265,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
             category: oauth_metadata
@@ -265,6 +280,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
@@ -325,6 +343,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             provisional: true
             value: '4'
@@ -341,6 +362,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -415,6 +439,9 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             provisional: true
             value: '4'
@@ -431,6 +458,9 @@ environment_shared:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
@@ -522,12 +552,17 @@ environment_shared:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
           MEMORY_ENABLED_USERS:
             category: memory_rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+            category: memory_rollout
+          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             category: memory_rollout
           OMI_ENV_STAGE:
             value: '{env}'

@@ -8,6 +8,27 @@ import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 
 void main() {
+  test('capture without upload defers the compatibility write', () async {
+    var uploads = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.always,
+      getCurrentPosition: () async => _position(latitude: 9, longitude: 8),
+      getLastKnownPosition: () async => null,
+      upload: (_) async {
+        uploads++;
+        return true;
+      },
+    );
+
+    final result = await capture.capture();
+    expect(result?.latitude, 9);
+    expect(uploads, 0);
+
+    await capture.uploadCompatibilitySnapshot(result!);
+    expect(uploads, 1);
+  });
+
   test('uploads a fresh position before recording starts', () async {
     Geolocation? uploaded;
     final capture = ConversationLocationCapture(

@@ -492,11 +492,13 @@ extension APIClient {
 extension APIClient {
   private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+  private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
 
   struct MemoryListPage {
     let memories: [ServerMemory]
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
+    let defaultMemoryDeleteSupported: Bool
   }
 
   /// Fetches memories from the API with optional filtering
@@ -586,11 +588,91 @@ extension APIClient {
     let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    let defaultMemoryDeleteSupported =
+      httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     return MemoryListPage(
       memories: memories,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
-      deviceScopeSupported: deviceScopeSupported
+      deviceScopeSupported: deviceScopeSupported,
+      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported
     )
+  }
+
+  /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two
+  /// sequential model calls), so these endpoints override the shared 30s transport timeout.
+  /// Windows budgets the same 60s.
+  static var managedSynthesisTimeout: TimeInterval { 60 }
+
+  /// Return-only SSOT memory-log extraction through managed memories (OpenRouter Luna).
+  func extractMemoryLogImpl(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let text: String
+      let textSource: String
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case text
+        case textSource = "text_source"
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/memories/extract",
+      body: Body(
+        text: text,
+        textSource: textSource,
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
+  }
+
+  /// Return-only connector synthesis (calendar / gmail / notes) through managed memories.
+  func synthesizeConnectorItemsImpl(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let source: String
+      let items: [String]
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case source
+        case items
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/connectors/synthesize",
+      body: Body(
+        source: source,
+        items: Array(items.prefix(200)).map { String($0.prefix(1000)) },
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 
   /// Creates a new memory (manual or extracted)
@@ -777,15 +859,41 @@ extension APIClient {
   }
 
   /// Deletes all default-scope memories.
-  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  /// The backend keeps Archive outside this operation.
   func deleteAllMemories(scope: MemoryLayerScope) async throws {
     if scope == .defaultAccess {
-      try await deleteAllMemories()
+      try await delete("v3/memories?scope=default")
       return
     }
     throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
+}
+
+struct MemoryLogExtractResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let profile: String
+}
+
+/// One task returned by the backend connector-synthesis SSOT.
+struct ConnectorSynthesisTask: Codable, Equatable, Sendable {
+  let description: String
+  let priority: String
+  let dueAt: String
+
+  enum CodingKeys: String, CodingKey {
+    case description
+    case priority
+    case dueAt = "due_at"
+  }
+}
+
+/// Response of POST /v1/connectors/synthesize — the backend owns the calendar /
+/// gmail / notes prompts, so readers only send their rows and read this back.
+struct ConnectorSynthesisResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let tasks: [ConnectorSynthesisTask]
+  let profile: String
 }
 
 /// The create endpoint returns the stored memory, including its authoritative

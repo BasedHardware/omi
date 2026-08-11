@@ -1,30 +1,49 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — embedded chat, insight cards, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
 preconditions:
   - auth_ready
 
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app shows the Home tab. Top nav bar should have Home, Memory, Tasks, Apps buttons. Home should be the active/selected tab."
+    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask a follow-up…') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Home
+        - Chat
 
   - id: S2
-    name: Verify chat input area
-    do: "Verify the chat input area is present on the Home tab. There should be a text field for typing messages and an Attachments button. Look for the send/connect button."
+    name: Verify the two inputs are distinct
+    do: "Verify the search bar above the panel is pure search (magnifying glass, no send control) and the chat composer inside the panel carries the conversation controls: text field, paperclip (Attach files), microphone, and the send disc."
     expect:
-      interactive_count: { min: 3 }
+      interactive_count: { min: 4 }
+
+  - id: S2b
+    name: Ask, then stop
+    do: "Type a question in the chat composer and press ⏎. The answer streams into the transcript. While it is still streaming, verify the send disc has been replaced by a Stop control in the same slot, and click it. The turn ends without an error card."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S2c
+    name: Conversation menu and the way back
+    do: "Open the '…' menu in the panel's corner and verify it offers Copy conversation, Clear conversation and AI settings. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
+    expect:
+      interactive_count: { min: 2 }
 
   - id: S3
     name: Verify Capture and Listening status
@@ -33,10 +52,11 @@ steps:
       interactive_count: { min: 2 }
 
   - id: S4
-    name: Verify insight cards
-    do: "Check the Home page content area for insight cards or status banners. These may include screen recording permission warnings, task suggestions, or conversation observations."
+    name: Reach the Brain Map from the panel's filter row
+    do: "In results mode, verify the panel header carries a 'Brain Map ›' control beside 'Filter ›' — in the header, not among the All / Conversations / Memories / Rewind chips, which only narrow the list in place. Click it and verify the app lands on the Library page with its Brain Map view selected (the hub's own switcher shows Brain Map as current). Press Escape to return Home."
     expect:
-      interactive_count: { min: 1 }
+      text_visible:
+        - Brain Map
 
   - id: S5
     name: Verify Settings gear accessible

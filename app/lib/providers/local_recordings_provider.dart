@@ -234,6 +234,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
     } on SyncRateLimitedException catch (e) {
       outcome =
           e.kind == SyncRateLimitKind.fairUse ? LocalUploadOutcome.fairUseLimited : LocalUploadOutcome.backendBusy;
+    } on SyncOfflineQueueQuarantinedException {
+      // Bounded-loss offline queue fence — stay silent and leave the file pending.
+      outcome = LocalUploadOutcome.backendBusy;
     } catch (e) {
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
       outcome = LocalUploadOutcome.failed;

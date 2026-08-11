@@ -107,6 +107,173 @@
         "title": "AcceptSharedTasksRequest",
         "type": "object"
       },
+      "AccountCutoverCheckpointPhase": {
+        "description": "Forward-migration checkpoint phases (legacy-side seam only).",
+        "enum": [
+          "not_started",
+          "inventory",
+          "offline_queue_fenced",
+          "exporting",
+          "importing",
+          "verifying",
+          "cutover_ready",
+          "completed",
+          "failed",
+          "paused"
+        ],
+        "title": "AccountCutoverCheckpointPhase",
+        "type": "string"
+      },
+      "AccountCutoverClientAction": {
+        "description": "Fail-closed client surface before product traffic.",
+        "enum": [
+          "none",
+          "force_upgrade",
+          "migration_maintenance"
+        ],
+        "title": "AccountCutoverClientAction",
+        "type": "string"
+      },
+      "AccountCutoverControl": {
+        "additionalProperties": false,
+        "description": "Authenticated bootstrap/control projection for bridge clients.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "api_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Api Generation",
+            "type": "integer"
+          },
+          "auth_bootstrap_reachable": {
+            "default": true,
+            "title": "Auth Bootstrap Reachable",
+            "type": "boolean"
+          },
+          "client_action": {
+            "$ref": "#/components/schemas/AccountCutoverClientAction",
+            "default": "none"
+          },
+          "legacy_writes_allowed": {
+            "default": true,
+            "title": "Legacy Writes Allowed",
+            "type": "boolean"
+          },
+          "migration": {
+            "$ref": "#/components/schemas/AccountCutoverManifestSummary"
+          },
+          "minimum_supported_builds": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlatformMinimumBuild"
+            },
+            "title": "Minimum Supported Builds",
+            "type": "array"
+          },
+          "offline_queue_instruction": {
+            "$ref": "#/components/schemas/OfflineQueueInstruction",
+            "default": "none"
+          },
+          "product_traffic_allowed": {
+            "default": true,
+            "title": "Product Traffic Allowed",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AccountCutoverState",
+            "default": "legacy"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          },
+          "ui_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Ui Generation",
+            "type": "integer"
+          }
+        },
+        "title": "AccountCutoverControl",
+        "type": "object"
+      },
+      "AccountCutoverManifestSummary": {
+        "additionalProperties": false,
+        "description": "Opaque forward-migration manifest identity without user content.",
+        "properties": {
+          "checkpoint_phase": {
+            "$ref": "#/components/schemas/AccountCutoverCheckpointPhase",
+            "default": "not_started"
+          },
+          "checkpoint_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Token"
+          },
+          "destination_backend_bound": {
+            "default": false,
+            "title": "Destination Backend Bound",
+            "type": "boolean"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountCutoverManifestSummary",
+        "type": "object"
+      },
+      "AccountCutoverState": {
+        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverState",
+        "type": "string"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -268,6 +435,13 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           },
           "target_task_id": {
             "anyOf": [
@@ -4099,6 +4273,40 @@
         "title": "AuthStep",
         "type": "object"
       },
+      "AvailableLanguage": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "AvailableLanguage",
+        "type": "object"
+      },
+      "AvailableLanguagesResponse": {
+        "properties": {
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/AvailableLanguage"
+            },
+            "title": "Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "languages"
+        ],
+        "title": "AvailableLanguagesResponse",
+        "type": "object"
+      },
       "AvailablePlansResponse": {
         "properties": {
           "plans": {
@@ -6251,6 +6459,97 @@
         "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
+      "ConnectorSynthesisRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "existing_memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Existing Memories",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "calendar",
+              "gmail",
+              "notes"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "ConnectorSynthesisRequest",
+        "type": "object"
+      },
+      "ConnectorSynthesisResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "profile": {
+            "default": "",
+            "title": "Profile",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorSynthesisTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories",
+          "tasks"
+        ],
+        "title": "ConnectorSynthesisResponse",
+        "type": "object"
+      },
+      "ConnectorSynthesisTask": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "default": "",
+            "title": "Due At",
+            "type": "string"
+          },
+          "priority": {
+            "default": "medium",
+            "title": "Priority",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConnectorSynthesisTask",
+        "type": "object"
+      },
       "ContextMatchSignal": {
         "enum": [
           "app",
@@ -7180,6 +7479,39 @@
           "summary"
         ],
         "title": "ConversationTestPromptResponse",
+        "type": "object"
+      },
+      "ConversationTopicRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "transcript": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "ConversationTopicRequest",
+        "type": "object"
+      },
+      "ConversationTopicResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ConversationTopicResponse",
         "type": "object"
       },
       "ConversationVisibility": {
@@ -10207,6 +10539,18 @@
             ],
             "title": "Device Id"
           },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
           "excerpt_hash": {
             "anyOf": [
               {
@@ -10231,6 +10575,35 @@
           },
           "scope": {
             "$ref": "#/components/schemas/EvidenceScope"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "transcript_segment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segment Ids"
           },
           "version": {
             "anyOf": [
@@ -10463,6 +10836,116 @@
         ],
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
+      },
+      "ExtractKnowledgeGraphRequest": {
+        "properties": {
+          "include_existing": {
+            "default": false,
+            "title": "Include Existing",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractKnowledgeGraphRequest",
+        "type": "object"
+      },
+      "ExtractKnowledgeGraphResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "ExtractKnowledgeGraphResponse",
+        "type": "object"
+      },
+      "ExtractMemoryLogRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "existing_memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Existing Memories",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 40000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "default": "memory_log",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Text Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractMemoryLogRequest",
+        "type": "object"
+      },
+      "ExtractMemoryLogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "profile": {
+            "default": "",
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "ExtractMemoryLogResponse",
+        "type": "object"
       },
       "FairUseDailyGenerationsBudgetResponse": {
         "properties": {
@@ -11208,6 +11691,14 @@
               }
             ],
             "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
           },
           "started_at": {
             "anyOf": [
@@ -15079,6 +15570,16 @@
         "title": "OAuthUrlResponse",
         "type": "object"
       },
+      "OfflineQueueInstruction": {
+        "description": "Server instruction for legacy offline/outbox queues on clients.\n\n``drain`` is only legal before the migration fence (legacy plane still\nwritable). ``quarantine`` applies once the account enters ``migrating``.",
+        "enum": [
+          "none",
+          "drain",
+          "quarantine"
+        ],
+        "title": "OfflineQueueInstruction",
+        "type": "string"
+      },
       "OnboardingStateResponse": {
         "properties": {
           "acquisition_source": {
@@ -16137,6 +16638,28 @@
         ],
         "title": "PlanType",
         "type": "string"
+      },
+      "PlatformMinimumBuild": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_supported_build": {
+            "minimum": 0.0,
+            "title": "Minimum Supported Build",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "minimum_supported_build"
+        ],
+        "title": "PlatformMinimumBuild",
+        "type": "object"
       },
       "PluginResult": {
         "properties": {
@@ -18503,6 +19026,14 @@
             ],
             "title": "Language"
           },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -19556,6 +20087,88 @@
           "detail"
         ],
         "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
+      "SynthesizeAIUserProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Conversations",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Goals",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Memories",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Messages",
+            "type": "array"
+          },
+          "past_profiles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Past Profiles",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "title": "SynthesizeAIUserProfileRequest",
+        "type": "object"
+      },
+      "SynthesizeAIUserProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data_sources_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Sources Used",
+            "type": "array"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "profile_text": {
+            "title": "Profile Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_text",
+          "data_sources_used",
+          "item_count"
+        ],
+        "title": "SynthesizeAIUserProfileResponse",
         "type": "object"
       },
       "Targeting": {
@@ -20989,6 +21602,86 @@
           "opted_in"
         ],
         "title": "TrainingDataOptInResponse",
+        "type": "object"
+      },
+      "TranscriptMatchSnippet": {
+        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
         "type": "object"
       },
       "TranscriptSegment": {
@@ -23734,6 +24427,100 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/account/cutover/control": {
+      "get": {
+        "description": "Stable authenticated bootstrap projection for bridge clients.\n\nAlways reachable for signed-in users, including while product traffic is\nfenced for migrating / force-upgrade / stranded states. Does not migrate\nany account; absent documents project as legacy. Malformed authoritative\ndocuments fail closed.",
+        "operationId": "get_account_cutover_control_v1_account_cutover_control_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCutoverControl"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Cutover Control",
+        "tags": [
+          "account-cutover"
+        ]
+      }
+    },
     "/v1/action-items": {
       "get": {
         "description": "Get action items for the current user.",
@@ -25601,7 +26388,7 @@
     },
     "/v1/agent/vm-ensure": {
       "post": {
-        "description": "Check VM status; if stopped/terminated, restart it in the background.",
+        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
         "operationId": "ensure_vm_v1_agent_vm_ensure_post",
         "parameters": [
           {
@@ -25676,7 +26463,7 @@
     },
     "/v1/agent/vm-status": {
       "get": {
-        "description": "Return the user's agent VM info from Firestore.",
+        "description": "Return the user's agent VM info from Firestore.\n\nTools paths do not probe GCE (reconciler authority). They still refuse to\nreport eternal ``ready`` while reconciler demand/missing/lease state is\nalready recorded — that is the shared read contract with desktop status.",
         "operationId": "get_vm_status_v1_agent_vm_status_get",
         "parameters": [
           {
@@ -31731,6 +32518,94 @@
         ]
       }
     },
+    "/v1/connectors/synthesize": {
+      "post": {
+        "description": "Return-only calendar/gmail/notes synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop connector importers call this instead of building\ntheir own prompts and inventing memories via Anthropic Haiku chat completions, then\npersist through the normal memory/task write APIs.",
+        "operationId": "synthesize_connector_data_v1_connectors_synthesize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorSynthesisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorSynthesisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Synthesize Connector Data",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/v1/conversations": {
       "get": {
         "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
@@ -32494,6 +33369,94 @@
           }
         ],
         "summary": "Search Conversations Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/topic": {
+      "post": {
+        "description": "Return-only emoji + short title through the managed conv_structure feature.\n\nDoes not write Firestore. Desktop clients call this for the fast provisional title\non a just-saved conversation instead of inventing one via Anthropic Haiku chat\ncompletions; full backend processing still overwrites it later.",
+        "operationId": "generate_conversation_topic_endpoint_v1_conversations_topic_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTopicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTopicResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Generate Conversation Topic Endpoint",
         "tags": [
           "conversations"
         ]
@@ -41261,6 +42224,94 @@
         ]
       }
     },
+    "/v1/knowledge-graph/extract": {
+      "post": {
+        "description": "Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/file-index should call this instead of\ninventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.\n\n``strict_parse`` is on at this HTTP boundary so a malformed model response fails\nclosed (502) instead of returning 200 with an empty graph, which a client cannot\ntell apart from a genuine \"no entities\" answer.",
+        "operationId": "extract_knowledge_graph_v1_knowledge_graph_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractKnowledgeGraphRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractKnowledgeGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Knowledge Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
     "/v1/knowledge-graph/rebuild": {
       "post": {
         "operationId": "rebuild_graph_v1_knowledge_graph_rebuild_post",
@@ -43270,6 +44321,94 @@
         "summary": "Mcp Sse Info",
         "tags": [
           "mcp"
+        ]
+      }
+    },
+    "/v1/memories/extract": {
+      "post": {
+        "description": "Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/import should call this instead of inventing\nmemories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.",
+        "operationId": "extract_memory_log_v1_memories_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractMemoryLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractMemoryLogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Memory Log",
+        "tags": [
+          "memories"
         ]
       }
     },
@@ -47253,6 +48392,94 @@
         ]
       }
     },
+    "/v1/users/ai-profile/synthesize": {
+      "post": {
+        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
+        "operationId": "synthesize_ai_profile_v1_users_ai_profile_synthesize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SynthesizeAIUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SynthesizeAIUserProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Synthesize Ai Profile",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/analytics/chat_message": {
       "post": {
         "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
@@ -47696,6 +48923,84 @@
         "summary": "Update Assistant Settings",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/v1/users/available-languages": {
+      "get": {
+        "description": "Primary-language options for the picker, in render order.",
+        "operationId": "get_available_languages_v1_users_available_languages_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailableLanguagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Available Languages",
+        "tags": [
+          "v1"
         ]
       }
     },
@@ -56473,6 +57778,22 @@
       "delete": {
         "operationId": "delete_memories_v3_memories_delete",
         "parameters": [
+          {
+            "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+              "enum": [
+                "all",
+                "default"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

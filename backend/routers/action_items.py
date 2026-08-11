@@ -21,11 +21,11 @@ from database.vector_db import (
     search_action_items_by_vector,
 )
 from utils.users import get_user_display_name
+from utils.share_links import build_share_url
 from utils.other import endpoints as auth
 from utils.notifications import (
     send_notification,
     send_action_item_data_message,
-    send_action_item_update_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
     sync_action_item_reminder,
@@ -33,7 +33,6 @@ from utils.notifications import (
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence.proactive_engine import run_task_changed_wake
 from pydantic import BaseModel, Field, ValidationError
-from models.shared import StatusResponse
 from models.action_item import (
     ActionItemCreateRequest,
     ActionItemResponse,
@@ -728,7 +727,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     if result is None:
         raise HTTPException(status_code=500, detail="Failed to create share link")
 
-    return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
+    return {"url": build_share_url(f"/tasks/{token}"), "token": token}
 
 
 @router.get("/v1/action-items/shared/{token}", response_model=SharedActionItemsResponse, tags=['action-items'])

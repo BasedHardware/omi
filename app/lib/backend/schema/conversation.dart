@@ -587,6 +587,13 @@ class SyncLocalFilesResponse {
   /// recovery rather than presenting a completed sync.
   int localUploadFailures;
 
+  /// Subset of [localUploadFailures] that are permanent server refusals
+  /// (HTTP 400/413, etc.). Soft-retry only applies when this stays zero.
+  int localUploadPermanentFailures;
+
+  /// Last permanent upload error message for SyncStatus.error surfacing.
+  String? localUploadPermanentError;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
@@ -594,6 +601,8 @@ class SyncLocalFilesResponse {
     this.totalSegments = 0,
     this.errors = const [],
     this.localUploadFailures = 0,
+    this.localUploadPermanentFailures = 0,
+    this.localUploadPermanentError,
   });
 
   bool get hasPartialFailure => failedSegments > 0;

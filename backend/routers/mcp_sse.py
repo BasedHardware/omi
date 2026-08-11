@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
@@ -41,6 +42,10 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.default_read_rollout import (
@@ -69,6 +74,7 @@ from utils.mcp_data import (
     end_of_day_utc,
     parse_date_only_utc,
 )
+from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -84,8 +90,18 @@ from utils.mcp_memories import (
     search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_analytics import (
+    authorization_outcome_for_code,
+    error_category_for_code,
+    result_count_for_tool_result,
+    schedule_mcp_tool_call,
+)
 from utils.observability.api_keys import record_api_key_repairs
-from utils.other.endpoints import enforce_account_deletion_http_access
+from utils.other.endpoints import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_deletion_http_access,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -101,6 +117,23 @@ OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+
+
+def _enforce_mcp_cutover_access(uid: str) -> None:
+    """Fence MCP product principals when cutover enforcement is enabled.
+
+    MCP auth helpers are Request-free; evaluate as a mutating product path so
+    positive-generation and migrating/new rules apply fail-closed.
+    """
+    if not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method='POST',
+        path='/v1/mcp/sse',
+        headers={},
+    )
+
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -172,6 +205,7 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not user_data or not user_data.get("user_id"):
         return None
     enforce_account_deletion_http_access(user_data["user_id"])
+    _enforce_mcp_cutover_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -191,6 +225,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         if not user_data or not user_data.get("user_id"):
             return None
         enforce_account_deletion_http_access(user_data["user_id"])
+        _enforce_mcp_cutover_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -204,6 +239,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     if not oauth_context:
         return None
     enforce_account_deletion_http_access(oauth_context["uid"])
+    _enforce_mcp_cutover_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",
@@ -442,7 +478,11 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "search_conversations",
-        "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "description": (
+            "Search the user's conversations by relevance to the query. Matches both conversation "
+            "summaries and transcript content when available, and returns match_snippets from "
+            "transcript segments (grep-style context) alongside each hit."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
@@ -747,10 +787,16 @@ def openai_apps_challenge():
 class ToolExecutionError(Exception):
     """Exception raised when a tool execution fails."""
 
-    def __init__(self, message: str, code: int = -32000):
+    def __init__(self, message: str, code: int = -32000, *, analytics_authorization_denied: bool = False):
         self.message = message
         self.code = code
+        self.analytics_authorization_denied = analytics_authorization_denied
         super().__init__(self.message)
+
+
+def _authorization_denied_error(message: str) -> ToolExecutionError:
+    """Preserve a product-authorization denial separately from its MCP code."""
+    return ToolExecutionError(message, code=-32009, analytics_authorization_denied=True)
 
 
 def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
@@ -758,7 +804,9 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
         raise ToolExecutionError("Memory not found", code=-32001) from exc
     if exc.status_code == 402:
         raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
-    if exc.status_code in {403, 409, 503}:
+    if exc.status_code == 403:
+        raise _authorization_denied_error(str(exc.detail)) from exc
+    if exc.status_code in {409, 503}:
         raise ToolExecutionError(str(exc.detail), code=-32009) from exc
     raise ToolExecutionError(str(exc.detail)) from exc
 
@@ -841,10 +889,10 @@ def execute_tool(
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             filtered = collect_filtered_memories(
@@ -885,7 +933,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(memory_list_results):
             denied = mcp_denied_read_payload(memory_list_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -915,10 +963,10 @@ def execute_tool(
             raise ToolExecutionError("Content is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
         try:
             write_context = resolve_external_memory_write_context(
                 user_id,
@@ -967,10 +1015,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         try:
             MemoryService(db_client=db).delete_external_memory(
@@ -992,10 +1040,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id and content are required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         if not content.strip():
             raise ToolExecutionError("content must not be empty", code=-32602)
@@ -1092,10 +1140,10 @@ def execute_tool(
         fetch_limit = min(limit * 3, 60)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db)
@@ -1114,7 +1162,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(vector_search_results):
             denied = mcp_denied_read_payload(vector_search_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
@@ -1162,7 +1210,16 @@ def execute_tool(
             end_dt = end_of_day_utc(end_dt)
         ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-        conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = resolve_mcp_conversation_search_ids(
+            user_id,
+            query,
+            limit=limit,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            query_vectors=vector_db.query_vectors,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+            embed_query=vector_db.embeddings.embed_query,
+        )
         if not conversation_ids:
             return {"conversations": []}
 
@@ -1176,6 +1233,9 @@ def execute_tool(
                 structured = dict(structured)
                 structured['action_items'] = []
                 structured['events'] = []
+            snippets: List[Dict[str, Any]] = []
+            if not conv.get("is_locked", False):
+                snippets = attach_match_snippets_to_conversations([conv], query)[0].get("match_snippets") or []
             results.append(
                 {
                     "id": conv.get("id"),
@@ -1183,6 +1243,7 @@ def execute_tool(
                     "finished_at": conv.get("finished_at"),
                     "structured": structured,
                     "language": conv.get("language"),
+                    "match_snippets": snippets,
                 }
             )
 
@@ -1419,12 +1480,7 @@ def handle_mcp_message(
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
-                    "instructions": (
-                        "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
-                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
-                        "task-specific evidence."
-                    ),
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             ),
             None,
@@ -1442,15 +1498,40 @@ def handle_mcp_message(
         raw_arguments: object = params.get("arguments", {})
         arguments: Dict[str, Any] = cast(Dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
 
-        if not tool_name:
+        if not isinstance(tool_name, str) or not tool_name:
+            schedule_mcp_tool_call(
+                uid=auth_context.uid,
+                tool_name=tool_name,
+                auth_type=auth_context.auth_type,
+                client_id=auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="validation",
+                duration_ms=0,
+                result_count=0,
+            )
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
+        started_at = time.monotonic()
         try:
             mcp_auth_context = auth_context
             _require_tool_scope(mcp_auth_context, tool_name)
             auth_context = mcp_auth_context.memory_context
             result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome=authorization_outcome_for_code(
+                    e.code, authorization_denied=e.analytics_authorization_denied
+                ),
+                error_category=error_category_for_code(e.code, authorization_denied=e.analytics_authorization_denied),
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
                 required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
@@ -1463,6 +1544,31 @@ def handle_mcp_message(
                     }
                 }
             return error, None
+        except Exception:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="internal",
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
+            raise
+
+        schedule_mcp_tool_call(
+            uid=mcp_auth_context.uid,
+            tool_name=tool_name,
+            auth_type=mcp_auth_context.auth_type,
+            client_id=mcp_auth_context.client_id,
+            outcome="success",
+            authorization_outcome="allowed",
+            error_category="none",
+            duration_ms=(time.monotonic() - started_at) * 1_000,
+            result_count=result_count_for_tool_result(tool_name, result),
+        )
 
         return (
             create_mcp_response(

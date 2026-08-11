@@ -145,7 +145,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     await getDeviceInfo();
     if (isNewConnection) {
-      PlatformManager.instance.analytics.deviceConnected();
+      PlatformManager.instance.analytics.deviceConnected(device);
     }
     if (device != null) {
       final firstPairedAt = await _markDevicePaired(device.id);
@@ -488,7 +488,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    await captureProvider?.onRecordingDeviceDisconnected();
     captureProvider?.updateRecordingDevice(null);
 
     // Batch mode: the native writer finalizes the in-progress recording on

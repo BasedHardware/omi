@@ -16,7 +16,8 @@ SPEC = importlib.util.spec_from_file_location("check_desktop_auto_beta_candidate
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
-REQUIRED_SMOKE_CHECKS = MODULE.REQUIRED_SMOKE_CHECKS
+REQUIRED_STRUCTURAL_SMOKE_CHECKS = MODULE.REQUIRED_STRUCTURAL_SMOKE_CHECKS
+REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS = MODULE.REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS
 validate = MODULE.validate
 
 
@@ -47,15 +48,7 @@ def fixtures(root: Path) -> argparse.Namespace:
         "version": "0.12.99",
         "build": "12099",
         "team_id": "9536L8KLMP",
-        "checks": sorted(REQUIRED_SMOKE_CHECKS),
-        "notification_callback_canary": {
-            "schema": 1,
-            "event": "user-notifications-settings-callback-completed",
-            "bundle_id": "com.omi.computer-macos",
-            "main_actor": True,
-            "authorization_status": 2,
-            "validated": True,
-        },
+        "checks": sorted(REQUIRED_STRUCTURAL_SMOKE_CHECKS),
         "artifacts": [
             {"label": "sparkle_zip", "sha256": ZIP_SHA},
             {"label": "dmg", "sha256": DMG_SHA},
@@ -101,7 +94,7 @@ def beta_fixtures(root: Path) -> argparse.Namespace:
         "version": "0.12.99",
         "build": "12099",
         "team_id": "9536L8KLMP",
-        "checks": sorted(REQUIRED_SMOKE_CHECKS),
+        "checks": sorted(REQUIRED_STRUCTURAL_SMOKE_CHECKS | REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS),
         "notification_callback_canary": {
             "schema": 1,
             "event": "user-notifications-settings-callback-completed",
@@ -133,7 +126,8 @@ def expect_failure(args: argparse.Namespace, fragment: str) -> None:
 def main() -> int:
     # omi-test-quality: source-inspection -- static contract: qualification labels must match signed-smoke output.
     smoke_labels = set(re.findall(r'^\s*pass "([^"]+)"\s*$', SIGNED_SMOKE.read_text(encoding="utf-8"), re.MULTILINE))
-    missing_labels = sorted(REQUIRED_SMOKE_CHECKS - smoke_labels)
+    required_labels = REQUIRED_STRUCTURAL_SMOKE_CHECKS | REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS
+    missing_labels = sorted(required_labels - smoke_labels)
     assert not missing_labels, f"qualification requires labels not emitted by signed smoke: {missing_labels}"
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -144,10 +138,10 @@ def main() -> int:
 
         smoke_path = Path(args.smoke_result)
         smoke = json.loads(smoke_path.read_text())
-        callback_canary = smoke.pop("notification_callback_canary")
+        removed_check = smoke["checks"].pop()
         smoke_path.write_text(json.dumps(smoke))
-        expect_failure(args, "missing UserNotifications callback canary evidence")
-        smoke["notification_callback_canary"] = callback_canary
+        expect_failure(args, "signed smoke result is missing required checks")
+        smoke["checks"].append(removed_check)
         smoke_path.write_text(json.dumps(smoke))
 
         stale = argparse.Namespace(**{**vars(args), "latest_tag": "v0.13.0+13000-macos"})
@@ -159,11 +153,6 @@ def main() -> int:
         expect_failure(args, "Omi.zip digest")
 
         smoke["artifacts"][0]["sha256"] = ZIP_SHA
-        smoke["notification_callback_canary"]["validated"] = False
-        smoke_path.write_text(json.dumps(smoke))
-        expect_failure(args, "callback canary validated mismatch")
-
-        smoke["notification_callback_canary"]["validated"] = True
         smoke["source_sha"] = "d" * 40
         smoke_path.write_text(json.dumps(smoke))
         expect_failure(args, "source SHA does not match the candidate tag")
@@ -195,6 +184,11 @@ def main() -> int:
 
         beta_smoke = json.loads(original)
         beta_smoke["checks"] = beta_smoke["checks"][1:]
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result is missing required checks")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["checks"].remove("Signed app launches and remains alive")
         beta_smoke_path.write_text(json.dumps(beta_smoke))
         expect_failure(args, "beta smoke result is missing required checks")
 
@@ -231,21 +225,27 @@ def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
     addition (e.g. the notification callback canary) that skips the beta
     invocation would otherwise fail-close the first dual-identity release."""
     codemagic = (Path(__file__).resolve().parents[2] / "codemagic.yaml").read_text(encoding="utf-8")
-    smoke_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
-    smoke_step = smoke_step.split("- name: ", 1)[0]
-    production_branch = smoke_step.split("else", 1)[1]
-    invocations = production_branch.split("scripts/smoke-signed-desktop-artifact.sh")
-    assert len(invocations) >= 3, "expected stable and beta smoke invocations in the production branch"
-    stable_invocation, beta_invocation = invocations[1], invocations[2]
+    stable_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
+    stable_step = stable_step.split("- name: ", 1)[0]
+    beta_step = codemagic.split("- name: Smoke signed desktop beta artifact", 1)[1]
+    beta_step = beta_step.split("- name: ", 1)[0]
+    stable_invocation = stable_step.split("scripts/smoke-signed-desktop-artifact.sh")[-1]
+    beta_invocation = beta_step.split("scripts/smoke-signed-desktop-artifact.sh")[-1]
 
-    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--source-sha", "--tag"]
-    for flag in evidence_flags:
+    shared_evidence_flags = ["--source-sha", "--tag"]
+    for flag in shared_evidence_flags:
         assert flag in stable_invocation, f"stable smoke invocation lost {flag}; update this contract test"
         assert flag in beta_invocation, (
             f"beta smoke invocation is missing {flag}, but the candidate gate validates the "
             "evidence it produces — the first dual-identity release would fail qualification"
         )
+    behavioral_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary"]
+    for flag in behavioral_flags:
+        assert flag not in stable_invocation, f"stable structural smoke must not duplicate {flag}"
+        assert flag in beta_invocation, f"beta behavioral smoke must retain {flag}"
     assert "--expected-bundle-id" in beta_invocation, "beta smoke must assert the beta bundle id"
+    assert "--timeout 90" not in stable_invocation, "stable structural smoke must not reserve callback timeout"
+    assert "--timeout 90" in beta_invocation, "beta signed smoke must tolerate slow clean-runner callbacks"
     assert "--expected-python-api-url \"https://api.omiapi.com/\"" in beta_invocation, (
         "beta smoke must assert the fixed development Python authority"
     )

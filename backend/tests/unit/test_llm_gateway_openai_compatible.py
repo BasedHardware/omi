@@ -5,6 +5,7 @@ import json
 
 from fastapi.testclient import TestClient
 import httpx
+import openai
 import pytest
 from starlette.requests import Request
 
@@ -19,6 +20,7 @@ from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.gateway_client import _chat_structured_payload
+from utils.llm.gateway_error_contract import is_byok_rate_limit_gateway_error
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -86,7 +88,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     # direct product route while shadow-only.
     assert provider.calls[0].model == 'gpt-5.6-luna'
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
-    assert provider.calls[0].request['temperature'] == 0
+    # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
+    # invalid_request_error param=temperature ("Only the default (1) value is supported").
+    # Gateway strips non-default temperatures so callers cannot trip that 400.
+    assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
 
@@ -157,8 +162,20 @@ def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, 
         app.dependency_overrides.clear()
 
     assert response.status_code == 429
-    assert response.json()['error']['type'] == 'rate_limit_error'
-    assert response.json()['error']['message'] == f'provider request failed: {failure_class.value}'
+    error = response.json()['error']
+    assert error['type'] == 'rate_limit_error'
+    assert error['message'] == f'provider request failed: {failure_class.value}'
+    assert error['failure_class'] == failure_class.value
+    # BYOK throttling is terminal: the gateway must not use an Omi-paid or LKG fallback.
+    assert len(provider.calls) == 1
+
+    for body in (error, {'error': error}):
+        sdk_error = openai.RateLimitError(
+            'safe gateway error',
+            response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
+            body=body,
+        )
+        assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
 
 
 def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
@@ -413,6 +430,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
         'concrete_deliverable',
         'candidate_action',
         'target_task_id',
+        'source_segment_ids',
     ]
     assert 'default' not in action_item_schema['properties']['due_at']
 
