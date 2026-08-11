@@ -319,7 +319,7 @@ function runIos(manifest, outputDir) {
   if (exported.status !== 0) throw new Error(`iOS runtime attachment export failed (${exported.status ?? "signal"})`);
   const exportedManifest = readJson(path.join(exportDir, "manifest.json"), "iOS runtime attachment manifest");
   if (!Array.isArray(exportedManifest) || exportedManifest.length !== 1 || !Array.isArray(exportedManifest[0].attachments)) throw new Error("iOS runtime attachment manifest is not exact");
-  const attachments = exportedManifest[0].attachments.filter((item) => typeof item.suggestedHumanReadableName === "string" && item.suggestedHumanReadableName === "OMI_NATIVE_IOS_RUNTIME_JSON");
+  const attachments = exportedManifest[0].attachments.filter((item) => typeof item.suggestedHumanReadableName === "string" && /^OMI_NATIVE_IOS_RUNTIME_JSON(?:_[A-Za-z0-9-]+)*\.json$/.test(item.suggestedHumanReadableName));
   if (attachments.length !== 1 || typeof attachments[0].exportedFileName !== "string" || !/^[A-Za-z0-9-]+\.json$/.test(attachments[0].exportedFileName)) throw new Error("iOS runtime UI test must retain exactly one typed host marker");
   const markerFile = path.join(exportDir, attachments[0].exportedFileName);
   if (!existsSync(markerFile) || !statSync(markerFile).isFile()) throw new Error("iOS runtime host marker bytes are missing");
