@@ -17,6 +17,13 @@ import {
   parseLaneClaimOverride,
 } from "./receipts.mjs";
 import { checkLaneClaims } from "../check-lane-claims.mjs";
+import {
+  CONSUMER_EVIDENCE_SCHEMA,
+  PRODUCER_EVIDENCE_SCHEMA,
+  arbitrateEvidence,
+  deterministicListenAudio,
+} from "./evidence-matrix.mjs";
+import { worktreeStamp } from "./provenance.mjs";
 
 // Every test in this file uses its own scratch workspace root, passed
 // explicitly via { workspaceRoot }. The receipt FILES are hermetic; the tree
@@ -27,19 +34,42 @@ import { checkLaneClaims } from "../check-lane-claims.mjs";
 let workspaceRoot;
 const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
 function l3Arbiters() {
+  const runId = "run-receipt-test";
+  const treeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+  const consumer = {
+    schema: CONSUMER_EVIDENCE_SCHEMA,
+    runId,
+    rows: ["macos", "ios"].flatMap((shell) => L3_DOMAINS.map((domain) => ({
+      runId, shell, domain, fixture: "none", evidence: "rendered-semantic",
+      observation: {
+        route: domain, state: "ready", semantic: `${domain} rendered`,
+        ...(domain === "listen" ? { transcript: "synthetic transcript" } : {}),
+      },
+      shellTreeHash: treeHash, surfaceTreeHash: treeHash,
+    }))),
+  };
+  const producer = {
+    schema: PRODUCER_EVIDENCE_SCHEMA,
+    runId,
+    rows: ["macos", "ios"].flatMap((shell) => L3_DOMAINS.map((domain) => ({
+      runId, shell, domain, evidence: "served-outcome",
+      ...(domain === "listen"
+        ? { listen: { protocolReady: 1, acceptedBinary: 1, acceptedBinaryBytes: deterministicListenAudio().byteLength } }
+        : { http: { successful: 1 } }),
+      ...(domain === "chat" ? { chat: { acceptedAdmission: 1 } } : {}),
+    }))),
+  };
   return {
-    runId: "run-receipt-test",
-    evidenceMatrix: {
-      schema: "omi.shell-domain-matrix.v1",
-      result: "pass",
-      rowCount: 14,
-      rows: ["macos", "ios"].flatMap((shell) => L3_DOMAINS.map((domain) => ({
-        shell,
-        domain,
-        consumer: { runId: "run-receipt-test", shell, domain },
-        producer: { runId: "run-receipt-test", shell, domain },
-      }))),
-    },
+    steps: [],
+    runId,
+    evidenceMatrix: arbitrateEvidence({
+      runId,
+      consumer,
+      producer,
+      expectedShellTreeHash: treeHash,
+      expectedSurfaceTreeHash: treeHash,
+    }),
+    assertions: [],
   };
 }
 beforeEach(() => {
@@ -93,13 +123,34 @@ describe("the exact L3 evidence matrix is required, not merely an aggregate", ()
   });
 
   it("RED-PROOF an aggregate count cannot replace one missing coordinate", () => {
-    const arbiters = l3Arbiters();
+    const arbiters = structuredClone(l3Arbiters());
     arbiters.evidenceMatrix.rows.pop();
     arbiters.evidenceMatrix.total = 14;
     assert.throws(
       () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters, workspaceRoot }),
-      /exact 14-row producer\/consumer evidenceMatrix/,
+      /canonical 14-row producer\/consumer evidenceMatrix/,
     );
+  });
+
+  it("RED-PROOF a missing nested consumer key fails before an immutable receipt is written", () => {
+    const arbiters = structuredClone(l3Arbiters());
+    delete arbiters.evidenceMatrix.rows[0].consumer.fixture;
+    assert.throws(
+      () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters, workspaceRoot }),
+      /missing schema field.*fixture/,
+    );
+  });
+
+  it("RED-PROOF a tampered stored L3 matrix fails receipt verification", () => {
+    writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters: l3Arbiters(), workspaceRoot });
+    const path = receiptPath("L3", { workspaceRoot });
+    const receipt = JSON.parse(readFileSync(path, "utf8"));
+    receipt.arbiters.evidenceMatrix.rows[0].producer.http.successful = 0;
+    writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);
+    const result = verifyReceipt("L3", { workspaceRoot });
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, "failed");
+    assert.match(result.reason, /positive successful served count|revalidation/);
   });
 
   it("a FAIL receipt may record whatever it managed to observe, including nothing", () => {
