@@ -54,9 +54,15 @@ import {
   readStampFile,
   verifyArtifact,
 } from "./lib/provenance.mjs";
+import { laneStepEnvironment } from "./lib/lane-step-env.mjs";
 
 const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
+// OMI_CORE_ROOT names the repository root to provenance and the public lane
+// interface. The Swift generator predates that interface and expects the
+// nested `core/` directory. Override it only in child processes that execute
+// codegen; never rewrite the caller's environment or the provenance root.
+const CORE_CODEGEN_ENV = Object.freeze({ OMI_CORE_ROOT: join(CORE_REPO, "core") });
 
 /** Loaded at the bottom; null when the receipt system is unavailable. */
 let receiptsModule = null;
@@ -86,14 +92,16 @@ export const LANES = {
       { cwd: PLATFORM_REPO, command: "bun run lint:imports" },
       { cwd: PLATFORM_REPO, command: "bun test contract-tests/ratified-contracts.test.ts contract-tests/qa-contracts.test.ts" },
       { cwd: join(CORE_REPO, "core"), command: "node scripts/check-wire-conformance.mjs" },
-      { cwd: join(CORE_REPO, "core"), command: "pnpm codegen:check" },
+      { cwd: join(CORE_REPO, "core"), command: "pnpm codegen:check", env: CORE_CODEGEN_ENV },
     ],
   },
   L1: {
     name: "unit — frontend",
     budgetNote: "<5s",
     reason: "pnpm verify is the Definition of Done for core/: build + unit tests + eight static checks",
-    steps: [{ cwd: join(CORE_REPO, "core"), command: "pnpm verify" }],
+    // `pnpm verify` ends with all three codegen drift checks, including the
+    // legacy Swift generator that consumes OMI_CORE_ROOT as a core directory.
+    steps: [{ cwd: join(CORE_REPO, "core"), command: "pnpm verify", env: CORE_CODEGEN_ENV }],
   },
   L2: {
     name: "hermetic integration",
@@ -173,7 +181,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs core/shells/macos/tests/consumer-evidence-writer.test.mjs core/shells/ios/tests/dev-run-ios.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs core/shells/macos/tests/consumer-evidence-writer.test.mjs core/shells/ios/tests/dev-run-ios.test.mjs" },
     ],
   },
   L3: {
@@ -338,7 +346,7 @@ function runLane(laneId, { json = false } = {}) {
         cwd: step.cwd,
         encoding: "utf8",
         stdio: json ? "pipe" : "inherit",
-        env: l3RunDir === null ? process.env : { ...process.env, OMI_DEV_STACK_RUNDIR: l3RunDir },
+        env: laneStepEnvironment({ callerEnv: process.env, stepEnv: step.env, l3RunDir }),
       }) ?? "";
     } catch (error) {
       status = error.status ?? 1;
