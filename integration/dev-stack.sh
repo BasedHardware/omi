@@ -81,7 +81,16 @@ PRODUCER_RESULT="$RUN_DIR/producer.json"
 FACTS_PATH="$RUN_DIR/facts.json"
 SERVICE_LOG_PIPE="$RUN_DIR/service-log.pipe"
 SERVICE_LOG_READY="$RUN_DIR/service-log-sanitizer-ready"
-mkdir -p "$LOG_DIR"
+mkdir -p "$RUNDIR/runs"
+if ! mkdir "$RUN_DIR" 2>/dev/null; then
+  echo "ERROR: raw run id $RUN_ID already owns a run directory; refusing to reuse or overwrite prior evidence." >&2
+  exit 1
+fi
+if ! mkdir "$LOG_DIR"; then
+  rmdir "$RUN_DIR" 2>/dev/null || true
+  echo "ERROR: could not create the exclusive run log directory." >&2
+  exit 1
+fi
 
 LEAVE_RUNNING=0
 OWNER_WRITTEN=0
@@ -96,7 +105,18 @@ cleanup() {
     kill "$SERVICE_PID" 2>/dev/null || true
     wait "$SERVICE_PID" 2>/dev/null || true
   fi
-  if [[ "$SERVICE_LOGGER_PID" =~ ^[0-9]+$ ]]; then wait "$SERVICE_LOGGER_PID" 2>/dev/null || true; fi
+  if [[ "$SERVICE_LOGGER_PID" =~ ^[0-9]+$ ]]; then
+    for _ in $(seq 1 100); do
+      node "$OWNER_TOOL" snapshot --pid "$SERVICE_LOGGER_PID" >/dev/null 2>&1 || break
+      sleep 0.02
+    done
+    if node "$OWNER_TOOL" snapshot --pid "$SERVICE_LOGGER_PID" >/dev/null 2>&1; then
+      echo "ERROR: exact service logger did not self-terminate after its service identity ended." >&2
+      stop_rc=1
+    else
+      wait "$SERVICE_LOGGER_PID" 2>/dev/null || true
+    fi
+  fi
   [[ ! -p "$SERVICE_LOG_PIPE" ]] || rm -f -- "$SERVICE_LOG_PIPE"
   [[ ! -e "$SERVICE_LOG_READY" ]] || rm -f -- "$SERVICE_LOG_READY"
   if (( stop_rc == 0 )); then rm -rf -- "$RUN_DIR"; fi
@@ -130,12 +150,7 @@ fi
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
-rm -f -- "$SERVICE_LOG_PIPE" "$SERVICE_LOG_READY" "$LOG_DIR/service.log"
 mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
-node "$LOG_SANITIZER" --stream --out "$LOG_DIR/service.log" \
-  --readiness "$READINESS_PATH" --ready-out "$SERVICE_LOG_READY" \
-  < "$SERVICE_LOG_PIPE" >/dev/null 2>&1 &
-SERVICE_LOGGER_PID=$!
 ( cd "$PLATFORM_REPO" && \
   OMI_PORT=4851 \
   OMI_QA_DB="$DATABASE_PATH" \
@@ -145,6 +160,15 @@ SERVICE_LOGGER_PID=$!
   TZ=UTC \
   exec bun "$SERVICE_REL" ) > "$SERVICE_LOG_PIPE" 2>&1 &
 SERVICE_PID=$!
+SERVICE_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$SERVICE_PID")" || exit $?
+SERVICE_START_IDENTITY="$(printf '%s' "$SERVICE_SNAPSHOT" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).startIdentity))')"
+node "$LOG_SANITIZER" --stream --out "$LOG_DIR/service.log" \
+  --readiness "$READINESS_PATH" --ready-out "$SERVICE_LOG_READY" \
+  --run-id "$RUN_ID" --executable "$SERVICE_REL" --base-url "$SERVICE_URL" \
+  --database "$DATABASE_PATH" --pid "$SERVICE_PID" --process-start-identity "$SERVICE_START_IDENTITY" \
+  < "$SERVICE_LOG_PIPE" >/dev/null 2>&1 &
+SERVICE_LOGGER_PID=$!
 
 ready=0
 for _ in $(seq 1 80); do
@@ -183,6 +207,10 @@ node "$ARTIFACT_GUARD" --readiness "$READINESS_PATH" --path "$LOG_DIR" >/dev/nul
 SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$SERVICE_PID")" || exit $?
 PROCESS_START_IDENTITY="$(printf '%s' "$SNAPSHOT" | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).startIdentity))')"
+[[ "$PROCESS_START_IDENTITY" == "$SERVICE_START_IDENTITY" ]] || {
+  echo "ERROR: launched service process identity changed before ownership was recorded." >&2
+  exit 1
+}
 OWNER_TOKEN="$(node "$OWNER_TOOL" new-token)" || exit $?
 node "$OWNER_TOOL" write --record "$OWNERFILE" --run-id "$RUN_ID" --pid "$SERVICE_PID" \
   --owner-token "$OWNER_TOKEN" --start-identity "$PROCESS_START_IDENTITY" \
