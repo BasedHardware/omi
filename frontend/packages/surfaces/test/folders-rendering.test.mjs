@@ -40,7 +40,6 @@ test("Folders exposes source, lifecycle, result semantics, and system-folder fil
     await rendered.cleanup();
   }
 });
-
 test("Folders keeps saved rows visible when a later list read fails", async () => {
   const FoldersProduction = await loadProductionExport("FoldersProduction.tsx", "FoldersProduction");
   const fixtureFolderStore = await loadProductionExport("conversation-fixtures.ts", "fixtureFolderStore");
@@ -69,4 +68,3 @@ test("Folders keeps saved rows visible when a later list read fails", async () =
     await rendered.cleanup();
   }
 });
-

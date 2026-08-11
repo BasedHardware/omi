@@ -466,6 +466,11 @@ test("send failure preserves draft and staged descriptors and double submit is f
   );
   const domain = new RenderedDomainChat();
   domain.sendFailure = new Error("enqueue failed");
+  const announcementCallbacks = [];
+  const announcementScheduler = {
+    setTimeout(callback) { announcementCallbacks.push(callback); return callback; },
+    clearTimeout() {},
+  };
   const staging = {
     isAvailable: () => true,
     async pickAndStage() {
@@ -480,6 +485,7 @@ test("send failure preserves draft and staged descriptors and double submit is f
   };
   const rendered = await renderComponent(ChatProduction, {
     store: createProductionChatStore(domain, staging),
+    announcementScheduler,
   });
   try {
     await click(rendered, rendered.container.querySelector("button.chat-attach"));
@@ -488,6 +494,10 @@ test("send failure preserves draft and staged descriptors and double submit is f
     await click(rendered, rendered.container.querySelector("button.chat-send"));
     assert.equal(textarea.value, "Keep this authored draft");
     assert.equal(rendered.container.querySelectorAll(".chat-attachments li").length, 1);
+    assert.equal(rendered.container.querySelector(".lifecycle-retry"), null, "ready operation errors do not expose an unbound retry");
+    assert.ok(rendered.container.querySelector(".lifecycle-next-action")?.textContent?.includes(EN_MESSAGES["chat.retryComposer"]));
+    assert.equal(rendered.container.querySelector(".production-operation-error")?.getAttribute("role"), "alert");
+    assert.equal(announcementCallbacks.length, 0, "assertive operation error is not duplicated in the polite live region");
 
     let release;
     domain.sendFailure = null;
