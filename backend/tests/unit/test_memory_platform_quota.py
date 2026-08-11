@@ -103,3 +103,45 @@ def test_counter_outage_fails_open_and_records_a_fallback(monkeypatch):
     assert len(recorded) == 1
     assert recorded[0]['component'] == 'memory_platform'
     assert recorded[0]['outcome'] == 'degraded'
+
+
+def test_web_quota_client_type_matches_the_response_model():
+    """The web billing client must name the fields this route actually returns.
+
+    STATIC CHECKER: this reads the TypeScript source rather than executing it.
+    It exists because the web surface shipped a `PlatformApiQuota` interface with
+    invented `included_requests`/`used_requests`/`remaining_requests` fields while
+    the route was still pending, which renders an empty quota bar against the
+    real response. The model side is real introspection, so adding or renaming a
+    field on `MemoryPlatformQuota` fails here until the client is updated.
+    """
+    import re
+    from pathlib import Path
+
+    from models.memory_platform import MemoryPlatformQuota
+
+    root = Path(__file__).resolve().parents[3]
+    client = (root / 'web' / 'frontend' / 'src' / 'lib' / 'api' / 'billing.ts').read_text(encoding='utf-8')
+
+    body = re.search(r'export interface PlatformApiQuota \{(.*?)\n\}', client, re.S)
+    assert body, 'PlatformApiQuota interface not found in web/frontend/src/lib/api/billing.ts'
+    declared = set(re.findall(r'^\s*(\w+)\??:', body.group(1), re.M))
+
+    assert declared == set(MemoryPlatformQuota.model_fields), (
+        f'client fields {sorted(declared)} != MemoryPlatformQuota fields ' f'{sorted(MemoryPlatformQuota.model_fields)}'
+    )
+
+
+def test_web_billing_client_calls_the_route_that_exists():
+    """STATIC CHECKER: the quota seam must point at the real path.
+
+    The web client originally called `/v1/payments/platform-api-quota`, a route
+    that was never implemented on any surface.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    client = (root / 'web' / 'frontend' / 'src' / 'lib' / 'api' / 'billing.ts').read_text(encoding='utf-8')
+
+    assert '/v1/memory/platform/quota' in client
+    assert 'platform-api-quota' not in client
