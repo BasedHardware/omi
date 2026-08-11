@@ -1011,6 +1011,19 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "probe_suggestion_nudge",
+      summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
+      params: ["app", "window_title"]
+    ) { params in
+      let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
+      let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
+      return await ProactiveAssistantsPlugin.shared.probeSuggestionNudge(
+        appOverride: app,
+        windowTitleOverride: title
+      )
+    }
+
+    register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
       params: ["suppressed"]

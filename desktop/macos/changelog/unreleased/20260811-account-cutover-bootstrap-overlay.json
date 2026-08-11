@@ -1,0 +1,3 @@
+{
+  "change": "Stopped the reserved account-migration prompt from flashing and blocking clicks during normal app launch"
+}
