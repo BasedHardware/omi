@@ -826,9 +826,10 @@ import XCTest
     defer { window.close() }
     let scheduler = UncancellableRetractionScheduler()
     window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
 
     window.makeKeyAndOrderFront(nil)
-    window.retractIntoNotch { [weak window] in window?.orderOut(nil) }
+    window.retractIntoNotch { staleRetractionCompletionCount += 1 }
     window.showNotification(
       FloatingBarNotification(
         ownerID: "owner",
@@ -838,7 +839,9 @@ import XCTest
       animated: false)
     scheduler.fire()
 
-    XCTAssertTrue(window.isVisible, "a stale retraction must not order out replacement content")
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "replacement content must invalidate the stale retraction completion")
     XCTAssertEqual(window.state.currentNotification?.title, "Replacement notification")
     XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
   }
@@ -873,13 +876,16 @@ import XCTest
     defer { window.close() }
     let scheduler = UncancellableRetractionScheduler()
     window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
 
     window.makeKeyAndOrderFront(nil)
-    window.retractIntoNotch { [weak window] in window?.orderOut(nil) }
+    window.retractIntoNotch { staleRetractionCompletionCount += 1 }
     window.resizeForPTTState(expanded: true)
     scheduler.fire()
 
-    XCTAssertTrue(window.isVisible, "a stale retraction must not hide active push-to-talk")
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "active push-to-talk must invalidate the stale retraction completion")
     XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
   }
 
