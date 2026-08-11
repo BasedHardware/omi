@@ -38,14 +38,34 @@ function canonical(
   text: string,
   clientMessageId: string | null = null,
   generationOutcome: "completed" | "cancelled" | null = role === "assistant" ? "completed" : null,
+  agentRun?: ChatMessage["agentRun"],
 ): ChatMessage {
   return {
     role,
     text,
     delivery: { kind: "canonical", serverId, clientMessageId, generationOutcome },
     attachments: [],
+    ...(agentRun === undefined ? {} : { agentRun }),
   };
 }
+
+const fixtureAgentRun: NonNullable<ChatMessage["agentRun"]> = {
+  state: "complete",
+  events: [
+    { sequence: 1, createdAt: CHAT_FIXED_NOW, kind: "run_accepted", safeSummary: "Request accepted", details: {} },
+    { sequence: 2, createdAt: CHAT_FIXED_NOW + 1, kind: "capability_receipt", safeSummary: "Local scripted adapter declared", details: { tier: "deterministic-scripted", adapter: "local-scripted", deterministic: true } },
+    { sequence: 3, createdAt: CHAT_FIXED_NOW + 2, kind: "context_receipt", safeSummary: "Saved context selected", details: { sourceKind: "memory", redactedPreview: "Review checklist preference", tokenEstimate: 18, inclusionReason: "Relevant to the handoff question", policyDecision: "included" } },
+    { sequence: 4, createdAt: CHAT_FIXED_NOW + 3, kind: "tool_request", safeSummary: "Searching saved conversations", details: { toolName: "search_conversations", timeoutMs: 5_000 } },
+    { sequence: 5, createdAt: CHAT_FIXED_NOW + 4, kind: "tool_result", safeSummary: "Saved conversations searched", details: { toolName: "search_conversations", resultSummary: "Two relevant conversations found", durationMs: 42, retryable: false } },
+    { sequence: 6, createdAt: CHAT_FIXED_NOW + 5, kind: "approval_requested", safeSummary: "Approval requested for an account change", details: { reason: "Account changes require confirmation", expiresAt: CHAT_FIXED_NOW + 60_000 } },
+    { sequence: 7, createdAt: CHAT_FIXED_NOW + 6, kind: "approval_resolved", safeSummary: "Approval was denied", details: { resolution: "denied" } },
+    { sequence: 8, createdAt: CHAT_FIXED_NOW + 7, kind: "tool_request", safeSummary: "Reading the review checklist", details: { toolName: "read_checklist", timeoutMs: 5_000 } },
+    { sequence: 9, createdAt: CHAT_FIXED_NOW + 8, kind: "tool_result", safeSummary: "Review checklist read", details: { toolName: "read_checklist", resultSummary: "Checklist is ready", durationMs: 21, retryable: false } },
+    { sequence: 10, createdAt: CHAT_FIXED_NOW + 9, kind: "recovery", safeSummary: "Response reconnected", details: { action: "reconnect", reason: "The event stream briefly disconnected" } },
+    { sequence: 11, createdAt: CHAT_FIXED_NOW + 10, kind: "usage", safeSummary: "Usage recorded", details: { inputTokens: 30, outputTokens: 20, totalTokens: 50, durationMs: 80 } },
+    { sequence: 12, createdAt: CHAT_FIXED_NOW + 11, kind: "terminal", safeSummary: "Response complete", details: { terminalOutcome: "completed", terminalCode: "completed", retryable: false, recoveryAction: null } },
+  ],
+};
 
 function streaming(generationId: string, text: string): ChatMessage {
   return {
@@ -61,7 +81,7 @@ function baseMessages(): ChatMessage[] {
     canonical("fixture-chat-s1", "user", "What did we decide about the handoff?", "fixture-cid-1"),
     canonical("fixture-chat-s2", "assistant", "Keep the review checklist short and ship the named build."),
     canonical("fixture-chat-s3", "user", "Any open risks?", "fixture-cid-2"),
-    canonical("fixture-chat-s4", "assistant", "Only the glass parity pass on dark desktop."),
+    canonical("fixture-chat-s4", "assistant", "Only the glass parity pass on dark desktop.", null, "completed", fixtureAgentRun),
   ];
 }
 

@@ -71,6 +71,7 @@ class BridgeStreamContract {
   static const String messageChannel = 'omiStream';
   static const String sinkFunction = '__omiStreamFrame';
   static const String chatGenerationChannel = 'chat-generation-events';
+  static const String chatAgentRunChannel = 'chat-agent-run-events';
   static const String openMessage = 'open';
   static const String grantMessage = 'grant';
   static const String cancelMessage = 'cancel';
@@ -78,6 +79,7 @@ class BridgeStreamContract {
   static const String endMessage = 'end';
   static const String errorMessage = 'error';
   static const Set<String> chatGenerationParameterFields = {'generationId', 'lastEventId'};
+  static const Set<String> chatAgentRunParameterFields = {'generationId', 'lastEventId'};
   static const Map<String, Set<String>> toShellFields = {
     'open': {'t', 'id', 'channel', 'params', 'credit'},
     'grant': {'t', 'id', 'credit', 'channel'},

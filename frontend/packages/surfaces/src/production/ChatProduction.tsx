@@ -52,6 +52,8 @@ function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
 function chatAnnouncement(messages: readonly ChatMessage[], locale: Locale): string | null {
   const latest = [...messages].reverse()[0];
   if (!latest) return null;
+  const agentUpdate = latest.agentRun?.events.at(-1)?.safeSummary;
+  if (agentUpdate) return agentUpdate;
   if (latest.delivery.kind === "streaming") return t(locale, "chat.streaming");
   if (latest.delivery.kind === "echo") return t(locale, "chat.pending");
   if (latest.delivery.kind === "failed") return t(locale, "chat.failed");
@@ -60,6 +62,21 @@ function chatAnnouncement(messages: readonly ChatMessage[], locale: Locale): str
     if (latest.role === "assistant" && latest.delivery.generationOutcome === "completed") return t(locale, "chat.completed");
   }
   return t(locale, "lifecycle.resultsCount", { count: messages.length });
+}
+
+function agentRunStateLabel(state: NonNullable<ChatMessage["agentRun"]>["state"], locale: Locale): string {
+  if (state === "complete") return t(locale, "chat.agentRunComplete");
+  if (state === "failed") return t(locale, "chat.agentRunFailed");
+  return t(locale, "chat.agentRunObserving");
+}
+
+function agentCapabilityLabel(message: ChatMessage, locale: Locale): string {
+  const capability = [...(message.agentRun?.events ?? [])].reverse()
+    .find((event) => event.kind === "capability_receipt");
+  if (capability?.kind !== "capability_receipt") return t(locale, "chat.agentUnknown");
+  if (capability.details.tier === "deterministic-scripted") return t(locale, "chat.agentScripted");
+  if (capability.details.tier === "real-provider") return t(locale, "chat.agentProvider");
+  return t(locale, "chat.agentUnknown");
 }
 
 function isSafeStagedAttachment(attachment: StagedChatAttachment): boolean {
@@ -419,7 +436,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
       message.delivery.kind === "canonical" &&
       message.delivery.clientMessageId === failed.clientMessageId
     );
-    if (!original || draft.trim().length > 0 || attachments.length > 0) {
+    if (!original || draft.length > 0 || attachments.length > 0) {
       draftRef.current?.focus();
       return;
     }
@@ -510,6 +527,11 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 const cancelled = message.delivery.kind === "canonical" &&
                   message.delivery.generationOutcome === "cancelled";
                 const failedDelivery = message.delivery.kind === "failed" ? message.delivery : null;
+                const hasRecoverySource = failedDelivery !== null && messages.some((candidate) =>
+                  candidate.role === "user" &&
+                  candidate.delivery.kind === "canonical" &&
+                  candidate.delivery.clientMessageId === failedDelivery.clientMessageId
+                );
                 return (
                   <li
                     key={messageKey(message)}
@@ -526,6 +548,37 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                         ? t(locale, "chat.responseUnavailable")
                         : "")}
                     </p>
+                    {message.role === "assistant" && message.agentRun && message.agentRun.events.length > 0 && (
+                      <details className="chat-agent-run" data-agent-run-state={message.agentRun.state}>
+                        <summary>
+                          <span>{t(locale, "chat.agentRunDetails")}</span>
+                          <span className="chat-agent-capability">{agentCapabilityLabel(message, locale)}</span>
+                          <span className="chat-agent-state">{agentRunStateLabel(message.agentRun.state, locale)}</span>
+                        </summary>
+                        <ol aria-label={t(locale, "chat.agentRunLabel")}>
+                          {message.agentRun.events.map((event) => (
+                            <li key={`${event.sequence}:${event.kind}`} data-agent-event={event.kind}>
+                              <p>{event.safeSummary}</p>
+                              {event.kind === "context_receipt" && (
+                                <p className="chat-agent-detail">
+                                  <span>{t(locale, "chat.agentContext", { preview: event.details.redactedPreview })}</span>
+                                  <span>{t(locale, "chat.agentContextReason", { reason: event.details.inclusionReason })}</span>
+                                </p>
+                              )}
+                              {(event.kind === "tool_request" || event.kind === "tool_result" || event.kind === "tool_error") && (
+                                <p className="chat-agent-detail">{t(locale, "chat.agentTool", { name: event.details.toolName })}</p>
+                              )}
+                              {event.kind === "approval_requested" && (
+                                <p className="chat-agent-detail">{t(locale, "chat.agentApprovalNoAction")}</p>
+                              )}
+                              {event.kind === "usage" && (
+                                <p className="chat-agent-detail">{t(locale, "chat.agentUsage", { count: event.details.totalTokens })}</p>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
                     {message.attachments.length > 0 && (
                       <ul className="chat-message-attachments" aria-label={t(locale, "chat.attachments")}>
                         {message.attachments.map((attachment) => (
@@ -548,7 +601,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                       </button>
                     )}
                     {failedDelivery?.source === "provider" &&
-                      failedDelivery.retryable && (
+                      failedDelivery.retryable && hasRecoverySource && (
                         <div className="chat-failure-recovery">
                           <button type="button" onClick={() => startNewMessage(failedDelivery)}>
                             {t(locale, "chat.startNewMessage")}

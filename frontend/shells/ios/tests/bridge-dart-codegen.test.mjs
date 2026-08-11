@@ -44,6 +44,7 @@ test("Dart bindings drift on every native stream and staging protocol symbol cla
       ["contracts/src/bridge/stream.ts", '"omiStream"', '"omiStreamChanged"'],
       ["contracts/src/bridge/stream.ts", '"__omiStreamFrame"', '"__omiStreamFrameChanged"'],
       ["contracts/src/bridge/stream.ts", '"chat-generation-events"', '"chat-generation-events-changed"'],
+      ["contracts/src/bridge/stream.ts", '"chat-agent-run-events"', '"chat-agent-run-events-changed"'],
       ["contracts/src/bridge/stream.ts", 't: "open"', 't: "open-changed"'],
       ["contracts/src/bridge/stream.ts", 't: "grant"', 't: "grant-changed"'],
       ["contracts/src/bridge/stream.ts", 't: "cancel"', 't: "cancel-changed"'],

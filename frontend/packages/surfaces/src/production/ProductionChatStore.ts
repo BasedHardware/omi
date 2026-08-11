@@ -14,6 +14,7 @@ import type {
   ChatHistoryPage,
   ChatMessage,
   ChatRole,
+  ChatAgentRunTimeline,
 } from "./chat-reconcile.js";
 
 export type {
@@ -22,6 +23,7 @@ export type {
   ChatHistoryPage,
   ChatMessage,
   ChatRole,
+  ChatAgentRunTimeline,
 };
 export type { StagedChatAttachment } from "@omi-core/contracts";
 
@@ -58,6 +60,7 @@ function role(sender: "human" | "ai"): ChatRole {
 function projectCanonical(
   message: Exclude<import("@omi-core/contracts").ChatMessage, { sender: "unknown" }>,
   pending = false,
+  agentRun?: ChatAgentRunTimeline,
 ): ChatMessage {
   return {
     role: role(message.sender),
@@ -71,6 +74,7 @@ function projectCanonical(
           generationOutcome: message.generationOutcome,
         },
     attachments: message.attachments,
+    ...(agentRun === undefined ? {} : { agentRun }),
   };
 }
 
@@ -91,10 +95,24 @@ function capabilities(store: ChatMessagesStore): ChatCapabilities {
 
 async function projectedHistory(store: ChatMessagesStore): Promise<readonly ChatMessage[]> {
   const pendingIds = new Set(store.pendingMessageIds());
+  const deliveries = await store.generationDeliveries();
+  const timelines = store.agentRunTimelines();
+  const timelineByGeneration = new Map(timelines.map((timeline) => [timeline.generationId, {
+    state: timeline.observationState,
+    events: timeline.events,
+  } satisfies ChatAgentRunTimeline]));
   const failedByClient = new Map(
-    (await store.generationDeliveries())
+    deliveries
       .filter((delivery) => delivery.terminal.kind === "failed")
       .map((delivery) => [delivery.clientMessageId, delivery]),
+  );
+  const generationByAssistant = new Map(
+    deliveries.flatMap((delivery) => {
+      const terminal = delivery.terminal;
+      const message = terminal.kind === "done" ? terminal.message
+        : terminal.kind === "cancelled" ? terminal.message : null;
+      return message === null ? [] : [[message.id, delivery.generationId] as const];
+    }),
   );
   const activeByClient = new Map(
     store.activeGenerations().map((generation) => [generation.clientMessageId, generation]),
@@ -102,7 +120,12 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
   const projected: ChatMessage[] = [];
   for (const message of await store.list()) {
     if (message.sender === "unknown") continue;
-    projected.push(projectCanonical(message, message.sender === "human" && pendingIds.has(message.id)));
+    const canonicalGeneration = message.sender === "ai" ? generationByAssistant.get(message.id) : undefined;
+    projected.push(projectCanonical(
+      message,
+      message.sender === "human" && pendingIds.has(message.id),
+      canonicalGeneration === undefined ? undefined : timelineByGeneration.get(canonicalGeneration),
+    ));
     const active = activeByClient.get(message.id);
     if (message.sender === "human" && active !== undefined) {
       projected.push({
@@ -118,6 +141,9 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
               retryable: false,
             },
         attachments: [],
+        ...(timelineByGeneration.get(active.generationId) === undefined ? {} : {
+          agentRun: timelineByGeneration.get(active.generationId)!,
+        }),
       });
       activeByClient.delete(message.id);
     } else if (message.sender === "human") {
@@ -134,6 +160,9 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
             retryable: failure.terminal.error.retryable,
           },
           attachments: [],
+          ...(timelineByGeneration.get(failure.generationId) === undefined ? {} : {
+            agentRun: timelineByGeneration.get(failure.generationId)!,
+          }),
         });
         failedByClient.delete(message.id);
       }
@@ -153,6 +182,9 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
             retryable: false,
           },
       attachments: [],
+      ...(timelineByGeneration.get(active.generationId) === undefined ? {} : {
+        agentRun: timelineByGeneration.get(active.generationId)!,
+      }),
     });
   }
   return projected;

@@ -107,6 +107,7 @@ function readNativeChatContract() {
     throw new Error("BridgeChatAttachmentStagingRequest gained an optional field");
   }
   const generationParams = interfaceFields(stream, "ChatGenerationStreamParams");
+  const agentRunParams = interfaceFields(stream, "ChatAgentRunStreamParams");
 
   return {
     streamChannel: requiredMatch(
@@ -124,9 +125,15 @@ function readNativeChatContract() {
       /export const CHAT_GENERATION_STREAM_CHANNEL\s*=\s*"([^"]+)"/,
       "CHAT_GENERATION_STREAM_CHANNEL",
     ),
+    chatAgentRunChannel: requiredMatch(
+      stream,
+      /export const CHAT_AGENT_RUN_STREAM_CHANNEL\s*=\s*"([^"]+)"/,
+      "CHAT_AGENT_RUN_STREAM_CHANNEL",
+    ),
     streamToShellMessages: messageNames(streamToShellBody, "StreamToShell"),
     streamFromShellMessages: messageNames(streamFromShellBody, "StreamFromShell"),
     generationParams,
+    agentRunParams,
     stagingChannel: requiredMatch(
       staging,
       /export const BRIDGE_CHAT_ATTACHMENT_STAGING_CHANNEL\s*=\s*"([^"]+)"/,
@@ -207,6 +214,7 @@ const content =
     `  static let channel = "${nativeChat.streamChannel}"`,
     `  static let sinkFunction = "${nativeChat.streamSink}"`,
     `  static let chatGenerationChannel = "${nativeChat.chatGenerationChannel}"`,
+    `  static let chatAgentRunChannel = "${nativeChat.chatAgentRunChannel}"`,
     "",
     "  enum ToShellMessage: String {",
     ...nativeChat.streamToShellMessages.map((name) => `    case ${camelCase(name)} = "${name}"`),
@@ -221,6 +229,9 @@ const content =
     "  ]",
     "  static let chatGenerationOptionalParameterFields: Set<String> = [",
     ...swiftSet(optionalGenerationFields),
+    "  ]",
+    "  static let chatAgentRunParameterFields: Set<String> = [",
+    ...swiftSet(nativeChat.agentRunParams.map((field) => field.name)),
     "  ]",
     "}",
     "",

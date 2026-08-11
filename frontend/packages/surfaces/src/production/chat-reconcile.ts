@@ -1,4 +1,5 @@
 import type { ChatAttachment as DomainChatAttachment } from "@omi-core/contracts";
+import type { AgentRunUiEvent } from "@omi-core/adapters-platform";
 
 /**
  * Pure chat mirror logic (ADR-005). Self-contained: no relative imports so
@@ -34,6 +35,13 @@ export type ChatMessage = {
   readonly text: string;
   readonly delivery: ChatDelivery;
   readonly attachments: readonly ChatAttachment[];
+  /** Privacy-reduced lifecycle receipts for this exact generation, when observed. */
+  readonly agentRun?: ChatAgentRunTimeline;
+};
+
+export type ChatAgentRunTimeline = {
+  readonly state: "observing" | "complete" | "failed";
+  readonly events: readonly AgentRunUiEvent[];
 };
 
 export type ChatHistoryPage = {

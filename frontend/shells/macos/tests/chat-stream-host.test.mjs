@@ -142,21 +142,36 @@ check("host-injected-auth", boundaryRequest?.value(forHTTPHeaderField: "Authoriz
 check("host-injected-contract", boundaryRequest?.value(forHTTPHeaderField: "x-omi-contract-version") == "1.0.0")
 check("host-injected-run-shell", boundaryRequest?.value(forHTTPHeaderField: "x-omi-client-id") == "run-stream-proof::macos")
 
+let agentPath = "/v1/chat-generations/generation-agent/agent-events"
+StubProtocol.bodies[agentPath] = Data(#"event: status\nid: run-event-1\ndata: {"runId":"generation-agent"}\n\n"#.utf8)
+host.receive(raw: #"{"t":"open","id":"s-agent","channel":"chat-agent-run-events","params":"{\"generationId\":\"generation-agent\",\"lastEventId\":\"run-before\"}","credit":2}"#)
+check("agent-run-stream-terminates", eventually {
+  framesFor("s-agent", in: frames).last?["t"] as? String == "end"
+})
+StubProtocol.lock.lock()
+let agentRequest = StubProtocol.requests.first { encodedPath($0.url) == agentPath }
+StubProtocol.lock.unlock()
+check("fixed-agent-run-get", agentRequest?.httpMethod == "GET" && agentRequest?.url?.path == agentPath)
+check("agent-last-event-id-exact", agentRequest?.value(forHTTPHeaderField: "Last-Event-ID") == "run-before")
+check("agent-frames-keep-channel", framesFor("s-agent", in: frames).allSatisfy { $0["channel"] as? String == "chat-agent-run-events" })
+check("agent-frames-hide-custody", !String(describing: framesFor("s-agent", in: frames)).contains("secret-token"))
+
 let malformedRequestCount: Int
 StubProtocol.lock.lock(); malformedRequestCount = StubProtocol.requests.count; StubProtocol.lock.unlock()
 let terminalMalformedFrames = [
-  ("s-extra-open", #"{"t":"open","id":"s-extra-open","channel":"chat-generation-events","params":"{\"generationId\":\"unused\"}","credit":1,"extra":true}"#),
-  ("s-invalid-params", #"{"t":"open","id":"s-invalid-params","channel":"chat-generation-events","params":"{\"generationId\":7}","credit":1}"#),
-  ("s-wrong-channel", #"{"t":"open","id":"s-wrong-channel","channel":"other-events","params":"{\"generationId\":\"unused\"}","credit":1}"#),
-  ("s-unknown-type", #"{"t":"unknown","id":"s-unknown-type","channel":"chat-generation-events"}"#),
+  ("s-extra-open", "chat-generation-events", #"{"t":"open","id":"s-extra-open","channel":"chat-generation-events","params":"{\"generationId\":\"unused\"}","credit":1,"extra":true}"#),
+  ("s-invalid-params", "chat-generation-events", #"{"t":"open","id":"s-invalid-params","channel":"chat-generation-events","params":"{\"generationId\":7}","credit":1}"#),
+  ("s-invalid-agent-params", "chat-agent-run-events", #"{"t":"open","id":"s-invalid-agent-params","channel":"chat-agent-run-events","params":"{\"generationId\":7}","credit":1}"#),
+  ("s-wrong-channel", "chat-generation-events", #"{"t":"open","id":"s-wrong-channel","channel":"other-events","params":"{\"generationId\":\"unused\"}","credit":1}"#),
+  ("s-unknown-type", "chat-generation-events", #"{"t":"unknown","id":"s-unknown-type","channel":"chat-generation-events"}"#),
 ]
-for (id, raw) in terminalMalformedFrames {
+for (id, expectedChannel, raw) in terminalMalformedFrames {
   host.receive(raw: raw)
   check("malformed-\(id)-is-terminal", eventually {
     let routed = framesFor(id, in: frames)
     return routed.count == 1
       && routed[0]["t"] as? String == "error"
-      && routed[0]["channel"] as? String == "chat-generation-events"
+      && routed[0]["channel"] as? String == expectedChannel
       && routed[0]["failure"] as? String == "invalid-frame"
   })
 }

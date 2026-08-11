@@ -43,6 +43,7 @@ enum BridgeStreamContract {
   static let channel = "omiStream"
   static let sinkFunction = "__omiStreamFrame"
   static let chatGenerationChannel = "chat-generation-events"
+  static let chatAgentRunChannel = "chat-agent-run-events"
 
   enum ToShellMessage: String {
     case open = "open"
@@ -60,6 +61,10 @@ enum BridgeStreamContract {
     "generationId",
   ]
   static let chatGenerationOptionalParameterFields: Set<String> = [
+    "lastEventId",
+  ]
+  static let chatAgentRunParameterFields: Set<String> = [
+    "generationId",
     "lastEventId",
   ]
 }
