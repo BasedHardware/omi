@@ -796,6 +796,43 @@ import XCTest
     XCTAssertFalse(window.frame.contains(pointInsideFormerDeadZone))
   }
 
+  func testPresentingDuringNotchRetractionKeepsThePanelVisibleAndRestoresItsContent() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = ManualDelayedActionScheduler()
+    window.notchRetractionScheduler = scheduler
+
+    window.makeKeyAndOrderFront(nil)
+    window.retractIntoNotch { [weak window] in window?.orderOut(nil) }
+    window.makeKeyAndOrderFront(nil)
+
+    XCTAssertFalse(scheduler.fireNext(), "presenting again must cancel the stale order-out deadline")
+    XCTAssertTrue(window.isVisible, "a canceled retraction must not order out a newly presented panel")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
     let viewSource = try floatingControlBarViewSource()

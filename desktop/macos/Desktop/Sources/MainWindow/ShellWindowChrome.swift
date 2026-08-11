@@ -28,13 +28,13 @@
 //    AppKit from `.closable` / `.miniaturizable`; hiding `standardWindowButton(_:)` hides a view and
 //    changes no behaviour. `dress` re-asserts both bits so a future window-construction change cannot
 //    strand a user in a window with no visible close control *and* no keyboard one.
-//  - **Moving has two handles, deliberately.** `.hiddenTitleBar` keeps a real (transparent) title bar
-//    over the top band, which still drags — that band is why the shell reserves
-//    `GlassShell.titlebarClearance` and draws nothing in it. SwiftUI's window-drag gesture covers the
-//    rest of the window. The native `isMovableByWindowBackground` switch cannot do that safely:
+//  - **Moving uses the real transparent title bar.** `.hiddenTitleBar` keeps that native drag handle
+//    over the top band — the band is why the shell reserves `GlassShell.titlebarClearance` and draws
+//    nothing in it. The native `isMovableByWindowBackground` switch cannot extend dragging safely:
 //    AppKit sees a SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background,
-//    and steals its click. Keeping both recognition paths in SwiftUI lets its gesture arena give an
-//    ordinary click to the Button and a drag to the window without intercepting either event.
+//    and steals its click. A root SwiftUI `WindowDragGesture` has the same ownership problem in the
+//    opposite direction: it competes with every Button and Menu in the shell. Keep window dragging
+//    confined to the title bar so interactive content owns its complete event sequence.
 //
 //  ## The two presentations, and why there are two
 //
@@ -144,7 +144,7 @@ enum ShellWindowChrome {
     hideStandardButtons(in: window)
     // AppKit cannot see SwiftUI controls inside an NSHostingView. The hosting view reports that a
     // mouse-down may move the window even when the point is a Button, so this native switch turns
-    // ordinary clicks into window drags. `ShellWindowDragSurface` keeps that ownership in SwiftUI.
+    // ordinary clicks into window drags. The transparent title bar is the only drag handle.
     window.isMovableByWindowBackground = false
     window.level = presentation == .summoned ? .floating : .normal
     // Onboarding and sign-in must survive trips to a browser or System Settings. Once the shell is a
@@ -198,46 +198,6 @@ enum ShellWindowChrome {
       && hasExpectedSpaceBehavior
   }
 
-  static func draggedOrigin(windowOrigin: NSPoint, translation: CGSize) -> NSPoint {
-    NSPoint(
-      x: windowOrigin.x + translation.width,
-      y: windowOrigin.y - translation.height)
-  }
-}
-
-/// Keeps click recognition and window-drag recognition in SwiftUI's gesture arena. This is the
-/// platform boundary AppKit's background-drag switch cannot see through an `NSHostingView`.
-@MainActor
-struct ShellWindowDragSurface: ViewModifier {
-  @State private var windowOrigin: NSPoint?
-
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if #available(macOS 15.0, *) {
-      content.gesture(WindowDragGesture(), including: .gesture)
-    } else {
-      // `WindowDragGesture` was introduced in macOS 15. Keep the macOS 14 deployment floor usable
-      // with a lower-precedence gesture: child controls keep their own clicks and drags, while the
-      // shell's non-control surfaces remain window handles.
-      content.gesture(
-        DragGesture(minimumDistance: 3)
-          .onChanged { value in
-            guard let window = ShellSummon.shellWindow() else { return }
-            let origin = windowOrigin ?? window.frame.origin
-            windowOrigin = origin
-            window.setFrameOrigin(
-              ShellWindowChrome.draggedOrigin(windowOrigin: origin, translation: value.translation))
-          }
-          .onEnded { _ in windowOrigin = nil },
-        including: .gesture)
-    }
-  }
-}
-
-extension View {
-  func shellWindowDragSurface() -> some View {
-    modifier(ShellWindowDragSurface())
-  }
 }
 
 /// Binds the SwiftUI shell to the exact `NSWindow` that contains it.

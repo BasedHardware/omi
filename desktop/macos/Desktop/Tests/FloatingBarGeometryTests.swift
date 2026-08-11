@@ -533,4 +533,38 @@ final class FloatingBarGeometryTests: XCTestCase {
         horizontalOutset: 24
       ))
   }
+
+  func testTransparentPanelIgnoresMouseOutsideItsVisibleHitRegion() {
+    let frame = NSRect(x: 500, y: 800, width: 360, height: 58)
+    let visibleLocalRegion = NSRect(x: 24, y: 24, width: 312, height: 34)
+
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 790),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "a top-level panel must not own events while the pointer is outside its frame")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 510, y: 810),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "transparent glow margin must pass through to the window underneath")
+    XCTAssertFalse(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "visible notch chrome remains interactive")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: false,
+        acceptsMouseHit: { _ in true }),
+      "an ordered-out panel must never retain event ownership")
+  }
 }
