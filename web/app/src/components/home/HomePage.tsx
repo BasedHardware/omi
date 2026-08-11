@@ -156,7 +156,7 @@ export function HomePage() {
         />
         <div ref={scrollRef} className="no-scrollbar h-full overflow-y-auto">
           {inChat ? (
-            <div className="mx-auto max-w-3xl px-6 py-6">
+            <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-6">
               <ChatTranscript
                 messages={messages}
                 isLoading={isLoading}
@@ -170,7 +170,7 @@ export function HomePage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25 }}
-              className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-6 py-12"
+              className="mx-auto flex min-h-full max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12"
             >
               <Image
                 src="/logo.png"
@@ -192,14 +192,14 @@ export function HomePage() {
                 />
               </div>
 
-              <div className="mt-8 flex flex-wrap justify-center gap-2">
+              <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">
                 {quickPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     onClick={() => void handleSend(prompt, [])}
                     disabled={isLoading || isStreaming}
                     className={cn(
-                      'rounded-full px-4 py-2 text-sm',
+                      'flex min-h-11 items-center justify-center rounded-full px-3 py-2 text-center text-sm sm:min-h-0 sm:px-4',
                       'border border-stroke bg-bg-tertiary hover:bg-bg-quaternary',
                       'text-text-secondary hover:text-text-primary',
                       'transition-colors',
@@ -269,7 +269,7 @@ export function HomePage() {
 
       {/* The ask bar is the one composer for the whole stage, so it holds its
           position while the content above it changes mode. */}
-      <div className="flex-shrink-0 px-6 pb-6 pt-3">
+      <div className="flex-shrink-0 px-4 pb-4 pt-3 sm:px-6 sm:pb-6">
         <div className="mx-auto w-full max-w-[640px] space-y-3 md:max-w-[720px] xl:max-w-[820px]">
           <AnimatePresence>
             {isCapturing && (

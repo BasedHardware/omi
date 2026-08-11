@@ -190,7 +190,7 @@ export function ChatComposer({
     !isUploading;
 
   const iconButton = cn(
-    'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+    'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
     'text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary',
     'disabled:cursor-not-allowed disabled:opacity-40',
   );
@@ -292,7 +292,7 @@ export function ChatComposer({
           onClick={() => void handleSend()}
           disabled={!canSend}
           className={cn(
-            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+            'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
             'bg-text-primary text-bg-primary transition-opacity hover:opacity-90',
             'disabled:cursor-not-allowed disabled:opacity-25',
           )}

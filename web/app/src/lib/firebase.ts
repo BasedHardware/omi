@@ -28,6 +28,18 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+export const isFirebaseAuthConfigured =
+  Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId,
+  ) &&
+  firebaseConfig.apiKey !== 'preview' &&
+  firebaseConfig.authDomain !== 'preview.local';
+
 // Initialize Firebase (prevent multiple initializations)
 const app =
   typeof window === 'undefined'
@@ -55,6 +67,11 @@ appleProvider.addScope('name');
  */
 export const signInWithGoogle = async (): Promise<User | null> => {
   try {
+    if (!isFirebaseAuthConfigured) {
+      throw Object.assign(new Error('Firebase sign-in is not configured'), {
+        code: 'auth/configuration-not-found',
+      });
+    }
     if (!app) throw new Error('Firebase auth is only available in a browser');
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
@@ -69,6 +86,11 @@ export const signInWithGoogle = async (): Promise<User | null> => {
  */
 export const signInWithApple = async (): Promise<User | null> => {
   try {
+    if (!isFirebaseAuthConfigured) {
+      throw Object.assign(new Error('Firebase sign-in is not configured'), {
+        code: 'auth/configuration-not-found',
+      });
+    }
     if (!app) throw new Error('Firebase auth is only available in a browser');
     const result = await signInWithPopup(auth, appleProvider);
     return result.user;

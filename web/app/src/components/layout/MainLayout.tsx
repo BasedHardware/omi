@@ -139,12 +139,12 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
                   (26), so the shell reads as a card floating over the window
                   rather than a full-bleed page. */}
-              <div className="flex-1 min-h-0 p-3">
+              <div className="flex-1 min-h-0 p-0 sm:p-3">
                 <div
                   className={cn(
                     'h-full w-full overflow-hidden',
-                    'rounded-window border border-stroke/[0.22] bg-bg-pane',
-                    'shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
+                    'bg-bg-pane sm:rounded-window sm:border sm:border-stroke/[0.22]',
+                    'sm:shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
                   )}
                 >
                   {/* Keyed on the pathname so each destination fades and lifts

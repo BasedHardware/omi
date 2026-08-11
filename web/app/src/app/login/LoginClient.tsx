@@ -8,8 +8,12 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { isFirebaseAuthConfigured } from '@/lib/firebase';
 
-function getAuthErrorMessage(error: unknown, provider: 'Google' | 'Apple'): string {
+export function getAuthErrorMessage(
+  error: unknown,
+  provider: 'Google' | 'Apple',
+): string {
   const code =
     typeof error === 'object' && error !== null && 'code' in error
       ? String(error.code)
@@ -22,6 +26,9 @@ function getAuthErrorMessage(error: unknown, provider: 'Google' | 'Apple'): stri
   }
   if (code === 'auth/popup-closed-by-user') {
     return 'The sign-in window was closed before sign-in finished.';
+  }
+  if (code === 'auth/configuration-not-found') {
+    return 'Sign-in is not configured in this local preview.';
   }
   return `Failed to sign in with ${provider}. Please try again.`;
 }
@@ -42,6 +49,10 @@ export function LoginClient() {
   const router = useRouter();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const signInUnavailable = !isFirebaseAuthConfigured;
+  const statusMessage =
+    error ??
+    (signInUnavailable ? 'Sign-in is not configured in this local preview.' : null);
 
   // Track page view
   useEffect(() => {
@@ -98,7 +109,7 @@ export function LoginClient() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-black">
+    <div className="relative min-h-[100svh] overflow-hidden bg-black">
       {/* Background Image with subtle floating animation */}
       <motion.div
         initial={{ opacity: 0, scale: 1.05 }}
@@ -130,7 +141,7 @@ export function LoginClient() {
           src="/login-bg.png"
           alt="Omi Product"
           fill
-          className="object-cover object-center"
+          className="object-contain object-center sm:object-cover"
           priority
         />
         {/* Darker overlay for better contrast */}
@@ -147,7 +158,7 @@ export function LoginClient() {
       />
 
       {/* Login Form (centered) */}
-      <div className="relative z-20 min-h-screen flex items-center justify-center px-4">
+      <div className="relative z-20 flex min-h-[100svh] items-center justify-center px-5 py-8 sm:px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -188,7 +199,7 @@ export function LoginClient() {
               overrides Tailwind's `-translate-x-1/2 -translate-y-1/2` and left
               the ring offset by half its own box.
             */}
-            <div className="fixed left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+            <div className="fixed left-1/2 top-[42%] z-10 -translate-x-1/2 -translate-y-1/2 sm:top-1/2">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -231,7 +242,7 @@ export function LoginClient() {
               {/* Apple Sign In */}
               <button
                 onClick={handleAppleSignIn}
-                disabled={isSigningIn !== null}
+                disabled={isSigningIn !== null || signInUnavailable}
                 aria-label="Sign in with Apple"
                 className={cn(
                   'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
@@ -239,7 +250,7 @@ export function LoginClient() {
                   'transition-all duration-150',
                   'hover:bg-gray-900',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:cursor-not-allowed disabled:bg-black disabled:text-white disabled:opacity-100',
                 )}
               >
                 {isSigningIn === 'apple' ? (
@@ -257,7 +268,7 @@ export function LoginClient() {
               {/* Google Sign In */}
               <button
                 onClick={handleGoogleSignIn}
-                disabled={isSigningIn !== null}
+                disabled={isSigningIn !== null || signInUnavailable}
                 aria-label="Sign in with Google"
                 className={cn(
                   'w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg',
@@ -265,7 +276,7 @@ export function LoginClient() {
                   'transition-all duration-150',
                   'hover:bg-gray-100',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:cursor-not-allowed disabled:bg-white disabled:text-black disabled:opacity-100',
                 )}
               >
                 {isSigningIn === 'google' ? (
@@ -296,17 +307,17 @@ export function LoginClient() {
               </button>
             </motion.div>
 
-            {/* App download message - for users without accounts */}
-            {/* Error message */}
-            {error && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mt-3 w-full rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-error text-sm text-center"
-              >
-                {error}
-              </motion.p>
-            )}
+            <div aria-live="polite" className="mt-3 min-h-[52px] w-full">
+              {statusMessage && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="w-full rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-sm text-error"
+                >
+                  {statusMessage}
+                </motion.p>
+              )}
+            </div>
           </div>
         </motion.div>
       </div>
