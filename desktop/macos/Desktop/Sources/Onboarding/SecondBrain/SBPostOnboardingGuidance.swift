@@ -173,19 +173,14 @@ enum SBPostOnboardingGuidance {
     talkShortcutTokens: [String],
     setup: SBSetupSnapshot
   ) -> [SBOrientationCue] {
-    // Describes what the window actually does now, which has changed twice. There is no closing it —
-    // `ShellWindowChrome` hides all three traffic lights — so the original cue ("closing this window
-    // doesn't stop me") named a control that does not exist. Its replacement promised the opposite of
-    // what the shell does today: it said clicking another app would put the window away, which was
-    // true only while `.summoned` meant `hidesOnDeactivate = true`. The shell now stays in front of
-    // whatever is behind it until asked to leave, so this says *that*, and names the two ways out. The
-    // menu bar icon is named rather than left to the chord cue below, because the chord is conditional
-    // and the icon is always there.
+    // Describe the signed-in shell's native click-away dismissal, then name the persistent way back.
+    // The menu bar icon is named rather than left to the chord cue below because the chord is
+    // conditional and the icon is always there.
     var cues: [SBOrientationCue] = [
       SBOrientationCue(
         id: "menubar",
         symbol: "menubar.arrow.up.rectangle",
-        title: "I stay in front while you work. Escape puts me away, and my menu bar icon brings me back.",
+        title: "Click the desktop or another app to put me away. My menu bar icon brings me back.",
         keys: [])
     ]
 

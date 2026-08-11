@@ -10,7 +10,6 @@ from typing import List, Optional, Dict, Any, Callable
 from google.api_core.exceptions import NotFound
 
 import utils.other.hume as hume
-from database import users as users_db
 from database.store import Filter, get_document_store
 from database.store.errors import AlreadyExists
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP

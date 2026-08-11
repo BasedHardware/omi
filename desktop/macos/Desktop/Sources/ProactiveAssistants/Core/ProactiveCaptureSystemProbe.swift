@@ -63,6 +63,15 @@ enum ProactiveCaptureSystemProbeReader {
       if ownerName == "Dock" {
         let windowName = window[kCGWindowName as String] as? String
         if windowName == nil || windowName?.isEmpty == true {
+          // The Dock also owns the full-screen desktop/wallpaper backstop, which sits at a
+          // deeply negative window layer and is on screen for the life of the session. The
+          // real Mission Control / Exposé overlay draws at a positive layer, above app
+          // windows. Without the layer cut the backstop matches the size rule and capture
+          // is skipped on every tick forever — no proactive analysis, ever. A window with
+          // no readable layer keeps the old size-only classification.
+          if let layer = window[kCGWindowLayer as String] as? Int, layer <= 0 {
+            continue
+          }
           if let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
             let width = bounds["Width"],
             let height = bounds["Height"],

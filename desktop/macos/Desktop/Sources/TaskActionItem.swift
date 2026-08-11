@@ -280,6 +280,23 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   /// Categories that trigger Claude agent execution
   static let agentCategories: Set<String> = ["feature", "bug", "code"]
 
+  /// Sources written by AI capture pipelines: desktop screen extraction
+  /// ("screenshot"), backend conversation extraction ("conversation"), voice
+  /// extraction ("transcription:omi" / "transcription:desktop"), and AI
+  /// suggestions ("ai_suggested"). A whitelist, not "anything non-manual" —
+  /// user-driven sources like "recurring" spawns, imports, and legacy nil/
+  /// "legacy" rows must stay in the normal due-date categories.
+  static let aiCaptureSources: Set<String> = ["screenshot", "conversation", "ai_suggested"]
+
+  /// An AI-captured task the user has not accepted yet. Accepting rewrites
+  /// `source` to "manual", which moves it into the due-date categories and
+  /// syncs the acceptance across devices without a new backend field.
+  var isPendingSuggestion: Bool {
+    guard !completed, !isRetired else { return false }
+    guard let source else { return false }
+    return Self.aiCaptureSources.contains(source) || source.hasPrefix("transcription")
+  }
+
   /// Get tags array from metadata or fall back to single category
   var tags: [String] {
     // First try to get tags from metadata JSON

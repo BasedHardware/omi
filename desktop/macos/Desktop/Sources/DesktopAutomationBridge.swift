@@ -1010,6 +1010,19 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "probe_suggestion_nudge",
+      summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
+      params: ["app", "window_title"]
+    ) { params in
+      let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
+      let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
+      return await ProactiveAssistantsPlugin.shared.probeSuggestionNudge(
+        appOverride: app,
+        windowTitleOverride: title
+      )
+    }
+
+    register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
       params: ["suppressed"]
@@ -1663,6 +1676,61 @@ final class DesktopAutomationActionRegistry {
         log("debug_reach_error: Retry tapped")
       }
       return ["shown": "true"]
+    }
+
+    // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
+    // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
+    // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
+    register(
+      name: "debug_hit_probe",
+      summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
+      params: ["x", "y"]
+    ) { params in
+      guard let x = Double(params["x"] ?? ""), let y = Double(params["y"] ?? "") else {
+        return ["error": "need x and y (screen top-left coords)"]
+      }
+      guard let primary = NSScreen.screens.first else { return ["error": "no screens"] }
+      let cocoaPoint = NSPoint(x: x, y: primary.frame.maxY - y)
+      var result: [String: String] = [
+        "screen_point_cg": "(\(Int(x)), \(Int(y)))",
+        "screen_point_cocoa": NSStringFromPoint(cocoaPoint),
+        "screens": NSScreen.screens.map { NSStringFromRect($0.frame) }.joined(separator: " | "),
+      ]
+      // Our own windows containing the point, front-to-back. Reliable where the window-server
+      // query is not; foreign overlap is diagnosed from outside via CGWindowList.
+      let containing = NSApp.windows
+        .filter { $0.isVisible && $0.frame.contains(cocoaPoint) }
+        .sorted { $0.orderedIndex < $1.orderedIndex }
+      result["own_windows_at_point"] =
+        containing.isEmpty
+        ? "none"
+        : containing.map { window in
+          var extras = ""
+          if let bar = window as? FloatingControlBarWindow {
+            let local = NSPoint(
+              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
+            extras =
+              " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          }
+          return
+            "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
+        }.joined(separator: " ; ")
+      if let window = containing.first {
+        let inWindow = window.convertPoint(fromScreen: cocoaPoint)
+        result["point_in_window"] = NSStringFromPoint(inWindow)
+        if let root = window.contentView?.superview ?? window.contentView {
+          let inRoot = root.convert(inWindow, from: nil)
+          let hit = root.hitTest(inRoot)
+          var chain: [String] = []
+          var view = hit
+          while let v = view, chain.count < 8 {
+            chain.append(String(describing: type(of: v)))
+            view = v.superview
+          }
+          result["hit_view_chain"] = chain.isEmpty ? "nil (click falls through)" : chain.joined(separator: " < ")
+        }
+      }
+      return result
     }
 
     register(

@@ -191,11 +191,10 @@ extension View {
   ///   - cornerRadius: the floating bar's surfaces are cut by their own geometry (a docked pill is
   ///     square where it meets the bezel), so unlike `inkGlassPanel` this has no single right answer
   ///     and the caller states it.
-  ///   - shadow: `nil` by default, and that is not an oversight. The panel is sized **once** to the
-  ///     maximum hover-menu extent and never resized (`FloatingControlBarWindow`), so there is no
-  ///     spare margin inside its bounds for an ambient shadow to fall into, and the surface it would
-  ///     fall onto is the screen bezel. The window's own `hasShadow` stays `false` for the same
-  ///     reason — a window shadow there traces a transparent rectangle much larger than the pill.
+  ///   - shadow: `nil` by default, and that is not an oversight. The panel hugs the current surface,
+  ///     so there is no spare margin inside its bounds for an ambient shadow to fall into, and the
+  ///     surface it would fall onto is the screen bezel. The window's own `hasShadow` stays `false`
+  ///     because an AppKit shadow would trace the rectangular panel rather than the pill.
   ///   - reduceTransparency: passed rather than read, for the same reason
   ///     `InkGlassView.apply(reduceTransparency:)` takes it: the setting is a machine setting a
   ///     hermetic test cannot flip, so a view that reads it directly has an accessibility path
@@ -222,9 +221,8 @@ extension View {
       }
       // **The clip is on the content, not only on the ground**, and that is load-bearing here in a
       // way it is not for `inkGlassPanel`: the bar's surfaces are a text editor, a scrolling response
-      // and a row of controls laid out to the window's full width, and the window is sized once to
-      // the maximum hover extent rather than to what is currently shown. Without it a long line runs
-      // out through the rounded corner and the pill stops having a shape.
+      // and a row of controls laid out to the window's full width. Without it a long line runs out
+      // through the rounded corner and the pill stops having a shape.
       .clipShape(shape)
       .overlay(shape.strokeBorder(NotchGlass.edge, lineWidth: 1))
       .shadow(

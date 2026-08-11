@@ -132,6 +132,44 @@ def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
         return None
 
 
+# A blocked newest SHA must not wedge the train indefinitely: fall back to the
+# newest older releasable SHA whose exact-SHA checks already succeeded, so the
+# last green tree keeps shipping while the tip is being fixed. Bounded so a
+# long-red history cannot turn the planner into a full-history scan.
+FALLBACK_SOURCE_CANDIDATES = 20
+
+
+def releasable_desktop_shas_since(ref: str | None) -> list[str]:
+    """First-parent commits (newest first) that touched releasable desktop paths."""
+    range_arg = "HEAD" if ref is None else f"{ref}..HEAD"
+    try:
+        output = git(
+            [
+                "log",
+                "--first-parent",
+                f"--max-count={FALLBACK_SOURCE_CANDIDATES}",
+                "--format=%H",
+                range_arg,
+                "--",
+                *DESKTOP_RELEASE_PATHS,
+            ]
+        )
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in output.splitlines() if line]
+
+
+def newest_green_fallback_source(repository: str, latest_tag: str | None, blocked_sha: str) -> tuple[str, str] | None:
+    """Newest older releasable SHA whose required checks all succeeded, if any."""
+    for sha in releasable_desktop_shas_since(latest_tag):
+        if sha == blocked_sha:
+            continue
+        gate = required_source_checks_gate(repository, sha)
+        if gate.state == "ready":
+            return sha, f"newest green releasable SHA behind blocked {blocked_sha[:12]}"
+    return None
+
+
 def check_run_sort_key(check_run: dict[str, object]) -> tuple[tuple[datetime, datetime, int] | None, str | None]:
     """Return a validated, deterministic ordering key for one GitHub check run."""
     check_run_id = check_run.get("id")
@@ -309,6 +347,41 @@ def github_candidate_release_published(repository: str, tag: str) -> tuple[bool 
     return release.get("isDraft") is False and isinstance(release.get("publishedAt"), str), None
 
 
+def candidate_publication_age_seconds(repository: str, tag: str) -> int | None:
+    """Age of the candidate's GitHub release, the hourly train's throttle clock.
+
+    Candidate tags are lightweight, so no local timestamp records when the tag
+    was CREATED — `git log --format=%ct <tag>` reads the tagged COMMIT's time,
+    and a tag pushed minutes ago onto an older commit would defeat the
+    throttle entirely. The release's createdAt is the authoritative
+    publication clock. No release yet means the candidate is still building
+    (the one-active-release fence owns that) or its build failed (the train
+    SHOULD cut a replacement), so the throttle deliberately stands aside.
+    """
+    result = subprocess.run(
+        ["gh", "release", "view", tag, "--repo", repository, "--json", "tagName,createdAt"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        release = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(release, dict) or release.get("tagName") != tag:
+        return None
+    created_at = release.get("createdAt")
+    if not isinstance(created_at, str):
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int(time.time() - created.timestamp()))
+
+
 def normal_candidate_lifecycle(repository: str, source_sha: str, tag: str) -> tuple[str, str]:
     """Return the tag-triggered candidate lifecycle without mutating it."""
     status, conclusion, error = codemagic_check_status(repository, source_sha)
@@ -421,6 +494,15 @@ def main() -> int:
         ),
     )
     parser.add_argument("--source-check-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
+    parser.add_argument(
+        "--min-tag-interval-seconds",
+        type=int,
+        default=0,
+        help=(
+            "Defer tagging while the latest desktop tag is younger than this "
+            "(the hourly release train's throttle; 0 disables it for manual dispatch)"
+        ),
+    )
     parser.add_argument("--watch-source-sha")
     parser.add_argument("--watch-max-polls", type=int, default=1)
     parser.add_argument("--watch-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
@@ -450,8 +532,22 @@ def main() -> int:
         )
 
     latest_tag = latest_desktop_tag()
-    changes = releasable_desktop_changes_since(latest_tag)
     set_output("latest_tag", latest_tag or "")
+
+    if args.min_tag_interval_seconds > 0 and latest_tag is not None:
+        latest_candidate_age = candidate_publication_age_seconds(args.repository, latest_tag)
+        if latest_candidate_age is not None and latest_candidate_age < args.min_tag_interval_seconds:
+            remaining = args.min_tag_interval_seconds - latest_candidate_age
+            set_output("source_sha", "")
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                f"Hourly release train: candidate {latest_tag} published {latest_candidate_age}s ago; "
+                f"next candidate in {remaining}s.",
+            )
+            return 0
+
+    changes = releasable_desktop_changes_since(latest_tag)
 
     if not changes:
         set_output("source_sha", "")
@@ -509,9 +605,23 @@ def main() -> int:
         set_output("reason", f"Waiting for required exact-SHA checks: {source_check_gate.reason}.")
         return 0
     if source_check_gate.state == "blocked":
-        set_output("should_release", "false")
-        set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
-        return 0
+        fallback = newest_green_fallback_source(args.repository, latest_tag, source_sha)
+        if fallback is None:
+            set_output("should_release", "false")
+            set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
+            return 0
+        fallback_sha, fallback_note = fallback
+        print(
+            f"::warning::Newest releasable SHA {source_sha} is blocked "
+            f"({source_check_gate.reason}); falling back to {fallback_note}."
+        )
+        source_sha = fallback_sha
+        set_output("source_sha", source_sha)
+        existing_candidate = existing_source_candidate_reason(args.repository, source_sha)
+        if existing_candidate:
+            set_output("should_release", "false")
+            set_output("reason", f"Desktop candidate already exists for fallback source: {existing_candidate}")
+            return 0
 
     active_reason = active_release_reason(args.repository, latest_tag)
     if active_reason:
