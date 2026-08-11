@@ -185,24 +185,6 @@ fi
 check_pr_preflight() {
   local has_supplied_pr_body=0
 
-  if [ "${PRE_PUSH_SKIP_PR_PREFLIGHT:-}" = "1" ]; then
-    # The broad preflight hatch is useful when local PR metadata discovery is
-    # unavailable, but it must not let a recurring failure class bypass the
-    # guard-artifact ratchet that CI enforces. That check is deterministic and
-    # needs only the already-required local PR body, so keep it mandatory.
-    if [ -z "${OMI_PR_BODY_FILE:-}" ] || [ ! -f "${OMI_PR_BODY_FILE}" ]; then
-      echo "FAIL: PRE_PUSH_SKIP_PR_PREFLIGHT=1 requires OMI_PR_BODY_FILE so the failure-class guard-artifact ratchet still runs." >&2
-      return 1
-    fi
-    echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
-    echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
-    python3 .github/scripts/check_failure_class_guard_ratchet.py \
-      --pr-body-file "$OMI_PR_BODY_FILE"
-    ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
-    ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
-    return
-  fi
-
   if [ -n "${OMI_PR_BODY_FILE:-}" ]; then
     has_supplied_pr_body=1
   fi

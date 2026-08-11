@@ -681,7 +681,6 @@ export function verifyReceiptObject(lane, receipt) {
 // prose and are never inspected.
 
 const LANES_TRAILER = /^Lanes:\s*(\S.*)$/;
-const OVERRIDE_TRAILER = /^Lane-Claim-Override:\s*(.*)$/;
 
 /**
  * Extract the claimed lanes from a commit message. Only a line matching
@@ -706,28 +705,6 @@ export function parseLaneClaims(message) {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-}
-
-/**
- * Extract the override trailer, if present. Mirrors the fence's
- * `// storage-provenance-ok(<reason>)` idiom: an escape hatch that is
- * accepted, reported loudly by the caller, and requires a non-empty reason.
- *
- * Returns `{ present, reason, valid }`:
- *   present  a `Lane-Claim-Override:` line exists (last one wins, as above)
- *   reason   its trimmed value ("" if none)
- *   valid    present AND reason is non-empty
- */
-export function parseLaneClaimOverride(message) {
-  const lines = String(message ?? "").split(/\r?\n/);
-  let matched = null;
-  for (const line of lines) {
-    const m = OVERRIDE_TRAILER.exec(line);
-    if (m) matched = m[1];
-  }
-  if (matched === null) return { present: false, reason: "", valid: false };
-  const reason = matched.trim();
-  return { present: true, reason, valid: reason.length > 0 };
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────────────

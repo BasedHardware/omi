@@ -23,12 +23,8 @@
 // prose gets routed around, and once routed around it protects nothing. Only
 // an exact `Lanes: L0,L1,L2` trailer line is ever inspected.
 //
-// THE OVERRIDE HATCH. AGENTS.md: "A broken gate is never a reason to be
-// stuck." A `Lane-Claim-Override: <reason>` trailer bypasses a failing check
-// — but is REPORTED loudly (never silently accepted) and requires a
-// non-empty reason, mirroring the fence's `// storage-provenance-ok(<reason>)`
-// idiom in lint-import-graph.ts. A gate with no hatch trains people to bypass
-// the whole system instead of just the one broken check.
+// CLAIMS HAVE NO MESSAGE-LEVEL BYPASS. A failed or missing receipt is not a
+// verified lane, so no commit trailer may convert that failure into success.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -38,7 +34,6 @@ import {
   LANE_IDS,
   verifyReceipt,
   parseLaneClaims,
-  parseLaneClaimOverride,
 } from "./lib/receipts.mjs";
 import { REPO_PATHS } from "./lib/provenance.mjs";
 
@@ -98,10 +93,9 @@ const NEXT_ACTION = {
 
 export function checkLaneClaims(message, { workspaceRoot } = {}) {
   const claims = parseLaneClaims(message);
-  const override = parseLaneClaimOverride(message);
 
   if (claims.length === 0) {
-    return { ok: true, claims: [], failures: [], override: override.present ? override : null };
+    return { ok: true, claims: [], failures: [] };
   }
 
   const failures = [];
@@ -118,27 +112,10 @@ export function checkLaneClaims(message, { workspaceRoot } = {}) {
   }
 
   if (failures.length === 0) {
-    return { ok: true, claims, failures: [], override: override.present ? override : null };
+    return { ok: true, claims, failures: [] };
   }
 
-  // Override present but malformed (no reason) is NOT a pass-through — an
-  // override that silently ignores its own missing reason is not "reported
-  // loudly", it's just a hole.
-  if (override.present && !override.valid) {
-    return {
-      ok: false,
-      claims,
-      failures,
-      override,
-      overrideError: 'Lane-Claim-Override trailer present but empty — it requires a non-empty reason.',
-    };
-  }
-
-  if (override.present && override.valid) {
-    return { ok: true, claims, failures, override, overridden: true };
-  }
-
-  return { ok: false, claims, failures, override: null };
+  return { ok: false, claims, failures };
 }
 
 function main() {
@@ -171,56 +148,11 @@ function main() {
 
   const result = checkLaneClaims(message);
 
-  if (result.overrideError) {
-    const error = result.overrideError;
-    if (json) {
-      console.log(
-        JSON.stringify(
-          { error, next_actions: ["Add a reason: `Lane-Claim-Override: <why>`."] },
-          null,
-          2,
-        ),
-      );
-    } else {
-      console.error(`✗ ${error}`);
-    }
-    process.exit(1);
-  }
-
   if (result.claims.length === 0) {
     if (json) {
       console.log(JSON.stringify({ ok: true, claims: [] }, null, 2));
     } else {
       console.log("no `Lanes:` trailer — no lane claims to verify.");
-    }
-    process.exit(0);
-  }
-
-  if (result.overridden) {
-    // REPORTED LOUDLY: this is the one output that must never be quiet, in
-    // either mode, because it is the record of a gate being bypassed.
-    const banner =
-      `OVERRIDE — Lane-Claim-Override: ${result.override.reason}\n` +
-      `The following claimed lane(s) failed verification and were bypassed:\n` +
-      result.failures.map((f) => `  - ${f.lane}: ${f.reason}`).join("\n");
-    if (json) {
-      console.log(
-        JSON.stringify(
-          {
-            ok: true,
-            claims: result.claims,
-            overridden: true,
-            override_reason: result.override.reason,
-            bypassed_failures: result.failures,
-          },
-          null,
-          2,
-        ),
-      );
-      console.error(banner);
-    } else {
-      console.error(`⚠ ${banner}`);
-      console.log(`lane claims [${result.claims.join(", ")}] accepted via override.`);
     }
     process.exit(0);
   }
@@ -248,9 +180,6 @@ function main() {
         console.error(`    ${f.lane}: ${f.reason}`);
         console.error(`      -> ${f.nextAction}`);
       }
-      console.error(
-        "    (Escape hatch: add a `Lane-Claim-Override: <reason>` trailer if this gate itself is broken.)",
-      );
     }
     process.exit(1);
   }
