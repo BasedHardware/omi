@@ -315,6 +315,11 @@ test("platform Listen client refuses a start that bypasses a denied native prefl
     preflight,
     openSocket() { throw new Error("socket must not open before preflight"); },
   });
+  const exposed = client.preflight();
+  assert.ok(Object.isFrozen(exposed));
+  assert.ok(Object.isFrozen(exposed.device));
+  assert.throws(() => { exposed.permission = "granted"; }, TypeError);
+  assert.equal(client.preflight().permission, "denied", "client returns an immutable detached snapshot");
   await assert.rejects(client.start(), (error) => error.code === "permission-required");
   state = { permission: "granted", device: { state: "available", label: "Default microphone" }, recovery: null };
   await assert.rejects(client.start(), /socket must not open/);
