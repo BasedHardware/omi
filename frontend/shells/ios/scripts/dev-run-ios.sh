@@ -76,6 +76,10 @@ if [[ -n "$evidence_out" ]]; then
     exit 2
   }
 fi
+if [[ -n "$evidence_out" && -z "$run_id_arg" ]] || [[ -z "$evidence_out" && -n "$run_id_arg" ]]; then
+  echo "ERROR: --evidence-out and --run-id must be supplied together." >&2
+  exit 2
+fi
 
 case "$route" in
   home|memories|conversations|tasks|folders|chat|settings|listen) ;;
@@ -170,8 +174,12 @@ else
     exit 1
   fi
   # The simulator shares the host network stack, so 127.0.0.1 reaches the host.
+  surface_query="route=${route}&platform=mobile"
+  if [[ -n "$evidence_out" ]]; then
+    surface_query="${surface_query}&generation=platform"
+  fi
   defines+=(
-    --dart-define=SURFACE_QUERY="route=${route}&platform=mobile"
+    --dart-define=SURFACE_QUERY="$surface_query"
     --dart-define=OMI_API_BASE_URL="$api_base"
     --dart-define=OMI_API_TOKEN="$token"
     --dart-define=OMI_RUN_CLIENT_ID="$run_id"
