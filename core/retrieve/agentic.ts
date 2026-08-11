@@ -323,7 +323,7 @@ export const retrieveAgentic = async (
   const { spans, claimIds } = evidenceFromIds(input, selected);
   const limited = uniqByEvidenceId(spans).slice(0, maxEvidence);
   if (!limited.length) {
-    return { answer_text: null, citations: [], hydrated_claim_revision_ids: [], absence: { kind: "query_gap", message: "no cited memory matched" } satisfies AbsenceDisclosure, grounding: null, agent_steps: trace.length, agent_trace: trace };
+    return { answer_text: null, citations: [], assertions: [], hydrated_claim_revision_ids: [], absence: { kind: "query_gap", message: "no cited memory matched" } satisfies AbsenceDisclosure, grounding: null, agent_steps: trace.length, agent_trace: trace };
   }
 
   const composeInput = { query: request.query, evidence_spans: limited.map((span) => ({ evidence_id: span.evidence_id, excerpt: span.excerpt })) };
@@ -347,6 +347,7 @@ export const retrieveAgentic = async (
     return {
       answer_text: salvaged.answer_text,
       citations: salvaged.citations,
+      assertions: salvaged.assertions,
       hydrated_claim_revision_ids,
       absence: null,
       grounding: { status: "grounded" },
@@ -357,6 +358,7 @@ export const retrieveAgentic = async (
   return {
     answer_text: null,
     citations: [],
+    assertions: [],
     hydrated_claim_revision_ids: [],
     absence: { kind: "query_gap", message: "no cited memory matched" } satisfies AbsenceDisclosure,
     grounding: null,

@@ -71,7 +71,7 @@ export const answerQuestion = async (request: RecallRequest): Promise<RecallAnsw
   if (logPath) {
     const dbFile = request.db.filename;
     appendRecallLog(logPath, {
-      schema_version: "recall_log.v2",
+      schema_version: "recall_log.v3",
       recorded_at: new Date().toISOString(),
       host: hostname(),
       db: dbFile && dbFile !== ":memory:" ? basename(dbFile) : null,
@@ -80,6 +80,10 @@ export const answerQuestion = async (request: RecallRequest): Promise<RecallAnsw
       ms: Date.now() - started,
       answer_text: answer.answer_text,
       citations: answer.citations,
+      grounded_assertion_citations: answer.assertions.map((assertion, ordinal) => ({
+        ordinal,
+        citations: assertion.citations,
+      })),
       absence: answer.absence?.kind ?? null,
       grounding: answer.grounding?.status ?? null,
       agent_steps: answer.agent_steps ?? null,

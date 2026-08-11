@@ -26,6 +26,8 @@ export type AbsenceDisclosure =
 export interface DogfoodResponse {
   answer_text: string | null;
   citations: readonly string[];
+  /** Final assertion-local grounding after entailment. Empty for every non-grounded outcome. */
+  assertions: readonly { text: string; citations: readonly string[] }[];
   hydrated_claim_revision_ids: readonly string[];
   absence: AbsenceDisclosure | null;
   grounding: { status: "grounded" } | { status: "ungrounded"; failures: readonly string[] } | null;
@@ -82,7 +84,7 @@ export const retrieveDogfood = async (request: DogfoodRequest, graph: GraphSnaps
   const hydrated = selected.filter((claim) => eligible.has(claim.claim_revision_id));
   const allLive = new Set(liveCommittedClaims(graph).filter((claim) => claim.placement_status === "canonical").map((claim) => claim.revision_id));
   const policy_omitted = selected.some((claim) => allLive.has(claim.claim_revision_id) && !safeEligible.has(claim.claim_revision_id));
-  if (!hydrated.length) return { answer_text: null, citations: [], hydrated_claim_revision_ids: [], absence: policy_omitted ? { kind: "policy_omission", grant_class: request.request_context.grant.grant_id, message: "some matching memory is omitted by your grant class" } : { kind: "query_gap", message: "no cited memory matched" }, grounding: null };
+  if (!hydrated.length) return { answer_text: null, citations: [], assertions: [], hydrated_claim_revision_ids: [], absence: policy_omitted ? { kind: "policy_omission", grant_class: request.request_context.grant.grant_id, message: "some matching memory is omitted by your grant class" } : { kind: "query_gap", message: "no cited memory matched" }, grounding: null };
   const spans = hydrated.flatMap((claim) => claim.evidence_spans).filter((span) => span.excerpt !== null);
   const permittedCitations = new Set(spans.map((span) => span.evidence_id));
   const composed = await model.compose({ strategy: "citation-grounded-compose", version: model_version, input: { query: request.query, evidence_spans: spans.map((span) => ({ evidence_id: span.evidence_id, excerpt: span.excerpt })) } });
@@ -108,6 +110,10 @@ export const retrieveDogfood = async (request: DogfoodRequest, graph: GraphSnaps
   if (composed.answer_text && composed.assertions.length === 0) failures.push("non-empty answer has no asserted-claim grounding manifest");
   const citations = [...new Set(composed.citations.filter((citation) => permittedCitations.has(citation)))].sort();
   const hydrated_claim_revision_ids = hydrated.map((claim) => claim.claim_revision_id).sort();
-  if (failures.length) return { answer_text: null, citations: [], hydrated_claim_revision_ids, absence: null, grounding: { status: "ungrounded", failures } };
-  return { answer_text: composed.answer_text, citations, hydrated_claim_revision_ids, absence: null, grounding: { status: "grounded" } };
+  if (failures.length) return { answer_text: null, citations: [], assertions: [], hydrated_claim_revision_ids, absence: null, grounding: { status: "ungrounded", failures } };
+  const assertions = composed.assertions.map((assertion) => ({
+    text: assertion.text,
+    citations: [...new Set(assertion.citations.filter((citation) => permittedCitations.has(citation)))].sort(),
+  }));
+  return { answer_text: composed.answer_text, citations, assertions, hydrated_claim_revision_ids, absence: null, grounding: { status: "grounded" } };
 };

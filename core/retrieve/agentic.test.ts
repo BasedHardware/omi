@@ -262,6 +262,7 @@ test("partial entailment salvages grounded assertions and drops the rest", async
   expect(answer.answer_text).toContain("friend");
   expect(answer.answer_text).not.toContain("dog");
   expect(answer.citations).toEqual([evidenceId]);
+  expect(answer.assertions).toEqual([{ text: "John is your friend.", citations: [evidenceId] }]);
 });
 
 test("no host packs or expandQuery; people and tools queries share one path", () => {

@@ -282,7 +282,7 @@ test("G2 SQLite adversarial D35: a lexically-smaller tombstone committed later l
   expect(input.claims).toEqual([]);
   expect(buildDeterministicAnchors(input)).toEqual(buildDeterministicAnchors(emptyInput));
   expect(ledger.retrieve({ owner_account_id: "owner-1", kind: "as_of", date: "2026-01-03" })).toEqual({ claims: [], absence: { kind: "query_gap", message: "no cited memory matched" } });
-  expect(await retrieveDogfood({ owner_account_id: "owner-1", query: "d35", as_of: "2026-01-03", request_context: { reader_account_id: "owner-1", grant } }, retracted, input, [], new DeterministicFakeModel())).toEqual({ answer_text: null, citations: [], hydrated_claim_revision_ids: [], absence: { kind: "query_gap", message: "no cited memory matched" }, grounding: null });
+  expect(await retrieveDogfood({ owner_account_id: "owner-1", query: "d35", as_of: "2026-01-03", request_context: { reader_account_id: "owner-1", grant } }, retracted, input, [], new DeterministicFakeModel())).toEqual({ answer_text: null, citations: [], assertions: [], hydrated_claim_revision_ids: [], absence: { kind: "query_gap", message: "no cited memory matched" }, grounding: null });
 });
 
 test("G2 SQLite adversarial D35: a purge fence survives reconstructing the ledger from the same database", () => {

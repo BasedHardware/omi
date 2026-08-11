@@ -147,10 +147,11 @@ test("owner recall appends a versioned JSONL log for every answerQuestion call",
     const lines = readFileSync(join(log_dir, "agentic-recall-v2.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({
-      schema_version: "recall_log.v2",
+      schema_version: "recall_log.v3",
       model_version: "agentic-recall-v2",
       query: "Atlas",
       answer_text: "Nora runs the Atlas rollout.",
+      grounded_assertion_citations: [{ ordinal: 0, citations: ["evidence:atlas"] }],
       grounding: "grounded",
       absence: null,
     });

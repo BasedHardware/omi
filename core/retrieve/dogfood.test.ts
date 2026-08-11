@@ -18,6 +18,7 @@ test("R4 composes only hydrated evidence, reports query gaps, and never entity-l
   const renders = await renderStructuralTree(buildDeterministicAnchors(input), input, renderModel, options);
   const answer = await retrieveDogfood({ owner_account_id: "owner", query: "met", entity_id: "entity", request_context: ownerContext }, graph, input, renders, composeModel);
   expect(answer.citations).toEqual(["e1"]);
+  expect(answer.assertions).toEqual([{ text: "grounded", citations: ["e1"] }]);
   expect(answer.hydrated_claim_revision_ids).not.toContain("provisional");
   expect((await retrieveDogfood({ owner_account_id: "owner", query: "missing", entity_id: "entity", request_context: ownerContext }, graph, input, renders, composeModel)).absence).toEqual({ kind: "query_gap", message: "no cited memory matched" });
 });
