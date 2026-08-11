@@ -30,6 +30,16 @@ beforeEach(() => {
   // jsdom has no layout, so the anchor's scroll call has to be stubbed for the
   // component to be renderable at all.
   Element.prototype.scrollIntoView = vi.fn();
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 });
 
 describe('RecordingStage during startup', () => {
@@ -76,5 +86,100 @@ describe('RecordingStage transcript', () => {
 
     expect(scrollIntoView.mock.calls.length).toBeGreaterThan(initialCalls);
     expect(screen.getByTestId('transcript-end')).toBeInTheDocument();
+  });
+
+  it('replaces a partial segment live without duplicating it', () => {
+    const { rerender } = renderStage({ segments: [segment('live', 'Hello')] });
+
+    rerender(
+      <RecordingStage
+        segments={[segment('live', 'Hello from the live transcript')]}
+        duration={1}
+        level={0.8}
+        isPaused={false}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Hello')).not.toBeInTheDocument();
+    expect(screen.getByText('Hello from the live transcript')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+  });
+});
+
+describe('RecordingStage Omi ring', () => {
+  function geometry() {
+    return Array.from(
+      screen.getByRole('img', { name: 'Omi' }).querySelectorAll('circle'),
+    ).map((circle) => [
+      circle.getAttribute('cx'),
+      circle.getAttribute('cy'),
+      circle.getAttribute('opacity'),
+    ]);
+  }
+
+  it('keeps one ring geometry while starting, listening, and paused', () => {
+    const { rerender } = renderStage({ isInitializing: true, level: 0 });
+    const starting = geometry();
+
+    rerender(
+      <RecordingStage
+        segments={[]}
+        duration={1}
+        level={1}
+        isPaused={false}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    const listening = geometry();
+
+    rerender(
+      <RecordingStage
+        segments={[]}
+        duration={1}
+        level={0}
+        isPaused
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(listening).toEqual(starting);
+    expect(geometry()).toEqual(starting);
+    expect(starting.every((dot) => dot[2] === '0.84')).toBe(true);
+  });
+
+  it('keeps the ring stationary with reduced motion', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const { rerender } = renderStage({ level: 0 });
+    const resting = geometry();
+
+    rerender(
+      <RecordingStage
+        segments={[]}
+        duration={1}
+        level={1}
+        isPaused={false}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(geometry()).toEqual(resting);
   });
 });
