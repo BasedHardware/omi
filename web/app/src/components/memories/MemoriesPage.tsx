@@ -630,7 +630,12 @@ export function MemoriesPage() {
                         <MemoryList
                           memories={filteredMemories}
                           loading={loading}
-                          hasMore={hasMore && !searchQuery && !selectedTag}
+                          hasMore={
+                            hasMore &&
+                            activeCategories.length === 0 &&
+                            !searchQuery &&
+                            !selectedTag
+                          }
                           onLoadMore={loadMore}
                           onEdit={editMemory}
                           onDelete={removeMemory}
@@ -646,6 +651,18 @@ export function MemoriesPage() {
                             !isSelectMode ? enterSelectionModeWithId : undefined
                           }
                         />
+                        {activeCategories.length > 0 && hasMore && (
+                          <button
+                            type="button"
+                            onClick={() => void loadMore()}
+                            disabled={loading}
+                            className="mx-auto mt-3 rounded-control border border-stroke px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50"
+                          >
+                            {loading
+                              ? 'Searching older memories…'
+                              : 'Search older memories'}
+                          </button>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>

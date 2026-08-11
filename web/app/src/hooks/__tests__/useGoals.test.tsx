@@ -120,22 +120,115 @@ describe('useGoals', () => {
     const { result } = await renderLoaded();
     vi.mocked(api.updateGoalProgress).mockRejectedValue(new Error('conflict'));
 
+    let succeeded = true;
     await act(async () => {
-      await result.current.setProgress('goal-1', 7);
+      succeeded = await result.current.setProgress('goal-1', 7);
     });
 
+    expect(succeeded).toBe(false);
     expect(result.current.goals[0].current_value).toBe(3);
     expect(result.current.error).toBe('conflict');
+  });
+
+  it('serializes overlapping writes for the same goal', async () => {
+    const { result } = await renderLoaded();
+    let resolveRename: ((value: Goal) => void) | undefined;
+    let resolveProgress: ((value: Goal) => void) | undefined;
+    vi.mocked(api.updateGoal).mockReturnValue(
+      new Promise<Goal>((resolve) => {
+        resolveRename = resolve;
+      }),
+    );
+    vi.mocked(api.updateGoalProgress).mockReturnValue(
+      new Promise<Goal>((resolve) => {
+        resolveProgress = resolve;
+      }),
+    );
+
+    let renamePromise: Promise<boolean>;
+    let progressPromise: Promise<boolean>;
+    act(() => {
+      renamePromise = result.current.editGoal('goal-1', { title: 'Read more books' });
+      progressPromise = result.current.setProgress('goal-1', 7);
+    });
+
+    expect(result.current.goals[0].title).toBe('Read more books');
+    expect(api.updateGoal).toHaveBeenCalledOnce();
+    expect(api.updateGoalProgress).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveRename?.(goal({ title: 'Read more books' }));
+      await renamePromise!;
+    });
+
+    await waitFor(() => expect(api.updateGoalProgress).toHaveBeenCalledOnce());
+    expect(result.current.goals[0]).toEqual(
+      expect.objectContaining({ title: 'Read more books', current_value: 7 }),
+    );
+
+    await act(async () => {
+      resolveProgress?.(goal({ title: 'Read more books', current_value: 7 }));
+      await progressPromise!;
+    });
+
+    expect(result.current.goals[0]).toEqual(
+      expect.objectContaining({ title: 'Read more books', current_value: 7 }),
+    );
+  });
+
+  it('does not let a failed earlier write roll back a later write', async () => {
+    const { result } = await renderLoaded();
+    let rejectRename: ((reason: Error) => void) | undefined;
+    let resolveProgress: ((value: Goal) => void) | undefined;
+    vi.mocked(api.updateGoal).mockReturnValue(
+      new Promise<Goal>((_resolve, reject) => {
+        rejectRename = reject;
+      }),
+    );
+    vi.mocked(api.updateGoalProgress).mockReturnValue(
+      new Promise<Goal>((resolve) => {
+        resolveProgress = resolve;
+      }),
+    );
+
+    let renamePromise: Promise<boolean>;
+    let progressPromise: Promise<boolean>;
+    act(() => {
+      renamePromise = result.current.editGoal('goal-1', { title: 'Read more books' });
+      progressPromise = result.current.setProgress('goal-1', 7);
+    });
+
+    await act(async () => {
+      rejectRename?.(new Error('rename conflict'));
+      expect(await renamePromise!).toBe(false);
+    });
+
+    await waitFor(() => expect(api.updateGoalProgress).toHaveBeenCalledOnce());
+    expect(result.current.goals[0]).toEqual(
+      expect.objectContaining({ title: 'Read books', current_value: 7 }),
+    );
+    expect(result.current.error).toBe('rename conflict');
+
+    await act(async () => {
+      resolveProgress?.(goal({ current_value: 7 }));
+      expect(await progressPromise!).toBe(true);
+    });
+
+    expect(result.current.goals[0]).toEqual(
+      expect.objectContaining({ title: 'Read books', current_value: 7 }),
+    );
   });
 
   it('restores a deleted goal when the delete fails', async () => {
     const { result } = await renderLoaded();
     vi.mocked(api.deleteGoal).mockRejectedValue(new Error('offline'));
 
+    let succeeded = true;
     await act(async () => {
-      await result.current.removeGoal('goal-1');
+      succeeded = await result.current.removeGoal('goal-1');
     });
 
+    expect(succeeded).toBe(false);
     expect(result.current.goals.map((entry) => entry.id)).toEqual(['goal-1']);
     expect(result.current.error).toBe('offline');
   });

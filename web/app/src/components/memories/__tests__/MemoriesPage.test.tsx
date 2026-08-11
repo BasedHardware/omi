@@ -1,11 +1,15 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoriesPage } from '@/components/memories/MemoriesPage';
 
 const mocks = vi.hoisted(() => ({
   loading: false,
   reducedMotion: false,
+  hasMore: false,
+  activeCategories: [] as string[],
+  loadMore: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock('framer-motion', async () => {
@@ -47,8 +51,8 @@ vi.mock('@/hooks/useMemories', () => ({
     memories: [],
     loading: mocks.loading,
     error: null,
-    hasMore: false,
-    loadMore: vi.fn(),
+    hasMore: mocks.hasMore,
+    loadMore: mocks.loadMore,
     addMemory: vi.fn(),
     editMemory: vi.fn(),
     removeMemory: vi.fn(),
@@ -57,7 +61,7 @@ vi.mock('@/hooks/useMemories', () => ({
     acceptMemory: vi.fn(),
     rejectMemory: vi.fn(),
     setCategories: vi.fn(),
-    activeCategories: [],
+    activeCategories: mocks.activeCategories,
   }),
 }));
 
@@ -82,7 +86,9 @@ vi.mock('@/components/memories/MemoryQuickAdd', () => ({
 }));
 
 vi.mock('@/components/memories/MemoryList', () => ({
-  MemoryList: () => <div data-testid="memory-list" />,
+  MemoryList: ({ hasMore }: { hasMore: boolean }) => (
+    <div data-testid="memory-list" data-has-more={hasMore} />
+  ),
   MemoryListSkeleton: () => <div data-testid="memory-list-skeleton" />,
 }));
 
@@ -90,6 +96,9 @@ describe('MemoriesPage list layout', () => {
   beforeEach(() => {
     mocks.loading = false;
     mocks.reducedMotion = false;
+    mocks.hasMore = false;
+    mocks.activeCategories = [];
+    mocks.loadMore.mockReset();
   });
 
   it('gives the desktop list column the remaining height without changing mobile flow', () => {
@@ -145,5 +154,18 @@ describe('MemoriesPage list layout', () => {
       'data-motion-duration',
       '0.08',
     );
+  });
+
+  it('loads category pages only after an explicit request', async () => {
+    mocks.hasMore = true;
+    mocks.activeCategories = ['system'];
+    render(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list')).toHaveAttribute('data-has-more', 'false');
+    expect(mocks.loadMore).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search older memories' }));
+
+    expect(mocks.loadMore).toHaveBeenCalledOnce();
   });
 });

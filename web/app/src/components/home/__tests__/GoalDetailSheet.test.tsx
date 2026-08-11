@@ -39,6 +39,19 @@ function setup(overrides: Partial<Goal> = {}) {
   return { onSave, onClose, user: userEvent.setup() };
 }
 
+function renderSheet(
+  currentGoal: Goal | null,
+  onSave = vi.fn().mockResolvedValue(true),
+  onClose = vi.fn(),
+) {
+  return {
+    ...render(<GoalDetailSheet goal={currentGoal} onClose={onClose} onSave={onSave} />),
+    onSave,
+    onClose,
+    user: userEvent.setup(),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -72,6 +85,35 @@ describe('GoalDetailSheet', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(onSave).toHaveBeenCalledWith('goal-1', { unit: null });
+  });
+
+  it('keeps the edited draft open when saving fails', async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    const { onClose, user } = renderSheet(goal(), onSave);
+    const title = await screen.findByLabelText('Title');
+
+    await user.clear(title);
+    await user.type(title, 'Read more books');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByText('Could not save this goal. Please try again.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Title')).toHaveValue('Read more books');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('discards an abandoned draft before reopening the same goal', async () => {
+    const originalGoal = goal();
+    const { rerender, user } = renderSheet(originalGoal);
+    const title = await screen.findByLabelText('Title');
+
+    await user.clear(title);
+    await user.type(title, 'Abandoned draft');
+    rerender(<GoalDetailSheet goal={null} onClose={vi.fn()} onSave={vi.fn()} />);
+    rerender(<GoalDetailSheet goal={originalGoal} onClose={vi.fn()} onSave={vi.fn()} />);
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('Read books');
   });
 
   it('cannot save when nothing has changed, which the backend 400s', async () => {

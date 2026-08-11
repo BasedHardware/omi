@@ -43,6 +43,21 @@ export function createGoalsStore() {
   const goals = createSignal<Goal[]>([]);
   const loading = createSignal(true);
   const error = createSignal<string | null>(null);
+  const mutationTails = new Map<string, Promise<void>>();
+
+  const enqueueMutation = <T>(id: string, mutation: () => Promise<T>): Promise<T> => {
+    const previous = mutationTails.get(id);
+    const result = previous ? previous.then(mutation) : mutation();
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    mutationTails.set(id, tail);
+    void tail.then(() => {
+      if (mutationTails.get(id) === tail) mutationTails.delete(id);
+    });
+    return result;
+  };
 
   const load = async () => {
     loading.set(true);
@@ -63,24 +78,29 @@ export function createGoalsStore() {
     apply: (goal: Goal) => Goal,
     request: () => Promise<Goal>,
     failureMessage: string,
-  ): Promise<boolean> => {
-    const previous = goals.peek().find((goal) => goal.id === id);
-    goals.set((current) => current.map((goal) => (goal.id === id ? apply(goal) : goal)));
+  ): Promise<boolean> =>
+    enqueueMutation(id, async () => {
+      const previous = goals.peek().find((goal) => goal.id === id);
+      goals.set((current) =>
+        current.map((goal) => (goal.id === id ? apply(goal) : goal)),
+      );
 
-    try {
-      const updated = await request();
-      goals.set((current) => current.map((goal) => (goal.id === id ? updated : goal)));
-      error.set(null);
-      return true;
-    } catch (err) {
-      console.error(failureMessage, err);
-      if (previous) {
-        goals.set((current) => current.map((goal) => (goal.id === id ? previous : goal)));
+      try {
+        const updated = await request();
+        goals.set((current) => current.map((goal) => (goal.id === id ? updated : goal)));
+        error.set(null);
+        return true;
+      } catch (err) {
+        console.error(failureMessage, err);
+        if (previous) {
+          goals.set((current) =>
+            current.map((goal) => (goal.id === id ? previous : goal)),
+          );
+        }
+        error.set(messageFor(err, failureMessage));
+        return false;
       }
-      error.set(messageFor(err, failureMessage));
-      return false;
-    }
-  };
+    });
 
   const add = async (params: CreateGoalParams): Promise<Goal | null> => {
     try {
@@ -95,23 +115,24 @@ export function createGoalsStore() {
     }
   };
 
-  const remove = async (id: string): Promise<boolean> => {
-    const removed = goals.peek().find((goal) => goal.id === id);
-    goals.set((current) => current.filter((goal) => goal.id !== id));
+  const remove = (id: string): Promise<boolean> =>
+    enqueueMutation(id, async () => {
+      const removed = goals.peek().find((goal) => goal.id === id);
+      goals.set((current) => current.filter((goal) => goal.id !== id));
 
-    try {
-      await deleteGoal(id);
-      error.set(null);
-      return true;
-    } catch (err) {
-      console.error('Failed to delete goal:', err);
-      if (removed) {
-        goals.set((current) => [...current, removed]);
+      try {
+        await deleteGoal(id);
+        error.set(null);
+        return true;
+      } catch (err) {
+        console.error('Failed to delete goal:', err);
+        if (removed) {
+          goals.set((current) => [...current, removed]);
+        }
+        error.set(messageFor(err, 'Failed to delete goal'));
+        return false;
       }
-      error.set(messageFor(err, 'Failed to delete goal'));
-      return false;
-    }
-  };
+    });
 
   return { goals, loading, error, load, optimistic, add, remove };
 }

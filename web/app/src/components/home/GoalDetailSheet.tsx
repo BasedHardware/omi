@@ -32,6 +32,15 @@ export function GoalDetailSheet({ goal, onClose, onSave }: GoalDetailSheetProps)
     setTitle(goal.title);
     setTarget(formatMetricValue(goal.target_value));
     setUnit(goal.unit ?? '');
+    setSaving(false);
+    setSaveError(null);
+  } else if (!goal && editedGoalId !== null) {
+    setEditedGoalId(null);
+    setTitle('');
+    setTarget('');
+    setUnit('');
+    setSaving(false);
+    setSaveError(null);
   }
 
   if (!goal) return null;
