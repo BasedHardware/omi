@@ -73,7 +73,7 @@ function canonical(value) {
 }
 
 function inputEntriesForFake(manifestPath, appPath) {
-  const files = [manifestPath, producer, ...walk(appPath)];
+  const files = [...new Set([manifestPath, producer, ...walk(appPath)])];
   const entries = files.map((file) => ({ key: `core:${path.relative(root, file)}`, sha256: sha256(readFileSync(file)), size: statSync(file).size, mode: statSync(file).mode & 0o777 })).sort((left, right) => left.key.localeCompare(right.key));
   const tree = sha256(canonical(entries));
   return { id: `input-v1-${tree}`, entries, tree_sha256: tree };
@@ -173,6 +173,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /prepared-input-set/);
   assert.match(source, /preparedDescriptor\.input_set/);
   assert.match(source, /prepared app contains unsupported symlink/);
+  assert.match(source, /artifact\?\.stamp/);
   assert.match(source, /screenConfig.*geometry/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);

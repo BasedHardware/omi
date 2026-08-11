@@ -194,7 +194,10 @@ function walkFiles(root) {
 
 function inputSet(manifestPath, artifacts = {}, extraFiles = []) {
   const files = [manifestPath, path.join(coreRoot, "shells/tools/capture-native-fixture-batch.mjs")];
-  for (const artifact of Object.values(artifacts)) if (artifact?.app && existsSync(artifact.app)) files.push(...walkFiles(artifact.app));
+  for (const artifact of Object.values(artifacts)) {
+    if (artifact?.app && existsSync(artifact.app)) files.push(...walkFiles(artifact.app));
+    if (artifact?.stamp && existsSync(artifact.stamp)) files.push(artifact.stamp);
+  }
   for (const file of extraFiles) if (existsSync(file)) files.push(file);
   const uniqueFiles = [...new Set(files)];
   const entries = uniqueFiles.map((file) => {
