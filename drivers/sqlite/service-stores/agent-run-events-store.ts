@@ -74,9 +74,10 @@ export class SqliteAgentRunEventStore implements AgentRunEventStore {
       CREATE INDEX IF NOT EXISTS service_agent_run_events_by_run
         ON service_agent_run_events (run_id, sequence);
     `);
-    // Construction is a corruption boundary: malformed rows never become a
-    // partially usable timeline and are not silently discarded.
-    rowsSnapshot(db);
+    // Construction is a corruption boundary: hydrate through the strict
+    // in-memory restore validator so sequence gaps, duplicate IDs, and
+    // terminal-order corruption never become a partially usable timeline.
+    hydrate(db);
   }
 
   append(input: unknown): ReturnType<AgentRunEventStore["append"]> {
@@ -90,7 +91,7 @@ export class SqliteAgentRunEventStore implements AgentRunEventStore {
         VALUES (?, ?, ?, ?)
       `).run(event.runId, event.eventId, event.sequence, eventBytes(event));
       return outcome;
-    })();
+    }).immediate();
   }
 
   list(runId: string): readonly AgentRunEvent[] {

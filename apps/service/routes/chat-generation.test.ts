@@ -2153,6 +2153,41 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("corrupt durable agent state is a fixed replay-expired response, not a generic 500", async () => {
+    const db = new Database(":memory:");
+    const stores = createSqliteLocalServiceStores(db);
+    const detachedSupervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted: (): void => {},
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
+    });
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: ACCOUNT,
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "agent-timeline-corrupt-route-proof",
+      generationSource: createScriptedChatGenerationSource([]),
+      generationContext: createEmptyChatGenerationContextSource(),
+      chatSupervisor: detachedSupervisor,
+    });
+    const admission = await readAdmission(await post(local, create("agent-corrupt-route")));
+    const runId = admission.generation.id;
+    const sidecar = createAgentRunEventSupervisor({
+      events: stores.agentRunEvents!,
+      nowEpochMilliseconds: () => 1_786_352_400_000,
+      eventId: (id, sequence, kind) => `${id}:event:${sequence}:${kind}`,
+    });
+    sidecar.accepted({ runId, attemptId: `${runId}:attempt:1`, admissionId: admission.message.id });
+    db.query("UPDATE service_agent_run_events SET event_json = ? WHERE run_id = ? AND sequence = ?")
+      .run("{not-json", runId, 1);
+    const response = await agentEvents(local, runId);
+    expect(response.status).toBe(410);
+    expect(response.status).not.toBe(500);
+    db.close();
+  });
+
   test("agent timeline closes a live reader after auth revocation on the next bounded poll", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start: () => Object.freeze({ cancel: (): void => {} }),

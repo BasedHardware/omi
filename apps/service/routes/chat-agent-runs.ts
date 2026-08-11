@@ -210,7 +210,14 @@ export const registerChatAgentRunRoutes = (
     if (principal === null) return unauthorized();
     const runId = context.req.param("generationId");
     if (!deps.resolveGenerationOwner(principal.uid, runId)) return notFound();
-    const events = deps.events.list(runId);
+    let events: readonly AgentRunEvent[];
+    try {
+      events = deps.events.list(runId);
+    } catch {
+      // A corrupt durable sidecar is a replay-unavailable condition, not a
+      // generic server error or a partially projected timeline.
+      return replayExpired();
+    }
     const timeline = events.length === 0 ? null : projectAgentRunTimeline(events);
     if (timeline === null) return replayExpired();
     const lastEventId = context.req.header("last-event-id") ?? null;
