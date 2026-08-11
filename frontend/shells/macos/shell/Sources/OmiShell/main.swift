@@ -628,13 +628,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // on the completion-handler API; side effects still run).
       let settle = Double(env["OMI_PROBE_SETTLE"] ?? "3") ?? 3
       DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-        self?.controller.webView.evaluateJavaScript(probe) { value, error in
-          let line = "PROBE_JS: \(value.map { "\($0)" } ?? "nil") error: \(error.map { "\($0)" } ?? "none")\n"
-          FileHandle.standardError.write(Data(line.utf8))
-          DispatchQueue.main.asyncAfter(deadline: .now() + settle) {
-            self?.maybeSnapshotThenExit(after: 0)
+        guard let self else { return }
+        let pendingValue = self.env["OMI_PROBE_PENDING_VALUE"]
+        let maxAttempts = max(1, min(Int(self.env["OMI_PROBE_MAX_ATTEMPTS"] ?? "1") ?? 1, 100))
+        let retryInterval = max(0.01, min(Double(self.env["OMI_PROBE_RETRY_INTERVAL"] ?? "0.1") ?? 0.1, 1))
+        var evaluateProbe: ((Int) -> Void)!
+        evaluateProbe = { [weak self] attempt in
+          guard let self else { return }
+          self.controller.webView.evaluateJavaScript(probe) { value, error in
+            if error == nil,
+               let pendingValue,
+               let rendered = value as? String,
+               rendered == pendingValue,
+               attempt < maxAttempts
+            {
+              DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval) {
+                evaluateProbe(attempt + 1)
+              }
+              return
+            }
+            let line = "PROBE_JS: \(value.map { "\($0)" } ?? "nil") error: \(error.map { "\($0)" } ?? "none")\n"
+            FileHandle.standardError.write(Data(line.utf8))
+            DispatchQueue.main.asyncAfter(deadline: .now() + settle) {
+              self.maybeSnapshotThenExit(after: 0)
+            }
           }
         }
+        evaluateProbe(1)
       }
     } else {
       maybeSnapshotThenExit(after: 2.5)
