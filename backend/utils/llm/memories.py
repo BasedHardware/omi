@@ -279,7 +279,7 @@ def extract_memory_log_from_text(
     text_source: str = "memory_log",
     existing_memories: Optional[List[str]] = None,
 ) -> Optional[MemoryLogExtraction]:
-    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+    """Return-only memory-log extraction through the managed memories feature.
 
     Desktop onboarding/import should call this (or POST /v1/memories/extract) instead of
     inventing memories via Anthropic Haiku chat completions.

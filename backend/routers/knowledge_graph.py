@@ -197,7 +197,7 @@ async def extract_knowledge_graph(
     body: ExtractKnowledgeGraphRequest,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:extract")),
 ):
-    """Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).
+    """Return-only KG extraction through the managed knowledge_graph feature.
 
     Does not write Firestore. Desktop onboarding/file-index should call this instead of
     inventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.

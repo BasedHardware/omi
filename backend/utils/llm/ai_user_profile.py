@@ -169,7 +169,7 @@ def synthesize_ai_user_profile(
     *,
     past_profiles: Optional[List[str]] = None,
 ) -> Optional[ProfileSynthesis]:
-    """Two-stage AI user profile synthesis through get_llm('memories') (OpenRouter Luna).
+    """Two-stage AI user profile synthesis through get_llm('memories').
 
     Stage 1 synthesizes today's profile from the raw source lines; stage 2 consolidates it
     with up to five past profiles (oldest first) so knowledge accumulates. Returns ``None``

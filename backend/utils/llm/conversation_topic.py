@@ -40,7 +40,7 @@ TRANSCRIPT:
 
 
 def generate_conversation_topic(uid: str, transcript: str) -> Optional[ConversationTopic]:
-    """Return-only emoji + short title through get_llm('conv_structure') (OpenRouter Luna).
+    """Return-only emoji + short title through get_llm('conv_structure').
 
     Returns an empty topic for an empty transcript and ``None`` when the model call or
     parse fails, so callers can leave the conversation untitled rather than show noise.

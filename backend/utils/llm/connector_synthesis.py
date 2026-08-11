@@ -98,7 +98,7 @@ def synthesize_connector_items(
     *,
     existing_memories: Optional[List[str]] = None,
 ) -> Optional[ConnectorSynthesis]:
-    """Return-only connector synthesis through get_llm('memories') (OpenRouter Luna).
+    """Return-only connector synthesis through get_llm('memories').
 
     Returns an empty synthesis when there is nothing to work with, and ``None`` when the
     model call or parse fails so callers can surface a real error instead of silence.

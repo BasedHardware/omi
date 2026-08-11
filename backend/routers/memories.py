@@ -492,7 +492,7 @@ async def extract_memory_log(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
     ),
 ):
-    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+    """Return-only memory-log extraction through the managed memories feature.
 
     Does not write Firestore. Desktop onboarding/import should call this instead of inventing
     memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
