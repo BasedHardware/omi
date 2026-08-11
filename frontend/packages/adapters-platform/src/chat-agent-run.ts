@@ -60,6 +60,7 @@ const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
 const SECRET_LIKE = /(?:Bearer\s+|sk-[A-Za-z0-9]|BEGIN\s+.*PRIVATE\s+KEY|(?:api[_. -]?key|authorization|access[_. -]?token|token|secret|password|attachment|file|opaque|reference)(?:[_. -]?(?:id|ids|ref|refs|reference|references))?\s*[:=]\s*\S+)/iu;
 const SENSITIVE_IDENTIFIER = /(?:secret|token|password|authorization|credential|oauth|jwt|bearer)/iu;
+const PRIVATE_MARKER = /\b(?:admission|attempt|call|approval|context[_. -]?receipt|event|recovery|run)[_. -]?id\b|\braw[_. -]?(?:arguments?|args?)\b|\b(?:opaque|reference)(?:[_. -]?(?:id|ids|ref|refs|reference|references))?\b/iu;
 
 type WireRecord = Record<string, unknown> & {
   runId?: unknown; attemptId?: unknown; eventId?: unknown; sequence?: unknown; createdAt?: unknown;
@@ -93,12 +94,13 @@ function token(value: unknown): value is string {
 }
 
 function safeIdentifier(value: unknown): value is string {
-  return token(value) && !SENSITIVE_IDENTIFIER.test(value);
+  return token(value) && !SENSITIVE_IDENTIFIER.test(value) && !PRIVATE_MARKER.test(value);
 }
 
 function summary(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 240 &&
-    value.trim().length > 0 && !CONTROL_CHARACTERS.test(value) && !SECRET_LIKE.test(value);
+    value.trim().length > 0 && !CONTROL_CHARACTERS.test(value)
+    && !SECRET_LIKE.test(value) && !PRIVATE_MARKER.test(value);
 }
 
 function integer(value: unknown, maximum = Number.MAX_SAFE_INTEGER): value is number {
@@ -371,7 +373,7 @@ export function observeAgentRun(
   let cancelDelay: (() => void) | null = null;
   let cursor = resumeAfterEventId;
   let lastSequence: number | null = null;
-  const seen = new Set<string>(cursor === undefined ? [] : [cursor]);
+  const seen = new Set<string>();
 
   const cancel = (reason?: string): void => {
     if (cancelled) return;
@@ -400,6 +402,7 @@ export function observeAgentRun(
     if (!token(generationId)) { yield { kind: "error", failure: "generation id is invalid" }; return; }
     let reconnect = 0;
     while (!cancelled) {
+      let replayedCursor = cursor;
       try {
         active = streamPort.open({
           channel: CHAT_AGENT_RUN_STREAM_CHANNEL,
@@ -416,7 +419,14 @@ export function observeAgentRun(
         const consume = function* (parsed: readonly ParsedAgentRunEvent[]): Generator<ParsedAgentRunEvent> {
           for (const item of parsed) {
             if (item.runId !== generationId) throw new Error("agent-run event belongs to another generation");
-            if (seen.has(item.id)) continue;
+            // Some transports echo the reconnect cursor once. It is already
+            // durable and must not be surfaced twice; any later reuse remains
+            // corruption and fails closed.
+            if (replayedCursor !== undefined && item.id === replayedCursor) {
+              replayedCursor = undefined;
+              continue;
+            }
+            if (seen.has(item.id)) throw new Error("agent-run event cursor was reused");
             if (lastSequence !== null && item.event.sequence <= lastSequence) {
               throw new Error("agent-run event sequence did not advance");
             }

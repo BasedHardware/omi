@@ -67,7 +67,7 @@ test("agent-run parser survives byte boundaries and strips opaque transport iden
   assert.doesNotMatch(JSON.stringify(parsed[0]?.event), /opaque-event|opaque-context|attempt-one|generation-one/);
 });
 
-test("agent-run parser fails closed on secret-like summaries and extra raw fields", () => {
+test("agent-run parser fails closed on secrets, private markers, and extra raw fields", () => {
   for (const raw of [
     visible("event-secret", 1, "status", "authorization: Bearer private", {
       status: "generating", progressPct: 20,
@@ -75,6 +75,22 @@ test("agent-run parser fails closed on secret-like summaries and extra raw field
     { ...visible("event-args", 1, "status", "Generating", {
       status: "generating", progressPct: 20,
     }), rawArguments: { hidden: true } },
+    ...["callId: opaque123", "approvalId=opaque", "eventId: hidden", "runId: hidden", "rawArguments: abc", "opaque", "reference"].map(
+      (safeSummary) => visible("event-marker", 1, "run_accepted", safeSummary, { admissionId: "admission-one" }),
+    ),
+    visible("event-context-marker", 1, "context_receipt", "Context selected", {
+      contextReceiptId: "context-one",
+      sourceKind: "memory",
+      redactedPreview: "rawArguments: foo",
+      tokenEstimate: 12,
+      inclusionReason: "callId: opaque",
+      policyDecision: "included",
+    }),
+    visible("event-tool-marker", 1, "tool_request", "Tool requested", {
+      callId: "call-one",
+      toolName: "eventId:foo",
+      timeoutMs: 1_000,
+    }),
   ]) {
     const parser = new IncrementalAgentRunParser();
     assert.throws(() => parser.push(sse(raw)), /invalid agent-run SSE event/);
