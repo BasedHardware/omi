@@ -43,6 +43,7 @@ import type {
 import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
+  ChatGenerationRetentionMetadata,
 } from "../stores/chat-generation-events-store";
 
 export const CHAT_MESSAGES_PATH = "/v1/chat-messages";
@@ -732,13 +733,47 @@ export const registerChatMessagesRoutes = (
     const lastEventId = context.req.header("last-event-id") ?? null;
     if (lastEventId === "") return badRequest();
 
+    let retention: ChatGenerationRetentionMetadata | null = null;
+    try {
+      retention = deps.events.retentionMetadata?.(principal.uid, generationId) ?? null;
+    } catch {
+      return generationReplayExpired();
+    }
+    const terminal = all.findLast(isTerminal);
+    const retainedCursorSequence = retention === null
+      ? null
+      : all.find((event) => event.id === retention!.replayCursor)?.sequence ?? null;
+    const requestedSequence = lastEventId === null
+      ? null
+      : all.find((event) => event.id === lastEventId)?.sequence ?? null;
+    const malformedRetention = retention !== null
+      && (!Number.isSafeInteger(retention.expiresAt) || retention.expiresAt < 0 || retention.replayCursor.length === 0);
+    const replayOlderThanRetention = retention !== null && retainedCursorSequence !== null
+      && (requestedSequence === null || requestedSequence < retainedCursorSequence);
+    const replayExpired = retention !== null
+      && (malformedRetention || deps.nowEpochMilliseconds() >= retention.expiresAt);
+    if (lastEventId !== null && (replayOlderThanRetention || replayExpired)) {
+      if (terminal === undefined) return generationReplayExpired();
+      return streamEvents({
+        accountId: principal.uid,
+        generationId,
+        events: deps.events,
+        initial: [terminal],
+        afterEventId: terminal.id,
+        signal: context.req.raw.signal,
+        revalidate,
+        policy: normalizeStreamPolicy(deps.streamPolicy),
+        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+        nowEpochMilliseconds: deps.nowEpochMilliseconds,
+      });
+    }
+
     if (lastEventId !== null) {
       if (all.some((event) => event.id === lastEventId && !isExternalGenerationEvent(event))) {
         return generationReplayExpired();
       }
       const replay = deps.events.listAfter(principal.uid, generationId, lastEventId);
       if (replay === null) {
-        const terminal = all.findLast(isTerminal);
         if (terminal === undefined) return generationReplayExpired();
         return streamEvents({
           accountId: principal.uid,
@@ -754,7 +789,6 @@ export const registerChatMessagesRoutes = (
         });
       }
       if (replay.length === 0 && lifecycle.state === "terminal") {
-        const terminal = all.findLast(isTerminal);
         if (terminal === undefined) return generationReplayExpired();
         return streamEvents({
           accountId: principal.uid,
@@ -800,7 +834,6 @@ export const registerChatMessagesRoutes = (
       });
     }
 
-    const terminal = all.findLast(isTerminal);
     if (terminal !== undefined) {
       return streamEvents({
         accountId: principal.uid,

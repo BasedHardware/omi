@@ -1754,4 +1754,24 @@ describe("ratified chat generation wire red proofs", () => {
       ?.filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind))).toHaveLength(1);
     db.close();
   });
+
+  test("compacted replay cursors heal an older SSE cursor from the terminal", async () => {
+    const { db, local, stores } = boot();
+    const { admission, eventsResponse } = await admitAndOpen(local, create("retention-replay"));
+    await eventsResponse.text();
+    const all = stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)!;
+    const oldCursor = all.find((event) => event.frame.kind === "snapshot")?.id;
+    expect(oldCursor).toBeDefined();
+    const compactNow = Math.max(...all.map((event) => event.createdAt)) + 100;
+    const compacted = stores.chatEvents.compact!(ACCOUNT, admission.generation.id, compactNow, {
+      ttlMs: 1,
+      maxDetailEvents: 0,
+    });
+    expect(compacted?.metadata.replayCursor).toBe(all.findLast((event) =>
+      ["done", "failed", "cancelled"].includes(event.frame.kind))?.id);
+    const replay = await generationEvents(local, admission.generation.id, oldCursor);
+    const frames = parseSse(await replay.text());
+    expect(frames.at(-1)?.event).toBe("done");
+    db.close();
+  });
 });

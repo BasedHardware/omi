@@ -141,6 +141,14 @@ const detachEvent = (event: ChatGenerationEvent): ChatGenerationEvent => Object.
 const keyOf = (accountId: string, generationId: string): string =>
   `${accountId.length}:${accountId}:${generationId}`;
 
+const retentionExpiry = (base: number, ttlMs: number): number => {
+  if (!Number.isSafeInteger(base) || base < 0 || !Number.isSafeInteger(ttlMs) || ttlMs <= 0
+    || base > Number.MAX_SAFE_INTEGER - ttlMs) {
+    throw new TypeError("chat generation retention expiry overflow");
+  }
+  return base + ttlMs;
+};
+
 export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGenerationEventsStore => {
   const logs = new Map<string, AccountGenerationLog>();
 
@@ -251,18 +259,18 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
         throw new TypeError("invalid chat generation retention policy");
       }
       const log = logs.get(keyOf(accountId, generationId));
-      if (log === undefined) return null;
+      if (log === undefined || log.state !== "terminal") return null;
       const details = log.events.filter((event) => event.frame.kind === "snapshot" || event.frame.kind === "delta");
       const expiresAt = details.length === 0
-        ? nowEpochMilliseconds + policy.ttlMs
-        : Math.max(...details.map((event) => event.createdAt)) + policy.ttlMs;
+        ? retentionExpiry(nowEpochMilliseconds, policy.ttlMs)
+        : retentionExpiry(Math.max(...details.map((event) => event.createdAt)), policy.ttlMs);
       let redactedEventCount = 0;
       const retainedDetails = (policy.maxDetailEvents === 0 ? [] : details.slice(-policy.maxDetailEvents)).map((event) => event.id);
       const retainedSet = new Set(retainedDetails);
       for (let index = 0; index < log.events.length; index += 1) {
         const event = log.events[index]!;
         if ((event.frame.kind !== "snapshot" && event.frame.kind !== "delta")
-          || retainedSet.has(event.id) || nowEpochMilliseconds < event.createdAt + policy.ttlMs
+          || retainedSet.has(event.id) || nowEpochMilliseconds < retentionExpiry(event.createdAt, policy.ttlMs)
           || event.frame.text === "[redacted]") continue;
         const frame = event.frame.kind === "snapshot"
           ? { kind: "snapshot" as const, text: "[redacted]" }
@@ -272,11 +280,18 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
         log.byId.set(event.id, replacement);
         redactedEventCount += 1;
       }
+      const replayCursor = log.events.find((event) => {
+        if (event.frame.kind === "accepted") return false;
+        if (event.frame.kind === "snapshot" || event.frame.kind === "delta") {
+          return retainedSet.has(event.id) && event.frame.text !== "[redacted]";
+        }
+        return true;
+      })?.id ?? log.events.at(-1)?.id ?? "";
       const metadata = Object.freeze({
         ttlMs: policy.ttlMs,
         expiresAt,
         compactedAt: redactedEventCount === 0 ? log.retention?.compactedAt ?? null : nowEpochMilliseconds,
-        replayCursor: log.events[0]?.id ?? "",
+        replayCursor,
         redactedEventCount: (log.retention?.redactedEventCount ?? 0) + redactedEventCount,
         canonicalTranscriptRetained: true as const,
       });

@@ -13,6 +13,14 @@ import type {
 } from "../../../apps/service/stores/chat-generation-events-store";
 import { configureServiceStoreConnection } from "./connection";
 
+const retentionExpiry = (base: number, ttlMs: number): number => {
+  if (!Number.isSafeInteger(base) || base < 0 || !Number.isSafeInteger(ttlMs) || ttlMs <= 0
+    || base > Number.MAX_SAFE_INTEGER - ttlMs) {
+    throw new TypeError("chat generation retention expiry overflow");
+  }
+  return base + ttlMs;
+};
+
 interface EventRow {
   readonly event_id: string;
   readonly generation_id: string;
@@ -279,6 +287,11 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
         ORDER BY sequence ASC
       `).all(accountId, generationId) as EventRow[];
       if (rows.length === 0) return null;
+      const lifecycle = this.db.query(`
+        SELECT state FROM service_chat_generation_lifecycle
+        WHERE account_id = ? AND generation_id = ?
+      `).get(accountId, generationId) as { readonly state: string } | null;
+      if (lifecycle?.state !== "terminal") return null;
       const details = rows.filter((row) => {
         const kind = (JSON.parse(row.frame_json) as { readonly kind?: unknown }).kind;
         return kind === "snapshot" || kind === "delta";
@@ -286,7 +299,7 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
       const retained = new Set((policy.maxDetailEvents === 0 ? [] : details.slice(-policy.maxDetailEvents)).map((row) => row.event_id));
       let redactedEventCount = 0;
       for (const row of details) {
-        if (retained.has(row.event_id) || nowEpochMilliseconds < row.created_at + policy.ttlMs) continue;
+        if (retained.has(row.event_id) || nowEpochMilliseconds < retentionExpiry(row.created_at, policy.ttlMs)) continue;
         const frame = JSON.parse(row.frame_json) as ChatGenerationFrame;
         if (frame.kind === "snapshot" || frame.kind === "delta") {
           if (frame.text === "[redacted]") continue;
@@ -302,13 +315,25 @@ export class SqliteChatGenerationEventsStore implements ChatGenerationEventsStor
       }
       const previous = this.retentionMetadata(accountId, generationId);
       const expiresAt = details.length === 0
-        ? nowEpochMilliseconds + policy.ttlMs
-        : Math.max(...details.map((row) => row.created_at)) + policy.ttlMs;
+        ? retentionExpiry(nowEpochMilliseconds, policy.ttlMs)
+        : retentionExpiry(Math.max(...details.map((row) => row.created_at)), policy.ttlMs);
+      const replayRows = this.db.query(`
+        SELECT event_id, frame_json FROM service_chat_generation_events
+        WHERE account_id = ? AND generation_id = ? ORDER BY sequence ASC
+      `).all(accountId, generationId) as readonly { readonly event_id: string; readonly frame_json: string }[];
+      const replayCursor = replayRows.find((row) => {
+        const frame = JSON.parse(row.frame_json) as ChatGenerationFrame;
+        if (frame.kind === "accepted") return false;
+        if (frame.kind === "snapshot" || frame.kind === "delta") {
+          return retained.has(row.event_id) && frame.text !== "[redacted]";
+        }
+        return true;
+      })?.event_id ?? replayRows.at(-1)?.event_id ?? "";
       const metadata = Object.freeze({
         ttlMs: policy.ttlMs,
         expiresAt,
         compactedAt: redactedEventCount === 0 ? previous?.compactedAt ?? null : nowEpochMilliseconds,
-        replayCursor: rows[0]!.event_id,
+        replayCursor,
         redactedEventCount: (previous?.redactedEventCount ?? 0) + redactedEventCount,
         canonicalTranscriptRetained: true as const,
       });

@@ -66,6 +66,7 @@ import {
 import { QA_FIXTURE_TIME_ANCHOR_UTC, seedQaSnapshot } from "./qa/seed";
 import {
   createChatGenerationSupervisor,
+  DEFAULT_CHAT_GENERATION_LIVENESS,
   type ChatGenerationLivenessPolicy,
   type ChatGenerationSupervisor,
 } from "./chat/generation-supervisor";
@@ -606,7 +607,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     finalization: stores.chatFinalization,
     attachments: stores.chatAttachments,
     nowEpochMilliseconds: chatNowEpochMilliseconds,
-    liveness: options.generationLiveness,
+    liveness: options.generationLiveness ?? DEFAULT_CHAT_GENERATION_LIVENESS,
     scheduler: options.generationStreamScheduler,
     assistantMessageId: (accountId, generationId) =>
       opaqueChatId("assistant", accountId, generationId),

@@ -78,6 +78,14 @@ export interface ChatGenerationLivenessPolicy {
   readonly cancelGraceMs: number;
 }
 
+/** Production-shaped bounded defaults; deterministic scenarios may override explicitly. */
+export const DEFAULT_CHAT_GENERATION_LIVENESS: ChatGenerationLivenessPolicy = Object.freeze({
+  firstEventDeadlineMs: 100,
+  maxRunDurationMs: 1_000,
+  heartbeatIntervalMs: 250,
+  cancelGraceMs: 100,
+});
+
 interface ActiveGeneration {
   readonly accountId: string;
   readonly generationId: string;
@@ -174,7 +182,8 @@ const validateUsage = (value: unknown): ChatGenerationUsage | null => {
       || Object.keys(usage).some((key) => !["usageId", "provider", "model", "inputTokens", "outputTokens", "totalTokens"].includes(key))) return null;
     const bounded = (candidate: unknown): candidate is string =>
       typeof candidate === "string" && candidate.length > 0 && candidate.length <= 128
-      && /^[A-Za-z0-9._:/-]+$/u.test(candidate);
+      && /^[A-Za-z0-9._:/-]+$/u.test(candidate)
+      && !/(?:^|[^a-z0-9])(?:sk(?:[_-]?live)?|api(?:[_ .:-]?key)?|access(?:[_ .:-]?token)?|bearer|authorization|password|secret|(?:attachment|file|opaque|reference)(?:[_ .:-]?(?:id|ref|reference))?)(?:$|[^a-z0-9])/iu.test(candidate);
     const tokens = (candidate: unknown): candidate is number =>
       typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0;
     if (!bounded(usage.usageId) || !bounded(usage.provider) || !bounded(usage.model)
@@ -740,7 +749,7 @@ export const createChatGenerationSupervisor = (
       if (state !== undefined && !state.terminal) {
         state.cancelRequested = true;
         cancelRun(state);
-        if (liveness !== undefined && liveness.cancelGraceMs > 0) {
+        if (liveness !== undefined && liveness.cancelGraceMs > 0 && state.providerStartedAt !== null) {
           clearTimer(state.cancelGraceTimer);
           try {
             state.cancelGraceTimer = scheduler.setTimeout(() => {

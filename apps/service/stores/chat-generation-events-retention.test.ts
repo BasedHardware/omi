@@ -39,7 +39,7 @@ describe("chat generation retention metadata", () => {
     expect(result?.metadata).toMatchObject({
       ttlMs: 10,
       expiresAt: 12,
-      replayCursor: "event:accepted",
+      replayCursor: "event:done",
       redactedEventCount: 2,
       canonicalTranscriptRetained: true,
     });
@@ -59,5 +59,14 @@ describe("chat generation retention metadata", () => {
     expect(store.compact!("retention-account", "missing", 0, { ttlMs: 10, maxDetailEvents: 1 })).toBeNull();
     expect(() => store.compact!("retention-account", "missing", 0, { ttlMs: 0, maxDetailEvents: 1 })).toThrow("invalid chat generation retention policy");
     expect(() => store.compact!("retention-account", "missing", 0, { ttlMs: 10, maxDetailEvents: -1 })).toThrow("invalid chat generation retention policy");
+    append(store, "accepted", "event:active", 0);
+    expect(store.compact!("retention-account", "generation:retention", 0, { ttlMs: 10, maxDetailEvents: 1 })).toBeNull();
+    const overflowStore = createInMemoryChatGenerationEventsStore();
+    append(overflowStore, "accepted", "event:overflow-accepted", Number.MAX_SAFE_INTEGER);
+    append(overflowStore, "snapshot", "event:overflow-snapshot", Number.MAX_SAFE_INTEGER, "detail");
+    append(overflowStore, "done", "event:overflow-done", Number.MAX_SAFE_INTEGER);
+    expect(() => overflowStore.compact!("retention-account", "generation:retention", Number.MAX_SAFE_INTEGER, {
+      ttlMs: 10, maxDetailEvents: 1,
+    })).toThrow("retention expiry overflow");
   });
 });
