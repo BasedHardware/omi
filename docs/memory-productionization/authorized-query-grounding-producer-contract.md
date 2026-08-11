@@ -1,6 +1,8 @@
 # Authorized query-grounding producer contract
 
-Status: P5 preregistration, 2026-08-11; implementation and activation absent
+Status: P5 preregistration plus production-neutral producer kernel, 2026-08-11;
+concrete source/PostgreSQL adapters, pairing, service composition, and
+activation absent
 
 ## Purpose
 
@@ -97,6 +99,27 @@ Exact replay performs source and repository reads but zero model calls. A
 changed input digest selects a different evaluation coordinate. A stored result
 whose grounding is absent is corruption/incomplete persistence, not permission
 to call the model again.
+
+## Landed kernel
+
+`memory-authorized-query-grounding-producer.ts` implements the single-result
+kernel with injected source, model, result-read, and atomic-grounding ports. It
+strictly parses the copied payload, withholds classes and projection coordinates
+from the model callback, rejects every trace-stage reference outside the copied
+candidate set, revalidates after the model and before stage, revalidates stored
+replay before release, and never regenerates a result whose grounding is
+missing. It contains dependency/model/storage failures behind closed outcomes.
+
+This is not a source-authority implementation. Hermetic tests construct the
+copied input through the existing sealed evidence-source facade. The future
+adapter still owes the owner-visible graph projection and exact class
+derivation described above.
+
+Verification for the landed unit: 7 focused producer tests and 35 combined
+producer/repository/audit/migration tests passed; the broad platform gate passed
+1,272 tests with 9,284 expectations across 175 files, plus the isolated 18-test
+epoch suite. Import graph, strict TypeScript, and diff checks passed. The known
+occupied fixed-port dev-server test remained excluded.
 
 ## Pre-registered acceptance tests
 

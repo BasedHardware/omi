@@ -195,6 +195,12 @@ Landed sub-units:
   result-plus-artifact stage call. The contamination audit consumes it through
   a narrow adapter. There is deliberately no concrete PostgreSQL implementation
   or authorized row-producing composition.
+- `memory-authorized-query-grounding-producer.ts` now supplies the inert
+  single-result composition kernel: strict owner-scoped copied payload,
+  class-blind model input, trace/candidate closure, post-model and replay-time
+  source revalidation, and atomic repository stage. Its source remains
+  hermetic/injected; no real graph adapter, paired scheduler, route, or grant is
+  present.
 
 ## Pre-registered acceptance tests
 
