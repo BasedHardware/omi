@@ -217,6 +217,20 @@ function canonicalBatchId(inputSetId, command, members) { return `batch-v1-${sha
 function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const { offset, limit } = captureRange(args, manifest);
   const prepared = loadPrepared(preparedPath, manifestPath, manifest, offset, limit);
+  const selectedCoordinates = manifest.coordinates.slice(offset, offset + limit);
+  if (selectedCoordinates.some((coordinate) => coordinate.kind === "keyboard_trace") && process.env.OMI_ALLOW_TEMPORARY_FOCUS !== "1") {
+    const blocked = {
+      schema: "omi.native-semantic-blocked/v1",
+      status: "blocked_user_focus",
+      reason: "keyboard_trace requires explicit OMI_ALLOW_TEMPORARY_FOCUS=1 operator consent",
+      source_shas: manifest.source_shas,
+      coordinate_count: limit,
+      run_ids: selectedCoordinates.map((coordinate) => coordinate.run_id),
+    };
+    process.stdout.write(`${JSON.stringify(blocked)}\n`);
+    process.exitCode = 3;
+    return;
+  }
   if (manifest.capture_class === "native_live" && guiLocked()) {
     const blocked = { schema: "omi.native-semantic-blocked/v1", status: "blocked_gui_locked", source_shas: manifest.source_shas, coordinate_count: limit, run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id) };
     process.stdout.write(`${JSON.stringify(blocked)}\n`); process.exitCode = 3; return;
@@ -224,7 +238,7 @@ function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const command = commandText(manifestPath, outRoot, preparedPath, offset, limit, Boolean(args.replay_proof));
   const records = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
-  for (const [index, coordinate] of manifest.coordinates.slice(offset, offset + limit).entries()) {
+  for (const [index, coordinate] of selectedCoordinates.entries()) {
     const probeArgs = ["--pid", String(coordinate.target.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
     if (coordinate.kind === "keyboard_trace") {
       probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));

@@ -9,10 +9,13 @@ screenshots or inspect page JavaScript. Generic runs are always
 Use the shell's default off-screen accessory mode for screenshots, runtime
 probes, and AX snapshots. For keyboard traces, launch the scratch shell with
 `OMI_SEMANTIC_WINDOW=1` instead of `OMI_HEADED=1`. That mode orders a small
-accessory window behind the user's windows without activating it. The probe
-temporarily activates the target for the bounded key sequence, then hides the
+accessory window behind the user's windows without activating it. The probe can
+temporarily activate the target for the bounded key sequence, then hides the
 scratch window and restores the app that was previously frontmost before it
-emits evidence. `OMI_HEADED=1` remains an explicit human/operator mode only.
+emits evidence. The batch coordinator refuses keyboard coordinates by default
+with `blocked_user_focus`; an operator must explicitly set
+`OMI_ALLOW_TEMPORARY_FOCUS=1` for a run where that brief activation is
+acceptable. `OMI_HEADED=1` remains an explicit human/operator mode only.
 
 Compile it on macOS with:
 
