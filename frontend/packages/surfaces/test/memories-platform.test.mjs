@@ -11,6 +11,7 @@ import {
   filterLoadedPropositions,
   lineageRows,
   paginationAffordance,
+  presentPropositionContent,
 } from "../src/production/proposition-presentation.ts";
 import {
   PROPOSITION_FIXTURE_STATES,
@@ -144,6 +145,49 @@ test("a proposition with no provenance produces no lineage rows and no placehold
   assert.deepEqual(lineageRows(item("p1", "one")), []);
   // red-proof: emitting rows with empty-string or "unknown" values makes this fail, and
   // would put a digest-shaped blank in front of a reader as if it were verifiable.
+});
+
+test("machine-shaped proposition text becomes human-first with technical details preserved", () => {
+  const raw = "entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).";
+  const presented = presentPropositionContent(raw);
+  assert.equal(presented.kind, "machine-coordinate");
+  assert.equal(presented.observedAt, Date.UTC(2026, 6, 30, 12, 0, 0));
+  assert.deepEqual(presented.technicalRows, [
+    { labelKey: "memoriesPlatform.sourceIdentifier", value: "entity:qa:000008" },
+    { labelKey: "memoriesPlatform.sourceType", value: "qa_memory" },
+    { labelKey: "memoriesPlatform.observedAt", value: "2026-07-30T12:00:00.000Z" },
+  ]);
+  assert.deepEqual(presentPropositionContent("You prefer concise status updates."), {
+    kind: "human",
+    text: "You prefer concise status updates.",
+    observedAt: null,
+    technicalRows: [],
+  });
+});
+
+test("platform Memories hides healthy projection machinery and raw coordinates until details open", async () => {
+  const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
+  const rendered = await renderComponent(Component, {
+    store: fixturePropositionStore("normal"),
+    source: { kind: "fixture", fixture: "normal" },
+  });
+  try {
+    await rendered.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    assert.equal(rendered.container.querySelector(".completeness-notice"), null, "healthy completeness is inspectable in data, not dashboard chrome");
+    assert.doesNotMatch(rendered.container.textContent ?? "", /entity:qa:|qa_memory|observed 2026|projection was searched/i);
+    assert.match(rendered.container.textContent ?? "", /Saved memory from/);
+    const machineCard = [...rendered.container.querySelectorAll(".proposition-card")]
+      .find((card) => card.textContent?.includes("Saved memory from"));
+    const details = machineCard?.querySelector(".proposition-details-toggle");
+    assert.ok(details);
+    assert.equal(details.getAttribute("aria-expanded"), "false");
+    await rendered.act(async () => details.dispatchEvent(new rendered.window.MouseEvent("click", { bubbles: true })));
+    assert.equal(details.getAttribute("aria-expanded"), "true");
+    assert.match(machineCard?.textContent ?? "", /entity:qa:000005/);
+    assert.match(machineCard?.textContent ?? "", /2026-08-02T12:00:00\.000Z/);
+  } finally {
+    await rendered.cleanup();
+  }
 });
 
 test("lineage renders the server's digests whole and unmodified", () => {
@@ -347,6 +391,16 @@ test("filtering matches proposition text over loaded rows only", () => {
   const rows = [item("p1", "Morning review"), item("p2", "Native shells"), item("p3", "morning light")];
   assert.deepEqual(filterLoadedPropositions(rows, "morning", "en").map((row) => row.id), ["p1", "p3"]);
   assert.equal(filterLoadedPropositions(rows, "   ", "en"), rows);
+  assert.deepEqual(
+    filterLoadedPropositions(
+      [item("machine", "entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).")],
+      "saved memory",
+      "en",
+      () => "Saved memory from Jul 30, 2026",
+    ).map((row) => row.id),
+    ["machine"],
+    "filtering follows the human text the card actually renders",
+  );
   assert.match(EN_MESSAGES["memoriesPlatform.filterSavedPlaceholder"], /^Filter/);
   // red-proof: a case-sensitive comparison drops p1; relabelling the control as a search
   // would claim a backend search this function does not perform.

@@ -50,7 +50,7 @@ function baseItems(): readonly SynthesizedMemoryItem[] {
     },
     {
       id: "prop:0005",
-      text: "You expect saved context to be surfaced before the same question is asked again.",
+      text: "entity:qa:000005 qa_memory (observed 2026-08-02T12:00:00.000Z).",
     },
   ];
 }

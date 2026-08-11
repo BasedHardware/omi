@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { t } from "@omi-core/i18n";
+import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
 import type { SynthesizedMemoryItem, SynthesizedRecallState } from "@omi-core/contracts";
@@ -12,6 +12,7 @@ import {
   filterLoadedPropositions,
   lineageRows,
   paginationAffordance,
+  presentPropositionContent,
 } from "./proposition-presentation.js";
 import "./memories-platform.css";
 
@@ -30,36 +31,47 @@ import "./memories-platform.css";
 
 type Locale = string;
 
+function propositionPrimaryText(item: SynthesizedMemoryItem, locale: Locale): string {
+  const content = presentPropositionContent(item.text);
+  return content.kind === "machine-coordinate" && content.observedAt !== null
+    ? t(locale, "memoriesPlatform.savedMemory", { date: formatDate(content.observedAt, locale) })
+    : content.text;
+}
+
 function PropositionCard({ item, locale }: {
   item: SynthesizedMemoryItem;
   locale: Locale;
 }): React.JSX.Element {
-  const [lineageOpen, setLineageOpen] = useState(false);
-  const lineage = lineageRows(item);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const content = presentPropositionContent(item.text);
+  const details = [...content.technicalRows, ...lineageRows(item)];
   const citations = citationSummary(item);
+  const primaryText = propositionPrimaryText(item, locale);
   return (
     <article className="proposition-card" data-proposition-id={item.id}>
-      <p className="proposition-text">{item.text}</p>
+      <p className="proposition-text">{primaryText}</p>
       <footer className="proposition-footer">
         {citations.count > 0 && (
           <span className="proposition-citations" aria-label={t(locale, "memoriesPlatform.citations")}>
-            {t(locale, "memoriesPlatform.citationsCount", { count: citations.count })}
+            {citations.count === 1
+              ? t(locale, "memoriesPlatform.citationsOne")
+              : t(locale, "memoriesPlatform.citationsCount", { count: citations.count })}
           </span>
         )}
-        {lineage.length > 0 && (
+        {details.length > 0 && (
           <button
-            className="proposition-lineage-toggle"
+            className="proposition-details-toggle"
             type="button"
-            aria-expanded={lineageOpen}
-            onClick={() => setLineageOpen((open) => !open)}
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((open) => !open)}
           >
-            {lineageOpen ? t(locale, "memoriesPlatform.hideLineage") : t(locale, "memoriesPlatform.showLineage")}
+            {detailsOpen ? t(locale, "memoriesPlatform.hideDetails") : t(locale, "memoriesPlatform.showDetails")}
           </button>
         )}
       </footer>
-      {lineageOpen && lineage.length > 0 && (
-        <dl className="proposition-lineage" aria-label={t(locale, "memoriesPlatform.lineage")}>
-          {lineage.map((row) => (
+      {detailsOpen && details.length > 0 && (
+        <dl className="proposition-lineage" aria-label={t(locale, "memoriesPlatform.details")}>
+          {details.map((row) => (
             <div className="proposition-lineage-row" key={row.labelKey}>
               <dt>{t(locale, row.labelKey)}</dt>
               <dd>{row.value}</dd>
@@ -126,7 +138,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
   const pagination = useMemo(() => paginationAffordance(recall), [recall]);
   const presentation = useMemo(() => emptyPresentation(items.length, recall), [items.length, recall]);
   const visibleItems = useMemo(
-    () => filterLoadedPropositions(items, query, locale),
+    () => filterLoadedPropositions(items, query, locale, (item) => propositionPrimaryText(item, locale)),
     [items, locale, query],
   );
 
@@ -172,7 +184,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
           retry={status.refresh.phase !== "ready" ? { onRetry: reload } : null}
         />
         <div className="surface-notices">
-          {completeness.titleKey && (
+          {completeness.kind !== "complete" && completeness.titleKey && (
             <div
               className={`completeness-notice tone-${completeness.tone}`}
               role="status"

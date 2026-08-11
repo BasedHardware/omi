@@ -31,6 +31,9 @@ export type LineageLabelKey = CatalogKey<
   | "memoriesPlatform.synthesisVersion"
   | "memoriesPlatform.inputDigest"
   | "memoriesPlatform.outputDigest"
+  | "memoriesPlatform.sourceIdentifier"
+  | "memoriesPlatform.sourceType"
+  | "memoriesPlatform.observedAt"
 >;
 
 /**
@@ -155,6 +158,39 @@ export function paginationAffordance(recall: SynthesizedRecallState): Pagination
 
 export type LineageRow = { readonly labelKey: LineageLabelKey; readonly value: string };
 
+export type PropositionContentPresentation = {
+  readonly kind: "human" | "machine-coordinate";
+  readonly text: string;
+  readonly observedAt: number | null;
+  readonly technicalRows: readonly LineageRow[];
+};
+
+const MACHINE_COORDINATE = /^(entity:[^\s]+)\s+([a-z][a-z0-9_]{0,63})\s+\(observed\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\)\.?$/u;
+
+/**
+ * The QA corpus can legitimately reach the production-shaped service with a machine
+ * coordinate as its synthesized text. Keep that value inspectable, but never make an
+ * entity id, predicate name, or exact instant the card's headline.
+ */
+export function presentPropositionContent(text: string): PropositionContentPresentation {
+  const match = MACHINE_COORDINATE.exec(text);
+  if (!match) return { kind: "human", text, observedAt: null, technicalRows: [] };
+  const observedAt = Date.parse(match[3]!);
+  if (!Number.isFinite(observedAt) || new Date(observedAt).toISOString() !== match[3]) {
+    return { kind: "human", text, observedAt: null, technicalRows: [] };
+  }
+  return {
+    kind: "machine-coordinate",
+    text,
+    observedAt,
+    technicalRows: [
+      { labelKey: "memoriesPlatform.sourceIdentifier", value: match[1]! },
+      { labelKey: "memoriesPlatform.sourceType", value: match[2]! },
+      { labelKey: "memoriesPlatform.observedAt", value: match[3]! },
+    ],
+  };
+}
+
 /** Empty when the server supplied no lineage. Digests are never synthesized client-side. */
 export function lineageRows(item: SynthesizedMemoryItem): readonly LineageRow[] {
   const provenance = item.provenance;
@@ -190,8 +226,9 @@ export function filterLoadedPropositions(
   items: readonly SynthesizedMemoryItem[],
   query: string,
   locale: string,
+  textFor: (item: SynthesizedMemoryItem) => string = (item) => item.text,
 ): readonly SynthesizedMemoryItem[] {
   const needle = query.trim().toLocaleLowerCase(locale);
   if (!needle) return items;
-  return items.filter((item) => item.text.toLocaleLowerCase(locale).includes(needle));
+  return items.filter((item) => textFor(item).toLocaleLowerCase(locale).includes(needle));
 }
