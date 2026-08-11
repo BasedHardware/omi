@@ -542,8 +542,8 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   runCommand(commandSpec("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], coreRoot, artifact.env, 30), `${coordinate.run_id}: terminate prior app`);
   let launched = false;
   try {
-    runCommand(commandSpec("xcrun", ["simctl", "launch", coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
     launched = true;
+    runCommand(commandSpec("xcrun", ["simctl", "launch", coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
     runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
     runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
   } finally {
