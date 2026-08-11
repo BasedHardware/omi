@@ -56,4 +56,44 @@ void main() {
       );
     });
   }
+
+  test('capture builds accept the simulator child environment query', () {
+    final query = _valid.substring('--omi-capture-query='.length);
+    expect(
+      surfaceQueryForLaunch(
+        captureOnly: true,
+        compileQuery: '',
+        arguments: const [],
+        environmentQuery: query,
+      ),
+      query,
+    );
+    expect(
+      captureRunIdForLaunch(
+        captureOnly: true,
+        environmentRunId: 'mx-v1-chat-ready',
+      ),
+      'mx-v1-chat-ready',
+    );
+  });
+
+  test('capture query sources and run ids fail closed', () {
+    final query = _valid.substring('--omi-capture-query='.length);
+    expect(
+      () => surfaceQueryForLaunch(
+        captureOnly: true,
+        compileQuery: '',
+        arguments: [_valid],
+        environmentQuery: query,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => captureRunIdForLaunch(
+        captureOnly: true,
+        environmentRunId: '../unsafe',
+      ),
+      throwsFormatException,
+    );
+  });
 }

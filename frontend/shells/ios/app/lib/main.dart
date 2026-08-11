@@ -2,6 +2,7 @@
 // Mirrors ADR-002: the shell owns device/capture state, the surface is UI only,
 // and everything crossing the boundary goes through the generated bridge.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -27,33 +28,60 @@ import 'scheme_host.dart';
 enum SurfaceMode { ship, dev, loop, scheme }
 
 // Set at build time: flutter run --dart-define=SURFACE_MODE=dev
-const String _modeFlag = String.fromEnvironment('SURFACE_MODE', defaultValue: 'ship');
+const String _modeFlag = String.fromEnvironment(
+  'SURFACE_MODE',
+  defaultValue: 'ship',
+);
 // iOS simulator can reach the host Mac on localhost; a real device needs the LAN IP.
-const String _devHost = String.fromEnvironment('SURFACE_HOST', defaultValue: 'localhost:8787');
+const String _devHost = String.fromEnvironment(
+  'SURFACE_HOST',
+  defaultValue: 'localhost:8787',
+);
 // loop mode: 0 = ephemeral port (demonstrates origin-per-port storage loss),
 // any fixed value = stable origin across relaunches.
 const int _loopPort = int.fromEnvironment('LOOP_PORT', defaultValue: 0);
 // scheme mode: which Documents/bundles/<id> to mount. Wave-2 default is the
 // real @omi-core/surfaces ship build; set SCHEME_BUNDLE=v1 to re-run the probe.
-const String _schemeBundle = String.fromEnvironment('SCHEME_BUNDLE', defaultValue: 'surfaces');
+const String _schemeBundle = String.fromEnvironment(
+  'SCHEME_BUNDLE',
+  defaultValue: 'surfaces',
+);
 // AUTODRIVE task text for the real surfaces harness (blank = open only).
 const String _addTask = String.fromEnvironment('ADD_TASK', defaultValue: '');
 // Privileged-HTTP custody (wave 9): the SHELL holds the API base URL and bearer
 // token; neither is ever handed to the webview. Unset base URL => no channel
 // registered => the surface truthfully feature-detects "no bridge" and falls
 // back to its DEV transport. Dev-grade custody (keychain is owed).
-const String _apiBaseUrl = String.fromEnvironment('OMI_API_BASE_URL', defaultValue: '');
-const String _apiToken = String.fromEnvironment('OMI_API_TOKEN', defaultValue: '');
+const String _apiBaseUrl = String.fromEnvironment(
+  'OMI_API_BASE_URL',
+  defaultValue: '',
+);
+const String _apiToken = String.fromEnvironment(
+  'OMI_API_TOKEN',
+  defaultValue: '',
+);
 // Per-run QA identity. The shell appends its fixed `ios` identity natively;
 // neither value is placed in the surface URL or JavaScript state.
-const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultValue: '');
+const String _runClientId = String.fromEnvironment(
+  'OMI_RUN_CLIENT_ID',
+  defaultValue: '',
+);
 // Launcher-owned safe basename for a Documents-local native result. Host paths
 // never cross into the simulator process or JavaScript state.
-const String _consumerEvidenceFilename = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_FILENAME', defaultValue: '');
+const String _consumerEvidenceFilename = String.fromEnvironment(
+  'OMI_CONSUMER_EVIDENCE_FILENAME',
+  defaultValue: '',
+);
 // Optional scheme query/profile namespace. Values are appended to the local
 // scheme URL, never interpolated into page JavaScript or logs.
-const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
-const String _surfaceProfile = String.fromEnvironment('SURFACE_PROFILE', defaultValue: '');
+const String _surfaceQuery = String.fromEnvironment(
+  'SURFACE_QUERY',
+  defaultValue: '',
+);
+const String _surfaceProfile = String.fromEnvironment(
+  'SURFACE_PROFILE',
+  defaultValue: '',
+);
 // Capture-only builds may receive one per-coordinate query at process launch.
 // This is deliberately compile-time gated: production builds ignore the
 // argument entirely, while capture builds fail closed on an absent, repeated,
@@ -117,18 +145,23 @@ String surfaceQueryForLaunch({
   required bool captureOnly,
   required String compileQuery,
   required List<String> arguments,
+  String? environmentQuery,
 }) {
   if (!captureOnly) return compileQuery;
   const prefix = '--omi-capture-query=';
   final matches = arguments
       .where((argument) => argument.startsWith(prefix))
       .toList();
-  if (matches.length != 1) {
+  final environment = environmentQuery?.trim();
+  final hasEnvironment = environment != null && environment.isNotEmpty;
+  if ((hasEnvironment ? 1 : 0) + matches.length != 1) {
     throw const FormatException(
-      'capture build requires exactly one --omi-capture-query argument',
+      'capture build requires exactly one native capture query source',
     );
   }
-  final raw = matches.single.substring(prefix.length);
+  final raw = hasEnvironment
+      ? environment
+      : matches.single.substring(prefix.length);
   if (raw.isEmpty || raw.length > 1024 || raw.contains('#')) {
     throw const FormatException(
       'capture query is empty, too long, or contains a fragment',
@@ -215,6 +248,26 @@ String get _activeSurfaceQuery => surfaceQueryForLaunch(
   captureOnly: _captureOnly,
   compileQuery: _surfaceQuery,
   arguments: Platform.executableArguments,
+  environmentQuery: Platform.environment['OMI_CAPTURE_QUERY'],
+);
+
+String captureRunIdForLaunch({
+  required bool captureOnly,
+  String? environmentRunId,
+}) {
+  if (!captureOnly) return '';
+  final value = environmentRunId?.trim() ?? '';
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$').hasMatch(value)) {
+    throw const FormatException(
+      'capture build requires one safe native run id',
+    );
+  }
+  return value;
+}
+
+String get _captureRunId => captureRunIdForLaunch(
+  captureOnly: _captureOnly,
+  environmentRunId: Platform.environment['OMI_CAPTURE_RUN_ID'],
 );
 
 ThemeMode shellThemeModeForSurfaceQuery(String raw) {
@@ -232,7 +285,10 @@ ThemeMode shellThemeModeForSurfaceQuery(String raw) {
   return ThemeMode.system;
 }
 
-Brightness shellBrightnessForSurfaceQuery(String raw, Brightness systemBrightness) {
+Brightness shellBrightnessForSurfaceQuery(
+  String raw,
+  Brightness systemBrightness,
+) {
   return switch (shellThemeModeForSurfaceQuery(raw)) {
     ThemeMode.light => Brightness.light,
     ThemeMode.dark => Brightness.dark,
@@ -241,7 +297,8 @@ Brightness shellBrightnessForSurfaceQuery(String raw, Brightness systemBrightnes
 }
 
 Color shellBackgroundForSurfaceQuery(String raw, Brightness systemBrightness) {
-  return shellBrightnessForSurfaceQuery(raw, systemBrightness) == Brightness.dark
+  return shellBrightnessForSurfaceQuery(raw, systemBrightness) ==
+          Brightness.dark
       ? const Color(0xFF0B0B0F)
       : const Color(0xFFF5F7F9);
 }
@@ -272,7 +329,9 @@ class SurfaceHost extends StatefulWidget {
   State<SurfaceHost> createState() => _SurfaceHostState();
 }
 
-class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver implements OmiShellBridgeHandler {
+class _SurfaceHostState extends State<SurfaceHost>
+    with WidgetsBindingObserver
+    implements OmiShellBridgeHandler {
   late final WebViewController _controller;
   late final OmiShellBridge _bridge;
   BridgeHttpHost? _http;
@@ -291,7 +350,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   // scheme mode: phase machine driving bundle swap / gate / suspend probes.
   SchemeSpike? _scheme;
   int _schemePhase = 0;
-  String? _blocked; // non-null = contract gate refused the mount (error surface)
+  String?
+  _blocked; // non-null = contract gate refused the mount (error surface)
   bool _acceptanceEmitted = false;
 
   String get _surfaceQuerySuffix {
@@ -314,7 +374,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
 
   String _redactedUrl(String? raw) {
     final parsed = Uri.tryParse(raw ?? '');
-    return parsed?.replace(query: '', fragment: '', userInfo: '').toString() ?? '(invalid-url)';
+    return parsed?.replace(query: '', fragment: '', userInfo: '').toString() ??
+        '(invalid-url)';
   }
 
   Future<void> _emitAcceptance(String phase) async {
@@ -351,7 +412,8 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
 
   Uri _ownDocument(Uri uri) => _http?.ownDocument(uri) ?? uri;
 
-  Future<void> _loadOwnedDocument(Uri uri) => _controller.loadRequest(_ownDocument(uri));
+  Future<void> _loadOwnedDocument(Uri uri) =>
+      _controller.loadRequest(_ownDocument(uri));
 
   @override
   void initState() {
@@ -360,10 +422,20 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     // Privileged HTTP: register BEFORE any load so the page sees the channel on
     // its first script evaluation and picks bridge mode rather than DEV.
     final apiBase = Uri.tryParse(_apiBaseUrl);
-    if (!_captureOnly && _apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
-      final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
+    if (!_captureOnly &&
+        _apiBaseUrl.isNotEmpty &&
+        apiBase != null &&
+        apiBase.hasScheme &&
+        apiBase.host.isNotEmpty) {
+      final authority = ShellTransportAuthority(
+        baseUrl: apiBase,
+        token: _apiToken,
+        runId: _runClientId,
+      );
       _http = authority.makeHttpHost();
-      _listen = authority.makeListenHost(evidenceAudioEnabled: _consumerEvidenceFilename.isNotEmpty);
+      _listen = authority.makeListenHost(
+        evidenceAudioEnabled: _consumerEvidenceFilename.isNotEmpty,
+      );
       final sink = ChatBridgeJavaScriptSink(
         (source) => _controller.runJavaScript(source),
         documentInitiallyActive: false,
@@ -386,14 +458,18 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         '(token ${_http!.hasCredential ? "present" : "absent"})',
       );
     } else {
-      debugPrint('[bridge-http] disabled (set OMI_API_BASE_URL to enable privileged HTTP)');
+      debugPrint(
+        '[bridge-http] disabled (set OMI_API_BASE_URL to enable privileged HTTP)',
+      );
     }
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(shellBackgroundForSurfaceQuery(
-        _activeSurfaceQuery,
-        WidgetsBinding.instance.platformDispatcher.platformBrightness,
-      ))
+      ..setBackgroundColor(
+        shellBackgroundForSurfaceQuery(
+          _activeSurfaceQuery,
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+        ),
+      )
       // Surface console -> flutter logs, so headless runs can read bench output.
       ..setOnConsoleMessage((msg) {
         debugPrint('[surface] ${msg.message}');
@@ -424,7 +500,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
             unawaited(_finishPageLoad(url));
           },
           onWebResourceError: (e) {
-            _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
+            _scheme?.log(
+              'WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}',
+            );
           },
         ),
       );
@@ -433,6 +511,43 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   }
 
   Future<void> _finishPageLoad(String url) async {
+    if (_captureOnly) {
+      final result = await _controller.runJavaScriptReturningResult('''
+        (() => {
+          const root = document.querySelector('main[data-production-shell="true"]');
+          if (!root) return JSON.stringify({ok:false});
+          return JSON.stringify({
+            ok: true,
+            route: String(root.getAttribute('data-route') || ''),
+            fixture: String(root.getAttribute('data-qa-fixture') || ''),
+            state: String(root.getAttribute('data-surface-state') || '')
+          });
+        })()
+      ''');
+      Object? decoded = result;
+      if (result is String) {
+        try {
+          decoded = jsonDecode(result);
+        } on FormatException {
+          throw StateError('capture readiness result was not JSON');
+        }
+      }
+      if (decoded is! Map ||
+          decoded['ok'] != true ||
+          decoded['route'] is! String ||
+          (decoded['route'] as String).isEmpty ||
+          decoded['fixture'] is! String ||
+          !(decoded['fixture'] as String).startsWith('polish:') ||
+          decoded['state'] is! String ||
+          (decoded['state'] as String).isEmpty) {
+        throw StateError('capture surface did not expose a typed fixture root');
+      }
+      debugPrint(
+        'NATIVE_CAPTURE_READY run_id=$_captureRunId '
+        'route=${decoded['route']} fixture=${decoded['fixture']} state=${decoded['state']}',
+      );
+      return;
+    }
     if (_consumerEvidence != null) {
       try {
         await _consumerEvidence!.pageFinished(
@@ -442,7 +557,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
           },
         );
         final resultPath = _consumerEvidenceResultPath;
-        if (_consumerEvidenceExit && resultPath != null && await File(resultPath).exists()) {
+        if (_consumerEvidenceExit &&
+            resultPath != null &&
+            await File(resultPath).exists()) {
           exit(0);
         }
       } catch (error) {
@@ -472,7 +589,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _scheme?.log('LIFECYCLE $state');
-    if (state == AppLifecycleState.resumed && _mode == SurfaceMode.scheme && _schemePhase > 0) {
+    if (state == AppLifecycleState.resumed &&
+        _mode == SurfaceMode.scheme &&
+        _schemePhase > 0) {
       _controller.runJavaScript(
         "console.log('PROBE resume readyState='+document.readyState+' bootCount='+localStorage.getItem('bootCount'));"
         "fetch('/probe/echo?after=resume').then(r=>console.log('PROBE resume-fetch '+r.status)).catch(e=>console.log('PROBE resume-fetch FAIL '+e));"
@@ -498,7 +617,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         await _loopA!.start(port: _loopPort);
         _loopPhase = 1;
         debugPrint('[loop] phase 1: loading from port ${_loopA!.port}');
-        await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopA!.port}/'));
+        await _loadOwnedDocument(
+          Uri.parse('http://127.0.0.1:${_loopA!.port}/'),
+        );
       case SurfaceMode.scheme:
         _scheme = SchemeSpike();
         await _scheme!.init();
@@ -509,10 +630,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         // Probe phase machine only for the original v1/v2/v3 suite.
         _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
         if (_consumerEvidenceFilename.isNotEmpty) {
-          if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,191}\.json$').hasMatch(_consumerEvidenceFilename)) {
-            throw StateError('consumer evidence filename is not a safe basename');
+          if (!RegExp(
+            r'^[A-Za-z0-9][A-Za-z0-9._-]{0,191}\.json$',
+          ).hasMatch(_consumerEvidenceFilename)) {
+            throw StateError(
+              'consumer evidence filename is not a safe basename',
+            );
           }
-          _consumerEvidenceResultPath = '${_scheme!.docsDir}/$_consumerEvidenceFilename';
+          _consumerEvidenceResultPath =
+              '${_scheme!.docsDir}/$_consumerEvidenceFilename';
           await _startConsumerEvidence();
         } else {
           await _mountBundle(_schemeBundle);
@@ -532,34 +658,54 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     if (await result.exists()) {
       await result.delete();
     }
-    if (_mode != SurfaceMode.scheme || _schemeBundle != 'surfaces' || _http == null) {
-      throw StateError('consumer evidence requires the live surfaces scheme host');
+    if (_mode != SurfaceMode.scheme ||
+        _schemeBundle != 'surfaces' ||
+        _http == null) {
+      throw StateError(
+        'consumer evidence requires the live surfaces scheme host',
+      );
     }
     final gate = await _scheme!.gateCheck('surfaces', kBridgeContractVersion);
     if (!gate.ok) {
-      throw StateError('consumer evidence bundle failed the native contract gate');
+      throw StateError(
+        'consumer evidence bundle failed the native contract gate',
+      );
     }
     await _scheme!.setActiveBundle('surfaces');
     final hashes = ConsumerEvidenceTreeHashes.fromAssetJson(
-      shellStamp: await rootBundle.loadString('assets/surfaces/omi-ios-shell-build-stamp.json'),
-      surfaceStamp: await rootBundle.loadString('assets/surfaces/omi-build-stamp.json'),
+      shellStamp: await rootBundle.loadString(
+        'assets/surfaces/omi-ios-shell-build-stamp.json',
+      ),
+      surfaceStamp: await rootBundle.loadString(
+        'assets/surfaces/omi-build-stamp.json',
+      ),
     );
-    final collector = ConsumerEvidenceCollector(resultPath: resultPath, runId: _runClientId, hashes: hashes);
+    final collector = ConsumerEvidenceCollector(
+      resultPath: resultPath,
+      runId: _runClientId,
+      hashes: hashes,
+    );
     await collector.prepare();
     _consumerEvidence = ConsumerEvidenceDriver(
       collector: collector,
       ownNavigation: _ownDocument,
       navigate: _controller.loadRequest,
       observe: () async {
-        final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
+        final result = await _controller.runJavaScriptReturningResult(
+          renderedConsumerObservationJavaScript,
+        );
         return normalizeRenderedObservationResult(result);
       },
       startListen: () async {
-        final result = await _controller.runJavaScriptReturningResult(startListenConsumerEvidenceJavaScript);
+        final result = await _controller.runJavaScriptReturningResult(
+          startListenConsumerEvidenceJavaScript,
+        );
         return result == true || result.toString() == 'true';
       },
       authorChat: () async {
-        final result = await _controller.runJavaScriptReturningResult(authorChatConsumerEvidenceJavaScript);
+        final result = await _controller.runJavaScriptReturningResult(
+          authorChatConsumerEvidenceJavaScript,
+        );
         if (result is int) return result;
         if (result is double && result.isFinite && result == result.round()) {
           return result.toInt();
@@ -567,11 +713,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         return null;
       },
       submitChat: () async {
-        final result = await _controller.runJavaScriptReturningResult(submitChatConsumerEvidenceJavaScript);
+        final result = await _controller.runJavaScriptReturningResult(
+          submitChatConsumerEvidenceJavaScript,
+        );
         return result == true || result.toString() == 'true';
       },
       observeChatAfterAdmission: (baseline) async {
-        final result = await _controller.runJavaScriptReturningResult(renderedChatObservationJavaScript(baseline));
+        final result = await _controller.runJavaScriptReturningResult(
+          renderedChatObservationJavaScript(baseline),
+        );
         return normalizeRenderedObservationResult(result);
       },
     );
@@ -619,11 +769,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await s.drainSchemeLog();
     switch (_schemePhase) {
       case 1:
-        await s.log('PHASE 1 complete (v1). Swapping bundle dir to v2 and reloading.');
+        await s.log(
+          'PHASE 1 complete (v1). Swapping bundle dir to v2 and reloading.',
+        );
         _schemePhase = 2;
         await _mountBundle('v2');
       case 2:
-        await s.log('PHASE 2 complete (v2 after swap). Attempting v3 (bad contract).');
+        await s.log(
+          'PHASE 2 complete (v2 after swap). Attempting v3 (bad contract).',
+        );
         _schemePhase = 3;
         final mounted = await _mountBundle('v3');
         await s.log(
@@ -660,13 +814,18 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   // the port and an ephemeral-port design silently wipes user state.
   Future<void> _onLoopPhaseDone() async {
     if (_mode != SurfaceMode.loop || _loopPhase != 1 || _loopPort != 0) {
-      if (_loopPhase == 2) debugPrint('[loop] phase 2 complete — compare bootCount/rows between phases');
+      if (_loopPhase == 2)
+        debugPrint(
+          '[loop] phase 2 complete — compare bootCount/rows between phases',
+        );
       return;
     }
     _loopPhase = 2;
     _loopB = LoopServer('assets/surface-loop');
     await _loopB!.start(port: 0);
-    debugPrint('[loop] phase 2: reloading from port ${_loopB!.port} (was ${_loopA!.port})');
+    debugPrint(
+      '[loop] phase 2: reloading from port ${_loopB!.port} (was ${_loopA!.port})',
+    );
     await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopB!.port}/'));
   }
 
@@ -786,7 +945,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   // folders). Conversations is server-originated and has NO client create, so it
   // is observed (list renders, no create form) rather than written.
   Future<void> _autodrive() async {
-    debugPrint('[autodrive] start mode=${_mode.name} bundle=$_schemeBundle addTask=$_addTask');
+    debugPrint(
+      '[autodrive] start mode=${_mode.name} bundle=$_schemeBundle addTask=$_addTask',
+    );
     if (_mode == SurfaceMode.scheme && _schemeBundle == 'surfaces') {
       await Future<void>.delayed(const Duration(milliseconds: 600));
       // Prefer the production-shell contract markers; retain the dev harness
@@ -873,8 +1034,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         })();
       ''');
       final seedText = _addTask.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      for (final route in const ['tasks', 'memories', 'folders', 'conversations']) {
-        await _controller.runJavaScript("console.log('AUTODRIVE route-open $route=' + window.__ad.openTab('$route'));");
+      for (final route in const [
+        'tasks',
+        'memories',
+        'folders',
+        'conversations',
+      ]) {
+        await _controller.runJavaScript(
+          "console.log('AUTODRIVE route-open $route=' + window.__ad.openTab('$route'));",
+        );
         await Future<void>.delayed(const Duration(milliseconds: 700));
         if (seedText.isNotEmpty && route != 'conversations') {
           await _controller.runJavaScript(
@@ -904,16 +1072,24 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       ''');
       await Future<void>.delayed(const Duration(milliseconds: 3200));
       if (_http != null) await _autodriveBridgeProbes();
-      await _scheme?.log('AUTODRIVE-DONE addTask=${_addTask.isEmpty ? "(none)" : _addTask}');
+      await _scheme?.log(
+        'AUTODRIVE-DONE addTask=${_addTask.isEmpty ? "(none)" : _addTask}',
+      );
       await _scheme?.drainSchemeLog();
       await _emitAcceptance('autodrive');
       return;
     }
-    await _controller.runJavaScript("document.getElementById('btn-device').click()");
+    await _controller.runJavaScript(
+      "document.getElementById('btn-device').click()",
+    );
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    await _controller.runJavaScript("document.getElementById('btn-listen').click()");
+    await _controller.runJavaScript(
+      "document.getElementById('btn-listen').click()",
+    );
     await Future<void>.delayed(const Duration(milliseconds: 800));
-    await _controller.runJavaScript("document.getElementById('btn-bench').click()");
+    await _controller.runJavaScript(
+      "document.getElementById('btn-bench').click()",
+    );
     await _emitAcceptance('autodrive');
   }
 
@@ -934,7 +1110,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   // Fake shell-side state; in the real app these read the BLE/capture layer.
   @override
   Future<DeviceState> getDeviceState() async {
-    return const DeviceState(connected: true, deviceId: 'omi-proto-0001', batteryPct: 57);
+    return const DeviceState(
+      connected: true,
+      deviceId: 'omi-proto-0001',
+      batteryPct: 57,
+    );
   }
 
   @override
@@ -942,7 +1122,16 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     final id = 'sess-${++_sessions}-${params.sampleRateHz}';
     _transcriptTimer?.cancel();
     var i = 0;
-    const words = ['hey', 'so', 'the', 'bridge', 'round', 'trip', 'looks', 'fine'];
+    const words = [
+      'hey',
+      'so',
+      'the',
+      'bridge',
+      'round',
+      'trip',
+      'looks',
+      'fine',
+    ];
     _transcriptTimer = Timer.periodic(const Duration(milliseconds: 700), (t) {
       if (i >= words.length) {
         t.cancel();
@@ -963,11 +1152,16 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
 
   @override
   void didChangePlatformBrightness() {
-    if (shellThemeModeForSurfaceQuery(_activeSurfaceQuery) != ThemeMode.system) return;
-    unawaited(_controller.setBackgroundColor(shellBackgroundForSurfaceQuery(
-      _activeSurfaceQuery,
-      WidgetsBinding.instance.platformDispatcher.platformBrightness,
-    )));
+    if (shellThemeModeForSurfaceQuery(_activeSurfaceQuery) != ThemeMode.system)
+      return;
+    unawaited(
+      _controller.setBackgroundColor(
+        shellBackgroundForSurfaceQuery(
+          _activeSurfaceQuery,
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+        ),
+      ),
+    );
     if (mounted) setState(() {});
   }
 
@@ -997,7 +1191,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
                 child: Text(
                   'UPDATE BLOCKED\n\n$_blocked',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A)),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFFFF453A),
+                  ),
                 ),
               ),
           ],
