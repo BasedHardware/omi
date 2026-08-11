@@ -12,6 +12,13 @@ def _request(headers=None):
     return SimpleNamespace(headers=headers or {})
 
 
+def _stub_quota(monkeypatch):
+    """Record metered requests instead of reaching the real usage counter."""
+    metered = []
+    monkeypatch.setattr(memory_platform, 'enforce_platform_quota', lambda uid: metered.append(uid))
+    return metered
+
+
 def _authorization():
     policy = SimpleNamespace(
         consumer=SimpleNamespace(value='omi_chat'),
@@ -30,6 +37,7 @@ def _authorization():
 
 def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatch):
     calls = []
+    metered = _stub_quota(monkeypatch)
 
     monkeypatch.setattr(memory_platform, '_require_product_authorization', lambda uid: _authorization())
 
@@ -57,6 +65,7 @@ def test_platform_search_is_bounded_and_uses_canonical_product_reader(monkeypatc
     assert calls[0]['offset'] == 4
     assert result['uid'] == 'user-1'
     assert result['archive_default_visible'] is False
+    assert metered == ['user-1']
 
 
 def test_platform_search_rejects_out_of_bounds_query(monkeypatch):
@@ -69,6 +78,7 @@ def test_platform_search_rejects_out_of_bounds_query(monkeypatch):
 def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     created = SimpleNamespace(id='memory-1')
     calls = []
+    metered = _stub_quota(monkeypatch)
 
     monkeypatch.setattr(
         memory_platform,
@@ -96,10 +106,12 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     assert result.status == 'created'
     assert calls[1][1]['memory_system'] is MemorySystem.CANONICAL
     assert calls[1][1]['require_canonical_promotion'] is True
+    assert metered == ['user-1']
 
 
 def test_platform_ingest_preserves_capture_device_provenance(monkeypatch):
     captured = {}
+    _stub_quota(monkeypatch)
 
     monkeypatch.setattr(
         memory_platform,
