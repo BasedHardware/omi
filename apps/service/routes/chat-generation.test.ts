@@ -745,6 +745,99 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("provider, context, and attachment failures stay failed through SSE, history, and replay", async () => {
+    const cases = [
+      {
+        name: "provider",
+        code: "generation_provider_failed",
+        source: Object.freeze({
+          start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            queueMicrotask(() => input.onError({
+              code: "generation_provider_failed",
+              retryable: false,
+            }));
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: false,
+      },
+      {
+        name: "context",
+        code: "generation_context_failed",
+        source: Object.freeze({
+          start() {
+            throw new Error("provider must not start after context failure");
+          },
+        }),
+        context: Object.freeze({
+          async load(): Promise<readonly string[]> {
+            throw new Error("injected context failure");
+          },
+        }),
+        attachmentFailure: false,
+      },
+      {
+        name: "attachment",
+        code: "generation_attachment_failed",
+        source: Object.freeze({
+          start() {
+            throw new Error("provider must not start after attachment failure");
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: true,
+      },
+    ] as const;
+
+    for (const scenario of cases) {
+      const base = createInMemoryLocalServiceStores();
+      const stores: LocalServiceStores = scenario.attachmentFailure === true
+        ? Object.freeze({
+            ...base,
+            chatAttachments: Object.freeze({
+              ...base.chatAttachments,
+              loadForGeneration(): never {
+                throw new Error("injected attachment failure");
+              },
+            }),
+          })
+        : base;
+      const db = new Database(":memory:");
+      const local = createLocalDevService({
+        db,
+        stores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: `chat-${scenario.name}-failure-projection-proof`,
+        generationSource: scenario.source,
+        generationContext: scenario.context,
+      });
+      const { admission } = await admitAndOpen(local, create(`projection-${scenario.name}`));
+      const stream = await generationEvents(local, admission.generation.id);
+      const frames = parseSse(await stream.text());
+      const terminals = frames.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event));
+      expect(terminals).toHaveLength(1);
+      expect(terminals[0]?.event).toBe("failed");
+      expect(terminals[0]?.data).toEqual({
+        kind: "failed",
+        error: {
+          code: scenario.code,
+          retryable: scenario.name === "provider" ? false : true,
+        },
+      });
+      expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
+
+      const replay = parseSse(await (await generationEvents(local, admission.generation.id)).text());
+      expect(replay.filter((frame) => frame.event === "failed")).toHaveLength(1);
+      expect(stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)!
+        .filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind)))
+        .toHaveLength(1);
+      db.close();
+    }
+  });
+
   test("a durable terminalization failure stays active until recovery can append failed", async () => {
     const base = createInMemoryLocalServiceStores();
     let allowTerminal = false;

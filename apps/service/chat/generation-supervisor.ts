@@ -9,10 +9,13 @@ import { createHash } from "node:crypto";
 
 import {
   snapshotChatGenerationMemoryContext,
-  unavailableChatGenerationMemoryContext,
   type ChatGenerationContextSource,
+  type ChatGenerationMemoryContext,
 } from "./generation-context";
-import type { ChatAttachmentContentPort } from "./attachment-content";
+import type {
+  ChatAttachmentContentPort,
+  ChatGenerationAttachmentDescriptor,
+} from "./attachment-content";
 import type { ChatGenerationSource, ChatGenerationSourceRun } from "./generation-source";
 import type { ChatGenerationEvent } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
@@ -30,6 +33,8 @@ export interface AdmittedChatGeneration {
 export interface ChatGenerationSupervisor {
   onAdmitted(input: AdmittedChatGeneration): void;
   cancel(accountId: string, generationId: string): void;
+  /** Optional fault-injection seam; production timeouts can adopt this later. */
+  timeout?(accountId: string, generationId: string): void;
   recoverInterrupted(): void;
 }
 
@@ -59,9 +64,52 @@ interface ActiveGeneration {
   run: ChatGenerationSourceRun | null;
   runCancelled: boolean;
   terminal: boolean;
+  failure: ChatGenerationFailure | null;
 }
 
 const FALLBACK_TEXT = "I’m sorry, I couldn’t complete that response.";
+
+export type ChatGenerationFailureCode =
+  | "generation_provider_failed"
+  | "generation_context_failed"
+  | "generation_attachment_failed"
+  | "generation_interrupted"
+  | "generation_timeout";
+
+export interface ChatGenerationFailure {
+  readonly code: ChatGenerationFailureCode;
+  readonly retryable: boolean;
+}
+
+const classifyFailure = (
+  error: unknown,
+  stage: "provider" | "context" | "attachment" | "callback" | "timeout",
+): ChatGenerationFailure => {
+  if (error !== null && typeof error === "object") {
+    const candidate = error as { readonly code?: unknown; readonly retryable?: unknown };
+    const allowed = stage === "provider"
+      ? ["generation_provider_failed", "generation_timeout"]
+      : stage === "context"
+        ? ["generation_context_failed", "generation_timeout"]
+        : stage === "attachment"
+          ? ["generation_attachment_failed", "generation_timeout"]
+          : stage === "callback"
+            ? ["generation_interrupted", "generation_timeout"]
+            : ["generation_timeout"];
+    if (typeof candidate.code === "string" && allowed.includes(candidate.code)
+      && typeof candidate.retryable === "boolean") {
+      return { code: candidate.code as ChatGenerationFailureCode, retryable: candidate.retryable };
+    }
+  }
+  if (stage === "context") return { code: "generation_context_failed", retryable: true };
+  if (stage === "attachment") return { code: "generation_attachment_failed", retryable: true };
+  // Keep the pre-existing interrupted code for callback/storage failures so old
+  // clients retain their wire vocabulary while the source/context causes become
+  // distinguishable typed failures.
+  if (stage === "callback") return { code: "generation_interrupted", retryable: true };
+  if (stage === "timeout") return { code: "generation_timeout", retryable: true };
+  return { code: "generation_provider_failed", retryable: true };
+};
 
 const accumulatedText = (events: readonly ChatGenerationEvent[]): string => {
   let text = "";
@@ -148,8 +196,15 @@ export const createChatGenerationSupervisor = (
     state: ActiveGeneration,
     kind: "done" | "cancelled" | "failed",
     text: string,
+    failure: ChatGenerationFailure | null = null,
   ): boolean => {
     if (state.terminal) return true;
+    if (kind === "done" && state.failure !== null) {
+      kind = "failed";
+      text = "";
+      failure = state.failure;
+    }
+    if (kind === "failed") state.failure = failure ?? classifyFailure(null, "provider");
     state.terminal = true;
     cancelRun(state);
     try {
@@ -164,7 +219,7 @@ export const createChatGenerationSupervisor = (
         frame: kind === "failed"
           ? {
               kind: "failed",
-              error: { code: "generation_interrupted", retryable: true },
+              error: state.failure!,
             }
           : kind === "done"
             ? { kind: "done", message: message ?? assistantMessage(state, FALLBACK_TEXT) }
@@ -178,7 +233,11 @@ export const createChatGenerationSupervisor = (
     return true;
   };
 
-  const failInterrupted = (accountId: string, generationId: string): boolean => {
+  const failInterrupted = (
+    accountId: string,
+    generationId: string,
+    failure: ChatGenerationFailure = { code: "generation_interrupted", retryable: true },
+  ): boolean => {
     try {
       const prior = deps.events.listAfter(accountId, generationId, null);
       if (prior === null) return false;
@@ -189,7 +248,7 @@ export const createChatGenerationSupervisor = (
         createdAt: deps.nowEpochMilliseconds(),
         frame: {
           kind: "failed",
-          error: { code: "generation_interrupted", retryable: true },
+          error: failure,
         },
       });
       return true;
@@ -212,6 +271,7 @@ export const createChatGenerationSupervisor = (
       run: null,
       runCancelled: false,
       terminal: false,
+      failure: null,
     };
     return finalize(state, "cancelled", state.text);
   };
@@ -238,6 +298,7 @@ export const createChatGenerationSupervisor = (
         run: null,
         runCancelled: false,
         terminal: false,
+        failure: null,
       };
       active.set(key, state);
       try {
@@ -246,30 +307,40 @@ export const createChatGenerationSupervisor = (
         active.delete(key);
         throw error;
       }
-      // Context failure must not turn an otherwise useful Chat answer into a
-      // false memory absence or a generic generation failure. The credential
-      // is passed directly to this promise and is never retained in active or
-      // durable generation state.
-      const contextLoad = Promise.resolve()
-        .then(() => deps.context.load({
-          accountId: input.accountId,
-          admitted: input.stored,
-          bearerToken: input.bearerToken,
-        }))
-        .then((value) => snapshotChatGenerationMemoryContext(value)
-          ?? unavailableChatGenerationMemoryContext())
-        .catch(() => unavailableChatGenerationMemoryContext());
-      void Promise.all([
-        contextLoad,
-        Promise.resolve(deps.attachments.loadForGeneration({
-          accountId: input.accountId,
-          messageId: input.stored.message.id,
-          attachments: input.stored.message.attachments ?? Object.freeze([]),
-          nowEpochMilliseconds: deps.nowEpochMilliseconds(),
-        })),
-      ])
-        .then(([context, attachments]) => {
-          if (state.terminal) return;
+      void (async (): Promise<void> => {
+        // Credential is passed only into this load and is never retained in
+        // active or durable generation state. Hostile or undeclarable memory
+        // envelopes fail the generation as a typed context fault; authorized
+        // memory-read unavailability is represented by the context source
+        // itself, not by swallowing the error here.
+        let context: ChatGenerationMemoryContext;
+        try {
+          const loaded = snapshotChatGenerationMemoryContext(await deps.context.load({
+            accountId: input.accountId,
+            admitted: input.stored,
+            bearerToken: input.bearerToken,
+          }));
+          if (loaded === null) throw new TypeError("untrusted generation context");
+          context = loaded;
+        } catch (error) {
+          void finalize(state, "failed", "", classifyFailure(error, "context"));
+          return;
+        }
+        if (state.terminal) return;
+        let attachments: readonly ChatGenerationAttachmentDescriptor[];
+        try {
+          attachments = await deps.attachments.loadForGeneration({
+            accountId: input.accountId,
+            messageId: input.stored.message.id,
+            attachments: input.stored.message.attachments ?? Object.freeze([]),
+            nowEpochMilliseconds: deps.nowEpochMilliseconds(),
+          });
+        } catch (error) {
+          void finalize(state, "failed", "", classifyFailure(error, "attachment"));
+          return;
+        }
+        if (state.terminal) return;
+        try {
           const run = deps.source.start({
             generationId,
             prompt: input.stored.message.text,
@@ -281,20 +352,22 @@ export const createChatGenerationSupervisor = (
                 append(state, { kind: "delta", text });
                 state.text += text;
               } catch {
-                void finalize(state, "failed", "");
+                void finalize(state, "failed", "", classifyFailure(null, "callback"));
               }
             },
             onComplete(): void {
               void finalize(state, "done", state.text);
             },
-            onError(): void {
-              void finalize(state, "done", FALLBACK_TEXT);
+            onError(error): void {
+              void finalize(state, "failed", "", classifyFailure(error, "provider"));
             },
           });
           state.run = run;
           if (state.terminal) cancelRun(state);
-        })
-        .catch(() => { void finalize(state, "done", FALLBACK_TEXT); });
+        } catch (error) {
+          void finalize(state, "failed", "", classifyFailure(error, "provider"));
+        }
+      })();
     },
 
     cancel(accountId: string, generationId: string): void {
@@ -302,6 +375,25 @@ export const createChatGenerationSupervisor = (
       queueMicrotask(() => {
         if (state !== undefined) void finalize(state, "cancelled", state.text);
         else void cancelFromDurableState(accountId, generationId);
+      });
+    },
+
+    timeout(accountId: string, generationId: string): void {
+      const state = active.get(keyOf(accountId, generationId));
+      queueMicrotask(() => {
+        if (state !== undefined) {
+          void finalize(
+            state,
+            "failed",
+            "",
+            { code: "generation_timeout", retryable: true },
+          );
+        } else {
+          void failInterrupted(accountId, generationId, {
+            code: "generation_timeout",
+            retryable: true,
+          });
+        }
       });
     },
 
