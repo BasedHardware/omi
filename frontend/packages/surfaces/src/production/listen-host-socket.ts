@@ -1,6 +1,10 @@
 /** Page-side proxy for the shell-owned, authenticated Listen WebSocket. */
 
 import type {
+  PlatformListenPreflightProvider,
+  PlatformListenPreflightSnapshot,
+  PlatformListenPermissionState,
+  PlatformListenInputDeviceState,
   PlatformListenSocket,
   PlatformListenSocketCloseEvent,
   PlatformListenSocketFactory,
@@ -19,6 +23,15 @@ type ListenHostEvent =
   | { readonly type: "error" }
   | { readonly type: "close"; readonly code: number };
 
+type ListenPreflightEvent = {
+  readonly type: "preflight";
+  readonly requestId: string;
+  readonly permission: PlatformListenPermissionState;
+  readonly deviceState: PlatformListenInputDeviceState;
+  readonly deviceLabel?: string | null;
+  readonly recovery?: "request-permission" | "open-settings" | null;
+};
+
 type ListenHostGlobals = {
   readonly omiListenSocket?: HostMessageChannel;
   readonly webkit?: {
@@ -27,6 +40,7 @@ type ListenHostGlobals = {
     };
   };
   __omiListenSocketEvent?: (id: string, event: ListenHostEvent | string) => void;
+  __omiListenPreflightEvent?: (requestId: string, event: ListenPreflightEvent | string) => void;
 };
 
 type ListenerMap = {
@@ -48,6 +62,19 @@ function parseEvent(event: ListenHostEvent | string): ListenHostEvent | null {
   if (typeof event !== "string") return event;
   try {
     return JSON.parse(event) as ListenHostEvent;
+  } catch {
+    return null;
+  }
+}
+
+function parsePreflightEvent(event: ListenPreflightEvent | string): ListenPreflightEvent | null {
+  if (typeof event !== "string") return event;
+  try {
+    const parsed = JSON.parse(event) as Partial<ListenPreflightEvent>;
+    if (parsed.type !== "preflight" || typeof parsed.requestId !== "string") return null;
+    if (!["unknown", "checking", "granted", "denied", "restricted", "unavailable"].includes(parsed.permission ?? "")) return null;
+    if (!["unknown", "checking", "available", "unavailable"].includes(parsed.deviceState ?? "")) return null;
+    return parsed as ListenPreflightEvent;
   } catch {
     return null;
   }
@@ -130,5 +157,64 @@ export function createProductionListenHostSocketFactory(
     const socket = new PlatformListenHostSocket(id, path, post);
     sockets.set(id, socket);
     return socket;
+  };
+}
+
+/**
+ * Host-only microphone/device preflight. The native side returns state, not
+ * hardware identifiers or credentials; a missing response is never treated as
+ * granted. Recovery methods exist only when the host advertises them.
+ */
+export function createProductionListenHostPreflightProvider(
+  host: ListenHostGlobals = globalThis as ListenHostGlobals,
+): PlatformListenPreflightProvider {
+  const channel = channelFrom(host);
+  let snapshot: PlatformListenPreflightSnapshot = {
+    permission: "unknown",
+    device: { state: "unknown", label: null },
+    recovery: null,
+  };
+  let nextId = 0;
+  const listeners = new Set<() => void>();
+  const pending = new Map<string, () => void>();
+  const post = (operation: "check" | "request-permission" | "open-settings"): Promise<void> => {
+    const requestId = `listen-preflight-${++nextId}`;
+    if (operation !== "open-settings") {
+      snapshot = {
+        ...snapshot,
+        permission: "checking",
+        device: { state: "checking", label: null },
+      };
+      for (const listener of listeners) listener();
+    }
+    return new Promise((resolve) => {
+      pending.set(requestId, resolve);
+      channel.postMessage(JSON.stringify({ id: requestId, action: "preflight", operation }));
+    });
+  };
+  host.__omiListenPreflightEvent = (requestId, rawEvent): void => {
+    const event = parsePreflightEvent(rawEvent);
+    if (event === null || event.requestId !== requestId) return;
+    const label = typeof event.deviceLabel === "string" && event.deviceLabel.trim() !== ""
+      ? event.deviceLabel.trim().slice(0, 80)
+      : null;
+    snapshot = {
+      permission: event.permission,
+      device: { state: event.deviceState, label },
+      recovery: event.recovery ?? null,
+    };
+    for (const listener of listeners) listener();
+    pending.get(requestId)?.();
+    pending.delete(requestId);
+  };
+  return {
+    snapshot: () => snapshot,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+    refresh: () => post("check"),
+    requestPermission: () => post("request-permission"),
+    openSettings: () => post("open-settings"),
   };
 }

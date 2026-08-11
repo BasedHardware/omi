@@ -29,6 +29,12 @@ print("NOT-READY=\(isListenProtocolReady("{\"type\":\"service_status\",\"status\
 let decision = authority.prepareListen(
   id: "listen-1", path: "/v4/listen?language=en", clientId: "run-listen-proof")
 if case let .dispatch(prepared) = decision {
+  let notDetermined = ListenPreflightPolicy.payload(permission: .notDetermined, inputAvailable: true)
+  let denied = ListenPreflightPolicy.payload(permission: .denied, inputAvailable: true)
+  let granted = ListenPreflightPolicy.payload(permission: .authorized, inputAvailable: true)
+  print("PREFLIGHT-UNKNOWN=\(notDetermined["permission"] as! String)/\(notDetermined["deviceState"] as! String)/\(notDetermined["recovery"] as! String)")
+  print("PREFLIGHT-DENIED=\(denied["permission"] as! String)/\(denied["deviceState"] as! String)/\(denied["recovery"] as! String)")
+  print("PREFLIGHT-GRANTED=\(granted["permission"] as! String)/\(granted["deviceState"] as! String)/\(granted["deviceLabel"] as! String)")
   print("URL=\(prepared.request.url!.absoluteString)")
   let auth = prepared.request.value(forHTTPHeaderField: "Authorization") ?? "missing"
   print("AUTH=\(auth)")
@@ -58,10 +64,12 @@ test(
         join(root, "shell/Sources/OmiShell/ListenSocket.swift"),
         main,
         "-framework", "Foundation",
+        "-framework", "AppKit",
+        "-framework", "AVFoundation",
         "-framework", "WebKit",
       ]);
       const output = execFileSync(binary, { encoding: "utf8" });
-      assert.equal(output, "AUDIO-BYTES=3200\nSAMPLE-0=-12000\nSAMPLE-1=-11743\nSAMPLE-1599=-9074\nREADY=true\nNOT-READY=false\nURL=wss://staging.example.test/v4/listen?language=en\nAUTH=Bearer shell-token\nCLIENT-ID=run-listen-proof::macos\n");
+      assert.equal(output, "AUDIO-BYTES=3200\nSAMPLE-0=-12000\nSAMPLE-1=-11743\nSAMPLE-1599=-9074\nREADY=true\nNOT-READY=false\nPREFLIGHT-UNKNOWN=unknown/unknown/request-permission\nPREFLIGHT-DENIED=denied/unavailable/open-settings\nPREFLIGHT-GRANTED=granted/available/Default microphone\nURL=wss://staging.example.test/v4/listen?language=en\nAUTH=Bearer shell-token\nCLIENT-ID=run-listen-proof::macos\n");
       assert.equal(output.includes("127.0.0.1:5290"), false);
     } finally {
       rmSync(scratch, { recursive: true, force: true });

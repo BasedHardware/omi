@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'bridge_http_host.dart';
@@ -136,6 +137,7 @@ class ListenSocketHost {
   });
 
   static const channel = 'omiListenSocket';
+  static const _preflightChannel = MethodChannel('omi/listen-preflight');
 
   final Uri baseUrl;
   final ShellCredentialCustody custody;
@@ -166,6 +168,15 @@ class ListenSocketHost {
     final id = decoded['id'];
     final action = decoded['action'];
     if (id is! String || action is! String) return;
+    if (action == 'preflight') {
+      final operation = decoded['operation'];
+      if (operation is! String ||
+          !const <String>{'check', 'request-permission', 'open-settings'}.contains(operation)) {
+        return;
+      }
+      await _handlePreflight(controller, id, operation);
+      return;
+    }
     if (action == 'close') {
       final code = decoded['code'] is int ? decoded['code'] as int : WebSocketStatus.normalClosure;
       final reason = decoded['reason'] is String ? decoded['reason'] as String : null;
@@ -220,8 +231,49 @@ class ListenSocketHost {
     }
   }
 
-  Future<void> _emit(WebViewController controller, String id, Map<String, Object> payload) {
-    return controller.runJavaScript('window.__omiListenSocketEvent?.(${jsonEncode(id)}, ${jsonEncode(payload)})');
+  Future<void> _handlePreflight(WebViewController controller, String id, String operation) async {
+    Map<String, Object?> payload;
+    try {
+      final method = switch (operation) {
+        'check' => 'check',
+        'request-permission' => 'requestPermission',
+        'open-settings' => 'openSettings',
+        _ => 'check',
+      };
+      final value = await _preflightChannel.invokeMethod<Object?>(method);
+      payload = value is Map
+          ? value.map((key, value) => MapEntry(key.toString(), value))
+          : _unavailablePreflight;
+    } on MissingPluginException {
+      payload = _unavailablePreflight;
+    } on PlatformException {
+      payload = _unavailablePreflight;
+    }
+    final response = <String, Object?>{
+      'type': 'preflight',
+      'requestId': id,
+      'permission': payload['permission'] ?? 'unavailable',
+      'deviceState': payload['deviceState'] ?? 'unavailable',
+      if (payload['deviceLabel'] is String) 'deviceLabel': payload['deviceLabel'],
+      'recovery': payload['recovery'],
+    };
+    await _emit(controller, id, response, callback: '__omiListenPreflightEvent');
+  }
+
+  static const _unavailablePreflight = <String, Object?>{
+    'permission': 'unavailable',
+    'deviceState': 'unavailable',
+    'deviceLabel': null,
+    'recovery': null,
+  };
+
+  Future<void> _emit(
+    WebViewController controller,
+    String id,
+    Map<String, Object?> payload, {
+    String callback = '__omiListenSocketEvent',
+  }) {
+    return controller.runJavaScript('window.$callback?.(${jsonEncode(id)}, ${jsonEncode(payload)})');
   }
 
   Future<void> resetForNavigation() => _closeAll('surface navigation');

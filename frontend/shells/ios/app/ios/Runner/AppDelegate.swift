@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import WebKit
+import AVFoundation
 
 // ============================================================================
 // Ship-origin host: WKURLSchemeHandler serving the surface bundle from
@@ -163,6 +164,41 @@ extension WKWebView {
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private func listenPreflightPayload() -> [String: Any] {
+    let session = AVAudioSession.sharedInstance()
+    let permission: String
+    let recovery: String?
+    switch session.recordPermission {
+    case .undetermined:
+      permission = "unknown"
+      recovery = "request-permission"
+    case .granted:
+      permission = "granted"
+      recovery = nil
+    case .denied:
+      permission = "denied"
+      recovery = "open-settings"
+    @unknown default:
+      permission = "unavailable"
+      recovery = nil
+    }
+    let hasInput = !session.currentRoute.inputs.isEmpty || !(session.availableInputs?.isEmpty ?? true)
+    let deviceState: String
+    if permission == "granted" {
+      deviceState = hasInput ? "available" : "unavailable"
+    } else if permission == "unknown" {
+      deviceState = "unknown"
+    } else {
+      deviceState = "unavailable"
+    }
+    return [
+      "permission": permission,
+      "deviceState": deviceState,
+      "deviceLabel": hasInput && permission == "granted" ? "Default microphone" : NSNull(),
+      "recovery": recovery ?? NSNull(),
+    ]
+  }
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -185,6 +221,31 @@ extension WKWebView {
         result(true)
       case "drainSchemeLog":
         result(OmiSchemeHandler.shared.drainLog())
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let listenPreflight = FlutterMethodChannel(
+      name: "omi/listen-preflight", binaryMessenger: registrar.messenger())
+    listenPreflight.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterError(code: "host-gone", message: nil, details: nil))
+        return
+      }
+      switch call.method {
+      case "check":
+        result(self.listenPreflightPayload())
+      case "requestPermission":
+        AVAudioSession.sharedInstance().requestRecordPermission { _ in
+          DispatchQueue.main.async { result(self.listenPreflightPayload()) }
+        }
+      case "openSettings":
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+          result(false)
+          return
+        }
+        UIApplication.shared.open(url) { opened in result(opened) }
       default:
         result(FlutterMethodNotImplemented)
       }

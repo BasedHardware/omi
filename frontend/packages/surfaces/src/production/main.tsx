@@ -16,6 +16,7 @@ import {
   type SettingsAppearancePreference,
 } from "@omi-core/contracts";
 import {
+  createUnavailableListenPreflightProvider,
   createPlatformListenCaptureClient,
   type PlatformListenSocketFactory,
 } from "@omi-core/adapters-platform";
@@ -35,7 +36,7 @@ import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
 import { FoldersProduction } from "./FoldersProduction.js";
 import { ProductionLifecycleRegion } from "./ProductionPrimitives.js";
-import { createProductionListenHostSocketFactory } from "./listen-host-socket.js";
+import { createProductionListenHostPreflightProvider, createProductionListenHostSocketFactory } from "./listen-host-socket.js";
 import { createPlatformProductionSettingsStore } from "./createPlatformSettingsStore.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
@@ -69,6 +70,7 @@ type OmiHostConfig = {
   readonly platformOriginLabel?: string;
   /** Native hosts attach auth while keeping credentials out of JS-visible state. */
   readonly listenSocketFactory?: PlatformListenSocketFactory;
+  readonly listenPreflightProvider?: import("@omi-core/adapters-platform").PlatformListenPreflightProvider;
 };
 const hostConfig: OmiHostConfig =
   (globalThis as { __OMI_HOST_CONFIG__?: OmiHostConfig }).__OMI_HOST_CONFIG__ ?? {};
@@ -404,6 +406,10 @@ if (query.get("lab") === "1") {
         } else if (route === "listen") {
           const openSocket = hostConfig.listenSocketFactory
             ?? createProductionListenHostSocketFactory();
+          const preflight = hostConfig.listenPreflightProvider
+            ?? (hostConfig.listenSocketFactory
+              ? createUnavailableListenPreflightProvider()
+              : createProductionListenHostPreflightProvider());
           const schema = JSON.parse(__OMI_LISTEN_PROTOCOL_SCHEMA__) as SchemaDocument;
           const client = createPlatformListenCaptureClient({
             env,
@@ -411,6 +417,7 @@ if (query.get("lab") === "1") {
             openSocket,
             generation: "platform",
             handshake: { language: locale, source: listenSource },
+            preflight,
           });
           const store = createPlatformProductionListenStore(client, env);
           markRendered("listen", null);

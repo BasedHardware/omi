@@ -1,4 +1,5 @@
 import type { StoreStatus } from "@omi-core/domain";
+import type { PlatformListenPreflightSnapshot } from "@omi-core/adapters-platform";
 import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { CaptureState } from "./capture-state.js";
 
@@ -23,4 +24,8 @@ export type ProductionListenStore = {
   entitlementState(): ListenEntitlementSnapshot | null;
   start(): Promise<void>;
   stop(): Promise<void>;
+  /** Native permission/device facts; absent only on legacy fixture stores. */
+  preflight?(): PlatformListenPreflightSnapshot;
+  requestPermission?(): Promise<void>;
+  openSettings?(): Promise<void>;
 };
