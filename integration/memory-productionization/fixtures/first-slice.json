@@ -1,0 +1,238 @@
+{
+  "schema_version": "memory-productionization-comparison-v1",
+  "versions": {
+    "kernel_contract": "memory-productionization-v1",
+    "extraction_strategy": "grounded-reference-v1",
+    "speaker_strategy": "session-frame-reference-v1",
+    "boundary_strategy": "unit-boundary-reference-v1",
+    "projection_strategy": "proposition-per-lineage-v1",
+    "read_strategy": "authorized-synthesized-v1"
+  },
+  "formation": {
+    "evidence_ids": ["evidence:synthetic:1"],
+    "extraction_dispositions": [
+      {
+        "claim_revision_id": "claim:provisional:1",
+        "disposition": "accepted",
+        "reason": null
+      },
+      {
+        "claim_revision_id": "claim:provisional:dropped",
+        "disposition": "dropped",
+        "reason": "missing_argument:object"
+      }
+    ],
+    "placement_dispositions": [
+      {
+        "claim_revision_id": "claim:provisional:1",
+        "disposition": "admitted",
+        "canonical_claim_revision_id": "claim:canonical:1",
+        "error_code": null
+      },
+      {
+        "claim_revision_id": "claim:provisional:retryable",
+        "disposition": "retryable_error",
+        "canonical_claim_revision_id": null,
+        "error_code": "model_timeout"
+      }
+    ]
+  },
+  "graph": {
+    "owner_account_id": "owner:synthetic",
+    "graph_generation": 1,
+    "claims": [
+      {
+        "revision_id": "claim:canonical:1",
+        "commit_sequence": 1,
+        "placement_status": "canonical",
+        "claim": {
+          "claim_lineage_id": "lineage:synthetic:1",
+          "claim_revision_id": "claim:canonical:1",
+          "owner_account_id": "owner:synthetic",
+          "predicate_id": "predicate:prefers",
+          "predicate": "prefers",
+          "proposition_key_raw": "prefers(subject=source:aster,object=cedar-tea)",
+          "proposition_key_resolved": "prefers(subject=person:aster,object=cedar-tea)",
+          "predicate_alias_frontier": "predicate-frontier:1",
+          "arguments": [
+            {
+              "slot_id": "subject",
+              "role": "subject",
+              "surface": "Aster",
+              "span": { "start": 0, "end": 5 },
+              "value": { "kind": "entity_ref", "ref": "person:aster" }
+            },
+            {
+              "slot_id": "object",
+              "role": "object",
+              "surface": "cedar tea",
+              "span": { "start": 23, "end": 32 },
+              "value": { "kind": "literal", "value": "cedar tea" }
+            }
+          ],
+          "polarity": "positive",
+          "observed_speaker_slot_id": "subject",
+          "temporal_scope": {
+            "observed_at": "2026-01-02T10:00:00Z",
+            "precision": "instant",
+            "valid_time": {
+              "typed_expression": {
+                "kind": "absolute",
+                "granularity": "instant",
+                "value": "2026-01-02T10:00:00Z"
+              },
+              "resolved_interval": {
+                "kind": "instant",
+                "start": "2026-01-02T10:00:00.000Z",
+                "end": "2026-01-02T10:00:00.000Z",
+                "timezone": "UTC",
+                "granularity": "instant"
+              },
+              "derivation": {
+                "resolver_version": "fixture-time-v1",
+                "timezone": "UTC"
+              }
+            }
+          },
+          "evidence_refs": ["evidence:synthetic:1"],
+          "policy_labels": [
+            "subject:generic",
+            "sensitivity:generic",
+            "capture:generic"
+          ],
+          "source_language": "en",
+          "scope": { "locality": "durable", "scope_ref": "person:aster" },
+          "lifecycle": "canonical",
+          "canonical_claim_id": "canonical:lineage:synthetic:1",
+          "source_provisional_revision_ids": ["claim:provisional:1"]
+        }
+      }
+    ],
+    "entities": [
+      {
+        "revision_id": "entity-revision:aster:1",
+        "entity": {
+          "entity_id": "person:aster",
+          "owner_account_id": "owner:synthetic",
+          "entity_revision_id": "entity-revision:aster:1",
+          "handle": "aster",
+          "labels": ["synthetic"]
+        }
+      }
+    ],
+    "predicates": [
+      {
+        "revision_id": "predicate-revision:prefers:1",
+        "predicate": {
+          "predicate_id": "predicate:prefers",
+          "owner_account_id": "owner:synthetic",
+          "predicate_revision_id": "predicate-revision:prefers:1",
+          "identity_name": "prefers",
+          "display_name": "prefers",
+          "lifecycle": "canonical",
+          "slot_ids": ["object", "subject"]
+        }
+      }
+    ],
+    "events": [
+      {
+        "revision_id": "event-revision:synthetic:1",
+        "event": {
+          "event_id": "event:synthetic:1",
+          "event_revision_id": "event-revision:synthetic:1",
+          "owner_account_id": "owner:synthetic",
+          "capture_session_id": "session:synthetic:1",
+          "stream_id": "stream:synthetic",
+          "event_kind": "text",
+          "payload_schema_ref": "synthetic-text-v1",
+          "schema_version": "v1",
+          "payload": { "synthetic": true },
+          "event_time": "2026-01-02T10:00:00Z",
+          "ingest_time": "2026-01-02T10:00:01Z",
+          "source_sequence": 1,
+          "evidence_addressable_refs": ["evidence:synthetic:1"],
+          "source_trust": "synthetic-fixture",
+          "policy_labels": [
+            "subject:generic",
+            "sensitivity:generic",
+            "capture:generic"
+          ],
+          "canonical_redacted_hash": "fixture-event-hash"
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "revision_id": "evidence-revision:synthetic:1",
+        "commit_sequence": 1,
+        "evidence": {
+          "evidence_id": "evidence:synthetic:1",
+          "event_revision_id": "event-revision:synthetic:1",
+          "source_unit_ref": "utterance:synthetic:1",
+          "range": { "start": 0, "end": 33 },
+          "excerpt": "Aster says they prefer cedar tea.",
+          "source_identity_ref": {
+            "namespace_instance_ref": "fixture-speakers",
+            "local_key": "speaker:aster",
+            "producer": {
+              "producer_ref": "fixture-producer",
+              "contract_ref": "fixture-contract-v1"
+            },
+            "asserted_identity": {
+              "domain": "synthetic",
+              "scope_ref": "session:synthetic:1"
+            }
+          },
+          "speaker_rendering": "Aster",
+          "source_local_mention_ref": "mention:synthetic:aster",
+          "state": "active",
+          "source_trust": "synthetic-fixture",
+          "policy_labels": [
+            "subject:generic",
+            "sensitivity:generic",
+            "capture:generic"
+          ],
+          "source_independence_key": "fixture-source:1"
+        }
+      }
+    ],
+    "adjacency": [
+      {
+        "claim_revision_id": "claim:canonical:1",
+        "entity_id": "person:aster",
+        "role_slot_id": "subject"
+      }
+    ]
+  },
+  "expected_semantic_manifest": {
+    "schema_version": "memory-productionization-comparison-v1",
+    "versions": {
+      "kernel_contract": "memory-productionization-v1",
+      "extraction_strategy": "grounded-reference-v1",
+      "speaker_strategy": "session-frame-reference-v1",
+      "boundary_strategy": "unit-boundary-reference-v1",
+      "projection_strategy": "proposition-per-lineage-v1",
+      "read_strategy": "authorized-synthesized-v1"
+    },
+    "evidence_ids": ["evidence:synthetic:1"],
+    "extraction_dispositions": [
+      "claim:provisional:1:accepted",
+      "claim:provisional:dropped:dropped:missing_argument:object"
+    ],
+    "placement_dispositions": [
+      "claim:provisional:1:admitted:claim:canonical:1",
+      "claim:provisional:retryable:retryable_error:model_timeout"
+    ],
+    "canonical_claim_heads": ["lineage:synthetic:1:claim:canonical:1"],
+    "predicate_identities": ["predicate:prefers:prefers:object,subject"],
+    "argument_roles": ["claim:canonical:1:object:object", "claim:canonical:1:subject:subject"],
+    "policy_labels": ["capture:generic", "sensitivity:generic", "subject:generic"],
+    "scope_localities": ["claim:canonical:1:durable"],
+    "lifecycle_heads": ["claim:canonical:1:canonical"],
+    "entity_adjacency": ["claim:canonical:1:person:aster:subject"],
+    "authorized_projected_claim_ids": ["claim:canonical:1"],
+    "citation_ids": ["evidence:synthetic:1"],
+    "citation_claim_ids": ["evidence:synthetic:1:claim:canonical:1"],
+    "recall": { "diagnostic_count": 0, "cited": true }
+  }
+}
