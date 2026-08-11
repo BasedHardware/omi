@@ -307,49 +307,43 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     filtering,
   });
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      const target = event.target;
-      if (target instanceof HTMLElement && target.closest("input, textarea, select, button, a, [contenteditable='true']")) return;
-      const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        setCreateOpen(true);
-        requestAnimationFrame(() => draftRef.current?.focus());
-        return;
-      }
-      if (!selectedTask) return;
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        const cards = Array.from(shellRef.current?.querySelectorAll<HTMLElement>(".task-card") ?? []);
-        const current = cards.findIndex((card) => card.dataset["taskId"] === selectedTask.id);
-        const next = event.key === "ArrowDown" ? Math.min(cards.length - 1, current + 1) : Math.max(0, current - 1);
-        cards[next]?.focus();
-        return;
-      }
-      if (modifier && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        if (!globalThis.confirm(translate("tasks.deleteConfirm"))) return;
-        void (async () => {
-          if (await run(() => store.delete(selectedTask.id))) setSelectedTaskId(null);
-        })();
-        return;
-      }
-      if (modifier && (event.key === "]" || event.key === "[")) {
-        event.preventDefault();
-        const nextIndent = Math.max(0, Math.min(3, selectedTask.indentLevel + (event.key === "[" ? -1 : 1)));
-        if (nextIndent !== selectedTask.indentLevel) {
-          void run(() => store.patch(selectedTask.id, { indentLevel: nextIndent } satisfies TaskPatch));
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [run, selectedTask, store, translate]);
+  const openCreate = (): void => {
+    setCreateOpen(true);
+    requestAnimationFrame(() => draftRef.current?.focus());
+  };
+  const navigateTask = (event?: KeyboardEvent): void => {
+    if (!selectedTask || !event) return;
+    const cards = Array.from(shellRef.current?.querySelectorAll<HTMLElement>(".task-card") ?? []);
+    const current = cards.findIndex((card) => card.dataset["taskId"] === selectedTask.id);
+    const next = event.key === "ArrowDown" ? Math.min(cards.length - 1, current + 1) : Math.max(0, current - 1);
+    cards[next]?.focus();
+  };
+  const deleteTask = (): void => {
+    if (!selectedTask || !globalThis.confirm(translate("tasks.deleteConfirm"))) return;
+    void (async () => {
+      if (await run(() => store.delete(selectedTask.id))) setSelectedTaskId(null);
+    })();
+  };
+  const indentTask = (event?: KeyboardEvent): void => {
+    if (!selectedTask || !event) return;
+    const nextIndent = Math.max(0, Math.min(3, selectedTask.indentLevel + (event.key === "[" ? -1 : 1)));
+    if (nextIndent !== selectedTask.indentLevel) void run(() => store.patch(selectedTask.id, { indentLevel: nextIndent } satisfies TaskPatch));
+  };
 
   return (
     <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={`tasks:visible:${visibleCount}:total:${rows.length}`}>
-      <ProductionChrome locale={locale} active="tasks" placement="top" />
+      <ProductionChrome locale={locale} active="tasks" placement="top" commandHandlers={{
+        "new-task": openCreate,
+        "navigate-task": navigateTask,
+        "delete-task": deleteTask,
+        "indent-task": indentTask,
+        "outdent-task": indentTask,
+      }} commandEnabled={{
+        "navigate-task": Boolean(selectedTask),
+        "delete-task": Boolean(selectedTask),
+        "indent-task": Boolean(selectedTask),
+        "outdent-task": Boolean(selectedTask),
+      }} />
       <section className="desktop-page-panel">
       <header className="tasks-header">
         <div>

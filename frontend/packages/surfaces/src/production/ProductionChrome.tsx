@@ -1,15 +1,27 @@
+import * as React from "react";
 import { t } from "@omi-core/i18n";
+import {
+  commandLabel,
+  createProductionCommandRegistry,
+  dispatchProductionCommand,
+  isApplePlatform,
+  type ProductionCommandContext,
+  type ProductionCommandId,
+} from "./command-registry.js";
 
 type Locale = string;
 // Chat, Settings and Listen are real routes (board ruling PR-7) but they are NOT yet
-// visible nav destinations: where they sit in the shell is a chrome design change that
-// belongs to the Ink/WindowGlass source of record (PR #11117), not to a surface author
-// inventing a slot. Widening `active` lets those surfaces render with an honest chrome in
-// which nothing is falsely highlighted; every `active === ...` comparison below simply
-// finds no match. See status/FE-SURFACES.md.
-type ProductionRoute = "home" | "memories" | "conversations" | "folders" | "tasks" | "chat" | "settings" | "listen";
+// persistent nav destinations: their shell slots belong to Ink/WindowGlass (PR #11117).
+// They remain first-class command-registry destinations so every live route is discoverable
+// without a surface author inventing a new chrome slot.
+import type { ProductionRoute } from "./command-registry.js";
 type ChromeIconName = "home" | "library" | "tasks" | "rewind" | "apps" | "conversations" | "microphone" | "screen" | "settings";
 type ThemeSelection = "default" | "system" | "light" | "dark";
+
+type CommandHandler = (event?: KeyboardEvent) => void | Promise<void>;
+
+const commandRegistry = createProductionCommandRegistry();
+const commandPopupRole: "dialog" = "dialog";
 
 function ChromeIcon({ name }: { name: ChromeIconName }): React.JSX.Element {
   const paths: Record<ChromeIconName, React.JSX.Element> = {
@@ -66,25 +78,78 @@ function ProductionThemeControl({ locale, mobile = false }: { locale: Locale; mo
   );
 }
 
-export function ProductionChrome({ locale, active, placement = "top" }: {
+export function ProductionChrome({ locale, active, placement = "top", commandHandlers, commandEnabled }: {
   locale: Locale;
   active: ProductionRoute;
   placement?: "top" | "bottom";
+  commandHandlers?: Partial<Record<ProductionCommandId, CommandHandler>>;
+  commandEnabled?: Partial<Record<ProductionCommandId, boolean>>;
 }): React.JSX.Element {
   const top = placement === "top";
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const paletteTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const paletteRef = React.useRef<HTMLDivElement>(null);
+  const paletteWasOpenRef = React.useRef(false);
+  const navigate = React.useCallback((route: ProductionRoute): void => {
+    location.href = href(route);
+  }, []);
+  const context = React.useMemo<ProductionCommandContext>(() => ({
+    activeRoute: active,
+    navigate,
+    handlers: {
+      ...commandHandlers,
+      "open-command-palette": () => setPaletteOpen(true),
+      "close-command-palette": () => setPaletteOpen(false),
+    },
+    enabled: {
+      ...commandEnabled,
+      "open-command-palette": true,
+      "close-command-palette": paletteOpen,
+    },
+    paletteOpen,
+  }), [active, commandEnabled, commandHandlers, navigate, paletteOpen]);
+
+  React.useEffect(() => {
+    if (!top) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      dispatchProductionCommand(event, commandRegistry, context);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [context, top]);
+
+  React.useEffect(() => {
+    if (!paletteOpen && paletteWasOpenRef.current) {
+      paletteTriggerRef.current?.focus();
+    }
+    if (paletteOpen) paletteRef.current?.focus();
+    paletteWasOpenRef.current = paletteOpen;
+  }, [paletteOpen]);
+
+  const invoke = (id: ProductionCommandId): void => {
+    const command = commandRegistry.find((candidate) => candidate.id === id);
+    if (!command || !command.isEnabled(context)) return;
+    void command.invoke(context);
+    if (id !== "open-command-palette") setPaletteOpen(false);
+  };
+
   return (
     <>
-      <nav className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-label={t(locale, "nav.library")}>
+      <nav className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-label={t(locale, top ? "nav.primary" : "nav.mobile")}>
         {top ? (
           <div className="nav-desktop">
             <div className="nav-primary">
-              <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
-              <a href={href("memories")} aria-current={active === "memories" || active === "conversations" || active === "folders" ? "page" : undefined}><ChromeIcon name="library" />{t(locale, "nav.library")}</a>
-              <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
+              <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
+              <a href={href("memories")} aria-current={active === "memories" || active === "conversations" || active === "folders" ? "page" : undefined}><ChromeIcon name="library" /><span className="nav-label">{t(locale, "nav.library")}</span></a>
+              <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" /><span className="nav-label">{t(locale, "nav.tasks")}</span></a>
             </div>
             <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
-              <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /><span className="visually-hidden">{t(locale, "nav.microphone")}</span></span>
-              <span className="nav-icon-control" aria-disabled="true" title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /><span className="visually-hidden">{t(locale, "nav.screenCapture")}</span></span>
+              <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.microphone")} title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /></button>
+              <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.screenCapture")} title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /></button>
+              <button ref={paletteTriggerRef} type="button" className="command-discovery-trigger" onClick={() => setPaletteOpen(true)} aria-haspopup={commandPopupRole} aria-expanded={paletteOpen} title={t(locale, "tasks.shortcuts")}>
+                <span className="nav-label">{t(locale, "tasks.shortcuts")}</span>
+                <kbd>{commandLabel(commandRegistry[0]!, isApplePlatform() ? "apple" : "other")}</kbd>
+              </button>
               <ProductionThemeControl locale={locale} />
             </div>
           </div>
@@ -94,24 +159,44 @@ export function ProductionChrome({ locale, active, placement = "top" }: {
           <ProductionThemeControl locale={locale} mobile />
         </div> : null}
         <div className="nav-mobile">
-          <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" />{t(locale, "nav.home")}</a>
-          <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" || active === "folders" ? "page" : undefined}><ChromeIcon name="conversations" />{t(locale, "nav.conversations")}</a>
-          <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" />{t(locale, "nav.tasks")}</a>
+          <a href={href("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
+          <a href={href("conversations")} aria-current={active === "conversations" || active === "memories" || active === "folders" ? "page" : undefined}><ChromeIcon name="conversations" /><span className="nav-label">{t(locale, "nav.conversations")}</span></a>
+          <a href={href("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" /><span className="nav-label">{t(locale, "nav.tasks")}</span></a>
         </div>
       </nav>
+      {top && paletteOpen ? <div className="command-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}>
+        <section ref={paletteRef} className="command-palette" role="dialog" aria-modal={Boolean(true)} aria-labelledby="production-command-title" tabIndex={-1}>
+          <header className="command-palette-header">
+            <h2 id="production-command-title">{t(locale, "tasks.shortcuts")}</h2>
+            <button type="button" onClick={() => setPaletteOpen(false)} aria-label={t(locale, "common.close")}>{t(locale, "common.close")}</button>
+          </header>
+          <p className="command-palette-hint">{t(locale, "shortcuts.openSearch")}<span className="command-hint-separator" aria-hidden="true" />{commandLabel(commandRegistry[0]!, isApplePlatform() ? "apple" : "other")}</p>
+          <ul className="command-palette-list">
+            {commandRegistry.filter((command) => command.id !== "close-command-palette").map((command) => {
+              const enabled = command.isEnabled(context);
+              return <li key={command.id}>
+                <button type="button" disabled={!enabled} onClick={() => invoke(command.id)}>
+                  <span>{t(locale, command.labelKey, undefined as never)}</span>
+                  {(command.chord || command.chords) && <kbd>{commandLabel(command, isApplePlatform() ? "apple" : "other")}</kbd>}
+                </button>
+              </li>;
+            })}
+          </ul>
+        </section>
+      </div> : null}
     </>
   );
 }
 
 export function ProductionLibrarySegment({ locale, active }: { locale: Locale; active: "memories" | "conversations" }): React.JSX.Element {
   return <>
-    <div className="desktop-library-segment" aria-label={t(locale, "nav.library")}>
+    <nav className="desktop-library-segment" aria-label={t(locale, "nav.library")}>
       <a href={href("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>
       <a href={href("memories")} aria-current={active === "memories" ? "page" : undefined}>{t(locale, "nav.memories")}</a>
-    </div>
-    <div className="mobile-library-segment" aria-label={t(locale, "nav.library")}>
+    </nav>
+    <nav className="mobile-library-segment" aria-label={t(locale, "nav.library")}>
       <a href={href("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>
       <a href={href("memories")} aria-current={active === "memories" ? "page" : undefined}>{t(locale, "nav.memories")}</a>
-    </div>
+    </nav>
   </>;
 }
