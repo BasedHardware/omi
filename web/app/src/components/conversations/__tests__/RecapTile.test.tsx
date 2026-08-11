@@ -33,6 +33,9 @@ describe('RecapTile', () => {
 
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('1h 35m')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Recap: A long day' })).toHaveClass(
+      'col-span-full',
+    );
   });
 
   // `DailySummaryResponse` in backend/routers/users.py declares `stats` and

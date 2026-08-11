@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { TimelineDayGroup } from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
@@ -74,7 +73,17 @@ export function ConversationGallery({
   );
 
   return (
-    <div className="h-full overflow-y-auto px-5 pb-8" onScroll={handleScroll}>
+    <div
+      className="h-full overflow-y-auto px-5 pb-32"
+      onScroll={handleScroll}
+      data-testid="conversation-gallery-scroller"
+      style={{
+        maskImage:
+          'linear-gradient(to bottom, black 0, black calc(100% - 8rem), transparent 100%)',
+        WebkitMaskImage:
+          'linear-gradient(to bottom, black 0, black calc(100% - 8rem), transparent 100%)',
+      }}
+    >
       {groups.map((group) => (
         <section key={group.key} className="mb-8">
           <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-bg-primary/90 backdrop-blur-sm border-b border-stroke mb-4">
@@ -84,10 +93,11 @@ export function ConversationGallery({
           </div>
 
           <div
-            className={cn(
-              'grid gap-3 items-stretch auto-rows-auto',
-              'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
-            )}
+            className="grid gap-3 items-stretch auto-rows-auto"
+            style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
+            }}
+            data-testid="conversation-gallery-grid"
           >
             {group.items.map((item) =>
               item.kind === 'recap' ? (
@@ -131,7 +141,12 @@ export function ConversationGallerySkeleton() {
       {[0, 1].map((section) => (
         <div key={section} className="mb-8">
           <div className="h-3 w-24 rounded bg-bg-tertiary animate-pulse mb-4" />
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div
+            className="grid gap-3"
+            style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
+            }}
+          >
             {[0, 1, 2, 3].map((tile) => (
               <ConversationTileSkeleton key={tile} />
             ))}

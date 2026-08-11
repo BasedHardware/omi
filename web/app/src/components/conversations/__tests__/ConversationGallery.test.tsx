@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationGallery } from '@/components/conversations/ConversationGallery';
 import type { TimelineDayGroup } from '@/lib/conversationTimeline';
@@ -41,6 +41,41 @@ function scrollToBottom(scroller: HTMLElement) {
 function scroller(container: HTMLElement): HTMLElement {
   return container.firstElementChild as HTMLElement;
 }
+
+describe('ConversationGallery responsive layout', () => {
+  it('uses the gallery width to collapse tiles without clipping them', () => {
+    render(
+      <ConversationGallery
+        groups={groupsOf(['a', 'b'])}
+        selectedId={null}
+        onConversationClick={vi.fn()}
+        onRecapClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('conversation-gallery-grid')).toHaveStyle({
+      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
+    });
+  });
+
+  it('fades the scroll edge into the page background', () => {
+    render(
+      <ConversationGallery
+        groups={groupsOf(['a'])}
+        selectedId={null}
+        onConversationClick={vi.fn()}
+        onRecapClick={vi.fn()}
+      />,
+    );
+
+    const galleryScroller = screen.getByTestId('conversation-gallery-scroller');
+    expect(galleryScroller).toHaveStyle({
+      maskImage:
+        'linear-gradient(to bottom, black 0, black calc(100% - 8rem), transparent 100%)',
+    });
+    expect(galleryScroller).toHaveClass('pb-32');
+  });
+});
 
 describe('ConversationGallery infinite scroll', () => {
   it('requests the next page when the viewport reaches the bottom', () => {

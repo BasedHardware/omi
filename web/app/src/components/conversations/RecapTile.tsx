@@ -66,7 +66,7 @@ export const RecapTile = memo(function RecapTile({
       onClick={onClick}
       className={cn(
         'noise-overlay group relative flex flex-col text-left rounded-card cursor-pointer overflow-hidden',
-        'sm:col-span-2 border transition-all duration-150 p-5',
+        'col-span-full border transition-all duration-150 p-5',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
         isSelected
           ? 'bg-bg-quaternary border-white/40'
