@@ -10,7 +10,7 @@
     "start": "bun .moonshine/server.ts",
     "lint": "bunx oxlint src scripts moonshine.config.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test scripts/moonshine-smoke.test.ts && bunx vitest run",
+    "test": "bun test scripts/moonshine-smoke.test.ts && bunx vitest run --config vitest.config.mts",
     "test:watch": "bunx vitest",
     "check": "bun run typecheck && bun run test"
   },

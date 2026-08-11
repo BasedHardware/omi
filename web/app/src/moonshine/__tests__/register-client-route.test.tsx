@@ -17,9 +17,10 @@ vi.mock('react-dom/client', () => ({
 const { registerMoonshineRoute } = await import('@/moonshine/register-client-route');
 
 function mountedRuntime(): MoonshineRouterInstance {
-  const props = (rendered.element as { props: { runtime: MoonshineRouterInstance } })
-    .props;
-  return props.runtime;
+  const root = rendered.element as {
+    props: { children: { props: { runtime: MoonshineRouterInstance } } };
+  };
+  return root.props.children.props.runtime;
 }
 
 describe('client route mounting', () => {
@@ -31,7 +32,7 @@ describe('client route mounting', () => {
 
     registerMoonshineRoute('/conversations', () => null, 'authenticated');
     // The mount is scheduled on a microtask, and loads react-dom/client.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(rendered.element).not.toBeNull());
 
     // Dropping the query here is what makes a notification or shared link open
     // the default view instead of the thing it pointed at.
