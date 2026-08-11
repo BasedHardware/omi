@@ -100,6 +100,7 @@ const expectedTables = [
   "memory_work_outbox_events",
   "memory_work_success_results",
   "memory_work_state_revisions",
+  "memory_work_staged_results",
   "memory_placement_artifacts",
   "memory_predicate_assertion_revisions",
   "memory_predicate_identities",
@@ -307,6 +308,26 @@ describe("P2/P3/P4 PostgreSQL schema contract", () => {
     expect(allSql).toContain("REFERENCES omi_memory.memory_work_success_results");
     expect(allSql).toContain("Deliberately no application or worker grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_work_success_results/s);
+  });
+
+  test("stages one sensitive normalized result and makes every success reference it", () => {
+    const staged = tables.find((table) => table.name === "memory_work_staged_results")!;
+    expect(staged.body).toContain("result_version = 'durable-memory-work-result-v1'");
+    expect(staged.body).toContain("PRIMARY KEY (account_id, job_id)");
+    expect(staged.body).toContain("staged_result_id ~ '^mwr1_[0-9a-f]{64}$'");
+    expect(staged.body).toContain("produced_state = 'leased'");
+    expect(staged.body).toContain("CHECK (produced_attempt = produced_lease_fence)");
+    expect(staged.body).toContain("memory_work_acceptances");
+    expect(staged.body).toContain("memory_work_state_revisions");
+    expect(staged.body).toContain("jsonb_typeof(normalized_result_json) = 'object'");
+    expect(staged.body).toContain("octet_length(normalized_result_json::text) <= 524288");
+    expect(staged.body).not.toMatch(/raw_provider|provider_output|error_message|last_error/i);
+
+    expect(allSql).toContain("memory_work_success_results_staged_result_fk");
+    expect(allSql).toContain("REFERENCES omi_memory.memory_work_staged_results");
+    expect(allSql).toContain("result_digest = staged_result_digest");
+    expect(allSql).toContain("Deliberately no application or worker grant");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_work_staged_results/s);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {

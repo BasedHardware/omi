@@ -16,6 +16,10 @@ import {
   type AuthoritativeLedgerAppend,
   type NonFormationAppendReason,
 } from "./authoritative-ledger-repository";
+import {
+  parseStagedDurableMemoryWorkResult,
+  type StagedDurableMemoryWorkResult,
+} from "./durable-memory-work-result-repository";
 
 const SUCCESS_PORT: unique symbol = Symbol("durable-memory-work-success-repository");
 const EXECUTE_CAPABILITY = "memories.work.execute";
@@ -27,6 +31,7 @@ export interface DurableMemoryWorkSuccessBody {
   readonly result_kind: DurableMemoryWorkResultKind;
   readonly response_digest: string;
   readonly result_digest: string;
+  readonly staged_result: StagedDurableMemoryWorkResult;
   readonly authoritative_append: AuthoritativeLedgerAppend | null;
 }
 
@@ -117,6 +122,8 @@ export const durableMemoryWorkSuccessRequestDigest = (body: DurableMemoryWorkSuc
     result_kind: body.result_kind,
     response_digest: body.response_digest,
     result_digest: body.result_digest,
+    staged_result_id: body.staged_result.staged_result_id,
+    staged_normalized_result_digest: body.staged_result.normalized_result_digest,
     authoritative_append_request_digest: body.authoritative_append?.append_attempt.request_digest ?? null,
   });
 };
@@ -134,6 +141,8 @@ export const durableMemoryWorkSuccessOutboxId = (body: DurableMemoryWorkSuccessB
     result_kind: body.result_kind,
     response_digest: body.response_digest,
     result_digest: body.result_digest,
+    staged_result_id: body.staged_result.staged_result_id,
+    staged_normalized_result_digest: body.staged_result.normalized_result_digest,
   })}`;
 };
 
@@ -145,7 +154,7 @@ export const assertDurableMemoryWorkSuccessRequest = (
   if (context.capability !== EXECUTE_CAPABILITY) fail("capability_denied");
   const root = exactRecord(value, [
     "leased_job", "result_kind", "response_digest", "result_digest",
-    "authoritative_append", "request_digest",
+    "staged_result", "authoritative_append", "request_digest",
   ], "invalid_request");
   let job: Readonly<DurableMemoryWorkJob>;
   try {
@@ -161,12 +170,20 @@ export const assertDurableMemoryWorkSuccessRequest = (
   if (resultKind !== "successful" && resultKind !== "successful_empty") fail("invalid_result");
   const responseDigest = digest(root["response_digest"], "invalid_result");
   const resultDigest = digest(root["result_digest"], "invalid_result");
+  let stagedResult: StagedDurableMemoryWorkResult;
+  try {
+    stagedResult = parseStagedDurableMemoryWorkResult(root["staged_result"], job);
+  } catch {
+    return fail("staged_result_mismatch");
+  }
+  if (stagedResult.response_digest !== responseDigest) fail("staged_result_mismatch");
   let append: AuthoritativeLedgerAppend | null = null;
   if (root["authoritative_append"] !== null) {
     append = assertAuthoritativeLedgerAppend(context, root["authoritative_append"]);
   }
   if (resultKind === "successful_empty") {
     if (append !== null) fail("unexpected_graph_append");
+    if (resultDigest !== stagedResult.normalized_result_digest) fail("result_stage_mismatch");
   } else {
     if (append === null) fail("missing_graph_append");
     if (append.append_attempt.request_digest !== resultDigest
@@ -187,6 +204,7 @@ export const assertDurableMemoryWorkSuccessRequest = (
     result_kind: resultKind,
     response_digest: responseDigest,
     result_digest: resultDigest,
+    staged_result: stagedResult,
     authoritative_append: append,
   }) as DurableMemoryWorkSuccessBody;
   const requestDigest = digest(root["request_digest"], "invalid_request");

@@ -36,6 +36,7 @@ The sealed success repository requires a current issued
 principal. A request binds:
 
 - the complete leased job state and fence;
+- one exact immutable staged normalized result for the accepted work;
 - `successful` or `successful_empty`;
 - exact response and result digests;
 - either one complete validated `AuthoritativeLedgerAppend` or null; and
@@ -48,7 +49,8 @@ the accepted job. A non-empty append must declare graph derivation success.
 
 `successful_empty` requires no graph append. It still records exact response and
 result digests, a terminal work state, a success-link row, and an outbox event;
-it never becomes absence, abstention, or deletion.
+its result digest equals the staged normalized-result digest. It never becomes
+absence, abstention, or deletion.
 
 No public request selects DB time. The future adapter locks current authority,
 work head, lease, graph head, and idempotency receipt, then derives the terminal
@@ -70,7 +72,9 @@ The new inert migration:
 The success-result check maps work kind to origin code. A formation job cannot
 point at promotion, and a predicate job cannot point at repair. A non-empty
 success cannot omit a graph commit; an empty success cannot smuggle one in.
-Every key and foreign key is account-scoped. The migration grants nobody.
+The follow-on result-staging migration additionally makes every success point to
+the exact owner-local staged normalized result and response digest. Every key
+and foreign key is account-scoped. The migrations grant nobody.
 
 ## Replay and failure
 

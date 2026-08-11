@@ -19,6 +19,12 @@ import {
   type AuthoritativeLedgerAppend,
 } from "./authoritative-ledger-repository";
 import {
+  durableMemoryWorkNormalizedResultDigest,
+  durableMemoryWorkResultStageRequestDigest,
+  materializeStagedDurableMemoryWorkResult,
+  type DurableMemoryWorkResultStageBody,
+} from "./durable-memory-work-result-repository";
+import {
   defineDurableMemoryWorkSuccessRepository,
   durableMemoryWorkSuccessOutboxId,
   durableMemoryWorkSuccessRequestDigest,
@@ -163,12 +169,31 @@ const request = (
   kind: DurableMemoryWorkKind,
   resultKind: "successful" | "successful_empty" = "successful",
 ): DurableMemoryWorkSuccessRequest => {
+  const job = leasedJob(kind);
+  const normalizedResult = { outcome: resultKind };
+  const resultContractVersion = `${kind}-result:v1`;
+  const normalizedResultDigest = durableMemoryWorkNormalizedResultDigest(
+    resultContractVersion,
+    normalizedResult,
+  );
+  const stageBody: DurableMemoryWorkResultStageBody = {
+    leased_job: job,
+    result_contract_version: resultContractVersion,
+    response_digest: digest("d"),
+    normalized_result_digest: normalizedResultDigest,
+    normalized_result: normalizedResult,
+  };
+  const stagedResult = materializeStagedDurableMemoryWorkResult({
+    ...stageBody,
+    request_digest: durableMemoryWorkResultStageRequestDigest(stageBody),
+  });
   const append = resultKind === "successful" ? authoritativeAppend(kind) : null;
   const body: DurableMemoryWorkSuccessBody = {
-    leased_job: leasedJob(kind),
+    leased_job: job,
     result_kind: resultKind,
     response_digest: digest("d"),
-    result_digest: append?.append_attempt.request_digest ?? digest("e"),
+    result_digest: append?.append_attempt.request_digest ?? normalizedResultDigest,
+    staged_result: stagedResult,
     authoritative_append: append,
   };
   return { ...body, request_digest: durableMemoryWorkSuccessRequestDigest(body) };
@@ -255,6 +280,10 @@ describe("atomic durable-work success repository", () => {
       .rejects.toThrow("missing_graph_append");
     await expect(repository.commit(context(), { ...valid, result_digest: digest("f") }))
       .rejects.toThrow("result_append_mismatch");
+    await expect(repository.commit(context(), {
+      ...valid,
+      staged_result: { ...valid.staged_result, job_id: "job:other" },
+    })).rejects.toThrow("staged_result_mismatch");
     await expect(repository.commit(context(), { ...valid, request_digest: digest("0") }))
       .rejects.toThrow("request_digest_mismatch");
     expect(calls).toBe(0);
