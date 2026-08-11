@@ -188,12 +188,15 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /omi-native-capture-ready\.json/);
   assert.match(source, /simctl", "spawn"/);
   assert.match(source, /marker\.nonce === nonce/);
+  assert.match(source, /marker\.polish_state === coordinate\.state/);
+  assert.match(source, /fixturePolicy\[coordinate\.domain\]/);
   assert.match(appDelegate, /name: "omi\/capture-launch"/);
   assert.match(appDelegate, /capture-ready-invalid/);
   assert.match(appDelegate, /capture-ready-write-failed/);
   assert.match(appDelegate, /omi-native-capture-ready\.json/);
   assert.match(dartHost, /_captureOnly && msg\.message\.contains\('OMI_PRODUCTION_READY'\)/);
   assert.match(dartHost, /_beginCaptureReadiness\(\)/);
+  assert.match(dartHost, /dataset\.polishState/);
   assert.match(dartHost, /page-finished callback precedes React's typed fixture root/);
   assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
   assert.match(source, /simctl.*ui.*appearance/);

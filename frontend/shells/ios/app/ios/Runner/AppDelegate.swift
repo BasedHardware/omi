@@ -245,14 +245,20 @@ extension WKWebView {
         let noncePrefix = "--omi-capture-nonce="
         guard
           let payload = call.arguments as? [String: String],
-          Set(payload.keys) == Set(["run_id", "route", "fixture", "state"]),
+          Set(payload.keys) == Set([
+            "run_id", "domain", "polish_state", "route", "fixture", "state",
+          ]),
           let runId = payload["run_id"],
+          let domain = payload["domain"],
+          let polishState = payload["polish_state"],
           let route = payload["route"],
           let fixture = payload["fixture"],
           let state = payload["state"],
           runId.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$", options: .regularExpression) != nil,
+          domain.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
+          polishState.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
           route.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
-          fixture.range(of: "^polish:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
+          fixture.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
           state.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
           ProcessInfo.processInfo.arguments.contains("--omi-capture-run-id=\(runId)"),
           let nonceArgument = ProcessInfo.processInfo.arguments.first(where: {
@@ -268,8 +274,10 @@ extension WKWebView {
           return
         }
         let marker: [String: String] = [
+          "domain": domain,
           "fixture": fixture,
           "nonce": nonce,
+          "polish_state": polishState,
           "route": route,
           "run_id": runId,
           "state": state,
