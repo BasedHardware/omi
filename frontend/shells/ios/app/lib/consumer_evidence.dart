@@ -11,7 +11,7 @@ extension ConsumerEvidenceRouteName on ConsumerEvidenceRoute {
 }
 
 String? normalizeRenderedObservationResult(Object? result) =>
-    result is String && result != '<null>' ? result : null;
+    result is String && result != '<null>' && result != 'null' ? result : null;
 
 final class RenderedConsumerObservation {
   const RenderedConsumerObservation({required this.route, required this.semantic, this.transcript});

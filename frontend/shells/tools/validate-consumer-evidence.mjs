@@ -44,13 +44,14 @@ if (document.runId !== runId) fail("wrong run id");
 if (!Array.isArray(document.rows) || document.rows.length !== 7) fail("expected seven rows");
 
 const seen = new Set();
-for (const row of document.rows) {
+for (const [index, row] of document.rows.entries()) {
   if (!exactKeys(row, [
     "runId", "shell", "domain", "fixture", "evidence", "observation",
     "shellTreeHash", "surfaceTreeHash",
   ])) fail("row keys are not exact");
   if (row.runId !== runId || row.shell !== shell) fail("wrong row identity");
   if (!expectedDomains.includes(row.domain) || seen.has(row.domain)) fail("missing or duplicate domain");
+  if (row.domain !== expectedDomains[index]) fail("rows are not in canonical domain order");
   seen.add(row.domain);
   if (row.fixture !== "none" || row.evidence !== "rendered-semantic") fail("non-live evidence row");
   if (!/^[0-9a-f]{40}$/u.test(row.shellTreeHash) || !/^[0-9a-f]{40}$/u.test(row.surfaceTreeHash)) {

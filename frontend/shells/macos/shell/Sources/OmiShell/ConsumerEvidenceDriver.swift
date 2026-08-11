@@ -10,10 +10,7 @@ final class ConsumerEvidenceDriver {
   private weak var controller: WebViewController?
   private var routeIndex = 0
   private var pollTimer: Timer?
-  private var pollCount = 0
-  private var listenStartRequested = false
-  private var chatAdmissionBaseline: Int?
-  private var chatSubmitted = false
+  private var routeDriveState = ConsumerEvidenceRouteDriveState()
   private(set) var failed = false
 
   init(collector: ConsumerEvidenceCollector, baseURL: URL) {
@@ -26,12 +23,10 @@ final class ConsumerEvidenceDriver {
     loadCurrentRoute()
   }
 
-  func pageDidFinish() {
-    guard !failed, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
-    pollCount = 0
-    listenStartRequested = false
-    chatAdmissionBaseline = nil
-    chatSubmitted = false
+  func pageDidFinish(_ navigation: WKNavigation?) {
+    guard !failed, routeIndex < ConsumerEvidenceRoute.allCases.count,
+      routeDriveState.acceptFinished(navigation)
+    else { return }
     schedulePoll()
   }
 
@@ -57,7 +52,12 @@ final class ConsumerEvidenceDriver {
       fail("cannot construct evidence route URL")
       return
     }
-    controller.load(url)
+    guard let navigation = controller.load(url), routeDriveState.begin(navigation) else {
+      fail("cannot start evidence route navigation")
+      return
+    }
+    pollTimer?.invalidate()
+    pollTimer = nil
   }
 
   private func schedulePoll() {
@@ -70,49 +70,49 @@ final class ConsumerEvidenceDriver {
 
   private func pollRenderedObservation() {
     guard let controller, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
-    pollCount += 1
-    if pollCount > 200 {
+    routeDriveState.pollCount += 1
+    if routeDriveState.pollCount > 200 {
       let route = ConsumerEvidenceRoute.allCases[routeIndex].rawValue
       fail("timed out waiting for rendered semantic observation on \(route)")
       return
     }
     let expected = ConsumerEvidenceRoute.allCases[routeIndex]
-    if expected == .listen && !listenStartRequested {
+    if expected == .listen && !routeDriveState.listenStartRequested {
       controller.webView.evaluateJavaScript(
         Self.startListenScript
       ) { [weak self] value, _ in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
-          self.listenStartRequested = value as? Bool == true
+          self.routeDriveState.listenStartRequested = value as? Bool == true
           self.schedulePoll()
         }
       }
       return
     }
-    if expected == .chat && chatAdmissionBaseline == nil {
+    if expected == .chat && routeDriveState.chatAdmissionBaseline == nil {
       controller.webView.evaluateJavaScript(Self.authorChatScript) { [weak self] value, _ in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
           if let number = value as? NSNumber {
-            self.chatAdmissionBaseline = number.intValue
+            self.routeDriveState.chatAdmissionBaseline = number.intValue
           }
           self.schedulePoll()
         }
       }
       return
     }
-    if expected == .chat && !chatSubmitted {
+    if expected == .chat && !routeDriveState.chatSubmitted {
       controller.webView.evaluateJavaScript(Self.submitChatScript) { [weak self] value, _ in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
-          self.chatSubmitted = value as? Bool == true
+          self.routeDriveState.chatSubmitted = value as? Bool == true
           self.schedulePoll()
         }
       }
       return
     }
     let observationScript = expected == .chat
-      ? Self.renderedChatObservationScript(after: chatAdmissionBaseline ?? Int.max)
+      ? Self.renderedChatObservationScript(after: routeDriveState.chatAdmissionBaseline ?? Int.max)
       : Self.renderedObservationScript
     controller.webView.evaluateJavaScript(observationScript) { [weak self] value, error in
       MainActor.assumeIsolated {

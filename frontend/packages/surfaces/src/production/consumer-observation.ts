@@ -21,6 +21,20 @@ export type RenderedConsumerObservation = {
 
 const MAX_SEMANTIC_LENGTH = 256;
 const MAX_TRANSCRIPT_LENGTH = 1_024;
+const encoder = new TextEncoder();
+
+function boundedUtf8Prefix(value: string, limit: number): string {
+  if (encoder.encode(value).byteLength <= limit) return value;
+  let bounded = "";
+  let bytes = 0;
+  for (const scalar of value) {
+    const scalarBytes = encoder.encode(scalar).byteLength;
+    if (bytes + scalarBytes > limit) break;
+    bounded += scalar;
+    bytes += scalarBytes;
+  }
+  return bounded;
+}
 
 function route(value: string | undefined): ConsumerEvidenceRoute | null {
   return CONSUMER_EVIDENCE_ROUTES.includes(value as ConsumerEvidenceRoute)
@@ -65,10 +79,10 @@ export function readRenderedConsumerObservation(
 export function boundedRenderedTranscript(
   segments: readonly { readonly text: string }[],
 ): string {
-  return segments
+  const transcript = segments
     .slice(-4)
-    .map((segment) => segment.text.replace(/\s+/gu, " ").trim().slice(0, 240))
+    .map((segment) => boundedUtf8Prefix(segment.text.replace(/\s+/gu, " ").trim(), 240))
     .filter((text) => text !== "")
-    .join(" ")
-    .slice(0, MAX_TRANSCRIPT_LENGTH);
+    .join(" ");
+  return boundedUtf8Prefix(transcript, MAX_TRANSCRIPT_LENGTH);
 }

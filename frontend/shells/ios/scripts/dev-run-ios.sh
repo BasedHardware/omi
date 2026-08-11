@@ -37,11 +37,13 @@ run_id_arg=""
 launched=0
 bundle_id="me.omi.proto.omiWebviewProto"
 evidence_tmp=""
+container_result=""
 
 cleanup() {
   if (( launched )); then
     xcrun simctl terminate "$device" "$bundle_id" >/dev/null 2>&1 || true
   fi
+  [[ -n "$container_result" ]] && rm -f -- "$container_result"
   [[ -n "$evidence_tmp" ]] && rm -f -- "$evidence_tmp"
   return 0
 }
