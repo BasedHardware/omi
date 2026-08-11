@@ -85,7 +85,9 @@ describe("versioned agent run events", () => {
     const first = runAgentRunScenario({ terminal: scenario.terminal });
     const event = first.events[0]!;
     expect(event.schemaVersion).toBe(CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION);
-    expect(first.events.every((item) => parseAgentRunEvent({ ...item, schemaVersion: 0 }).ok)).toBe(true);
+    const previous = first.events.map((item) => parseAgentRunEvent({ ...item, schemaVersion: 0 }));
+    expect(previous.every((item) => item.ok)).toBe(true);
+    expect(previous.every((item) => item.ok && item.event.schemaVersion === CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION)).toBe(true);
     expect(parseAgentRunEvent({ ...event, schemaVersion: 99 }).ok).toBe(false);
   });
 
@@ -138,5 +140,10 @@ describe("versioned agent run events", () => {
     expect(scanAgentRunRedactions({ prompt: "do not retain", nested: { credentials: "token" } })).toEqual([
       "prompt", "nested.credentials",
     ]);
+    for (const field of ["safeSummary", "resultSummary", "errorSummary", "reason",
+      "redactedPreview", "inclusionReason"]) {
+      expect(scanAgentRunRedactions({ [field]: "attachmentId=opaque-123 api_key=secret-value" }).length)
+        .toBeGreaterThan(0);
+    }
   });
 });

@@ -8,6 +8,11 @@
 
 export const CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION = 1 as const;
 export const PREVIOUS_AGENT_RUN_EVENT_SCHEMA_VERSION = 0 as const;
+/**
+ * Version 0 is the initial compatibility encoding. Its field set is
+ * intentionally identical to v1; parsing v0 detaches it into the current v1
+ * in-memory representation before it can enter a store or projection.
+ */
 export const SUPPORTED_AGENT_RUN_EVENT_SCHEMA_VERSIONS = Object.freeze([
   PREVIOUS_AGENT_RUN_EVENT_SCHEMA_VERSION,
   CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION,
@@ -254,6 +259,9 @@ const ownDataRecord = (
   readonly value?: never;
   readonly reason: "not_object" | "accessor_or_proxy";
 } => {
+  // This reflective boundary catches malformed objects and accessor/proxy
+  // failures. It does not promise zero Proxy trap execution; callers needing
+  // side-effect-free parsing must supply raw JSON/plain data.
   try {
     if (input === null || typeof input !== "object" || Array.isArray(input)) {
       return { reason: "not_object" };
@@ -316,7 +324,12 @@ const asEvent = (record: Record<string, unknown>, kind: AgentRunEventKind): Agen
     || (common.visibility !== "ui" && common.visibility !== "internal")
     || !isSafeEpoch(common.createdAt) || !isSafeSummary(common.safeSummary)) return null;
 
-  const base = Object.freeze(common) as AgentRunEventBase;
+  const base = Object.freeze({
+    ...common,
+    // v0 and v1 have the same field set; normalize the accepted compatibility
+    // form to the current schema before storing or projecting it.
+    schemaVersion: CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION,
+  }) as AgentRunEventBase;
   switch (kind) {
     case "run_accepted":
       return isSafeToken(record.admissionId)
@@ -618,6 +631,8 @@ const REDACTED_KEYS = new Set([
   "secret", "token", "apiKey", "authorization", "auth", "reasoning", "chainOfThought", "hiddenReasoning",
 ]);
 const REDACTED_STRING = /(?:Bearer\s+|sk-[A-Za-z0-9]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
+const REDACTED_VALUE_STRING = /(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]\s*\S+/iu;
+const REDACTED_ATTACHMENT_STRING = /(?:attachment(?:[_ -]?id)?|file[_ -]?id)\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
 
 /** Returns scanner findings rather than exposing sensitive values. */
 export const scanAgentRunRedactions = (value: unknown): readonly string[] => {
@@ -625,7 +640,8 @@ export const scanAgentRunRedactions = (value: unknown): readonly string[] => {
   const seen = new Set<object>();
   const visit = (current: unknown, path: string): void => {
     if (typeof current === "string") {
-      if (REDACTED_STRING.test(current)) findings.push(path || "value");
+      if (REDACTED_STRING.test(current) || REDACTED_VALUE_STRING.test(current)
+        || REDACTED_ATTACHMENT_STRING.test(current)) findings.push(path || "value");
       return;
     }
     if (current === null || typeof current !== "object") return;
