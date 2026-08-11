@@ -2,12 +2,17 @@ import { describe, expect, test } from "bun:test";
 
 import type { AccountControlProjection } from "./account-control";
 import {
+  DELETION_INVENTORY_CONTRACT_VERSION,
+  DELETION_INVENTORY_SOURCE_RECEIPT_VERSION,
+  verifyDeletionCleanupInventory,
+  type VerifiedDeletionCleanupInventory,
+} from "./deletion-cleanup-inventory";
+import {
   DELETION_CLEANUP_SURFACES,
   DeletionDominanceInputError,
   planDeletionDominance,
   type DeletionDominanceInput,
   type DeletionDominanceInputErrorCode,
-  type DeletionSurfaceInventoryRow,
   type TerminalControlTombstone,
   type TerminalDeletionExportReceipt,
 } from "./deletion-dominance";
@@ -31,10 +36,32 @@ const projection = (
 
 const inventory = (
   counts: Partial<Record<typeof DELETION_CLEANUP_SURFACES[number], number>> = {},
-): DeletionSurfaceInventoryRow[] => DELETION_CLEANUP_SURFACES.map((surface) => ({
-  surface,
-  remaining_count: counts[surface] ?? 0,
-}));
+): VerifiedDeletionCleanupInventory => {
+  const result = verifyDeletionCleanupInventory({
+    terminal_coordinate: {
+      account_id: ACCOUNT,
+      control_revision: 7,
+      deletion_epoch: 31,
+    },
+    source_receipts: DELETION_CLEANUP_SURFACES.map((surface, index) => ({
+      version: DELETION_INVENTORY_SOURCE_RECEIPT_VERSION,
+      inventory_contract_version: DELETION_INVENTORY_CONTRACT_VERSION,
+      scanner_contract_version: `scanner-${surface}-v1`,
+      account_id: ACCOUNT,
+      control_revision: 7,
+      deletion_epoch: 31,
+      surface,
+      source_frontier_digest: digest(String(index % 10)),
+      source_authorization_digest: digest("a"),
+      scan_fence_state: "held" as const,
+      scan_fence_receipt_digest: digest("b"),
+      remaining_count: counts[surface] ?? 0,
+      remaining_set_digest: digest("c"),
+    })),
+  });
+  expect(result.report.blockers).toEqual([]);
+  return result.verified_inventory!;
+};
 
 const tombstone = (
   overrides: Partial<TerminalControlTombstone> = {},
@@ -77,7 +104,7 @@ const input = (
   restore_replay: { state: "not_required" },
   retention_disposition: { status: "unratified" },
   recovery_objectives: { status: "unratified" },
-  inventory: inventory(),
+  inventory: null,
   ...overrides,
 });
 
@@ -96,6 +123,7 @@ const terminalInput = (
   terminal_export_receipt: exportReceipt(),
   retention_disposition: ratified("retention-v1"),
   recovery_objectives: ratified("recovery-v1"),
+  inventory: inventory(),
   ...overrides,
 });
 
@@ -183,14 +211,13 @@ describe("lifecycle dominance and terminal cleanup", () => {
         deletion_epoch: 31,
         activation: { activated_epoch: 9, at_control_revision: 3 },
       }),
-      inventory: inventory({ product_projections: 5, external_objects: 2 }),
     }));
     expect(plan.mode).toBe("deletion_pending");
     expect(Object.values(plan.fences).every((fenced) => fenced)).toBe(true);
     expect(plan.obligations).toContain("deactivate_destination_epoch");
     expect(plan.obligations).toContain("await_terminal_control");
     expect(plan.obligations).not.toContain("dispose_policy_authorized_surfaces");
-    expect(plan.cleanup).toMatchObject({ state: "not_applicable", remaining_total: 7 });
+    expect(plan.cleanup).toMatchObject({ state: "not_applicable", remaining_total: 0 });
   });
 
   test("terminal cleanup remains blocked until export and human policy coordinates exist", () => {
@@ -223,6 +250,15 @@ describe("lifecycle dominance and terminal cleanup", () => {
       terminal_control_tombstone: null,
       terminal_export_receipt: null,
     })), "terminal_coordinate_mismatch");
+  });
+
+  test("a terminal plan never interprets an unverified inventory as zero", () => {
+    const plan = planDeletionDominance(terminalInput({ inventory: null }));
+    expect(plan).toMatchObject({
+      mode: "deleted_blocked",
+      cleanup: { state: "blocked", blockers: ["cleanup_inventory_unverified"] },
+    });
+    expect(plan.obligations).toContain("require_verified_cleanup_inventory");
   });
 
   test("ratified coordinates make remaining surfaces eligible, not deleted", () => {
@@ -271,6 +307,7 @@ describe("restore non-resurrection", () => {
       terminal_export_receipt: exportReceipt(),
       retention_disposition: ratified("retention-v1"),
       recovery_objectives: ratified("recovery-v1"),
+      inventory: inventory(),
     }));
     expect(plan).toMatchObject({
       mode: "deleted_blocked",
@@ -343,7 +380,7 @@ describe("strict detached input and coordinate closure", () => {
     })), "terminal_coordinate_mismatch");
   });
 
-  test("rejects proxies, accessors, extras, sparse/decorated arrays, duplicates, and bad counts", () => {
+  test("rejects proxies, accessors, extras, and forged inventory capabilities", () => {
     expectErrorCode(() => planDeletionDominance(new Proxy(input(), {})), "invalid_input");
 
     const accessor = input() as unknown as Record<string, unknown>;
@@ -368,26 +405,11 @@ describe("strict detached input and coordinate closure", () => {
     })), "invalid_restore_replay");
 
     expectErrorCode(() => planDeletionDominance({ ...input(), extra: true }), "invalid_input");
-
-    const sparse = inventory();
-    delete sparse[3];
-    expectErrorCode(() => planDeletionDominance(input({ inventory: sparse })), "invalid_inventory");
-
-    const decorated = inventory() as DeletionSurfaceInventoryRow[] & { extra?: boolean };
-    decorated.extra = true;
-    expectErrorCode(() => planDeletionDominance(input({ inventory: decorated })), "invalid_inventory");
-
-    const duplicate = inventory();
-    duplicate[1] = { ...duplicate[0]! };
-    expectErrorCode(() => planDeletionDominance(input({ inventory: duplicate })), "invalid_inventory");
-
-    const negative = inventory();
-    negative[0] = { ...negative[0]!, remaining_count: -1 };
-    expectErrorCode(() => planDeletionDominance(input({ inventory: negative })), "invalid_inventory");
-
-    const unsafe = inventory();
-    unsafe[0] = { ...unsafe[0]!, remaining_count: Number.MAX_SAFE_INTEGER + 1 };
-    expectErrorCode(() => planDeletionDominance(input({ inventory: unsafe })), "invalid_inventory");
+    const forged = JSON.parse(JSON.stringify(inventory())) as VerifiedDeletionCleanupInventory;
+    expectErrorCode(() => planDeletionDominance(terminalInput({ inventory: forged })), "invalid_inventory");
+    expectErrorCode(() => planDeletionDominance(terminalInput({
+      inventory: new Proxy(inventory(), {}) as never,
+    })), "invalid_inventory");
   });
 
   test("returns frozen, deterministic output detached from later input mutation", () => {
@@ -395,7 +417,6 @@ describe("strict detached input and coordinate closure", () => {
     const first = planDeletionDominance(mutable);
     const canonical = JSON.stringify(first);
 
-    (mutable.inventory[3] as { remaining_count: number }).remaining_count = 999;
     (mutable.control_projection as { control_revision: number }).control_revision = 999;
 
     expect(JSON.stringify(first)).toBe(canonical);

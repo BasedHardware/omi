@@ -6,12 +6,21 @@ import {
   type AccountControlProjection,
   type AccountGeneration,
 } from "./account-control";
+import {
+  DELETION_CLEANUP_SURFACES,
+  isVerifiedDeletionCleanupInventory,
+  type DeletionCleanupSurface,
+  type VerifiedDeletionCleanupInventory,
+  type VerifiedDeletionInventoryRow,
+} from "./deletion-cleanup-inventory";
+
+export { DELETION_CLEANUP_SURFACES } from "./deletion-cleanup-inventory";
+export type { DeletionCleanupSurface } from "./deletion-cleanup-inventory";
 
 export const DELETION_DOMINANCE_PLAN_VERSION = "deletion-dominance-plan-v1" as const;
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const MAX_COORDINATE_LENGTH = 256;
-const MAX_REMAINING_COUNT = 1_000_000_000;
 
 const GENERATIONS = Object.freeze([
   "legacy",
@@ -19,21 +28,6 @@ const GENERATIONS = Object.freeze([
   "new",
   "rolled_back_stranded",
 ] as const satisfies readonly AccountGeneration[]);
-
-export const DELETION_CLEANUP_SURFACES = Object.freeze([
-  "durable_work",
-  "staged_results",
-  "experiment_results",
-  "product_projections",
-  "search_documents",
-  "vector_embeddings",
-  "rebuildable_groups_indexes",
-  "migration_state",
-  "stranded_product_data",
-  "external_objects",
-] as const);
-
-export type DeletionCleanupSurface = typeof DELETION_CLEANUP_SURFACES[number];
 
 export type LifecycleOperationMode =
   | "control_unavailable"
@@ -60,6 +54,7 @@ export type DeletionDominanceObligation =
   | "consult_item_tombstones_on_migration_resume"
   | "retain_terminal_control_tombstone"
   | "require_terminal_export_receipt"
+  | "require_verified_cleanup_inventory"
   | "replay_tombstones_before_restore_traffic"
   | "require_retention_disposition_approval"
   | "require_recovery_objectives_approval"
@@ -69,6 +64,7 @@ export type DeletionCleanupBlocker =
   | "control_unavailable"
   | "terminal_control_not_replayed"
   | "terminal_export_receipt_missing"
+  | "cleanup_inventory_unverified"
   | "restore_replay_incomplete"
   | "retention_disposition_unratified"
   | "recovery_objectives_unratified";
@@ -113,10 +109,7 @@ export type RatificationCoordinate =
       readonly approval_digest: string;
     };
 
-export interface DeletionSurfaceInventoryRow {
-  readonly surface: DeletionCleanupSurface;
-  readonly remaining_count: number;
-}
+export type DeletionSurfaceInventoryRow = VerifiedDeletionInventoryRow;
 
 export interface DeletionDominanceInput {
   readonly control_projection: AccountControlProjection | null;
@@ -125,7 +118,7 @@ export interface DeletionDominanceInput {
   readonly restore_replay: RestoreReplayState;
   readonly retention_disposition: RatificationCoordinate;
   readonly recovery_objectives: RatificationCoordinate;
-  readonly inventory: readonly DeletionSurfaceInventoryRow[];
+  readonly inventory: VerifiedDeletionCleanupInventory | null;
 }
 
 export interface DeletionActivityFences {
@@ -201,24 +194,6 @@ const exactPlainRecord = (
   return value as PlainRecord;
 };
 
-const exactPlainArray = (
-  value: unknown,
-  length: number,
-  code: DeletionDominanceInputErrorCode,
-): readonly unknown[] => {
-  if (!Array.isArray(value) || isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype
-    || value.length !== length) fail(code);
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.some((key) => typeof key !== "string") || keys.length !== length + 1
-    || !Object.prototype.hasOwnProperty.call(descriptors, "length")) fail(code);
-  for (let index = 0; index < length; index += 1) {
-    const descriptor = descriptors[String(index)];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) fail(code);
-  }
-  return value as readonly unknown[];
-};
-
 const plainDiscriminant = (
   value: unknown,
   key: string,
@@ -233,9 +208,6 @@ const plainDiscriminant = (
 
 const safeEpoch = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-
-const safeCount = (value: unknown): value is number =>
-  safeEpoch(value) && value <= MAX_REMAINING_COUNT;
 
 const boundedCoordinate = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_COORDINATE_LENGTH
@@ -380,25 +352,10 @@ const parseRatification = (value: unknown): RatificationCoordinate => {
   return value as RatificationCoordinate;
 };
 
-const parseInventory = (value: unknown): readonly DeletionSurfaceInventoryRow[] => {
-  const rows = exactPlainArray(value, DELETION_CLEANUP_SURFACES.length, "invalid_inventory");
-  const found = new Map<DeletionCleanupSurface, number>();
-  for (const valueRow of rows) {
-    const row = exactPlainRecord(valueRow, ["surface", "remaining_count"], "invalid_inventory");
-    if (typeof row.surface !== "string"
-      || !(DELETION_CLEANUP_SURFACES as readonly string[]).includes(row.surface)
-      || found.has(row.surface as DeletionCleanupSurface)) {
-      fail("invalid_inventory");
-    }
-    const remainingCount = row.remaining_count;
-    if (typeof remainingCount !== "number" || !safeCount(remainingCount)) fail("invalid_inventory");
-    found.set(row.surface as DeletionCleanupSurface, remainingCount as number);
-  }
-  return Object.freeze(DELETION_CLEANUP_SURFACES.map((surface) => Object.freeze({
-    surface,
-    remaining_count: found.get(surface)!,
-  })));
-};
+const emptyInventory = Object.freeze(DELETION_CLEANUP_SURFACES.map((surface) => Object.freeze({
+  surface,
+  remaining_count: 0,
+})));
 
 const fenceAll = (): DeletionActivityFences => Object.freeze({
   request_reads: true,
@@ -478,9 +435,19 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   const restoreReplay = parseRestoreReplay(input.restore_replay);
   const retention = parseRatification(input.retention_disposition);
   const recovery = parseRatification(input.recovery_objectives);
-  const inventory = parseInventory(input.inventory);
+  const verifiedInventory = input.inventory === null
+    ? null
+    : isVerifiedDeletionCleanupInventory(input.inventory)
+      ? input.inventory
+      : fail("invalid_inventory");
+  const inventory = verifiedInventory?.rows ?? emptyInventory;
 
-  const accountIds = [projection?.account_id, tombstone?.account_id, exportReceipt?.account_id]
+  const accountIds = [
+    projection?.account_id,
+    tombstone?.account_id,
+    exportReceipt?.account_id,
+    verifiedInventory?.account_id,
+  ]
     .filter((value): value is string => value !== undefined);
   if (new Set(accountIds).size > 1) fail("account_coordinate_mismatch");
   if (restoreReplay.state === "required" && restoreReplay.checkpoint !== null
@@ -496,6 +463,13 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     }
     const stranded = inventory.find((row) => row.surface === "stranded_product_data")!;
     if (stranded.remaining_count > 0 && !exportReceipt.stranded_data_present) {
+      fail("terminal_coordinate_mismatch");
+    }
+  }
+  if (verifiedInventory !== null) {
+    if (tombstone === null
+      || verifiedInventory.control_revision !== tombstone.control_revision
+      || verifiedInventory.deletion_epoch !== tombstone.deletion_epoch) {
       fail("terminal_coordinate_mismatch");
     }
   }
@@ -542,6 +516,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   if (restoredBehindTerminal) {
     const blockers: DeletionCleanupBlocker[] = ["terminal_control_not_replayed"];
     if (exportReceipt === null) blockers.push("terminal_export_receipt_missing");
+    if (verifiedInventory === null) blockers.push("cleanup_inventory_unverified");
     if (retention.status !== "ratified") blockers.push("retention_disposition_unratified");
     if (recovery.status !== "ratified") blockers.push("recovery_objectives_unratified");
     return Object.freeze({
@@ -556,6 +531,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
         ...(projection.activation === null ? [] : ["deactivate_destination_epoch" as const]),
         "retain_terminal_control_tombstone",
         ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
+        ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
         "replay_tombstones_before_restore_traffic",
         ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
         ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
@@ -565,7 +541,9 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   }
 
   if (projection.lifecycle_state === "active") {
-    if (tombstone !== null || exportReceipt !== null) fail("terminal_coordinate_mismatch");
+    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null) {
+      fail("terminal_coordinate_mismatch");
+    }
     let mode: LifecycleOperationMode;
     switch (projection.account_generation) {
       case "legacy": mode = "legacy_active"; break;
@@ -593,7 +571,9 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   }
 
   if (projection.lifecycle_state === "deletion_pending") {
-    if (tombstone !== null || exportReceipt !== null) fail("terminal_coordinate_mismatch");
+    if (tombstone !== null || exportReceipt !== null || verifiedInventory !== null) {
+      fail("terminal_coordinate_mismatch");
+    }
     return Object.freeze({
       version: DELETION_DOMINANCE_PLAN_VERSION,
       mode: "deletion_pending",
@@ -613,6 +593,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   if (tombstone === null) fail("terminal_coordinate_mismatch");
   const blockers: DeletionCleanupBlocker[] = [];
   if (exportReceipt === null) blockers.push("terminal_export_receipt_missing");
+  if (verifiedInventory === null) blockers.push("cleanup_inventory_unverified");
   const restoreCheckpoint = restoreReplay.state === "required" ? restoreReplay.checkpoint : null;
   if (restoreReplay.state === "required"
     && (restoreCheckpoint === null
@@ -635,6 +616,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     ...(projection.activation === null ? [] : ["deactivate_destination_epoch" as const]),
     "retain_terminal_control_tombstone",
     ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
+    ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
     "replay_tombstones_before_restore_traffic",
     ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
     ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
