@@ -9,7 +9,7 @@
  * receipt.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -134,7 +134,8 @@ function main() {
   env.OMI_APP_NAME = `omi-on-polish-fixture-${manifest.run_id}`;
   env.OMI_SURFACE_PORT = "5290";
   env.OMI_FIXTURE_CAPTURE_WAIT_SECONDS = "5";
-  const result = spawnSync("/bin/bash", [launcher, ...launcherArgs], { cwd: toolRoot, env, stdio: "inherit", encoding: "utf8" });
+  const timeoutSeconds = 300;
+  const result = spawnSync("/bin/bash", [launcher, ...launcherArgs], { cwd: toolRoot, env, stdio: "inherit", encoding: "utf8", timeout: timeoutSeconds * 1000 });
   const finished = isoNow();
   if (result.status !== 0 || !existsSync(output)) { rmSync(output, { force: true }); fail(`native ${manifest.shell} launcher failed (exit ${result.status ?? "signal"})`); return; }
   const image = readFileSync(output);
@@ -144,7 +145,7 @@ function main() {
   const relativeImage = path.relative(toolRoot, output);
   const bound = { schema: "omi.polish.screenshot/v1", domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility, run_id: manifest.run_id, source_shas: manifest.source_shas, capture_class: manifest.capture_class, source_tier: manifest.source_tier, image_root: "core", image_path: relativeImage, image_sha256: imageSha };
   writeFileSync(sidecar, json(bound), { mode: 0o600 });
-  writeFileSync(receipt, json({ schema: "omi.polish.native-fixture/v1", run_id: manifest.run_id, capture_class: manifest.capture_class, source_tier: manifest.source_tier, source_shas: manifest.source_shas, surface_query: query, viewport: manifest.viewport, capture: { fixture: true, shell: manifest.shell, method: manifest.shell === "macos" ? "WKWebView.takeSnapshot" : "xcrun simctl io screenshot" }, image_root: "core", image_path: relativeImage, image_sha256: imageSha, command: { argv: [launcher, ...launcherArgs], exit_code: result.status, started_at: started, finished_at: finished } }), { mode: 0o600 });
+  writeFileSync(receipt, json({ schema: "omi.polish.native-fixture/v1", run_id: manifest.run_id, capture_class: manifest.capture_class, source_tier: manifest.source_tier, source_shas: manifest.source_shas, surface_query: query, viewport: manifest.viewport, capture: { fixture: true, shell: manifest.shell, method: manifest.shell === "macos" ? "WKWebView.takeSnapshot" : "xcrun simctl io screenshot" }, image_root: "core", image_path: relativeImage, image_sha256: imageSha, command: { argv: [launcher, ...launcherArgs], exit_code: result.status, started_at: started, finished_at: finished, timeout_seconds: timeoutSeconds } }), { mode: 0o600 });
   console.log(`NATIVE_FIXTURE_CAPTURE: ${relativeImage} sha256=${imageSha} run_id=${manifest.run_id}`);
 }
 
