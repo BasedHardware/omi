@@ -636,12 +636,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         evaluateProbe = { [weak self] attempt in
           guard let self else { return }
           self.controller.webView.evaluateJavaScript(probe) { value, error in
-            if error == nil,
-               let pendingValue,
-               let rendered = value as? String,
-               rendered == pendingValue,
-               attempt < maxAttempts
-            {
+            let pending = pendingValue != nil && (value as? String) == pendingValue
+            if attempt < maxAttempts && (error != nil || pending) {
               DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval) {
                 evaluateProbe(attempt + 1)
               }

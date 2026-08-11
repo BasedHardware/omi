@@ -46,11 +46,13 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   const source = readFileSync(producer, "utf8");
   const iosHook = readFileSync(path.join(root, "shells/ios/app/ios/Runner/OmiUiWebView.swift"), "utf8");
   const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
+  const macHost = readFileSync(path.join(root, "shells/macos/shell/Sources/OmiShell/main.swift"), "utf8");
   assert.match(source, /dev-run-macos\.sh/);
   assert.match(source, /OMI_PROBE_JS/);
   assert.match(source, /OMI_PROBE_PENDING_VALUE/);
   assert.match(source, /OMI_PROBE_MAX_ATTEMPTS/);
   assert.match(source, /OMI_ACCEPTANCE_WAIT_SECONDS = "30"/);
+  assert.match(macHost, /attempt < maxAttempts && \(error != nil \|\| pending\)/);
   assert.match(source, /xcodebuild/);
   assert.match(source, /xcresulttool/);
   assert.match(source, /OMI_NATIVE_IOS_RUNTIME_JSON\(\?:_\\d\+_\[0-9A-F-\]\{36\}\)\?/);
