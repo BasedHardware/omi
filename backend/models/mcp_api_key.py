@@ -21,6 +21,11 @@ class McpApiKeyDB(McpApiKey):
 
 class McpApiKeyCreate(BaseModel):
     name: str
+    scopes: Optional[list[str]] = None
+
+
+class McpApiKeyRotated(McpApiKey):
+    key: str
 
 
 class McpApiKeyCreated(McpApiKey):

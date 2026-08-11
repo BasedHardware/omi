@@ -57,6 +57,10 @@ class ApiKeyRevocationUnavailableError(RuntimeError):
     """Raised when revocation cannot invalidate an active auth cache safely."""
 
 
+class ApiKeyNotFoundError(LookupError):
+    """Raised when a key id does not resolve to a key owned by the caller."""
+
+
 @dataclass(frozen=True)
 class ApiKeyMetadataProjection:
     metadata: dict[str, Any]

@@ -10,6 +10,7 @@ from database.api_key_metadata import (
     ApiKeyAuthRepair,
     ApiKeyCacheReadMode,
     ApiKeyMetadataRepair,
+    ApiKeyNotFoundError,
     ApiKeyRevocationUnavailableError,
     ApiKeyValidationError,
     api_key_scopes_need_repair,
@@ -111,6 +112,62 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
         scopes=resolved_scopes,
     )
     return raw_key, api_key_data
+
+
+def rotate_dev_key(user_id: str, key_id: str) -> Tuple[str, DevApiKey]:
+    """Issue a new secret for an existing Developer key, preserving its identity.
+
+    Rotation is a hard cutover with no grace window: the previous secret stops
+    authorizing the moment the swap commits. The cached auth context is deleted
+    strictly first, because a surviving cache entry would keep the retired secret
+    valid for the cache TTL. Name, scopes, creation time, and the key's memory
+    grant are carried over unchanged; only the credential changes.
+    """
+    firestore_client = _db()
+    key_ref = firestore_client.collection("dev_api_keys").document(key_id)
+    key_doc = key_ref.get()
+    if not getattr(key_doc, "exists", False):
+        raise ApiKeyNotFoundError("Developer API key not found")
+    raw: object = key_doc.to_dict()
+    key_data: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    if key_data.get("user_id") != user_id:
+        raise ApiKeyNotFoundError("Developer API key not found")
+
+    previous_hashed_key = key_data.get("hashed_key")
+    if not is_valid_api_key_hash(previous_hashed_key):
+        raise ApiKeyRevocationUnavailableError("Developer API key credential metadata is invalid")
+    try:
+        cache_deleted = redis_db.delete_cached_dev_api_key_strict(previous_hashed_key)
+    except Exception as exc:
+        raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation failed") from exc
+    if cache_deleted is not True:
+        raise ApiKeyRevocationUnavailableError("Developer API key cache invalidation was not confirmed")
+
+    raw_key, hashed_key, key_prefix = generate_dev_api_key()
+    now = datetime.now(timezone.utc)
+    scopes = _normalize_dev_scopes(key_data.get("scopes"))
+    key_ref.update(
+        {
+            "id": key_id,
+            "hashed_key": hashed_key,
+            "key_prefix": key_prefix,
+            "app_id": DEV_API_KEY_APP_ID,
+            "scopes": scopes,
+            "rotated_at": now,
+            "last_used_at": None,
+        }
+    )
+
+    projection = project_api_key_metadata(
+        document_id=key_id,
+        raw={**key_data, "key_prefix": key_prefix, "id": key_id},
+        snapshot_create_time=getattr(key_doc, "create_time", None),
+        key_kind="dev",
+    )
+    projected = projection.metadata
+    projected["scopes"] = scopes
+    projected["last_used_at"] = None
+    return raw_key, DevApiKey.model_validate(projected)
 
 
 def get_dev_keys_for_user_with_repair_info(
