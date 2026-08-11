@@ -1,6 +1,6 @@
 // domain-pending(DIV-DOMCORE-012)
 // domain-pending(DIV-DOMX-001)
-import { sha256CanonicalRedacted } from "../ledger";
+import { sha256CanonicalRedacted, type CanonicalJson } from "../ledger";
 import type { PolicyClass, TreeInputSnapshot } from "./index";
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
@@ -52,6 +52,7 @@ export interface OwnerBoundSynthesizedProjectionEnvelope {
   node_id: string;
   render_generation: string;
   render_hash: string;
+  renderer_contract_digest: string;
   rendered_from_digest: string;
   live_claim_revision_ids: readonly string[];
   citations: readonly SynthesizedCitation[];
@@ -120,12 +121,13 @@ export const buildOwnerBoundSynthesizedProjection = (
     projection_authorization_digest: render.projection_authorization_digest,
     projected_content_digest: render.projected_content_digest,
     node_id: render.node_id,
+    renderer_contract_digest: render.renderer_contract_digest,
     rendered_from_digest: render.rendered_from_digest,
     rendered_from_manifest: render.rendered_from_manifest,
     summary_text: render.summary_text,
     citations: [...render.citations].sort(),
     effective_policy: render.effective_policy,
-  });
+  } as unknown as CanonicalJson);
   if (render.render_hash !== expectedRenderHash || render.render_generation !== `render-v1:${render.render_hash}`) fail("render_identity_invalid");
   if (!isProducedRenderNode(render)) fail("render_identity_invalid");
 
@@ -183,6 +185,7 @@ export const buildOwnerBoundSynthesizedProjection = (
     node_id: String(render.node_id),
     render_generation: String(render.render_generation),
     render_hash: String(render.render_hash),
+    renderer_contract_digest: String(render.renderer_contract_digest),
     rendered_from_digest: String(render.rendered_from_digest),
     live_claim_revision_ids: [...memberIds],
     citations,

@@ -471,6 +471,7 @@ const queryEvaluationLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^
 const sourceImpactLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/source-impact(?:\.ts)?["']/;
 const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/durable-memory-work-runner(?:\.ts)?["']/;
 const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
+const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -542,6 +543,11 @@ for (const file of files(root)) {
     if (shown.startsWith("apps/service/routes/") && consolidationWorkServiceImport.test(code)) {
       failures.push(
         `${shown}: consolidation work is worker-only; routes cannot import its service or adapters`,
+      );
+    }
+    if (shown.startsWith("apps/service/routes/") && productProjectionMaterializerImport.test(code)) {
+      failures.push(
+        `${shown}: product projection materialization is worker-only; routes consume authorized projections through the registered read composition`,
       );
     }
   }

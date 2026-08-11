@@ -5,7 +5,12 @@
 // domain-pending(DIV-DOMX-005)
 import { expect, test } from "bun:test";
 import { projectTreeInputSnapshot } from "./index";
-import { renderStructuralTree, restrictivePolicyJoin, validateRestrictiveJoin } from "./render";
+import {
+  rendererContractDigest,
+  renderStructuralTree,
+  restrictivePolicyJoin,
+  validateRestrictiveJoin,
+} from "./render";
 import { incrementallyTransitionAnchors } from "./track-a";
 import { buildDeterministicAnchors, type StructuralTree } from "./tree";
 import { snapshot } from "./tree.fixture";
@@ -21,6 +26,24 @@ const inputAndTree = () => {
   const input = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC" });
   return { input, tree: buildDeterministicAnchors(input) };
 };
+
+test("renderer contract identity covers every result-affecting coordinate", () => {
+  const baseline = options();
+  const baselineDigest = rendererContractDigest(baseline);
+  expect(rendererContractDigest({ ...baseline })).toBe(baselineDigest);
+  for (const key of [
+    "strategy", "model_version", "prompt_version", "policy_version", "schema_version",
+  ] as const) {
+    expect(rendererContractDigest({ ...baseline, [key]: `${baseline[key]}:changed` }))
+      .not.toBe(baselineDigest);
+  }
+  expect(() => rendererContractDigest({ ...baseline, extra: "forged" } as never))
+    .toThrow("invalid renderer contract");
+  const accessor = { ...baseline };
+  Object.defineProperty(accessor, "prompt_version", { enumerable: true, get: () => "forged" });
+  expect(() => rendererContractDigest(accessor)).toThrow("plain JSON requires");
+  expect(() => rendererContractDigest(new Proxy(baseline, {}))).toThrow("plain JSON rejects proxies");
+});
 
 test("R2 rebuild/incremental-equivalent structure and render cache behavior are real", async () => {
   const { input, tree } = inputAndTree();

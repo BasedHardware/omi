@@ -52,6 +52,7 @@ const resign = (render: RenderNode, patch: Partial<RenderNode>): RenderNode => {
     projection_authorization_digest: changed.projection_authorization_digest,
     projected_content_digest: changed.projected_content_digest,
     node_id: changed.node_id,
+    renderer_contract_digest: changed.renderer_contract_digest,
     rendered_from_digest: changed.rendered_from_digest,
     rendered_from_manifest: changed.rendered_from_manifest,
     summary_text: changed.summary_text,
@@ -79,6 +80,7 @@ test("projection binds owner, generations, exact claims, citations, policy, and 
   expect(envelope.projection_authorization_digest).toBe(input.projection_authorization_digest);
   expect(envelope.reader_projection_digest).toBe(input.reader_projection_digest);
   expect(envelope.projected_content_digest).toBe(input.projected_content_digest);
+  expect(envelope.renderer_contract_digest).toBe(render.renderer_contract_digest);
   expect(envelope.live_claim_revision_ids).toEqual([...render.rendered_from_manifest.live_member_revisions].sort());
   expect(envelope.citations).toEqual([{ evidence_id: "e1", event_revision_id: "event", capture_session_id: "capture", claim_revision_ids: envelope.live_claim_revision_ids }]);
   expect(envelope.synthesized_summary).toBe("A synthesized summary.");
@@ -240,6 +242,7 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
     projection_authorization_digest: seed.projection_authorization_digest,
     projected_content_digest: seed.projected_content_digest,
     node_id: seed.node_id,
+    renderer_contract_digest: seed.renderer_contract_digest,
     rendered_from_digest: seed.rendered_from_digest,
     rendered_from_manifest: poisonedManifest,
     summary_text: seed.summary_text,

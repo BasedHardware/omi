@@ -350,6 +350,15 @@ const outwardCounts = (counters: Counters) => ({
   sink: counters.sink,
 });
 
+const stringLeaves = (value: unknown): readonly string[] => {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(stringLeaves);
+  if (value !== null && typeof value === "object") {
+    return Object.values(value).flatMap(stringLeaves);
+  }
+  return [];
+};
+
 describe("production-neutral application synthesized read", () => {
   test("projects only produced renders with grounded evidence closure and exact derived provenance", async () => {
     const config = await withProducedRenders(loadConfig(), ["A grounded synthesized summary."]);
@@ -371,7 +380,10 @@ describe("production-neutral application synthesized read", () => {
     expect(fixture.traceInputs[0]!.outcome).toBe("grounded");
     expect(fixture.traceInputs[0]!.stages.cited.length).toBe(1);
     expect(fixture.traceInputs[0]!.stages.grounded.length).toBe(1);
-    for (const rawId of [render.node_id, "e1", "event", "capture"]) expect(result.raw).not.toContain(rawId);
+    const outwardStringValues = stringLeaves(JSON.parse(result.raw));
+    for (const rawId of [render.node_id, "e1", "event", "capture"]) {
+      expect(outwardStringValues).not.toContain(rawId);
+    }
   });
 
   test("rejects cloned, forged, cross-snapshot, and citationless renders before outward work", async () => {

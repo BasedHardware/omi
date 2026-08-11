@@ -158,6 +158,31 @@ test("consolidation work has one composition and no route-level executor", () =>
   }
 });
 
+test("product projection materialization stays behind the worker boundary", () => {
+  const routeFixture = join(platformRoot, "apps", "service", "routes", "projection-materializer-tripwire-fixture.ts");
+  const workerFixture = join(platformRoot, "apps", "service", "workers", "projection-materializer-caller-fixture.ts");
+  try {
+    writeFileSync(routeFixture, [
+      'import { buildAuthorizedProductProjectionWriteRequest } from "../workers/product-projection-materialization";',
+      "export const bypass = buildAuthorizedProductProjectionWriteRequest;",
+    ].join("\n"));
+    const rejected = runLint();
+    expect(rejected.status).not.toBe(0);
+    expect(`${rejected.stdout}${rejected.stderr}`)
+      .toContain("product projection materialization is worker-only");
+
+    rmSync(routeFixture, { force: true });
+    writeFileSync(workerFixture, [
+      'import { buildAuthorizedProductProjectionWriteRequest } from "./product-projection-materialization";',
+      "export const workerOnly = buildAuthorizedProductProjectionWriteRequest;",
+    ].join("\n"));
+    expect(runLint().status).toBe(0);
+  } finally {
+    rmSync(routeFixture, { force: true });
+    rmSync(workerFixture, { force: true });
+  }
+});
+
 const withPortFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(portFixture, source);

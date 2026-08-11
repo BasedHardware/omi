@@ -1,6 +1,6 @@
 import { compareStrings } from "../order";
 // domain-pending(DIV-DOMX-001)
-import { sha256CanonicalRedacted } from "../ledger";
+import { sha256CanonicalRedacted, type CanonicalJson } from "../ledger";
 import { policyPartitionLabel, type PolicyClass, type TreeInputSnapshot } from "./index";
 import type { DependencyManifest, StructuralNode, StructuralTree } from "./tree";
 import { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
@@ -8,6 +8,8 @@ import { sha256CanonicalContent } from "./content-digest";
 import { deepFreezePlainJson, normalizePlainJson } from "./plain-json";
 
 export { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
+
+export const RENDERER_CONTRACT_VERSION = "renderer-contract-v1" as const;
 
 export type RenderStatus = "ready" | "empty" | "failed";
 export interface RenderNode {
@@ -22,6 +24,7 @@ export interface RenderNode {
   summary_text: string | null;
   citations: readonly string[];
   model_version: string;
+  renderer_contract_digest: string;
   rendered_from_digest: string;
   rendered_from_manifest: DependencyManifest;
   render_hash: string | null;
@@ -39,6 +42,7 @@ export interface RenderOptions { strategy: string; model_version: string; prompt
 export type RenderCache = ReadonlyMap<string, RenderNode>;
 
 const producedRenderNodes = new WeakSet<object>();
+const TOKEN = /^[\x21-\x7e]{1,256}$/;
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
 export const isProducedRenderNode = (value: unknown): value is RenderNode =>
@@ -56,7 +60,7 @@ const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
 const renderNodeKeys = [
   "owner_account_id", "graph_generation", "reader_projection_digest", "projection_authorization_digest",
   "projected_content_digest", "node_id", "policy_partition_label", "render_generation", "summary_text",
-  "citations", "model_version", "rendered_from_digest", "rendered_from_manifest", "render_hash",
+  "citations", "model_version", "renderer_contract_digest", "rendered_from_digest", "rendered_from_manifest", "render_hash",
   "effective_policy", "status", "failure", "stale", "source_language",
 ] as const;
 const exactStrings = (left: readonly string[], right: readonly string[]): boolean =>
@@ -64,7 +68,7 @@ const exactStrings = (left: readonly string[], right: readonly string[]): boolea
 // domain-pending(DIV-DOMX-001)
 const renderHash = (render: Pick<RenderNode,
   "owner_account_id" | "graph_generation" | "reader_projection_digest" | "projection_authorization_digest"
-  | "projected_content_digest" | "node_id" | "rendered_from_digest" | "rendered_from_manifest"
+  | "projected_content_digest" | "node_id" | "renderer_contract_digest" | "rendered_from_digest" | "rendered_from_manifest"
   | "summary_text" | "citations" | "effective_policy">): string => sha256CanonicalRedacted({
   owner_account_id: render.owner_account_id,
   graph_generation: render.graph_generation,
@@ -72,12 +76,30 @@ const renderHash = (render: Pick<RenderNode,
   projection_authorization_digest: render.projection_authorization_digest,
   projected_content_digest: render.projected_content_digest,
   node_id: render.node_id,
+  renderer_contract_digest: render.renderer_contract_digest,
   rendered_from_digest: render.rendered_from_digest,
   rendered_from_manifest: render.rendered_from_manifest,
   summary_text: render.summary_text,
   citations: [...render.citations].sort(),
   effective_policy: render.effective_policy,
-});
+} as unknown as CanonicalJson);
+
+export const rendererContractDigest = (optionsValue: RenderOptions): string => {
+  const options = normalizePlainJson(optionsValue);
+  if (!hasExactKeys(options, [
+    "strategy", "model_version", "prompt_version", "policy_version", "schema_version",
+  ]) || Object.values(options).some((value) => typeof value !== "string" || !TOKEN.test(value))) {
+    throw new TypeError("invalid renderer contract");
+  }
+  return sha256CanonicalContent({
+    contract_version: RENDERER_CONTRACT_VERSION,
+    strategy: options.strategy,
+    model_version: options.model_version,
+    prompt_version: options.prompt_version,
+    policy_version: options.policy_version,
+    schema_version: options.schema_version,
+  });
+};
 
 const validatedCacheHit = (
   candidate: RenderNode | undefined,
@@ -89,6 +111,7 @@ const validatedCacheHit = (
     effective_policy: PolicyClass;
     child_stale: boolean;
     model_version: string;
+    renderer_contract_digest: string;
     source_language: string;
   },
 ): RenderNode | null => {
@@ -109,6 +132,7 @@ const validatedCacheHit = (
       || cached.rendered_from_digest !== expected.rendered_from_digest
       || cached.policy_partition_label !== expected.node.policy_partition_label
       || cached.model_version !== expected.model_version
+      || cached.renderer_contract_digest !== expected.renderer_contract_digest
       || cached.source_language !== expected.source_language
       || cached.stale !== expected.child_stale
       || cached.failure !== null
@@ -140,6 +164,7 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
   tree = normalizePlainJson(tree);
   input = immutableClone(input);
   options = immutableClone(options);
+  const renderer_contract_digest = rendererContractDigest(options);
   cache = new Map(cache);
   if (tree.input_generation !== input.graph_generation) throw new Error("render tree/input generation mismatch");
   const inputClaimsById = new Map(input.claims.map((claim) => [claim.claim_revision_id, claim]));
@@ -189,13 +214,15 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     const rendered_from_digest = sha256CanonicalRedacted({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
       reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
       projected_content_digest: input.projected_content_digest,
-      node_id: node.node_id, manifest, strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
+      node_id: node.node_id, manifest, renderer_contract_digest,
+      strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version,
+      policy_version: options.policy_version, schema_version: options.schema_version } as unknown as CanonicalJson);
     if (!validateRestrictiveJoin(effective, claims.map((claim) => claim.policy_class))) throw new Error(`restrictive policy join failed for ${node.node_id}`);
     const childStale = manifest.child_render_hashes.some((hash) => hash === "missing-child-render" || children.some((child) => child.render_hash === hash && (child.stale || child.status === "failed")));
     const sourceLanguage = claims[0]?.source_language ?? "und";
     const cached = validatedCacheHit(cache.get(rendered_from_digest), {
       input, node, manifest, rendered_from_digest, effective_policy: effective, child_stale: childStale,
-      model_version: options.model_version, source_language: sourceLanguage,
+      model_version: options.model_version, renderer_contract_digest, source_language: sourceLanguage,
     });
     if (cached) { rendered.set(node.node_id, cached); return cached; }
     try {
@@ -211,13 +238,15 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
       const render_hash = renderHash({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
         reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
         projected_content_digest: input.projected_content_digest,
-        node_id: node.node_id, rendered_from_digest, rendered_from_manifest: manifest, summary_text: storedSummary,
+        node_id: node.node_id, renderer_contract_digest, rendered_from_digest,
+        rendered_from_manifest: manifest, summary_text: storedSummary,
         citations, effective_policy: effective });
       const result: RenderNode = deepFreezePlainJson({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
         reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
         projected_content_digest: input.projected_content_digest,
         node_id: node.node_id, policy_partition_label: node.policy_partition_label,
         render_generation: `render-v1:${render_hash}`, summary_text: storedSummary, citations, model_version: options.model_version,
+        renderer_contract_digest,
         rendered_from_digest, rendered_from_manifest: manifest, render_hash, effective_policy: effective, status, failure: null,
         stale: childStale, source_language: sourceLanguage } satisfies RenderNode);
       producedRenderNodes.add(result);
@@ -228,6 +257,7 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
         projected_content_digest: input.projected_content_digest,
         node_id: node.node_id, policy_partition_label: node.policy_partition_label, render_generation: `render-v1:failed:${rendered_from_digest}`,
         summary_text: null, citations: [], model_version: options.model_version, rendered_from_digest, rendered_from_manifest: manifest, render_hash: null,
+        renderer_contract_digest,
         effective_policy: effective, status: "failed", failure: error instanceof Error ? error.message : String(error), stale: true, source_language: sourceLanguage } satisfies RenderNode);
       producedRenderNodes.add(result);
       rendered.set(node.node_id, result); return result;
