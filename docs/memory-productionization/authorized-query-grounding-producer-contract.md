@@ -113,7 +113,8 @@ missing. It contains dependency/model/storage failures behind closed outcomes.
 This is not a source-authority implementation. Hermetic tests construct the
 copied input through the existing sealed evidence-source facade. The future
 adapter still owes the owner-visible graph projection and exact class
-derivation described above.
+derivation described above. Its contract is frozen separately in
+`owner-query-source-contract.md`.
 
 Verification for the landed unit: 7 focused producer tests and 35 combined
 producer/repository/audit/migration tests passed; the broad platform gate passed
