@@ -149,6 +149,7 @@ final class ConsumerEvidenceDriver {
   private func fail(_ reason: String) {
     guard !failed else { return }
     failed = true
+    routeDriveState.failCurrentRoute()
     teardown()
     FileHandle.standardError.write(Data("CONSUMER-EVIDENCE: FAIL \(reason)\n".utf8))
     if ProcessInfo.processInfo.environment["OMI_CONSUMER_EVIDENCE_EXIT"] == "1" {
