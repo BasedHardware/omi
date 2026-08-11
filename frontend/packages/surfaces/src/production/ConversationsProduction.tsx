@@ -7,6 +7,7 @@ import { deadLetterView } from "./dead-letter-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import "./conversations.css";
 
 type Locale = string;
@@ -120,7 +121,7 @@ function ConversationRow({ conversation, locale, run, store, fixture }: {
           aria-label={conversation.starred ? t(locale, "conversations.unstar") : t(locale, "conversations.star")}
           onClick={() => void run(() => store.patch(conversation.id, { starred: !conversation.starred }))}
         >
-          <span aria-hidden={true} />
+          <ProductionIcon name="star" filled={conversation.starred} />
         </button>
       </div>
     </article>
@@ -152,7 +153,7 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   };
   return (
     <section className="conversation-detail" data-conversation-detail={conversation.id}>
-      <a className="conversation-back" href={listHref(fixture)}>{t(locale, "conversation.detail.back")}</a>
+      <a className="conversation-back" href={listHref(fixture)}><ProductionIcon name="back" />{t(locale, "conversation.detail.back")}</a>
       <header className="conversation-detail-header">
         <div className="conversation-detail-title-editor">
           {editingTitle ? (

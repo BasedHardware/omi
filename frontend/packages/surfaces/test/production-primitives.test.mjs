@@ -237,6 +237,14 @@ test("production icon vocabulary is explicit and chrome/search do not draw one-o
   assert.doesNotMatch(chrome, /<svg|<path|<circle|<rect/);
   assert.match(primitives, /<ProductionIcon name="search"/);
   assert.doesNotMatch(styles, /\.production-search-icon::after/);
+  for (const file of ["HomeProduction.tsx", "MemoriesProduction.tsx", "TasksProduction.tsx", "ConversationsProduction.tsx"]) {
+    const source = await read(`src/production/${file}`);
+    assert.doesNotMatch(source, /[★☆☀◐○‹]|•••|>\+<|>×</u, `${file} uses the shared icon vocabulary`);
+  }
+  for (const file of ["home.css", "tasks.css", "conversations.css", "styles.css"]) {
+    const source = await read(`src/production/${file}`);
+    assert.doesNotMatch(source, /[★☆☀◐○‹]|Open Runde/u, `${file} uses semantic typography and icons`);
+  }
 });
 
 test("named control collections expose groups and ready errors never advertise an unbound retry", async () => {

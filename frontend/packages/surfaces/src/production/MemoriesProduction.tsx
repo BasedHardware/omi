@@ -5,6 +5,7 @@ import type { ProductionMemoryStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
 import { createProductionCommandRegistry, dispatchProductionCommand } from "./command-registry.js";
@@ -224,8 +225,8 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
           onValueChange={setVisibilityFilter}
         />
         <div className="memory-toolbar-actions">
-          <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} aria-label={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} title={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} onClick={() => setComposerOpen((open) => !open)}>{composerOpen ? "×" : "+"}</button>
-          <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}>•••</button>
+          <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} aria-label={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} title={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} onClick={() => setComposerOpen((open) => !open)}><ProductionIcon name={composerOpen ? "close" : "plus"} /></button>
+          <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}><ProductionIcon name="more" /></button>
         </div>
       </div>
       <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleRows.length })} />

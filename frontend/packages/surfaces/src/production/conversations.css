@@ -154,8 +154,6 @@
   font-size: var(--type-heading-size);
 }
 .conversation-row-actions button:not(:disabled):hover { color: var(--warning); background: var(--surface-elevated); }
-.conversation-star span::before { content: "☆"; }
-.conversation-star.is-starred span::before { content: "★"; }
 .conversation-row-actions button.is-starred { color: var(--warning); }
 
 .conversation-detail { display: grid; gap: var(--space-lg); max-width: 1040px; }
@@ -167,7 +165,7 @@
   color: var(--content-primary);
   text-decoration: none;
 }
-.conversation-back::before { margin-right: var(--space-sm); content: "‹"; font-size: var(--type-heading-size); }
+.conversation-back .production-icon { margin-right: var(--space-sm); }
 .conversation-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-lg); }
 .conversation-detail-header > button { flex: 0 0 auto; }
 .conversation-detail-header h2 {
@@ -314,5 +312,5 @@ html[data-platform="desktop"] .conversation-row-title { font-size: 14px; font-we
 html[data-platform="desktop"] .conversation-row-meta { margin-top: 2px; font-size: 10px; }
 html[data-platform="desktop"] .conversation-row-actions button { min-width: 30px; width: 30px; min-height: 30px; font-size: 17px; }
 html[data-platform="desktop"] .conversation-detail { max-width: 860px; gap: 15px; }
-html[data-platform="desktop"] .conversation-detail-header h2 { font-family: "Open Runde", ui-rounded, -apple-system, sans-serif; font-size: 28px; letter-spacing: -.75px; }
+html[data-platform="desktop"] .conversation-detail-header h2 { font-family: var(--type-title-family); font-size: 28px; letter-spacing: -.75px; }
 html[data-platform="desktop"] .conversation-summary { padding: 18px; border-color: rgba(39,46,55,.065); border-radius: 14px; background: rgba(255,255,255,.34); }

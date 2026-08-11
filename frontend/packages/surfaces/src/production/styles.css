@@ -355,7 +355,7 @@ html[data-platform="desktop"] .tasks-eyebrow { display: none; }
 html[data-platform="desktop"] .production-header h1,
 html[data-platform="desktop"] .tasks-header h1 {
   margin: 0 0 3px;
-  font-family: "Open Runde", ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--type-display-family);
   font-size: 24px;
   font-weight: 650;
   line-height: 1.1;

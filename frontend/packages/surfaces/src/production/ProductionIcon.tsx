@@ -83,11 +83,13 @@ export function ProductionIcon({
   size = 20,
   strokeWidth = 1.8,
   className = "",
+  filled = false,
 }: {
   name: ProductionIconName;
   size?: number;
   strokeWidth?: number;
   className?: string;
+  filled?: boolean;
 }): React.JSX.Element {
   const Icon = productionIcons[name];
   return (
@@ -97,6 +99,7 @@ export function ProductionIcon({
       className={`production-icon${className ? ` ${className}` : ""}`}
       size={size}
       strokeWidth={strokeWidth}
+      fill={filled ? "currentColor" : "none"}
     />
   );
 }
