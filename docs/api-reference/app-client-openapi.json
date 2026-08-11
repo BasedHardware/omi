@@ -4055,6 +4055,16 @@
               }
             ],
             "title": "Update Channel"
+          },
+          "web_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSearchAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AssistantSettingsResponse",
@@ -22385,6 +22395,16 @@
               }
             ],
             "title": "Update Channel"
+          },
+          "web_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSearchAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "UpdateAssistantSettingsRequest",
@@ -23526,6 +23546,23 @@
           "transcript"
         ],
         "title": "VoiceMessageTranscriptionResponse",
+        "type": "object"
+      },
+      "WebSearchAssistantSettings": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "title": "WebSearchAssistantSettings",
         "type": "object"
       },
       "WebhookType": {
