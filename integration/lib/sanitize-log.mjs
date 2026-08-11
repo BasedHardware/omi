@@ -1,24 +1,108 @@
 #!/usr/bin/env node
 // LIFECYCLE: permanent
-// Persist only diagnostic shape, never credentials or backend origins.
+// Persist diagnostic shape, never credentials or backend origins. Service logs
+// are sanitized before the first byte reaches disk: raw service output exists
+// only in the kernel pipe while this process waits for the readiness token.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+export function sanitizeLogText(input, redactions = []) {
+  let safe = input;
+  for (const value of redactions.filter(Boolean)) safe = safe.split(value).join("[redacted]");
+  return safe
+    .replace(/https?:\/\/[^\s)'"\]]+/gu, "[redacted-origin]")
+    .replace(/(authorization:\s*bearer\s+)[^\s]+/giu, "$1[redacted]")
+    .replace(/(\bOMI_API_TOKEN\s*=\s*)[^\s]+/gu, "$1[redacted]")
+    .replace(/((?:dev[\s_-]*)?token\s*[:=]\s*)[^\s]+/giu, "$1[redacted]");
+}
 
 const argv = process.argv.slice(2);
 const flag = (name) => {
   const index = argv.indexOf(name);
   return index === -1 ? null : argv[index + 1];
 };
-const input = flag("--in");
 const output = flag("--out");
-if (!input || !output) {
-  process.stderr.write("usage: sanitize-log.mjs --in <raw> --out <safe> [--redact <value>]...\n");
-  process.exit(2);
-}
 const redactions = argv.flatMap((value, index) => value === "--redact" && argv[index + 1] ? [argv[index + 1]] : []);
-let text = readFileSync(input, "utf8");
-for (const value of redactions.filter(Boolean)) text = text.split(value).join("[redacted]");
-text = text
-  .replace(/https?:\/\/[^\s)'"]+/gu, "[redacted-origin]")
-  .replace(/(authorization:\s*bearer\s+)[^\s]+/giu, "$1[redacted]");
-writeFileSync(output, text);
+
+function fileMode() {
+  const input = flag("--in");
+  if (!input || !output) {
+    process.stderr.write("usage: sanitize-log.mjs --in <raw> --out <safe> [--redact <value>]...\n");
+    process.exitCode = 2;
+    return;
+  }
+  writeFileSync(output, sanitizeLogText(readFileSync(input, "utf8"), redactions), { mode: 0o600 });
+}
+
+function streamMode() {
+  const readinessPath = flag("--readiness");
+  const readyOut = flag("--ready-out");
+  if (!output || !readinessPath || !readyOut) {
+    process.stderr.write("usage: sanitize-log.mjs --stream --out <safe> --readiness <record> --ready-out <path>\n");
+    process.exitCode = 2;
+    return;
+  }
+
+  writeFileSync(output, "", { mode: 0o600 });
+  let pending = "";
+  let activated = false;
+  let ended = false;
+  let timer;
+
+  const flush = (all = false) => {
+    const boundary = all ? pending.length : pending.lastIndexOf("\n") + 1;
+    if (boundary <= 0) return;
+    const raw = pending.slice(0, boundary);
+    pending = pending.slice(boundary);
+    writeFileSync(output, sanitizeLogText(raw, redactions), { flag: "a", mode: 0o600 });
+  };
+
+  const activate = () => {
+    if (activated || !existsSync(readinessPath)) return false;
+    try {
+      const readiness = JSON.parse(readFileSync(readinessPath, "utf8"));
+      if (typeof readiness.devToken !== "string" || readiness.devToken === "") return false;
+      redactions.push(readiness.devToken, readiness.baseUrl);
+      activated = true;
+      flush(false);
+      writeFileSync(readyOut, "sanitizer-ready\n", { flag: "wx", mode: 0o600 });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const finish = () => {
+    if (!activated) {
+      // Without the independent token coordinate there is no safe way to
+      // prove arbitrary output clean. Fail closed and persist only our own
+      // diagnostic, never the buffered service bytes.
+      pending = "";
+      writeFileSync(output, "service diagnostics withheld: readiness identity unavailable\n", { flag: "a", mode: 0o600 });
+    } else {
+      flush(true);
+    }
+    if (timer) clearInterval(timer);
+  };
+
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    pending += chunk;
+    if (pending.length > 4 * 1024 * 1024 && !activated) {
+      pending = "";
+      process.stderr.write("service log sanitizer refused more than 4 MiB before readiness\n");
+      process.exitCode = 1;
+      process.stdin.destroy();
+      return;
+    }
+    if (activate()) return;
+    if (activated) flush(false);
+  });
+  process.stdin.on("end", () => { ended = true; finish(); });
+  process.stdin.on("close", () => { if (!ended) finish(); });
+  timer = setInterval(() => { if (activate() && ended) finish(); }, 20);
+  timer.unref();
+}
+
+if (argv.includes("--stream")) streamMode();
+else fileMode();

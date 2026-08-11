@@ -98,5 +98,18 @@ test("RED-PROOF stop signals only a durable exact process owner", () => {
   assert.match(owner, /owner PID was reused or has a stale start identity/);
   assert.match(owner, /owner PID has an unknown executable or command/);
   assert.match(owner, /process identity changed before escalation; SIGKILL skipped/);
+  assert.match(owner, /ownerTokenSha256/);
+  assert.match(owner, /independent binding changed before signal; stop refused/);
+  assert.match(owner, /independent binding changed before escalation; SIGKILL skipped/);
   assert.doesNotMatch(stack, /PIDFILE|kill -KILL "\$pid"/);
+});
+
+test("RED-PROOF service output reaches disk only through the streaming sanitizer", () => {
+  assert.match(stack, /mkfifo "\$SERVICE_LOG_PIPE"/);
+  assert.match(stack, /"\$LOG_SANITIZER" --stream --out "\$LOG_DIR\/service\.log"/);
+  assert.match(stack, /exec bun "\$SERVICE_REL" \) > "\$SERVICE_LOG_PIPE" 2>&1 &/);
+  assert.doesNotMatch(stack, /exec bun "\$SERVICE_REL" \) > "\$LOG_DIR\/service\.log"/);
+  assert.match(stack, /"\$ARTIFACT_GUARD" --readiness "\$READINESS_PATH" --path "\$LOG_DIR"/);
+  assert.match(stack, /retained_paths=\("\$LOG_DIR" "\$MACOS_RESULT" "\$IOS_RESULT" "\$CONSUMER_RESULT" "\$PRODUCER_RESULT" "\$FACTS_PATH"\)/);
+  assert.match(stack, /retained_paths\+\=\("\$REPORTFILE"\)/);
 });

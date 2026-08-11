@@ -17,6 +17,8 @@ SURFACES="$CORE_REPO/core/packages/surfaces"
 MACOS_LAUNCHER="$CORE_REPO/core/shells/macos/scripts/dev-run-macos.sh"
 IOS_LAUNCHER="$CORE_REPO/core/shells/ios/scripts/dev-run-ios.sh"
 OWNER_TOOL="$HERE/lib/process-owner.mjs"
+LOG_SANITIZER="$HERE/lib/sanitize-log.mjs"
+ARTIFACT_GUARD="$HERE/lib/artifact-safety.mjs"
 
 MODE_ASSERT=0 MODE_JSON=0 MODE_UP=0 STOP_ONLY=0 DOCTOR_ONLY=0
 DEVICE=""
@@ -77,11 +79,14 @@ IOS_RESULT="$RUN_DIR/ios-consumer.json"
 CONSUMER_RESULT="$RUN_DIR/consumer.json"
 PRODUCER_RESULT="$RUN_DIR/producer.json"
 FACTS_PATH="$RUN_DIR/facts.json"
+SERVICE_LOG_PIPE="$RUN_DIR/service-log.pipe"
+SERVICE_LOG_READY="$RUN_DIR/service-log-sanitizer-ready"
 mkdir -p "$LOG_DIR"
 
 LEAVE_RUNNING=0
 OWNER_WRITTEN=0
 SERVICE_PID=""
+SERVICE_LOGGER_PID=""
 cleanup() {
   local stop_rc=0
   if (( LEAVE_RUNNING )); then return; fi
@@ -91,6 +96,9 @@ cleanup() {
     kill "$SERVICE_PID" 2>/dev/null || true
     wait "$SERVICE_PID" 2>/dev/null || true
   fi
+  if [[ "$SERVICE_LOGGER_PID" =~ ^[0-9]+$ ]]; then wait "$SERVICE_LOGGER_PID" 2>/dev/null || true; fi
+  [[ ! -p "$SERVICE_LOG_PIPE" ]] || rm -f -- "$SERVICE_LOG_PIPE"
+  [[ ! -e "$SERVICE_LOG_READY" ]] || rm -f -- "$SERVICE_LOG_READY"
   if (( stop_rc == 0 )); then rm -rf -- "$RUN_DIR"; fi
 }
 trap cleanup EXIT
@@ -98,7 +106,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required tool $1" >&2; exit 1; }; }
-for tool in bun node lsof curl; do need "$tool"; done
+for tool in bun node lsof curl mkfifo; do need "$tool"; done
 [[ -f "$SERVICE_LAUNCHER" ]] || { echo "ERROR: required sibling launcher is absent: $SERVICE_LAUNCHER" >&2; exit 1; }
 node "$OWNER_TOOL" prepare --record "$OWNERFILE" >/dev/null || exit $?
 
@@ -122,6 +130,12 @@ fi
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
+rm -f -- "$SERVICE_LOG_PIPE" "$SERVICE_LOG_READY" "$LOG_DIR/service.log"
+mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
+node "$LOG_SANITIZER" --stream --out "$LOG_DIR/service.log" \
+  --readiness "$READINESS_PATH" --ready-out "$SERVICE_LOG_READY" \
+  < "$SERVICE_LOG_PIPE" >/dev/null 2>&1 &
+SERVICE_LOGGER_PID=$!
 ( cd "$PLATFORM_REPO" && \
   OMI_PORT=4851 \
   OMI_QA_DB="$DATABASE_PATH" \
@@ -129,7 +143,7 @@ printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
   OMI_DEV_READY_RECORD="$READINESS_PATH" \
   OMI_DEV_EVIDENCE=1 \
   TZ=UTC \
-  exec bun "$SERVICE_REL" ) > "$LOG_DIR/service.log" 2>&1 &
+  exec bun "$SERVICE_REL" ) > "$SERVICE_LOG_PIPE" 2>&1 &
 SERVICE_PID=$!
 
 ready=0
@@ -151,6 +165,20 @@ node "$HERE/lib/evidence-cli.mjs" validate-readiness \
 DEV_TOKEN="$(read -r value < "$TOKEN_PATH"; printf '%s' "$value")"
 rm -f -- "$TOKEN_PATH"
 [[ -n "$DEV_TOKEN" ]] || { echo "ERROR: readiness record supplied no dev token." >&2; exit 1; }
+
+log_ready=0
+for _ in $(seq 1 80); do
+  if [[ -s "$SERVICE_LOG_READY" ]]; then log_ready=1; break; fi
+  kill -0 "$SERVICE_LOGGER_PID" 2>/dev/null || break
+  sleep 0.025
+done
+rm -f -- "$SERVICE_LOG_PIPE"
+if (( log_ready == 0 )); then
+  echo "ERROR: service diagnostics were not accepted by the streaming sanitizer." >&2
+  exit 1
+fi
+rm -f -- "$SERVICE_LOG_READY"
+node "$ARTIFACT_GUARD" --readiness "$READINESS_PATH" --path "$LOG_DIR" >/dev/null || exit $?
 
 SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$SERVICE_PID")" || exit $?
 PROCESS_START_IDENTITY="$(printf '%s' "$SNAPSHOT" | node -e '
@@ -174,14 +202,19 @@ for tool in corepack xcrun; do need "$tool"; done
 [[ -x "$IOS_LAUNCHER" ]] || { echo "ERROR: iOS launcher is absent or not executable: $IOS_LAUNCHER" >&2; exit 1; }
 printf 'macOS origin %s; iOS origin omi-ui://local\n' "$MACOS_ORIGIN"
 
+CORE_BUILD_RAW="$LOG_DIR/core-build.raw.log"
 ( cd "$CORE_REPO/core" \
   && corepack pnpm install --config.confirmModulesPurge=false --silent \
   && node "$HERE/check-surfaces-dependency-dist.mjs" --prepare-build \
-  && corepack pnpm -r build ) > "$LOG_DIR/core-build.log" 2>&1 || {
+  && corepack pnpm -r build ) > "$CORE_BUILD_RAW" 2>&1
+core_build_status=$?
+node "$LOG_SANITIZER" --in "$CORE_BUILD_RAW" --out "$LOG_DIR/core-build.log"
+rm -f -- "$CORE_BUILD_RAW"
+if (( core_build_status != 0 )); then
   echo "ERROR: core workspace build failed; see the run-scoped core build log." >&2
   tail -20 "$LOG_DIR/core-build.log" >&2
-  exit 1
-}
+  exit "$core_build_status"
+fi
 
 CORE_TREE="$(node "$HERE/lib/provenance.mjs" --repo core-foundation | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).treeHash??"")}catch{}})')"
@@ -260,4 +293,10 @@ report_args=(--facts "$FACTS_PATH" --readiness "$READINESS_PATH" --out "$REPORTF
 (( MODE_JSON )) && report_args+=(--json)
 (( MODE_ASSERT )) && report_args+=(--assert)
 node "$HERE/lib/run-report.mjs" "${report_args[@]}"
-exit $?
+report_status=$?
+retained_paths=("$LOG_DIR" "$MACOS_RESULT" "$IOS_RESULT" "$CONSUMER_RESULT" "$PRODUCER_RESULT" "$FACTS_PATH")
+[[ ! -f "$REPORTFILE" ]] || retained_paths+=("$REPORTFILE")
+artifact_args=(--readiness "$READINESS_PATH")
+for retained_path in "${retained_paths[@]}"; do artifact_args+=(--path "$retained_path"); done
+node "$ARTIFACT_GUARD" "${artifact_args[@]}" >/dev/null || exit $?
+exit "$report_status"
