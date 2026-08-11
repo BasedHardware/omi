@@ -31,6 +31,7 @@ test("tasks derive UTC urgency groups and preserve no-due tasks separately", asy
   assert.match(source, /groupFor\(task, now, dayFormatter\)/);
   assert.match(source, /if \(task\.dueAt === null\) return "noDeadline"/);
   assert.match(source, /if \(task\.dueAt < now\) return "overdue"/);
+  assert.ok(source.indexOf('if (task.dueAt < now) return "overdue"') < source.indexOf('if (due === current) return "today"'));
   assert.match(source, /86_400_000/);
   assert.match(source, /type GroupKey = "overdue" \| "today" \| "tomorrow" \| "later" \| "noDeadline"/);
   assert.match(source, /tasks\.noDueDate/);

@@ -68,6 +68,12 @@
   transform: translateX(-50%);
 }
 
+html[data-platform="mobile"] .chat-jump-latest {
+  position: fixed;
+  z-index: 3;
+  inset-block-end: calc(var(--chat-mobile-composer-height, 0px) + var(--min-tap-target) + var(--space-xxl) + env(safe-area-inset-bottom, 0px));
+}
+
 .chat-message {
   padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border);

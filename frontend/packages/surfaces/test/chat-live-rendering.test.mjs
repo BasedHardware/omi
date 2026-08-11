@@ -309,6 +309,38 @@ test("Chat preserves the reader's live-edge choice and older-history anchor", as
   }
 });
 
+test("mobile Chat keeps Latest above the sticky composer", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("human", "human", "Question"), row("answer", "ai", "Answer")];
+  const rendered = await renderComponent(ChatProduction, { store: createProductionChatStore(domain) });
+  try {
+    rendered.window.document.documentElement.dataset.platform = "mobile";
+    const composer = rendered.container.querySelector(".chat-composer");
+    const list = rendered.container.querySelector(".chat-message-list");
+    assert.ok(composer);
+    assert.ok(list);
+    Object.defineProperty(composer, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ height: 176, width: 320, top: 400, right: 320, bottom: 576, left: 0, x: 0, y: 400, toJSON() {} }),
+    });
+    await rendered.act(async () => {
+      rendered.window.dispatchEvent(new rendered.window.Event("resize"));
+      list.dispatchEvent(new rendered.window.WheelEvent("wheel", { bubbles: true, deltaY: -1 }));
+    });
+    const latest = rendered.container.querySelector(".chat-jump-latest");
+    assert.ok(latest);
+    assert.equal(latest.style.getPropertyValue("--chat-mobile-composer-height"), "176px");
+    assert.equal(latest.textContent, EN_MESSAGES["chat.latest"]);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("rendered live Chat streams changing assistant text and converges without duplicate bubbles", async () => {
   // red-proof: omit activeGenerations() from projectedHistory. The rendered
   // `.is-streaming` assertion fails even though the domain observer has text.
