@@ -17,9 +17,19 @@ import type {
   ChatAttachmentContentPort,
   ChatGenerationAttachmentDescriptor,
 } from "./attachment-content";
-import type { ChatGenerationSource, ChatGenerationSourceRun } from "./generation-source";
-import type { ChatGenerationEvent } from "../stores/chat-generation-events-store";
-import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
+import {
+  realtimeChatGenerationScheduler,
+  type ChatGenerationProgress,
+  type ChatGenerationScheduler,
+  type ChatGenerationSource,
+  type ChatGenerationSourceRun,
+  type ChatGenerationUsage,
+} from "./generation-source";
+import type {
+  ChatGenerationEvent,
+  ChatGenerationEventsStore,
+  ChatGenerationFrame,
+} from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord, ChatMessagesStore, StoredChatMessage } from "../stores/chat-messages-store";
 
@@ -47,6 +57,10 @@ export interface ChatGenerationSupervisorDependencies {
   readonly finalization: ChatGenerationFinalization;
   readonly attachments: ChatAttachmentContentPort;
   readonly nowEpochMilliseconds: () => number;
+  /** Optional virtual/realtime timer seam for provider liveness deadlines. */
+  readonly scheduler?: ChatGenerationScheduler;
+  /** Omitted for legacy text-only composition; supplied adapters get bounded liveness. */
+  readonly liveness?: ChatGenerationLivenessPolicy;
   readonly assistantMessageId: (accountId: string, generationId: string) => string;
   readonly eventId: (
     accountId: string,
@@ -57,15 +71,32 @@ export interface ChatGenerationSupervisorDependencies {
   readonly revision: (accountId: string, messageId: string, payloadHash: string) => string;
 }
 
+export interface ChatGenerationLivenessPolicy {
+  readonly firstEventDeadlineMs: number;
+  readonly maxRunDurationMs: number;
+  readonly heartbeatIntervalMs: number;
+  readonly cancelGraceMs: number;
+}
+
 interface ActiveGeneration {
   readonly accountId: string;
   readonly generationId: string;
   readonly admitted: StoredChatMessage;
+  readonly attemptId: string;
   text: string;
   run: ChatGenerationSourceRun | null;
   runCancelled: boolean;
   terminal: boolean;
   failure: ChatGenerationFailure | null;
+  providerStartedAt: number | null;
+  providerEventSeen: boolean;
+  cancelRequested: boolean;
+  firstEventTimer: unknown | null;
+  maxDurationTimer: unknown | null;
+  heartbeatTimer: unknown | null;
+  cancelGraceTimer: unknown | null;
+  progressPct: number | null;
+  usage: ChatGenerationUsage | null;
 }
 
 const FALLBACK_TEXT = "I’m sorry, I couldn’t complete that response.";
@@ -93,6 +124,90 @@ const defaultFailure = (
       : stage === "timeout"
         ? { code: "generation_timeout", retryable: true }
         : { code: "generation_provider_failed", retryable: true };
+
+const validDeadline = (value: unknown, allowZero = false): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && (allowZero ? value >= 0 : value > 0);
+
+const validateLivenessPolicy = (
+  policy: ChatGenerationLivenessPolicy | undefined,
+): ChatGenerationLivenessPolicy | undefined => {
+  if (policy === undefined) return undefined;
+  if (!validDeadline(policy.firstEventDeadlineMs)
+    || !validDeadline(policy.maxRunDurationMs)
+    || !validDeadline(policy.heartbeatIntervalMs, true)
+    || !validDeadline(policy.cancelGraceMs, true)
+    || policy.firstEventDeadlineMs > policy.maxRunDurationMs
+    || policy.firstEventDeadlineMs > 86_400_000
+    || policy.maxRunDurationMs > 86_400_000
+    || policy.heartbeatIntervalMs > 300_000
+    || policy.cancelGraceMs > 300_000) {
+    throw new TypeError("invalid Chat generation liveness policy");
+  }
+  return Object.freeze({ ...policy });
+};
+
+const readPlainDataRecord = (value: unknown): Record<string, unknown> | null => {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some((key) => typeof key !== "string")) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const record = Object.create(null) as Record<string, unknown>;
+    for (const key of keys) {
+      const descriptor = descriptors[key as string];
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      record[key as string] = descriptor.value;
+    }
+    return record;
+  } catch {
+    return null;
+  }
+};
+
+const validateUsage = (value: unknown): ChatGenerationUsage | null => {
+  const usage = readPlainDataRecord(value);
+  if (usage === null) return null;
+  try {
+    if (Object.keys(usage).length !== 6
+      || Object.keys(usage).some((key) => !["usageId", "provider", "model", "inputTokens", "outputTokens", "totalTokens"].includes(key))) return null;
+    const bounded = (candidate: unknown): candidate is string =>
+      typeof candidate === "string" && candidate.length > 0 && candidate.length <= 128
+      && /^[A-Za-z0-9._:/-]+$/u.test(candidate);
+    const tokens = (candidate: unknown): candidate is number =>
+      typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0;
+    if (!bounded(usage.usageId) || !bounded(usage.provider) || !bounded(usage.model)
+      || !tokens(usage.inputTokens) || !tokens(usage.outputTokens) || !tokens(usage.totalTokens)
+      || usage.totalTokens !== (usage.inputTokens as number) + (usage.outputTokens as number)) return null;
+    return Object.freeze({
+      usageId: usage.usageId as string,
+      provider: usage.provider,
+      model: usage.model,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    });
+  } catch {
+    return null;
+  }
+};
+
+const validateProgress = (value: unknown): ChatGenerationProgress | null => {
+  const progress = readPlainDataRecord(value);
+  if (progress === null) return null;
+  try {
+    if (Object.keys(progress).length !== 2 || Object.keys(progress).some((key) => key !== "progressPct" && key !== "usage")) return null;
+    if (!(progress.progressPct === null
+      || (typeof progress.progressPct === "number" && Number.isSafeInteger(progress.progressPct)
+        && progress.progressPct >= 0 && progress.progressPct <= 100))) return null;
+    const usage = progress.usage === null ? null : validateUsage(progress.usage);
+    if (progress.usage !== null && usage === null) return null;
+    return Object.freeze({ progressPct: progress.progressPct as number | null, usage });
+  } catch {
+    return null;
+  }
+};
 
 /** Reads only own data properties; hostile getters/proxies fail closed. */
 const readFailureDeclaration = (
@@ -196,12 +311,14 @@ export const createChatGenerationSupervisor = (
   deps: ChatGenerationSupervisorDependencies,
 ): ChatGenerationSupervisor => {
   const active = new Map<string, ActiveGeneration>();
+  const scheduler = deps.scheduler ?? realtimeChatGenerationScheduler;
+  const liveness = validateLivenessPolicy(deps.liveness);
   const keyOf = (accountId: string, generationId: string): string =>
     `${accountId.length}:${accountId}:${generationId}`;
 
   const append = (
     state: Pick<ActiveGeneration, "accountId" | "generationId">,
-    frame: { readonly kind: "snapshot" | "delta"; readonly text: string },
+    frame: Exclude<ChatGenerationFrame, { readonly kind: "accepted" | "done" | "failed" | "cancelled" }>,
   ): void => {
     const prior = deps.events.listAfter(state.accountId, state.generationId, null);
     if (prior === null) throw new TypeError("chat generation event log disappeared");
@@ -219,6 +336,63 @@ export const createChatGenerationSupervisor = (
     });
     if (appended.kind !== "appended") {
       throw new TypeError("chat generation event identity conflict");
+    }
+  };
+
+  const clearTimer = (handle: unknown | null): void => {
+    if (handle !== null) scheduler.clearTimeout(handle);
+  };
+
+  const clearLivenessTimers = (state: ActiveGeneration): void => {
+    clearTimer(state.firstEventTimer);
+    clearTimer(state.maxDurationTimer);
+    clearTimer(state.heartbeatTimer);
+    clearTimer(state.cancelGraceTimer);
+    state.firstEventTimer = null;
+    state.maxDurationTimer = null;
+    state.heartbeatTimer = null;
+    state.cancelGraceTimer = null;
+  };
+
+  const appendHeartbeat = (state: ActiveGeneration): void => {
+    if (liveness?.heartbeatIntervalMs === 0 || state.terminal || state.cancelRequested) return;
+    const startedAt = state.providerStartedAt;
+    if (startedAt === null) return;
+    append(state, {
+      kind: "heartbeat",
+      attemptId: state.attemptId,
+      elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - startedAt),
+    });
+  };
+
+  const markProviderEvent = (state: ActiveGeneration): void => {
+    state.providerEventSeen = true;
+    clearTimer(state.firstEventTimer);
+    state.firstEventTimer = null;
+  };
+
+  const armLiveness = (state: ActiveGeneration): void => {
+    if (liveness === undefined || state.providerStartedAt === null || state.terminal || state.cancelRequested) return;
+    state.firstEventTimer = scheduler.setTimeout(() => {
+      if (state.terminal || state.providerEventSeen || state.cancelRequested) return;
+      void finalize(state, "failed", "", { code: "generation_timeout", retryable: true });
+    }, liveness.firstEventDeadlineMs);
+    state.maxDurationTimer = scheduler.setTimeout(() => {
+      if (state.terminal || state.cancelRequested) return;
+      void finalize(state, "failed", "", { code: "generation_timeout", retryable: true });
+    }, liveness.maxRunDurationMs);
+    if (liveness.heartbeatIntervalMs > 0) {
+      const heartbeat = (): void => {
+        if (state.terminal || state.cancelRequested) return;
+        try {
+          appendHeartbeat(state);
+        } catch {
+          void finalize(state, "failed", "", defaultFailure("callback"));
+          return;
+        }
+        state.heartbeatTimer = scheduler.setTimeout(heartbeat, liveness.heartbeatIntervalMs);
+      };
+      state.heartbeatTimer = scheduler.setTimeout(heartbeat, liveness.heartbeatIntervalMs);
     }
   };
 
@@ -271,6 +445,11 @@ export const createChatGenerationSupervisor = (
     failure: ChatGenerationFailure | null = null,
   ): boolean => {
     if (state.terminal) return true;
+    if (state.cancelRequested && kind !== "cancelled") {
+      kind = "cancelled";
+      text = state.text;
+      failure = null;
+    }
     // A provider that completes without emitting any text has not produced a
     // truthful answer. Keep this terminal in the failed grammar so projection
     // cannot persist the apology fallback as a completed assistant message.
@@ -285,6 +464,7 @@ export const createChatGenerationSupervisor = (
     }
     if (kind === "failed") state.failure = failure ?? classifyFailure(null, "provider");
     state.terminal = true;
+    clearLivenessTimers(state);
     cancelRun(state);
     try {
       const message = text.length === 0 ? null : assistantMessage(state, text);
@@ -348,11 +528,21 @@ export const createChatGenerationSupervisor = (
       accountId,
       generationId,
       admitted,
+      attemptId: `${generationId}:attempt:recovery`,
       text: accumulatedText(events),
       run: null,
       runCancelled: false,
       terminal: false,
       failure: null,
+      providerStartedAt: null,
+      providerEventSeen: true,
+      cancelRequested: true,
+      firstEventTimer: null,
+      maxDurationTimer: null,
+      heartbeatTimer: null,
+      cancelGraceTimer: null,
+      progressPct: null,
+      usage: null,
     };
     return finalize(state, "cancelled", state.text);
   };
@@ -375,11 +565,21 @@ export const createChatGenerationSupervisor = (
         accountId: input.accountId,
         generationId,
         admitted: input.stored,
+        attemptId: `${generationId}:attempt:1`,
         text: "",
         run: null,
         runCancelled: false,
         terminal: false,
         failure: null,
+        providerStartedAt: null,
+        providerEventSeen: false,
+        cancelRequested: false,
+        firstEventTimer: null,
+        maxDurationTimer: null,
+        heartbeatTimer: null,
+        cancelGraceTimer: null,
+        progressPct: null,
+        usage: null,
       };
       active.set(key, state);
       try {
@@ -416,7 +616,7 @@ export const createChatGenerationSupervisor = (
           void finalize(state, "failed", "", classifyFailure(error, "context"));
           return;
         }
-        if (state.terminal) return;
+        if (state.terminal || state.cancelRequested) return;
         let attachments: readonly ChatGenerationAttachmentDescriptor[];
         try {
           const loadedAttachments = await deps.attachments.loadForGeneration({
@@ -430,16 +630,19 @@ export const createChatGenerationSupervisor = (
           void finalize(state, "failed", "", classifyFailure(error, "attachment"));
           return;
         }
-        if (state.terminal) return;
+        if (state.terminal || state.cancelRequested) return;
         try {
+          state.providerStartedAt = deps.nowEpochMilliseconds();
           const run = deps.source.start({
             generationId,
+            attemptId: state.attemptId,
             prompt: input.stored.message.text,
             context,
             attachments,
             onDelta(text): void {
               try {
                 if (state.terminal) return;
+                markProviderEvent(state);
                 if (typeof text !== "string") {
                   void finalize(state, "failed", "", defaultFailure("provider"));
                   return;
@@ -451,15 +654,61 @@ export const createChatGenerationSupervisor = (
                 void finalize(state, "failed", "", classifyFailure(null, "callback"));
               }
             },
+            onProgress(progress): void {
+              try {
+                if (state.terminal || state.cancelRequested) return;
+                markProviderEvent(state);
+                const safe = validateProgress(progress);
+                if (safe === null) {
+                  void finalize(state, "failed", "", defaultFailure("provider"));
+                  return;
+                }
+                state.progressPct = safe.progressPct;
+                if (safe.usage !== null) state.usage = safe.usage;
+                append(state, {
+                  kind: "progress",
+                  attemptId: state.attemptId,
+                  progressPct: state.progressPct,
+                  elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - (state.providerStartedAt ?? deps.nowEpochMilliseconds())),
+                  usage: state.usage,
+                });
+              } catch {
+                void finalize(state, "failed", "", defaultFailure("callback"));
+              }
+            },
+            onUsage(usage): void {
+              try {
+                if (state.terminal || state.cancelRequested) return;
+                markProviderEvent(state);
+                const safe = validateUsage(usage);
+                if (safe === null) {
+                  void finalize(state, "failed", "", defaultFailure("provider"));
+                  return;
+                }
+                state.usage = safe;
+                append(state, {
+                  kind: "progress",
+                  attemptId: state.attemptId,
+                  progressPct: state.progressPct,
+                  elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - (state.providerStartedAt ?? deps.nowEpochMilliseconds())),
+                  usage: safe,
+                });
+              } catch {
+                void finalize(state, "failed", "", defaultFailure("callback"));
+              }
+            },
             onComplete(): void {
+              markProviderEvent(state);
               void finalize(state, "done", state.text);
             },
             onError(error): void {
+              markProviderEvent(state);
               void finalize(state, "failed", "", classifyFailure(error, "provider"));
             },
           });
           state.run = run;
-          if (state.terminal) cancelRun(state);
+          armLiveness(state);
+          if (state.terminal || state.cancelRequested) cancelRun(state);
         } catch (error) {
           void finalize(state, "failed", "", classifyFailure(error, "provider"));
         }
@@ -468,6 +717,18 @@ export const createChatGenerationSupervisor = (
 
     cancel(accountId: string, generationId: string): void {
       const state = active.get(keyOf(accountId, generationId));
+      if (state !== undefined && !state.terminal) {
+        state.cancelRequested = true;
+        cancelRun(state);
+        if (liveness !== undefined && liveness.cancelGraceMs > 0) {
+          clearTimer(state.cancelGraceTimer);
+          state.cancelGraceTimer = scheduler.setTimeout(() => {
+            state.cancelGraceTimer = null;
+            void finalize(state, "cancelled", state.text);
+          }, liveness.cancelGraceMs);
+          return;
+        }
+      }
       queueMicrotask(() => {
         if (state !== undefined) void finalize(state, "cancelled", state.text);
         else void cancelFromDurableState(accountId, generationId);
@@ -479,8 +740,17 @@ export const createChatGenerationSupervisor = (
       queueMicrotask(() => {
         const lifecycle = deps.events.readLifecycle(accountId, generationId);
         if (lifecycle?.state === "cancellation_requested") {
-          if (state !== undefined) void finalize(state, "cancelled", state.text);
-          else void cancelFromDurableState(accountId, generationId);
+          if (state !== undefined) {
+            state.cancelRequested = true;
+            cancelRun(state);
+            if (liveness?.cancelGraceMs === undefined || liveness.cancelGraceMs === 0) {
+              void finalize(state, "cancelled", state.text);
+            }
+          } else void cancelFromDurableState(accountId, generationId);
+        } else if (state !== undefined && state.cancelRequested) {
+          // A cancellation request owns the race; its grace timer (if any)
+          // remains responsible for the terminal rather than a timeout.
+          return;
         } else if (state !== undefined) {
           void finalize(
             state,

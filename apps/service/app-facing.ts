@@ -66,6 +66,7 @@ import {
 import { QA_FIXTURE_TIME_ANCHOR_UTC, seedQaSnapshot } from "./qa/seed";
 import {
   createChatGenerationSupervisor,
+  type ChatGenerationLivenessPolicy,
   type ChatGenerationSupervisor,
 } from "./chat/generation-supervisor";
 import {
@@ -79,6 +80,7 @@ import {
 import { createChatHistoryCursorCodec } from "./chat/history-cursor";
 import {
   CHAT_MESSAGES_PATH,
+  type ChatGenerationStreamPolicy,
   registerChatMessagesRoutes,
 } from "./routes/chat-messages";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
@@ -204,6 +206,9 @@ export interface LocalServiceOptions {
   readonly generationSource: ChatGenerationSource;
   /** Required consultation seam; memory implementation is owned outside Chat. */
   readonly generationContext: ChatGenerationContextSource;
+  readonly generationLiveness?: ChatGenerationLivenessPolicy;
+  readonly generationStreamPolicy?: ChatGenerationStreamPolicy;
+  readonly generationStreamScheduler?: import("./chat/generation-source").ChatGenerationScheduler;
   /** Test-only complete supervisor override. */
   readonly chatSupervisor?: ChatGenerationSupervisor;
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
@@ -601,6 +606,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     finalization: stores.chatFinalization,
     attachments: stores.chatAttachments,
     nowEpochMilliseconds: chatNowEpochMilliseconds,
+    liveness: options.generationLiveness,
+    scheduler: options.generationStreamScheduler,
     assistantMessageId: (accountId, generationId) =>
       opaqueChatId("assistant", accountId, generationId),
     eventId: (accountId, generationId, kind, sequence) =>
@@ -821,6 +828,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     recordAcceptedAdmission: producerEvidence.recordAcceptedAdmission,
     revision: (accountId, messageId, journalRevision, payloadHash) =>
       opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
+    streamPolicy: options.generationStreamPolicy,
+    streamScheduler: options.generationStreamScheduler,
   });
   registerChatAttachmentsRoute(app, {
     resolvePrincipal,

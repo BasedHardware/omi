@@ -28,8 +28,10 @@ import {
 } from "../chat/generation-context";
 import {
   createScriptedChatGenerationSource,
+  type ChatGenerationScheduler,
   type ChatGenerationSource,
 } from "../chat/generation-source";
+import type { ChatGenerationStreamPolicy } from "./chat-messages";
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
@@ -63,6 +65,8 @@ const boot = (
   ]),
   devSecretLabel = "chat-generation-proof",
   generationContext: ChatGenerationContextSource = createEmptyChatGenerationContextSource(),
+  generationStreamPolicy?: ChatGenerationStreamPolicy,
+  generationStreamScheduler?: ChatGenerationScheduler,
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -74,6 +78,8 @@ const boot = (
     devSecretLabel,
     generationSource,
     generationContext,
+    generationStreamPolicy,
+    generationStreamScheduler,
   });
   return { db, local, stores };
 };
@@ -1569,6 +1575,74 @@ describe("ratified chat generation wire red proofs", () => {
     const messages = await history(local);
     expect(messages.map((message) => message.sender)).toEqual(["human", "ai"]);
     expect(messages.at(-1)?.text).toBe("streamed after disconnect");
+    db.close();
+  });
+
+  test("slow SSE consumers get bounded batches and reconnect from the last durable cursor", async () => {
+    const source = createScriptedChatGenerationSource([
+      { delayMs: 1, text: "one" },
+      { delayMs: 1, text: "two" },
+      { delayMs: 1, text: "three" },
+      { delayMs: 1, text: "four" },
+    ]);
+    const { db, local } = boot(
+      createInMemoryLocalServiceStores(),
+      source,
+      "chat-stream-backpressure-proof",
+      createEmptyChatGenerationContextSource(),
+      {
+        pollIntervalMs: 1,
+        heartbeatIntervalMs: 0,
+        maxBatchEvents: 2,
+        maxBufferedEvents: 2,
+        backpressurePollIntervalMs: 2,
+      },
+    );
+    const { admission } = await admitAndOpen(local, create("stream-backpressure"));
+    const firstResponse = await generationEvents(local, admission.generation.id);
+    const firstReader = firstResponse.body!.getReader();
+    const firstChunk = await firstReader.read();
+    expect(firstChunk.done).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const firstTail = await readRemaining(firstReader, new TextDecoder().decode(firstChunk.value));
+    const firstFrames = parseSse(firstTail);
+    expect(firstFrames.some((frame) => frame.event === "done")).toBe(false);
+    const lastCursor = firstFrames.at(-1)?.id;
+    expect(lastCursor).toBeDefined();
+
+    const reconnect = await generationEvents(local, admission.generation.id, lastCursor);
+    const reconnectFrames = parseSse(await reconnect.text());
+    expect(reconnectFrames.at(-1)?.event).toBe("done");
+    expect(firstFrames.some((frame) => frame.event === "delta")).toBe(true);
+    db.close();
+  });
+
+  test("idle SSE streams emit bounded heartbeat comments without advancing replay cursors", async () => {
+    const hanging: ChatGenerationSource = Object.freeze({
+      start: () => Object.freeze({ cancel: (): void => {} }),
+    });
+    const { db, local } = boot(
+      createInMemoryLocalServiceStores(),
+      hanging,
+      "chat-stream-heartbeat-proof",
+      createEmptyChatGenerationContextSource(),
+      {
+        pollIntervalMs: 1,
+        heartbeatIntervalMs: 2,
+        maxBatchEvents: 4,
+        maxBufferedEvents: 8,
+        backpressurePollIntervalMs: 2,
+      },
+    );
+    const { admission } = await admitAndOpen(local, create("stream-heartbeat"));
+    const response = await generationEvents(local, admission.generation.id);
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain("event: snapshot");
+    const heartbeat = await reader.read();
+    expect(heartbeat.done).toBe(false);
+    expect(new TextDecoder().decode(heartbeat.value)).toContain(": heartbeat");
+    await reader.cancel();
     db.close();
   });
 });

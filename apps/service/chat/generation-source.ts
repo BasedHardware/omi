@@ -3,17 +3,36 @@ import type { ChatGenerationContextPacket } from "./generation-context";
 
 export interface ChatGenerationSourceInput {
   readonly generationId: string;
+  /** Stable provider-attempt identity; optional for legacy source adapters. */
+  readonly attemptId?: string;
   readonly prompt: string;
   /** Structured, privacy-safe context; legacy adapters are normalized before provider start. */
   readonly context: ChatGenerationContextPacket;
   readonly attachments: readonly ChatGenerationAttachmentDescriptor[];
   readonly onDelta: (text: string) => void;
+  readonly onProgress?: (progress: ChatGenerationProgress) => void;
+  readonly onUsage?: (usage: ChatGenerationUsage) => void;
   readonly onComplete: () => void;
   readonly onError: (error: unknown) => void;
 }
 
 export interface ChatGenerationSourceRun {
   cancel(): void;
+}
+
+/** Provider usage is an opaque, safe accounting receipt; it never carries raw arguments or content. */
+export interface ChatGenerationUsage {
+  readonly usageId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
+export interface ChatGenerationProgress {
+  readonly progressPct: number | null;
+  readonly usage: ChatGenerationUsage | null;
 }
 
 /** A timer seam kept deliberately smaller than any platform timer API. */
@@ -139,6 +158,8 @@ export const registerChatGenerationSourceCapability = (
 export interface ScriptedChatGenerationStep {
   readonly delayMs: number;
   readonly text: string;
+  readonly progressPct?: number | null;
+  readonly usage?: ChatGenerationUsage | null;
 }
 
 export interface ScriptedChatGenerationOptions {
@@ -156,7 +177,28 @@ const validateStep = (step: ScriptedChatGenerationStep): ScriptedChatGenerationS
     || typeof step.text !== "string" || step.text.length === 0) {
     throw new TypeError("invalid scripted chat generation step");
   }
-  return Object.freeze({ delayMs: step.delayMs, text: step.text });
+  if (step.progressPct !== undefined && step.progressPct !== null
+    && (!Number.isSafeInteger(step.progressPct) || step.progressPct < 0 || step.progressPct > 100)) {
+    throw new TypeError("invalid scripted chat generation progress");
+  }
+  if (step.usage !== undefined && step.usage !== null) {
+    const usage = step.usage;
+    if (typeof usage !== "object" || usage === null
+      || typeof usage.usageId !== "string" || usage.usageId.length === 0
+      || typeof usage.provider !== "string" || usage.provider.length === 0
+      || typeof usage.model !== "string" || usage.model.length === 0
+      || !Number.isSafeInteger(usage.inputTokens) || usage.inputTokens < 0
+      || !Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0
+      || !Number.isSafeInteger(usage.totalTokens) || usage.totalTokens !== usage.inputTokens + usage.outputTokens) {
+      throw new TypeError("invalid scripted chat generation usage");
+    }
+  }
+  return Object.freeze({
+    delayMs: step.delayMs,
+    text: step.text,
+    progressPct: step.progressPct ?? null,
+    usage: step.usage ?? null,
+  });
 };
 
 /** Deterministic dev adapter with provider-like, real elapsed timing. */
@@ -189,6 +231,9 @@ export const createScriptedChatGenerationSource = (
         timers.push(scheduler.setTimeout(() => {
           if (cancelled) return;
           try {
+            if (step.progressPct !== null || step.usage !== null) {
+              input.onProgress?.({ progressPct: step.progressPct ?? null, usage: step.usage ?? null });
+            }
             input.onDelta(step.text);
             if (index === steps.length - 1) input.onComplete();
           } catch (error) {

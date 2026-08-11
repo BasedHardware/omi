@@ -213,6 +213,64 @@ describe("deterministic Chat generation scenarios", () => {
     expect(cancellationWins.trace.filter((entry) => ["done", "failed", "cancelled"].includes(entry.kind))).toHaveLength(1);
   });
 
+  test("injected liveness deadlines are deterministic and cancellation grace beats timeout", async () => {
+    const liveness = {
+      firstEventDeadlineMs: 5,
+      maxRunDurationMs: 20,
+      heartbeatIntervalMs: 0,
+      cancelGraceMs: 3,
+    } as const;
+    const firstEvent = await runChatGenerationScenario({
+      prompt: "first-event-timeout",
+      script: [{ delayMs: 10, text: "late" }],
+      liveness,
+    });
+    expect(firstEvent.trace.at(-1)).toEqual({ atMs: 5, kind: "failed", errorCode: "generation_timeout" });
+    expect(firstEvent.terminal).toBe("failed");
+
+    const cancelled = await runChatGenerationScenario({
+      prompt: "cancel-grace",
+      script: [{ delayMs: 20, text: "late" }],
+      cancelAtMs: 1,
+      timeoutAtMs: 2,
+      liveness,
+    });
+    expect(cancelled.trace.at(-1)).toEqual({ atMs: 4, kind: "cancelled" });
+    expect(cancelled.trace.filter((entry) => ["done", "failed", "cancelled"].includes(entry.kind))).toHaveLength(1);
+  });
+
+  test("safe progress, usage, heartbeat, and attempt identity are durable and replay-stable", async () => {
+    const scenario = {
+      generationId: "liveness-trace",
+      prompt: "trace",
+      script: [{
+        delayMs: 4,
+        text: "answer",
+        progressPct: 50,
+        usage: {
+          usageId: "usage:one",
+          provider: "scripted",
+          model: "deterministic",
+          inputTokens: 2,
+          outputTokens: 1,
+          totalTokens: 3,
+        },
+      }],
+      liveness: {
+        firstEventDeadlineMs: 10,
+        maxRunDurationMs: 30,
+        heartbeatIntervalMs: 2,
+        cancelGraceMs: 0,
+      },
+    } as const;
+    const first = await runChatGenerationScenario(scenario);
+    const second = await runChatGenerationScenario(scenario);
+    expect(first).toEqual(second);
+    expect(first.trace).toContainEqual({ atMs: 2, kind: "heartbeat", attemptId: "liveness-trace:attempt:1" });
+    expect(first.trace).toContainEqual({ atMs: 4, kind: "progress", attemptId: "liveness-trace:attempt:1", usageId: "usage:one" });
+    expect(first.terminal).toBe("done");
+  });
+
   test("the same declarative scenario produces an identical durable trace", async () => {
     const scenario = {
       generationId: "stable",

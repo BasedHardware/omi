@@ -6,6 +6,7 @@ import {
 import {
   createChatGenerationSupervisor,
   type ChatGenerationFailureCode,
+  type ChatGenerationLivenessPolicy,
 } from "./generation-supervisor";
 import {
   createScriptedChatGenerationSource,
@@ -69,6 +70,7 @@ export interface ChatGenerationScenario {
   readonly cancelAtMs?: number;
   readonly timeoutAtMs?: number;
   readonly callbackFault?: "delta";
+  readonly liveness?: ChatGenerationLivenessPolicy;
 }
 
 export interface ChatGenerationScenarioTraceEntry {
@@ -76,6 +78,8 @@ export interface ChatGenerationScenarioTraceEntry {
   readonly kind: ChatGenerationEvent["frame"]["kind"];
   readonly text?: string;
   readonly errorCode?: ChatGenerationFailureCode;
+  readonly attemptId?: string;
+  readonly usageId?: string;
 }
 
 export interface ChatGenerationScenarioResult {
@@ -144,6 +148,14 @@ const traceOf = (
         : "generation_provider_failed";
       return Object.freeze({ atMs: event.createdAt, kind: frame.kind, errorCode });
     }
+    if (frame.kind === "progress" || frame.kind === "heartbeat") {
+      return Object.freeze({
+        atMs: event.createdAt,
+        kind: frame.kind,
+        attemptId: frame.attemptId,
+        ...(frame.kind === "progress" && frame.usage !== null ? { usageId: frame.usage.usageId } : {}),
+      });
+    }
     return Object.freeze({ atMs: event.createdAt, kind: frame.kind });
   }));
 
@@ -191,6 +203,8 @@ export const runChatGenerationScenario = async (
     finalization: stores.chatFinalization,
     attachments,
     nowEpochMilliseconds: () => scheduler.now,
+    scheduler,
+    liveness: scenario.liveness,
     assistantMessageId: (_accountId, id) => `assistant-${id}`,
     eventId: (_accountId, id, kind, sequence) => `event-${id}-${kind}-${sequence}`,
     revision: (_accountId, id, hash) => `revision-${id}-${hash}`,

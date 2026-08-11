@@ -1,4 +1,5 @@
 import type { ChatMessageRecord } from "./chat-messages-store";
+import type { ChatGenerationUsage } from "../chat/generation-source";
 
 export type ChatGenerationFrame =
   | {
@@ -8,6 +9,18 @@ export type ChatGenerationFrame =
     }
   | { readonly kind: "snapshot"; readonly text: string }
   | { readonly kind: "delta"; readonly text: string }
+  | {
+      readonly kind: "progress";
+      readonly attemptId: string;
+      readonly progressPct: number | null;
+      readonly elapsedMs: number;
+      readonly usage: ChatGenerationUsage | null;
+    }
+  | {
+      readonly kind: "heartbeat";
+      readonly attemptId: string;
+      readonly elapsedMs: number;
+    }
   | { readonly kind: "done"; readonly message: ChatMessageRecord }
   | { readonly kind: "failed"; readonly error: { readonly code: string; readonly retryable: boolean } }
   | { readonly kind: "cancelled"; readonly message: ChatMessageRecord | null };
@@ -37,6 +50,26 @@ export type ChatCancellationRequestOutcome =
   | { readonly kind: "already_requested" | "already_terminal" }
   | { readonly kind: "not_found" };
 
+export interface ChatGenerationRetentionPolicy {
+  readonly ttlMs: number;
+  readonly maxDetailEvents: number;
+}
+
+export interface ChatGenerationRetentionMetadata {
+  readonly ttlMs: number;
+  readonly expiresAt: number;
+  readonly compactedAt: number | null;
+  /** The durable event id from which a reconnect cursor remains valid. */
+  readonly replayCursor: string;
+  readonly redactedEventCount: number;
+  readonly canonicalTranscriptRetained: true;
+}
+
+export interface ChatGenerationCompactionResult {
+  readonly metadata: ChatGenerationRetentionMetadata;
+  readonly redactedEventCount: number;
+}
+
 export type AppendChatGenerationEventOutcome =
   | { readonly kind: "appended"; readonly event: ChatGenerationEvent }
   | { readonly kind: "replay"; readonly event: ChatGenerationEvent }
@@ -58,6 +91,16 @@ export interface ChatGenerationEventsStore {
   readLifecycle(accountId: string, generationId: string): ChatGenerationLifecycle | null;
   listUnterminated(): readonly ChatGenerationLifecycle[];
   requestCancellation(accountId: string, generationId: string): ChatCancellationRequestOutcome;
+  readonly retentionMetadata?: (
+    accountId: string,
+    generationId: string,
+  ) => ChatGenerationRetentionMetadata | null;
+  readonly compact?: (
+    accountId: string,
+    generationId: string,
+    nowEpochMilliseconds: number,
+    policy: ChatGenerationRetentionPolicy,
+  ) => ChatGenerationCompactionResult | null;
   reset(): void;
 }
 
@@ -66,6 +109,7 @@ export interface InMemoryChatGenerationEventsAccountSnapshot {
     readonly generationId: string;
     readonly events: readonly ChatGenerationEvent[];
     readonly state: ChatGenerationLifecycle["state"];
+    readonly retention?: ChatGenerationRetentionMetadata | null;
   }[];
 }
 
@@ -81,6 +125,7 @@ interface AccountGenerationLog {
   readonly events: ChatGenerationEvent[];
   readonly byId: Map<string, ChatGenerationEvent>;
   state: ChatGenerationLifecycle["state"];
+  retention: ChatGenerationRetentionMetadata | null;
 }
 
 const stableFrame = (frame: ChatGenerationFrame): string => JSON.stringify(frame);
@@ -112,6 +157,7 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
         events: [],
         byId: new Map<string, ChatGenerationEvent>(),
         state: "active" as const,
+        retention: null,
       };
       logs.set(key, log);
       const existing = log.byId.get(input.eventId);
@@ -186,6 +232,57 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
       return { kind: "accepted" };
     },
 
+    retentionMetadata(accountId: string, generationId: string): ChatGenerationRetentionMetadata | null {
+      const log = logs.get(keyOf(accountId, generationId));
+      return log?.retention === null || log === undefined ? null : Object.freeze({ ...log.retention });
+    },
+
+    compact(
+      accountId: string,
+      generationId: string,
+      nowEpochMilliseconds: number,
+      policy: ChatGenerationRetentionPolicy,
+    ): ChatGenerationCompactionResult | null {
+      if (!Number.isSafeInteger(nowEpochMilliseconds) || nowEpochMilliseconds < 0
+        || !Number.isSafeInteger(policy.ttlMs) || policy.ttlMs <= 0
+        || policy.ttlMs > 90 * 24 * 60 * 60 * 1_000
+        || !Number.isSafeInteger(policy.maxDetailEvents) || policy.maxDetailEvents < 0
+        || policy.maxDetailEvents > 1_024) {
+        throw new TypeError("invalid chat generation retention policy");
+      }
+      const log = logs.get(keyOf(accountId, generationId));
+      if (log === undefined) return null;
+      const details = log.events.filter((event) => event.frame.kind === "snapshot" || event.frame.kind === "delta");
+      const expiresAt = details.length === 0
+        ? nowEpochMilliseconds + policy.ttlMs
+        : Math.max(...details.map((event) => event.createdAt)) + policy.ttlMs;
+      let redactedEventCount = 0;
+      const retainedDetails = (policy.maxDetailEvents === 0 ? [] : details.slice(-policy.maxDetailEvents)).map((event) => event.id);
+      const retainedSet = new Set(retainedDetails);
+      for (let index = 0; index < log.events.length; index += 1) {
+        const event = log.events[index]!;
+        if ((event.frame.kind !== "snapshot" && event.frame.kind !== "delta")
+          || retainedSet.has(event.id) || nowEpochMilliseconds < event.createdAt + policy.ttlMs) continue;
+        const frame = event.frame.kind === "snapshot"
+          ? { kind: "snapshot" as const, text: "[redacted]" }
+          : { kind: "delta" as const, text: "[redacted]" };
+        const replacement = Object.freeze({ ...event, frame });
+        log.events[index] = replacement;
+        log.byId.set(event.id, replacement);
+        redactedEventCount += 1;
+      }
+      const metadata = Object.freeze({
+        ttlMs: policy.ttlMs,
+        expiresAt,
+        compactedAt: redactedEventCount === 0 ? log.retention?.compactedAt ?? null : nowEpochMilliseconds,
+        replayCursor: log.events[0]?.id ?? "",
+        redactedEventCount: (log.retention?.redactedEventCount ?? 0) + redactedEventCount,
+        canonicalTranscriptRetained: true as const,
+      });
+      log.retention = metadata;
+      return Object.freeze({ metadata, redactedEventCount });
+    },
+
     snapshotAccount(accountId: string): InMemoryChatGenerationEventsAccountSnapshot {
       return Object.freeze({
         logs: Object.freeze([...logs.values()]
@@ -194,6 +291,7 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
             generationId: log.generationId,
             events: Object.freeze(log.events.map(detachEvent)),
             state: log.state,
+            retention: log.retention,
           }))),
       });
     },
@@ -213,6 +311,7 @@ export const createInMemoryChatGenerationEventsStore = (): InMemoryChatGeneratio
           events,
           byId: new Map(events.map((event) => [event.id, event])),
           state: log.state,
+          retention: log.retention ?? null,
         });
       }
     },

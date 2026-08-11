@@ -17,6 +17,10 @@ import type { DevPrincipal } from "../auth/dev-token";
 import type { AccountControlProjectionStore } from "../control/projection-store";
 import type { ChatGenerationSupervisor } from "../chat/generation-supervisor";
 import {
+  realtimeChatGenerationScheduler,
+  type ChatGenerationScheduler,
+} from "../chat/generation-source";
+import {
   ExpiredChatHistoryCursorError,
   InvalidChatHistoryCursorError,
   type ChatHistoryCursorCodec,
@@ -80,7 +84,47 @@ export interface ChatMessagesRouteDependencies {
     journalRevision: number,
     payloadHash: string,
   ) => string;
+  /** Optional bounded SSE delivery policy; defaults preserve the existing wire cadence. */
+  readonly streamPolicy?: ChatGenerationStreamPolicy;
+  readonly streamScheduler?: ChatGenerationScheduler;
 }
+
+export interface ChatGenerationStreamPolicy {
+  readonly pollIntervalMs: number;
+  readonly heartbeatIntervalMs: number;
+  readonly maxBatchEvents: number;
+  readonly maxBufferedEvents: number;
+  readonly backpressurePollIntervalMs: number;
+}
+
+const DEFAULT_STREAM_POLICY: ChatGenerationStreamPolicy = Object.freeze({
+  pollIntervalMs: 5,
+  heartbeatIntervalMs: 0,
+  maxBatchEvents: 16,
+  maxBufferedEvents: 128,
+  backpressurePollIntervalMs: 25,
+});
+
+const normalizeStreamPolicy = (
+  policy: ChatGenerationStreamPolicy | undefined,
+): ChatGenerationStreamPolicy => {
+  if (policy === undefined) return DEFAULT_STREAM_POLICY;
+  const values = [
+    policy.pollIntervalMs,
+    policy.heartbeatIntervalMs,
+    policy.maxBatchEvents,
+    policy.maxBufferedEvents,
+    policy.backpressurePollIntervalMs,
+  ];
+  if (values.some((value) => !Number.isSafeInteger(value) || value < 0)
+    || policy.maxBatchEvents === 0 || policy.maxBufferedEvents === 0
+    || policy.maxBatchEvents > 128 || policy.maxBufferedEvents > 1_024
+    || policy.pollIntervalMs > 60_000 || policy.heartbeatIntervalMs > 300_000
+    || policy.backpressurePollIntervalMs > 60_000) {
+    throw new TypeError("invalid Chat generation stream policy");
+  }
+  return Object.freeze({ ...policy });
+};
 
 interface ParsedCreate {
   readonly id: string;
@@ -343,8 +387,11 @@ const streamEvents = (input: {
   readonly afterEventId: string | null;
   readonly signal: AbortSignal;
   readonly revalidate: () => boolean;
+  readonly policy: ChatGenerationStreamPolicy;
+  readonly scheduler: ChatGenerationScheduler;
+  readonly nowEpochMilliseconds: () => number;
 }): Response => {
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: unknown | null = null;
   let stopped = false;
   let cursor = input.afterEventId;
   const body = new ReadableStream<Uint8Array>({
@@ -352,16 +399,23 @@ const streamEvents = (input: {
       const close = (): void => {
         if (stopped) return;
         stopped = true;
-        if (timer !== null) clearTimeout(timer);
+        if (timer !== null) input.scheduler.clearTimeout(timer);
         controller.close();
       };
-      const emit = (events: readonly ChatGenerationEvent[]): boolean => {
-        for (const event of events) {
+      const pending: ChatGenerationEvent[] = [];
+      let overflow = false;
+      let lastActivityAt = input.nowEpochMilliseconds();
+      let idleElapsedMs = 0;
+      const emit = (): boolean => {
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) return false;
+        const batch = pending.splice(0, input.policy.maxBatchEvents);
+        for (const event of batch) {
           cursor = event.id;
           // Admission is a durable dispatch record, not part of the external
           // generation grammar. Advance past it without projecting it.
           if (!isExternalGenerationEvent(event)) continue;
           controller.enqueue(encodeSse(event));
+          lastActivityAt = input.nowEpochMilliseconds();
           if (isTerminal(event)) {
             close();
             return true;
@@ -369,7 +423,17 @@ const streamEvents = (input: {
         }
         return false;
       };
-      if (emit(input.initial)) return;
+      const queue = (events: readonly ChatGenerationEvent[]): void => {
+        if (events.length === 0) return;
+        const remaining = input.policy.maxBufferedEvents - pending.length;
+        if (events.length > remaining) {
+          pending.push(...events.slice(0, Math.max(0, remaining)));
+          overflow = true;
+          return;
+        }
+        pending.push(...events);
+      };
+      queue(input.initial);
       const poll = (): void => {
         if (stopped) return;
         if (input.signal.aborted) {
@@ -385,25 +449,48 @@ const streamEvents = (input: {
           close();
           return;
         }
-        let events: readonly ChatGenerationEvent[] | null;
-        try {
-          events = input.events.listAfter(input.accountId, input.generationId, cursor);
-        } catch {
+        if (pending.length === 0 && !overflow) {
+          let events: readonly ChatGenerationEvent[] | null;
+          try {
+            events = input.events.listAfter(input.accountId, input.generationId, cursor);
+          } catch {
+            close();
+            return;
+          }
+          if (events === null) {
+            close();
+            return;
+          }
+          if (events.length > 0) idleElapsedMs = 0;
+          queue(events);
+        }
+        if (emit()) return;
+        if (pending.length === 0 && overflow) {
           close();
           return;
         }
-        if (events === null) {
-          close();
-          return;
+        if (pending.length === 0 && input.policy.heartbeatIntervalMs > 0) {
+          idleElapsedMs += Math.max(1, input.policy.pollIntervalMs);
+          const now = input.nowEpochMilliseconds();
+          if (idleElapsedMs >= input.policy.heartbeatIntervalMs
+            && (controller.desiredSize === null || controller.desiredSize > 0)) {
+            controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+            lastActivityAt = now;
+            idleElapsedMs = 0;
+          }
         }
-        if (emit(events)) return;
-        timer = setTimeout(poll, 5);
+        const delay = controller.desiredSize !== null && controller.desiredSize <= 0
+          ? input.policy.backpressurePollIntervalMs
+          : pending.length > 0
+            ? 0
+            : Math.max(0, input.policy.pollIntervalMs - (input.nowEpochMilliseconds() - lastActivityAt));
+        timer = input.scheduler.setTimeout(poll, delay);
       };
       poll();
     },
     cancel(): void {
       stopped = true;
-      if (timer !== null) clearTimeout(timer);
+      if (timer !== null) input.scheduler.clearTimeout(timer);
     },
   });
   return new Response(body, {
@@ -661,6 +748,9 @@ export const registerChatMessagesRoutes = (
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
           revalidate,
+          policy: normalizeStreamPolicy(deps.streamPolicy),
+          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+          nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
       }
       if (replay.length === 0 && lifecycle.state === "terminal") {
@@ -674,6 +764,9 @@ export const registerChatMessagesRoutes = (
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
           revalidate,
+          policy: normalizeStreamPolicy(deps.streamPolicy),
+          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+          nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
       }
       const replayTerminal = replay.findLast(isTerminal);
@@ -686,6 +779,9 @@ export const registerChatMessagesRoutes = (
           afterEventId: replayTerminal.id,
           signal: context.req.raw.signal,
           revalidate,
+          policy: normalizeStreamPolicy(deps.streamPolicy),
+          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+          nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
       }
       const snapshot = currentSnapshot(generationId, all);
@@ -698,6 +794,9 @@ export const registerChatMessagesRoutes = (
         afterEventId: snapshot.id,
         signal: context.req.raw.signal,
         revalidate,
+        policy: normalizeStreamPolicy(deps.streamPolicy),
+        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+        nowEpochMilliseconds: deps.nowEpochMilliseconds,
       });
     }
 
@@ -711,6 +810,9 @@ export const registerChatMessagesRoutes = (
         afterEventId: terminal.id,
         signal: context.req.raw.signal,
         revalidate,
+        policy: normalizeStreamPolicy(deps.streamPolicy),
+        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+        nowEpochMilliseconds: deps.nowEpochMilliseconds,
       });
     }
     const snapshot = currentSnapshot(generationId, all);
@@ -723,6 +825,9 @@ export const registerChatMessagesRoutes = (
       afterEventId: snapshot.id,
       signal: context.req.raw.signal,
       revalidate,
+      policy: normalizeStreamPolicy(deps.streamPolicy),
+      scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+      nowEpochMilliseconds: deps.nowEpochMilliseconds,
     });
   });
 
