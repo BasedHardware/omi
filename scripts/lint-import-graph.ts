@@ -347,10 +347,11 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
 ];
 /**
  * Server-construction sites exempted from rule 17. Keyed by (file, 1-indexed
- * line). A stale row — one whose line no longer holds a server construction —
- * is itself a failure, symmetric with `servedBy` and `composedIn`: a registry
- * row that has quietly stopped describing reality disables a fence silently,
- * which is the whole class this file exists to prevent.
+ * line). There are no live exemptions today; every current server site is
+ * checked. If a future bounded harness genuinely needs one, a stale row — one
+ * whose line no longer holds a server construction — is itself a failure,
+ * symmetric with `servedBy` and `composedIn`, because a registry row that has
+ * quietly stopped describing reality disables a fence silently.
  */
 interface WirePathHatchRow {
   /** Path relative to the platform root, exactly as the checker reports it. */
@@ -510,7 +511,7 @@ for (const file of files(root)) {
      * hatch's key, so a line holding TWO constructions has one entry and one
      * exemption covering both — a row written for a legitimate server would also
      * cover an unrelated rogue one sharing its line. Found by the round-6 audit,
-     * demonstrated against the real hatched file, lint green.
+     * demonstrated against a future hatched file, lint green.
      */
     const constructionsOn = (line: string): number =>
       socketBindPatterns.reduce(
@@ -574,13 +575,11 @@ for (const file of files(root)) {
     }
 
     /**
-     * The marker on the construction line, or anywhere in the comment block
-     * immediately above it. Walking the block matters: the tree's one real hatch
-     * is a four-line `//` comment whose marker sits on the FIRST line, so
-     * checking only `index - 1` (rule 16's rule, adequate for a one-line
-     * justification) would reject a hatch that is correctly placed.
+     * No text is consulted. A site is exempt iff this file declares it, by
+     * line. The registry is empty in the current tree, so every server site is
+     * unhatched; the explicit lookup keeps a future bounded exemption scoped to
+     * its one construction.
      */
-    // No text is consulted. A site is exempt iff this file declares it, by line.
     const hatchedAt = (index: number): boolean =>
       WIRE_PATH_HATCHES.some((row) => row.file === shown && row.line === index + 1);
 

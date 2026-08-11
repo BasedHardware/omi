@@ -159,8 +159,8 @@ export async function recall(
   // `Bearer ` is not optional on this route. The registered route
   // (`apps/service/routes/memories.ts`) extracts the token with a strict
   // prefix check and answers 401 without it — the retired hand-rolled door
-  // accepted a bare key, which is one more way it was not interchangeable with
-  // the real backend "by base URL alone".
+  // accepted a bare key, one of the bounded compatibility differences this
+  // adversarial harness keeps visible.
   const headers: Record<string, string> = { authorization: `Bearer ${options.key ?? QA_KEY}` };
   if (options.clientId !== undefined) {
     headers["x-omi-client-id"] = options.clientId;

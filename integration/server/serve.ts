@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Live backend-under-test for the integration harness. Port 4851 (INTEGRATION's
- * registry allocation). Loopback only — board ruling PR-4.
+ * Live adversarial backend target for the integration harness. Defaults to port
+ * 4851 (INTEGRATION's registry allocation); tests may supply a bounded
+ * loopback override. Loopback only — board ruling PR-4.
  *
  * WHAT IS ACTUALLY THE CODE UNDER TEST, STATED PRECISELY
  * -----------------------------------------------------
@@ -55,6 +56,8 @@ import { BACKEND_PROCESS_STAMP } from "./provenance";
 /** Request header a launcher sends on every bridge request so served reads are joinable to the run that made them — see provenance.ts and client-counter.ts. */
 const CLIENT_ID_HEADER = "x-omi-client-id";
 
+// The direct service door is fixed at 4851. The adversarial child may use a
+// test-owned loopback port, but only within the bounded user-port range below.
 const DEFAULT_PORT = 4851;
 const HOSTNAME = "127.0.0.1";
 const DEFAULT_PLAN: QaFixturePlan = Object.freeze({ visibleCount: 7, hiddenCount: 0 });
@@ -77,9 +80,9 @@ const app = createServiceApp(mcpHandler);
 /**
  * The settled client recall route: `GET /v1/memories?limit=&cursor=` with
  * `Authorization: Bearer <token>`. Registered — not re-implemented — so this
- * instance is interchangeable with the dev server by base URL alone, including
- * its method fence, trailing-slash strictness, duplicate-parameter refusal,
- * fixed failure bodies and cursor grammar.
+ * adversarial process exercises the same route module as the dev service. Its
+ * fixture, credential, and `/qa/*` controls are deliberately bounded test
+ * compatibility seams, not a claim that this process is a drop-in backend.
  *
  * It reuses the SAME composition as the `/mcp` path over the same fixture and
  * the same principal identity, so the two transports cannot drift into serving
@@ -115,7 +118,11 @@ async function mcpServedAPage(response: Response): Promise<boolean> {
   }
 }
 
-const port = Number(process.env.OMI_INTEGRATION_PORT ?? DEFAULT_PORT);
+const rawPort = process.env.OMI_INTEGRATION_PORT;
+const port = rawPort === undefined ? DEFAULT_PORT : Number(rawPort);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+  throw new Error("OMI_INTEGRATION_PORT must be an integer between 1024 and 65535");
+}
 
 const server = Bun.serve({
   hostname: HOSTNAME,

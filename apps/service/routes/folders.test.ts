@@ -159,6 +159,15 @@ describe("PATCH /v1/folders/:id", () => {
       expect(missing.status).toBe(404);
       expect(await body(missing)).toEqual({ error: "not_found" });
 
+      const nested = await request("/v1/folders/work-folder-qa/nested", {
+        method: "PATCH",
+        // A nested path is rejected before the body parser runs. This keeps
+        // the route's fixed 404/status body stable even for malformed input.
+        body: "{",
+      });
+      expect(nested.status).toBe(404);
+      expect(await body(nested)).toEqual({ error: "not_found" });
+
       const invalidJson = await request("/v1/folders/work-folder-qa", {
         method: "PATCH",
         body: "{",

@@ -2,9 +2,9 @@
  * The harness must refuse what the real backend refuses.
  *
  * `integration/server/serve.ts` is the live adversarial harness target. The
- * product stack is launched by the core integration entrypoint, while this
- * harness's own header claims it is interchangeable with the real backend "by
- * base URL alone". That claim is a behavioural one, and nothing was
+ * product stack is launched by the core integration entrypoint. This harness
+ * mounts the registered route but keeps bounded fixture and QA-control seams;
+ * its compatibility claims are behavioural, and nothing was
  * checking it: the recall route dispatched on `url.pathname` and never looked at
  * `request.method`, so POST/PUT/PATCH/DELETE each returned 200 with the full read
  * payload while `apps/service/routes/memories.ts` — GET-only, pinned by

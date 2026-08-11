@@ -14,7 +14,7 @@
  * the in-process test proves one composition can serve both doors, while this
  * proves the live adversarial server process did bind it that way. The
  * whole W4 ruling exists because a harness can be wired differently from the
- * thing it claims to be interchangeable with, and no in-process assertion can
+ * product binding it mirrors, and no in-process assertion can
  * see that.
  *
  * It is also the standing check on the ruling itself: if anyone reintroduces a

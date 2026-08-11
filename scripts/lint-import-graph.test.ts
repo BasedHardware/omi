@@ -213,26 +213,27 @@ const withWirePathFixture = (source: string, assertion: (result: ReturnType<type
 };
 
 /**
- * RULE 17'S HATCH IS NO LONGER TEXT, so the nine tests that used to live here —
+ * RULE 17 HAS NO LIVE HATCH ROW TODAY. The nine tests that used to live here —
  * every one of them a bypass a non-author audit found in a comment marker across
  * four rounds — are deleted rather than kept. They exercised machinery that does
  * not exist: `wire-path-ok(` in a string, in a block comment inside a string, in
  * a template literal, behind a desynced `${}` interpolation. A test for a deleted
  * mechanism is not coverage, it is a claim about nothing.
  *
- * The exemption is now a `(file, line)` row in `WIRE_PATH_HATCHES`, which is why
- * the three cases below CANNOT be fixture-tested: they need the registry itself
- * to differ, and a test-only row would be a permanent real exemption on a path
- * that only exists during a test run — reintroducing, for the sake of testing a
- * fence, exactly the kind of standing hole the fence is about.
+ * A future exemption would be a `(file, line)` row in `WIRE_PATH_HATCHES`, but
+ * the current registry is intentionally empty. The three cases below cannot be
+ * fixture-tested by adding a row: a test-only row would be a permanent real
+ * exemption on a path that only exists during a test run — reintroducing, for
+ * the sake of testing a fence, exactly the kind of standing hole the fence is
+ * about.
  *
  * So they are hand-applied red-proofs, run against real source and recorded in
  * the commit that landed them, the same way this fence's sharpest proof has been
  * handled in every round:
  *
- *   - a SECOND, unhatched server in the hatched file        -> fires at :68
- *   - move the row one line off the construction            -> "stale row"
- *   - delete the row                                        -> the real probe fires at :67
+ *   - a SECOND server beside a future exempted construction -> must fire
+ *   - move a future row one line off its construction        -> "stale row"
+ *   - delete a future row                                    -> the real probe fires
  *
  * The stale-row check earned its place before it was ever tested: the first
  * version of the row named the wrong line, and the checker said so on its first
@@ -348,9 +349,9 @@ test("rule 17: two unbound routers on one line is still ambiguous", () => {
   // Round-8 audit. Round 7 narrowed the ambiguity count to socket binds, which
   // was right for `Bun.serve({ fetch: new Hono().fetch })` — and reopened round
   // 6's class for lines with NO socket bind: two independent routers collapse to
-  // one site, so one hatch row would exempt both. Not reachable in the tree today
-  // (its one hatch binds a socket); it goes live the first time anyone hatches a
-  // Hono-only site.
+  // one site, so one future hatch row would exempt both. Not reachable in the
+  // tree today because WIRE_PATH_HATCHES is empty; it goes live the first time
+  // anyone hatches a Hono-only site.
   withWirePathFixture(
     [
       'import { Hono } from "hono";',
