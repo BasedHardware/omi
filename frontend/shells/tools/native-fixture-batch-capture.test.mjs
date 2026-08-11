@@ -17,7 +17,7 @@ function coordinate(shell, runId, overrides = {}) {
   const width = overrides.width || (shell === "macos" ? "regular" : "compact");
   const viewport = shell === "macos"
     ? { compact: { width: 760, height: 671, scale: 2 }, regular: { width: 960, height: 671, scale: 2 }, wide: { width: 1280, height: 800, scale: 2 } }[width]
-    : { compact: { width: 402, height: 874, scale: 3 }, regular: { width: 820, height: 1180, scale: 2 }, wide: { width: 1366, height: 1024, scale: 2 } }[width];
+    : { compact: { width: 402, height: 874, scale: 3 }, regular: { width: 820, height: 1180, scale: 2 }, wide: { width: 1032, height: 1376, scale: 2 } }[width];
   const domain = "memories";
   const state = "ready";
   const theme = "light";
@@ -178,6 +178,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /ensureCoreFile\(String\(item\.stamp/);
   assert.match(source, /prepared iOS bundle id is not the capture shell/);
   assert.match(source, /screenConfig.*geometry/);
+  assert.match(source, /viewport\.width \* viewport\.scale/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
