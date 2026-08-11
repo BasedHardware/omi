@@ -4,7 +4,7 @@
 #include "Custom.xcconfig"
 // Keep production Google sign-in deterministic even when Custom.xcconfig is
 // regenerated locally for a beta or developer build.
-GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde
+GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as
 
 ASSET_PREFIX=prod
 BUNDLE_NAME=Omi
