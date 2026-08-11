@@ -443,15 +443,14 @@ function artifactDescriptor(artifact) {
   };
 }
 
-function writePreparedInputSet(file, manifestPath, manifest, coordinates, outRoot, shell, offset, limit, artifacts) {
+function writePreparedInputSet(file, manifestPath, manifest, coordinates, outRoot, shell, artifacts) {
   const descriptor = {
     schema: "omi.polish.native-fixture-prepared/v1",
     source_shas: manifest.source_shas,
     manifest_path: `core:${authorityRelative(manifestPath)}`,
     manifest_sha256: hashFile(manifestPath),
     shell,
-    offset,
-    limit,
+    scope: "manifest-shell",
     coordinate_run_ids: coordinates.map((coordinate) => coordinate.run_id),
     artifacts: Object.fromEntries(Object.entries(artifacts).map(([name, artifact]) => [name, artifactDescriptor(artifact)])),
     authority: { fixture: true, bridge: "disabled", credentials: false, production_api: false, origins: { macos: "http://127.0.0.1:5290", ios: "omi-ui://local" } },
@@ -486,6 +485,11 @@ function loadPreparedInputSet(file, manifestPath, manifest, shell) {
   if (descriptor.source_shas?.core !== manifest.source_shas.core || descriptor.source_shas?.platform !== manifest.source_shas.platform) fail("prepared input set source SHAs are stale");
   if (descriptor.manifest_path !== `core:${authorityRelative(manifestPath)}` || descriptor.manifest_sha256 !== hashFile(manifestPath)) fail("prepared input set manifest binding is stale");
   if (descriptor.shell !== shell && descriptor.shell !== "both") fail("prepared input set shell does not cover capture shell");
+  if (descriptor.scope !== "manifest-shell") fail("prepared input set scope is invalid");
+  const expectedRunIds = manifest.coordinates
+    .filter((coordinate) => shell === "both" || coordinate.shell === shell)
+    .map((coordinate) => coordinate.run_id);
+  if (!Array.isArray(descriptor.coordinate_run_ids) || canonical(descriptor.coordinate_run_ids) !== canonical(expectedRunIds)) fail("prepared input set coordinate scope is stale");
   const artifacts = {};
   if (shell === "both" || shell === "macos") artifacts.macos = resolvePreparedArtifact(descriptor, "macos");
   if (shell === "both" || shell === "ios") artifacts.ios = resolvePreparedArtifact(descriptor, "ios");
@@ -830,7 +834,7 @@ function main() {
   if (args.prepare) {
     if (coordinates.some((coordinate) => coordinate.shell === "macos")) artifacts.macos = buildMac(manifest, outRoot, batchBuildId);
     if (coordinates.some((coordinate) => coordinate.shell === "ios")) artifacts.ios = buildIos(manifest, outRoot, batchBuildId);
-    const preparedDescriptor = writePreparedInputSet(preparedPath, manifestPath, manifest, coordinates, outRoot, shell, offset, limit, artifacts);
+    const preparedDescriptor = writePreparedInputSet(preparedPath, manifestPath, manifest, shellCoordinates, outRoot, shell, artifacts);
     preparedDescriptor.input_set = inputSet(manifestPath, artifacts);
     writeAtomic(preparedPath, preparedDescriptor);
     const preparedInput = inputSet(manifestPath, artifacts, [preparedPath]);
