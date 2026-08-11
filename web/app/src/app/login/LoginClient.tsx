@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
@@ -40,16 +40,8 @@ const omiMarkDots = [
 export function LoginClient() {
   const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const channel = searchParams.get('channel');
-  const code = searchParams.get('code');
-  const signedInDestination =
-    channel && code
-      ? `/settings?${new URLSearchParams({ channel, code }).toString()}`
-      : '/home';
 
   // Track page view
   useEffect(() => {
@@ -59,16 +51,16 @@ export function LoginClient() {
   // Redirect to home if already logged in
   useEffect(() => {
     if (!loading && user) {
-      router.push(signedInDestination);
+      router.push('/home');
     }
-  }, [user, loading, router, signedInDestination]);
+  }, [user, loading, router]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
     setError(null);
     try {
       await signInWithGoogle();
-      router.push(signedInDestination);
+      router.push('/home');
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Google'));
       console.error(err);
@@ -82,7 +74,7 @@ export function LoginClient() {
     setError(null);
     try {
       await signInWithApple();
-      router.push(signedInDestination);
+      router.push('/home');
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Apple'));
       console.error(err);
@@ -179,7 +171,7 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.3 }}
               className="text-text-tertiary text-sm mb-8"
             >
-              {channel && code ? 'Connect your chat' : 'thought to action'}
+              thought to action
             </motion.p>
 
             {/*

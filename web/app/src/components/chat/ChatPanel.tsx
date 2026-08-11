@@ -176,7 +176,11 @@ export function ChatPanel() {
   };
 
   const handleSend = async (text: string = input) => {
-    if ((!text.trim() && !selectedFiles.some((item) => item.uploadedId)) || isStreaming)
+    if (
+      (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
+      isLoading ||
+      isStreaming
+    )
       return;
 
     // Get file IDs from uploaded files
@@ -214,6 +218,7 @@ export function ChatPanel() {
 
   const canSend =
     (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
+    !isLoading &&
     !isStreaming &&
     !isUploading;
 
@@ -309,7 +314,7 @@ export function ChatPanel() {
                       <button
                         key={i}
                         onClick={() => handleSend(prompt)}
-                        disabled={isStreaming}
+                        disabled={isLoading || isStreaming}
                         className={cn(
                           'px-3 py-1.5 rounded-full text-sm',
                           'bg-bg-tertiary hover:bg-bg-quaternary',
@@ -442,7 +447,7 @@ export function ChatPanel() {
                   <FilePreview
                     files={selectedFiles}
                     onRemove={handleRemoveFile}
-                    disabled={isStreaming}
+                    disabled={isLoading || isStreaming}
                   />
                 )}
 
@@ -451,7 +456,9 @@ export function ChatPanel() {
                     {/* File attach button */}
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isStreaming || selectedFiles.length >= MAX_FILES}
+                      disabled={
+                        isLoading || isStreaming || selectedFiles.length >= MAX_FILES
+                      }
                       className={cn(
                         'p-2 rounded-lg flex-shrink-0',
                         'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
@@ -483,7 +490,7 @@ export function ChatPanel() {
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Ask anything..."
-                      disabled={isStreaming}
+                      disabled={isLoading || isStreaming}
                       className={cn(
                         'flex-1 px-4 py-3 rounded-xl',
                         'bg-bg-tertiary border border-bg-quaternary',
@@ -497,7 +504,7 @@ export function ChatPanel() {
                     {/* Inline voice recorder */}
                     <InlineVoiceRecorder
                       onTranscript={handleVoiceTranscript}
-                      disabled={isStreaming}
+                      disabled={isLoading || isStreaming}
                     />
 
                     {/* Send button */}

@@ -157,7 +157,8 @@ export function ChatComposer({
     if (
       (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
       disabled ||
-      isStreaming
+      isStreaming ||
+      isUploading
     )
       return;
 
