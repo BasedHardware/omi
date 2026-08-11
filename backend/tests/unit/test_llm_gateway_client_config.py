@@ -303,7 +303,7 @@ def test_get_llm_disables_byok_and_retries_for_bounded_managed_requests(monkeypa
         'hello'
     )
 
-    assert captured['options'] == {'request_timeout': 8.0, 'max_retries': 0}
+    assert captured['options'] == {'request_timeout': 8.0, 'max_retries': 0, 'thinking_budget': 0}
     assert captured['result'].calls[0]['kwargs']['max_output_tokens'] == 120
 
 
