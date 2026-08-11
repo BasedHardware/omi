@@ -222,7 +222,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
           },
           onPageFinished: (url) {
             _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
-            unawaited(_finishPageLoad());
+            unawaited(_finishPageLoad(url));
           },
           onWebResourceError: (e) {
             _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
@@ -233,11 +233,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     _boot();
   }
 
-  Future<void> _finishPageLoad() async {
-    await _chatSink?.activateDocument();
+  Future<void> _finishPageLoad(String url) async {
     if (_consumerEvidence != null) {
       try {
-        await _consumerEvidence!.pageFinished();
+        await _consumerEvidence!.pageFinished(
+          url,
+          prepareOwnedDocument: () async {
+            await _chatSink?.activateDocument();
+          },
+        );
         final resultPath = _consumerEvidenceResultPath;
         if (_consumerEvidenceExit && resultPath != null && await File(resultPath).exists()) {
           exit(0);
@@ -248,6 +252,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       }
       return;
     }
+    await _chatSink?.activateDocument();
     if (const bool.fromEnvironment('AUTODRIVE')) {
       await _autodrive();
     } else if (_acceptance || _acceptanceExit) {

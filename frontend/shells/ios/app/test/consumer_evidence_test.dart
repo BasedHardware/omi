@@ -226,7 +226,7 @@ void main() {
     );
     await driver.start();
     for (var index = 0; index < ConsumerEvidenceRoute.values.length; index++) {
-      await driver.pageFinished();
+      await driver.pageFinished(navigated[index].toString());
     }
     expect(
       navigated.map((uri) => uri.toString()),
@@ -246,5 +246,69 @@ void main() {
     expect(acceptedAdmissions, 1);
     expect(listenStartAttempts, 2, reason: 'the host must retry until the rendered control exists');
     expect(await result.exists(), isTrue);
+  });
+
+  test('iOS evidence ignores a late prior-route finish and advances only the owned load', () async {
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-consumer-owned-load-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final collector = ConsumerEvidenceCollector(
+      resultPath: '${scratch.path}/result.json',
+      runId: 'run-ios-owned-load',
+      hashes: const ConsumerEvidenceTreeHashes(shell: hashA, surface: hashB),
+    );
+    await collector.prepare();
+    final navigated = <Uri>[];
+    var renderedRoute = ConsumerEvidenceRoute.memories;
+    var observations = 0;
+    var ownedDocumentPreparations = 0;
+    final driver = ConsumerEvidenceDriver(
+      collector: collector,
+      navigate: (uri) async => navigated.add(uri),
+      observe: () async {
+        observations++;
+        return jsonEncode(observation(renderedRoute).toJson());
+      },
+      startListen: () async => true,
+      authorChat: () async => 0,
+      submitChat: () async => true,
+      observeChatAfterAdmission: (_) async => jsonEncode(observation(ConsumerEvidenceRoute.chat).toJson()),
+      delay: (_) async {},
+      maxPolls: 1,
+    );
+
+    await driver.start();
+    final memoriesUrl = navigated.single.toString();
+    Future<void> prepareOwnedDocument() async {
+      ownedDocumentPreparations++;
+    }
+
+    await driver.pageFinished(null, prepareOwnedDocument: prepareOwnedDocument);
+    await driver.pageFinished('not a valid URI%', prepareOwnedDocument: prepareOwnedDocument);
+    await driver.pageFinished(
+      consumerEvidenceRouteUri(ConsumerEvidenceRoute.tasks).toString(),
+      prepareOwnedDocument: prepareOwnedDocument,
+    );
+    expect(observations, 0);
+    expect(ownedDocumentPreparations, 0, reason: 'unowned finishes cannot prepare a document');
+
+    await driver.pageFinished(memoriesUrl, prepareOwnedDocument: prepareOwnedDocument);
+    expect(navigated.last.queryParameters['route'], 'tasks');
+    expect(observations, 1);
+    expect(ownedDocumentPreparations, 1);
+
+    await driver.pageFinished(memoriesUrl, prepareOwnedDocument: prepareOwnedDocument);
+    expect(
+      navigated.last.queryParameters['route'],
+      'tasks',
+      reason: 'late Memories finish cannot poll or advance Tasks',
+    );
+    expect(observations, 1, reason: 'late Memories finish cannot poll the old DOM as Tasks');
+    expect(ownedDocumentPreparations, 1, reason: 'late Memories finish cannot prepare the Tasks document');
+
+    renderedRoute = ConsumerEvidenceRoute.tasks;
+    await driver.pageFinished(navigated.last.toString(), prepareOwnedDocument: prepareOwnedDocument);
+    expect(navigated.last.queryParameters['route'], 'conversations');
+    expect(observations, 2);
+    expect(ownedDocumentPreparations, 2);
   });
 }
