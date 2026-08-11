@@ -44,6 +44,28 @@ function projection(initialPhase = "initial-loading", initialRows = []) {
   };
 }
 
+function refreshableProjection(initialRows = []) {
+  let status = refresh("saved-but-refresh-failed", initialRows.length > 0);
+  let refreshCalls = 0;
+  const listeners = new Set();
+  return {
+    source: {
+      list: async () => initialRows,
+      status: () => ({ refresh: status, pendingWrites: 0, deadLetters: [] }),
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      async refresh() {
+        refreshCalls += 1;
+        status = refresh("ready", initialRows.length > 0);
+        for (const listener of listeners) listener();
+      },
+    },
+    refreshCalls: () => refreshCalls,
+  };
+}
+
 function present(phase, hasSavedData, rowCount, filtering = false) {
   const status = refresh(phase, hasSavedData);
   return homeSurfacePresentation(status, rowCount, refreshPhaseNoticeKey(phase), filtering);
@@ -146,6 +168,39 @@ test("Home unavailable state does not promise Retry when projections have no ref
   try {
     assert.equal(rendered.container.querySelector(".lifecycle-retry"), null);
     assert.equal(rendered.container.querySelector(".lifecycle-next-action"), null, "an unavailable projection without refresh cannot promise a settings action it does not render");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Home saved-refresh failure shows age and a working retry without making memories look clickable", async () => {
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
+  const [savedMemory] = await fixtureMemoryStore("normal").list();
+  const memories = refreshableProjection([savedMemory]);
+  const conversations = refreshableProjection([]);
+  let now = 120_000;
+  const rendered = await renderComponent(HomeProduction, {
+    sources: { memories: memories.source, conversations: conversations.source },
+    initialLastSuccessAt: 60_000,
+    now: () => now,
+  });
+  try {
+    assert.match(rendered.container.querySelector(".lifecycle-last-success")?.textContent ?? "", /1m ago/);
+    const memoryRow = rendered.container.querySelector("article.home-result-row");
+    assert.equal(memoryRow?.getAttribute("data-actionable"), "false");
+    assert.equal(rendered.container.querySelector("a.home-result-row"), null);
+    const retry = rendered.container.querySelector(".lifecycle-retry");
+    assert.ok(retry, "saved refresh failure exposes the available recovery action");
+    now = 121_000;
+    await rendered.act(async () => {
+      retry.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(memories.refreshCalls(), 1);
+    assert.equal(conversations.refreshCalls(), 1);
+    assert.equal(rendered.container.querySelector("main")?.getAttribute("data-surface-state"), "ready");
+    assert.equal(rendered.container.querySelector(".lifecycle-retry"), null, "successful recovery clears the retry affordance");
   } finally {
     await rendered.cleanup();
   }
