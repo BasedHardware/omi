@@ -252,6 +252,8 @@ export interface LocalServiceStores {
   readonly chatEvents: ChatGenerationEventsStore;
   readonly chatAdmission: ChatAdmission;
   readonly chatFinalization: ChatGenerationFinalization;
+  /** Durable compositions may supply the SQLite-backed agent ledger. */
+  readonly agentRunEvents?: AgentRunEventStore;
 }
 
 export interface InMemoryLocalServiceStores extends LocalServiceStores {
@@ -478,7 +480,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     throw new TypeError("persistentQaStores requires an externally owned store set");
   }
   const stores = options.stores ?? createInMemoryLocalServiceStores();
-  const agentRunEvents = options.agentRunEvents ?? createInMemoryAgentRunEventStore();
+  const agentRunEvents = options.agentRunEvents
+    ?? stores.agentRunEvents
+    ?? createInMemoryAgentRunEventStore();
   const conversations = stores.conversations;
   const folders = stores.folders;
   const folderDeletion = stores.folderDeletion;

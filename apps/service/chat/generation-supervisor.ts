@@ -35,6 +35,7 @@ import type {
   ChatGenerationEvent,
   ChatGenerationEventsStore,
   ChatGenerationFrame,
+  ChatGenerationTerminalFrame,
 } from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord, ChatMessagesStore, StoredChatMessage } from "../stores/chat-messages-store";
@@ -108,6 +109,8 @@ interface ActiveGeneration {
   providerStartedAt: number | null;
   providerEventSeen: boolean;
   cancelRequested: boolean;
+  /** True when this state was reconstructed after a process/service restart. */
+  recovered: boolean;
   firstEventTimer: unknown | null;
   maxDurationTimer: unknown | null;
   heartbeatTimer: unknown | null;
@@ -380,7 +383,7 @@ export const createChatGenerationSupervisor = (
     state: ActiveGeneration,
     packet: ChatGenerationContextPacket,
   ): void => {
-    const policyDecision = packet.items.length > 0 && packet.budget.usedTokens > 0 ? "included" : "degraded";
+    const policyDecision = packet.budget.usedTokens > 0 ? "included" : "degraded";
     recordAgent(() => agentEvents!.context({
       runId: state.generationId,
       attemptId: state.attemptId,
@@ -439,6 +442,74 @@ export const createChatGenerationSupervisor = (
       // No retry/recovery route exists at this layer; do not advertise one.
       recoveryAction: null,
     }));
+  };
+
+  const recordRecoveredAgentTerminal = (
+    accountId: string,
+    generationId: string,
+    frame: ChatGenerationTerminalFrame,
+  ): void => {
+    if (agentEvents === null || deps.agentRunEvents === undefined) return;
+    try {
+      let prior = deps.agentRunEvents.list(generationId);
+      let accepted = prior.find((event) => event.kind === "run_accepted");
+      // A process may have crashed immediately after canonical admission and
+      // before the sidecar append. Reconstruct only that safe first link from
+      // the durable canonical accepted frame; otherwise fail closed without a
+      // misleading terminal-only agent timeline.
+      if (accepted === undefined) {
+        const canonicalAccepted = deps.events.listAfter(accountId, generationId, null)
+          ?.find((event) => event.frame.kind === "accepted");
+        if (canonicalAccepted === undefined || canonicalAccepted.frame.kind !== "accepted") return;
+        try {
+          agentEvents.accepted({
+            runId: generationId,
+            attemptId: `${generationId}:attempt:recovery`,
+            admissionId: canonicalAccepted.id,
+          });
+        } catch {
+          return;
+        }
+        prior = deps.agentRunEvents.list(generationId);
+        accepted = prior.find((event) => event.kind === "run_accepted");
+      }
+      if (accepted === undefined || prior.some((event) => event.kind === "terminal")) return;
+      const recoveryAttemptId = `${generationId}:attempt:recovery`;
+      if (!prior.some((event) => event.kind === "recovery")) {
+        try {
+          agentEvents.recovery({
+            runId: generationId,
+            attemptId: recoveryAttemptId,
+            recoveryId: `${generationId}:recovery:reconnect`,
+            action: "reconnect",
+            reason: "process restarted before terminal",
+            fromAttemptId: accepted.attemptId,
+            toAttemptId: recoveryAttemptId,
+          });
+        } catch {
+          // A recovery marker is useful but never substitutes for the
+          // canonical terminal. Continue to the terminal append below.
+        }
+      }
+      const latest = deps.agentRunEvents.list(generationId);
+      if (latest.some((event) => event.kind === "terminal")) return;
+      const failure = frame.kind === "failed" ? frame.error : null;
+      agentEvents.terminal({
+        runId: generationId,
+        attemptId: recoveryAttemptId,
+        terminalOutcome: frame.kind === "done" ? "completed" : frame.kind,
+        terminalCode: frame.kind === "done"
+          ? "completed"
+          : frame.kind === "cancelled"
+            ? "cancelled"
+            : failure.code,
+        retryable: frame.kind === "failed" ? failure.retryable : false,
+        recoveryAction: null,
+      });
+    } catch {
+      // The canonical generation ledger remains authoritative if the sidecar
+      // is unavailable or corrupt during recovery.
+    }
   };
 
   const append = (
@@ -620,11 +691,15 @@ export const createChatGenerationSupervisor = (
             : { kind: "cancelled", message },
       });
       const canonicalKind = finalized.frame.kind;
-      recordAgentTerminal(
-        state,
-        canonicalKind,
-        canonicalKind === "failed" ? finalized.frame.error : null,
-      );
+      if (state.recovered) {
+        recordRecoveredAgentTerminal(state.accountId, state.generationId, finalized.frame);
+      } else {
+        recordAgentTerminal(
+          state,
+          canonicalKind,
+          canonicalKind === "failed" ? finalized.frame.error : null,
+        );
+      }
     } catch {
       state.terminal = false;
       return false;
@@ -643,7 +718,7 @@ export const createChatGenerationSupervisor = (
       // A timeout/recovery callback must never manufacture a terminal for a
       // generation that has no durable admission record.
       if (prior === null || !prior.some((event) => event.frame.kind === "accepted")) return false;
-      deps.finalization.finalize({
+      const finalized = deps.finalization.finalize({
         accountId,
         generationId,
         eventId: deps.eventId(accountId, generationId, "failed", prior.length + 1),
@@ -653,6 +728,7 @@ export const createChatGenerationSupervisor = (
           error: failure,
         },
       });
+      recordRecoveredAgentTerminal(accountId, generationId, finalized.frame);
       return true;
     } catch {
       return false;
@@ -679,6 +755,7 @@ export const createChatGenerationSupervisor = (
       providerStartedAt: null,
       providerEventSeen: true,
       cancelRequested: true,
+      recovered: true,
       firstEventTimer: null,
       maxDurationTimer: null,
       heartbeatTimer: null,
@@ -717,6 +794,7 @@ export const createChatGenerationSupervisor = (
         providerStartedAt: null,
         providerEventSeen: false,
         cancelRequested: false,
+        recovered: false,
         firstEventTimer: null,
         maxDurationTimer: null,
         heartbeatTimer: null,

@@ -1404,6 +1404,92 @@ describe("ratified chat generation wire red proofs", () => {
     }
   });
 
+  test("durable agent timeline reconstructs and recovers one truthful terminal without replay side effects", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "omi-agent-generation-recovery-"));
+    const path = join(directory, "service.sqlite");
+    const hanging: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onDelta("durable partial"));
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    let generationId = "";
+    try {
+      const firstDb = new Database(path);
+      const first = createLocalDevService({
+        db: firstDb,
+        stores: createSqliteLocalServiceStores(firstDb),
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "agent-durable-recovery-proof",
+        generationSource: hanging,
+      });
+      const admission = await readAdmission(await post(first, create("agent-durable-recovery")));
+      generationId = admission.generation.id;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      firstDb.close();
+
+      const secondDb = new Database(path);
+      const secondStores = createSqliteLocalServiceStores(secondDb);
+      const second = createLocalDevService({
+        db: secondDb,
+        stores: secondStores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "agent-durable-recovery-proof",
+      });
+      const canonical = parseSse(await (await generationEvents(second, generationId)).text());
+      expect(canonical.at(-1)?.data).toEqual({
+        kind: "failed",
+        error: { code: "generation_interrupted", retryable: true },
+      });
+      const timeline = secondStores.agentRunEvents!;
+      const events = timeline.list(generationId);
+      expect(events.filter((event) => event.kind === "terminal")).toHaveLength(1);
+      expect(events.filter((event) => event.kind === "recovery")).toHaveLength(1);
+      expect(events.at(-1)).toMatchObject({
+        kind: "terminal",
+        terminalOutcome: "failed",
+        terminalCode: "generation_interrupted",
+      });
+      expect((await history(second)).map((entry) => entry.sender)).toEqual(["human"]);
+      const replay = await agentEvents(second, generationId);
+      expect((await replay.text())).toContain("event: terminal");
+      const beforeReload = timeline.snapshot();
+      secondDb.close();
+
+      const thirdDb = new Database(path);
+      const thirdStores = createSqliteLocalServiceStores(thirdDb);
+      createLocalDevService({
+        db: thirdDb,
+        stores: thirdStores,
+        ownerAccountId: ACCOUNT,
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "agent-durable-recovery-proof",
+      });
+      expect(thirdStores.agentRunEvents!.snapshot()).toEqual(beforeReload);
+      expect(thirdStores.chatEvents.listAfter(ACCOUNT, generationId, null)!
+        .filter((event) => ["done", "failed", "cancelled"].includes(event.frame.kind))).toHaveLength(1);
+      const foreignDb = new Database(path);
+      const foreign = createLocalDevService({
+        db: foreignDb,
+        stores: createSqliteLocalServiceStores(foreignDb),
+        ownerAccountId: "foreign-agent-owner",
+        memoryCount: 0,
+        accountTimezone: "UTC",
+        devSecretLabel: "agent-durable-foreign-proof",
+      });
+      expect((await agentEvents(foreign, generationId)).status).toBe(404);
+      foreignDb.close();
+      thirdDb.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("restart owns a durable cancellation request without starting or double-cancelling a provider", async () => {
     const directory = mkdtempSync(join(tmpdir(), "omi-chat-cancellation-restart-"));
     const path = join(directory, "service.sqlite");
@@ -1442,9 +1528,10 @@ describe("ratified chat generation wire red proofs", () => {
       {
         let starts = 0;
         const db = new Database(path);
+        const stores = createSqliteLocalServiceStores(db);
         const local = createLocalDevService({
           db,
-          stores: createSqliteLocalServiceStores(db),
+          stores,
           ownerAccountId: ACCOUNT,
           memoryCount: 0,
           accountTimezone: "UTC",
@@ -1471,6 +1558,14 @@ describe("ratified chat generation wire red proofs", () => {
         ])).toEqual([
           ["human", "cancel after restart", null],
         ]);
+        const timeline = stores.agentRunEvents!.list("generation-restart-cancel");
+        expect(timeline.filter((event) => event.kind === "recovery")).toHaveLength(1);
+        expect(timeline.filter((event) => event.kind === "terminal")).toHaveLength(1);
+        expect(timeline.at(-1)).toMatchObject({
+          kind: "terminal",
+          terminalOutcome: "cancelled",
+          terminalCode: "cancelled",
+        });
         expect((await local.app.request("/v1/chat-generations/generation-restart-cancel", {
           method: "DELETE",
           headers: auth(local.devToken),
@@ -2022,6 +2117,42 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("agent timeline refreshes projection for events appended after connect", async () => {
+    const agentStore = createInMemoryAgentRunEventStore();
+    const detachedSupervisor: ChatGenerationSupervisor = Object.freeze({
+      onAdmitted: (): void => {},
+      cancel: (): void => {},
+      recoverInterrupted: (): void => {},
+    });
+    const { db, local } = boot(createInMemoryLocalServiceStores(), undefined,
+      "agent-timeline-live-projection-proof", createEmptyChatGenerationContextSource(),
+      undefined, undefined, undefined, undefined, agentStore, detachedSupervisor);
+    const admission = await readAdmission(await post(local, create("agent-live-projection")));
+    const runId = admission.generation.id;
+    const attemptId = `${runId}:attempt:1`;
+    const supervisor = createAgentRunEventSupervisor({
+      events: agentStore,
+      nowEpochMilliseconds: () => 1_786_352_400_000,
+      eventId: (id, sequence, kind) => `${id}:event:${sequence}:${kind}`,
+    });
+    supervisor.accepted({ runId, attemptId, admissionId: admission.message.id });
+    const response = await agentEvents(local, runId);
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(new TextDecoder().decode(first.value)).toContain("run_accepted");
+    // These events are appended after connect. The stream must re-project the
+    // durable ledger rather than consulting only its initial visible map.
+    supervisor.status({ runId, attemptId, status: "generating", progressPct: 40 });
+    supervisor.terminal({ runId, attemptId, terminalOutcome: "failed",
+      terminalCode: "generation_provider_failed", retryable: true, recoveryAction: null });
+    const body = await readRemaining(reader, new TextDecoder().decode(first.value));
+    expect(body).toContain("event: status");
+    expect(body).toContain("event: terminal");
+    expect((body.match(/event: terminal/gu) ?? [])).toHaveLength(1);
+    db.close();
+  });
+
   test("agent timeline closes a live reader after auth revocation on the next bounded poll", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start: () => Object.freeze({ cancel: (): void => {} }),
@@ -2074,6 +2205,7 @@ describe("ratified chat generation wire red proofs", () => {
       clearTimeout(handle) {
         clearCalls += 1;
         if (typeof handle === "object" && handle !== null) handles.delete(handle as object);
+        if (clearCalls === 1) throw new Error("injected clear failure");
       },
     };
     const hanging: ChatGenerationSource = Object.freeze({

@@ -50,7 +50,7 @@ const streamAgentEvents = (input: {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
   readonly resolveGenerationOwner: (accountId: string, runId: string) => boolean;
   readonly initial: readonly AgentRunEvent[];
-  readonly visibleById: ReadonlyMap<string, AgentRunVisibleTimelineEvent>;
+  readonly visibleById: Map<string, AgentRunVisibleTimelineEvent>;
   readonly afterEventId: string | null;
   readonly signal: AbortSignal;
   readonly scheduler: ChatGenerationScheduler;
@@ -65,7 +65,14 @@ const streamAgentEvents = (input: {
       const close = (): void => {
         if (stopped) return;
         stopped = true;
-        if (timer !== null) input.scheduler.clearTimeout(timer);
+        if (timer !== null) {
+          try {
+            input.scheduler.clearTimeout(timer);
+          } catch {
+            // Stream teardown is best effort; a hostile scheduler must not
+            // escape the response or strand the reader.
+          }
+        }
         controller.close();
       };
       // Keep the producer side bounded. A slow reader can reconnect from the
@@ -120,8 +127,25 @@ const streamAgentEvents = (input: {
           close();
           return;
         }
+        // Rebuild the projection from the durable ledger on every poll. The
+        // initial map is only a snapshot; status/terminal events appended
+        // after connect must be encoded with the same fail-closed projection
+        // rules before they enter the SSE queue.
+        let next: readonly AgentRunEvent[];
+        try {
+          next = input.events.list(input.runId);
+          const projection = next.length === 0 ? null : projectAgentRunTimeline(next);
+          if (projection === null) {
+            close();
+            return;
+          }
+          input.visibleById.clear();
+          for (const visible of projection.events) input.visibleById.set(visible.eventId, visible);
+        } catch {
+          close();
+          return;
+        }
         if (queue.length === 0) {
-          const next = input.events.list(input.runId);
           const start = cursor === null ? 0 : next.findIndex((event) => event.eventId === cursor) + 1;
           if (cursor !== null && start === 0) {
             close();
@@ -155,7 +179,13 @@ const streamAgentEvents = (input: {
     },
     cancel(): void {
       stopped = true;
-      if (timer !== null) input.scheduler.clearTimeout(timer);
+      if (timer !== null) {
+        try {
+          input.scheduler.clearTimeout(timer);
+        } catch {
+          // Cancellation is terminal for this stream even if cleanup fails.
+        }
+      }
     },
   });
   return new Response(body, { status: 200, headers: SSE_HEADERS });
