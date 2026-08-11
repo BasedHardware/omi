@@ -165,6 +165,7 @@ function commandText(manifestPath, outRoot, preparedPath, offset, limit, replayP
 function checkProbeDocument(document, coordinate) {
   const expectedClass = coordinate.kind === "keyboard_trace" ? "native_keyboard_trace" : "native_ax_snapshot";
   if (!document || document.schema !== "omi.native-semantic-evidence.v2" || document.runId !== coordinate.run_id || document.coordinate !== coordinateKey(coordinate) || document.axTrusted !== true || document.evidenceClass !== expectedClass || document.matrixEligible !== true || document.domainLandmarkFound !== true) fail(`${coordinate.run_id}: probe did not produce a matrix-eligible observation`);
+  if (coordinate.kind === "keyboard_trace" && document.frontmostRestored !== true) fail(`${coordinate.run_id}: probe did not restore the previously frontmost app`);
   if (document.targetPid !== coordinate.target.pid || document.target?.bound !== true || document.target.pid !== coordinate.target.pid || document.target.bundleId !== coordinate.target.bundle_id || document.target.processNameBound !== true || document.target.expectedPid !== coordinate.target.pid || document.target.expectedBundleId !== coordinate.target.bundle_id) fail(`${coordinate.run_id}: probe target binding is not exact`);
   if (document.sourceCoreSha !== coordinate.source_shas.core || document.sourcePlatformSha !== coordinate.source_shas.platform) fail(`${coordinate.run_id}: probe source binding is stale`);
   return document;
@@ -186,7 +187,7 @@ function evidenceDocument(coordinate, probe) {
   return { schema: "omi.polish.keyboard/v1", ...metadata, steps };
 }
 function sidecarDocument(coordinate, probe, evidence) {
-  return { schema: "omi.native-semantic-sidecar/v1", coordinate: coordinateKey(coordinate), run_id: coordinate.run_id, source_shas: coordinate.source_shas, capture_class: coordinate.capture_class, source_tier: coordinate.source_tier, target: { pid: coordinate.target.pid, bundle_id: coordinate.target.bundle_id, process_name_bound: true }, evidence_schema: evidence.schema, matrix_eligible: probe.matrixEligible === true, domain_landmark: coordinate.landmark };
+  return { schema: "omi.native-semantic-sidecar/v1", coordinate: coordinateKey(coordinate), run_id: coordinate.run_id, source_shas: coordinate.source_shas, capture_class: coordinate.capture_class, source_tier: coordinate.source_tier, target: { pid: coordinate.target.pid, bundle_id: coordinate.target.bundle_id, process_name_bound: true }, evidence_schema: evidence.schema, matrix_eligible: probe.matrixEligible === true, domain_landmark: coordinate.landmark, frontmost_restored: coordinate.kind === "keyboard_trace" ? probe.frontmostRestored === true : null };
 }
 function writePrepared(file, manifestPath, manifest, probePath, offset, limit) {
   const descriptor = { schema: "omi.native-semantic-prepared/v1", source_shas: manifest.source_shas, manifest_path: `core:${authorityRelative(manifestPath)}`, manifest_sha256: hashFile(manifestPath), shell: "macos", offset, limit, coordinate_run_ids: manifest.coordinates.slice(offset, offset + limit).map((coordinate) => coordinate.run_id), capture_class: manifest.capture_class, probe: `core:${authorityRelative(probePath)}`, authority: { fixture: manifest.capture_class === "native_fixture", bridge: "disabled", credentials: false, production_api: false }, input_set: inputSet(manifestPath, probePath) };
@@ -224,8 +225,10 @@ function capture(args, manifestPath, manifest, outRoot, preparedPath) {
   const records = {}; const captureRoot = path.join(outRoot, "captures", "macos"); mkdirSync(captureRoot, { recursive: true });
   const stdoutLine = `NATIVE_SEMANTIC_BATCH_COMPLETE members=${limit}\n`;
   for (const [index, coordinate] of manifest.coordinates.slice(offset, offset + limit).entries()) {
-    const probeArgs = ["--pid", String(coordinate.target.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--require-matrix", "--json"];
-    if (coordinate.kind === "keyboard_trace") probeArgs.push("--activate", "--keys", coordinate.keys.join(","));
+    const probeArgs = ["--pid", String(coordinate.target.pid), "--bundle-id", coordinate.target.bundle_id, "--expected-bundle-id", coordinate.target.bundle_id, "--expected-process-name", coordinate.target.process_name, "--run-id", coordinate.run_id, "--source-core-sha", coordinate.source_shas.core, "--source-platform-sha", coordinate.source_shas.platform, "--coordinate", coordinateKey(coordinate), "--kind", coordinate.kind, "--landmark", coordinate.landmark, "--require-matrix", "--json"];
+    if (coordinate.kind === "keyboard_trace") {
+      probeArgs.push("--expect-after", coordinate.expected_after.map((value) => value || "-").join(","), "--activate", "--keys", coordinate.keys.join(","));
+    }
     const result = spawnSync(prepared.probePath, probeArgs, { cwd: coreRoot, env: safeEnvironment(), encoding: "utf8", timeout: 120_000 });
     let probe; try { probe = JSON.parse(result.stdout || "{}"); } catch { fail(`${coordinate.run_id}: probe did not emit JSON`); }
     if (result.status !== 0) fail(`${coordinate.run_id}: probe failed: ${(result.stderr || probe.error || "probe failure").trim()}`);

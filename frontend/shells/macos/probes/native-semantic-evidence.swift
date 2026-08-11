@@ -1,9 +1,11 @@
-// Native semantic evidence probe for a headed AppKit/WKWebView shell.
+// Native semantic evidence probe for an AppKit/WKWebView scratch shell.
 //
 // This is intentionally a separate executable: it never changes the product
 // shell, captures no pixels, and does not inspect page JavaScript. Accessibility
 // observations come from AXUIElement and keyboard events come from CoreGraphics.
-// Run it while the target scratch shell is frontmost:
+// AX-only observations do not activate the target. Keyboard traces temporarily
+// activate a background scratch window, then hide it and restore the app that
+// was frontmost before the trace:
 //
 //   swiftc -O -framework AppKit -framework ApplicationServices \
 //     -framework CoreGraphics -o /tmp/omi-native-semantic-evidence \
@@ -11,8 +13,8 @@
 //   /tmp/omi-native-semantic-evidence --pid <shell-pid> \
 //     --keys cmd+k,escape --json
 //
-// `--activate` is required when sending keys. This makes focus-stealing an
-// explicit operator choice instead of an accidental side effect of inspection.
+// `--activate` is required when sending keys. Activation is bounded to the key
+// sequence and automatically undone before evidence is emitted.
 import ApplicationServices
 import AppKit
 import CoreGraphics
@@ -125,6 +127,7 @@ private struct Evidence: Codable {
   let focusedBefore: AXNode?
   let keys: [KeyObservation]
   let focusRestored: Bool?
+  var frontmostRestored: Bool?
   let matrixEligible: Bool
   let error: String?
 }
@@ -141,6 +144,7 @@ private enum ProbeError: Error, CustomStringConvertible {
   case invalidMatrixBinding(String)
   case keyboardTransitionNotObserved(String)
   case focusNotRestored
+  case frontmostNotRestored
   case cannotPostKeys
 
   var description: String {
@@ -152,11 +156,12 @@ private enum ProbeError: Error, CustomStringConvertible {
     case .accessibilityNotTrusted:
       return "accessibility-not-trusted: grant Accessibility access to this probe"
     case .targetNotActive: return "target-not-active: pass --activate before --keys"
-    case .noAccessibleWindow: return "no-accessible-window: keep the headed shell frontmost"
+    case .noAccessibleWindow: return "no-accessible-window: target has no observable native window"
     case .noDomainLandmark(let message): return "no-domain-landmark: \(message)"
     case .invalidMatrixBinding(let message): return "invalid-matrix-binding: \(message)"
     case .keyboardTransitionNotObserved(let message): return "keyboard-transition-not-observed: \(message)"
     case .focusNotRestored: return "focus-not-restored: Escape did not return to the bound focus identity"
+    case .frontmostNotRestored: return "frontmost-not-restored: the previously active app could not be restored"
     case .cannotPostKeys: return "cannot-post-keys: CGEvent creation failed"
     }
   }
@@ -202,7 +207,7 @@ private func printHelp() {
     --expect-after LIST     Comma-separated allowlisted landmarks after keys; '-' means none
     --require-matrix        Fail unless all matrix bindings and observations are proven
     --keys SPEC             Comma-separated keys, e.g. cmd+k,escape
-    --activate              Activate/raise the target before posting keys
+    --activate              Temporarily activate for keys, then hide and restore prior app
     --json                  Emit one JSON evidence document
     --self-test              Run deterministic redaction/focus guard tests
     --help                  Show this help
@@ -210,8 +215,9 @@ private func printHelp() {
   Keys: cmd+k, ctrl+k, shift+enter, enter, escape, tab, shift+tab,
         arrow-up, arrow-down, arrow-left, arrow-right
 
-  The target must be a headed scratch native shell. This probe observes bounded,
-  AXUIElement roles,
+  AX snapshots can use the shell's off-screen mode. Keyboard traces should use
+  OMI_SEMANTIC_WINDOW=1, which shows a small background accessory window only
+  while the trace needs it. This probe observes bounded AXUIElement roles,
   allowlisted AX roles/names and posts native CGEvents; it does not take screenshots or
   claim that a browser preview is native evidence.
   """)
@@ -544,6 +550,7 @@ private func failureEvidence(_ options: Options, error: Error, app: NSRunningApp
     focusedBefore: nil,
     keys: [],
     focusRestored: nil,
+    frontmostRestored: nil,
     matrixEligible: false,
     error: String(describing: error))
 }
@@ -579,9 +586,7 @@ private func resolveTarget(_ options: Options) throws -> NSRunningApplication {
   return candidates[0]
 }
 
-private func run(_ options: Options) throws -> Evidence {
-  guard AXIsProcessTrusted() else { throw ProbeError.accessibilityNotTrusted }
-  let app = try resolveTarget(options)
+private func runResolved(_ options: Options, app: NSRunningApplication) throws -> Evidence {
   guard let bundleId = app.bundleIdentifier else {
     throw ProbeError.targetIdentityMismatch("target bundle identifier is unavailable")
   }
@@ -687,8 +692,51 @@ private func run(_ options: Options) throws -> Evidence {
     focusedBefore: before,
     keys: observations,
     focusRestored: restored,
+    frontmostRestored: nil,
     matrixEligible: matrixEligible,
     error: nil)
+}
+
+private func restoreFrontmost(
+  _ prior: NSRunningApplication?, target: NSRunningApplication
+) throws -> Bool {
+  guard let prior else {
+    target.hide()
+    return true
+  }
+  if prior.processIdentifier == target.processIdentifier { return true }
+  target.hide()
+  if prior.isTerminated { return true }
+  _ = prior.activate(options: [])
+  for _ in 0..<20 {
+    if NSRunningApplication(processIdentifier: prior.processIdentifier)?.isActive == true {
+      return true
+    }
+    usleep(25_000)
+  }
+  throw ProbeError.frontmostNotRestored
+}
+
+private func run(_ options: Options) throws -> Evidence {
+  guard AXIsProcessTrusted() else { throw ProbeError.accessibilityNotTrusted }
+  let app = try resolveTarget(options)
+  let prior = options.activate ? NSWorkspace.shared.frontmostApplication : nil
+  do {
+    var evidence = try runResolved(options, app: app)
+    if options.activate {
+      evidence.frontmostRestored = try restoreFrontmost(prior, target: app)
+    }
+    return evidence
+  } catch {
+    if options.activate {
+      do {
+        _ = try restoreFrontmost(prior, target: app)
+      } catch {
+        throw ProbeError.frontmostNotRestored
+      }
+    }
+    throw error
+  }
 }
 
 private func selfTest() -> Bool {

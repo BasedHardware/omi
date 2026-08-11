@@ -58,14 +58,18 @@ test("the visible navigation island exposes a native drag lane without covering 
 test("scratch shell opens at the deterministic comparison frame", async () => {
   const source = await read("shell/Sources/OmiShell/main.swift");
   assert.match(source, /let fixtureCapture = env\["OMI_PROBE_EXIT"\] != nil/);
+  assert.match(source, /let semanticWindow = env\["OMI_SEMANTIC_WINDOW"\] == "1"/);
   assert.match(
     source,
-    /width: fixtureCapture \? captureDimension\("OMI_NATIVE_VIEWPORT_WIDTH", fallback: 934,[^\n]+\) : 934/,
+    /width: fixtureSized \? captureDimension\("OMI_NATIVE_VIEWPORT_WIDTH", fallback: semanticWindow \? 420 : 934,[^\n]+\) : 934/,
   );
   assert.match(
     source,
-    /height: fixtureCapture \? captureDimension\("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: 671,[^\n]+\) : 671/,
+    /height: fixtureSized \? captureDimension\("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: semanticWindow \? 420 : 671,[^\n]+\) : 671/,
   );
+  assert.match(source, /let headed = env\["OMI_HEADED"\] == "1" && !semanticWindow/);
+  assert.match(source, /window\.orderBack\(nil\)/);
+  assert.match(source, /displayMode = headed \? "headed" : \(semanticWindow \? "background-semantic"/);
   assert.match(source, /window\.isRestorable = false/);
   assert.match(source, /window\.setContentSize\(contentRect\.size\)/);
   assert.match(source, /window\.isOpaque = false/);
