@@ -1992,6 +1992,10 @@ class FloatingBarSettings(BaseModel):
     elevenlabs_voice_id: str | None = Field(None, max_length=200)
 
 
+class WebSearchAssistantSettings(BaseModel):
+    enabled: bool | None = None
+
+
 class UpdateAssistantSettingsRequest(BaseModel):
     shared: SharedAssistantSettings | None = None
     focus: FocusAssistantSettings | None = None
@@ -1999,6 +2003,7 @@ class UpdateAssistantSettingsRequest(BaseModel):
     advice: AdviceAssistantSettings | None = None
     memory: MemoryAssistantSettings | None = None
     floating_bar: FloatingBarSettings | None = None
+    web_search: WebSearchAssistantSettings | None = None
     update_channel: str | None = Field(None, max_length=50)
 
 
