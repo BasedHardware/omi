@@ -8,6 +8,7 @@ import {
   gateReplay,
   macRuntimeAppName,
   parseMacProbe,
+  runtimeProbeScript,
   validateHostMarker,
   validateManifest,
 } from "./capture-native-runtime.mjs";
@@ -42,6 +43,19 @@ test("runtime manifest is immutable and cannot be relabelled as browser or unsup
   assert.throws(() => validateManifest(manifest({ device: { udid: "other", model: "Mac17,7", orientation: "landscape" } })), /device/);
 });
 
+test("Memories runtime binds the platform fixture alias to the normalized domain", () => {
+  const memories = manifest({
+    domain: "memories",
+    state: "busy",
+    surface_query: "polish=1&qa=memories-platform&state=busy&platform=desktop&theme=dark&width=regular&accessibility=none&locale=en-US",
+  });
+  assert.doesNotThrow(() => validateManifest(memories));
+  const probe = runtimeProbeScript(memories);
+  assert.match(probe, /expectedQa = "memories-platform"/);
+  assert.match(probe, /domain:expectedDomain/);
+  assert.throws(() => validateManifest({ ...memories, surface_query: memories.surface_query.replace("memories-platform", "memories") }), /surface_query/);
+});
+
 test("native shell custody is explicit and browser shortcuts are absent", () => {
   const source = readFileSync(producer, "utf8");
   const iosHook = readFileSync(path.join(root, "shells/ios/app/ios/Runner/OmiUiWebView.swift"), "utf8");
@@ -67,6 +81,7 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(iosHook, /computed_style/);
   assert.match(iosHook, /attempts < 80/);
   assert.match(iosHook, /polishState !== wantedState/);
+  assert.match(iosHook, /requestedQa === "memories-platform" \? "memories" : requestedQa/);
   assert.match(source, /document\.documentElement\.dataset\.polishState/);
   assert.doesNotMatch(source, /value:root\.dataset\.surfaceState/);
   assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
