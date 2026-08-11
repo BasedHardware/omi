@@ -15,23 +15,23 @@ webview mounting, and the bridge bindings. Promoted here from the frontend track
 launcher should call these and nothing deeper; the internals below them are free to move.
 
 ```bash
-# macOS — LIVE against a local backend
-core/shells/macos/scripts/dev-run-macos.sh --api http://127.0.0.1:4801
+# macOS — LIVE against the registered local-production service
+core/shells/macos/scripts/dev-run-macos.sh --api http://127.0.0.1:4851
 
-# iOS Simulator — LIVE against a local backend
-core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4801
+# iOS Simulator — LIVE against the registered local-production service
+core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
 ```
 
-Both take the same flags and honour the same environment, so a launcher can treat them
-uniformly:
+Their shared LIVE controls honor the same API environment; platform-specific controls are
+called out below:
 
 | Flag / env | Meaning |
 | --- | --- |
-| `--api <url>` / `OMI_API_BASE_URL` | Backend base URL. Default `http://127.0.0.1:4801`. |
+| `--api <url>` / `OMI_API_BASE_URL` | Backend base URL. Default `http://127.0.0.1:4851`. |
 | `OMI_API_TOKEN` | Dev credential, held by the **shell**, never given to the page. |
 | `OMI_DEV_TOKEN_ISSUER_URL` | Optional dev-mode issuer; used when no token is set. |
-| `--fixture <name>` | **FIXTURE** mode — deterministic in-page data, bridge bypassed. |
-| `--route <name>` | Live route to open (macOS). Default `home`. |
+| `--fixture <name>` | iOS visual-QA **FIXTURE** mode — deterministic in-page data, bridge bypassed; never registered/local-production evidence. |
+| `--route <name>` | Live route to open. Default `home`. |
 | `--accept` | Headless acceptance run; exits nonzero on **zero** served traffic. |
 | `--device <udid>` | iOS only. Defaults to the booted simulator. |
 
@@ -39,6 +39,12 @@ Exit codes are meaningful. Both scripts **refuse to launch** rather than show yo
 empty app when the backend is unreachable or no credential is available. That refusal is
 deliberate: a shell that launches into an empty list is indistinguishable from a UI bug,
 and that ambiguity is exactly how a dead data path once passed for a working one.
+
+With no API override, both LIVE entry points target the registered local-production service
+at `http://127.0.0.1:4851`. The backend flag may deliberately repoint a manual development
+run, but it never changes the render origin: macOS remains `http://127.0.0.1:5290` and iOS
+remains `omi-ui://local`. Registered lane and local-production runs use the registered
+service rather than the visual-QA fixture path.
 
 Listen uses the same shell-held API authority and bearer credential as privileged HTTP.
 The page sends only an origin-relative `/v4/listen?...` path over the
@@ -60,7 +66,8 @@ and rows that exist only server-side.
 
 ## The origin is frozen, and that is a storage invariant
 
-macOS serves the surface from a fixed loopback port; iOS serves it from `omi-ui://local`.
+macOS serves the surface from fixed `http://127.0.0.1:5290`; iOS serves it from
+`omi-ui://local`.
 Neither is a naming preference. `IndexedDB` and `localStorage` are **origin-keyed**, and
 the port is part of the origin — so an ephemeral port or a per-version scheme is a silent
 wipe of local surface storage on the next launch. `dev-run-macos.sh` warns loudly if you
@@ -112,5 +119,5 @@ window composited; `simctl` proves both. A byte-identical "success" pair is a fa
 
   ```bash
   FLUTTER_BIN=/Users/dazheng/.local/share/mise/installs/flutter/3.44.5/bin/flutter \
-    core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4801
+    core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
   ```

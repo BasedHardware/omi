@@ -122,8 +122,8 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
       "https://api.omi.me./",
       "not a URL",
       "ftp://127.0.0.1/token",
-      "http://user:password@127.0.0.1:4801",
-      "http://127.0.0.1:4801/path",
+      "http://user:password@127.0.0.1:4851",
+      "http://127.0.0.1:4851/path",
     ];
     for (const value of forbiddenApiVariants) {
       const result = spawnSync(run.launcher, ["--api", value, "--route", "chat"], {
@@ -144,7 +144,7 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     for (const value of forbiddenIssuerVariants) {
       const environment = { ...run.environment, OMI_DEV_TOKEN_ISSUER_URL: value };
       delete environment.OMI_API_TOKEN;
-      const result = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4801"], {
+      const result = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851"], {
         encoding: "utf8", env: environment,
       });
       assert.equal(result.status, 1, value);
@@ -153,7 +153,7 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
 
     const evidenceRoutes = ["memories", "conversations", "tasks", "folders", "chat", "settings", "listen"];
     for (const route of evidenceRoutes) {
-      const result = spawnSync(run.launcher, ["--api", "HTTP://LOCALHOST:4801/", "--route", route], {
+      const result = spawnSync(run.launcher, ["--api", "HTTP://LOCALHOST:4851/", "--route", route], {
         encoding: "utf8", env: run.environment,
       });
       assert.equal(result.status, 0, `${route}: ${result.stderr}`);
@@ -165,18 +165,18 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     assert.equal(actions.match(/^launch\|/gm)?.length, 7);
     assert.doesNotMatch(actions, /generation=platform/);
 
-    const defaultHome = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4801"], {
+    const defaultHome = spawnSync(run.launcher, [], {
       encoding: "utf8", env: run.environment,
     });
     assert.equal(defaultHome.status, 0);
     actions = run.readActions();
-    assert.match(actions, /launch\|query=route=home&platform=desktop/);
+    assert.match(actions, /launch\|query=route=home&platform=desktop.*\|api=http:\/\/127\.0\.0\.1:4851\|/);
 
     for (const [name, value] of [
       ["OMI_SURFACE_URL", "https://stale.example.invalid/"],
       ["OMI_SURFACE_PATH", "/?rig=dev"],
     ]) {
-      const result = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4801", "--route", "chat"], {
+      const result = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "chat"], {
         encoding: "utf8", env: { ...run.environment, [name]: value },
       });
       assert.equal(result.status, 0, name);
@@ -195,7 +195,7 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     assert.equal(existsSync(evidence), false, "a gate failure must remove prior host success");
 
     const nativeEvidence = spawnSync(run.launcher, [
-      "--api", "http://127.0.0.1:4801", "--route", "chat",
+      "--api", "http://127.0.0.1:4851", "--route", "chat",
       "--evidence-out", evidence, "--run-id", "raw-macos-run",
     ], { encoding: "utf8", env: run.environment });
     assert.equal(nativeEvidence.status, 0, nativeEvidence.stderr || nativeEvidence.stdout);

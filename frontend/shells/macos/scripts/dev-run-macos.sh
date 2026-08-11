@@ -6,12 +6,12 @@
 # scripts/dev-stack.sh, not just by a human.
 #
 #   ./scripts/dev-run-macos.sh --route chat        # LIVE Chat against the local backend
-#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4801 --route home
+#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4851 --route home
 #   ./scripts/dev-run-macos.sh --accept            # headless acceptance, exits nonzero on zero traffic
 #
 # Env (all overridable, all with local-sane defaults — nothing is hardcoded at
 # a build step, so repointing at another backend never needs a recompile):
-#   OMI_API_BASE_URL   default http://127.0.0.1:4801   (new backend)
+#   OMI_API_BASE_URL   default http://127.0.0.1:4851   (registered local production)
 #   OMI_API_TOKEN      dev token; if unset and an issuer is set, it is fetched
 #   OMI_DEV_TOKEN_ISSUER_URL   optional dev-mode token issuer
 #   OMI_SURFACE_PORT   fixed 5290
@@ -27,7 +27,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 core="$(cd "$here/../.." && pwd)"
 
-api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4801}"
+api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4851}"
 accept=0
 route="home"
 evidence_out=""
