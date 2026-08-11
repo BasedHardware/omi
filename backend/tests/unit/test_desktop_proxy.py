@@ -150,17 +150,53 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
+@pytest.mark.parametrize(("model_tier", "used_requests"), [("", 1), ("", 30), ("max", 300)])
+async def test_server_gemini_meter_keeps_pro_within_the_soft_limit(monkeypatch, model_tier, used_requests):
+    fallbacks = []
+
     async def run_blocking(_, function, *args, **kwargs):
         if function is desktop_proxy.redis_db.check_rate_limit:
             if args[1] == "desktop_gemini_daily":
-                return True, 31, 86_400
-            return True, 1, 60
-        return 31, 86_400
+                return True, desktop_proxy._DAILY_HARD_LIMIT - used_requests, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
-    monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    if model_tier:
+        monkeypatch.setenv("OMI_MODEL_TIER", model_tier)
+    else:
+        monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+
+    assert (
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+        == "models/gemini-2.5-pro:generateContent"
+    )
+    assert fallbacks == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model_tier", "used_requests"), [("", 31), ("max", 301)])
+async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch, model_tier, used_requests):
+    fallbacks = []
+
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, desktop_proxy._DAILY_HARD_LIMIT - used_requests, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    if model_tier:
+        monkeypatch.setenv("OMI_MODEL_TIER", model_tier)
+    else:
+        monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
 
     assert (
         await desktop_proxy._meter_server_request(
@@ -168,6 +204,74 @@ async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypat
         )
         == "models/gemini-2.5-flash:generateContent"
     )
+    assert fallbacks == [
+        {
+            "component": "gemini_model",
+            "from_mode": "pro",
+            "to_mode": "flash",
+            "reason": "quota",
+            "outcome": "degraded",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["embedContent", "batchEmbedContents"])
+async def test_server_gemini_meter_does_not_downgrade_embedding_actions(monkeypatch, action):
+    fallbacks = []
+
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, desktop_proxy._DAILY_HARD_LIMIT - 31, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+    path = f"models/gemini-2.5-pro:{action}"
+
+    assert await desktop_proxy._meter_server_request("user", path, "gemini-2.5-pro", action) == path
+    assert fallbacks == []
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_allows_request_at_the_daily_hard_limit(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, 0, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    path = "models/gemini-2.5-flash:generateContent"
+
+    assert await desktop_proxy._meter_server_request("user", path, "gemini-2.5-flash", "generateContent") == path
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_rejects_request_over_the_daily_hard_limit(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return False, 0, 86_400
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+
+    assert error.value.status_code == 429
+    assert error.value.detail == "Gemini daily request limit exceeded"
 
 
 @pytest.mark.asyncio
