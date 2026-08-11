@@ -543,7 +543,10 @@ export function MemoriesPage() {
       <div className="flex-1 overflow-hidden">
         <div className="h-full flex flex-col lg:flex-row w-full max-w-full overflow-x-hidden">
           {/* Left Column - Memories list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0 order-1">
+          <div
+            data-testid="memories-list-column"
+            className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden p-4 space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 min-w-0 order-1"
+          >
             {viewMode === 'list' ? (
               <>
                 {/* Quick add */}

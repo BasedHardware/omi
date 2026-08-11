@@ -109,8 +109,9 @@ export function MemoryList({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
-      style={{ maxHeight: 'calc(100vh - 350px)' }}
+      role="region"
+      aria-label="Memories list"
+      className="flex flex-col overflow-y-auto max-h-[calc(100dvh-350px)] lg:max-h-none lg:flex-1 lg:min-h-0 scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
     >
       {/* Virtual scrolling container */}
       <div
