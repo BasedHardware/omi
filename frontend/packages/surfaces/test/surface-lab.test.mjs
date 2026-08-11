@@ -16,7 +16,9 @@ test("surface lab is an explicit backend-free production fixture entry", async (
   assert.match(lab, /FIXTURE_STATES as MEMORY_STATES/);
   assert.match(lab, /CONVERSATION_FIXTURE_STATES/);
   assert.match(lab, /FIXTURE_STATES as TASK_STATES/);
-  assert.match(lab, /new URLSearchParams\(\{ qa: surface\.id, state, platform, locale \}\)/);
+  assert.match(lab, /new URLSearchParams\(\{ qa: surface\.id, state, platform, locale, \.\.\.\(polish \? \{ polish: "1" \} : \{\}\) \}\)/);
+  assert.match(lab, /const MATRIX_SURFACES:[\s\S]+POLISH_EVIDENCE_STATES\.settings/);
+  assert.match(lab, /const SURFACE_CATALOG = MATRIX_MODE \? MATRIX_SURFACES : SURFACES/);
   assert.doesNotMatch(lab, /bridgeHttpClient|openWebStorageBridge|fetch\(/);
   assert.match(pkg, /"dev:lab": "vite --port 4650 --open '\/\?lab=1'"/);
 

@@ -3,7 +3,7 @@ import { t } from "@omi-core/i18n";
 import type { Folder } from "@omi-core/contracts";
 import type { ProductionFolderStore } from "./ProductionStores.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionNotice, ProductionPageHeader } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionNotice, ProductionPageHeader, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import "./folders.css";
 
@@ -21,10 +21,12 @@ export function foldersConversationHref(search: string, folderId?: Folder["id"])
   return `?${params.toString()}`;
 }
 
-export function FoldersProduction({ store, locale = "en", onReady }: {
+export function FoldersProduction({ store, locale = "en", onReady, source = { kind: "live", origin: "bridge" }, fixture }: {
   store: ProductionFolderStore;
   locale?: string;
   onReady?: () => void;
+  source?: SurfaceDataSource;
+  fixture?: string;
 }): React.JSX.Element {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [status, setStatus] = useState(store.status());
@@ -76,7 +78,7 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
       data-production-shell="true"
       data-route="folders"
       data-surface-state={phase}
-      data-qa-fixture="none"
+      data-qa-fixture={fixture ?? "none"}
       data-consumer-semantic={`folders:visible:${visible.length}:total:${folders.length}`}
     >
       <ProductionChrome locale={locale} active="folders" placement="top" />
@@ -87,7 +89,7 @@ export function FoldersProduction({ store, locale = "en", onReady }: {
           title={t(locale, "nav.folders")}
           description={t(locale, "folders.description")}
         />
-        <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
+        <ProductionDataSourceBadge source={source} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"
           phase={phase}

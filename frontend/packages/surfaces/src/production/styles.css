@@ -538,3 +538,31 @@ html[data-platform="desktop"] .data-source-badge {
   border-radius: 9px;
   font-size: 11px;
 }
+
+/* QA-only accessibility selectors for the immutable polish evidence matrix.
+ * Live routes remain governed by their OS media queries and native settings. */
+html[data-polish-evidence="true"][data-polish-accessibility="text_scale_200"] {
+  font-size: 200%;
+}
+
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_motion"] *,
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_motion"] *::before,
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_motion"] *::after {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0s !important;
+}
+
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_transparency"] *,
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_transparency"] *::before,
+html[data-polish-evidence="true"][data-polish-accessibility="reduced_transparency"] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-polish-evidence="true"][data-polish-accessibility="high_contrast"] {
+  --border: currentColor !important;
+  --focus-ring-width: 3px !important;
+  --selected-border-width: 2px !important;
+}

@@ -42,11 +42,16 @@ import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
+import { LISTEN_FIXTURE_STATES, fixtureListenStore, type ListenFixtureState } from "./listen-fixtures.js";
+import { resolvePolishFixture } from "./polish-evidence-fixtures.js";
 import "./styles.css";
 
 const query = new URLSearchParams(location.search);
 const requestedRoute = query.get("route");
 const requestedQa = query.get("qa");
+const polishFixture = query.get("polish") === "1"
+  ? resolvePolishFixture(requestedQa, query.get("state"))
+  : null;
 /**
  * Host-supplied backend-generation selection, resolved BEFORE routing.
  *
@@ -106,6 +111,14 @@ const colorModeFor = (selection: ThemeSelection): ColorMode => selection === "sy
     : platform === "mobile" ? "dark" : "light";
 let themeName: ThemeName = themeNameFor(platform, colorModeFor(themeSelection));
 const locale = query.get("locale")?.trim() || navigator.language || "en";
+if (polishFixture !== null) {
+  document.documentElement.dataset["polishEvidence"] = "true";
+  document.documentElement.dataset["polishDomain"] = polishFixture.domain;
+  document.documentElement.dataset["polishState"] = polishFixture.state;
+  const accessibility = query.get("accessibility")?.trim() || "none";
+  document.documentElement.dataset["polishAccessibility"] = accessibility;
+  document.documentElement.dir = accessibility === "rtl" ? "rtl" : "ltr";
+}
 const translateTasks = t.bind(null, locale) as unknown as TasksProductionProps["translate"];
 const appearancePreference: SettingsAppearancePreference = {
   async readAppearance() {
@@ -284,7 +297,7 @@ if (query.get("lab") === "1") {
 } else if (query.get("rig") === "dev") {
   void import("../dev/main.js");
 } else {
-  const fixtureValue = query.get("state");
+  const fixtureValue = polishFixture?.fixture ?? query.get("state");
   const fixtureRequest = requestedRoute === null;
   const memoryFixture = fixtureRequest && requestedQa === "memories" && FIXTURE_STATES.includes(fixtureValue as FixtureState)
     ? fixtureValue as FixtureState
@@ -306,6 +319,12 @@ if (query.get("lab") === "1") {
   const settingsFixture = fixtureRequest && requestedQa === "settings" && SETTINGS_FIXTURE_STATES.includes(fixtureValue as SettingsFixtureState)
     ? fixtureValue as SettingsFixtureState
     : undefined;
+  const folderFixture = fixtureRequest && requestedQa === "folders" && polishFixture?.domain === "folders"
+    ? polishFixture.fixture as import("./conversation-fixtures.js").FolderFixtureState
+    : undefined;
+  const listenFixture = fixtureRequest && requestedQa === "listen" && LISTEN_FIXTURE_STATES.includes(fixtureValue as ListenFixtureState)
+    ? fixtureValue as ListenFixtureState
+    : undefined;
   const homeFixture = fixtureRequest && requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
   if (propositionFixture) {
@@ -324,6 +343,12 @@ if (query.get("lab") === "1") {
     root.render(<StrictMode><ConversationsProduction store={fixtureConversationStore(conversationFixture, requestedQa === "conversation-detail")} foldersStore={fixtureFolderStore()} fixture={conversationFixture} detailId={detailId} initialFolderId={initialFolderId} locale={locale} onReady={() => emitReady(`fixture:${conversationFixture}`)} /></StrictMode>);
   } else if (memoryFixture) {
     root.render(<StrictMode><MemoriesProduction store={fixtureStore(memoryFixture)} fixture={memoryFixture} locale={locale} onReady={() => emitReady(`fixture:${memoryFixture}`)} /></StrictMode>);
+  } else if (folderFixture) {
+    const evidenceLabel = `polish:${polishFixture?.state ?? folderFixture}`;
+    root.render(<StrictMode><FoldersProduction store={fixtureFolderStore(folderFixture)} source={{ kind: "fixture", fixture: evidenceLabel }} fixture={evidenceLabel} locale={locale} onReady={() => emitReady(`fixture:${folderFixture}`)} /></StrictMode>);
+  } else if (listenFixture) {
+    const evidenceLabel = `polish:${polishFixture?.state ?? listenFixture}`;
+    root.render(<StrictMode><ListenProduction store={fixtureListenStore(listenFixture)} source={{ kind: "fixture", fixture: evidenceLabel }} fixture={evidenceLabel} locale={locale} onReady={() => emitReady(`fixture:${listenFixture}`)} /></StrictMode>);
   } else if (route === "unsupported") {
     root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
     emitReady("unsupported");
