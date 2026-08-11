@@ -64,6 +64,7 @@ private enum ProbeError: Error, CustomStringConvertible {
   case usage(String)
   case targetNotFound(String)
   case targetAmbiguous(String)
+  case accessibilityNotTrusted
   case targetNotActive
   case noAccessibleWindow
   case cannotPostKeys
@@ -73,6 +74,8 @@ private enum ProbeError: Error, CustomStringConvertible {
     case .usage(let message): return "usage: \(message)"
     case .targetNotFound(let message): return "target-not-found: \(message)"
     case .targetAmbiguous(let message): return "target-ambiguous: \(message)"
+    case .accessibilityNotTrusted:
+      return "accessibility-not-trusted: grant Accessibility access to this probe"
     case .targetNotActive: return "target-not-active: pass --activate before --keys"
     case .noAccessibleWindow: return "no-accessible-window: keep the headed shell frontmost"
     case .cannotPostKeys: return "cannot-post-keys: CGEvent creation failed"
@@ -210,8 +213,9 @@ private func elementArrayAttribute(_ element: AXUIElement, _ attribute: String) 
   for index in 0..<CFArrayGetCount(array) {
     let item = CFArrayGetValueAtIndex(array, index)
     guard let item else { continue }
-    let element = unsafeBitCast(item, to: AXUIElement.self)
-    if AXUIElementGetTypeID() == CFGetTypeID(element) { elements.append(element) }
+    let itemRef = unsafeBitCast(item, to: CFTypeRef.self)
+    guard CFGetTypeID(itemRef) == AXUIElementGetTypeID() else { continue }
+    elements.append(unsafeBitCast(itemRef, to: AXUIElement.self))
   }
   return elements
 }
@@ -329,7 +333,7 @@ private func resolveTarget(_ options: Options) throws -> NSRunningApplication {
 
 private func run(_ options: Options) throws -> Evidence {
   guard AXIsProcessTrusted() else {
-    throw ProbeError.targetNotActive
+    throw ProbeError.accessibilityNotTrusted
   }
   let app = try resolveTarget(options)
   if options.activate {
