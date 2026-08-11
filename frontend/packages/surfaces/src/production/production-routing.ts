@@ -85,7 +85,10 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
  */
 export function generationMismatch(
   selectedMemories: MemoriesGeneration,
-  renderedMemories: MemoriesGeneration,
+  renderedMemories: MemoriesGeneration | null,
 ): boolean {
+  // `null` means the rendered surface does not consume Memories at all. A
+  // per-domain platform Memories selection says nothing about Tasks,
+  // Conversations, Folders, Listen, Chat, or Settings.
   return selectedMemories === "platform" && renderedMemories === "legacy";
 }
