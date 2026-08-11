@@ -19,8 +19,6 @@ def test_memory_platform_capability_exposes_rest_mcp_and_zkr_contracts():
 
     assert capability.surfaces.rest == "GET /v1/memory/platform"
     assert capability.surfaces.mcp == "memory_platform"
-    assert capability.surfaces.rest == "GET /v1/memory/platform"
-    assert capability.surfaces.mcp == "memory_platform"
     assert capability.zkr.model_dump() == {
         "export_format": 1,
         "replica_role": "mirror",
