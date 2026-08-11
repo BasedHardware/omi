@@ -6,7 +6,7 @@ Status: P5 preregistration, 2026-08-11; implementation and activation absent
 
 Run one already-assigned read authority strategy and every selected read shadow
 through the finalized-grounding producer over explicit repeats, then persist
-only verified baseline/candidate pair metadata. This is the production-neutral
+verified baseline/candidate pair metadata. This is the production-neutral
 bridge from exact authorized query results to the existing export, repeat-noise,
 contamination, statistics, and blind-sheet tools. It cannot serve a product
 answer, grade truth, promote a strategy, or write memory authority.
@@ -69,8 +69,17 @@ the exact staged result plus grounding first and revalidates the source before
 returning zero-call replay. Pair persistence is immutable and replayable. A
 stopped run never fabricates a pair for an incomplete arm.
 
-Completed and stopped outputs contain only verified pair records, integer
-model-call/staged/replayed-result counts, and closed stop codes. They contain no
+The persisted verified pair is protected isolated metadata and includes its
+account key. It is never returned by this coordinator. Only after successful
+pair persistence does the coordinator derive a content-safe receipt containing
+the pair version, opaque pair ref/digest, and repeat ordinal. A future isolated
+pair-read boundary may load the full verified rows for the existing export.
+
+Completed and stopped outputs contain only those opaque pair receipts, integer
+observed-model-call/staged/replayed-result and recorded/replayed-pair counts,
+and closed stop codes. On a stopped run, `observed_model_calls` counts only
+completed producer receipts; a thrown dependency cannot be used to claim an
+unknown total. Outputs contain no
 query, answer, assertion, citation, trace ref, subject class, graph/source
 coordinate, copied input, normalized result, response digest, prompt, model,
 owner, credential, grant, or error text.
@@ -81,9 +90,9 @@ records later repeats for read-side disagreement only and computes no statistic.
 ## Pre-registered acceptance tests
 
 1. Two repeats over one authority plus two shadows produce six sequential
-   completed attempts, four exact pairs, peak producer concurrency one, and the
+   completed attempts, four exact pair receipts, peak producer concurrency one, and the
    order baseline/A/B then baseline/A/B.
-2. Exact restart returns the same pairs with zero model calls and six replayed
+2. Exact restart returns the same pair refs with zero model calls and six replayed
    results. A prefix restart reuses completed arms/pairs and invokes only the
    missing work.
 3. Empty authorized projections complete every arm and pair with zero model
@@ -98,7 +107,8 @@ records later repeats for read-side disagreement only and computes no statistic.
    distinguishable. Malformed adapter output and pair-write throw share the
    last class by design. Already recorded pairs remain exact.
 7. Serialized completed/stopped outcomes contain none of the sensitive fields
-   named above. Pair order and identity are stable under replay.
+   named above, including the account key present in the persisted pair. Pair
+   receipt order and identity are stable under replay.
 8. Later repeats are present with exact ordinals but the existing statistics
    and contamination gates still use repeat 0 as primary N.
 9. Focused and broad tests, import graph, migration hashes, and
@@ -108,7 +118,7 @@ records later repeats for read-side disagreement only and computes no statistic.
 
 The slice lands only if all acceptance tests pass and a two-repeat/two-shadow
 hermetic run records four verified pairs with peak concurrency one, while exact
-restart performs zero model calls and returns byte-identical pair identities.
+restart performs zero model calls and returns byte-identical opaque pair refs.
 This proves orchestration and replay safety only. It is not answer-quality,
 contamination, truth, or production-read evidence.
 
