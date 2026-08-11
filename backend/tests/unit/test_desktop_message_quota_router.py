@@ -65,6 +65,8 @@ def _make_client():
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = _install_module('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    subscription = _install_module('utils.subscription', ModuleType('utils.subscription'))
+    subscription.is_trial_paywalled = MagicMock(return_value=False)
 
     chat_utils = _install_module('utils.chat', ModuleType('utils.chat'))
     chat_utils.initial_message_util = MagicMock()
