@@ -425,6 +425,9 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
       state.expiresAt = decision.expiresAt;
       const outcome: AgentToolOutcome = { kind: "pending_approval", callId: state.callId, approvalId: decision.approvalId, expiresAt: decision.expiresAt, reason: decision.reason };
       emit({ kind: "approval_requested", callId: state.callId, approvalId: decision.approvalId, expiresAt: decision.expiresAt, reason: decision.reason });
+      if (state.outcome !== null || state.cancelRequested || state.state === "cancelled") {
+        return state.outcome ?? { kind: "cancelled", callId: state.callId, summary: "The tool call was cancelled." };
+      }
       state.outcome = Object.freeze(outcome);
       return outcome;
     }

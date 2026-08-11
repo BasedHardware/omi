@@ -155,6 +155,24 @@ describe("closed agent tool registry and approval seam", () => {
     expect(secondEvents.slice(secondBefore)).toEqual([]);
   });
 
+  test("synchronous approval trace cancellation cannot be overwritten by pending approval", async () => {
+    let runner!: AgentToolRunner;
+    const registry = createAgentToolRegistry([safeTool("safe.reentrant-approval", async () => ({
+      summary: "must not run", durationMs: 1, retryable: false,
+    }), { risk: "approval-required" })]);
+    runner = createAgentToolRunner({
+      registry,
+      nowEpochMilliseconds: () => 10,
+      onEvent: (event) => {
+        if (event.kind === "approval_requested") runner.cancel(event.callId);
+      },
+    });
+    const outcome = await runner.request({ callId: "call:approval-reentrant", toolName: "safe.reentrant-approval", idempotencyKey: "idem:approval-reentrant", input: {} });
+    expect(outcome).toMatchObject({ kind: "cancelled" });
+    expect(await runner.request({ callId: "call:replay", toolName: "safe.reentrant-approval", idempotencyKey: "idem:approval-reentrant", input: {} })).toEqual(outcome);
+    expect(runner.snapshot().calls[0]).toMatchObject({ state: "cancelled", outcome: { kind: "cancelled" } });
+  });
+
   test("denial, expiry, cancellation, timeout, and unsafe results never create a false success", async () => {
     let executions = 0;
     const scheduler = new DeterministicToolScheduler();
