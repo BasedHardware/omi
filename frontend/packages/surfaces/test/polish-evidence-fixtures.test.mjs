@@ -39,6 +39,11 @@ test("polish fixture resolver exactly covers the immutable domain lifecycle map"
   });
   assert.equal(resolvePolishFixture("folders", "cancelled"), null);
   assert.equal(resolvePolishFixture("unknown", "ready"), null);
+  for (const inheritedName of ["__proto__", "constructor", "toString", "valueOf"]) {
+    assert.equal(resolvePolishFixture(inheritedName, "ready"), null);
+  }
+  // red-proof: using the `in` operator on the ordinary state-map object makes
+  // inherited property names reach `.includes` and crash the production entry.
 });
 
 test("folder polish fixtures expose truthful source and distinct lifecycle phases", async () => {
