@@ -76,6 +76,18 @@ export const easeOutCubic = new CubicEasing(0.215, 0.61, 0.355, 1);
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+export function smoothOmiLevel(
+  current: number,
+  target: number,
+  elapsedMs: number,
+): number {
+  const from = clamp01(current);
+  const to = clamp01(target);
+  const rate = to > from ? 14 : 7;
+  const duration = Math.max(0, Math.min(64, elapsedMs));
+  return from + (to - from) * (1 - Math.exp((-rate * duration) / 1000));
+}
+
 /**
  * The geometry of the Omi mark, measured from `assets/images/omi_logo.png`
  * and kept identical to `assets/images/omi_mark.svg`, the source of truth.

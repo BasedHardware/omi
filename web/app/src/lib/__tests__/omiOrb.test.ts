@@ -13,6 +13,7 @@ import {
   omiPendulumWaveSwings,
   omiSineLanePhase,
   omiSineTravelsPerLap,
+  smoothOmiLevel,
   omiTusiPendulumSlides,
   type OmiOrbMotion,
   type OmiOrbState,
@@ -92,6 +93,24 @@ describe('CubicEasing', () => {
   it('clamps outside the unit interval', () => {
     expect(easeOutCubic.transform(-1)).toBe(0);
     expect(easeOutCubic.transform(2)).toBe(1);
+  });
+});
+
+describe('smoothOmiLevel', () => {
+  it('eases raw meter changes over animation frames', () => {
+    const attack = smoothOmiLevel(0, 1, 16);
+    const release = smoothOmiLevel(1, 0, 16);
+
+    expect(attack).toBeGreaterThan(0);
+    expect(attack).toBeLessThan(1);
+    expect(release).toBeGreaterThan(0);
+    expect(release).toBeLessThan(1);
+    expect(attack).toBeGreaterThan(1 - release);
+  });
+
+  it('clamps invalid source values before smoothing', () => {
+    expect(smoothOmiLevel(-1, 2, 100)).toBeGreaterThan(0);
+    expect(smoothOmiLevel(2, -1, 100)).toBeLessThan(1);
   });
 });
 

@@ -53,6 +53,7 @@
     "react-markdown": "^10.1.0",
     "react-virtualized-auto-sizer": "^2.0.2",
     "react-window": "^2.2.3",
+    "streamdown": "^2.5.0",
     "tailwind-merge": "^2.5.2",
     "three": "^0.182.0",
     "three-spritetext": "^1.10.0"

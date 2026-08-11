@@ -19,7 +19,6 @@ import { GoalDetailSheet } from './GoalDetailSheet';
 import { HomeTaskList } from './HomeTaskList';
 import { restingMode } from '@/lib/homeStage';
 import { cn } from '@/lib/utils';
-import { AppSelector } from '@/components/chat/AppSelector';
 
 /**
  * Home — the one place Omi answers from.
@@ -47,7 +46,7 @@ export function HomePage() {
   const { user } = useAuth();
   // Home renders the same transcript the panel does, so it reads the same
   // selected session rather than pinning itself to the shared thread.
-  const { chat, selectedAppId, selectApp } = useChatContext();
+  const { chat, selectedAppId } = useChatContext();
   const {
     messages,
     isLoading,
@@ -106,6 +105,10 @@ export function HomePage() {
 
   useEffect(() => {
     askRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    document.title = 'Omi - Your AI Companion';
   }, []);
 
   const hasMeaningfulHistory = messages.some(
@@ -267,7 +270,7 @@ export function HomePage() {
       {/* The ask bar is the one composer for the whole stage, so it holds its
           position while the content above it changes mode. */}
       <div className="flex-shrink-0 px-6 pb-6 pt-3">
-        <div className="mx-auto max-w-3xl space-y-3">
+        <div className="mx-auto w-full max-w-[640px] space-y-3 md:max-w-[720px] xl:max-w-[820px]">
           <AnimatePresence>
             {isCapturing && (
               <RecordingStage
@@ -298,11 +301,6 @@ export function HomePage() {
               onStart: () => void startRecording(),
               onStop: () => void stopRecording(),
             }}
-          />
-          <AppSelector
-            selectedAppId={selectedAppId}
-            onSelectApp={selectApp}
-            disabled={isLoading || isStreaming}
           />
         </div>
       </div>

@@ -6,6 +6,7 @@ import Image from '@tschk/moonshine-next/image';
 import { Brain } from 'lucide-react';
 import type { ClientMessage } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { ChatMarkdown } from './ChatMarkdown';
 
 /**
  * The chat transcript, with no chrome of its own.
@@ -108,9 +109,7 @@ export function ChatTranscript({
                       ))}
                     </div>
                   )}
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                    {message.text}
-                  </p>
+                  <ChatMarkdown>{message.text}</ChatMarkdown>
                 </div>
                 <span className="text-xs text-text-quaternary mt-1 block">
                   {formatMessageTime(message.created_at)}
@@ -180,10 +179,7 @@ export function ChatTranscript({
           <div className="flex gap-3 max-w-[85%] sm:max-w-[75%]">
             <OmiAvatar />
             <div className="rounded-2xl px-5 py-3 bg-bg-secondary border border-stroke text-text-primary">
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                {streamingText}
-              </p>
-              <span className="inline-block w-2 h-4 bg-text-tertiary/50 animate-pulse ml-0.5" />
+              <ChatMarkdown isStreaming>{streamingText}</ChatMarkdown>
             </div>
           </div>
         </motion.div>

@@ -11,6 +11,7 @@ import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { ChatMarkdown } from './ChatMarkdown';
 
 interface FilePreviewItem {
   file: File;
@@ -363,7 +364,11 @@ export function ChatPanel() {
                               : 'bg-bg-tertiary text-text-primary',
                           )}
                         >
-                          <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                          {message.sender === 'human' ? (
+                            <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                          ) : (
+                            <ChatMarkdown>{message.text}</ChatMarkdown>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -387,8 +392,7 @@ export function ChatPanel() {
                     {streamingText && (
                       <div className="flex justify-start">
                         <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary text-text-primary">
-                          <p className="text-sm whitespace-pre-wrap">{streamingText}</p>
-                          <span className="inline-block w-2 h-4 bg-text-tertiary/50 animate-pulse ml-0.5" />
+                          <ChatMarkdown isStreaming>{streamingText}</ChatMarkdown>
                         </div>
                       </div>
                     )}

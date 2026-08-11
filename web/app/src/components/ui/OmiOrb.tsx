@@ -7,6 +7,7 @@ import {
   omiDotPlacement,
   omiMotionForState,
   omiOrbPlacements,
+  smoothOmiLevel,
   type OmiOrbMotion,
   type OmiOrbState,
 } from '@/lib/omiOrb';
@@ -90,6 +91,7 @@ export function OmiOrb({
 
   const dots = useRef<(SVGCircleElement | null)[]>([]);
   const levelRef = useRef(level);
+  const smoothedLevelRef = useRef(level);
   levelRef.current = level;
 
   const unit = size / OmiMarkGeometry.canvas;
@@ -114,9 +116,17 @@ export function OmiOrb({
     const lap = LAP_SECONDS[active] * 1000;
     let frame = 0;
     let start = 0;
+    let previous = 0;
 
     const tick = (now: number) => {
       if (start === 0) start = now;
+      const elapsed = previous === 0 ? 1000 / 60 : now - previous;
+      previous = now;
+      smoothedLevelRef.current = smoothOmiLevel(
+        smoothedLevelRef.current,
+        levelRef.current,
+        elapsed,
+      );
       const turn = ((((now - start) / lap) % 1) + 1) % 1;
       for (let i = 0; i < OmiMarkGeometry.dotCount; i++) {
         const node = dots.current[i];
@@ -125,7 +135,7 @@ export function OmiOrb({
           motion: active,
           index: i,
           turn,
-          level: levelRef.current,
+          level: smoothedLevelRef.current,
           burst: omiBurstForTurn(active, turn),
         });
         // Mutating attributes directly keeps the tree from re-rendering 60
