@@ -52,13 +52,15 @@ cache-hit, production-overhead, or canonical-store performance improvements.
 1. `recall-trace-v1` remains exact and authoritative. Research `recall_log.v3`, its raw
    evidence ids, query/answer text, host/database fields, and agent tool arguments are not
    production contracts.
-2. Assertion provenance is a separate exact-shaped, versioned manifest. It contains only
-   a stable assertion ordinal and unique reader-scoped opaque `tr1_` citation references.
-   It contains no assertion text and is never reconstructed by sentence-splitting rendered
-   prose.
-3. The manifest may be built only from structured assertions that survived grounding and
-   from citations already authorized for that read. It cannot add, remove, reorder, or
-   smooth answer text, and it is not exposed on a product route in this unit.
+2. Assertion provenance requires a finalized authorized grounding artifact, not merely
+   syntactically opaque `tr1_` references. The canonical collection read has no structured
+   grounded assertion set, and query-bearing agentic recall is not a product route.
+   Therefore this unit deliberately exposes no assertion-provenance builder. That API is
+   deferred until the query-bearing read integration can bind every assertion and citation
+   to the final post-revalidation authorized result.
+3. Future provenance must retain structured assertion order and authorized citations; it
+   must never reconstruct structure by sentence-splitting rendered prose or add, remove,
+   reorder, or smooth answer text.
 4. Telemetry is evidence, never read or write authority. Sink failure cannot affect output.
    Denied or invalidated reads emit no successful read trace.
 
@@ -82,24 +84,32 @@ cache-hit, production-overhead, or canonical-store performance improvements.
    together with explicit model/provider, adapter, strategy, prompt, parser/schema,
    policy, retry, sampling/tool, and cache-format coordinates. Raw prompt bytes never
    enter a cache store or telemetry sink.
-2. A cache scope is owner/account-specific. Reader-facing model work additionally binds
-   the reader projection and authorization state, and cache lookup occurs only after that
-   authorization/projection. A shared hit/miss timing channel across grants is forbidden.
+2. A cache scope is discriminated. `owner_offline` binds owner and policy for offline QA;
+   `reader_bound` additionally requires non-null reader-projection and authorization
+   digests, and lookup occurs only after that authorization/projection. A shared hit/miss
+   timing channel across grants is forbidden.
 3. Only strictly parsed successful results are cacheable. Throws, timeouts, provider
    failures, malformed responses, retryable/partial outcomes, and raw error strings are
    never cached. Cache corruption or coordinate mismatch is a miss, not a served value.
 4. Retry-repair prompt bytes differ from the initial prompt. This unit does not claim
    exact successful-request caching until the adapter returns the exact successful prompt
    digest with its validated result.
-5. The existing SQLite verdict cache remains QA/offline only. It may gain an adapter-owned
-   prompt-identity seam and stricter tests, but no environment-selected path becomes a
-   production control plane and no cache is wired into application service composition.
+5. The existing SQLite verdict cache remains local, disposable QA/offline state. Its
+   values are sensitive parsed model results even though its v2 keys are digest-only; it
+   is not content-safe storage. No environment-selected path becomes a production control
+   plane and no scoped cache is wired into application service composition in this unit.
+   One pipeline owns each cache path; cross-process shared-cache winner semantics remain a
+   production-activation blocker.
 6. Content-safe operational telemetry is injected. Events contain only closed stage/error
    codes, opaque digests, bounded counts, token counts, duration, and explicit versions.
    They exclude query, prompt, excerpt, account/evidence ids, model output, tool arguments,
    provider/parser messages, and stack traces.
 7. The research change from three to five GLM/agent retries is excluded. Retry policy is
    behavior and cost, not telemetry.
+8. Existing repair retries may append a bounded parse-error hint to the next prompt,
+   including on the excluded agentic edge. This unit makes those bytes cache-visible and
+   keeps repaired attempts uncacheable; it does not change the retry prompt because that
+   could change model outcomes. Closed repair codes are a separate prompt-policy candidate.
 
 ## Acceptance tests
 
@@ -108,10 +118,9 @@ cache-hit, production-overhead, or canonical-store performance improvements.
   array permutations;
 - the private evidence/fence indexes are constructed once per selection attempt and cannot
   be injected by a caller;
-- assertion provenance rejects raw ids, duplicate/unsorted citations, extras, accessors,
-  proxies, decorated/sparse arrays, invalid ordinals, and forged trace refs;
-- assertion provenance serialization contains none of supplied query, answer, excerpt,
-  account, evidence, model-output, or provider-error sentinels;
+- no assertion-provenance authority-shaped builder is exported before a finalized
+  authorized grounding artifact exists; syntactically valid forged trace refs cannot be
+  certified as provenance;
 - full and structural trajectory modes have byte-identical structural fields, skipped walk
   analysis is explicit, and the current dream caller explicitly requests `full`;
 - prompt-equivalent input objects share an adapter prompt digest, while any owner, model,
@@ -132,7 +141,9 @@ This unit excludes `subject:*`, bystander privacy, compose voice, owner/mixed-vo
 agentic query planning, entity dossiers, prompt experiments, accepted/STM positive
 synthesis, health/readiness claims, PostgreSQL persistence, deployment, and human grading.
 
-The unit exits with a local commit and independent review. It may claim semantic
-equivalence and stricter observability/cost contracts. It may not claim faster production
-reads, fewer production model calls, better answers, or production cache readiness until
-the later copied-store profile/replay and PostgreSQL activation slices supply that evidence.
+The unit exits with a local commit and independent review. The scoped cache and injected
+telemetry seams remain inert in production composition. It may claim semantic equivalence
+and stricter observability/cost contracts, but not active production telemetry, faster
+production reads, fewer production model calls, better answers, or production cache
+readiness until later copied-store profile/replay and PostgreSQL activation slices supply
+that evidence.

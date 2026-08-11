@@ -8,8 +8,16 @@ test("B1.5 reports synthetic structure accumulated between snapshots", () => {
   const before: GraphSnapshot = { owner_account_id: "owner", graph_generation: 1, claims: [claim("claim", "frontier:old", "resolved:old")], entities: [entity("entity:a"), entity("entity:b")], adjacency: [] };
   const authorization = { authorization_id: "auth", owner_account_id: "owner", endpoints: [{ kind: "entity" as const, entity_id: "entity:a" }, { kind: "entity" as const, entity_id: "entity:b" }] as const, relation: "same" as const, support: { kind: "owner_confirmation" as const, confirmation_ref: "confirmation" }, standing_policy_ref: null, namespace_scope: { namespace_instance_ref: null, identity_domain: null, scope_ref: null }, authority_policy_version: "p", evaluated_frontier: 1, actor_provenance: { actor_ref: "owner", producer_ref: null }, lifecycle: "active" as const, superseded_by: null };
   const after: GraphSnapshot = { ...before, graph_generation: 2, claims: [claim("claim:reprojected", "frontier:new", "resolved:new")], predicate_assertions: [{ revision_id: "assertion", assertion: { assertion_id: "assertion", owner_account_id: "owner", predicate_id: "p:old", relation: "alias_of", target_predicate_id: "p:new", slot_aliases: [], alias_frontier: "frontier:new", admission: "accepted", lifecycle: "active", supersedes_assertion_id: null } }], identity_constraints: [{ revision_id: "same", constraint: { constraint_id: "same", owner_account_id: "owner", endpoints: authorization.endpoints, left_handle: "entity:a", right_handle: "entity:b", relation: "same", identity_authorization: authorization, effective_at: 1, reversed_at: null } }], adjacency: [{ claim_revision_id: "claim:reprojected", entity_id: "entity:a", role_slot_id: "subject" }] };
-  const diff = diffGraphSnapshots(before, after);
+  const diff = diffGraphSnapshots(before, after, { analysis_mode: "full" });
+  expect(diff.version).toBe("trajectory-diff-v1");
+  expect(diff.walk_analysis).toBe("computed");
   expect(diff.entities_merged).toEqual([{ canonical_entity_id: "entity:a", entity_ids: ["entity:a", "entity:b"] }]);
   expect(diff.predicates_aliased).toEqual(["assertion"]);
   expect(diff.claims_reprojected).toEqual([{ claim_revision_id: "claim:reprojected", raw_key: "raw:stable", previous_resolved_key: "resolved:old", resolved_key: "resolved:new", frontier: "frontier:new" }]);
+
+  const structural = diffGraphSnapshots(before, after, { analysis_mode: "structural" });
+  expect(structural).toMatchObject({ version: "trajectory-diff-v1", walk_analysis: "skipped", components_before: [], components_after: [], paths_newly_walkable: [] });
+  const structuralFields = (value: typeof diff) => JSON.stringify({ entities_merged: value.entities_merged, entities_split: value.entities_split, predicates_aliased: value.predicates_aliased, claims_reprojected: value.claims_reprojected });
+  expect(structuralFields(structural)).toBe(structuralFields(diff));
+  expect(diff.components_after.length).toBeGreaterThan(0);
 });

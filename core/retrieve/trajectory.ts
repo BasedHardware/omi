@@ -4,7 +4,17 @@ import { projectTypedAdjacency, type TypedAdjacencyKind } from "./adjacency";
 import { buildWalkIndex, walk, type WalkPath } from "./walk";
 
 export interface GraphComponent { nodes: readonly string[]; }
+export type TrajectoryAnalysisMode = "full" | "structural";
+export interface TrajectoryDiffOptions {
+  analysis_mode: TrajectoryAnalysisMode;
+  max_hops?: number;
+  path_cap_per_anchor?: number;
+  relation_kinds?: readonly TypedAdjacencyKind[];
+  temporal_proximity_window_ms?: number;
+}
 export interface TrajectoryDiff {
+  version: "trajectory-diff-v1";
+  walk_analysis: "computed" | "skipped";
   entities_merged: readonly { canonical_entity_id: string; entity_ids: readonly string[] }[];
   entities_split: readonly { previous_canonical_entity_id: string; entity_ids: readonly string[] }[];
   predicates_aliased: readonly string[];
@@ -42,9 +52,9 @@ const entityGroups = (snapshot: GraphSnapshot): Map<string, string[]> => {
 const pathSignature = (path: WalkPath): string => JSON.stringify({ nodes: path.nodes, hops: path.hops.map((hop) => ({ relation_kind: hop.relation_kind, from: hop.from, to: hop.to, temporal_window_ms: hop.temporal_window_ms })) });
 
 /** A pure cycle-to-cycle report: it exposes structural deltas without treating either snapshot as truth. */
-export const diffGraphSnapshots = (before: GraphSnapshot, after: GraphSnapshot, options: { max_hops?: number; path_cap_per_anchor?: number; relation_kinds?: readonly TypedAdjacencyKind[]; temporal_proximity_window_ms?: number } = {}): TrajectoryDiff => {
+export const diffGraphSnapshots = (before: GraphSnapshot, after: GraphSnapshot, options: TrajectoryDiffOptions): TrajectoryDiff => {
+  if (options.analysis_mode !== "full" && options.analysis_mode !== "structural") throw new TypeError(`unsupported trajectory analysis mode: ${String(options.analysis_mode)}`);
   const relationKinds = options.relation_kinds ?? ["when-adjacent", "entity-shared", "evidence-lineage", "source-shared", "temporal-proximity"];
-  const beforeSafe = ownerProjection(before), afterSafe = ownerProjection(after);
   const beforeGroups = entityGroups(before), afterGroups = entityGroups(after);
   const canonicalBefore = canonicalEntityIdsAt(before), canonicalAfter = canonicalEntityIdsAt(after);
   const entities_merged = [...afterGroups].flatMap(([canonical_entity_id, entity_ids]) => {
@@ -83,6 +93,16 @@ export const diffGraphSnapshots = (before: GraphSnapshot, after: GraphSnapshot, 
       for (const path of walk(subgraph, { anchor, max_hops: maxHops, result_cap: pathCap, relation_kinds: relationKinds, temporal_proximity_window_ms: options.temporal_proximity_window_ms, index }).paths) visit(path);
     }
   };
+  const oldByRaw = new Map(before.claims.map((item) => [item.claim.proposition_key_raw, item.claim]));
+  const claims_reprojected = after.claims.flatMap((item) => {
+    const raw_key = item.claim.proposition_key_raw; const resolved_key = item.claim.proposition_key_resolved; const frontier = item.claim.predicate_alias_frontier;
+    if (!raw_key || !resolved_key || !frontier) return [];
+    const previous = oldByRaw.get(raw_key);
+    return !previous || previous.proposition_key_resolved !== resolved_key || previous.predicate_alias_frontier !== frontier ? [{ claim_revision_id: item.revision_id, raw_key, previous_resolved_key: previous?.proposition_key_resolved ?? null, resolved_key, frontier }] : [];
+  }).sort((left, right) => compareStrings(left.claim_revision_id, right.claim_revision_id));
+  if (options.analysis_mode === "structural") return { version: "trajectory-diff-v1", walk_analysis: "skipped", entities_merged, entities_split, predicates_aliased, components_before: [], components_after: [], paths_newly_walkable: [], claims_reprojected };
+
+  const beforeSafe = ownerProjection(before), afterSafe = ownerProjection(after);
   const beforePaths = new Set<string>();
   eachPath(beforeSafe, (path) => { beforePaths.add(pathSignature(path)); });
   // Filtering during the walk rather than after collecting is order-preserving:
@@ -93,12 +113,5 @@ export const diffGraphSnapshots = (before: GraphSnapshot, after: GraphSnapshot, 
     if (!beforePaths.has(signature)) newlyWalkable.push({ path, signature });
   });
   const paths_newly_walkable = newlyWalkable.sort((left, right) => compareStrings(left.signature, right.signature)).map((entry) => entry.path);
-  const oldByRaw = new Map(before.claims.map((item) => [item.claim.proposition_key_raw, item.claim]));
-  const claims_reprojected = after.claims.flatMap((item) => {
-    const raw_key = item.claim.proposition_key_raw; const resolved_key = item.claim.proposition_key_resolved; const frontier = item.claim.predicate_alias_frontier;
-    if (!raw_key || !resolved_key || !frontier) return [];
-    const previous = oldByRaw.get(raw_key);
-    return !previous || previous.proposition_key_resolved !== resolved_key || previous.predicate_alias_frontier !== frontier ? [{ claim_revision_id: item.revision_id, raw_key, previous_resolved_key: previous?.proposition_key_resolved ?? null, resolved_key, frontier }] : [];
-  }).sort((left, right) => compareStrings(left.claim_revision_id, right.claim_revision_id));
-  return { entities_merged, entities_split, predicates_aliased, components_before: components(beforeSafe, relationKinds, options.temporal_proximity_window_ms), components_after: components(afterSafe, relationKinds, options.temporal_proximity_window_ms), paths_newly_walkable, claims_reprojected };
+  return { version: "trajectory-diff-v1", walk_analysis: "computed", entities_merged, entities_split, predicates_aliased, components_before: components(beforeSafe, relationKinds, options.temporal_proximity_window_ms), components_after: components(afterSafe, relationKinds, options.temporal_proximity_window_ms), paths_newly_walkable, claims_reprojected };
 };

@@ -1,4 +1,6 @@
 // domain-pending(DIV-DOMTASK-004)
+import { isProxy } from "node:util/types";
+
 import { compareStrings } from "../order";
 
 const INTERNAL_REF = /^[\x21-\x7e]{1,512}$/;
@@ -26,6 +28,7 @@ const detachPlainJson = (input: unknown): PlainJson => {
       return Object.is(value, -0) ? 0 : value;
     }
     if (typeof value !== "object") return fail("recall integrity accepts plain JSON only");
+    if (isProxy(value)) return fail("recall integrity rejects proxies");
     if (active.has(value)) return fail("recall integrity rejects cycles");
     active.add(value);
     try {

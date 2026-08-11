@@ -4,7 +4,8 @@ import type { UnitBoundaryJudgment } from "../../core/extract/provisional";
 import type { MentionDetectionRequest, MentionDetectionResponse } from "../../core/resolve/mention-detection";
 import type { EntityProposal, EntityResolutionRequest } from "../../core/resolve/entities";
 import type { ScopeRoleProposal, ScopeRoleRequest } from "../../core/scope/placement";
-import type { ModelPort } from "./port";
+import type { CachedModelResultValidation, ModelInitialPromptIdentity, ModelInvocationSuccess, ModelInvokeRequest, ModelPort, ModelPromptCoordinates } from "./port";
+import { emitModelTelemetrySafely, type ModelTelemetryErrorCode, type ModelTelemetrySink } from "./telemetry";
 
 const entityStrategy = "local-handle-durable-entity";
 const mentionStrategy = "mention-local-handle";
@@ -20,6 +21,30 @@ const composeStrategy = "citation-grounded-compose";
 const entailmentStrategy = "span-entailment";
 const renderStrategy = "retrieval-node-summary";
 type GlmStrategy = typeof entityStrategy | typeof mentionStrategy | typeof scopeStrategy | typeof boundaryStrategy | typeof groundedStrategy | typeof identityStrategy | typeof identityVerifyStrategy | typeof namingCheckStrategy | typeof selfReferenceStrategy | typeof predicateStrategy | typeof composeStrategy | typeof entailmentStrategy | typeof renderStrategy;
+
+const GLM_ADAPTER_VERSION = "glm-openai-compatible-adapter-v1";
+const GLM_RETRY_VERSION = "glm-three-attempt-repair-v1";
+const GLM_SAMPLING_TOOL_VERSION = "temperature-zero-thinking-disabled-json-v1";
+const QA_CACHE_FORMAT_VERSION = "qa-model-verdict-cache-v2" as const;
+const promptDigest = (value: string): string => new Bun.CryptoHasher("sha256").update(value).digest("hex");
+
+interface ProviderUsage { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+const providerUsage = (payload: unknown): ProviderUsage => {
+  const usage = payload && typeof payload === "object" ? (payload as { usage?: unknown }).usage : null;
+  if (!usage || typeof usage !== "object") return { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  const record = usage as Record<string, unknown>;
+  const count = (value: unknown): number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  return { prompt_tokens: count(record.prompt_tokens), completion_tokens: count(record.completion_tokens), total_tokens: count(record.total_tokens) };
+};
+
+const telemetryErrorCode = (error: unknown): ModelTelemetryErrorCode => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/\b429\b/.test(message)) return "rate_limited";
+  if (/timeout|AbortError|TimeoutError|ECONNRESET|socket/i.test(message)) return "timeout";
+  if (/chat completion failed \(\d+\)|fetch failed/i.test(message)) return "provider_error";
+  if (/was not JSON|missing required field|unexpected field|must be|invalid|contained no text response/i.test(message)) return "invalid_response";
+  return "unknown";
+};
 
 /** Dream-path strategies: fail faster than extract — hung identity was burning 5min×retries per chunk. */
 const DREAM_TIMEOUT_STRATEGIES: ReadonlySet<string> = new Set([
@@ -713,16 +738,56 @@ export class GlmModel implements ModelPort {
   private readonly apiKey: string | undefined;
   private readonly model: string;
   private readonly fetchFn: typeof fetch;
+  private readonly telemetrySink: ModelTelemetrySink | undefined;
 
-  constructor(options: { baseUrl?: string; apiKey?: string; model?: string; fetch?: typeof fetch } = {}) {
+  constructor(options: { baseUrl?: string; apiKey?: string; model?: string; fetch?: typeof fetch; telemetrySink?: ModelTelemetrySink } = {}) {
     this.baseUrl = (options.baseUrl ?? process.env.OMI_BENCH_OPENAI_BASE_URL ?? "https://api.z.ai/api/paas/v4").replace(/\/$/, "");
     this.apiKey = options.apiKey ?? process.env.GLM_API_KEY ?? process.env.ZAI_API_KEY ?? process.env.OMI_BENCH_OPENAI_API_KEY;
     this.model = options.model ?? process.env.OMI_BENCH_OPENAI_MODEL ?? "glm-4.7";
     this.fetchFn = options.fetch ?? fetch;
+    this.telemetrySink = options.telemetrySink;
+  }
+
+  private coordinatesFor(strategy: GlmStrategy, version?: string): ModelPromptCoordinates {
+    const promptVersion = version ?? "caller-version-unspecified";
+    return {
+      provider_version: "openai-compatible-glm-v1",
+      model_version: this.model,
+      adapter_version: GLM_ADAPTER_VERSION,
+      strategy_version: strategy,
+      prompt_version: promptVersion,
+      parser_schema_version: `${strategy}:${promptVersion}:parser-v1`,
+      policy_version: "model-edge-policy-v1",
+      retry_version: GLM_RETRY_VERSION,
+      sampling_tool_version: GLM_SAMPLING_TOOL_VERSION,
+      cache_format_version: QA_CACHE_FORMAT_VERSION,
+    };
+  }
+
+  private edgeFor(request: ModelInvokeRequest): { strategy: GlmStrategy; edge: GlmEdge } | undefined {
+    if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) return undefined;
+    const strategy = request.strategy as GlmStrategy;
+    const edge = EDGES[strategy];
+    if (edge.versions !== null && request.version !== undefined && !edge.versions.has(request.version)) return undefined;
+    return { strategy, edge };
+  }
+
+  /** Digest-only identity of the exact first-attempt prompt. */
+  initialPromptIdentity(request: ModelInvokeRequest): ModelInitialPromptIdentity | undefined {
+    const resolved = this.edgeFor(request);
+    if (!resolved) return undefined;
+    try {
+      return Object.freeze({
+        prompt_digest: promptDigest(resolved.edge.prompt(request.input, request.version)),
+        coordinates: Object.freeze(this.coordinatesFor(resolved.strategy, request.version)),
+      });
+    } catch {
+      return undefined;
+    }
   }
 
   /** One chat call per edge; the three port methods differ only in which registry row they dispatch. */
-  private async complete(strategy: GlmStrategy, input: unknown, version?: string): Promise<unknown> {
+  private async completeWithMetadata(strategy: GlmStrategy, input: unknown, version?: string): Promise<ModelInvocationSuccess> {
     const edge = EDGES[strategy];
     // Version drift must be loud: a caller naming a contract this driver does
     // not implement used to be silently answered by whatever is implemented.
@@ -731,8 +796,11 @@ export class GlmModel implements ModelPort {
     const attempts = 3;
     let lastError: unknown;
     for (let attempt = 1; ; attempt += 1) {
+      const started = performance.now();
+      let usage: ProviderUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      const content = edge.prompt(input, version) + (attempt > 1 ? repairHint(lastError) : "");
+      const digest = promptDigest(content);
       try {
-        const content = edge.prompt(input, version) + (attempt > 1 ? repairHint(lastError) : "");
         const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
@@ -743,23 +811,63 @@ export class GlmModel implements ModelPort {
         });
         if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
         const payload = await response.json();
-        return edge.parse(readContent(payload), input, version);
+        usage = providerUsage(payload);
+        const result = edge.parse(readContent(payload), input, version);
+        emitModelTelemetrySafely(this.telemetrySink, {
+          version: "model-operational-telemetry-v1", stage: "provider_attempt", outcome: "success", error_code: null,
+          prompt_digest: digest, coordinates: this.coordinatesFor(strategy, version), attempt,
+          duration_ms: Math.max(0, Math.round(performance.now() - started)),
+          token_counts: { input: usage.prompt_tokens, output: usage.completion_tokens, total: usage.total_tokens },
+        });
+        return { result, successful_prompt_digest: digest, attempt };
       } catch (error) {
+        emitModelTelemetrySafely(this.telemetrySink, {
+          version: "model-operational-telemetry-v1", stage: "provider_attempt", outcome: "failure", error_code: telemetryErrorCode(error),
+          prompt_digest: digest, coordinates: this.coordinatesFor(strategy, version), attempt,
+          duration_ms: Math.max(0, Math.round(performance.now() - started)),
+          token_counts: { input: usage.prompt_tokens, output: usage.completion_tokens, total: usage.total_tokens },
+        });
         lastError = error;
         if (attempt >= attempts || !retryableGlmError(error)) throw error;
         const backoffMs = 500 * 2 ** (attempt - 1);
-        console.error(`retry ${attempt}/${attempts - 1} for ${strategy} in ${backoffMs}ms: ${error instanceof Error ? error.message : error}`);
+        console.error(`model_retry strategy=${strategy} attempt=${attempt} max_attempts=${attempts} backoff_ms=${backoffMs} error_code=${telemetryErrorCode(error)}`);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
 
+  private async complete(strategy: GlmStrategy, input: unknown, version?: string): Promise<unknown> {
+    return (await this.completeWithMetadata(strategy, input, version)).result;
+  }
+
   // Compose and render are deliberately refused here: their responses have
   // their own typed shapes and their own methods, and an `invoke` caller
   // receiving `unknown` would have to re-assert one of them by hand.
-  async invoke(request: { strategy: string; version: string; input: unknown }): Promise<unknown> {
+  async invoke(request: ModelInvokeRequest): Promise<unknown> {
     if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
     return this.complete(request.strategy as GlmStrategy, request.input, request.version);
+  }
+
+  async invokeWithMetadata(request: ModelInvokeRequest): Promise<ModelInvocationSuccess> {
+    if (!Object.hasOwn(EDGES, request.strategy) || request.strategy === composeStrategy || request.strategy === renderStrategy) throw new Error(`GlmModel does not support strategy: ${request.strategy}`);
+    return this.completeWithMetadata(request.strategy as GlmStrategy, request.input, request.version);
+  }
+
+  /** Re-run decoded QA cache values through this adapter's exact parser. */
+  validateCachedResult(request: ModelInvokeRequest, candidate: unknown): CachedModelResultValidation {
+    const resolved = this.edgeFor(request);
+    if (!resolved) return { ok: false };
+    try {
+      const encoded = JSON.stringify(candidate);
+      if (encoded === undefined) return { ok: false };
+      const result = resolved.edge.parse(encoded, request.input, request.version);
+      // Some edges translate model-local labels into durable ids. Those are
+      // intentionally left uncacheable until they gain an explicit inverse
+      // cache codec; accepting a merely parseable but changed value is unsafe.
+      return JSON.stringify(result) === encoded ? { ok: true, result } : { ok: false };
+    } catch {
+      return { ok: false };
+    }
   }
 
   /** The retrieval tree names its own render strategy per run for cache identity; this method IS the edge,
@@ -809,7 +917,7 @@ export class GlmModel implements ModelPort {
         lastError = error;
         if (attempt >= attempts || !retryableGlmError(error)) throw error;
         const backoffMs = 500 * 2 ** (attempt - 1);
-        console.error(`retry ${attempt}/${attempts - 1} for agentStep in ${backoffMs}ms: ${error instanceof Error ? error.message : error}`);
+        console.error(`model_retry strategy=agent-step attempt=${attempt} max_attempts=${attempts} backoff_ms=${backoffMs} error_code=${telemetryErrorCode(error)}`);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }

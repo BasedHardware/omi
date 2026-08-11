@@ -157,7 +157,7 @@ are selected by persisted, typed, versioned rollout configuration with an audit 
 | `core/retrieve/agentic.test.ts` | translate provenance and stage-failure tests; exclude dossier/prompt outcome assertions |
 | `core/retrieve/dogfood.ts` | do not port research compose-subject behavior |
 | `core/retrieve/index.ts` | manually reconcile the once-per-cycle optimization with newer canonical read/security work; this is the only independently changed file on both branches |
-| `core/retrieve/trajectory.ts` | port cycle-scoped snapshot reuse if canonical profiling confirms the same cost |
+| `core/retrieve/trajectory.ts` | port explicit full/structural analysis mode; profile canonical copied stores before changing the full default |
 | `core/retrieve/trajectory.test.ts` | translate the single-snapshot-per-cycle invariant |
 | `core/schema/index.ts` | port predicate identity-name invariant with domain-pending markers |
 | `drivers/model/consolidation-judge-edge.ts` | offline research only; no production port yet |

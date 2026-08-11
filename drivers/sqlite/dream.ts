@@ -571,7 +571,7 @@ export const runSqliteDreamCycle = async (input: {
       retryable_group_mention_ids: skippedMerges.filter((item) => item.retryable).map((item) => item.group_mention_ids),
     }));
     const after = input.ledger.snapshot(input.owner_account_id);
-    const report: DreamCycleReport = { cycle_id: input.cycle_id, promoted, deferred, reprojected, committed_merges: committedMerges, skipped_merges: skippedMerges, trajectory: diffGraphSnapshots(before, after) };
+    const report: DreamCycleReport = { cycle_id: input.cycle_id, promoted, deferred, reprojected, committed_merges: committedMerges, skipped_merges: skippedMerges, trajectory: diffGraphSnapshots(before, after, { analysis_mode: "full" }) };
     state.recordCycle(report, input.owner_account_id, input.trigger_kind, Number(before.graph_generation ?? 0), Number(after.graph_generation ?? 0));
     return report;
 };

@@ -258,7 +258,11 @@ const selectLineageHead = (members: readonly CommittedClaim[]): CommittedClaim =
  */
 const currentEvidenceById = (revisions: readonly CommittedEvidence[]): Map<string, Evidence> => {
   const grouped = new Map<string, CommittedEvidence[]>();
-  for (const revision of revisions) grouped.set(revision.evidence.evidence_id, [...(grouped.get(revision.evidence.evidence_id) ?? []), revision]);
+  for (const revision of revisions) {
+    const bucket = grouped.get(revision.evidence.evidence_id);
+    if (bucket) bucket.push(revision);
+    else grouped.set(revision.evidence.evidence_id, [revision]);
+  }
   const current = new Map<string, Evidence>();
   for (const [evidenceId, members] of grouped) {
     if (members.length === 1) {
@@ -276,42 +280,54 @@ const currentEvidenceById = (revisions: readonly CommittedEvidence[]): Map<strin
   return current;
 };
 
+/** Private, snapshot-derived indexes shared only within one selection attempt. */
+interface LivenessSelectionIndex {
+  evidence_by_id: ReadonlyMap<string, Evidence>;
+  purged_claim_revision_ids: ReadonlySet<string>;
+  forgotten_claim_revision_ids: ReadonlySet<string>;
+}
+
+const buildLivenessSelectionIndex = (causes: Pick<D35LivenessCauses, "evidence" | "purged_claim_revision_ids" | "forgotten_claim_revision_ids">): LivenessSelectionIndex => ({
+  evidence_by_id: currentEvidenceById(causes.evidence),
+  purged_claim_revision_ids: new Set(causes.purged_claim_revision_ids),
+  forgotten_claim_revision_ids: new Set(causes.forgotten_claim_revision_ids),
+});
+
+const isLiveWithIndex = (claim: CommittedClaim, lineageMembers: readonly CommittedClaim[], index: LivenessSelectionIndex): boolean => {
+  if (index.purged_claim_revision_ids.has(claim.revision_id) || index.forgotten_claim_revision_ids.has(claim.revision_id)) return false;
+  if (claim.claim.lifecycle === "canonical" && claim.claim.evidence_refs.length > 0) {
+    const citedEvidence = claim.claim.evidence_refs.map((ref) => index.evidence_by_id.get(ref)).filter((evidence): evidence is Evidence => evidence !== undefined);
+    // A canonical claim with citations needs at least one currently active one:
+    // a lost reference and a tombstoned/security-hidden last citation are both D35.
+    if (!citedEvidence.some((evidence) => evidence.state === "active")) return false;
+  }
+  const lineage = lineageMembers.filter((member) => member.claim.claim_lineage_id === claim.claim.claim_lineage_id);
+  return !lineage.length || selectLineageHead(lineage).revision_id === claim.revision_id;
+};
+
 /**
  * D35's single, pure liveness authority. Evidence loss, an immutable purge/forget
  * fence, and a non-head lineage member are all non-live. Placement `consumed` is
  * deliberately absent: it is provisional audit bookkeeping, not retraction.
  */
-export const isLive = (claim: CommittedClaim, causes: D35LivenessCauses): boolean => {
-  if (causes.purged_claim_revision_ids.includes(claim.revision_id) || causes.forgotten_claim_revision_ids.includes(claim.revision_id)) return false;
-  if (claim.claim.lifecycle === "canonical" && claim.claim.evidence_refs.length > 0) {
-    const evidenceById = currentEvidenceById(causes.evidence);
-    const citedEvidence = claim.claim.evidence_refs.map((ref) => evidenceById.get(ref)).filter((evidence): evidence is Evidence => evidence !== undefined);
-    // A canonical claim with citations needs at least one currently active one:
-    // a lost reference and a tombstoned/security-hidden last citation are both D35.
-    if (!citedEvidence.some((evidence) => evidence.state === "active")) return false;
-  }
-  const lineage = causes.lineage_members.filter((member) => member.claim.claim_lineage_id === claim.claim.claim_lineage_id);
-  return !lineage.length || selectLineageHead(lineage).revision_id === claim.revision_id;
-};
-
-const causesFor = (snapshot: GraphSnapshot, lineage_members: readonly CommittedClaim[]): D35LivenessCauses => ({
-  evidence: snapshot.evidence ?? [],
-  purged_claim_revision_ids: snapshot.liveness_causes?.purged_claim_revision_ids ?? [],
-  forgotten_claim_revision_ids: snapshot.liveness_causes?.forgotten_claim_revision_ids ?? [],
-  lineage_members,
-});
+export const isLive = (claim: CommittedClaim, causes: D35LivenessCauses): boolean =>
+  isLiveWithIndex(claim, causes.lineage_members, buildLivenessSelectionIndex(causes));
 
 /** D35 selection is intentionally evaluated after the reader grant projection. */
 const selectLiveCommittedClaims = (snapshot: GraphSnapshot, ctx?: RequestContext): LiveClaimSelection => {
-  const evidenceById = currentEvidenceById(snapshot.evidence ?? []);
+  const index = buildLivenessSelectionIndex({
+    evidence: snapshot.evidence ?? [],
+    purged_claim_revision_ids: snapshot.liveness_causes?.purged_claim_revision_ids ?? [],
+    forgotten_claim_revision_ids: snapshot.liveness_causes?.forgotten_claim_revision_ids ?? [],
+  });
   const eligible = snapshot.claims.filter((item) => item.placement_status !== "consumed").filter((item) => {
     if (!ctx) return true;
-    const evidence = item.claim.evidence_refs.map((ref) => evidenceById.get(ref)).filter((entry): entry is Evidence => entry !== undefined);
+    const evidence = item.claim.evidence_refs.map((ref) => index.evidence_by_id.get(ref)).filter((entry): entry is Evidence => entry !== undefined);
     return grantAllows(ctx, item.claim, genericPolicyClassifier.classify(item.claim, evidence));
   });
   // First remove global D35 exclusions. Only then may the remaining members contend
   // for a lineage head; a tombstoned/purged revision cannot suppress an older one.
-  const materiallyLive = eligible.filter((item) => isLive(item, causesFor(snapshot, [item])));
+  const materiallyLive = eligible.filter((item) => isLiveWithIndex(item, [item], index));
   const byLineage = new Map<string, CommittedClaim[]>();
   for (const item of materiallyLive) byLineage.set(item.claim.claim_lineage_id, [...(byLineage.get(item.claim.claim_lineage_id) ?? []), item]);
   const diagnostics: ProjectionDiagnostic[] = [];
@@ -319,7 +335,7 @@ const selectLiveCommittedClaims = (snapshot: GraphSnapshot, ctx?: RequestContext
     if (members.some((member) => member.commit_sequence === undefined)) {
       diagnostics.push({ kind: "missing_commit_sequence", claim_lineage_id: lineage, claim_revision_ids: members.map((member) => member.revision_id).sort(), message: `lineage ${lineage} has multiple revisions without a complete commit sequence; selected by stable content hash` });
     }
-    return members.filter((item) => isLive(item, causesFor(snapshot, members)));
+    return members.filter((item) => isLiveWithIndex(item, members, index));
   });
   return { claims: winners.sort((left, right) => compareStrings(left.revision_id, right.revision_id)), diagnostics };
 };

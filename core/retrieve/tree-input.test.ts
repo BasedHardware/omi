@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { project, projectTreeInputSnapshot, type GraphSnapshot, type PolicyClassifier } from "./index";
+import { isLive, liveCommittedClaims, project, projectTreeInputSnapshot, type D35LivenessCauses, type GraphSnapshot, type PolicyClassifier } from "./index";
 
 const entity = (id: string, handle = id) => ({ entity_id: id, owner_account_id: "owner", entity_revision_id: `${id}:r1`, handle, labels: [] });
 const claim = (revision: string, lineage: string, subject = "entity:old", labels: string[] = []) => ({
@@ -28,6 +28,33 @@ test("R0 projects only one live supersession member and binds roles to the merge
   expect(result.claims.map((item) => item.claim_revision_id)).toEqual(["survivor"]);
   expect(result.claims[0]!.arguments[0]!.value).toEqual({ kind: "entity_ref", ref: "entity:new" });
   expect(result.claims[0]!.evidence_spans).toEqual([expect.objectContaining({ capture_session_id: "capture:1", excerpt: "supported" })]);
+});
+
+test("D35 builds private evidence and fence indexes once per live selection", () => {
+  const input = graph();
+  let evidenceIterations = 0;
+  input.evidence = new Proxy(input.evidence!, {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) evidenceIterations++;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  expect(liveCommittedClaims(input).map((item) => item.revision_id)).toEqual(["survivor"]);
+  expect(evidenceIterations).toBe(1);
+});
+
+test("D35 public liveness cannot be changed by caller-supplied derived indexes", () => {
+  const item = graph().claims[1]!;
+  const forged = {
+    evidence: graph().evidence!.map((revision) => ({ ...revision, evidence: { ...revision.evidence, state: "tombstoned" as const } })),
+    purged_claim_revision_ids: [],
+    forgotten_claim_revision_ids: [],
+    lineage_members: [item],
+    evidence_by_id: new Map([["e1", graph().evidence![0]!.evidence]]),
+    purged_set: new Set<string>(),
+    forgotten_set: new Set<string>(),
+  } as D35LivenessCauses & Record<string, unknown>;
+  expect(isLive(item, forged)).toBe(false);
 });
 
 test("R0 preserves persisted imprecision and classifier changes create a new generation", () => {

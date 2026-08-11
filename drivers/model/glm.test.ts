@@ -8,6 +8,7 @@ import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
 import { boundaryVersion, buildUnitBoundaryRequest } from "./unit-boundary-edge";
 import { EDGES, GlmModel, predicateAlignmentPromptCost } from "./glm";
+import type { ModelOperationalTelemetryEvent } from "./telemetry";
 
 const claim = (id = "p-1", surface = "Alice"): ProvisionalClaim => ({
   claim_lineage_id: `lineage:${id}`, claim_revision_id: id, owner_account_id: "owner", predicate: "works_on",
@@ -77,13 +78,51 @@ test("GLM placement parsers reject malformed model output instead of repairing i
 });
 
 test("GLM retries a malformed boundary judgment and accepts a later valid response", async () => {
-  const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
+  const telemetryClaim = claim("p-telemetry", "raw-telemetry-sentinel");
+  const boundaryRequest = buildUnitBoundaryRequest(telemetryClaim, evidenceFor(telemetryClaim));
   const provider = fixtureProvider('{"decision":"abstain","risk_markers":[""]}', '{"decision":"abstain","risk_markers":["missing_time"]}');
-  await expect(modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
+  const events: ModelOperationalTelemetryEvent[] = [];
+  const model = new GlmModel({ apiKey: "fixture-key", baseUrl: "https://fixture.invalid/v1", model: "fixture-glm", fetch: provider.fetch, telemetrySink: (event) => { events.push(event); } });
+  const request = { strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest } as const;
+  const identity = model.initialPromptIdentity(request);
+  await expect(model.invoke(request)).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
   expect(provider.calls).toHaveLength(2);
+  expect(events).toHaveLength(2);
+  expect(events.map((event) => [event.outcome, event.error_code, event.attempt])).toEqual([
+    ["failure", "invalid_response", 1], ["success", null, 2],
+  ]);
+  expect(events[0]!.prompt_digest).toBe(identity?.prompt_digest);
+  expect(events[1]!.prompt_digest).not.toBe(identity?.prompt_digest);
+  expect(JSON.stringify(events)).not.toContain("raw-telemetry-sentinel");
+  expect(JSON.stringify(events)).not.toContain("risk_markers must be");
   const retryPrompt = (provider.calls[1] as { messages: { content: string }[] }).messages[0]!.content;
   expect(retryPrompt).toContain("previous answer was rejected");
   expect(retryPrompt).toContain("risk_markers");
+});
+
+test("provider response bodies never enter retry logs or telemetry", async () => {
+  const sentinel = "raw-provider-body-sentinel";
+  let calls = 0;
+  const fetch = (async () => {
+    calls += 1;
+    if (calls === 1) return new Response(sentinel, { status: 500 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"claims":[]}' } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof globalThis.fetch;
+  const events: ModelOperationalTelemetryEvent[] = [];
+  const logs: string[] = [];
+  const originalError = console.error;
+  console.error = (...values: unknown[]) => { logs.push(values.map(String).join(" ")); };
+  try {
+    const model = new GlmModel({ apiKey: "fixture", fetch, telemetrySink: (event) => { events.push(event); } });
+    await expect(model.invoke({ strategy: "grounded-extraction", version: "v1", input: { prompt: "extract" } })).resolves.toEqual({ claims: [] });
+  } finally {
+    console.error = originalError;
+  }
+  expect(calls).toBe(2);
+  expect(logs).toHaveLength(1);
+  expect(logs[0]).toContain("error_code=provider_error");
+  expect(logs.join("\n")).not.toContain(sentinel);
+  expect(JSON.stringify(events)).not.toContain(sentinel);
 });
 
 test("GLM placement abstentions parse without becoming placement approvals, and unknown strategies still reject", async () => {
