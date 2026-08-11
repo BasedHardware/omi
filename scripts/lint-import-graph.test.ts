@@ -124,6 +124,40 @@ test("source-impact core is private to the final-fenced composition", () => {
   }
 });
 
+test("consolidation work has one composition and no route-level executor", () => {
+  const routeFixture = join(platformRoot, "apps", "service", "routes", "consolidation-tripwire-fixture.ts");
+  const workerFixture = join(platformRoot, "apps", "service", "workers", "consolidation-caller-fixture.ts");
+  try {
+    writeFileSync(routeFixture, [
+      'import { defineDurableMemoryWorkRunner } from "../workers/durable-memory-work-runner";',
+      "export const bypass = defineDurableMemoryWorkRunner;",
+    ].join("\n"));
+    const runnerRejected = runLint();
+    expect(runnerRejected.status).not.toBe(0);
+    expect(`${runnerRejected.stdout}${runnerRejected.stderr}`)
+      .toContain("durable work runner is private to registered work-service compositions");
+
+    writeFileSync(routeFixture, [
+      'import { defineConsolidationWorkService } from "../workers/consolidation-work-service";',
+      "export const routeWorker = defineConsolidationWorkService;",
+    ].join("\n"));
+    const routeRejected = runLint();
+    expect(routeRejected.status).not.toBe(0);
+    expect(`${routeRejected.stdout}${routeRejected.stderr}`)
+      .toContain("consolidation work is worker-only");
+
+    rmSync(routeFixture, { force: true });
+    writeFileSync(workerFixture, [
+      'import type { ConsolidationWorkService } from "./consolidation-work-service";',
+      "export type WorkerOnly = Pick<ConsolidationWorkService, 'runNext'>;",
+    ].join("\n"));
+    expect(runLint().status).toBe(0);
+  } finally {
+    rmSync(routeFixture, { force: true });
+    rmSync(workerFixture, { force: true });
+  }
+});
+
 const withPortFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(portFixture, source);

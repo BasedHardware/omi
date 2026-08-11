@@ -11,7 +11,10 @@ import {
 } from "../../../core/consolidate/strategy-assignment";
 import type { CanonicalJson } from "../../../core/ledger";
 import type { AuthorizedLedgerWriteContext } from "../auth/authorized-context";
-import type { AuthoritativeLedgerAppend } from "../stores/authoritative-ledger-repository";
+import {
+  assertAuthoritativeLedgerAppend,
+  type AuthoritativeLedgerAppend,
+} from "../stores/authoritative-ledger-repository";
 import type {
   DurableMemoryWorkExecutionRepository,
   DurableMemoryWorkFailureOutcome,
@@ -19,6 +22,7 @@ import type {
 import {
   durableMemoryWorkNormalizedResultDigest,
   durableMemoryWorkResultStageRequestDigest,
+  normalizeDurableMemoryWorkResultJson,
   type DurableMemoryWorkResultRepository,
   type StagedDurableMemoryWorkResult,
 } from "../stores/durable-memory-work-result-repository";
@@ -31,6 +35,8 @@ import {
 
 const RUNNER_PORT: unique symbol = Symbol("durable-memory-work-runner");
 const MAX_PARENT_REBUILDS = 10;
+const TOKEN = /^[\x21-\x7e]{1,256}$/;
+const DIGEST = /^[a-f0-9]{64}$/;
 const ERROR_CODES = new Set<DurableMemoryWorkErrorCode>([
   "model_timeout", "model_rate_limited", "model_response_invalid",
   "prompt_budget_exceeded", "dependency_unavailable", "serialization_retryable",
@@ -159,15 +165,22 @@ const parseProduce = (value: unknown): DurableMemoryWorkProduceOutcome => {
   const input = exactRecord(value, [
     "kind", "result_contract_version", "response_digest", "normalized_result",
   ], "invalid_dependency_outcome");
+  if (typeof input["result_contract_version"] !== "string"
+    || !TOKEN.test(input["result_contract_version"])
+    || typeof input["response_digest"] !== "string"
+    || !DIGEST.test(input["response_digest"])) fail("invalid_dependency_outcome");
   return Object.freeze({
     kind,
-    result_contract_version: input["result_contract_version"] as string,
-    response_digest: input["response_digest"] as string,
-    normalized_result: input["normalized_result"] as Readonly<Record<string, CanonicalJson>>,
+    result_contract_version: input["result_contract_version"],
+    response_digest: input["response_digest"],
+    normalized_result: normalizeDurableMemoryWorkResultJson(input["normalized_result"]),
   });
 };
 
-const parseMaterialize = (value: unknown): DurableMemoryWorkMaterializeOutcome => {
+const parseMaterialize = (
+  value: unknown,
+  context: AuthorizedLedgerWriteContext,
+): DurableMemoryWorkMaterializeOutcome => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) fail("invalid_dependency_outcome");
   const kindDescriptor = Object.getOwnPropertyDescriptor(value, "kind");
@@ -184,10 +197,13 @@ const parseMaterialize = (value: unknown): DurableMemoryWorkMaterializeOutcome =
   if (input["result_kind"] !== "successful" && input["result_kind"] !== "successful_empty") {
     fail("invalid_dependency_outcome");
   }
+  const authoritativeAppend = input["authoritative_append"] === null
+    ? null
+    : assertAuthoritativeLedgerAppend(context, input["authoritative_append"]);
   return Object.freeze({
     kind,
     result_kind: input["result_kind"],
-    authoritative_append: input["authoritative_append"] as AuthoritativeLedgerAppend | null,
+    authoritative_append: authoritativeAppend,
   });
 };
 
@@ -263,7 +279,14 @@ export const defineDurableMemoryWorkRunner = (
         } catch {
           return recordFailure(context, leasedJob, "dependency_unavailable", producerCalls, 0);
         }
-        const produced = parseProduce(rawProduced);
+        let produced: DurableMemoryWorkProduceOutcome;
+        try {
+          produced = parseProduce(rawProduced);
+        } catch {
+          return recordFailure(
+            context, leasedJob, "model_response_invalid", producerCalls, 0,
+          );
+        }
         if (produced.kind === "failed") {
           return recordFailure(context, leasedJob, produced.error_code, producerCalls, 0);
         }
@@ -319,7 +342,14 @@ export const defineDurableMemoryWorkRunner = (
             context, leasedJob, "dependency_unavailable", producerCalls, materializationAttempts,
           );
         }
-        const materialized = parseMaterialize(rawMaterialized);
+        let materialized: DurableMemoryWorkMaterializeOutcome;
+        try {
+          materialized = parseMaterialize(rawMaterialized, context);
+        } catch {
+          return recordFailure(
+            context, leasedJob, "model_response_invalid", producerCalls, materializationAttempts,
+          );
+        }
         if (materialized.kind === "failed") {
           return recordFailure(
             context, leasedJob, materialized.error_code, producerCalls, materializationAttempts,

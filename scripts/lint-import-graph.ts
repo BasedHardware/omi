@@ -200,6 +200,14 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "cursor codecs must remain one operation. Routes and QA callers import this reader "
       + "instead of assembling a second path with weaker revocation or cursor semantics.",
   },
+  {
+    portType: "ConsolidationWorkService",
+    composedIn: ["apps/service/workers/consolidation-work-service.ts"],
+    reason:
+      "Promotion, identity-cluster, and predicate-batch work must share the durable result, "
+      + "replay, lease, and atomic-success path. Semantic workers inject sealed adapters into "
+      + "this one composition; routes never assemble or invoke the generic runner directly.",
+  },
 ];
 /**
  * Port-composition sites exempted from rule 16. Keyed by (file, 1-indexed
@@ -448,6 +456,11 @@ const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-ev
 const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
 const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
 const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
+const durableWorkRunnerImporters = new Set([
+  "apps/service/workers/durable-memory-work-runner.test.ts",
+  "apps/service/workers/formation-work-service.ts",
+  "apps/service/workers/consolidation-work-service.ts",
+]);
 const queryEvaluationInternalImporters = new Set([
   queryEvaluationCompositionRoot,
   "apps/service/workers/memory-owner-query-evidence-source.ts",
@@ -456,6 +469,8 @@ const queryEvaluationInternalImporters = new Set([
 ]);
 const queryEvaluationLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*memory-(?:owner-query-evidence-source|authorized-query-grounding-producer|paired-query-grounding-coordinator)(?:\.ts)?["']/;
 const sourceImpactLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/source-impact(?:\.ts)?["']/;
+const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/durable-memory-work-runner(?:\.ts)?["']/;
+const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
 const withoutComments = (text: string): string => text
@@ -514,6 +529,19 @@ for (const file of files(root)) {
       failures.push(
         `${shown}: source-impact core is private to ${sourceImpactCompositionRoot}; `
         + "import the registered reader instead of bypassing its final authorization fence",
+      );
+    }
+    if (shown.startsWith("apps/")
+      && !durableWorkRunnerImporters.has(shown)
+      && durableWorkRunnerLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: durable work runner is private to registered work-service compositions; `
+        + "inject a sealed semantic adapter or import the registered work service",
+      );
+    }
+    if (shown.startsWith("apps/service/routes/") && consolidationWorkServiceImport.test(code)) {
+      failures.push(
+        `${shown}: consolidation work is worker-only; routes cannot import its service or adapters`,
       );
     }
   }
