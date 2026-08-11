@@ -234,14 +234,37 @@ extension WKWebView {
     let captureLaunch = FlutterMethodChannel(
       name: "omi/capture-launch", binaryMessenger: registrar.messenger())
     captureLaunch.setMethodCallHandler { call, result in
-      guard call.method == "arguments" else {
-        result(FlutterMethodNotImplemented)
+      if call.method == "arguments" {
+        let prefixes = ["--omi-capture-query=", "--omi-capture-run-id="]
+        result(ProcessInfo.processInfo.arguments.filter { argument in
+          prefixes.contains { argument.hasPrefix($0) }
+        })
         return
       }
-      let prefixes = ["--omi-capture-query=", "--omi-capture-run-id="]
-      result(ProcessInfo.processInfo.arguments.filter { argument in
-        prefixes.contains { argument.hasPrefix($0) }
-      })
+      if call.method == "ready" {
+        guard
+          let payload = call.arguments as? [String: String],
+          Set(payload.keys) == Set(["run_id", "route", "fixture", "state"]),
+          let runId = payload["run_id"],
+          let route = payload["route"],
+          let fixture = payload["fixture"],
+          let state = payload["state"],
+          runId.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$", options: .regularExpression) != nil,
+          route.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
+          fixture.range(of: "^polish:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
+          state.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$", options: .regularExpression) != nil,
+          ProcessInfo.processInfo.arguments.contains("--omi-capture-run-id=\(runId)")
+        else {
+          result(FlutterError(code: "capture-ready-invalid", message: nil, details: nil))
+          return
+        }
+        NSLog(
+          "NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@",
+          runId, route, fixture, state)
+        result(true)
+        return
+      }
+      result(FlutterMethodNotImplemented)
     }
 
     let listenPreflight = FlutterMethodChannel(

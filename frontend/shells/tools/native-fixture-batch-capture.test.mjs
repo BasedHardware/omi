@@ -27,7 +27,7 @@ function coordinate(shell, runId, overrides = {}) {
     schema: "omi.polish.matrix-coordinate/v1", kind: "screenshot", domain, shell, state, theme, width, accessibility,
     run_id: runId, capture_class: "native_fixture", source_tier: "native_shell", source_shas: { core: coreSha, platform: platformSha },
     surface_query: `polish=1&qa=${domain === "memories" ? "memories-platform" : domain}&state=${state}&platform=${platform}&theme=${theme}&width=${width}&accessibility=${accessibility}&locale=en-US`,
-    device: { udid: shell === "ios" ? "ios-udid-1" : "macos-host-1", model: shell === "ios" ? "iPhone 17 Pro" : "MacBookPro", orientation: shell === "ios" && width === "wide" ? "landscape" : shell === "ios" ? "portrait" : "landscape" },
+    device: { udid: shell === "ios" ? "ios-udid-1" : "macos-host-1", model: shell === "ios" ? "iPhone 17 Pro" : "MacBookPro", orientation: shell === "ios" ? "portrait" : "landscape" },
     viewport, ...overrides,
   };
 }
@@ -151,6 +151,7 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   // red-proof: removing status-bar override/clear or the consecutive hash
   // comparison would make simulator time and animation bytes silently drift.
   const source = readFileSync(producer, "utf8");
+  const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
   assert.match(source, /const maxCoordinates = 1236/);
   assert.match(source, /OMI_SURFACE_PORT = "5290"/);
   assert.match(source, /credentials: false/);
@@ -183,6 +184,9 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /found nothing to terminate/);
   assert.match(source, /--omi-capture-run-id=/);
   assert.match(source, /NATIVE_CAPTURE_READY/);
+  assert.match(appDelegate, /name: "omi\/capture-launch"/);
+  assert.match(appDelegate, /capture-ready-invalid/);
+  assert.match(appDelegate, /NATIVE_CAPTURE_READY run_id=%@ route=%@ fixture=%@ state=%@/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
