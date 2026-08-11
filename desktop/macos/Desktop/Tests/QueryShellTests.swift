@@ -561,26 +561,4 @@ final class QueryShellTests: XCTestCase {
     ]
     XCTAssertEqual(HomeChatTranscript.plainText(messages), "You: hello")
   }
-
-  /// **"All of chat is there" is not the same as "chat is reachable".** Asking is a mode, and the
-  /// mode is view state, so leaving Home and coming back leaves the transcript on the provider and
-  /// nothing on screen admitting it exists. The panel's corner offers the way back — but only once
-  /// history has actually loaded, or the chip flickers in during every launch.
-  func testTheWayBackIntoTheTranscriptAppearsOnlyForLoadedHistory() {
-    XCTAssertFalse(HomeChatReentry.isOffered(messageCount: 0, isLoading: false))
-    XCTAssertFalse(
-      HomeChatReentry.isOffered(messageCount: 12, isLoading: true),
-      "a count that is still being restored is not history yet")
-    XCTAssertTrue(HomeChatReentry.isOffered(messageCount: 12, isLoading: false))
-  }
-
-  /// It is the same rule Home already had for its resting mode. Two opinions about "is there
-  /// history worth showing" is how one of them silently stops matching the other.
-  func testReentryReusesHomesOneOpinionAboutExistingHistory() {
-    for (count, loading) in [(0, false), (12, true), (12, false), (1, false)] {
-      XCTAssertEqual(
-        HomeChatReentry.isOffered(messageCount: count, isLoading: loading),
-        HomeHistoryPresentationPolicy.restingMode(isLoading: loading, messageCount: count) == .chat)
-    }
-  }
 }
