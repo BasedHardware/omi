@@ -213,6 +213,7 @@ function runMac(manifest, outputDir) {
   if (!surfacesDist.startsWith(`${coreRoot}${path.sep}`) || !existsSync(path.join(surfacesDist, "index.html"))) throw new Error("OMI_SURFACES_DIST must be an existing core-owned surfaces dist");
   env.OMI_SURFACES_DIST = surfacesDist;
   const scratch = path.join(outputDir, "home");
+  mkdirSync(scratch, { recursive: true });
   env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   // The launcher deliberately accepts only short scratch bundle names. Matrix
   // run IDs contain underscores and coordinate prose, so bind them through a
@@ -300,7 +301,7 @@ function runIos(manifest, outputDir) {
   const testOnly = "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence";
   const resultBundle = path.join(outputDir, "Runner.xcresult");
   const env = allowedEnvironment();
-  const scratch = path.join(outputDir, "home"); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
+  const scratch = path.join(outputDir, "home"); mkdirSync(scratch, { recursive: true }); env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
   mkdirSync(outputDir, { recursive: true });
   const surfacesDist = process.env.SURFACES_DIST || process.env.OMI_SURFACES_DIST;
   const resolvedSurfacesDist = surfacesDist ? path.resolve(surfacesDist) : "";
