@@ -1,6 +1,8 @@
 # Owner-projected query source contract
 
-Status: P5 preregistration, 2026-08-11; implementation and activation absent
+Status: P5 preregistration plus production-neutral source adapter, 2026-08-11;
+concrete PostgreSQL loader, production codec secret, composition, and activation
+absent
 
 ## Purpose
 
@@ -45,8 +47,9 @@ missing evidence/event closure never becomes a partial candidate set.
 
 ## Candidate derivation
 
-1. Consider only evidence spans actually cited by at least one projected live
-   claim. Ignore unreferenced evidence.
+1. Consider only evidence spans actually cited by at least one projected live,
+   canonical, durable claim. Ignore provisional, source-local, and unreferenced
+   evidence; accepted/STM overlays remain a separately gated future source.
 2. Require a nonempty authorized excerpt and exact Evidence -> Event -> Capture
    closure already proven by the projection.
 3. For each evidence span, collect the subject class of every projected claim
@@ -102,3 +105,22 @@ drift.
 - no concrete PostgreSQL loader or production codec secret;
 - no product read or external-application policy widening;
 - no inference that a source-derived class is David-specific truth.
+
+## Landed kernel
+
+`memory-owner-query-evidence-source.ts` implements the injected source adapter.
+It detaches and bounds the graph before inspection, applies the canonical owner
+projection, admits only live canonical durable claim evidence, derives exact
+subject-class unions, encodes reader-scoped opaque trace refs through an
+injected codec, and seals a class-bearing copied input without exposing raw
+graph coordinates. Empty authorized projections are explicit zero-candidate
+inputs; the downstream producer stages a deterministic `query_gap` with zero
+model calls.
+
+The unit remains production-neutral: its loader and codec are injected, and no
+database, secret, worker grant, route, or default is composed. Verification for
+the landed slice passed 16 focused source/producer tests, 44 combined
+source/producer/repository/audit/migration tests with 1,312 expectations, the
+broad 1,281-test platform gate with 9,321 expectations, and the isolated
+18-test epoch suite. Import-graph and diff checks passed. The known occupied
+fixed-port dev-server test remained excluded.

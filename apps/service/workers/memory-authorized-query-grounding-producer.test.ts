@@ -226,6 +226,17 @@ describe("authorized query grounding producer", () => {
     expect(fixture.counts()).toEqual({ sourceCalls: 3, modelCalls: 1, stageCalls: 1 });
   });
 
+  test("an empty authorized projection stages a deterministic query gap without a model call", async () => {
+    const fixture = setup(() => ({ ...validPayload(), candidates: [] }));
+    const outcome = await fixture.producer.run(context(), request);
+    expect(outcome).toMatchObject({
+      kind: "completed", completion: "staged", model_calls: 0,
+      result: { normalized_result: { answer_text: null, absence: "query_gap", assertions: [] } },
+      artifact: { grounded_reference_count: 0, rows: [] },
+    });
+    expect(fixture.counts()).toEqual({ sourceCalls: 2, modelCalls: 0, stageCalls: 1 });
+  });
+
   test("request authority and assignment fail before source/model/store access", async () => {
     const fixture = setup();
     await expect(fixture.producer.run(context("memories.work.execute"), request)).rejects.toThrow("capability_denied");

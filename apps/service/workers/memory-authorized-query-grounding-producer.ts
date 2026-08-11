@@ -7,7 +7,12 @@ import {
   type MemoryStrategyAssignmentEntry,
   type RegisteredMemoryStrategy,
 } from "../../../core/consolidate/strategy-assignment";
-import type { ContentSafeRecallTrace, RecallTraceRef } from "../../../core/retrieve/recall-integrity";
+import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
+import {
+  buildContentSafeRecallTrace,
+  type ContentSafeRecallTrace,
+  type RecallTraceRef,
+} from "../../../core/retrieve/recall-integrity";
 import {
   assertAuthorizedLedgerWriteContext,
   type AuthorizedLedgerWriteContext,
@@ -205,7 +210,7 @@ const parseInput = (copied: Readonly<CopiedMemoryEvaluationInput>): Readonly<Aut
     "projected_content_digest", "classifier_version", "candidates",
   ], "invalid_input");
   if (input["version"] !== INPUT_VERSION) fail("invalid_input");
-  const candidates = exactArray(input["candidates"], 1, MAX_CANDIDATES, "invalid_candidates").map((value) => {
+  const candidates = exactArray(input["candidates"], 0, MAX_CANDIDATES, "invalid_candidates").map((value) => {
     const candidate = exactRecord(value, [
       "trace_ref", "text", "contributing_subject_classes",
     ], "invalid_candidate");
@@ -425,10 +430,50 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
         evaluation_role: request.role,
         repeat_ordinal: request.repeat_ordinal,
       });
-      let produced: AuthorizedQueryModelOutcome;
-      try { produced = parseProduced(await Reflect.apply(produce, undefined, [modelRequest])); }
-      catch { return stop("invalid_result", 1); }
-      if (produced.kind === "failed") return stop("producer_failed", 1, produced.error_code);
+      let modelCalls: 0 | 1;
+      let produced: Exclude<AuthorizedQueryModelOutcome, { kind: "failed" }>;
+      if (input.candidates.length === 0) {
+        modelCalls = 0;
+        produced = Object.freeze({
+          kind: "produced" as const,
+          response_digest: sha256CanonicalContent({
+            contract_version: "authorized-query-empty-result-v1",
+            input_digest: copied.input_digest,
+            strategy_id: request.strategy.strategy_id,
+            execution_contract_digest: request.strategy.execution_contract_digest,
+            evaluation_role: request.role,
+            repeat_ordinal: request.repeat_ordinal,
+          }),
+          answer_text: null,
+          absence: "query_gap" as const,
+          assertions: Object.freeze([]),
+          recall_trace: buildContentSafeRecallTrace({
+            version: "recall-trace-v1",
+            traceRef: `tr1_${sha256CanonicalContent({
+              contract_version: "authorized-query-empty-trace-v1",
+              input_digest: copied.input_digest,
+              strategy_id: request.strategy.strategy_id,
+              repeat_ordinal: request.repeat_ordinal,
+            })}`,
+            strategyVersion: request.strategy.coordinates.strategy_version,
+            projectionFreshness: "fresh",
+            outcome: "no_eligible_candidates",
+            latencyMs: 0,
+            tokenCounts: { input: 0, output: 0 },
+            stages: {
+              eligible: [], selected: [], hydrated: [],
+              policyEligible: [], cited: [], grounded: [],
+            },
+          }),
+        });
+      } else {
+        modelCalls = 1;
+        let rawProduced: AuthorizedQueryModelOutcome;
+        try { rawProduced = parseProduced(await Reflect.apply(produce, undefined, [modelRequest])); }
+        catch { return stop("invalid_result", 1); }
+        if (rawProduced.kind === "failed") return stop("producer_failed", 1, rawProduced.error_code);
+        produced = rawProduced;
+      }
 
       let result: Readonly<MemoryEvaluationResult>;
       let read;
@@ -461,14 +506,14 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
           request_digest: memoryEvaluationStageRequestDigest(context, body),
         });
       } catch {
-        return stop("invalid_result", 1);
+        return stop("invalid_result", modelCalls);
       }
 
       let finalLoad;
       try { finalLoad = await evidenceSource.load(context, request.source_request); }
-      catch { return stop("read_invalidated", 1); }
+      catch { return stop("read_invalidated", modelCalls); }
       if (finalLoad.kind !== "found" || finalLoad.copied_input.input_digest !== copied.input_digest) {
-        return stop("read_invalidated", 1);
+        return stop("read_invalidated", modelCalls);
       }
 
       let artifact: Readonly<FinalizedMemoryReadGroundingArtifact>;
@@ -486,21 +531,21 @@ export const defineMemoryAuthorizedQueryGroundingProducer = (
           })),
         });
       } catch {
-        return stop("invalid_result", 1);
+        return stop("invalid_result", modelCalls);
       }
 
       let staged;
       try { staged = await groundingRepository.stage(context, result, artifact); }
-      catch { return stop("storage_unavailable", 1); }
+      catch { return stop("storage_unavailable", modelCalls); }
       if (staged.kind !== "staged" && staged.kind !== "replayed") {
-        return stop(storageStop(staged.kind), 1);
+        return stop(storageStop(staged.kind), modelCalls);
       }
       return Object.freeze({
         kind: "completed" as const,
         completion: staged.kind,
         result,
         artifact: staged.artifact,
-        model_calls: 1 as const,
+        model_calls: modelCalls,
       });
     },
   });

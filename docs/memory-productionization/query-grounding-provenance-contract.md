@@ -1,8 +1,8 @@
 # Finalized query grounding and provenance contract
 
-Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, and
-sealed repository boundary, 2026-08-11; no authorized producer, concrete
-PostgreSQL adapter, route, grant, or runtime activation landed
+Status: P5 contract, legacy compatibility gate, inert PostgreSQL schema, sealed
+repository, and production-neutral producer/source kernels, 2026-08-11; no
+concrete PostgreSQL adapter, route, grant, or runtime activation landed
 
 ## Purpose
 
@@ -201,6 +201,12 @@ Landed sub-units:
   source revalidation, and atomic repository stage. Its source remains
   hermetic/injected; no real graph adapter, paired scheduler, route, or grant is
   present.
+- `memory-owner-query-evidence-source.ts` supplies the injected owner-projected
+  source kernel: canonical liveness/policy projection, exact evidence-to-class
+  derivation, reader-scoped opaque trace encoding, strict budgets, and sealed
+  copied input. Empty projections become deterministic zero-model-call query
+  gaps. The concrete PostgreSQL loader, codec secret, and service composition
+  remain absent.
 
 ## Pre-registered acceptance tests
 

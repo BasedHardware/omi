@@ -1,8 +1,8 @@
 # Authorized query-grounding producer contract
 
-Status: P5 preregistration plus production-neutral producer kernel, 2026-08-11;
-concrete source/PostgreSQL adapters, pairing, service composition, and
-activation absent
+Status: P5 preregistration plus production-neutral producer and injected
+owner-source kernels, 2026-08-11; concrete PostgreSQL adapters, pairing,
+service composition, and activation absent
 
 ## Purpose
 
@@ -63,13 +63,16 @@ part of this unit.
 1. Validate the sealed worker context, assignment bundle, selected
    baseline/candidate assignment, run/repeat coordinates, and an
    `authorized_graph_snapshot` source request before any dependency call.
-2. Load and seal the first copied input. Reject missing, malformed, empty,
-   duplicate, unsorted, cross-coordinate, or non-opaque candidate data.
+2. Load and seal the first copied input. Reject missing, malformed, duplicate,
+   unsorted, cross-coordinate, or non-opaque candidate data. An exact empty
+   candidate set is retained as an explicit authorized query gap.
 3. Compute the exact evaluation coordinate. Ask the isolated result repository
    first. If the result exists, load its finalized grounding artifact and
    return exact replay with zero model calls. A result without its artifact is
    an incomplete-persistence failure and never triggers regeneration.
-4. Give the producer callback only query text, opaque trace refs, authorized
+4. When the candidate set is empty, build the deterministic qualified
+   `query_gap` result and non-grounded trace locally with zero model calls. For
+   a nonempty set, give the producer callback only query text, opaque trace refs, authorized
    cited text, selected registered strategy, role, and repeat. Do not expose
    subject classes or projection authorization coordinates to model behavior.
 5. Accept only a closed produced/failed envelope. Build the read result through
@@ -110,11 +113,11 @@ candidate set, revalidates after the model and before stage, revalidates stored
 replay before release, and never regenerates a result whose grounding is
 missing. It contains dependency/model/storage failures behind closed outcomes.
 
-This is not a source-authority implementation. Hermetic tests construct the
-copied input through the existing sealed evidence-source facade. The future
-adapter still owes the owner-visible graph projection and exact class
-derivation described above. Its contract is frozen separately in
-`owner-query-source-contract.md`.
+`memory-owner-query-evidence-source.ts` now supplies the injected source
+authority kernel described above. It performs the owner-visible projection and
+exact class derivation, but still owns no concrete PostgreSQL load, codec
+secret, grant, or service composition. Its contract and landed verification are
+recorded separately in `owner-query-source-contract.md`.
 
 Verification for the landed unit: 7 focused producer tests and 35 combined
 producer/repository/audit/migration tests passed; the broad platform gate passed
