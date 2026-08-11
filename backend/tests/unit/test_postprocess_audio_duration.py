@@ -25,7 +25,7 @@ def test_postprocess_conversation_cancels_audio_shorter_than_transcript_window()
         id='conversation-1',
         discarded=False,
         postprocessing=SimpleNamespace(status=PostProcessingStatus.not_started),
-        transcript_segments=[SimpleNamespace(start=0.0, end=15.0)],
+        transcript_segments=[SimpleNamespace(start=0.0, end=25.0)],
     )
     status = MagicMock()
 
@@ -35,7 +35,7 @@ def test_postprocess_conversation_cancels_audio_shorter_than_transcript_window()
         patch.object(
             postprocess_module.AudioSegment,
             'from_wav',
-            return_value=SimpleNamespace(duration_seconds=9.0),
+            return_value=SimpleNamespace(duration_seconds=14.0),
         ),
         patch.object(postprocess_module.conversations_db, 'set_postprocessing_status', status),
     ):
@@ -52,7 +52,7 @@ def test_postprocess_conversation_marks_allowed_audio_in_progress_before_process
         id='conversation-1',
         discarded=False,
         postprocessing=SimpleNamespace(status=PostProcessingStatus.not_started),
-        transcript_segments=[SimpleNamespace(start=0.0, end=15.0, text='hello', speaker='speaker-1')],
+        transcript_segments=[SimpleNamespace(start=0.0, end=25.0, text='hello', speaker='speaker-1')],
     )
     status = MagicMock()
 
@@ -62,7 +62,7 @@ def test_postprocess_conversation_marks_allowed_audio_in_progress_before_process
         patch.object(
             postprocess_module.AudioSegment,
             'from_wav',
-            return_value=SimpleNamespace(duration_seconds=10.0, frame_rate=16000),
+            return_value=SimpleNamespace(duration_seconds=15.0, frame_rate=16000),
         ),
         patch.object(postprocess_module, 'vad_is_empty', return_value=[]),
         patch.object(postprocess_module, 'upload_postprocessing_audio', side_effect=RuntimeError('stop')),
