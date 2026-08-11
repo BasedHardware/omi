@@ -25,7 +25,7 @@ const boot = (state: LifecycleState) => {
     devSecretLabel: `account-lifecycle-${state}`,
     stores: base,
   });
-  return { service, authorization: `Bearer ${service.devToken}` };
+  return { service, stores: base, authorization: `Bearer ${service.devToken}` };
 };
 
 const appFacingRequests = (authorization: string): ReadonlyArray<{
@@ -112,6 +112,16 @@ const appFacingRequests = (authorization: string): ReadonlyArray<{
 };
 
 describe("account lifecycle is part of authentication", () => {
+  test("local QA composition explicitly seeds only its configured owner and reseeds it", () => {
+    const seeded = boot("active");
+    expect(seeded.stores.accountLifecycle.readLifecycle(ACCOUNT_ID)).toBe("active");
+    seeded.stores.accountLifecycle.setLifecycle("unrelated-account", "deleted");
+
+    seeded.service.reseed();
+    expect(seeded.stores.accountLifecycle.readLifecycle(ACCOUNT_ID)).toBe("active");
+    expect(seeded.stores.accountLifecycle.readLifecycle("unrelated-account")).toBeNull();
+  });
+
   for (const state of ["deletion_pending", "deleted"] as const) {
     test(`a valid token for an account that is ${state} gets 401 on every authenticated route`, async () => {
       const { service, authorization } = boot(state);
@@ -124,4 +134,36 @@ describe("account lifecycle is part of authentication", () => {
       expect(observed).toEqual(observed.map(({ name }) => ({ name, status: 401 })));
     });
   }
+
+  test("missing lifecycle state is byte-indistinguishable from deleted and reaches no route", async () => {
+    const missing = boot("active");
+    missing.stores.accountLifecycle.reset();
+    const deleted = boot("deleted");
+
+    const observe = async (candidate: ReturnType<typeof boot>) => {
+      const responses: Array<{
+        readonly name: string;
+        readonly status: number;
+        readonly body: string;
+      }> = [];
+      for (const request of appFacingRequests(candidate.authorization)) {
+        const response = await candidate.service.app.request(request.path, request.init);
+        responses.push({
+          name: request.name,
+          status: response.status,
+          body: await response.text(),
+        });
+      }
+      return responses;
+    };
+
+    const missingResponses = await observe(missing);
+    const deletedResponses = await observe(deleted);
+    expect(missingResponses).toEqual(deletedResponses);
+    expect(missingResponses.every((response) => response.status === 401)).toBe(true);
+    expect(JSON.stringify(missingResponses)).not.toContain(ACCOUNT_ID);
+    expect(JSON.stringify(missingResponses)).not.toContain("lifecycle");
+    expect(missing.stores.folders.listFolders(ACCOUNT_ID)).toEqual([]);
+    expect(missing.stores.tasks.listRecords(ACCOUNT_ID)).toEqual([]);
+  });
 });

@@ -52,6 +52,7 @@ const boot = (options: {
     limitReached: false,
     upgradeAvailable: options.limit !== null,
   });
+  stores.accountLifecycle.setLifecycle(ACCOUNT, "active");
   const service = createLocalService({
     db: new Database(":memory:"),
     ownerAccountId: ACCOUNT,
@@ -229,6 +230,7 @@ describe("GET /v4/listen WebSocket", () => {
       limitReached: false,
       upgradeAvailable: true,
     });
+    baseStores.accountLifecycle.setLifecycle(ACCOUNT, "active");
     let injectCrash = true;
     const stores = Object.freeze({
       ...baseStores,

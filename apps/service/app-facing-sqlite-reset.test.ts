@@ -167,7 +167,8 @@ test("explicit QA reset restores every externally supplied SQLite store family",
   });
   expect(stores.currentSession.authenticate(OTHER_TOKEN, () => ({ uid: OTHER_OWNER })))
     .toEqual({ uid: OTHER_OWNER });
-  expect(stores.accountLifecycle.readLifecycle(OTHER_OWNER)).toBe("active");
+  expect(stores.accountLifecycle.readLifecycle(OWNER)).toBe("active");
+  expect(stores.accountLifecycle.readLifecycle(OTHER_OWNER)).toBeNull();
   expect(stores.listen.readSession(OWNER, "listen-reset-session")).toBeNull();
   expect(stores.chatMessages.readMessage(OWNER, "reset-chat")).toBeNull();
   expect(stores.chatEvents.listUnterminated()).toEqual([]);

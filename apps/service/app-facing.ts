@@ -396,8 +396,14 @@ export type LocalDevServiceOptions = Omit<
   readonly generationContext?: ChatGenerationContextSource;
 };
 
-export const createLocalDevService = (options: LocalDevServiceOptions): LocalService =>
-  createLocalService({
+export const createLocalDevService = (options: LocalDevServiceOptions): LocalService => {
+  // An injected local/QA store set owns its fixtures, so seed only a missing
+  // configured owner. Explicit deletion states survive composition unchanged.
+  if (options.stores !== undefined
+    && options.stores.accountLifecycle.readLifecycle(options.ownerAccountId) === null) {
+    options.stores.accountLifecycle.setLifecycle(options.ownerAccountId, "active");
+  }
+  return createLocalService({
     ...options,
     transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource(),
     conversationProcessorFactory: options.conversationProcessorFactory
@@ -405,6 +411,7 @@ export const createLocalDevService = (options: LocalDevServiceOptions): LocalSer
     generationSource: options.generationSource ?? createScriptedChatGenerationSource(),
     generationContext: options.generationContext ?? createEmptyChatGenerationContextSource(),
   });
+};
 
 type HttpEvidenceDomain = Exclude<QaEvidenceDomain, "listen">;
 
@@ -473,6 +480,9 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   };
 
   const seedServiceStores = (): void => {
+    // Local/QA composition admits the configured owner by writing an explicit
+    // lifecycle row. Absence is never interpreted as active by the auth port.
+    stores.accountLifecycle.setLifecycle(options.ownerAccountId, "active");
     for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
     const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
     if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");

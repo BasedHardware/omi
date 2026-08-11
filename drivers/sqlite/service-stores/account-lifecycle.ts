@@ -7,7 +7,7 @@ import {
 } from "../../../apps/service/auth/account-lifecycle";
 import { configureServiceStoreConnection } from "./connection";
 
-/** SQLite account-lifecycle adapter. A missing source row means active. */
+/** SQLite QA adapter. Missing source state stays missing and fails closed. */
 export class SqliteAccountLifecycleStore implements AccountLifecycleStore {
   constructor(private readonly db: Database) {
     configureServiceStoreConnection(db);
@@ -20,13 +20,13 @@ export class SqliteAccountLifecycleStore implements AccountLifecycleStore {
     `);
   }
 
-  readLifecycle(accountId: string): AccountLifecycleState {
+  readLifecycle(accountId: string): AccountLifecycleState | null {
     const row = this.db.query(`
       SELECT lifecycle_state
       FROM service_account_lifecycle
       WHERE account_id = ?
     `).get(accountId) as { readonly lifecycle_state: AccountLifecycleState } | null;
-    return row === null ? "active" : assertAccountLifecycleState(row.lifecycle_state);
+    return row === null ? null : assertAccountLifecycleState(row.lifecycle_state);
   }
 
   setLifecycle(accountId: string, state: AccountLifecycleState): void {

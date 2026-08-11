@@ -2,8 +2,8 @@ import type { AccountLifecycleState } from "../../../core/control/account-contro
 
 /** Authentication-facing account existence/lifecycle source. */
 export interface AccountLifecyclePort {
-  /** Missing state defaults to active until a production source is composed. */
-  readLifecycle(accountId: string): AccountLifecycleState;
+  /** Missing or unavailable source state is not authority to admit an account. */
+  readLifecycle(accountId: string): AccountLifecycleState | null;
 }
 
 /** Writable adapter seam for source ingestion and hermetic tests. */
@@ -28,12 +28,12 @@ export const assertAccountLifecycleState = (
   return state as AccountLifecycleState;
 };
 
-/** In-memory adapter. Accounts without a source row exist and are active. */
+/** In-memory local/QA adapter. The composition must seed every admitted account. */
 export const createInMemoryAccountLifecycleStore = (): AccountLifecycleStore => {
   const states = new Map<string, AccountLifecycleState>();
   return Object.freeze({
-    readLifecycle(accountId: string): AccountLifecycleState {
-      return states.get(accountId) ?? "active";
+    readLifecycle(accountId: string): AccountLifecycleState | null {
+      return states.get(accountId) ?? null;
     },
 
     setLifecycle(accountId: string, state: AccountLifecycleState): void {
