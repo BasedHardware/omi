@@ -378,9 +378,14 @@ if (query.get("lab") === "1") {
             stores.openMemories(),
             stores.openConversations(),
           ]);
-          await Promise.allSettled([memories.refresh(), conversations.refresh()]);
+          const homeRefreshes = await Promise.allSettled([memories.refresh(), conversations.refresh()]);
+          const homeInitialLastSuccessAt = homeRefreshes.every((result) => result.status === "fulfilled")
+            && memories.status().refresh.phase === "ready"
+            && conversations.status().refresh.phase === "ready"
+              ? env.now()
+              : null;
           markRendered("home", "legacy");
-          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
+          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "tasks") {
           const store = await stores.openTasks();
           markRendered("tasks", null);

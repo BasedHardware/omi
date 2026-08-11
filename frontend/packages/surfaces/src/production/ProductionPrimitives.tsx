@@ -154,7 +154,7 @@ export function ProductionLifecycleRegion({
     : null;
   const lifecycleSummary = [
     noticeKey ? t(locale, noticeKey) : null,
-    phase === "ready" && hasSavedData && lastSuccessAgeMs != null
+    (phase === "ready" || phase === "saved-but-refresh-failed") && hasSavedData && lastSuccessAgeMs != null
       ? t(locale, "lifecycle.lastSuccess", { age: ageLabel(locale, lastSuccessAgeMs) })
       : null,
     phase === "saved-but-refresh-failed" && hasSavedData ? t(locale, "lifecycle.savedData") : null,
@@ -172,7 +172,7 @@ export function ProductionLifecycleRegion({
     >
       {lifecycleSummary && <p className="production-lifecycle-summary visually-hidden" role="status" aria-live="polite" aria-atomic={atomicLiveRegion}>{lifecycleSummary}</p>}
       {noticeKey && <p className={`status-notice ${phase}`}>{t(locale, noticeKey)}</p>}
-      {phase === "ready" && hasSavedData && lastSuccessAgeMs != null && (
+      {(phase === "ready" || phase === "saved-but-refresh-failed") && hasSavedData && lastSuccessAgeMs != null && (
         <p className="lifecycle-last-success">
           {t(locale, "lifecycle.lastSuccess", { age: ageLabel(locale, lastSuccessAgeMs) })}
         </p>

@@ -67,16 +67,19 @@ function readCombinedStatus(sources: HomeSearchSources): RefreshStatus {
   );
 }
 
-export function HomeProduction({ sources, source, locale = "en", onReady }: {
+export function HomeProduction({ sources, source, locale = "en", onReady, initialLastSuccessAt = null, now }: {
   sources: HomeSearchSources;
   source?: SurfaceDataSource;
   locale?: Locale;
   onReady?: () => void;
+  initialLastSuccessAt?: number | null;
+  now?: () => number;
 }): React.JSX.Element {
   const [rows, setRows] = useState<HomeRows>(EMPTY_ROWS);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
   const [refresh, setRefresh] = useState<RefreshStatus>(() => readCombinedStatus(sources));
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(initialLastSuccessAt);
   const searchRef = useRef<HTMLInputElement>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
@@ -138,7 +141,13 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
       conversationSource.refresh?.(),
     ]);
     await reload();
+    if (readCombinedStatus(sources).phase === "ready" && now) setLastSuccessAt(now());
   };
+  const failedWithSavedData = presentation.phase === "saved-but-refresh-failed";
+  const refreshFailed = failedWithSavedData || presentation.phase === "unavailable";
+  const lastSuccessAgeMs = failedWithSavedData && lastSuccessAt !== null && now
+    ? Math.max(0, now() - lastSuccessAt)
+    : null;
 
   return (
     <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
@@ -176,8 +185,9 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
             phase={refresh.phase}
             hasSavedData={refresh.hasSavedData}
             locale={locale}
-            nextAction={presentation.phase === "unavailable" && canRetry ? t(locale, "common.retry") : null}
-            retry={presentation.phase === "unavailable" && canRetry ? { onRetry: retry } : null}
+            lastSuccessAgeMs={lastSuccessAgeMs}
+            nextAction={refreshFailed && canRetry ? t(locale, "common.retry") : null}
+            retry={refreshFailed && canRetry ? { onRetry: retry } : null}
           />
           <ProductionLiveAnnouncement message={t(locale, filtering ? "home.matchCount" : "home.loadedCount", { count: formatNumber(results.length, locale) })} />
           <header className="home-results-header">
@@ -193,7 +203,7 @@ export function HomeProduction({ sources, source, locale = "en", onReady }: {
             <div className="home-result-spine">
               {results.map((row) => {
                 const date = formatDate(row.timestamp, locale, { dateStyle: "medium" });
-                if (row.kind === "memory") return <article className="home-result-row" key={`memory:${row.value.id}`}>
+                if (row.kind === "memory") return <article className="home-result-row" data-actionable="false" key={`memory:${row.value.id}`}>
                   <span className="home-result-icon is-memory"><ProductionIcon name="library" size={18} /></span>
                   <div className="home-result-copy"><p>{presentMemoryContent(row.value.content).body}</p><small>{[t(locale, "nav.memories"), date].join(" · ")}</small></div>
                 </article>;

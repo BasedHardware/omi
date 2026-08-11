@@ -15,7 +15,8 @@
 .home-result-count { flex: none; color: var(--content-secondary); font-family: var(--type-label-family); font-size: var(--type-label-size); font-variant-numeric: tabular-nums; }
 .home-result-spine { display: grid; gap: var(--space-xs); }
 .home-result-row { display: grid; grid-template-columns: var(--min-tap-target) minmax(0,1fr); gap: var(--space-md); align-items: center; min-height: calc(var(--min-tap-target) + var(--space-md)); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); color: var(--content-primary); text-decoration: none; }
-.home-result-row:hover, .home-result-row:focus-visible { background: var(--surface-elevated); }
+a.home-result-row:hover, a.home-result-row:focus-visible { background: var(--surface-elevated); }
+.home-result-row[data-actionable="false"] { cursor: default; }
 .home-result-row p, .home-result-row small { margin: 0; }
 .home-result-row p { overflow: hidden; line-height: var(--type-row-line); text-overflow: ellipsis; white-space: nowrap; }
 .home-result-row small { display: block; overflow: hidden; margin-top: var(--space-xs); color: var(--content-tertiary); font-size: var(--type-label-size); text-overflow: ellipsis; white-space: nowrap; }
