@@ -171,5 +171,21 @@ describe("versioned agent run events", () => {
       "nested.file_id",
       "nested.safeSummary",
     ]);
+    expect(scanAgentRunRedactions({
+      safeSummary: "api.key=secret attachment.id=opaque-a opaque.id=opaque-b reference.id=opaque-c",
+      opaque_id: "opaque-d",
+      reference_id: "opaque-e",
+      opaqueReference: "opaque-f",
+    })).toEqual([
+      "safeSummary",
+      "opaque_id",
+      "reference_id",
+      "opaqueReference",
+    ]);
+    expect(projectAgentRunTimeline(first.events.slice(1))).toBeNull();
+    expect(projectAgentRunTimeline([
+      first.events[0]!,
+      { ...first.events[1]!, eventId: first.events[0]!.eventId, sequence: 2 },
+    ])).toBeNull();
   });
 });

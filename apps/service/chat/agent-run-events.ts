@@ -631,12 +631,13 @@ export interface AgentRunVisibleTimeline {
 
 const REDACTED_KEYS = new Set([
   "prompt", "rawprompt", "args", "arguments", "rawarguments", "attachment", "attachments",
-  "attachmentid", "attachmentids", "fileid", "fileids", "credential", "credentials", "accesstoken", "password",
+  "attachmentid", "attachmentids", "fileid", "fileids", "opaqueid", "opaquereference", "referenceid", "reference",
+  "credential", "credentials", "accesstoken", "password",
   "secret", "token", "apikey", "authorization", "auth", "reasoning", "chainofthought", "hiddenreasoning",
 ]);
 const REDACTED_STRING = /(?:Bearer\s+|sk-[A-Za-z0-9]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
-const REDACTED_VALUE_STRING = /(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]\s*\S+/iu;
-const REDACTED_ATTACHMENT_STRING = /(?:attachment(?:[_ -]?id)?|file[_ -]?id|opaque(?:[_ -]?id)?|reference(?:[_ -]?id)?)\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
+const REDACTED_VALUE_STRING = /(?:api[_. -]?key|authorization|access[_. -]?token|token|secret|password)\s*[:=]\s*\S+/iu;
+const REDACTED_ATTACHMENT_STRING = /(?:attachment|file|opaque|reference)(?:[_. -]?id)?\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
 const normalizedRedactionKey = (key: string): string => key.replace(/[^A-Za-z0-9]/gu, "").toLowerCase();
 
 /** Returns scanner findings rather than exposing sensitive values. */
@@ -705,14 +706,19 @@ export const projectAgentRunTimeline = (
   input: readonly unknown[],
 ): AgentRunVisibleTimeline | null => {
   const parsed: AgentRunEvent[] = [];
+  const eventIds = new Set<string>();
   for (const raw of input) {
     const result = parseAgentRunEvent(raw);
     if (!result.ok) return null;
+    if (eventIds.has(result.event.eventId)) return null;
+    eventIds.add(result.event.eventId);
     parsed.push(result.event);
   }
   if (parsed.length === 0) return null;
   const runId = parsed[0]!.runId;
-  if (parsed.some((event, index) => event.runId !== runId || event.sequence !== index + 1)) return null;
+  if (parsed[0]!.kind !== "run_accepted"
+    || parsed.some((event, index) => event.runId !== runId || event.sequence !== index + 1
+      || (index > 0 && event.kind === "run_accepted"))) return null;
   let terminalSeen = false;
   for (const [index, event] of parsed.entries()) {
     if (terminalSeen) return null;
