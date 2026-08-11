@@ -22,8 +22,8 @@ import {
 } from "../chat/generation-supervisor";
 import {
   createEmptyChatGenerationContextSource,
-  unavailableChatGenerationMemoryContext,
-  type ChatGenerationMemoryContext,
+  createDeterministicChatGenerationContextSource,
+  type ChatGenerationContextPacket,
   type ChatGenerationContextSource,
 } from "../chat/generation-context";
 import {
@@ -62,6 +62,7 @@ const boot = (
     { delayMs: 3, text: "answer." },
   ]),
   devSecretLabel = "chat-generation-proof",
+  generationContext: ChatGenerationContextSource = createEmptyChatGenerationContextSource(),
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -72,6 +73,7 @@ const boot = (
     accountTimezone: "UTC",
     devSecretLabel,
     generationSource,
+    generationContext,
   });
   return { db, local, stores };
 };
@@ -375,6 +377,54 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("provider receives a structured context packet while SSE/history remain canonical", async () => {
+    let received: ChatGenerationContextPacket | null = null;
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        received = input.context;
+        queueMicrotask(() => {
+          input.onDelta("context-backed answer");
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const context = createDeterministicChatGenerationContextSource({
+      candidates: [{
+        sourceKind: "memory",
+        sourceId: "memory:first",
+        claimId: "claim:first",
+        evidenceId: "evidence:first",
+        ownerAccountId: ACCOUNT,
+        sourceHash: `sha256:${"c".repeat(64)}`,
+        capturedAt: 1,
+        expiresAt: null,
+        redactedPreview: "safe context evidence",
+        tokenEstimate: 3,
+        inclusionReason: "retrieve_harness_evidence",
+        policyDecision: "included",
+        priority: 1,
+        conflictKey: null,
+      }],
+    });
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source, "chat-context-packet-proof", context);
+    const { admission, eventsResponse } = await admitAndOpen(local, create("structured-context"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event))).toHaveLength(1);
+    expect(frames.at(-1)?.data.kind).toBe("done");
+    expect(received).not.toBeNull();
+    expect(received).toMatchObject({
+      ownerAccountId: ACCOUNT,
+      generationId: admission.generation.id,
+      schemaVersion: "v1",
+      traceVersion: "v1",
+    });
+    expect(received?.items.map((item) => item.evidenceId)).toEqual(["evidence:first"]);
+    const rows = await history(local);
+    expect(rows.filter((row) => row.sender === "ai").map((row) => row.text)).toEqual(["context-backed answer"]);
+    db.close();
+  });
+
   test("GET projects internal accepted records out of every generation stream", async () => {
     const hanging: ChatGenerationSource = Object.freeze({
       start() {
@@ -503,9 +553,9 @@ describe("ratified chat generation wire red proofs", () => {
   });
 
   test("cancellation before context or provider start retains no assistant content", async () => {
-    let releaseContext: ((value: ChatGenerationMemoryContext) => void) | null = null;
+    let releaseContext: ((value: readonly string[]) => void) | null = null;
     const context: ChatGenerationContextSource = Object.freeze({
-      load: (): Promise<ChatGenerationMemoryContext> => new Promise((resolve) => {
+      load: (): Promise<readonly string[]> => new Promise((resolve) => {
         releaseContext = resolve;
       }),
     });
@@ -536,7 +586,7 @@ describe("ratified chat generation wire red proofs", () => {
     );
     expect(cancelled.status).toBe(202);
     if (releaseContext === null) throw new TypeError("generation context did not start loading");
-    releaseContext(unavailableChatGenerationMemoryContext());
+    releaseContext(Object.freeze([]));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const response = await generationEvents(local, admission.generation.id);
@@ -559,7 +609,10 @@ describe("ratified chat generation wire red proofs", () => {
     const context: ChatGenerationContextSource = Object.freeze({
       async load(input) {
         observedCredential = input.bearerToken;
-        throw new Error("raw memory provider secret");
+        // Memory-read unavailability is represented by the context source
+        // (later: MemoryRouteReadPort composition). A generic throw still
+        // fails Chat as generation_context_failed; this source fail-opens.
+        return Object.freeze([]);
       },
     });
     let sourceContext: unknown = null;
@@ -589,9 +642,11 @@ describe("ratified chat generation wire red proofs", () => {
     expect(await waitForTerminalLifecycle(stores.chatEvents, admitted.generation.id, 100))
       .toBe("terminal");
     expect(observedCredential).toBe(local.devToken);
-    expect(sourceContext).toEqual({
-      version: "chat-generation-memory-context-v1",
-      state: "unavailable",
+    expect(sourceContext).toMatchObject({
+      ownerAccountId: ACCOUNT,
+      generationId: admitted.generation.id,
+      schemaVersion: "v1",
+      items: [],
     });
     expect(JSON.stringify(sourceContext)).not.toContain(local.devToken);
     expect((await history(local)).at(-1)?.text).toBe("Useful without memory.");

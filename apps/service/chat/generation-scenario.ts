@@ -1,7 +1,6 @@
 import { createInMemoryLocalServiceStores } from "../app-facing";
 import type { ChatAttachmentContentPort } from "./attachment-content";
 import {
-  unavailableChatGenerationMemoryContext,
   type ChatGenerationContextSource,
 } from "./generation-context";
 import {
@@ -139,8 +138,7 @@ const contextFor = (
 ): ChatGenerationContextSource => Object.freeze({
   async load() {
     if (scenario.contextError === true) throw new Error("scenario context fault");
-    void scenario.context;
-    return unavailableChatGenerationMemoryContext();
+    return Object.freeze([...(scenario.context ?? [])]);
   },
 });
 

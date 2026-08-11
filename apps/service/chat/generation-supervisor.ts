@@ -8,9 +8,9 @@
 import { createHash } from "node:crypto";
 
 import {
-  snapshotChatGenerationMemoryContext,
+  normalizeChatGenerationContext,
+  type ChatGenerationContextPacket,
   type ChatGenerationContextSource,
-  type ChatGenerationMemoryContext,
 } from "./generation-context";
 import type {
   ChatAttachmentContentPort,
@@ -341,20 +341,29 @@ export const createChatGenerationSupervisor = (
         throw error;
       }
       void (async (): Promise<void> => {
-        // Credential is passed only into this load and is never retained in
-        // active or durable generation state. Hostile or undeclarable memory
-        // envelopes fail the generation as a typed context fault; authorized
-        // memory-read unavailability is represented by the context source
-        // itself, not by swallowing the error here.
-        let context: ChatGenerationMemoryContext;
+        let context: ChatGenerationContextPacket;
         try {
-          const loaded = snapshotChatGenerationMemoryContext(await deps.context.load({
+          const nowEpochMilliseconds = deps.nowEpochMilliseconds();
+          const snapshotSequence = deps.messages.readSnapshotSequence(input.accountId);
+          const historyPage = deps.messages.listHistory(input.accountId, {
+            limit: 16,
+            snapshotSequence,
+            olderThan: null,
+          });
+          const history = historyPage.messages.filter((message) => message.id !== input.stored.message.id);
+          const loaded = await deps.context.load({
             accountId: input.accountId,
+            generationId,
             admitted: input.stored,
+            nowEpochMilliseconds,
+            history,
             bearerToken: input.bearerToken,
-          }));
-          if (loaded === null) throw new TypeError("untrusted generation context");
-          context = loaded;
+          });
+          context = normalizeChatGenerationContext(loaded, {
+            accountId: input.accountId,
+            generationId,
+            nowEpochMilliseconds,
+          });
         } catch (error) {
           void finalize(state, "failed", "", classifyFailure(error, "context"));
           return;
