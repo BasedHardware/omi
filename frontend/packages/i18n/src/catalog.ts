@@ -198,6 +198,8 @@ export const EN_MESSAGES = {
   "nav.screenCapture": "Screen capture",
   "nav.settings": "Settings",
   "nav.tasks": "Tasks",
+  "nav.primary": "Primary navigation",
+  "nav.mobile": "Mobile navigation",
   "home.title": "Find anything",
   "home.subtitle": "Search your saved memories, conversations, and tasks",
   "home.searchPlaceholder": "Search saved Omi data",

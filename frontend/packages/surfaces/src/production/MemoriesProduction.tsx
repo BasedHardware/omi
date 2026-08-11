@@ -9,9 +9,11 @@ import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimit
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
+import { createProductionCommandRegistry, dispatchProductionCommand } from "./command-registry.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
+const commandRegistry = createProductionCommandRegistry();
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
   const key = refreshPhaseNoticeKey(status.refresh.phase);
@@ -60,8 +62,11 @@ function MemoryCard({ memory, store, locale, run }: {
         </>
       ) : editing ? (
         <textarea className="memory-editor" value={draft} aria-label={t(locale, "memories.edit")} autoFocus onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-          if (event.key === "Escape") cancelEdit();
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void save();
+          dispatchProductionCommand(event.nativeEvent, commandRegistry, {
+            activeRoute: "memories",
+            navigate: () => undefined,
+            handlers: { "save-memory": () => void save(), "cancel-memory": cancelEdit },
+          });
         }} />
       ) : (
         <p className="memory-content">{visibleText}</p>

@@ -318,7 +318,9 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-chat-admission-count={admittedUserMessages} data-consumer-semantic={`chat:messages:${messages.length}:admitted:${admittedUserMessages}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
-      <ProductionChrome locale={locale} active="chat" placement="top" />
+      <ProductionChrome locale={locale} active="chat" placement="top" commandHandlers={{
+        "send-chat": send,
+      }} commandEnabled={{ "send-chat": canSend }} />
       <section className="desktop-page-panel">
         <header className="production-header chat-header">
           <div>
@@ -477,12 +479,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
               placeholder={t(locale, "chat.composerPlaceholder")}
               aria-label={t(locale, "chat.composerLabel")}
               onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
             />
             <button type="submit" className="chat-send" disabled={!canSend} aria-label={t(locale, "chat.send")}>
               {t(locale, "chat.send")}

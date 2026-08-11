@@ -114,16 +114,6 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
     };
   }, [conversationSource, memorySource, reload]);
 
-  useEffect(() => {
-    const focusSearch = (event: KeyboardEvent): void => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "k") return;
-      event.preventDefault();
-      searchRef.current?.focus();
-    };
-    window.addEventListener("keydown", focusSearch);
-    return () => window.removeEventListener("keydown", focusSearch);
-  }, []);
-
   const needle = normalize(query, locale);
   const spine = useMemo<HomeSpineRow[]>(() => [
     ...rows.memories.map((value): HomeSpineRow => ({ kind: "memory", timestamp: value.updatedAt, value })),
@@ -139,7 +129,9 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
 
   return (
     <main className="production-shell home-production-shell" data-production-shell="true" data-route="home" data-surface-state={presentation.phase}>
-      <ProductionChrome locale={locale} active="home" placement="top" />
+      <ProductionChrome locale={locale} active="home" placement="top" commandHandlers={{
+        "focus-home-search": () => searchRef.current?.focus(),
+      }} />
       <div className="home-workspace">
         <section className="home-search-hero" aria-labelledby="home-title">
           <h1 className="visually-hidden" id="home-title">{t(locale, "home.title")}</h1>
