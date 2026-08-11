@@ -229,23 +229,10 @@ do not hand-edit those paths to match a specific machine.
 - `users/{uid}/fcm_tokens` - Token ID prefix = platform (ios_, android_, macos_)
 - `users/{uid}/memories` - Extracted memories
 
-### Platform Detection
-- **FCM tokens**: Document ID prefix (e.g., `macos_abc123`)
-- **Conversations**: `source` field
-- **Action items**: No platform tracking
-
 ### Known Limitations
 - Firestore has no collection group indexes for `source` field
 - Counting users by platform requires iterating all users (slow)
 - Apple Sign-In: Only one Services ID per Firebase project
-
-## API Endpoints
-- Production: `https://api.omi.me`
-- Local: `http://localhost:8080`
-
-## Credentials
-Connection details come from your local agent configuration; they are deliberately not
-checked in. Ask the user for anything you are missing rather than guessing an endpoint.
 
 ## Development Workflow
 

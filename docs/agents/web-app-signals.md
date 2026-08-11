@@ -49,7 +49,6 @@ exposes only `.`, so the usable half cannot be deep-imported.
 instead; they are the same shape as the upstream ones and are about fifteen
 lines.
 
-Moonshine publishes raw TypeScript rather than compiled output, so it is listed
-in `transpilePackages` in `web/app/next.config.js`. It is ISC licensed,
-carries no telemetry, and its kernel entry point has no runtime imports of its
-own.
+Moonshine publishes raw TypeScript and the compiler/deploy configuration lives
+in `web/app/moonshine.config.ts`. It is ISC licensed, carries no telemetry, and
+its kernel entry point has no runtime imports of its own.

@@ -322,7 +322,7 @@ checks:
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: web-app-checks
     command: ["bash", "web/app/test.sh"]
-    triggers: ["web/app/src/**", "web/app/package.json", "web/app/package-lock.json", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/eslint.config.mjs", "web/app/test.sh", ".github/checks-manifest.yaml"]
+    triggers: ["web/app/src/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.ts", "web/app/vitest.setup.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "web/app shipped with no typecheck or test lane at all, so desktop-parity work there had no runnable Definition-of-Done gate"
   - id: web-llm-gateway-only
