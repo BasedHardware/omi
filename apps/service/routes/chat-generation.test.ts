@@ -32,7 +32,10 @@ import {
   type ChatGenerationSource,
 } from "../chat/generation-source";
 import type { ChatGenerationLivenessPolicy } from "../chat/generation-supervisor";
-import type { ChatGenerationStreamPolicy } from "./chat-messages";
+import {
+  normalizeChatGenerationStreamPolicy,
+  type ChatGenerationStreamPolicy,
+} from "./chat-messages";
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
@@ -219,6 +222,23 @@ const history = async (local: ReturnType<typeof createLocalDevService>): Promise
 };
 
 describe("ratified chat generation wire red proofs", () => {
+  test("SSE policy rejects zero-delay polling to prevent busy spins", () => {
+    expect(() => normalizeChatGenerationStreamPolicy({
+      pollIntervalMs: 0,
+      heartbeatIntervalMs: 0,
+      maxBatchEvents: 1,
+      maxBufferedEvents: 1,
+      backpressurePollIntervalMs: 1,
+    })).toThrow("invalid Chat generation stream policy");
+    expect(normalizeChatGenerationStreamPolicy({
+      pollIntervalMs: 1,
+      heartbeatIntervalMs: 0,
+      maxBatchEvents: 1,
+      maxBufferedEvents: 1,
+      backpressurePollIntervalMs: 1,
+    }).pollIntervalMs).toBe(1);
+  });
+
   test("same-process concurrent replay re-drives a dispatch throw exactly once", async () => {
     const stores = createInMemoryLocalServiceStores();
     stores.settings.putEntitlement(ACCOUNT, {
@@ -1760,7 +1780,7 @@ describe("ratified chat generation wire red proofs", () => {
     const { admission, eventsResponse } = await admitAndOpen(local, create("retention-replay"));
     await eventsResponse.text();
     await (await generationEvents(local, admission.generation.id)).text();
-    expect(stores.chatEvents.retentionMetadata!(ACCOUNT, admission.generation.id)).not.toBeNull();
+    expect(stores.chatEvents.retentionMetadata!(ACCOUNT, admission.generation.id)).toMatchObject({ ttlMs: 86_400_000 });
     const all = stores.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)!;
     const oldCursor = all.find((event) => event.frame.kind === "snapshot")?.id;
     expect(oldCursor).toBeDefined();

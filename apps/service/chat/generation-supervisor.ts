@@ -183,7 +183,7 @@ const validateUsage = (value: unknown): ChatGenerationUsage | null => {
     const bounded = (candidate: unknown): candidate is string =>
       typeof candidate === "string" && candidate.length > 0 && candidate.length <= 128
       && /^[A-Za-z0-9._:/-]+$/u.test(candidate)
-      && !/(?:^|[^a-z0-9])(?:sk(?:[_-]?live)?|api(?:[_ .:-]?key)?|access(?:[_ .:-]?token)?|bearer|authorization|password|secret|(?:attachment|file|opaque|reference)(?:[_ .:-]?(?:id|ref|reference))?)(?:$|[^a-z0-9])/iu.test(candidate);
+      && !/(?:^|[^a-z0-9])(?:sk(?:[_-]?live)?|api(?:[_ .:-]?key)?|access(?:[_ .:-]?token)?|bearer|authorization|password|secret|token|jwt|credential|oauth|(?:attachment|file|opaque|reference)(?:[_ .:-]?(?:id|ref|reference))?)(?:$|[^a-z0-9])/iu.test(candidate);
     const tokens = (candidate: unknown): candidate is number =>
       typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0;
     if (!bounded(usage.usageId) || !bounded(usage.provider) || !bounded(usage.model)

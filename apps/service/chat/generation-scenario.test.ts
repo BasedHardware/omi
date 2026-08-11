@@ -272,23 +272,25 @@ describe("deterministic Chat generation scenarios", () => {
   });
 
   test("usage receipts fail closed on credential or opaque-reference values", async () => {
-    const result = await runChatGenerationScenario({
-      prompt: "unsafe usage",
-      script: [{
-        delayMs: 1,
-        text: "answer",
-        usage: {
-          usageId: "usage:unsafe",
-          provider: "sk-live-secret",
-          model: "deterministic",
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2,
-        },
-      }],
-    });
-    expect(result.terminal).toBe("failed");
-    expect(result.trace.filter((entry) => entry.kind === "progress")).toHaveLength(0);
+    for (const provider of ["sk-live-secret", "jwt:eyJ.fake", "oauth:token", "credential:secret", "token:secret"]) {
+      const result = await runChatGenerationScenario({
+        prompt: "unsafe usage",
+        script: [{
+          delayMs: 1,
+          text: "answer",
+          usage: {
+            usageId: "usage:unsafe",
+            provider,
+            model: "deterministic",
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+          },
+        }],
+      });
+      expect(result.terminal).toBe("failed");
+      expect(result.trace.filter((entry) => entry.kind === "progress")).toHaveLength(0);
+    }
   });
 
   test("the same declarative scenario produces an identical durable trace", async () => {

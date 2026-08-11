@@ -109,7 +109,8 @@ const DEFAULT_STREAM_POLICY: ChatGenerationStreamPolicy = Object.freeze({
   backpressurePollIntervalMs: 25,
 });
 
-const normalizeStreamPolicy = (
+/** Internal policy seam; zero-delay polling is rejected to avoid unbounded scheduler churn. */
+export const normalizeChatGenerationStreamPolicy = (
   policy: ChatGenerationStreamPolicy | undefined,
 ): ChatGenerationStreamPolicy => {
   if (policy === undefined) return DEFAULT_STREAM_POLICY;
@@ -121,6 +122,7 @@ const normalizeStreamPolicy = (
     policy.backpressurePollIntervalMs,
   ];
   if (values.some((value) => !Number.isSafeInteger(value) || value < 0)
+    || policy.pollIntervalMs < 1
     || policy.maxBatchEvents === 0 || policy.maxBufferedEvents === 0
     || policy.maxBatchEvents > 128 || policy.maxBufferedEvents > 1_024
     || policy.pollIntervalMs > 60_000 || policy.heartbeatIntervalMs > 300_000
@@ -774,7 +776,7 @@ export const registerChatMessagesRoutes = (
         afterEventId: terminal.id,
         signal: context.req.raw.signal,
         revalidate,
-        policy: normalizeStreamPolicy(deps.streamPolicy),
+        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
         scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
         nowEpochMilliseconds: deps.nowEpochMilliseconds,
       });
@@ -795,7 +797,7 @@ export const registerChatMessagesRoutes = (
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
           revalidate,
-          policy: normalizeStreamPolicy(deps.streamPolicy),
+          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
           scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
           nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
@@ -810,7 +812,7 @@ export const registerChatMessagesRoutes = (
           afterEventId: terminal.id,
           signal: context.req.raw.signal,
           revalidate,
-          policy: normalizeStreamPolicy(deps.streamPolicy),
+          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
           scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
           nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
@@ -825,7 +827,7 @@ export const registerChatMessagesRoutes = (
           afterEventId: replayTerminal.id,
           signal: context.req.raw.signal,
           revalidate,
-          policy: normalizeStreamPolicy(deps.streamPolicy),
+          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
           scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
           nowEpochMilliseconds: deps.nowEpochMilliseconds,
         });
@@ -840,7 +842,7 @@ export const registerChatMessagesRoutes = (
         afterEventId: snapshot.id,
         signal: context.req.raw.signal,
         revalidate,
-        policy: normalizeStreamPolicy(deps.streamPolicy),
+        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
         scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
         nowEpochMilliseconds: deps.nowEpochMilliseconds,
       });
@@ -855,7 +857,7 @@ export const registerChatMessagesRoutes = (
         afterEventId: terminal.id,
         signal: context.req.raw.signal,
         revalidate,
-        policy: normalizeStreamPolicy(deps.streamPolicy),
+        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
         scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
         nowEpochMilliseconds: deps.nowEpochMilliseconds,
       });
@@ -870,7 +872,7 @@ export const registerChatMessagesRoutes = (
       afterEventId: snapshot.id,
       signal: context.req.raw.signal,
       revalidate,
-      policy: normalizeStreamPolicy(deps.streamPolicy),
+      policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
       scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
       nowEpochMilliseconds: deps.nowEpochMilliseconds,
     });
