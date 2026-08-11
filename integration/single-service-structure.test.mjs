@@ -102,7 +102,11 @@ test("RED-PROOF stop signals only a durable exact process owner", () => {
   assert.match(owner, /ownerTokenSha256/);
   assert.match(owner, /independent binding changed before signal; stop refused/);
   assert.match(owner, /independent binding changed before escalation; SIGKILL skipped/);
-  assert.doesNotMatch(stack, /PIDFILE|kill -KILL "\$pid"/);
+  assert.match(owner, /stopPreOwnerProcess/);
+  assert.match(owner, /immediatelyBeforeCommit/);
+  assert.match(owner, /validateCommittedOwner\(path, record\)/);
+  assert.match(stack, /stop-pre-owner --pid "\$SERVICE_PID"/);
+  assert.doesNotMatch(stack, /PIDFILE|kill -KILL "\$pid"|kill "\$SERVICE_PID"/);
 });
 
 test("RED-PROOF service output reaches disk only through the streaming sanitizer", () => {

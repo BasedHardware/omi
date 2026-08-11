@@ -65,6 +65,10 @@ database path, and readiness path. `--stop` verifies every coordinate again befo
 a stale, reused, or unknown PID is reported and left alive. A separate mode-0600 ownership
 binding retains only a digest of the random owner token plus the process coordinates. Replacing
 the owner record's token with another valid-looking value therefore refuses stop without signaling.
+Before that durable record exists, cleanup still requires the captured PID, kernel start identity,
+and exact service command immediately before TERM and before any escalation; there is no PID-only
+fallback. Owner creation revalidates process and readiness immediately before persistence and again
+after persistence, rolling both owner files back if either coordinate changed during the commit.
 Service diagnostics pass through a streaming sanitizer before their first persisted byte; retained
 logs and final evidence artifacts are scanned for the readiness credential, bearer credentials,
 and backend origins. The raw run id claims its run directory with one exclusive `mkdir`; an existing
