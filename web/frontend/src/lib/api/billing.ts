@@ -1,0 +1,114 @@
+import envConfig from '@/src/constants/envConfig';
+
+export type PlanId =
+  | 'basic'
+  | 'unlimited'
+  | 'architect'
+  | 'operator'
+  | 'plus'
+  | 'unlimited_v2';
+
+export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
+  basic: 'Free',
+  unlimited: 'Neo',
+  architect: 'Architect',
+  operator: 'Operator',
+  plus: 'Plus',
+  unlimited_v2: 'Unlimited',
+};
+
+export interface PricingOption {
+  id: string;
+  plan_id: string;
+  title: string;
+  price_string: string;
+  description?: string | null;
+  subtitle?: string | null;
+  eyebrow?: string | null;
+  interval: string;
+  unit_amount: number;
+  is_active: boolean;
+}
+
+export interface OverageInfo {
+  plan: string;
+  plan_type: string;
+  is_overage_plan: boolean;
+  included_questions?: number | null;
+  used_questions: number;
+  excess_questions: number;
+  overage_usd: number;
+  reset_at?: number | null;
+  explainer_title: string;
+  explainer_body: string;
+}
+
+export interface PlatformApiQuota {
+  included_requests: number | null;
+  used_requests: number;
+  remaining_requests: number | null;
+  reset_at?: number | null;
+}
+
+function apiBase(): string {
+  return envConfig.API_URL ?? '';
+}
+
+async function request<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(`${apiBase()}${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok)
+    throw new Error(`${init.method ?? 'GET'} ${path} failed: ${response.status}`);
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/** LIVE: GET /v1/payments/available-plans */
+export async function getAvailablePlans(token: string): Promise<PricingOption[]> {
+  const data = await request<{ plans: PricingOption[] }>(
+    '/v1/payments/available-plans',
+    token,
+  );
+  return data?.plans ?? [];
+}
+
+/** LIVE: GET /v1/payments/overage-info */
+export function getOverageInfo(token: string) {
+  return request<OverageInfo>('/v1/payments/overage-info', token);
+}
+
+/** LIVE: POST /v1/payments/checkout-session */
+export function createCheckoutSession(token: string, priceId: string) {
+  return request<{ url?: string; sessionId?: string }>(
+    '/v1/payments/checkout-session',
+    token,
+    { method: 'POST', body: JSON.stringify({ price_id: priceId }) },
+  );
+}
+
+/** LIVE: POST /v1/payments/customer-portal */
+export function createCustomerPortalSession(token: string) {
+  return request<{ url?: string }>('/v1/payments/customer-portal', token, {
+    method: 'POST',
+  });
+}
+
+/**
+ * PENDING: platform-API quota is being added to `PlanLimits` backend-side this
+ * cycle. This is the single client seam for reading remaining quota — when the
+ * route lands, only this function changes.
+ */
+export function getPlatformApiQuota(token: string) {
+  return request<PlatformApiQuota>('/v1/payments/platform-api-quota', token);
+}
