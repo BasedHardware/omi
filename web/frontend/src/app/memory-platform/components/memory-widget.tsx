@@ -82,7 +82,7 @@ export default function MemoryWidget({ demo = false }: MemoryWidgetProps) {
     setPending(true);
     try {
       const response = await searchMemoryPlatform(token, { query, limit: 20 });
-      setItems(response?.memories ?? []);
+      setItems(response?.items ?? []);
     } catch {
       setError('Search is unavailable right now.');
     } finally {
