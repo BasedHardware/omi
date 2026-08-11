@@ -29,9 +29,36 @@ fi
 # Dart formatting for app/
 STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' -e '^app/lib/l10n/app_localizations.*\.dart$')
 
+if [ -n "$STAGED_DART_FILES" ] && [ "${OMI_SKIP_DART_FORMAT:-}" = "1" ]; then
+  echo "OMI_SKIP_DART_FORMAT=1: leaving staged Dart files unformatted."
+  STAGED_DART_FILES=""
+fi
+
 if [ -n "$STAGED_DART_FILES" ]; then
-  echo "Formatting staged Dart files in app/..."
-  echo "$STAGED_DART_FILES" | xargs dart format --line-length 120
+  ROOT="$(git rev-parse --show-toplevel)"
+  PINNED_FLUTTER=$(sed -n 's/^[[:space:]]*flutter-version:[[:space:]]*//p' "$ROOT/.github/workflows/repo-checks.yml" 2>/dev/null | head -1 | tr -d "\"' ")
+  if [ -z "$PINNED_FLUTTER" ]; then
+    echo "Could not read the pinned flutter-version from .github/workflows/repo-checks.yml." >&2
+    echo "Refusing to run 'dart format' with an unknown toolchain. Set OMI_SKIP_DART_FORMAT=1 to commit unformatted." >&2
+    exit 1
+  fi
+  if command -v flutter >/dev/null 2>&1; then
+    LOCAL_FLUTTER=$(flutter --version 2>/dev/null | sed -n 's/^Flutter \([0-9][^ ]*\).*/\1/p' | head -1)
+  else
+    LOCAL_FLUTTER=""
+  fi
+  if [ "$LOCAL_FLUTTER" != "$PINNED_FLUTTER" ]; then
+    echo "Dart formatter toolchain mismatch: repo pins Flutter $PINNED_FLUTTER, found ${LOCAL_FLUTTER:-no flutter on PATH}." >&2
+    echo "A different Dart SDK reformats untouched files into a shape CI rejects, so formatting is refused." >&2
+    echo "Install Flutter $PINNED_FLUTTER (fvm use $PINNED_FLUTTER), or set OMI_SKIP_DART_FORMAT=1 to commit unformatted." >&2
+    exit 1
+  fi
+  DART_BIN="$(dirname "$(command -v flutter)")/dart"
+  if [ ! -x "$DART_BIN" ]; then
+    DART_BIN="dart"
+  fi
+  echo "Formatting staged Dart files in app/ with Flutter $PINNED_FLUTTER..."
+  echo "$STAGED_DART_FILES" | xargs "$DART_BIN" format --line-length 120
   echo "$STAGED_DART_FILES" | xargs git add
 fi
 
@@ -71,23 +98,39 @@ fi
 # Web (JS/TS/JSX/TSX) formatting with Prettier
 STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$' | grep -E '^web/')
 
+if [ -n "$STAGED_WEB_FILES" ] && [ "${OMI_SKIP_WEB_FORMAT:-}" = "1" ]; then
+  echo "OMI_SKIP_WEB_FORMAT=1: leaving staged web files unformatted."
+  STAGED_WEB_FILES=""
+fi
+
 if [ -n "$STAGED_WEB_FILES" ]; then
   echo "Formatting staged web files with Prettier..."
-  for dir in web/frontend web/app web/personas-open-source; do
+  for dir in $(echo "$STAGED_WEB_FILES" | cut -d/ -f1-2 | sort -u); do
     DIR_FILES=$(echo "$STAGED_WEB_FILES" | grep "^$dir/")
     if [ -z "$DIR_FILES" ]; then
       continue
     fi
-    if [ -x "$dir/node_modules/.bin/prettier" ]; then
-      echo "$DIR_FILES" | xargs "$dir/node_modules/.bin/prettier" --write
-    elif command -v npx >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs npx --prefix "$dir" prettier --write
-    elif command -v prettier >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs prettier --write
-    else
-      echo "prettier not found for $dir. Run 'npm install' in $dir or install prettier globally." >&2
+    PINNED=$(sed -n 's/.*"prettier"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/package.json" 2>/dev/null | head -1)
+    if [ -z "$PINNED" ]; then
+      echo "$dir/package.json does not pin prettier; refusing to format $dir." >&2
+      echo "Pin prettier there, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
       exit 1
     fi
+    PINNED_MAJOR=$(echo "$PINNED" | sed 's/^[^0-9]*//' | cut -d. -f1)
+    PRETTIER_BIN="$dir/node_modules/.bin/prettier"
+    if [ -x "$PRETTIER_BIN" ]; then
+      LOCAL_VERSION=$("$PRETTIER_BIN" --version 2>/dev/null)
+    else
+      LOCAL_VERSION=""
+    fi
+    LOCAL_MAJOR=$(echo "$LOCAL_VERSION" | cut -d. -f1)
+    if [ -z "$LOCAL_VERSION" ] || [ "$LOCAL_MAJOR" != "$PINNED_MAJOR" ]; then
+      echo "Prettier toolchain mismatch in $dir: package.json pins $PINNED, found ${LOCAL_VERSION:-no $dir/node_modules/.bin/prettier}." >&2
+      echo "A floating prettier reformats files into a shape CI rejects, so formatting is refused." >&2
+      echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+      exit 1
+    fi
+    echo "$DIR_FILES" | xargs "$PRETTIER_BIN" --write
     echo "$DIR_FILES" | xargs git add
   done
 fi
