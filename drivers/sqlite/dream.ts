@@ -8,7 +8,7 @@ import { invokeBlockedIdentityAdjudication, selectSettleableIdentityClusterDiges
 import { predicateRevisionForStoredObservation } from "../../core/consolidate/predicate-identity";
 import { validateAndAllocatePlacement } from "../../core/consolidate/plan";
 import { reprojectBoundClaims, reprojectionWitnesses, type ReprojectionBinding } from "../../core/consolidate/reprojection";
-import { invokePredicateAlignment, type PredicateAlignmentBatchOutcome, type PredicateAlignmentExclusion } from "../../core/consolidate/relations";
+import { invokePredicateAlignment, type PredicateAlignmentBatchOutcome, type PredicateAlignmentBatchSuccess, type PredicateAlignmentExclusion, type PredicateAlignmentSuccessfulQuestion } from "../../core/consolidate/relations";
 import { diffGraphSnapshots, liveCommittedClaims, type GraphSnapshot } from "../../core/retrieve";
 import type { Entity, IdentityAuthorization, IdentityConstraint, Mention } from "../../core/schema";
 import { identityAdjudicationCost, predicateAlignmentPromptCost } from "../model/glm";
@@ -68,6 +68,7 @@ export class SqliteDreamStore {
     CREATE TABLE IF NOT EXISTS dream_partition_history (owner_account_id TEXT NOT NULL, partition_hash TEXT NOT NULL, PRIMARY KEY(owner_account_id, partition_hash));
     CREATE TABLE IF NOT EXISTS dream_settled_clusters (owner_account_id TEXT NOT NULL, cluster_digest TEXT NOT NULL, PRIMARY KEY(owner_account_id, cluster_digest));
     CREATE TABLE IF NOT EXISTS dream_settled_predicate_batches (owner_account_id TEXT NOT NULL, batch_digest TEXT NOT NULL, PRIMARY KEY(owner_account_id, batch_digest));
+    CREATE TABLE IF NOT EXISTS dream_successful_predicate_questions (owner_account_id TEXT NOT NULL, batch_question_digest TEXT NOT NULL, predicate_frontier TEXT NOT NULL, predicate_ids_json TEXT NOT NULL, response_digest TEXT NOT NULL, result_digest TEXT NOT NULL, PRIMARY KEY(owner_account_id, batch_question_digest));
     CREATE TABLE IF NOT EXISTS dream_predicate_batch_outcomes (outcome_id TEXT PRIMARY KEY, cycle_id TEXT NOT NULL, owner_account_id TEXT NOT NULL, batch_question_digest TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('success', 'retryable_error')), response_digest TEXT, result_digest TEXT, error_code TEXT);
     CREATE TABLE IF NOT EXISTS dream_predicate_exclusions (exclusion_id TEXT PRIMARY KEY, cycle_id TEXT NOT NULL, owner_account_id TEXT NOT NULL, predicate_revision_digest TEXT NOT NULL, code TEXT NOT NULL);
   `); }
@@ -82,8 +83,28 @@ export class SqliteDreamStore {
       for (const digest of digests) this.db.query("INSERT OR IGNORE INTO dream_settled_clusters VALUES (?, ?)").run(owner, digest);
     })();
   }
-  settledPredicateBatches(owner: string): ReadonlySet<string> {
-    return new Set((this.db.query("SELECT batch_digest FROM dream_settled_predicate_batches WHERE owner_account_id=? ORDER BY batch_digest").all(owner) as { batch_digest: string }[]).map((row) => row.batch_digest));
+  successfulPredicateQuestions(owner: string): readonly PredicateAlignmentSuccessfulQuestion[] {
+    return (this.db.query<{
+      batch_question_digest: string;
+      predicate_frontier: string;
+      predicate_ids_json: string;
+      response_digest: string;
+      result_digest: string;
+    }, [string]>("SELECT batch_question_digest, predicate_frontier, predicate_ids_json, response_digest, result_digest FROM dream_successful_predicate_questions WHERE owner_account_id=? ORDER BY batch_question_digest").all(owner)).flatMap((row) => {
+      try {
+        const predicate_ids = JSON.parse(row.predicate_ids_json) as unknown;
+        if (!Array.isArray(predicate_ids) || predicate_ids.some((id) => typeof id !== "string")) return [];
+        return [{
+          batch_question_digest: row.batch_question_digest,
+          predicate_frontier: row.predicate_frontier,
+          predicate_ids,
+          response_digest: row.response_digest,
+          result_digest: row.result_digest,
+        }];
+      } catch {
+        return [];
+      }
+    });
   }
   recordPredicateBatchOutcome(cycleId: string, owner: string, outcome: PredicateAlignmentBatchOutcome): void {
     const responseDigest = outcome.kind === "success" ? outcome.response_digest : null;
@@ -111,6 +132,16 @@ export class SqliteDreamStore {
   }
   recordSettledPredicateBatch(owner: string, digest: string): void {
     this.db.query("INSERT OR IGNORE INTO dream_settled_predicate_batches VALUES (?, ?)").run(owner, digest);
+  }
+  recordSuccessfulPredicateQuestion(owner: string, outcome: PredicateAlignmentBatchSuccess): void {
+    this.db.query("INSERT OR IGNORE INTO dream_successful_predicate_questions VALUES (?, ?, ?, ?, ?, ?)").run(
+      owner,
+      outcome.batch_question_digest,
+      outcome.predicate_frontier,
+      JSON.stringify(outcome.predicate_ids),
+      outcome.response_digest,
+      outcome.result_digest,
+    );
   }
   recordPredicateExclusion(cycleId: string, owner: string, exclusion: PredicateAlignmentExclusion): void {
     const predicateRevisionDigest = sha256CanonicalRedacted({ predicate_revision_id: exclusion.predicate_revision_id });
@@ -327,9 +358,10 @@ export const runSqliteDreamCycle = async (input: {
           owner_account_id: input.owner_account_id,
           batch_prompt_budget: 20_000,
           model_concurrency: 4,
+          max_questions_per_invocation: 64,
           prompt_cost: predicateAlignmentPromptCost,
           adjudication_contract: predicateContract,
-          settled_batch_digests: state.settledPredicateBatches(input.owner_account_id),
+          successful_questions: state.successfulPredicateQuestions(input.owner_account_id),
         },
       )
       : { assertions: [], batch_outcomes: [], skipped_settled_batch_digests: [], excluded_predicates: [] };
@@ -396,6 +428,7 @@ export const runSqliteDreamCycle = async (input: {
       input.db.transaction(() => {
         state.recordPredicateBatchOutcome(input.cycle_id, input.owner_account_id, outcome);
         state.recordSettledPredicateBatch(input.owner_account_id, outcome.settleable_batch_digest);
+        state.recordSuccessfulPredicateQuestion(input.owner_account_id, outcome);
       })();
       afterPromotion = input.ledger.snapshot(input.owner_account_id);
     }

@@ -42,14 +42,28 @@ export interface PredicateAlignmentOptions {
   batch_prompt_budget: number;
   /** Positive bounded number of model calls in flight. */
   model_concurrency: number;
+  /** Positive hard bound on questions emitted by one resumable invocation. */
+  max_questions_per_invocation: number;
   /**
    * Adapter-owned exact cost of the prompt produced for this request. The core
    * cannot silently approximate a provider prompt from storage JSON.
    */
   prompt_cost: (request: PredicateAlignmentRequest) => number;
   adjudication_contract: PredicateAlignmentAdjudicationContract;
-  /** Only exact successful batch digests belong here. */
-  settled_batch_digests?: ReadonlySet<string>;
+  /**
+   * Exact prior successes used to reconstruct pair coverage incrementally.
+   * The adapter may supply one only after the corresponding graph result is
+   * durable; a model response or settlement digest alone is not authority.
+   */
+  successful_questions?: readonly PredicateAlignmentSuccessfulQuestion[];
+}
+
+export interface PredicateAlignmentSuccessfulQuestion {
+  batch_question_digest: string;
+  predicate_frontier: string;
+  predicate_ids: readonly string[];
+  response_digest: string;
+  result_digest: string;
 }
 
 export type PredicateProposalRejectionCode =
@@ -109,6 +123,19 @@ export interface PredicateAlignmentResult {
   batch_outcomes: readonly PredicateAlignmentBatchOutcome[];
   skipped_settled_batch_digests: readonly string[];
   excluded_predicates: readonly PredicateAlignmentExclusion[];
+  coverage: PredicateAlignmentCoverage;
+}
+
+export interface PredicateAlignmentCoverage {
+  eligible_predicates: number;
+  total_pairs: number;
+  valid_successful_questions: number;
+  covered_pairs_before_plan: number;
+  remaining_pairs_before_plan: number;
+  planned_questions: number;
+  planned_newly_covered_pairs: number;
+  remaining_pairs_after_plan: number;
+  maximum_remaining_questions_after_plan: number;
 }
 
 type PredicateView = {
@@ -120,6 +147,7 @@ type PredicateView = {
 type OwnerKnowledge = { owners: ReadonlySet<string>; roles: ReadonlySet<string> };
 
 const MAX_ALIGNMENT_CONCURRENCY = 64;
+const MAX_ALIGNMENT_QUESTIONS_PER_INVOCATION = 4_096;
 const MAX_ALIGNMENT_PROMPT_BUDGET = 10_000_000;
 const MAX_PROPOSALS_PER_BATCH = 4_096;
 const MAX_MODEL_IDENTIFIER_LENGTH = 1_024;
@@ -138,6 +166,11 @@ const validateOptions = (options: PredicateAlignmentOptions): void => {
     || options.model_concurrency < 1
     || options.model_concurrency > MAX_ALIGNMENT_CONCURRENCY) {
     throw new RangeError("predicate_alignment_concurrency_invalid");
+  }
+  if (!Number.isSafeInteger(options.max_questions_per_invocation)
+    || options.max_questions_per_invocation < 1
+    || options.max_questions_per_invocation > MAX_ALIGNMENT_QUESTIONS_PER_INVOCATION) {
+    throw new RangeError("predicate_alignment_question_limit_invalid");
   }
   if (typeof options.prompt_cost !== "function") throw new TypeError("predicate_alignment_prompt_cost_missing");
   requireNonEmpty(options.owner_account_id, "predicate_alignment_owner_invalid");
@@ -378,37 +411,155 @@ interface PlannedBatch {
   batch_index: number;
 }
 
+const pairKey = (left: number, right: number): string => left < right ? `${left}:${right}` : `${right}:${left}`;
+const digestPattern = /^[0-9a-f]{64}$/;
+
+const validSuccessfulQuestions = (
+  view: readonly PredicateView[],
+  options: PredicateAlignmentOptions,
+): readonly PredicateAlignmentSuccessfulQuestion[] => {
+  const byId = new Map(view.map((predicate) => [predicate.predicate_id, predicate]));
+  const valid = new Map<string, PredicateAlignmentSuccessfulQuestion>();
+  const records = options.successful_questions ?? [];
+  if (!densePlainArray(records, 100_000)) return [];
+  for (const raw of records) {
+    if (!isPlainRecord(raw)) continue;
+    const batch_question_digest = ownData(raw, "batch_question_digest");
+    const predicate_frontier = ownData(raw, "predicate_frontier");
+    const predicate_ids = ownData(raw, "predicate_ids");
+    const response_digest = ownData(raw, "response_digest");
+    const result_digest = ownData(raw, "result_digest");
+    if (typeof batch_question_digest !== "string" || !digestPattern.test(batch_question_digest)
+      || typeof predicate_frontier !== "string" || !digestPattern.test(predicate_frontier)
+      || typeof response_digest !== "string" || !digestPattern.test(response_digest)
+      || typeof result_digest !== "string" || !digestPattern.test(result_digest)
+      || !densePlainArray(predicate_ids, 100_000)
+      || predicate_ids.some((id) => typeof id !== "string")
+      || new Set(predicate_ids).size !== predicate_ids.length) continue;
+    const predicates = (predicate_ids as readonly string[]).flatMap((id) => {
+      const predicate = byId.get(id);
+      return predicate ? [predicate] : [];
+    }).sort((left, right) => compareStrings(left.name, right.name)
+      || compareStrings(left.predicate_id, right.predicate_id));
+    if (predicates.length !== predicate_ids.length
+      || predicates.some((predicate, index) => predicate.predicate_id !== predicate_ids[index])) continue;
+    const request: PredicateAlignmentRequest = {
+      predicate_frontier: vocabularyFrontierForView(predicates, options.owner_account_id),
+      predicates,
+    };
+    if (request.predicate_frontier !== predicate_frontier
+      || predicateAlignmentBatchDigest(options.adjudication_contract, request) !== batch_question_digest) continue;
+    valid.set(batch_question_digest, {
+      batch_question_digest,
+      predicate_frontier,
+      predicate_ids: [...predicate_ids] as string[],
+      response_digest,
+      result_digest,
+    });
+  }
+  return [...valid.values()].sort((left, right) => compareStrings(left.batch_question_digest, right.batch_question_digest));
+};
+
 const planBatches = (
   view: readonly PredicateView[],
   options: PredicateAlignmentOptions,
-): readonly PlannedBatch[] => {
+): { planned: readonly PlannedBatch[]; coverage: PredicateAlignmentCoverage; valid_successes: readonly PredicateAlignmentSuccessfulQuestion[] } => {
   const requestFor = (predicates: readonly PredicateView[]): PredicateAlignmentRequest => ({
     predicate_frontier: vocabularyFrontierForView(predicates, options.owner_account_id),
     predicates,
   });
-  const requests: PredicateAlignmentRequest[] = [];
-  let current: PredicateView[] = [];
-  let currentCost = 0;
-  for (const predicate of view) {
-    const candidate = requestFor([...current, predicate]);
-    const candidateCost = measuredCost(options, candidate);
-    if (current.length && candidateCost < currentCost) throw new RangeError("predicate_alignment_prompt_cost_not_monotone");
-    if (current.length && candidateCost > options.batch_prompt_budget) {
-      requests.push(requestFor(current));
-      current = [predicate];
-      currentCost = measuredCost(options, requestFor(current));
-    } else {
-      current = [...current, predicate];
-      currentCost = candidateCost;
+  const indexById = new Map(view.map((predicate, index) => [predicate.predicate_id, index]));
+  const totalPairs = view.length * (view.length - 1) / 2;
+  const validSuccesses = validSuccessfulQuestions(view, options);
+  const covered = new Set<string>();
+  for (const success of validSuccesses) {
+    const indices = success.predicate_ids.map((id) => indexById.get(id)!);
+    for (let left = 0; left < indices.length; left += 1) {
+      for (let right = left + 1; right < indices.length; right += 1) {
+        covered.add(pairKey(indices[left]!, indices[right]!));
+      }
     }
   }
-  if (current.length) requests.push(requestFor(current));
-  return requests.map((request, batch_index) => ({
+  const uncovered = new Set<string>();
+  for (let left = 0; left < view.length; left += 1) {
+    for (let right = left + 1; right < view.length; right += 1) {
+      const key = pairKey(left, right);
+      if (!covered.has(key)) uncovered.add(key);
+    }
+  }
+  const before = uncovered.size;
+  const requests: PredicateAlignmentRequest[] = [];
+  while (uncovered.size && requests.length < options.max_questions_per_invocation) {
+    const seed = uncovered.values().next().value as string | undefined;
+    if (!seed) break;
+    const [seedLeft, seedRight] = seed.split(":").map(Number) as [number, number];
+    const block = [seedLeft, seedRight];
+    const selected = new Set(block);
+    const scores = new Int32Array(view.length);
+    for (let candidate = 0; candidate < view.length; candidate += 1) {
+      if (selected.has(candidate)) continue;
+      scores[candidate] = Number(uncovered.has(pairKey(candidate, seedLeft)))
+        + Number(uncovered.has(pairKey(candidate, seedRight)));
+    }
+    let currentCost = measuredCost(options, requestFor(block.map((index) => view[index]!)));
+    while (true) {
+      const candidates: { index: number; score: number }[] = [];
+      for (let candidate = 0; candidate < view.length; candidate += 1) {
+        if (selected.has(candidate)) continue;
+        const score = scores[candidate]!;
+        if (score > 0) candidates.push({ index: candidate, score });
+      }
+      candidates.sort((left, right) => right.score - left.score || left.index - right.index);
+      let winner = -1;
+      let winnerCost = 0;
+      for (const candidate of candidates) {
+        const indices = [...block, candidate.index].sort((left, right) => left - right);
+        const cost = measuredCost(options, requestFor(indices.map((index) => view[index]!)));
+        if (cost < currentCost) throw new RangeError("predicate_alignment_prompt_cost_not_monotone");
+        if (cost <= options.batch_prompt_budget) {
+          winner = candidate.index;
+          winnerCost = cost;
+          break;
+        }
+      }
+      if (winner < 0) break;
+      block.push(winner);
+      block.sort((left, right) => left - right);
+      selected.add(winner);
+      scores[winner] = -1;
+      for (let candidate = 0; candidate < view.length; candidate += 1) {
+        if (!selected.has(candidate) && uncovered.has(pairKey(candidate, winner))) scores[candidate]! += 1;
+      }
+      currentCost = winnerCost;
+    }
+    for (let left = 0; left < block.length; left += 1) {
+      for (let right = left + 1; right < block.length; right += 1) {
+        uncovered.delete(pairKey(block[left]!, block[right]!));
+      }
+    }
+    requests.push(requestFor(block.map((index) => view[index]!)));
+  }
+  const planned = requests.map((request, batch_index) => ({
     request,
     cost: measuredCost(options, request),
     digest: predicateAlignmentBatchDigest(options.adjudication_contract, request),
     batch_index,
   }));
+  return {
+    planned,
+    valid_successes: validSuccesses,
+    coverage: {
+      eligible_predicates: view.length,
+      total_pairs: totalPairs,
+      valid_successful_questions: validSuccesses.length,
+      covered_pairs_before_plan: totalPairs - before,
+      remaining_pairs_before_plan: before,
+      planned_questions: planned.length,
+      planned_newly_covered_pairs: before - uncovered.size,
+      remaining_pairs_after_plan: uncovered.size,
+      maximum_remaining_questions_after_plan: uncovered.size,
+    },
+  };
 };
 
 const reject = (
@@ -485,10 +636,9 @@ export const invokePredicateAlignment = async (
 ): Promise<PredicateAlignmentResult> => {
   validateOptions(options);
   const { view, knowledge, excluded } = buildView(predicates, options.owner_account_id);
-  const planned = planBatches(view, options);
-  const settled = options.settled_batch_digests ?? new Set<string>();
-  const skipped = planned.filter((batch) => settled.has(batch.digest));
-  const pending = planned.filter((batch) => !settled.has(batch.digest));
+  const plan = planBatches(view, options);
+  const planned = plan.planned;
+  const pending = planned;
   const outcomes = await mapLimit(pending, options.model_concurrency, async (batch): Promise<PredicateAlignmentBatchOutcome> => {
     const coordinate = {
       batch_index: batch.batch_index,
@@ -571,7 +721,10 @@ export const invokePredicateAlignment = async (
     assertions: outcomes.flatMap((outcome) => outcome.kind === "success" ? outcome.assertions : [])
       .sort((left, right) => compareStrings(left.assertion_id, right.assertion_id)),
     batch_outcomes: outcomes,
-    skipped_settled_batch_digests: skipped.map((batch) => batch.digest),
+    skipped_settled_batch_digests: [...new Set([
+      ...plan.valid_successes.map((success) => success.batch_question_digest),
+    ])].sort(compareStrings),
     excluded_predicates: excluded,
+    coverage: plan.coverage,
   };
 };

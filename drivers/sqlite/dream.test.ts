@@ -430,15 +430,17 @@ test("predicate batches settle only after their exact graph result is durable", 
     error_code: null,
   }]);
   expect(db.query("SELECT COUNT(*) AS count FROM dream_settled_predicate_batches").get()).toEqual({ count: 1 });
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_successful_predicate_questions").get()).toEqual({ count: 1 });
 
   // Simulate a process crash after the graph append but before the QA audit
   // and settlement transaction. The exact result must replay through the
   // graph idempotency key, restore settlement, and never duplicate an alias.
-  db.exec("DELETE FROM dream_settled_predicate_batches; DELETE FROM dream_predicate_batch_outcomes;");
+  db.exec("DELETE FROM dream_settled_predicate_batches; DELETE FROM dream_successful_predicate_questions; DELETE FROM dream_predicate_batch_outcomes;");
   await runAlignment("predicate-align-crash-resume");
   expect(predicateCalls).toBe(2);
   expect(ledger.snapshot(owner).predicate_assertions).toHaveLength(1);
   expect(db.query("SELECT COUNT(*) AS count FROM dream_settled_predicate_batches").get()).toEqual({ count: 1 });
+  expect(db.query("SELECT COUNT(*) AS count FROM dream_successful_predicate_questions").get()).toEqual({ count: 1 });
 
   // The assertion commit does not change the vocabulary frontier, so the
   // exact settled question is skipped instead of asking itself forever.

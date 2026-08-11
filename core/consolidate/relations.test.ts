@@ -5,6 +5,7 @@ import {
   predicateAlignmentBatchDigest,
   predicateAlignmentVocabularyFrontier,
   type PredicateAlignmentAdjudicationContract,
+  type PredicateAlignmentBatchOutcome,
   type PredicateAlignmentOptions,
   type PredicateAlignmentRequest,
 } from "./relations";
@@ -24,6 +25,7 @@ const options = (overrides: Partial<PredicateAlignmentOptions> = {}): PredicateA
   owner_account_id: "owner-a",
   batch_prompt_budget: 10_000,
   model_concurrency: 2,
+  max_questions_per_invocation: 64,
   prompt_cost: (request) => 5 + request.predicates.length * 10,
   adjudication_contract: contract,
   ...overrides,
@@ -130,11 +132,11 @@ test("exact injected prompt cost bounds whole-row batches and concurrency", asyn
     model_concurrency: 2,
   }));
 
-  expect(requests.map((request) => request.predicates.map((predicate) => predicate.name))).toEqual([
-    ["alpha", "bravo"],
-    ["charlie", "delta"],
-    ["echo"],
-  ]);
+  expect(requests).toHaveLength(10);
+  expect(new Set(requests.flatMap((request) => {
+    const [left, right] = request.predicates;
+    return left && right ? [[left.name, right.name].sort().join(":")] : [];
+  })).size).toBe(10);
   expect(peak).toBe(2);
   expect(requests.every((request) => 5 + request.predicates.length * 10 <= 25)).toBe(true);
 });
@@ -155,9 +157,9 @@ test("parallel completion order cannot change outcomes or assertion ids", async 
   const reversedCompletion: string[] = [];
   const reversed = await run({ alpha: 20, charlie: 0 }, reversedCompletion);
   const sequential = await run({ alpha: 0, charlie: 20 }, []);
-  expect(reversedCompletion).toEqual(["charlie", "alpha"]);
+  expect(reversedCompletion).not.toEqual([...reversedCompletion].sort());
   expect(reversed).toEqual(sequential);
-  expect(reversed.batch_outcomes.map((outcome) => outcome.batch_index)).toEqual([0, 1]);
+  expect(reversed.batch_outcomes.map((outcome) => outcome.batch_index)).toEqual([0, 1, 2, 3, 4, 5]);
 });
 
 test("admission rejects self, invented, and cross-batch proposals while foreign-owner rows never reach the model", async () => {
@@ -169,7 +171,7 @@ test("admission rejects self, invented, and cross-batch proposals while foreign-
   ];
   const result = await invokePredicateAlignment({ invoke: async ({ input }) => {
     const request = input as PredicateAlignmentRequest;
-    if (request.predicates[0]?.name !== "alpha") return { assertions: [] };
+    if (request.predicates.map((predicate) => predicate.name).join(":") !== "alpha:bravo") return { assertions: [] };
     return { assertions: [
       { predicate_id: id("alpha"), target_predicate_id: id("bravo"), slot_aliases: [{ from_slot_id: "subject", to_slot_id: "actor" }] },
       { predicate_id: id("alpha"), target_predicate_id: id("alpha") },
@@ -242,24 +244,26 @@ test("one failed batch stays retryable while a successful sibling settles indepe
     return { assertions: [{ predicate_id: id("charlie"), target_predicate_id: id("delta") }] };
   } }, predicates, options({ batch_prompt_budget: 25 }));
 
-  expect(first.batch_outcomes.map((outcome) => outcome.kind)).toEqual(["retryable_error", "success"]);
+  expect(first.batch_outcomes.map((outcome) => outcome.kind)).toEqual([
+    "retryable_error", "retryable_error", "retryable_error", "success", "success", "success",
+  ]);
   expect(first.batch_outcomes[0]).toMatchObject({ error_code: "model_invoke_failed" });
   expect(JSON.stringify(first)).not.toContain("raw provider text");
   expect(first.assertions).toHaveLength(1);
-  const success = first.batch_outcomes[1]!;
-  expect(success).toMatchObject({ kind: "success", response_digest: expect.any(String), result_digest: expect.any(String) });
+  const success = first.batch_outcomes[5]!;
   if (success.kind !== "success") throw new Error("expected success");
-  const successfulDigest = success.settleable_batch_digest;
 
   const called: string[] = [];
   const replay = await invokePredicateAlignment({ invoke: async ({ input }) => {
     called.push((input as PredicateAlignmentRequest).predicates[0]!.name);
     return { assertions: [] };
-  } }, predicates, options({ batch_prompt_budget: 25, settled_batch_digests: new Set([successfulDigest]) }));
-  expect(called).toEqual(["alpha"]);
-  expect(replay.skipped_settled_batch_digests).toEqual([successfulDigest]);
-  expect(replay.batch_outcomes).toHaveLength(1);
+  } }, predicates, options({ batch_prompt_budget: 25, successful_questions: [success] }));
+  expect(replay.coverage.valid_successful_questions).toBe(1);
+  expect(called).toEqual(["alpha", "alpha", "alpha", "bravo", "bravo"]);
+  expect(replay.skipped_settled_batch_digests).toEqual([success.settleable_batch_digest]);
+  expect(replay.batch_outcomes).toHaveLength(5);
   expect(replay.batch_outcomes[0]!.batch_index).toBe(0);
+  expect(success).toMatchObject({ kind: "success", response_digest: expect.any(String), result_digest: expect.any(String) });
 });
 
 test("adding vocabulary asks only new or regrouped batches, not every settled batch", async () => {
@@ -267,9 +271,8 @@ test("adding vocabulary asks only new or regrouped batches, not every settled ba
   const first = await invokePredicateAlignment({ invoke: async () => ({ assertions: [] }) }, original, options({
     batch_prompt_budget: 25,
   }));
-  const settled = new Set(first.batch_outcomes.flatMap((outcome) =>
-    outcome.kind === "success" ? [outcome.settleable_batch_digest] : []));
-  expect(settled.size).toBe(2);
+  const successful = first.batch_outcomes.filter((outcome) => outcome.kind === "success");
+  expect(successful).toHaveLength(6);
 
   const called: string[][] = [];
   const incremental = await invokePredicateAlignment({ invoke: async ({ input }) => {
@@ -277,10 +280,17 @@ test("adding vocabulary asks only new or regrouped batches, not every settled ba
     return { assertions: [] };
   } }, [...original, v2("ignored", "echo", "owner-a", ["subject"])], options({
     batch_prompt_budget: 25,
-    settled_batch_digests: settled,
+    successful_questions: successful,
   }));
-  expect(called).toEqual([["echo"]]);
-  expect(incremental.skipped_settled_batch_digests).toHaveLength(2);
+  expect(called).toEqual([
+    ["alpha", "echo"], ["bravo", "echo"], ["charlie", "echo"], ["delta", "echo"],
+  ]);
+  expect(incremental.skipped_settled_batch_digests).toHaveLength(6);
+  expect(incremental.coverage).toMatchObject({
+    covered_pairs_before_plan: 6,
+    remaining_pairs_before_plan: 4,
+    remaining_pairs_after_plan: 0,
+  });
 });
 
 test("settlement digest changes with adjudication contract or exact ordered question", async () => {
@@ -301,13 +311,13 @@ test("settlement digest changes with adjudication contract or exact ordered ques
 
   let calls = 0;
   await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } }, predicates, options({
-    settled_batch_digests: new Set([originalDigest]),
+    successful_questions: [],
     adjudication_contract: { ...contract, prompt_version: "predicate-prompt-v3" },
   }));
   expect(calls).toBe(1);
   await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } }, [
     predicates[0]!, v2("p:b", "bravo", "owner-a", ["object", "place"]),
-  ], options({ settled_batch_digests: new Set([originalDigest]) }));
+  ], options({ successful_questions: [] }));
   expect(calls).toBe(2);
 });
 
@@ -315,12 +325,14 @@ test("oversize questions and malformed responses are retryable, never successful
   let calls = 0;
   const oversize = await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } }, [
     v2("p:a", "alpha", "owner-a", ["subject"]),
+    v2("p:b", "bravo", "owner-a", ["subject"]),
   ], options({ batch_prompt_budget: 10, prompt_cost: () => 11 }));
   expect(calls).toBe(0);
   expect(oversize.batch_outcomes[0]).toMatchObject({ kind: "retryable_error", error_code: "batch_prompt_budget_exceeded" });
 
   const malformed = await invokePredicateAlignment({ invoke: async () => ({ assertions: "not-an-array" }) }, [
     v2("p:a", "alpha", "owner-a", ["subject"]),
+    v2("p:b", "bravo", "owner-a", ["subject"]),
   ], options());
   expect(malformed.batch_outcomes[0]).toMatchObject({ kind: "retryable_error", error_code: "model_response_invalid" });
 });
@@ -341,6 +353,7 @@ test("provider responses must be detached plain data with exact envelopes", asyn
   for (const response of invalidResponses) {
     const result = await invokePredicateAlignment({ invoke: async () => response }, [
       v2("ignored", "alpha", "owner-a", ["subject"]),
+      v2("ignored", "bravo", "owner-a", ["subject"]),
     ], options());
     expect(result.batch_outcomes[0]).toMatchObject({
       kind: "retryable_error",
@@ -369,4 +382,117 @@ test("budget and concurrency must be positive and bounded", async () => {
   await expect(invokePredicateAlignment(model, predicates, options({ batch_prompt_budget: 0 }))).rejects.toThrow("predicate_alignment_prompt_budget_invalid");
   await expect(invokePredicateAlignment(model, predicates, options({ model_concurrency: 0 }))).rejects.toThrow("predicate_alignment_concurrency_invalid");
   await expect(invokePredicateAlignment(model, predicates, options({ model_concurrency: 65 }))).rejects.toThrow("predicate_alignment_concurrency_invalid");
+  await expect(invokePredicateAlignment(model, predicates, options({ max_questions_per_invocation: 0 }))).rejects.toThrow("predicate_alignment_question_limit_invalid");
+});
+
+test("exhaustive questions cover every eligible pair and are input-order deterministic", async () => {
+  const predicates = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"]
+    .map((name) => v2("ignored", name, "owner-a", ["subject"]));
+  const run = async (input: readonly Predicate[]) => {
+    const requests: PredicateAlignmentRequest[] = [];
+    const result = await invokePredicateAlignment({ invoke: async ({ input: raw }) => {
+      requests.push(raw as PredicateAlignmentRequest);
+      return { assertions: [] };
+    } }, input, options({ batch_prompt_budget: 35 }));
+    return { requests, result };
+  };
+  const forward = await run(predicates);
+  const reversed = await run([...predicates].reverse());
+  expect(reversed).toEqual(forward);
+  const pairs = new Set(forward.requests.flatMap((request) => request.predicates.flatMap((left, leftIndex) =>
+    request.predicates.slice(leftIndex + 1).map((right) => [left.predicate_id, right.predicate_id].sort().join(":")))));
+  expect(pairs.size).toBe(28);
+  expect(forward.result.coverage).toEqual({
+    eligible_predicates: 8,
+    total_pairs: 28,
+    valid_successful_questions: 0,
+    covered_pairs_before_plan: 0,
+    remaining_pairs_before_plan: 28,
+    planned_questions: forward.requests.length,
+    planned_newly_covered_pairs: 28,
+    remaining_pairs_after_plan: 0,
+    maximum_remaining_questions_after_plan: 0,
+  });
+});
+
+test("successful question records resume exactly while stale contract and role coordinates re-ask", async () => {
+  const predicates = ["alpha", "bravo", "charlie", "delta"]
+    .map((name) => v2("ignored", name, "owner-a", ["subject"]));
+  const first = await invokePredicateAlignment({ invoke: async () => ({ assertions: [] }) }, predicates, options({
+    batch_prompt_budget: 35,
+  }));
+  const successful = first.batch_outcomes.filter((outcome) => outcome.kind === "success");
+  let calls = 0;
+  const resumed = await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } },
+    [...predicates].reverse(), options({ batch_prompt_budget: 35, successful_questions: successful }));
+  expect(calls).toBe(0);
+  expect(resumed.coverage).toMatchObject({ covered_pairs_before_plan: 6, remaining_pairs_before_plan: 0 });
+
+  const bumped = await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } },
+    predicates, options({
+      batch_prompt_budget: 35,
+      successful_questions: successful,
+      adjudication_contract: { ...contract, prompt_version: "predicate-prompt-v3" },
+    }));
+  expect(bumped.coverage.covered_pairs_before_plan).toBe(0);
+  expect(calls).toBeGreaterThan(0);
+
+  const changedRole = [predicates[0]!, v2("ignored", "bravo", "owner-a", ["object", "subject"]), ...predicates.slice(2)];
+  const roleReplay = await invokePredicateAlignment({ invoke: async () => ({ assertions: [] }) }, changedRole, options({
+    batch_prompt_budget: 35,
+    successful_questions: successful,
+  }));
+  expect(roleReplay.coverage.covered_pairs_before_plan).toBeLessThan(6);
+  expect(roleReplay.coverage.remaining_pairs_before_plan).toBeGreaterThan(0);
+});
+
+test("hard question limit yields a deterministic finite continuation until coverage is complete", async () => {
+  const predicates = ["alpha", "bravo", "charlie", "delta", "echo"]
+    .map((name) => v2("ignored", name, "owner-a", ["subject"]));
+  const successes: PredicateAlignmentBatchOutcome[] = [];
+  const remaining: number[] = [];
+  for (let cycle = 0; cycle < 4; cycle += 1) {
+    const result = await invokePredicateAlignment({ invoke: async () => ({ assertions: [] }) }, predicates, options({
+      batch_prompt_budget: 25,
+      max_questions_per_invocation: 3,
+      successful_questions: successes.filter((outcome) => outcome.kind === "success"),
+    }));
+    expect(result.batch_outcomes.length).toBeLessThanOrEqual(3);
+    successes.push(...result.batch_outcomes);
+    remaining.push(result.coverage.remaining_pairs_after_plan);
+  }
+  expect(remaining).toEqual([7, 4, 1, 0]);
+  const complete = await invokePredicateAlignment({ invoke: async () => {
+    throw new Error("complete coverage must not invoke");
+  } }, predicates, options({
+    batch_prompt_budget: 25,
+    max_questions_per_invocation: 3,
+    successful_questions: successes.filter((outcome) => outcome.kind === "success"),
+  }));
+  expect(complete.batch_outcomes).toEqual([]);
+  expect(complete.coverage).toMatchObject({ covered_pairs_before_plan: 10, remaining_pairs_before_plan: 0 });
+});
+
+test("forged, accessor, proxy, decorated, and malformed success records cover nothing", async () => {
+  const predicates = [v2("ignored", "alpha", "owner-a", ["subject"]), v2("ignored", "bravo", "owner-a", ["subject"])];
+  const first = await invokePredicateAlignment({ invoke: async () => ({ assertions: [] }) }, predicates, options());
+  const success = first.batch_outcomes[0]!;
+  if (success.kind !== "success") throw new Error("expected successful fixture");
+  const accessor = {} as Record<string, unknown>;
+  Object.defineProperty(accessor, "batch_question_digest", { get: () => success.batch_question_digest });
+  const decorated = [success] as unknown[];
+  Object.defineProperty(decorated, "hidden", { value: true });
+  const badRecords: unknown[] = [
+    { ...success, response_digest: "not-a-digest" },
+    accessor,
+    new Proxy({ ...success }, {}),
+  ];
+  for (const records of [badRecords, decorated]) {
+    let calls = 0;
+    const result = await invokePredicateAlignment({ invoke: async () => { calls += 1; return { assertions: [] }; } },
+      predicates, options({ successful_questions: records as never }));
+    expect(calls).toBe(1);
+    expect(result.coverage.valid_successful_questions).toBe(0);
+    expect(result.coverage.remaining_pairs_before_plan).toBe(1);
+  }
 });
