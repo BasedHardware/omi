@@ -219,10 +219,11 @@ function runMac(manifest, outputDir) {
   // deterministic digest instead of weakening that native-shell boundary.
   env.OMI_APP_NAME = macRuntimeAppName(manifest.run_id);
   env.OMI_SURFACE_PORT = "5290"; env.OMI_FIXTURE_CAPTURE_WAIT_SECONDS = "5";
-  env.OMI_PROBE_JS = probeScript(manifest); env.OMI_PROBE_DELAY = "2"; env.OMI_PROBE_SETTLE = "1";
+  env.OMI_PROBE_JS = probeScript(manifest); env.OMI_PROBE_DELAY = "5"; env.OMI_PROBE_SETTLE = "1";
   env.OMI_PROBE_PENDING_VALUE = "OMI_RUNTIME_PENDING";
-  env.OMI_PROBE_MAX_ATTEMPTS = "80";
+  env.OMI_PROBE_MAX_ATTEMPTS = "50";
   env.OMI_PROBE_RETRY_INTERVAL = "0.1";
+  env.OMI_ACCEPTANCE_WAIT_SECONDS = "30";
   const args = ["--fixture", manifest.domain, "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", screenshot, "--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height)];
   const started = new Date();
   const result = spawnSync("/bin/bash", [launcher, ...args], { cwd: coreRoot, env, encoding: "utf8", timeout: 300_000, maxBuffer: 64 * 1024 * 1024 });
