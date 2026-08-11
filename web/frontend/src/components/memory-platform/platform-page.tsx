@@ -160,7 +160,7 @@ export default function PlatformPage() {
   src="https://your-app.example/memory"
   title="Memory"
   loading="lazy"
-  sandbox="allow-scripts allow-same-origin"
+  sandbox="allow-scripts"
 />`}</pre>
         </section>
 

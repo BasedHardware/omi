@@ -44,6 +44,27 @@ describe('memory platform website contract', () => {
     assert.match(docs, new RegExp(`limit 1–${backendLimit}\\b`));
   });
 
+  it('never publishes an iframe sandbox the frame can remove', async () => {
+    const sources = await Promise.all([
+      read('app/memory-platform/embed/page.tsx'),
+      read('components/memory-platform/platform-page.tsx'),
+      readFile(
+        new URL('../../../../docs/memory/embedding.md', `file://${frontendRoot}/`),
+        'utf8',
+      ),
+    ]);
+
+    for (const source of sources) {
+      for (const [, tokens] of source.matchAll(/sandbox="([^"]*)"/g)) {
+        const values = tokens.split(/\s+/).filter(Boolean);
+        assert.ok(
+          !(values.includes('allow-scripts') && values.includes('allow-same-origin')),
+          `sandbox="${tokens}" lets the framed document remove its own sandbox`,
+        );
+      }
+    }
+  });
+
   it('proxies through a server-owned token instead of the caller header', async () => {
     const embed = await read('app/memory-platform/embed/page.tsx');
 
