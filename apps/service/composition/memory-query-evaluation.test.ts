@@ -10,8 +10,8 @@ import type { GraphSnapshot } from "../../../core/retrieve";
 import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import { buildContentSafeRecallTrace } from "../../../core/retrieve/recall-integrity";
 import { createAuthorizedLedgerWriteContextIssuer } from "../auth/authorized-context-internal";
-import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
 import { defineMemoryReadGroundingRepository } from "../stores/memory-read-grounding-repository";
+import { defineMemoryQueryEvaluationGraphSource } from "../stores/memory-query-evaluation-graph-source";
 import {
   defineMemoryShadowResultRepository,
   memoryEvaluationResultId,
@@ -110,15 +110,15 @@ const request = Object.freeze({
   repeats: 1,
 });
 
-const setup = (empty = false) => {
+const setup = (empty = false, codecRootSecret = new Uint8Array(32).fill(19)) => {
   const results = new Map<string, unknown>();
   const artifacts = new Map<string, unknown>();
   const pairs = new Map<string, Readonly<MemoryEvaluationPair>>();
   let graphLoads = 0;
-  let traceEncodes = 0;
   let modelCalls = 0;
   let pairWrites = 0;
   let modelBytes = "";
+  const modelTraceRefs: string[] = [];
   const repositoryImplementation: MemoryShadowResultImplementation = {
     load: async (authorized, coordinate) => {
       const found = results.get(memoryEvaluationResultId(authorized, coordinate));
@@ -145,8 +145,7 @@ const setup = (empty = false) => {
       return artifact ? { kind: "found", artifact } : { kind: "missing" };
     },
   });
-  const coordinator = composeMemoryQueryEvaluation({
-    load_graph: async (authorized, selected) => {
+  const graphSource = defineMemoryQueryEvaluationGraphSource(async (authorized, selected) => {
       graphLoads += 1;
       return {
         kind: "found", owner_account_id: authorized.account_id,
@@ -154,19 +153,17 @@ const setup = (empty = false) => {
         input_frontier: selected.input_frontier, query_text: "What did I say about Omi?",
         account_timezone: "America/New_York", graph_snapshot: graph(empty),
       };
-    },
-    encode_trace_ref: ({ reader_projection_digest, evidence_closure_digest }) => {
-      traceEncodes += 1;
-      return createReaderScopedOpaqueCodecs({
-        root_secret: new Uint8Array(32).fill(19), reader_projection_digest,
-      }).encodeTraceRef(evidence_closure_digest);
-    },
+    });
+  const coordinator = composeMemoryQueryEvaluation({
+    graph_source: graphSource,
+    codec_root_secret: codecRootSecret,
     result_repository: resultRepository,
     grounding_repository: groundingRepository,
     produce: async (modelRequest) => {
       modelCalls += 1;
       modelBytes = JSON.stringify(modelRequest);
       const cited = modelRequest.candidates[0]!.trace_ref;
+      modelTraceRefs.push(cited);
       return {
         kind: "produced",
         response_digest: sha256CanonicalContent({
@@ -191,8 +188,9 @@ const setup = (empty = false) => {
   });
   return {
     coordinator,
-    counts: () => ({ graphLoads, traceEncodes, modelCalls, pairWrites }),
+    counts: () => ({ graphLoads, modelCalls, pairWrites }),
     modelBytes: () => modelBytes,
+    modelTraceRefs,
     results, artifacts, pairs,
   };
 };
@@ -207,7 +205,7 @@ describe("single memory query evaluation composition", () => {
       recorded_pairs: 1, replayed_pairs: 0,
     });
     expect(first.pair_receipts).toHaveLength(1);
-    expect(fixture.counts()).toEqual({ graphLoads: 4, traceEncodes: 4, modelCalls: 2, pairWrites: 1 });
+    expect(fixture.counts()).toEqual({ graphLoads: 4, modelCalls: 2, pairWrites: 1 });
     expect(fixture.results.size).toBe(2);
     expect(fixture.artifacts.size).toBe(2);
     expect(fixture.pairs.size).toBe(1);
@@ -226,7 +224,7 @@ describe("single memory query evaluation composition", () => {
       observed_model_calls: 0, staged_results: 0, replayed_results: 2,
       recorded_pairs: 0, replayed_pairs: 1,
     });
-    expect(fixture.counts()).toEqual({ graphLoads: 8, traceEncodes: 8, modelCalls: 2, pairWrites: 2 });
+    expect(fixture.counts()).toEqual({ graphLoads: 8, modelCalls: 2, pairWrites: 2 });
   });
 
   test("an empty owner projection pairs without calling the model or trace codec", async () => {
@@ -236,29 +234,75 @@ describe("single memory query evaluation composition", () => {
       kind: "completed", observed_model_calls: 0, staged_results: 2,
       recorded_pairs: 1,
     });
-    expect(fixture.counts()).toEqual({ graphLoads: 4, traceEncodes: 0, modelCalls: 0, pairWrites: 1 });
+    expect(fixture.counts()).toEqual({ graphLoads: 4, modelCalls: 0, pairWrites: 1 });
   });
 
   test("outer accessors, extras, and forged repositories fail before dependency use", () => {
     let getterCalls = 0;
     const fixture = setup();
-    const hostile = Object.defineProperty({}, "load_graph", {
+    const hostile = Object.defineProperty({}, "graph_source", {
       enumerable: true,
-      get() { getterCalls += 1; return () => null; },
+      get() { getterCalls += 1; return {}; },
     });
     for (const [key, value] of Object.entries({
-      encode_trace_ref: () => "", result_repository: {}, grounding_repository: {}, produce: () => null,
+      codec_root_secret: new Uint8Array(32), result_repository: {},
+      grounding_repository: {}, produce: () => null,
     })) Object.defineProperty(hostile, key, { enumerable: true, value });
     expect(() => composeMemoryQueryEvaluation(hostile as never)).toThrow("invalid_config");
     expect(getterCalls).toBe(0);
 
     expect(() => composeMemoryQueryEvaluation({
-      load_graph: async () => ({ kind: "not_found" }),
-      encode_trace_ref: () => "",
+      graph_source: { load: async () => ({ kind: "not_found" }) } as never,
+      codec_root_secret: new Uint8Array(32),
       result_repository: {} as never,
       grounding_repository: {} as never,
       produce: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
-    })).toThrow("unverified_repository");
-    expect(fixture.counts()).toEqual({ graphLoads: 0, traceEncodes: 0, modelCalls: 0, pairWrites: 0 });
+    })).toThrow("invalid_config");
+    expect(fixture.counts()).toEqual({ graphLoads: 0, modelCalls: 0, pairWrites: 0 });
+  });
+
+  test("composition snapshots codec root bytes and different roots stay reader isolated", async () => {
+    const mutableRoot = new Uint8Array(32).fill(19);
+    const mutatedAfterConstruction = setup(false, mutableRoot);
+    mutableRoot.fill(20);
+    const stableRoot = setup(false, new Uint8Array(32).fill(19));
+    const differentRoot = setup(false, new Uint8Array(32).fill(20));
+
+    const [mutated, stable, different] = await Promise.all([
+      mutatedAfterConstruction.coordinator.run(context(), request),
+      stableRoot.coordinator.run(context(), request),
+      differentRoot.coordinator.run(context(), request),
+    ]);
+    expect(mutatedAfterConstruction.modelTraceRefs).toEqual(stableRoot.modelTraceRefs);
+    expect(mutatedAfterConstruction.modelTraceRefs).not.toEqual(differentRoot.modelTraceRefs);
+    expect(mutated).toEqual(stable);
+    expect(mutated).not.toEqual(different);
+  });
+
+  test("invalid codec roots fail before any dependency call", () => {
+    const fixture = setup();
+    const graphSource = defineMemoryQueryEvaluationGraphSource(async () => ({ kind: "not_found" }));
+    const base = {
+      graph_source: graphSource,
+      codec_root_secret: new Uint8Array(32),
+      result_repository: defineMemoryShadowResultRepository({
+        load: async () => ({ kind: "missing" }),
+        stage: async () => ({ kind: "serialization_retryable" }),
+        recordPair: async () => ({ kind: "serialization_retryable" }),
+      }),
+      grounding_repository: defineMemoryReadGroundingRepository({
+        load: async () => ({ kind: "missing" }),
+        stage: async () => ({ kind: "serialization_retryable" }),
+      }),
+      produce: async () => ({ kind: "failed" as const, error_code: "dependency_unavailable" as const }),
+    };
+    for (const candidate of [
+      { ...base, codec_root_secret: new Uint8Array(31) },
+      { ...base, codec_root_secret: new Uint8Array(4_097) },
+      { ...base, codec_root_secret: new Uint8Array(new SharedArrayBuffer(32)) },
+      { ...base, codec_root_secret: new Proxy(new Uint8Array(32), {}) },
+      { ...base, extra: true },
+    ]) expect(() => composeMemoryQueryEvaluation(candidate as never)).toThrow("invalid_config");
+    expect(fixture.counts()).toEqual({ graphLoads: 0, modelCalls: 0, pairWrites: 0 });
   });
 });
