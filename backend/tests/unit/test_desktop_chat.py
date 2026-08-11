@@ -39,6 +39,23 @@ def test_request_translates_openai_tool_history_and_alias():
     assert payload['tool_choice'] == {'type': 'auto'}
 
 
+@pytest.mark.parametrize('requested_model', ['omi-luna', 'omi-auto', 'omi:auto:chat-agent', 'omi-structured', ''])
+def test_request_normalizes_managed_aliases_for_direct_fallback(requested_model):
+    public_model, payload = desktop_chat._request(
+        {'model': requested_model, 'messages': [{'role': 'user', 'content': 'hello'}]}
+    )
+
+    assert public_model == (requested_model.strip().lower() or 'omi-sonnet')
+    assert payload['model'] == 'claude-sonnet-4-6'
+
+
+def test_request_defaults_missing_model_for_direct_fallback():
+    public_model, payload = desktop_chat._request({'messages': [{'role': 'user', 'content': 'hello'}]})
+
+    assert public_model == 'omi-sonnet'
+    assert payload['model'] == 'claude-sonnet-4-6'
+
+
 def test_request_injects_web_search_for_desktop_opt_in():
     _, payload = desktop_chat._request(
         {

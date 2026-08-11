@@ -89,7 +89,7 @@ def test_empty_stage1_content_returns_none(monkeypatch):
     )
 
 
-def test_empty_stage2_content_keeps_stage1(monkeypatch):
+def test_empty_stage2_content_fails_closed(monkeypatch):
     captured: list[list[tuple[str, str]]] = []
     _patch(monkeypatch, ['- fresh fact', ''], captured)
 
@@ -99,8 +99,7 @@ def test_empty_stage2_content_keeps_stage1(monkeypatch):
         past_profiles=['- old fact'],
     )
 
-    assert result is not None
-    assert result.profile_text == '- fresh fact'
+    assert result is None
 
 
 def test_profile_text_is_hard_capped(monkeypatch):

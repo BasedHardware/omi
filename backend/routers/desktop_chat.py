@@ -201,6 +201,11 @@ _MODEL_ROUTES = {
     'claude-sonnet-4-20250514': 'claude-sonnet-4-6',
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
     'claude-haiku-4-5': 'claude-haiku-4-5',
+    'omi-luna': 'claude-sonnet-4-6',
+    'omi-auto': 'claude-sonnet-4-6',
+    CHAT_AGENT_AUTO_LANE_ID: 'claude-sonnet-4-6',
+    'omi-structured': 'claude-sonnet-4-6',
+    CHAT_STRUCTURED_AUTO_LANE_ID: 'claude-sonnet-4-6',
 }
 _MANAGED_CHAT_ALIASES = {
     'omi-sonnet',
@@ -476,7 +481,13 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         raise ValueError('request body must be an object')
     model = body.get('model')
     messages = body.get('messages')
-    if not isinstance(model, str) or model not in _MODEL_ROUTES:
+    if 'model' not in body:
+        model_name = 'omi-sonnet'
+    elif isinstance(model, str):
+        model_name = model.strip().lower() or 'omi-sonnet'
+    else:
+        raise ValueError('unsupported model')
+    if model_name not in _MODEL_ROUTES:
         raise ValueError('unsupported model')
     if not isinstance(messages, list):
         raise ValueError('messages must be an array')
@@ -528,7 +539,7 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
         raise ValueError('max_tokens must be a positive integer')
     result: dict[str, object] = {
-        'model': _MODEL_ROUTES[model],
+        'model': _MODEL_ROUTES[model_name],
         'max_tokens': min(maximum, _MAX_TOKENS),
         'messages': translated,
     }
@@ -584,7 +595,7 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         result['tools'] = ([_WEB_SEARCH_TOOL] if inject_web_search else []) + client_tools
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
-    return model, result
+    return model_name, result
 
 
 def _usage_field(usage: object, field: str) -> int:

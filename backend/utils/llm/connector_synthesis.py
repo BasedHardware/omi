@@ -23,6 +23,7 @@ ConnectorSource = Literal['calendar', 'gmail', 'notes']
 MAX_ITEMS = 200
 MAX_ITEM_CHARS = 1_000
 MAX_EXISTING = 200
+MAX_EXISTING_MEMORY_CHARS = 1_000
 
 
 class SynthesizedTask(BaseModel):
@@ -111,7 +112,7 @@ def synthesize_connector_items(
     if not cleaned:
         return ConnectorSynthesis(memories=[], tasks=[], profile="")
 
-    existing = [m.strip() for m in (existing_memories or []) if m.strip()][:MAX_EXISTING]
+    existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in (existing_memories or []) if m.strip()][:MAX_EXISTING]
     existing_block = "\n".join(f"- {m}" for m in existing) if existing else "(none)"
 
     try:

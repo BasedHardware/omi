@@ -75,3 +75,15 @@ def test_calendar_synthesis_parses_and_dedupes(monkeypatch):
 def test_unparseable_response_returns_none(monkeypatch):
     _patch(monkeypatch, 'not json at all')
     assert connector_synthesis.synthesize_connector_items('uid', 'gmail', ['From: a | Subject: b | c']) is None
+
+
+def test_existing_memories_are_bounded_before_prompt_construction(monkeypatch):
+    capture: dict = {}
+    _patch(monkeypatch, '{"memories": [], "tasks": [], "profile": ""}', capture)
+    existing = 'x' * connector_synthesis.MAX_EXISTING_MEMORY_CHARS + 'TAIL'
+
+    result = connector_synthesis.synthesize_connector_items('uid', 'notes', ['A note'], existing_memories=[existing])
+
+    assert result is not None
+    assert existing[: connector_synthesis.MAX_EXISTING_MEMORY_CHARS] in capture['prompt']
+    assert 'TAIL' not in capture['prompt']

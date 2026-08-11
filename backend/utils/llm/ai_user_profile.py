@@ -193,7 +193,8 @@ def synthesize_ai_user_profile(
             if consolidated:
                 profile_text = consolidated
             else:
-                logger.warning("AI user profile stage 2 returned empty content for uid=%s; keeping stage 1", uid)
+                logger.error("AI user profile stage 2 returned empty content for uid=%s", uid)
+                return None
     except Exception:
         logger.exception("Error synthesizing AI user profile for uid=%s", uid)
         return None
