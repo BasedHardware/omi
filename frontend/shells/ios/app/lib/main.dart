@@ -494,6 +494,9 @@ class _SurfaceHostState extends State<SurfaceHost>
       ..setOnConsoleMessage((msg) {
         debugPrint('[surface] ${msg.message}');
         _scheme?.log('[surface] ${msg.message}', echo: false);
+        if (_captureOnly && msg.message.contains('OMI_PRODUCTION_READY')) {
+          _beginCaptureReadiness();
+        }
         if (msg.message.contains('OMI_PRODUCTION_READY') ||
             msg.message.contains('data-surface-state=ready') ||
             msg.message.contains('data-surface-state="ready"')) {
@@ -530,9 +533,20 @@ class _SurfaceHostState extends State<SurfaceHost>
     _boot();
   }
 
-  Future<void> _finishPageLoad(String url) async {
-    if (_captureOnly) {
-      final result = await _controller.runJavaScriptReturningResult('''
+  bool _captureReadinessStarted = false;
+
+  void _beginCaptureReadiness() {
+    if (_captureReadinessStarted) return;
+    _captureReadinessStarted = true;
+    unawaited(
+      _publishCaptureReadiness().catchError((Object error, StackTrace stack) {
+        debugPrint('NATIVE_CAPTURE_READY_FAILED $error');
+      }),
+    );
+  }
+
+  Future<void> _publishCaptureReadiness() async {
+    final result = await _controller.runJavaScriptReturningResult('''
         (() => {
           const root = document.querySelector('main[data-production-shell="true"]');
           if (!root) return JSON.stringify({ok:false});
@@ -544,35 +558,41 @@ class _SurfaceHostState extends State<SurfaceHost>
           });
         })()
       ''');
-      Object? decoded = result;
-      if (result is String) {
-        try {
-          decoded = jsonDecode(result);
-        } on FormatException {
-          throw StateError('capture readiness result was not JSON');
-        }
+    Object? decoded = result;
+    if (result is String) {
+      try {
+        decoded = jsonDecode(result);
+      } on FormatException {
+        throw StateError('capture readiness result was not JSON');
       }
-      if (decoded is! Map ||
-          decoded['ok'] != true ||
-          decoded['route'] is! String ||
-          (decoded['route'] as String).isEmpty ||
-          decoded['fixture'] is! String ||
-          !(decoded['fixture'] as String).startsWith('polish:') ||
-          decoded['state'] is! String ||
-          (decoded['state'] as String).isEmpty) {
-        throw StateError('capture surface did not expose a typed fixture root');
-      }
-      final confirmed = await const MethodChannel('omi/capture-launch')
-          .invokeMethod<bool>('ready', <String, String>{
-            'run_id': _captureRunId,
-            'route': decoded['route'] as String,
-            'fixture': decoded['fixture'] as String,
-            'state': decoded['state'] as String,
-          });
-      if (confirmed != true) {
-        throw StateError('native capture host did not confirm readiness');
-      }
-      debugPrint('NATIVE_CAPTURE_HOST_CONFIRMED run_id=$_captureRunId');
+    }
+    if (decoded is! Map ||
+        decoded['ok'] != true ||
+        decoded['route'] is! String ||
+        (decoded['route'] as String).isEmpty ||
+        decoded['fixture'] is! String ||
+        !(decoded['fixture'] as String).startsWith('polish:') ||
+        decoded['state'] is! String ||
+        (decoded['state'] as String).isEmpty) {
+      throw StateError('capture surface did not expose a typed fixture root');
+    }
+    final confirmed = await const MethodChannel('omi/capture-launch')
+        .invokeMethod<bool>('ready', <String, String>{
+          'run_id': _captureRunId,
+          'route': decoded['route'] as String,
+          'fixture': decoded['fixture'] as String,
+          'state': decoded['state'] as String,
+        });
+    if (confirmed != true) {
+      throw StateError('native capture host did not confirm readiness');
+    }
+    debugPrint('NATIVE_CAPTURE_HOST_CONFIRMED run_id=$_captureRunId');
+  }
+
+  Future<void> _finishPageLoad(String url) async {
+    if (_captureOnly) {
+      // The WK page-finished callback precedes React's typed fixture root.
+      // Capture readiness is published only after OMI_PRODUCTION_READY.
       return;
     }
     if (_consumerEvidence != null) {
