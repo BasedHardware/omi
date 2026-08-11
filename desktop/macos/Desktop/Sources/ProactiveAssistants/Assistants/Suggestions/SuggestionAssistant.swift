@@ -93,13 +93,8 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Initialization
 
   init(apiKey: String? = nil) throws {
-    let model = ModelQoS.Gemini.suggestions
-    self.geminiClient = try GeminiClient(
-      apiKey: apiKey,
-      model: model,
-      fallbackModel: "gemini-2.5-flash"
-    )
-    telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
+    self.geminiClient = try GeminiClient(apiKey: apiKey, proactiveFeature: .suggestions)
+    telemetryModel = .other
   }
 
   // MARK: - Trigger

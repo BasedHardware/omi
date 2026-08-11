@@ -31,6 +31,13 @@ class AutoLaneRouteRef:
 
 RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 
+
+@dataclass(frozen=True)
+class DesktopGeminiProxyRoute:
+    primary_model: str
+    fallback_model: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #
@@ -163,6 +170,15 @@ DEFAULT_CONFIG = _DEFAULT_CONFIG
 # traffic; existing direct LLM routing never consults this map.
 _AUTO_LANE_FEATURES: Dict[str, str] = {}
 
+_DESKTOP_GEMINI_PROXY_ROUTES: Dict[str, DesktopGeminiProxyRoute] = {
+    'desktop_proactive_goals': DesktopGeminiProxyRoute('gemini-2.5-flash'),
+    'desktop_proactive_insight': DesktopGeminiProxyRoute('gemini-2.5-pro', 'gemini-2.5-flash'),
+    'desktop_proactive_memory': DesktopGeminiProxyRoute('gemini-2.5-flash'),
+    'desktop_proactive_suggestions': DesktopGeminiProxyRoute('gemini-2.5-flash-lite', 'gemini-2.5-flash'),
+    'desktop_proactive_task_extraction': DesktopGeminiProxyRoute('gemini-2.5-flash'),
+    'desktop_proactive_task_maintenance': DesktopGeminiProxyRoute('gemini-2.5-flash'),
+}
+
 
 def _get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
@@ -243,6 +259,19 @@ def get_route_ref(feature: str) -> RouteRef:
         provider=provider,
         options=get_route_options(feature, model, provider),
     )
+
+
+def get_desktop_gemini_proxy_route(feature: str) -> DesktopGeminiProxyRoute | None:
+    return _DESKTOP_GEMINI_PROXY_ROUTES.get(feature)
+
+
+def get_desktop_gemini_proxy_model(feature: str, *, fallback: bool = False) -> str | None:
+    route = get_desktop_gemini_proxy_route(feature)
+    if route is None:
+        return None
+    if fallback and route.fallback_model is not None:
+        return route.fallback_model
+    return route.primary_model
 
 
 def supports_prompt_cache(model: str) -> bool:

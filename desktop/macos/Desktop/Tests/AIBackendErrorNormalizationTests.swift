@@ -3,6 +3,17 @@ import XCTest
 @testable import Omi_Computer
 
 final class AIBackendErrorNormalizationTests: XCTestCase {
+  func testProactiveRoutesDeclareFeatureAndFallbackIntent() {
+    XCTAssertEqual(
+      GeminiClient.proactiveRouteHeaders(feature: .insight, fallback: false),
+      ["X-Omi-LLM-Feature": "desktop_proactive_insight", "X-Omi-Gemini-Route": "primary"]
+    )
+    XCTAssertEqual(
+      GeminiClient.proactiveRouteHeaders(feature: .insight, fallback: true),
+      ["X-Omi-LLM-Feature": "desktop_proactive_insight", "X-Omi-Gemini-Route": "fallback"]
+    )
+  }
+
   func testEmbeddingTrialExpiredIsProductGateAndNotSentryActionable() {
     let error = EmbeddingService.EmbeddingError.serverError(
       statusCode: 402,

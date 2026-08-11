@@ -181,7 +181,20 @@ struct GeminiResponse: Decodable {
 /// All requests route through the Rust backend (/v1/proxy/gemini/*) which adds
 /// the Gemini API key server-side. Auth uses Firebase Bearer token.
 actor GeminiClient {
+  enum ProactiveFeature: String {
+    case goals = "desktop_proactive_goals"
+    case insight = "desktop_proactive_insight"
+    case memory = "desktop_proactive_memory"
+    case suggestions = "desktop_proactive_suggestions"
+    case taskExtraction = "desktop_proactive_task_extraction"
+    case taskMaintenance = "desktop_proactive_task_maintenance"
+  }
+
+  private static let serverSelectedModelRequestPath = "gemini-2.5-flash"
+  private static let serverSelectedFallbackModelRequestPath = "gemini-2.5-flash-lite"
+
   private let model: String
+  private let proactiveFeature: ProactiveFeature?
 
   /// Backend proxy base URL resolved through the identity-bound endpoint policy.
   /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
@@ -356,12 +369,28 @@ actor GeminiClient {
       throw GeminiClientError.missingAPIKey
     }
     self.model = model
+    self.proactiveFeature = nil
     self.fallbackModel = fallbackModel
     // Which model a proactive assistant actually runs on is a product decision with a
     // measurable click-through cost, and until now it was invisible at runtime — the model
     // appears only inside the request URL, so a tier change could not be confirmed on a
     // real machine. Model IDs are non-sensitive and low-cardinality.
     log("GeminiClient: model=\(model) fallback=\(fallbackModel ?? "none")")
+  }
+
+  init(apiKey: String? = nil, proactiveFeature: ProactiveFeature) throws {
+    guard !Self.proxyBaseURL.isEmpty else {
+      throw GeminiClientError.missingAPIKey
+    }
+    self.model = Self.serverSelectedModelRequestPath
+    self.proactiveFeature = proactiveFeature
+    switch proactiveFeature {
+    case .insight, .suggestions:
+      self.fallbackModel = Self.serverSelectedFallbackModelRequestPath
+    case .goals, .memory, .taskExtraction, .taskMaintenance:
+      self.fallbackModel = nil
+    }
+    log("GeminiClient: proactiveFeature=\(proactiveFeature.rawValue)")
   }
 
   /// Get Firebase auth header for proxy requests
@@ -374,6 +403,26 @@ actor GeminiClient {
   /// other than the instance default (e.g. the fallback model).
   private func proxyURL(action: String, modelOverride: String? = nil) -> URL {
     URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelOverride ?? model):\(action)")!
+  }
+
+  private func requestHeaders(modelOverride: String? = nil) async throws -> [String: String] {
+    var headers = ["Authorization": try await authHeader()]
+    headers.merge(
+      Self.proactiveRouteHeaders(
+        feature: proactiveFeature,
+        fallback: modelOverride != nil && modelOverride != model
+      ),
+      uniquingKeysWith: { _, new in new }
+    )
+    return headers
+  }
+
+  static func proactiveRouteHeaders(feature: ProactiveFeature?, fallback: Bool) -> [String: String] {
+    guard let feature else { return [:] }
+    return [
+      "X-Omi-LLM-Feature": feature.rawValue,
+      "X-Omi-Gemini-Route": fallback ? "fallback" : "primary",
+    ]
   }
 
   /// Log the raw API error message for debugging and throw a sanitized error.
@@ -554,7 +603,9 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        for (field, value) in try await requestHeaders() {
+          urlRequest.setValue(value, forHTTPHeaderField: field)
+        }
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -629,7 +680,9 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        for (field, value) in try await requestHeaders() {
+          urlRequest.setValue(value, forHTTPHeaderField: field)
+        }
         urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -701,7 +754,9 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        for (field, value) in try await requestHeaders() {
+          urlRequest.setValue(value, forHTTPHeaderField: field)
+        }
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -1006,7 +1061,9 @@ extension GeminiClient {
           var urlRequest = URLRequest(url: url)
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          for (field, value) in try await requestHeaders(modelOverride: activeModel) {
+            urlRequest.setValue(value, forHTTPHeaderField: field)
+          }
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 

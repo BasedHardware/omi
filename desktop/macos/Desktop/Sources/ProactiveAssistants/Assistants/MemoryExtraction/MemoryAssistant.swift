@@ -74,7 +74,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   init(apiKey: String? = nil) throws {
     // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
-    self.geminiClient = try GeminiClient(apiKey: apiKey)
+    self.geminiClient = try GeminiClient(apiKey: apiKey, proactiveFeature: .memory)
     self.extractionOverride = nil
     self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
       runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())

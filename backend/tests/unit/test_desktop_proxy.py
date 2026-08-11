@@ -24,6 +24,7 @@ def make_request(
     body: bytes = b'{"contents":[{"parts":[{"text":"hello"}]}]}',
     *,
     query_string: bytes = b"",
+    headers: list[tuple[bytes, bytes]] | None = None,
 ) -> Request:
     sent = False
     pending = asyncio.Event()
@@ -41,7 +42,7 @@ def make_request(
             "method": "POST",
             "path": "/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
             "query_string": query_string,
-            "headers": [(b"x-omi-request-id", b"request-12345678")],
+            "headers": [(b"x-omi-request-id", b"request-12345678"), *(headers or [])],
         },
         receive,
     )
@@ -90,6 +91,62 @@ def test_desktop_live_suggestions_model_is_allowed_and_vertex_routed(monkeypatch
         "https://us-central1-aiplatform.googleapis.com/v1/projects/omi-test/locations/us-central1"
         "/publishers/google/models/gemini-2.5-flash-lite:generateContent"
     )
+
+
+def test_desktop_proactive_feature_route_uses_backend_primary_and_fallback_models():
+    request = make_request(
+        headers=[
+            (b"x-omi-llm-feature", b"desktop_proactive_insight"),
+            (b"x-omi-gemini-route", b"primary"),
+        ]
+    )
+    path, model, action = desktop_proxy._path_parts("models/gemini-2.5-flash:generateContent")
+    assert desktop_proxy._resolve_desktop_feature_route(request, path, model, action) == (
+        "models/gemini-2.5-pro:generateContent",
+        "gemini-2.5-pro",
+    )
+
+    fallback_request = make_request(
+        headers=[
+            (b"x-omi-llm-feature", b"desktop_proactive_insight"),
+            (b"x-omi-gemini-route", b"fallback"),
+        ]
+    )
+    assert desktop_proxy._resolve_desktop_feature_route(fallback_request, path, model, action) == (
+        "models/gemini-2.5-flash:generateContent",
+        "gemini-2.5-flash",
+    )
+
+
+@pytest.mark.parametrize(
+    ("feature", "expected_model"),
+    [
+        ("desktop_proactive_goals", "gemini-2.5-flash"),
+        ("desktop_proactive_memory", "gemini-2.5-flash"),
+        ("desktop_proactive_suggestions", "gemini-2.5-flash-lite"),
+        ("desktop_proactive_task_extraction", "gemini-2.5-flash"),
+        ("desktop_proactive_task_maintenance", "gemini-2.5-flash"),
+    ],
+)
+def test_desktop_proactive_feature_routes_use_backend_models(feature, expected_model):
+    request = make_request(headers=[(b"x-omi-llm-feature", feature.encode())])
+    path, model, action = desktop_proxy._path_parts("models/gemini-2.5-pro:generateContent")
+    assert desktop_proxy._resolve_desktop_feature_route(request, path, model, action) == (
+        f"models/{expected_model}:generateContent",
+        expected_model,
+    )
+
+
+def test_desktop_proactive_feature_route_rejects_unknown_route_selection():
+    request = make_request(
+        headers=[
+            (b"x-omi-llm-feature", b"desktop_proactive_memory"),
+            (b"x-omi-gemini-route", b"untrusted"),
+        ]
+    )
+    path, model, action = desktop_proxy._path_parts("models/gemini-2.5-flash:generateContent")
+    with pytest.raises(HTTPException, match="Gemini route"):
+        desktop_proxy._resolve_desktop_feature_route(request, path, model, action)
 
 
 def test_every_model_the_desktop_client_ships_is_proxy_allowlisted():

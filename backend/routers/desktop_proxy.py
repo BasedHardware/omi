@@ -23,6 +23,7 @@ from utils.http_client import (
     get_desktop_gemini_semaphore,
     get_desktop_gemini_stream_client,
 )
+from utils.llm.model_config import get_desktop_gemini_proxy_model, get_desktop_gemini_proxy_route
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -49,6 +50,8 @@ _MAX_CONTENT_PARTS = 512
 _MAX_INLINE_MEDIA_PARTS = 16
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
+_DESKTOP_LLM_FEATURE_HEADER = 'x-omi-llm-feature'
+_DESKTOP_GEMINI_ROUTE_HEADER = 'x-omi-gemini-route'
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
@@ -245,6 +248,19 @@ def _path_parts(path: str) -> tuple[str, str, str]:
     if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
         raise HTTPException(status_code=403, detail='Gemini model or action is not allowed')
     return path, model, action
+
+
+def _resolve_desktop_feature_route(request: Request, path: str, model: str, action: str) -> tuple[str, str]:
+    feature = request.headers.get(_DESKTOP_LLM_FEATURE_HEADER, '').strip()
+    if not feature or get_desktop_gemini_proxy_route(feature) is None:
+        return path, model
+    route = request.headers.get(_DESKTOP_GEMINI_ROUTE_HEADER, 'primary').strip().lower()
+    if route not in {'primary', 'fallback'}:
+        raise HTTPException(status_code=400, detail='Gemini route must be primary or fallback')
+    selected_model = get_desktop_gemini_proxy_model(feature, fallback=route == 'fallback')
+    if selected_model is None:
+        raise HTTPException(status_code=403, detail='Gemini feature route is not allowed')
+    return f'models/{selected_model}:{action}', selected_model
 
 
 def _as_nonnegative_int(value: Any) -> int | None:
@@ -676,6 +692,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         body = await _read_request_body(request)
         telemetry.shape = _payload_shape(body)
         path, model, action = _path_parts(path)
+        path, model = _resolve_desktop_feature_route(request, path, model, action)
         telemetry.model = model
         telemetry.action = action
         if llm_stub_enabled():

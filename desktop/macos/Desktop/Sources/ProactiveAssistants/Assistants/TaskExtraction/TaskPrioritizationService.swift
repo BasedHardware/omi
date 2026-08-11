@@ -46,7 +46,7 @@ actor TaskPrioritizationService {
     guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
     geminiClientInitAttempted = true
     do {
-      let client = try GeminiClient()
+      let client = try GeminiClient(proactiveFeature: .taskMaintenance)
       geminiClient = client
       return client
     } catch {
