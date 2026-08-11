@@ -152,7 +152,7 @@ void main() {
       await request.response.close();
     });
     addTearDown(() => service.close(force: true));
-    final navigated = <ConsumerEvidenceRoute>[];
+    final navigated = <Uri>[];
     var listenStarted = false;
     var listenStartAttempts = 0;
     var chatAuthored = false;
@@ -166,9 +166,9 @@ void main() {
     await collector.prepare();
     final driver = ConsumerEvidenceDriver(
       collector: collector,
-      navigate: (route) async => navigated.add(route),
+      navigate: (uri) async => navigated.add(uri),
       observe: () async {
-        final route = navigated.last;
+        final route = ConsumerEvidenceRoute.values.byName(navigated.last.queryParameters['route']!);
         if (route == ConsumerEvidenceRoute.listen && !listenStarted) {
           return null;
         }
@@ -209,7 +209,17 @@ void main() {
     for (var index = 0; index < ConsumerEvidenceRoute.values.length; index++) {
       await driver.pageFinished();
     }
-    expect(navigated, ConsumerEvidenceRoute.values);
+    expect(
+      navigated.map((uri) => uri.toString()),
+      ConsumerEvidenceRoute.values.map(
+        (route) => 'omi-ui://local/index.html?route=${route.wireName}&platform=mobile&generation=platform',
+      ),
+    );
+    for (final uri in navigated) {
+      expect(uri.queryParametersAll['generation'], const ['platform']);
+      expect(uri.queryParameters, isNot(contains('qa')));
+      expect(uri.queryParameters, isNot(contains('rig')));
+    }
     expect(listenStarted, isTrue);
     expect(chatAuthored, isTrue);
     expect(chatSubmitted, isTrue);

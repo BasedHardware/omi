@@ -171,7 +171,14 @@ final class ConsumerEvidenceCollector {
   }
 }
 
-typedef EvidenceNavigate = Future<void> Function(ConsumerEvidenceRoute route);
+Uri consumerEvidenceRouteUri(ConsumerEvidenceRoute route) => Uri(
+  scheme: 'omi-ui',
+  host: 'local',
+  path: '/index.html',
+  queryParameters: {'route': route.wireName, 'platform': 'mobile', 'generation': 'platform'},
+);
+
+typedef EvidenceNavigate = Future<void> Function(Uri uri);
 typedef EvidenceObserve = Future<String?> Function();
 typedef EvidenceStartListen = Future<bool> Function();
 typedef EvidenceAuthorChat = Future<int?> Function();
@@ -206,7 +213,7 @@ final class ConsumerEvidenceDriver {
 
   static Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
 
-  Future<void> start() async => navigate(ConsumerEvidenceRoute.values.first);
+  Future<void> start() async => navigate(consumerEvidenceRouteUri(ConsumerEvidenceRoute.values.first));
 
   Future<void> pageFinished() async {
     if (_closed || _polling || _routeIndex >= ConsumerEvidenceRoute.values.length) {
@@ -251,7 +258,7 @@ final class ConsumerEvidenceDriver {
             await collector.finish();
             _closed = true;
           } else {
-            await navigate(ConsumerEvidenceRoute.values[_routeIndex]);
+            await navigate(consumerEvidenceRouteUri(ConsumerEvidenceRoute.values[_routeIndex]));
           }
           return;
         }

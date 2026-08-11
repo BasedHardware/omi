@@ -128,7 +128,11 @@ export OMI_SURFACE_PORT="$port"
 # Inherited overrides would let main.swift bypass the frozen candidate origin
 # or load stale/remote content. The QA launcher owns the surface selection.
 unset OMI_SURFACE_URL OMI_SURFACE_PATH
-export OMI_SURFACE_QUERY="route=${route}&platform=desktop"
+surface_query="route=${route}&platform=desktop"
+if [[ -n "$evidence_out" ]]; then
+  surface_query="${surface_query}&generation=platform"
+fi
+export OMI_SURFACE_QUERY="$surface_query"
 export OMI_API_BASE_URL="$api_base"
 
 token="${OMI_API_TOKEN:-}"

@@ -85,6 +85,7 @@ exit 0
       const args = readFileSync(argsFile, "utf8");
       assert.match(args, /--dart-define=SURFACE_MODE=scheme/);
       assert.match(args, new RegExp(`--dart-define=SURFACE_QUERY=route=${route}&platform=mobile`));
+      assert.doesNotMatch(args, /generation=platform/);
       assert.match(args, /--dart-define=OMI_RUN_CLIENT_ID=run-launcher-proof/);
       assert.doesNotMatch(args, /OMI_CONSUMER_EVIDENCE/);
       assert.doesNotMatch(args, /rig=dev|qa=|api\.omi\.me/);
@@ -97,6 +98,16 @@ exit 0
     });
     assert.equal(defaultHome.status, 0, defaultHome.stderr || defaultHome.stdout);
     assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile/);
+    assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
+
+    const fixtureMode = spawnSync(
+      "/bin/bash",
+      [launcher, "--fixture", "conversations", "--device", "simulator-proof"],
+      { encoding: "utf8", env },
+    );
+    assert.equal(fixtureMode.status, 0, fixtureMode.stderr || fixtureMode.stdout);
+    assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=qa=conversations&state=normal&platform=mobile/);
+    assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
 
     const unknown = spawnSync("/bin/bash", [launcher, "--route", "not-a-route"], { encoding: "utf8", env });
     assert.equal(unknown.status, 2);
@@ -124,6 +135,27 @@ exit 0
     }
 
     const evidence = path.join(scratch, "ios-consumer.json");
+    writeFileSync(flutterCount, "");
+    writeFileSync(curlCount, "");
+    writeFileSync(evidence, "prior one-sided success");
+    const outputOnly = spawnSync("/bin/bash", [
+      launcher, "--evidence-out", evidence,
+    ], { encoding: "utf8", env });
+    assert.equal(outputOnly.status, 2);
+    assert.match(outputOnly.stderr, /--evidence-out and --run-id must be supplied together/);
+    assert.equal(existsSync(evidence), false, "an output-only invocation must remove prior host success");
+    assert.equal(readFileSync(flutterCount, "utf8"), "", "Flutter invoked for an output-only gate");
+    assert.equal(readFileSync(curlCount, "utf8"), "", "curl invoked for an output-only gate");
+
+    const runOnly = spawnSync("/bin/bash", [
+      launcher, "--run-id", "run-launcher-proof",
+    ], { encoding: "utf8", env });
+    assert.equal(runOnly.status, 2);
+    assert.match(runOnly.stderr, /--evidence-out and --run-id must be supplied together/);
+    assert.equal(existsSync(evidence), false, "a run-only invocation cannot restore prior host success");
+    assert.equal(readFileSync(flutterCount, "utf8"), "", "Flutter invoked for a run-only gate");
+    assert.equal(readFileSync(curlCount, "utf8"), "", "curl invoked for a run-only gate");
+
     writeFileSync(evidence, "prior success");
     const rejected = spawnSync("/bin/bash", [
       launcher, "--route", "not-a-route", "--device", "simulator-proof",
@@ -148,6 +180,9 @@ exit 0
     assert.equal(selected.status, 0, selected.stderr || selected.stdout);
     const args = readFileSync(argsFile, "utf8");
     assert.match(args, /^build\nios\n--simulator\n--debug/m);
+    assert.match(args, /--dart-define=SURFACE_QUERY=route=chat&platform=mobile&generation=platform/);
+    assert.equal(args.match(/generation=platform/g)?.length, 1);
+    assert.doesNotMatch(args, /qa=|rig=dev/);
     assert.match(args, /--dart-define=OMI_RUN_CLIENT_ID=run-launcher-proof/);
     assert.match(args, /--dart-define=OMI_CONSUMER_EVIDENCE_FILENAME=omi-c3b3-consumer-run-launcher-proof\.json/);
     assert.doesNotMatch(args, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

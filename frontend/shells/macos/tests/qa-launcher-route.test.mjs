@@ -163,6 +163,7 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
       assert.match(actions, new RegExp(`launch\\|query=route=${route}&platform=desktop`));
     }
     assert.equal(actions.match(/^launch\|/gm)?.length, 7);
+    assert.doesNotMatch(actions, /generation=platform/);
 
     const defaultHome = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4801"], {
       encoding: "utf8", env: run.environment,
@@ -199,8 +200,13 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     ], { encoding: "utf8", env: run.environment });
     assert.equal(nativeEvidence.status, 0, nativeEvidence.stderr || nativeEvidence.stdout);
     assert.equal(JSON.parse(readFileSync(evidence, "utf8")).runId, "raw-macos-run");
-    assert.match(run.readActions(), /run=raw-macos-run\|result=.*macos-consumer\.json/);
-    assert.doesNotMatch(run.readActions(), /raw-macos-run::macos/);
+    actions = run.readActions();
+    const evidenceLaunch = actions.trim().split("\n").filter((line) => line.startsWith("launch|")).at(-1);
+    assert.match(evidenceLaunch, /^launch\|query=route=chat&platform=desktop&generation=platform\|/);
+    assert.equal(evidenceLaunch.match(/generation=platform/g)?.length, 1);
+    assert.doesNotMatch(evidenceLaunch, /qa=|rig=dev/);
+    assert.match(evidenceLaunch, /run=raw-macos-run\|result=.*macos-consumer\.json/);
+    assert.doesNotMatch(evidenceLaunch, /raw-macos-run::macos/);
   } finally {
     rmSync(run.scratch, { recursive: true, force: true });
   }

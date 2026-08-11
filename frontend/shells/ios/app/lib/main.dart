@@ -344,8 +344,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await collector.prepare();
     _consumerEvidence = ConsumerEvidenceDriver(
       collector: collector,
-      navigate: (route) =>
-          _controller.loadRequest(Uri.parse('omi-ui://local/index.html?route=${route.wireName}&platform=mobile')),
+      navigate: _controller.loadRequest,
       observe: () async {
         final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
         if (result is String) return result;
