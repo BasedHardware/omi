@@ -9422,6 +9422,66 @@
         "title": "DevApiKeyCreated",
         "type": "object"
       },
+      "DevApiKeyRotated": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key_prefix",
+          "created_at",
+          "key"
+        ],
+        "title": "DevApiKeyRotated",
+        "type": "object"
+      },
       "DeveloperActionItem": {
         "properties": {
           "completed": {
@@ -13636,6 +13696,20 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
           }
         },
         "required": [
@@ -13713,6 +13787,77 @@
           "key"
         ],
         "title": "McpApiKeyCreated",
+        "type": "object"
+      },
+      "McpApiKeyRotated": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key_prefix",
+          "created_at",
+          "key"
+        ],
+        "title": "McpApiKeyRotated",
         "type": "object"
       },
       "McpCreateActionItem": {
@@ -16496,6 +16641,17 @@
               }
             ],
             "title": "Insights Gained"
+          },
+          "platform_api_requests_per_month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Api Requests Per Month"
           },
           "transcription_seconds": {
             "anyOf": [
@@ -36396,6 +36552,57 @@
         ]
       }
     },
+    "/v1/dev/keys/{key_id}/rotate": {
+      "post": {
+        "description": "Issue a new secret for an existing Developer key. The raw key is returned once.\n\nThe previous secret stops working immediately — there is no grace window.",
+        "operationId": "rotateApiKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevApiKeyRotated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Rotate Key",
+        "tags": [
+          "API Keys"
+        ]
+      }
+    },
     "/v1/dev/user/action-items": {
       "get": {
         "description": "Get action items with optional filters. Locked action items are excluded.\n\n- **conversation_id**: Filter by conversation ID (None for standalone items)\n- **completed**: Filter by completion status\n- **start_date**: Filter by start date (inclusive)\n- **end_date**: Filter by end date (inclusive)\n- **limit**: Maximum number of items to return\n- **offset**: Number of items to skip",
@@ -43289,6 +43496,57 @@
           }
         ],
         "summary": "Delete Key",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/keys/{key_id}/rotate": {
+      "post": {
+        "description": "Issue a new secret for an existing MCP key. The raw key is returned once.\n\nThe previous secret stops working immediately — there is no grace window.",
+        "operationId": "rotate_key_v1_mcp_keys__key_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpApiKeyRotated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Rotate Key",
         "tags": [
           "mcp"
         ]
