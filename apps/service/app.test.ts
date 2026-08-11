@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { createServiceApp, type StandardFetchHandler } from "./app";
+import { createOperationalTelemetryEmitter } from "../../core/observability/operational-telemetry";
 
 describe("canonical service shell", () => {
   test("exposes content-safe health and readiness only at their exact routes", async () => {
@@ -211,12 +212,58 @@ describe("canonical service shell", () => {
     expect(body).not.toContain("opaque-secret-from-rejection");
   });
 
+  test("emits content-safe service telemetry only after each response exists", async () => {
+    const events: unknown[] = [];
+    const ticks = [100, 105, 200, 209, 300, 304];
+    const telemetry = createOperationalTelemetryEmitter((event) => { events.push(event); });
+    const app = createServiceApp(
+      () => new Response(null, { status: 503 }),
+      { telemetry, nowMilliseconds: () => ticks.shift() ?? 0 },
+    );
+
+    expect((await app.request("/health")).status).toBe(200);
+    expect((await app.request("/mcp", { method: "POST" })).status).toBe(503);
+    expect((await app.request("/secret-path?token=do-not-record")).status).toBe(404);
+
+    expect(events).toEqual([
+      {
+        version: "operational-telemetry-v1", family: "service", operation: "health",
+        outcome: "success", status_class: "2xx", duration_ms: 5, in_flight: 1,
+      },
+      {
+        version: "operational-telemetry-v1", family: "service", operation: "mcp",
+        outcome: "unavailable", status_class: "5xx", duration_ms: 9, in_flight: 1,
+      },
+      {
+        version: "operational-telemetry-v1", family: "service", operation: "other",
+        outcome: "invalid", status_class: "4xx", duration_ms: 4, in_flight: 1,
+      },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("secret-path");
+    expect(JSON.stringify(events)).not.toContain("do-not-record");
+  });
+
+  test("telemetry and clock failures cannot change service responses", async () => {
+    const telemetry = createOperationalTelemetryEmitter(() => { throw new Error("sink secret"); });
+    const app = createServiceApp(
+      () => new Response("delegated", { status: 202 }),
+      { telemetry, nowMilliseconds: () => { throw new Error("clock secret"); } },
+    );
+
+    const response = await app.request("/mcp", { method: "POST" });
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("delegated");
+    expect(telemetry.health()).toEqual({
+      version: "operational-telemetry-health-v1", emitted: 0, rejected: 0, dropped: 1,
+    });
+  });
+
   test("keeps the production shell runtime-neutral and handler-injected", () => {
     const source = readFileSync(new URL("./app.ts", import.meta.url), "utf8");
     const importedModules = [...source.matchAll(/from\s+["']([^"']+)["']/g)]
       .map((match) => match[1]);
 
-    expect(importedModules).toEqual(["hono"]);
+    expect(importedModules).toEqual(["hono", "../../core/observability/operational-telemetry"]);
     expect(source).not.toMatch(/\bBun\b/);
     expect(source).not.toMatch(/\b(?:serve|listen)\s*\(/);
   });

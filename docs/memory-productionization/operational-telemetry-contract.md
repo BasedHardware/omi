@@ -89,8 +89,9 @@ a schema revision and cardinality/privacy review.
    return, exception, and call count unchanged.
 5. Concurrent owner operations produce the same closed event bytes when their
    operational outcome/counts are the same.
-6. Instrumented service, database transaction, formation dispatch, and fence
-   tests prove events are emitted only at the semantic producer point.
+6. Instrumented service, database transaction, and fence tests prove events are
+   emitted only at the semantic producer point. Worker tests join this gate only
+   when a durable worker outcome exists; dispatch alone must emit no success.
 7. Backlog unavailability cannot emit zeros; a coherent snapshot can.
 8. Import-graph tests prevent vendor, environment, filesystem, and route/model
    dependencies from entering the telemetry core.
@@ -102,3 +103,13 @@ a schema revision and cardinality/privacy review.
 - No raw OpenTelemetry attributes or arbitrary structured logging facade.
 - No production-readiness claim before the exact image and load gate proves the
   chosen sink bounded under backpressure and useful at forecast cohort load.
+
+## Implementation ruling
+
+The first implementation wires service responses, write-fence decisions, and
+PostgreSQL transaction completion. The typed worker and backlog families remain
+inactive: this tree does not yet have a production PostgreSQL worker outcome or
+a coherent PostgreSQL backlog snapshot. An inactive producer is honest here;
+dispatch-time worker success or fabricated all-zero gauges would violate the
+semantic rules above. Their activation belongs with the durable worker and real
+PostgreSQL qualification slices.

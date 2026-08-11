@@ -24,6 +24,7 @@
 
 import { evaluateWriteFence, type WriteFenceDecision } from "../../../core/control/write-fence";
 import type { WriteFenceCounter } from "./fence-counter";
+import type { OperationalTelemetryEmitter } from "../../../core/observability/operational-telemetry";
 import type { AccountControlProjectionStore } from "./projection-store";
 import type { EntitlementProjectionReader } from "./settings-projection";
 import type { WriteEnforcementDecision } from "./write-enforcement-decision";
@@ -33,6 +34,7 @@ export interface WriteFenceDependencies {
   /** The same entitlement projection rendered by Settings. */
   readonly entitlement: EntitlementProjectionReader;
   readonly counter: WriteFenceCounter;
+  readonly operationalTelemetry?: OperationalTelemetryEmitter;
 }
 
 export interface WriteFenceInput {
@@ -67,5 +69,12 @@ export const applyWriteFence = (
   // Recorded from the decision, after it exists. Both facts matter; see
   // fence-counter.ts.
   dependencies.counter.record(input.runId, decision);
+  dependencies.operationalTelemetry?.emit({
+    version: "operational-telemetry-v1",
+    family: "fence",
+    door: "write",
+    outcome: decision.admitted ? "admitted" : decision.outcome,
+    preserved_envelope: !decision.admitted && decision.evidence === "preserve_envelope",
+  });
   return decision;
 };

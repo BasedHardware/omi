@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { createAuthorizedLedgerWriteContextIssuer } from "../../apps/service/auth/authorized-context-internal";
+import { createOperationalTelemetryEmitter } from "../../core/observability/operational-telemetry";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
@@ -183,4 +184,89 @@ test("maps SQLSTATE 40001 exactly and keeps provider contents out of adapter err
   const unknown = mapPostgresFailure(new Error("secret row and SQL text"));
   expect(unknown).toEqual(new PostgresRepositoryError("persistence_failed"));
   expect(unknown.message).toBe("persistence_failed");
+});
+
+test("emits one content-safe transaction outcome after durable success", async () => {
+  const row = authorityRow();
+  const events: unknown[] = [];
+  const times = [1_000, 1_025];
+  const result = await withAuthorizedSerializableTransaction(
+    new FakePool(new FakeConnection(row)),
+    context(row),
+    async () => "committed",
+    {
+      telemetry: createOperationalTelemetryEmitter((event) => events.push(event)),
+      nowMilliseconds: () => times.shift() ?? 1_025,
+    },
+  );
+
+  expect(result).toBe("committed");
+  expect(events).toEqual([{
+    version: "operational-telemetry-v1",
+    family: "database",
+    stage: "transaction",
+    outcome: "success",
+    duration_ms: 25,
+    pool: null,
+  }]);
+  expect(JSON.stringify(events)).not.toContain("alice");
+  expect(JSON.stringify(events)).not.toContain("principal");
+});
+
+test("classifies serialization and stale authority at the transaction boundary", async () => {
+  const events: unknown[] = [];
+  const telemetry = createOperationalTelemetryEmitter((event) => events.push(event));
+  class FailingPool implements PostgresTransactionPool {
+    async withTransaction<Result>(): Promise<Result> {
+      throw { code: "40001", message: "private provider body" };
+    }
+  }
+  await expect(withAuthorizedSerializableTransaction(
+    new FailingPool(),
+    context(),
+    async () => "never",
+    { telemetry, nowMilliseconds: () => 10 },
+  )).rejects.toEqual(new PostgresRepositoryError("retryable_serialization", true));
+
+  const stale = authorityRow({ account_epoch: 13 });
+  await expect(withAuthorizedSerializableTransaction(
+    new FakePool(new FakeConnection(stale)),
+    context(),
+    async () => "never",
+    { telemetry, nowMilliseconds: () => 10 },
+  )).rejects.toEqual(new PostgresRepositoryError("stale_epoch"));
+
+  expect(events).toEqual([
+    expect.objectContaining({ family: "database", outcome: "serialization_retryable" }),
+    expect.objectContaining({ family: "database", outcome: "stale_authority" }),
+  ]);
+  expect(JSON.stringify(events)).not.toContain("private provider body");
+});
+
+test("telemetry and clock failures cannot alter transaction results or errors", async () => {
+  const row = authorityRow();
+  let callbackCalls = 0;
+  const throwingTelemetry = createOperationalTelemetryEmitter(() => {
+    throw new Error("telemetry unavailable");
+  });
+  const observability = {
+    telemetry: throwingTelemetry,
+    nowMilliseconds: () => { throw new Error("clock unavailable"); },
+  };
+
+  await expect(withAuthorizedSerializableTransaction(
+    new FakePool(new FakeConnection(row)),
+    context(row),
+    async () => { callbackCalls += 1; return "same-result"; },
+    observability,
+  )).resolves.toBe("same-result");
+  expect(callbackCalls).toBe(1);
+
+  await expect(withAuthorizedSerializableTransaction(
+    new FakePool(new FakeConnection(row)),
+    context(row),
+    async () => { throw new Error("private callback failure"); },
+    observability,
+  )).rejects.toEqual(new PostgresRepositoryError("persistence_failed"));
+  expect(callbackCalls).toBe(1);
 });

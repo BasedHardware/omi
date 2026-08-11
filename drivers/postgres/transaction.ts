@@ -6,6 +6,10 @@ import {
   type AuthorizedLedgerWriteContext,
 } from "../../apps/service/auth/authorized-context";
 import type {
+  DatabaseOutcome,
+  OperationalTelemetryEmitter,
+} from "../../core/observability/operational-telemetry";
+import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
   SqlStatement,
@@ -159,14 +163,70 @@ export const mapPostgresFailure = (error: unknown): PostgresRepositoryError => {
   return new PostgresRepositoryError("persistence_failed");
 };
 
+export interface PostgresTransactionObservability {
+  readonly telemetry?: OperationalTelemetryEmitter;
+  readonly nowMilliseconds?: () => number;
+}
+
+const safeNowMilliseconds = (clock: () => number): number | null => {
+  try {
+    const value = clock();
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+const boundedDurationMilliseconds = (started: number | null, finished: number | null): number => {
+  if (started === null || finished === null || finished < started) return 0;
+  return Math.min(finished - started, 86_400_000);
+};
+
+const databaseOutcomeFor = (error: PostgresRepositoryError): DatabaseOutcome => {
+  if (error.code === "retryable_serialization") return "serialization_retryable";
+  if ([
+    "authorization_state_denied",
+    "expired_context",
+    "stale_epoch",
+    "destination_inactive",
+    "lifecycle_inactive",
+    "credential_inactive",
+    "grant_inactive",
+    "capability_denied",
+  ].includes(error.code)) return "stale_authority";
+  return "failure";
+};
+
+const emitTransactionTelemetry = (
+  observability: PostgresTransactionObservability,
+  outcome: DatabaseOutcome,
+  started: number | null,
+): void => {
+  try {
+    const finished = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
+    observability.telemetry?.emit({
+      version: "operational-telemetry-v1",
+      family: "database",
+      stage: "transaction",
+      outcome,
+      duration_ms: boundedDurationMilliseconds(started, finished),
+      pool: null,
+    });
+  } catch {
+    // Operational telemetry is observational and must never alter persistence.
+  }
+};
+
 export const withAuthorizedSerializableTransaction = async <Result>(
   pool: PostgresTransactionPool,
   suppliedContext: AuthorizedLedgerWriteContext,
   callback: (transaction: AuthorizedPostgresTransaction) => Promise<Result>,
+  observability: PostgresTransactionObservability = {},
 ): Promise<Result> => {
+  const started = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
   try {
     const context = assertAuthorizedLedgerWriteContext(suppliedContext);
-    return await pool.withTransaction(
+    const result = await pool.withTransaction(
       { isolationLevel: "serializable", accessMode: "read write" },
       async (connection: CheckedOutPostgresConnection) => {
         await connection.query({
@@ -206,7 +266,11 @@ export const withAuthorizedSerializableTransaction = async <Result>(
         return callback(transaction);
       },
     );
+    emitTransactionTelemetry(observability, "success", started);
+    return result;
   } catch (error) {
-    throw mapPostgresFailure(error);
+    const mapped = mapPostgresFailure(error);
+    emitTransactionTelemetry(observability, databaseOutcomeFor(mapped), started);
+    throw mapped;
   }
 };

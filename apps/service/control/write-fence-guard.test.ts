@@ -5,6 +5,7 @@ import { createWriteFenceCounter, UNATTRIBUTED_RUN } from "./fence-counter";
 import { WRITE_FENCE_REFUSALS, writeFenceRefusalResponse } from "./fence-http";
 import { createInMemoryAccountControlProjectionStore } from "./projection-store";
 import { applyWriteFence } from "./write-fence-guard";
+import { createOperationalTelemetryEmitter } from "../../../core/observability/operational-telemetry";
 
 const ACCOUNT = "acct-guard-unit-fixture";
 const noEntitlement = Object.freeze({ readEntitlement: () => null });
@@ -131,6 +132,52 @@ describe("the producer-side counter is keyed by run and derived from the decisio
       { accountId: ACCOUNT, requestEpoch: 6, runId: "  " },
     );
     expect(counter.tally(UNATTRIBUTED_RUN)?.refused.stale_epoch).toBe(2);
+  });
+});
+
+describe("operational fence telemetry", () => {
+  test("is derived from the produced decision and carries no account or run coordinate", () => {
+    const store = liveStore();
+    const events: unknown[] = [];
+    const operationalTelemetry = createOperationalTelemetryEmitter((event) => { events.push(event); });
+    const dependencies = {
+      store,
+      entitlement: noEntitlement,
+      counter: createWriteFenceCounter(),
+      operationalTelemetry,
+    };
+
+    applyWriteFence(dependencies, { accountId: ACCOUNT, requestEpoch: 7, runId: "secret-run" });
+    applyWriteFence(dependencies, { accountId: ACCOUNT, requestEpoch: 6, runId: "secret-run" });
+
+    expect(events).toEqual([
+      {
+        version: "operational-telemetry-v1", family: "fence", door: "write",
+        outcome: "admitted", preserved_envelope: false,
+      },
+      {
+        version: "operational-telemetry-v1", family: "fence", door: "write",
+        outcome: "stale_epoch", preserved_envelope: true,
+      },
+    ]);
+    expect(JSON.stringify(events)).not.toContain(ACCOUNT);
+    expect(JSON.stringify(events)).not.toContain("secret-run");
+  });
+
+  test("sink failure cannot alter or suppress the fence decision or QA counter", () => {
+    const store = liveStore();
+    const counter = createWriteFenceCounter();
+    const operationalTelemetry = createOperationalTelemetryEmitter(() => {
+      throw new Error("telemetry sink secret");
+    });
+    const decision = applyWriteFence(
+      { store, entitlement: noEntitlement, counter, operationalTelemetry },
+      { accountId: ACCOUNT, requestEpoch: 6, runId: "run" },
+    );
+
+    expect(decision).toMatchObject({ admitted: false, outcome: "stale_epoch" });
+    expect(counter.tally("run")?.refused.stale_epoch).toBe(1);
+    expect(operationalTelemetry.health().dropped).toBe(1);
   });
 });
 
