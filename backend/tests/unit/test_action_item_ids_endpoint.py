@@ -95,7 +95,7 @@ def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch
     assert seen == {'uid': 'user-9', 'completed': True}
 
 
-def test_visible_action_item_ids_normalizes_legacy_active_and_excludes_deleted():
+def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted():
     client = _Firestore(
         [
             _Doc('active', {'completed': False}),
@@ -109,11 +109,11 @@ def test_visible_action_item_ids_normalizes_legacy_active_and_excludes_deleted()
 
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
 
-    assert ids == ['active', 'legacy-active', 'legacy-status-active']
+    assert ids == ['active']
     assert client.query.projected_fields == ['completed', 'status', 'deleted']
 
 
-def test_visible_action_item_ids_uses_status_when_legacy_completed_is_null():
+def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
     client = _Firestore(
         [
             _Doc('legacy-done', {'completed': None, 'status': 'completed'}),
@@ -123,7 +123,7 @@ def test_visible_action_item_ids_uses_status_when_legacy_completed_is_null():
 
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=True, firestore_client=client)
 
-    assert ids == ['legacy-done']
+    assert ids == []
 
 
 def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):

@@ -31,7 +31,12 @@ extension TasksStore {
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
 
     var seen = Set<String>()
-    return (remoteIDs + localTasks.filter { $0.completed == completed }.map(\.id)).filter {
+    let localOnlyIDs =
+      localTasks
+      .filter { $0.completed == completed }
+      .map(\.id)
+      .filter { ActionItemTaskIdentity(surfacedId: $0).isLocalOnly }
+    return (remoteIDs + localOnlyIDs).filter {
       !$0.isEmpty && seen.insert($0).inserted
     }
   }
@@ -50,7 +55,7 @@ extension TasksStore {
     let allTasks =
       (try? await ActionItemStorage.shared.getAllLocalActionItems())
       ?? (incompleteTasks + completedTasks)
-    guard isCurrent(lease) else { return .localFailure }
+    guard isCurrent(lease) else { return .ownerChanged }
     let tasksByID = Dictionary(lastWriteWins: allTasks.map { ($0.id, $0) })
     let scores = ids.compactMap { tasksByID[$0]?.relevanceScore }
     let selectedIDs = Set(ids)
@@ -64,12 +69,12 @@ extension TasksStore {
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
-      guard isCurrent(lease) else { return .localFailure }
+      guard isCurrent(lease) else { return .ownerChanged }
       self.error = error.localizedDescription
       logError("TasksStore: Failed to delete selected tasks locally", error: error)
       return .localFailure
     }
-    guard isCurrent(lease) else { return .remoteFailure }
+    guard isCurrent(lease) else { return .ownerChanged }
     incompleteTasks.removeAll { selectedIDs.contains($0.id) }
     completedTasks.removeAll { selectedIDs.contains($0.id) }
 
@@ -80,7 +85,7 @@ extension TasksStore {
           removedScore: score,
           authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
         )
-        guard isCurrent(lease) else { return .remoteFailure }
+        guard isCurrent(lease) else { return .ownerChanged }
       }
     }
     if !removesEveryLocalTask, !scores.isEmpty {
@@ -91,19 +96,31 @@ extension TasksStore {
 
     // Hard-delete authoritative IDs through the existing bulk endpoint.
     let remoteIDs = ids.filter { !ActionItemTaskIdentity(surfacedId: $0).isLocalOnly }
-    guard !remoteIDs.isEmpty else { return .deletedEverywhere }
+    guard !remoteIDs.isEmpty else {
+      return isCurrent(lease) ? .deletedEverywhere : .ownerChanged
+    }
     do {
       try await APIClient.shared.batchDeleteActionItems(
         ids: remoteIDs,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
+    } catch let partialFailure as APIClient.BatchDeletePartialFailure {
+      guard isCurrent(lease) else { return .ownerChanged }
+      self.error = partialFailure.underlying.localizedDescription
+      logError(
+        "TasksStore: Bulk delete partially completed on backend (\(partialFailure.confirmedIDs.count) confirmed, "
+          + "\(partialFailure.pendingIDs.count) pending)",
+        error: partialFailure.underlying
+      )
+      return .remoteFailure(confirmedIDs: Set(partialFailure.confirmedIDs))
     } catch {
-      guard isCurrent(lease) else { return .remoteFailure }
+      guard isCurrent(lease) else { return .ownerChanged }
       self.error = error.localizedDescription
       logError("TasksStore: Failed to delete selected tasks on backend (local delete preserved)", error: error)
-      return .remoteFailure
+      return .remoteFailure(confirmedIDs: [])
     }
+    guard isCurrent(lease) else { return .ownerChanged }
     return .deletedEverywhere
   }
 }

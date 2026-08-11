@@ -23,6 +23,12 @@ struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
 }
 
 extension APIClient {
+  struct BatchDeletePartialFailure: Error {
+    let confirmedIDs: [String]
+    let pendingIDs: [String]
+    let underlying: Error
+  }
+
   /// The backend's action-item list orders every non-null `due_at` before the
   /// null bucket. Firestore inequality filters also exclude documents where
   /// `due_at` is missing/null, so this lower bound is the smallest supported
@@ -192,7 +198,10 @@ extension APIClient {
 
   /// Delete task IDs through the backend's existing chunked bulk endpoint.
   /// The endpoint accepts at most 10,000 IDs; callers chunk larger selections
-  /// so an honest Select All never falls back to serial network requests.
+  /// so an honest Select All never falls back to serial network requests. If a
+  /// later chunk fails, the error preserves the chunks whose server response
+  /// was validated so callers can reconcile confirmed and pending IDs instead
+  /// of reporting an all-or-nothing result for a partial remote commit.
   func batchDeleteActionItems(
     ids: [String],
     expectedOwnerId: String? = nil,
@@ -211,18 +220,29 @@ extension APIClient {
       }
     }
 
-    for batch in ids.chunked(maxSize: 10_000) {
-      let response: BatchDeleteResponse = try await post(
-        "v1/action-items/batch-delete",
-        body: BatchDeleteRequest(ids: batch),
-        expectedOwnerId: expectedOwnerId,
-        authorizationSnapshot: authorizationSnapshot
-      )
-      guard response.status.lowercased() == "ok",
-        response.deletedCount == batch.count,
-        Set(response.deletedIds) == Set(batch)
-      else {
-        throw APIError.invalidResponse
+    var confirmedIDs: [String] = []
+    for (batchIndex, batch) in ids.chunked(maxSize: 10_000).enumerated() {
+      do {
+        let response: BatchDeleteResponse = try await post(
+          "v1/action-items/batch-delete",
+          body: BatchDeleteRequest(ids: batch),
+          expectedOwnerId: expectedOwnerId,
+          authorizationSnapshot: authorizationSnapshot
+        )
+        guard response.status.lowercased() == "ok",
+          response.deletedCount == batch.count,
+          Set(response.deletedIds) == Set(batch)
+        else {
+          throw APIError.invalidResponse
+        }
+        confirmedIDs.append(contentsOf: batch)
+      } catch {
+        let pendingStart = batchIndex * 10_000
+        throw BatchDeletePartialFailure(
+          confirmedIDs: confirmedIDs,
+          pendingIDs: Array(ids.dropFirst(pendingStart)),
+          underlying: error
+        )
       }
     }
   }

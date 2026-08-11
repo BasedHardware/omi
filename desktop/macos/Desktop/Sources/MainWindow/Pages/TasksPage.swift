@@ -347,6 +347,8 @@ struct DynamicFilterTag: Identifiable, Hashable {
 class TasksViewModel: ObservableObject {
   typealias SortOrderUpdate = (id: String, sortOrder: Int, indentLevel: Int)
   typealias SelectionSnapshotLoader = (_ completed: Bool) async throws -> [String]
+  typealias SearchLoader = (_ query: String, _ includeDeleted: Bool) async throws -> [TaskActionItem]
+  typealias BulkDeleteOperation = (_ ids: [String]) async -> TasksStore.BulkDeleteOutcome
 
   struct SortOrderSyncOperations: Sendable {
     let updateStorage:
@@ -388,9 +390,13 @@ class TasksViewModel: ObservableObject {
   private let ownerIDProvider: @MainActor () -> String?
   private let sortOrderSyncOperations: SortOrderSyncOperations
   let selectionSnapshotLoader: SelectionSnapshotLoader
+  let searchLoader: SearchLoader
+  let bulkDeleteOperation: BulkDeleteOperation
+  let bulkDeleteConfirmation: (Int) -> Bool
   private let orderingDefaults: UserDefaults
   private var activeOwnerID: String?
   private var ownerGeneration: UInt64 = 0
+  var selectionOwnerGeneration: UInt64 = 0
   private var suppressOrderingPersistence = false
 
   /// Set by TasksPage so delete operations can purge in-memory chat states.
@@ -400,6 +406,10 @@ class TasksViewModel: ObservableObject {
   @Published var searchText = "" {
     didSet {
       if oldValue != searchText {
+        searchRequestGeneration &+= 1
+        let requestGeneration = searchRequestGeneration
+        let query = normalizedSearchQuery
+        let includeDeleted = selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
         let oldQuery = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let oldScope: SelectionScope =
           oldQuery.isEmpty ? .taskBucket(completed: showCompleted) : .search(oldQuery)
@@ -409,12 +419,19 @@ class TasksViewModel: ObservableObject {
         displayLimit = 100
         keyboardSelectedTaskId = nil
         isInlineCreating = false
-        Task { await performSearch() }
+        Task {
+          await performSearch(
+            query: query,
+            includeDeleted: includeDeleted,
+            generation: requestGeneration
+          )
+        }
       }
     }
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [TaskActionItem] = []
+  var searchRequestGeneration: UInt64 = 0
 
   // UI-specific state
   @Published var showCompleted = false {
@@ -536,6 +553,14 @@ class TasksViewModel: ObservableObject {
   @Published var multiSelection = TaskMultiSelectionState()
   @Published var isSelectingAllTasks = false
   @Published var bulkTaskErrorMessage: String?
+  /// Invalidates async selection/delete completions when the user changes
+  /// owner, scope, mode, or selected IDs while an operation is suspended.
+  var selectionOperationGeneration: UInt64 = 0
+  var bulkDeleteInFlight = false
+  var selectionAllOperationToken: UInt64 = 0
+  var activeSelectionAllOperationToken: UInt64?
+  var bulkDeleteOperationToken: UInt64 = 0
+  var activeBulkDeleteOperationToken: UInt64?
 
   var isMultiSelectMode: Bool { multiSelection.isActive }
   var selectedTaskIds: Set<String> { multiSelection.selectedIDs }
@@ -558,11 +583,15 @@ class TasksViewModel: ObservableObject {
   }
 
   var currentSelectionScope: SelectionScope {
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let query = normalizedSearchQuery
     if !query.isEmpty {
       return .search(query)
     }
     return .taskBucket(completed: showCompleted)
+  }
+
+  var normalizedSearchQuery: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var allAvailableTaskIDs: Set<String> {
@@ -703,11 +732,28 @@ class TasksViewModel: ObservableObject {
     selectionSnapshotLoader: @escaping SelectionSnapshotLoader = { completed in
       try await TasksStore.shared.selectionSnapshotIDs(completed: completed)
     },
+    searchLoader: SearchLoader? = nil,
+    bulkDeleteOperation: BulkDeleteOperation? = nil,
+    bulkDeleteConfirmation: ((Int) -> Bool)? = nil,
     orderingDefaults: UserDefaults = .standard
   ) {
     self.ownerIDProvider = ownerIDProvider
     self.sortOrderSyncOperations = sortOrderSyncOperations
     self.selectionSnapshotLoader = selectionSnapshotLoader
+    self.searchLoader =
+      searchLoader ?? { query, includeDeleted in
+        try await ActionItemStorage.shared.searchLocalActionItems(
+          query: query,
+          limit: 10000,
+          completed: nil,
+          includeDeleted: includeDeleted
+        )
+      }
+    self.bulkDeleteOperation =
+      bulkDeleteOperation ?? { ids in
+        await TasksStore.shared.deleteMultipleTasks(ids: ids)
+      }
+    self.bulkDeleteConfirmation = bulkDeleteConfirmation ?? Self.confirmBulkDelete
     self.orderingDefaults = orderingDefaults
     activeOwnerID = Self.normalizedOwnerID(ownerIDProvider())
     if let activeOwnerID {
@@ -785,6 +831,7 @@ class TasksViewModel: ObservableObject {
 
   private func resetOwnerOrderingProjection(scheduleOwnerActivation: Bool = true) {
     ownerGeneration &+= 1
+    selectionOwnerGeneration &+= 1
     sortOrderMutationGeneration &+= 1
     sortOrderSyncTask?.cancel()
     sortOrderSyncTask = nil
@@ -813,6 +860,10 @@ class TasksViewModel: ObservableObject {
     selectedAllScopeTaskIDs.removeAll()
     isSelectingAllTasks = false
     bulkTaskErrorMessage = nil
+    invalidateSelectionOperation()
+    searchRequestGeneration &+= 1
+    searchResults.removeAll()
+    isSearching = false
     suppressDatabaseRequery = false
     suppressRequeryGeneration &+= 1
     removeUnscopedLegacyOrderingDefaults()
@@ -919,7 +970,7 @@ class TasksViewModel: ObservableObject {
   /// persistence path separately loads every local row before rebasing it.
   private func getActiveScopeOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
     var scope: [TaskActionItem] = []
-    if !searchText.isEmpty {
+    if !normalizedSearchQuery.isEmpty {
       scope.append(contentsOf: searchResults)
     } else if !filteredFromDatabase.isEmpty {
       scope.append(contentsOf: filteredFromDatabase)
@@ -1090,7 +1141,7 @@ class TasksViewModel: ObservableObject {
     allLocalTasks: [TaskActionItem]
   ) -> [TaskActionItem] {
     var scope: [TaskActionItem] = []
-    if !searchText.isEmpty {
+    if !normalizedSearchQuery.isEmpty {
       scope.append(contentsOf: searchResults)
     } else if !filteredFromDatabase.isEmpty {
       scope.append(contentsOf: filteredFromDatabase)
@@ -1691,7 +1742,7 @@ class TasksViewModel: ObservableObject {
     // Skip when chat panel is open — the input may briefly lose focus after
     // sending a message and we don't want Enter to accidentally trigger here.
     if !chatOpen && keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
-      if !searchText.isEmpty { return false }
+      if !normalizedSearchQuery.isEmpty { return false }
 
       let now = Date()
       if let last = lastEnterPressTime, now.timeIntervalSince(last) < 0.4 {
@@ -2327,12 +2378,19 @@ class TasksViewModel: ObservableObject {
     recomputeDisplayCaches()
   }
 
-  /// Perform search against SQLite database
-  private func performSearch() async {
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  /// Perform search against SQLite database. The query and generation are
+  /// captured at request start so a slower earlier request cannot overwrite
+  /// the results for a newer search string.
+  private func performSearch(
+    query: String,
+    includeDeleted: Bool,
+    generation: UInt64
+  ) async {
+    guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
 
     if query.isEmpty {
       searchResults = []
+      isSearching = false
       recomputeDisplayCaches()
       return
     }
@@ -2340,20 +2398,17 @@ class TasksViewModel: ObservableObject {
     isSearching = true
 
     do {
-      // Search across all tasks in SQLite
-      let results = try await ActionItemStorage.shared.searchLocalActionItems(
-        query: query,
-        limit: 10000,
-        completed: nil,  // Search all
-        includeDeleted: selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
-      )
+      let results = try await searchLoader(query, includeDeleted)
+      guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
       searchResults = results
       log("TasksViewModel: Search found \(results.count) tasks for '\(query)'")
     } catch {
+      guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
       logError("TasksViewModel: Search failed", error: error)
       searchResults = []
     }
 
+    guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
     isSearching = false
     recomputeDisplayCaches()
   }
@@ -2361,7 +2416,7 @@ class TasksViewModel: ObservableObject {
   /// Whether we're currently in search mode (the only filtered mode left —
   /// the status toggle is a view switch, not a filter, matching mobile)
   var isInFilteredMode: Bool {
-    !searchText.isEmpty
+    !normalizedSearchQuery.isEmpty
   }
 
   /// Recompute display-related caches when filters or sort change
@@ -2370,7 +2425,7 @@ class TasksViewModel: ObservableObject {
     // Determine the source of tasks based on current state
     let sourceTasks: [TaskActionItem]
 
-    if !searchText.isEmpty {
+    if !normalizedSearchQuery.isEmpty {
       // Searching: use search results from SQLite
       sourceTasks = searchResults
     } else if !filteredFromDatabase.isEmpty {
@@ -2387,7 +2442,7 @@ class TasksViewModel: ObservableObject {
     let hasDateFilters = selectedTags.contains(where: { $0.group == .date })
     let filterContext = TaskFilterTag.FilterContext()
     var filteredTasks: [TaskActionItem]
-    if !searchText.isEmpty {
+    if !normalizedSearchQuery.isEmpty {
       filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
     } else if hasSQLiteFilters || hasDateFilters {
       // SQLite already filtered by category/source/priority/date when filteredFromDatabase is populated.
@@ -2429,7 +2484,7 @@ class TasksViewModel: ObservableObject {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
       // shows completed. Search bypasses the gate like mobile's flat search.
-      if searchText.isEmpty && task.completed != showCompleted {
+      if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
         continue
       }
       let category = categoryFor(
@@ -2466,7 +2521,7 @@ class TasksViewModel: ObservableObject {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
       // shows completed. Search bypasses the gate like mobile's flat search.
-      if searchText.isEmpty && task.completed != showCompleted {
+      if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
         continue
       }
       let category = categoryFor(
@@ -3800,7 +3855,7 @@ struct TasksPage: View {
           .textFieldStyle(.plain)
           .foregroundColor(Ink.primary)
 
-        if !viewModel.searchText.isEmpty {
+        if !viewModel.normalizedSearchQuery.isEmpty {
           Button {
             viewModel.searchText = ""
           } label: {
@@ -4245,7 +4300,7 @@ struct TasksPage: View {
   private var emptyView: some View {
     // Search with no hits gets its own messaging (mobile parity);
     // otherwise the list is genuinely empty for the current view.
-    let isSearchEmpty = !viewModel.searchText.isEmpty
+    let isSearchEmpty = !viewModel.normalizedSearchQuery.isEmpty
     return VStack(spacing: OmiSpacing.lg) {
       Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
         .scaledFont(size: 48)

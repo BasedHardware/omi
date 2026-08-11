@@ -118,7 +118,7 @@ def get_visible_action_item_ids(
 
     The account-wide ID census intentionally includes every document for reconciliation
     and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
-    rows and normalize legacy missing/null ``completed`` values to the active bucket.
+    rows and include only rows that the explicit ``completed`` list filter can render.
     """
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
@@ -128,8 +128,7 @@ def get_visible_action_item_ids(
         if data.get('deleted'):
             continue
         completed_value = data.get('completed')
-        is_completed = data.get('status') == 'completed' if completed_value is None else completed_value is True
-        if is_completed == completed:
+        if completed_value is completed:
             visible_ids.append(doc.id)
     return visible_ids
 

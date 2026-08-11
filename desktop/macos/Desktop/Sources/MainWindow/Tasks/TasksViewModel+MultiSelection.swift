@@ -2,9 +2,18 @@ import AppKit
 
 @MainActor
 extension TasksViewModel {
+  func invalidateSelectionOperation() {
+    selectionOperationGeneration &+= 1
+    isSelectingAllTasks = false
+    activeSelectionAllOperationToken = nil
+    bulkDeleteInFlight = false
+    activeBulkDeleteOperationToken = nil
+  }
+
   func clearMultiSelectionForScopeChange() {
+    invalidateSelectionOperation()
     guard multiSelection.isActive else { return }
-    mutateMultiSelection { state in
+    mutateMultiSelection(fencesOperation: false) { state in
       state.deselectAll()
     }
     authoritativeSelectionTaskIDs.removeAll()
@@ -13,23 +22,30 @@ extension TasksViewModel {
     bulkTaskErrorMessage = nil
   }
 
-  func mutateMultiSelection(_ mutation: (inout TaskMultiSelectionState) -> Void) {
+  func mutateMultiSelection(
+    fencesOperation: Bool = true,
+    _ mutation: (inout TaskMultiSelectionState) -> Void
+  ) {
     var next = multiSelection
     mutation(&next)
+    if fencesOperation, next != multiSelection {
+      selectionOperationGeneration &+= 1
+    }
     multiSelection = next
   }
 
   func reconcileMultiSelection() {
     guard multiSelection.isActive else { return }
     let visibleIDs = visibleTaskIDsForSelection
-    mutateMultiSelection { state in
+    mutateMultiSelection(fencesOperation: false) { state in
       state.reconcile(visibleIDs: visibleIDs, availableTaskIDs: allAvailableTaskIDs)
     }
   }
 
   func toggleMultiSelectMode() {
+    invalidateSelectionOperation()
     let wasActive = multiSelection.isActive
-    mutateMultiSelection { state in
+    mutateMultiSelection(fencesOperation: false) { state in
       if state.isActive {
         state.exit()
       } else {
@@ -66,15 +82,29 @@ extension TasksViewModel {
   }
 
   func selectAllTasks() async {
-    guard multiSelection.isActive, !isSelectingAllTasks else { return }
+    guard multiSelection.isActive, !isSelectingAllTasks, !bulkDeleteInFlight else { return }
+    selectionOperationGeneration &+= 1
     let scope = currentSelectionScope
+    let operationGeneration = selectionOperationGeneration
+    selectionAllOperationToken &+= 1
+    let operationToken = selectionAllOperationToken
+    activeSelectionAllOperationToken = operationToken
     isSelectingAllTasks = true
     bulkTaskErrorMessage = nil
-    defer { isSelectingAllTasks = false }
+    defer {
+      if activeSelectionAllOperationToken == operationToken {
+        activeSelectionAllOperationToken = nil
+        isSelectingAllTasks = false
+      }
+    }
 
     do {
       let taskIDs = try await taskIDsForSelectionScope(scope)
-      guard multiSelection.isActive, currentSelectionScope == scope else { return }
+      guard
+        selectionOperationGeneration == operationGeneration,
+        multiSelection.isActive,
+        currentSelectionScope == scope
+      else { return }
 
       authoritativeSelectionTaskIDs.formUnion(taskIDs)
       selectedAllScope = scope
@@ -83,6 +113,11 @@ extension TasksViewModel {
         state.selectAll(visibleIDs: taskIDs)
       }
     } catch {
+      guard
+        selectionOperationGeneration == operationGeneration,
+        multiSelection.isActive,
+        currentSelectionScope == scope
+      else { return }
       bulkTaskErrorMessage =
         "Could not reach your complete task list. No additional tasks were selected. Please retry."
       logError("TasksViewModel: Failed to select complete task scope", error: error)
@@ -110,27 +145,69 @@ extension TasksViewModel {
   }
 
   func deleteSelectedTasks() async {
+    guard !bulkDeleteInFlight, !isSelectingAllTasks else { return }
     let orderedIDs = multiSelection.selectedIDs(in: visibleTaskIDsForSelection)
     guard !orderedIDs.isEmpty else { return }
-    guard Self.confirmBulkDelete(count: orderedIDs.count) else { return }
+    guard bulkDeleteConfirmation(orderedIDs.count) else { return }
+    selectionOperationGeneration &+= 1
+    let operationGeneration = selectionOperationGeneration
+    let scope = currentSelectionScope
+    let ownerGeneration = selectionOwnerGeneration
+    bulkDeleteOperationToken &+= 1
+    let operationToken = bulkDeleteOperationToken
+    activeBulkDeleteOperationToken = operationToken
+    bulkDeleteInFlight = true
+    defer {
+      if activeBulkDeleteOperationToken == operationToken {
+        activeBulkDeleteOperationToken = nil
+        bulkDeleteInFlight = false
+      }
+    }
 
     for id in orderedIDs {
       removeFromDisplay(id)
     }
-    let outcome = await store.deleteMultipleTasks(ids: orderedIDs)
+    let outcome = await bulkDeleteOperation(orderedIDs)
+    guard
+      selectionOperationGeneration == operationGeneration,
+      multiSelection.isActive,
+      currentSelectionScope == scope,
+      selectionOwnerGeneration == ownerGeneration
+    else {
+      if currentSelectionScope == scope, selectionOwnerGeneration == ownerGeneration {
+        recomputeDisplayCaches()
+      }
+      return
+    }
     switch outcome {
     case .localFailure:
       recomputeDisplayCaches()
       bulkTaskErrorMessage =
         "The tasks could not be deleted from this Mac. Nothing was deleted from your account. Please retry."
       return
-    case .remoteFailure:
+    case .remoteFailure(let confirmedIDs):
       for id in orderedIDs {
         chatCoordinator?.purgeState(for: id)
+      }
+      let localOnlyIDs = Set(
+        orderedIDs.filter { ActionItemTaskIdentity(surfacedId: $0).isLocalOnly }
+      )
+      let settledIDs = confirmedIDs.union(localOnlyIDs)
+      if !settledIDs.isEmpty {
+        mutateMultiSelection { state in
+          state.removeSelectedIDs(settledIDs)
+        }
+        authoritativeSelectionTaskIDs.subtract(settledIDs)
+        selectedAllScopeTaskIDs.subtract(settledIDs)
+        if selectedAllScopeTaskIDs.isEmpty {
+          selectedAllScope = nil
+        }
       }
       bulkTaskErrorMessage =
         "The tasks were removed from this Mac, but could not be deleted from your account. "
         + "They remain selected so you can retry."
+      return
+    case .ownerChanged:
       return
     case .deletedEverywhere:
       for id in orderedIDs {
@@ -152,7 +229,7 @@ extension TasksViewModel {
     }
   }
 
-  private static func confirmBulkDelete(count: Int) -> Bool {
+  static func confirmBulkDelete(count: Int) -> Bool {
     let alert = NSAlert()
     alert.messageText = "Delete \(count) tasks?"
     alert.informativeText = "This cannot be undone."

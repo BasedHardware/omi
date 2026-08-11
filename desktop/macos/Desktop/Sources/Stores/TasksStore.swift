@@ -55,7 +55,8 @@ class TasksStore: ObservableObject {
   enum BulkDeleteOutcome: Equatable, Sendable {
     case deletedEverywhere
     case localFailure
-    case remoteFailure
+    case remoteFailure(confirmedIDs: Set<String>)
+    case ownerChanged
   }
 
   struct TaskUpdateOperationOverrides {
