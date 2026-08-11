@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { runChatGenerationScenario } from "./generation-scenario";
+import { validateChatGenerationAttachmentDescriptors } from "./generation-supervisor";
+import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
 import {
   createScriptedChatGenerationSource,
   readChatGenerationSourceCapability,
@@ -201,6 +203,14 @@ describe("deterministic Chat generation scenarios", () => {
       kind: "failed",
       errorCode: "generation_timeout",
     });
+    const cancellationWins = await runChatGenerationScenario({
+      prompt: "cancel-timeout-race",
+      script: [{ delayMs: 5, text: "late" }],
+      cancelAtMs: 1,
+      timeoutAtMs: 1,
+    });
+    expect(cancellationWins.terminal).toBe("cancelled");
+    expect(cancellationWins.trace.filter((entry) => ["done", "failed", "cancelled"].includes(entry.kind))).toHaveLength(1);
   });
 
   test("the same declarative scenario produces an identical durable trace", async () => {
@@ -216,5 +226,26 @@ describe("deterministic Chat generation scenarios", () => {
     const first = await runChatGenerationScenario(scenario);
     const second = await runChatGenerationScenario(scenario);
     expect(second).toEqual(first);
+  });
+
+  test("attachment generation boundary rejects foreign/malformed descriptors", () => {
+    const expected = [{
+      id: "attachment:one",
+      displayName: "one.txt",
+      mediaType: "text/plain",
+      sizeBytes: 3,
+      contentReference: "reference:one",
+    }];
+    const valid: ChatGenerationAttachmentDescriptor[] = [{
+      ...expected[0]!,
+      content: new Uint8Array([1, 2, 3]),
+    }];
+    expect(validateChatGenerationAttachmentDescriptors(expected, valid)).toHaveLength(1);
+    expect(() => validateChatGenerationAttachmentDescriptors(expected, [{
+      ...valid[0]!, id: "attachment:foreign",
+    }])).toThrow("invalid generation attachment descriptor");
+    expect(() => validateChatGenerationAttachmentDescriptors(expected, [{
+      ...valid[0]!, content: new Uint8Array([1]),
+    }])).toThrow("invalid generation attachment descriptor");
   });
 });

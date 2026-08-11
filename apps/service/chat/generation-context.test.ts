@@ -300,18 +300,52 @@ describe("structured Chat generation context packets", () => {
       accountId: ACCOUNT,
       generationId: "generation:malformed",
       nowEpochMilliseconds: 800,
-    })).toThrow("invalid legacy context");
+    })).toThrow("untrusted context packet");
     const mutated = { ...packet, packetHash: HASH_B };
     expect(() => normalizeChatGenerationContext(mutated, {
       accountId: ACCOUNT,
       generationId: "generation:malformed",
       nowEpochMilliseconds: 800,
-    })).toThrow("context packet hash mismatch");
+    })).toThrow("untrusted context packet");
     expect(() => normalizeChatGenerationContext(packet, {
       accountId: OTHER_ACCOUNT,
       generationId: "generation:malformed",
       nowEpochMilliseconds: 800,
     })).toThrow("owner or generation mismatch");
+  });
+
+  test("untrusted packet getters/proxies are rejected without reflective execution", () => {
+    let getterCalls = 0;
+    const getterPacket = Object.defineProperty({}, "schemaVersion", {
+      enumerable: true,
+      get: (): string => {
+        getterCalls += 1;
+        return "v1";
+      },
+    });
+    expect(() => normalizeChatGenerationContext(getterPacket as never, {
+      accountId: ACCOUNT,
+      generationId: "generation:hostile",
+      nowEpochMilliseconds: 900,
+    })).toThrow("untrusted context packet");
+    expect(getterCalls).toBe(0);
+    let proxyTraps = 0;
+    const proxy = new Proxy({}, {
+      get: (): unknown => {
+        proxyTraps += 1;
+        return "v1";
+      },
+      ownKeys: (): string[] => {
+        proxyTraps += 1;
+        return [];
+      },
+    });
+    expect(() => normalizeChatGenerationContext(proxy as never, {
+      accountId: ACCOUNT,
+      generationId: "generation:hostile",
+      nowEpochMilliseconds: 900,
+    })).toThrow("untrusted context packet");
+    expect(proxyTraps).toBe(0);
   });
 });
 

@@ -19,6 +19,10 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const SAFE_HASH = /^sha256:[0-9a-f]{64}$/u;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 const REDACTION_MARKER = /(?:Bearer\s+|(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]|(?:attachment|file|opaque|reference)(?:[_ -]?id)?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
+// Only packets produced by this module's detached builder cross the structured
+// boundary. Identity lookup is side-effect free for getters and proxies; an
+// unregistered declaration fails closed without reflective reads.
+const TRUSTED_CONTEXT_PACKETS = new WeakSet<object>();
 
 export type ChatGenerationContextPolicyDecision = "included" | "excluded" | "degraded";
 
@@ -431,7 +435,9 @@ export const createChatGenerationContextPacket = (
     }),
   };
   const packetHash = hashText(canonicalJson(packetWithoutHash));
-  return Object.freeze({ ...packetWithoutHash, packetHash });
+  const packet = Object.freeze({ ...packetWithoutHash, packetHash });
+  TRUSTED_CONTEXT_PACKETS.add(packet);
+  return packet;
 };
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
@@ -507,42 +513,30 @@ const isPacket = (value: unknown): value is ChatGenerationContextPacket => {
     && isBudget(packet.budget);
 };
 
-const deepFreeze = <T>(value: T, seen = new WeakSet<object>()): T => {
-  if (value !== null && typeof value === "object" && !seen.has(value as object)) {
-    seen.add(value as object);
-    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child, seen);
-    Object.freeze(value);
-  }
-  return value;
-};
-
 /** Validates ownership/hash and converts legacy bare context strings. */
 export const normalizeChatGenerationContext = (
   value: ChatGenerationContextResult,
   input: { readonly accountId: string; readonly generationId: string; readonly nowEpochMilliseconds: number },
 ): ChatGenerationContextPacket => {
-  let detached: unknown;
-  try {
-    detached = structuredClone(value);
-  } catch {
-    throw new TypeError("context value is not cloneable");
-  }
-  if (isPacket(detached)) {
-    if (detached.ownerAccountId !== input.accountId || detached.generationId !== input.generationId) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    if (!TRUSTED_CONTEXT_PACKETS.has(value)) throw new TypeError("untrusted context packet");
+    if (!isPacket(value)) throw new TypeError("invalid context packet");
+    const packet = value;
+    if (packet.ownerAccountId !== input.accountId || packet.generationId !== input.generationId) {
       throw new TypeError("context packet owner or generation mismatch");
     }
-    const { packetHash, ...withoutHash } = detached;
+    const { packetHash, ...withoutHash } = packet;
     if (hashText(canonicalJson(withoutHash)) !== packetHash) throw new TypeError("context packet hash mismatch");
-    return deepFreeze(detached);
+    return packet;
   }
-  if (!Array.isArray(detached) || detached.some((entry) => typeof entry !== "string" || entry.length > 512)) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length > 512)) {
     throw new TypeError("invalid legacy context");
   }
   return createChatGenerationContextPacket({
     accountId: input.accountId,
     generationId: input.generationId,
     nowEpochMilliseconds: input.nowEpochMilliseconds,
-    candidates: detached.map((text, index) => ({
+    candidates: value.map((text, index) => ({
       sourceKind: "legacy",
       sourceId: `legacy:${index}`,
       claimId: null,

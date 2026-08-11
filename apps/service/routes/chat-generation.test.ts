@@ -800,6 +800,27 @@ describe("ratified chat generation wire red proofs", () => {
     db.close();
   });
 
+  test("a non-string provider delta fails closed without persisting object text", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => {
+          input.onDelta({ forged: true } as unknown as string);
+          input.onComplete();
+        });
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source, "chat-delta-type-proof");
+    const { admission, eventsResponse } = await admitAndOpen(local, create("delta-object"));
+    const frames = parseSse(await eventsResponse.text());
+    expect(frames.at(-1)?.data).toEqual({ kind: "failed", error: { code: "generation_provider_failed", retryable: true } });
+    expect(frames.filter((frame) => ["done", "failed", "cancelled"].includes(frame.event))).toHaveLength(1);
+    expect(JSON.stringify(await history(local))).not.toContain("forged");
+    expect((local as unknown as { writePath: { chatEvents: ChatGenerationEventsStore } }).writePath.chatEvents.listAfter(ACCOUNT, admission.generation.id, null)
+      ?.map((event) => event.frame.kind)).toEqual(["accepted", "snapshot", "failed"]);
+    db.close();
+  });
+
   test("provider, context, and attachment failures stay failed through SSE, history, and replay", async () => {
     const cases = [
       {
@@ -841,6 +862,29 @@ describe("ratified chat generation wire red proofs", () => {
             const malformed = new Proxy(
               { code: "generation_provider_failed", retryable: false },
               { getOwnPropertyDescriptor: (): never => { throw new Error("proxy escaped"); } },
+            );
+            queueMicrotask(() => input.onError(malformed));
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: false,
+      },
+      {
+        name: "provider-forged-proxy",
+        code: "generation_provider_failed",
+        source: Object.freeze({
+          start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            const malformed = new Proxy(
+              { code: "generation_provider_failed", retryable: true },
+              {
+                getOwnPropertyDescriptor: (_target, key): PropertyDescriptor | undefined =>
+                  key === "code"
+                    ? { value: "generation_timeout", writable: true, enumerable: true, configurable: true }
+                    : key === "retryable"
+                      ? { value: false, writable: true, enumerable: true, configurable: true }
+                      : undefined,
+              },
             );
             queueMicrotask(() => input.onError(malformed));
             return Object.freeze({ cancel: (): void => {} });

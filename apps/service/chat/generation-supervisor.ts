@@ -103,6 +103,10 @@ const readFailureDeclaration = (
     const retryable = Object.getOwnPropertyDescriptor(error, "retryable");
     if (code === undefined || retryable === undefined
       || !("value" in code) || !("value" in retryable)) return null;
+    // Compare descriptor values with ordinary reads. A Proxy that forges only
+    // descriptor traps cannot smuggle a typed declaration through this gate;
+    // any accessor/get trap failure is contained by the surrounding catch.
+    if (Reflect.get(error, "code") !== code.value || Reflect.get(error, "retryable") !== retryable.value) return null;
     return Object.freeze({ code: code.value, retryable: retryable.value });
   } catch {
     return null;
@@ -142,6 +146,41 @@ const accumulatedText = (events: readonly ChatGenerationEvent[]): string => {
     if (event.frame.kind === "delta") text += event.frame.text;
   }
   return text;
+};
+
+export const validateChatGenerationAttachmentDescriptors = (
+  expected: readonly {
+    readonly id: string;
+    readonly displayName: string;
+    readonly mediaType: string;
+    readonly sizeBytes: number;
+    readonly contentReference: string | null;
+  }[],
+  loaded: readonly ChatGenerationAttachmentDescriptor[],
+): readonly ChatGenerationAttachmentDescriptor[] => {
+  if (!Array.isArray(loaded) || loaded.length !== expected.length) throw new TypeError("invalid generation attachments");
+  const seen = new Set<string>();
+  return Object.freeze(loaded.map((descriptor, index) => {
+    const source = expected[index];
+    if (source === undefined || descriptor === null || typeof descriptor !== "object"
+      || descriptor.id !== source.id || descriptor.displayName !== source.displayName
+      || descriptor.mediaType !== source.mediaType || descriptor.sizeBytes !== source.sizeBytes
+      || (descriptor.contentReference !== source.contentReference && descriptor.contentReference !== null)
+      || seen.has(descriptor.id)
+      || !(descriptor.content === null || descriptor.content instanceof Uint8Array)
+      || (descriptor.content !== null && descriptor.content.byteLength !== descriptor.sizeBytes)) {
+      throw new TypeError("invalid generation attachment descriptor");
+    }
+    seen.add(descriptor.id);
+    return Object.freeze({
+      id: descriptor.id,
+      displayName: descriptor.displayName,
+      mediaType: descriptor.mediaType,
+      sizeBytes: descriptor.sizeBytes,
+      contentReference: descriptor.contentReference,
+      content: descriptor.content === null ? null : new Uint8Array(descriptor.content),
+    });
+  }));
 };
 
 export const createChatGenerationSupervisor = (
@@ -371,12 +410,13 @@ export const createChatGenerationSupervisor = (
         if (state.terminal) return;
         let attachments: readonly ChatGenerationAttachmentDescriptor[];
         try {
-          attachments = await deps.attachments.loadForGeneration({
+          const loadedAttachments = await deps.attachments.loadForGeneration({
             accountId: input.accountId,
             messageId: input.stored.message.id,
             attachments: input.stored.message.attachments ?? Object.freeze([]),
             nowEpochMilliseconds: deps.nowEpochMilliseconds(),
           });
+          attachments = validateChatGenerationAttachmentDescriptors(input.stored.message.attachments ?? Object.freeze([]), loadedAttachments);
         } catch (error) {
           void finalize(state, "failed", "", classifyFailure(error, "attachment"));
           return;
@@ -390,7 +430,12 @@ export const createChatGenerationSupervisor = (
             attachments,
             onDelta(text): void {
               try {
-                if (state.terminal || text.length === 0) return;
+                if (state.terminal) return;
+                if (typeof text !== "string") {
+                  void finalize(state, "failed", "", defaultFailure("provider"));
+                  return;
+                }
+                if (text.length === 0) return;
                 append(state, { kind: "delta", text });
                 state.text += text;
               } catch {
@@ -423,7 +468,11 @@ export const createChatGenerationSupervisor = (
     timeout(accountId: string, generationId: string): void {
       const state = active.get(keyOf(accountId, generationId));
       queueMicrotask(() => {
-        if (state !== undefined) {
+        const lifecycle = deps.events.readLifecycle(accountId, generationId);
+        if (lifecycle?.state === "cancellation_requested") {
+          if (state !== undefined) void finalize(state, "cancelled", state.text);
+          else void cancelFromDurableState(accountId, generationId);
+        } else if (state !== undefined) {
           void finalize(
             state,
             "failed",
