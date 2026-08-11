@@ -8,7 +8,8 @@ enum FloatingBarMouseInterceptionPolicy {
     isVisible: Bool,
     acceptsMouseHit: (NSPoint) -> Bool
   ) -> Bool {
-    guard isVisible, windowFrame.contains(mouseLocation) else { return true }
+    guard isVisible else { return true }
+    guard windowFrame.contains(mouseLocation) else { return false }
     let local = NSPoint(
       x: mouseLocation.x - windowFrame.minX,
       y: mouseLocation.y - windowFrame.minY)

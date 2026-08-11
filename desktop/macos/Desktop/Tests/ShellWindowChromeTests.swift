@@ -90,8 +90,9 @@ final class ShellWindowChromeTests: XCTestCase {
       "the keyboard path is the only close/minimise affordance left; it may never be dropped")
   }
 
-  /// …and the window still moves. The transparent title bar covers the reserved band. Content is not
-  /// a drag handle because AppKit and root SwiftUI gestures can both mistake hosted controls for it.
+  /// …and the window still moves. It has two handles: the transparent title bar over the reserved
+  /// band and a thresholded SwiftUI gesture across the content. The native background-drag switch is
+  /// deliberately off because AppKit mistakes hosted SwiftUI buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
     window.isMovableByWindowBackground = false
@@ -123,6 +124,14 @@ final class ShellWindowChromeTests: XCTestCase {
     XCTAssertFalse(
       window.isMovableByWindowBackground,
       "native background dragging steals this hosted button's click before SwiftUI receives it")
+  }
+
+  func testLegacyWindowDragUsesSwiftUITranslation() {
+    XCTAssertEqual(
+      ShellWindowChrome.draggedOrigin(
+        windowOrigin: NSPoint(x: 100, y: 200),
+        translation: CGSize(width: 75, height: 40)),
+      NSPoint(x: 175, y: 160))
   }
 
   // MARK: - Summoned vs anchored

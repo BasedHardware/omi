@@ -821,15 +821,22 @@ import XCTest
       defer: false
     )
     defer { window.close() }
-    let scheduler = ManualDelayedActionScheduler()
+    let scheduler = UncancellableRetractionScheduler()
     window.notchRetractionScheduler = scheduler
 
     window.makeKeyAndOrderFront(nil)
     window.retractIntoNotch { [weak window] in window?.orderOut(nil) }
-    window.makeKeyAndOrderFront(nil)
+    window.showNotification(
+      FloatingBarNotification(
+        ownerID: "owner",
+        title: "Replacement notification",
+        message: "Must remain visible",
+        assistantId: "test"),
+      animated: false)
+    scheduler.fire()
 
-    XCTAssertFalse(scheduler.fireNext(), "presenting again must cancel the stale order-out deadline")
-    XCTAssertTrue(window.isVisible, "a canceled retraction must not order out a newly presented panel")
+    XCTAssertTrue(window.isVisible, "a stale retraction must not order out replacement content")
+    XCTAssertEqual(window.state.currentNotification?.title, "Replacement notification")
     XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
   }
 
@@ -2216,6 +2223,25 @@ import XCTest
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+}
+
+@MainActor
+private final class UncancellableRetractionScheduler: DelayedActionScheduling {
+  private var action: (@MainActor () -> Void)?
+
+  func schedule(
+    after interval: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> DelayedActionCancellation {
+    _ = interval
+    self.action = action
+    return ManualDelayedActionCancellation()
+  }
+
+  func fire() {
+    action?()
+    action = nil
   }
 }
 

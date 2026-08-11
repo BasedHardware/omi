@@ -204,6 +204,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var resizeWorkItem: DispatchWorkItem?
   var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
   private var notchRetractionCancellation: DelayedActionCancellation?
+  private var notchRetractionGeneration = 0
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -487,6 +488,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   override func orderOut(_ sender: Any?) {
+    notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
     state.notchRevealProgress = 1
@@ -1024,8 +1026,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   // an invisible click sink over everything beneath it — other apps, and Omi's own centered shell
   // (dead top-bar pills). The window-level mechanism is `ignoresMouseEvents`, kept in sync with
   // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
-  // Two monitors are required — the local one sees moves while we are interactive; the global one
-  // while we are ignored (events then belong to the window below).
   /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
   func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     acceptsMouseHit(inContentPoint: point)
@@ -2122,11 +2122,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return
     }
     notchRetractionCancellation?.cancel()
+    frameAnimationToken += 1
+    notchRetractionGeneration &+= 1
+    let generation = notchRetractionGeneration
     OmiMotion.withGated(.easeIn(duration: 0.18)) {
       state.notchRevealProgress = 0.01
     }
     notchRetractionCancellation = notchRetractionScheduler.schedule(after: 0.18) { [weak self] in
-      guard let self else { return }
+      guard let self, self.notchRetractionGeneration == generation else { return }
       completion()
       // Leave the island ready to render for show paths that skip the
       // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
@@ -2136,6 +2139,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func cancelPendingRetraction() {
+    notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
     state.notchRevealProgress = 1
@@ -2143,6 +2147,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
     guard !state.showingAIConversation else { return }
+    cancelPendingRetraction()
     state.currentNotification = notification
     let barHeight =
       notchModeEnabled

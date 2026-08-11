@@ -538,13 +538,13 @@ final class FloatingBarGeometryTests: XCTestCase {
     let frame = NSRect(x: 500, y: 800, width: 360, height: 58)
     let visibleLocalRegion = NSRect(x: 24, y: 24, width: 312, height: 34)
 
-    XCTAssertTrue(
+    XCTAssertFalse(
       FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
         mouseLocation: NSPoint(x: 680, y: 790),
         windowFrame: frame,
         isVisible: true,
         acceptsMouseHit: visibleLocalRegion.contains),
-      "a top-level panel must not own events while the pointer is outside its frame")
+      "an ordered-in panel stays ready to receive the tracking event when the pointer enters")
     XCTAssertTrue(
       FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
         mouseLocation: NSPoint(x: 510, y: 810),
