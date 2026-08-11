@@ -10,6 +10,11 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "bun:test";
 
+import {
+  isPlacementDecision,
+  parseFormationOutcomeEnvelope,
+  retainsAcceptedWork,
+} from "../../core/consolidate/formation-outcome";
 import type { GraphSnapshot } from "../../core/retrieve";
 import {
   readAfterApplicationAuthorization,
@@ -19,27 +24,10 @@ import { buildOwnerBoundSynthesizedProjection } from "../../core/retrieve/projec
 import { renderStructuralTree } from "../../core/retrieve/render";
 import { buildDeterministicAnchors } from "../../core/retrieve/tree";
 
-type ExtractionDisposition = {
-  claim_revision_id: string;
-  disposition: "accepted" | "dropped";
-  reason: string | null;
-};
-
-type PlacementDisposition = {
-  claim_revision_id: string;
-  disposition: "admitted" | "retryable_error";
-  canonical_claim_revision_id: string | null;
-  error_code: string | null;
-};
-
 type ComparisonFixture = {
   schema_version: string;
   versions: Record<string, string>;
-  formation: {
-    evidence_ids: string[];
-    extraction_dispositions: ExtractionDisposition[];
-    placement_dispositions: PlacementDisposition[];
-  };
+  formation: unknown;
   graph: GraphSnapshot;
   expected_semantic_manifest: unknown;
 };
@@ -77,6 +65,7 @@ const authorizationRequest = (): ApplicationMemoryReadAuthorizationRequest => ({
 });
 
 test("P0 comparison fixture is synthetic, explicit, and has no implicit strategy switch", () => {
+  const formation = parseFormationOutcomeEnvelope(fixture.formation);
   expect(exactKeys(fixture, [
     "schema_version", "versions", "formation", "graph", "expected_semantic_manifest",
   ])).toBe(true);
@@ -89,6 +78,12 @@ test("P0 comparison fixture is synthetic, explicit, and has no implicit strategy
     projection_strategy: "proposition-per-lineage-v1",
     read_strategy: "authorized-synthesized-v1",
   });
+  expect(formation.coordinates).toMatchObject({
+    strategy_version: fixture.versions.extraction_strategy,
+    speaker_strategy_version: fixture.versions.speaker_strategy,
+    boundary_strategy_version: fixture.versions.boundary_strategy,
+    code_version: fixture.versions.kernel_contract,
+  });
   expect(fixture.graph.owner_account_id).toBe("owner:synthetic");
   expect(fixture.graph.events?.every((item) =>
     item.event.source_trust === "synthetic-fixture"
@@ -96,6 +91,7 @@ test("P0 comparison fixture is synthetic, explicit, and has no implicit strategy
 });
 
 test("P0 semantic comparison reaches the canonical authorized projection without a model or network edge", async () => {
+  const formation = parseFormationOutcomeEnvelope(fixture.formation);
   const projected = readAfterApplicationAuthorization(authorizationRequest(), () => ({
     snapshot: fixture.graph,
     options: { account_timezone: "UTC" },
@@ -131,12 +127,22 @@ test("P0 semantic comparison reaches the canonical authorized projection without
   const actual = {
     schema_version: fixture.schema_version,
     versions: fixture.versions,
-    evidence_ids: [...fixture.formation.evidence_ids].sort(),
-    extraction_dispositions: fixture.formation.extraction_dispositions.map((item) =>
-      [item.claim_revision_id, item.disposition, item.reason].filter((value) => value !== null).join(":")),
-    placement_dispositions: fixture.formation.placement_dispositions.map((item) =>
-      [item.claim_revision_id, item.disposition, item.canonical_claim_revision_id ?? item.error_code]
-        .filter((value) => value !== null).join(":")),
+    evidence_ids: [...new Set(formation.extraction_outcomes.flatMap((outcome) =>
+      outcome.kind === "accepted" ? outcome.evidence_ids : []))].sort(),
+    extraction_dispositions: formation.extraction_outcomes.map((outcome) =>
+      outcome.kind === "accepted"
+        ? `${outcome.claim_revision_id}:${outcome.kind}`
+        : [outcome.candidate_ref, outcome.kind, outcome.reason_code, outcome.reason_detail]
+          .filter((value) => value !== null).join(":")),
+    placement_dispositions: formation.placement_outcomes.map((outcome) => {
+      if (outcome.kind === "admitted") {
+        return `${outcome.input_provisional_revision_id}:${outcome.kind}:${outcome.canonical_claim_revision_id}`;
+      }
+      if (outcome.kind === "retryable_error" || outcome.kind === "dead_letter") {
+        return `${outcome.input_provisional_revision_id}:${outcome.kind}:${outcome.error_code}`;
+      }
+      return `${outcome.input_provisional_revision_id}:${outcome.kind}:${outcome.reason_code}`;
+    }),
     canonical_claim_heads: canonicalClaims.map((item) =>
       `${item.claim.claim_lineage_id}:${item.revision_id}`),
     predicate_identities: (fixture.graph.predicates ?? []).map((item) =>
@@ -162,12 +168,15 @@ test("P0 semantic comparison reaches the canonical authorized projection without
 
   expect(fakeRenderCalls).toBeGreaterThan(0);
   expect(actual).toEqual(fixture.expected_semantic_manifest);
-  const retryable = fixture.formation.placement_dispositions.find((item) =>
-    item.disposition === "retryable_error");
+  const retryable = formation.placement_outcomes.find((outcome) =>
+    outcome.kind === "retryable_error");
   expect(retryable).toMatchObject({
-    canonical_claim_revision_id: null,
+    kind: "retryable_error",
     error_code: "model_timeout",
   });
-  expect(fixture.formation.placement_dispositions.some((item) =>
-    item.claim_revision_id === retryable?.claim_revision_id && item.disposition === "admitted")).toBe(false);
+  expect(retryable && isPlacementDecision(retryable)).toBe(false);
+  expect(retryable && retainsAcceptedWork(retryable)).toBe(true);
+  expect(formation.placement_outcomes.some((outcome) =>
+    outcome.input_provisional_revision_id === retryable?.input_provisional_revision_id
+    && outcome.kind === "admitted")).toBe(false);
 });

@@ -9,31 +9,60 @@
     "read_strategy": "authorized-synthesized-v1"
   },
   "formation": {
-    "evidence_ids": ["evidence:synthetic:1"],
-    "extraction_dispositions": [
+    "contract_version": "memory-formation-outcome-v1",
+    "owner_account_id": "owner:synthetic",
+    "work_id": "work:synthetic:1",
+    "input_frontier": "frontier:synthetic:1",
+    "coordinates": {
+      "contract_version": "memory-formation-outcome-v1",
+      "strategy_version": "grounded-reference-v1",
+      "model_version": "deterministic-fake-v1",
+      "prompt_version": "none",
+      "policy_version": "fixture-policy-v1",
+      "code_version": "memory-productionization-v1",
+      "schema_version": "memory-productionization-comparison-v1",
+      "tokenizer_version": "none",
+      "tool_version": "synthetic-fixture-v1",
+      "speaker_strategy_version": "session-frame-reference-v1",
+      "boundary_strategy_version": "unit-boundary-reference-v1"
+    },
+    "extraction_outcomes": [
       {
+        "kind": "accepted",
+        "candidate_ref": "candidate:synthetic:1",
         "claim_revision_id": "claim:provisional:1",
-        "disposition": "accepted",
-        "reason": null
+        "evidence_ids": ["evidence:synthetic:1"],
+        "repair_codes": []
       },
       {
-        "claim_revision_id": "claim:provisional:dropped",
-        "disposition": "dropped",
-        "reason": "missing_argument:object"
+        "kind": "accepted",
+        "candidate_ref": "candidate:synthetic:retryable",
+        "claim_revision_id": "claim:provisional:retryable",
+        "evidence_ids": ["evidence:synthetic:1"],
+        "repair_codes": []
+      },
+      {
+        "kind": "dropped",
+        "candidate_ref": "candidate:synthetic:dropped",
+        "reason_code": "missing_argument",
+        "reason_detail": "object"
       }
     ],
-    "placement_dispositions": [
+    "placement_outcomes": [
       {
-        "claim_revision_id": "claim:provisional:1",
-        "disposition": "admitted",
+        "kind": "admitted",
+        "input_provisional_revision_id": "claim:provisional:1",
         "canonical_claim_revision_id": "claim:canonical:1",
-        "error_code": null
+        "boundary_decision": "accept_ltm",
+        "scope_locality": "durable"
       },
       {
-        "claim_revision_id": "claim:provisional:retryable",
-        "disposition": "retryable_error",
-        "canonical_claim_revision_id": null,
-        "error_code": "model_timeout"
+        "kind": "retryable_error",
+        "input_provisional_revision_id": "claim:provisional:retryable",
+        "attempt": 1,
+        "max_attempts": 3,
+        "error_code": "model_timeout",
+        "next_eligible_at": null
       }
     ]
   },
@@ -217,7 +246,8 @@
     "evidence_ids": ["evidence:synthetic:1"],
     "extraction_dispositions": [
       "claim:provisional:1:accepted",
-      "claim:provisional:dropped:dropped:missing_argument:object"
+      "claim:provisional:retryable:accepted",
+      "candidate:synthetic:dropped:dropped:missing_argument:object"
     ],
     "placement_dispositions": [
       "claim:provisional:1:admitted:claim:canonical:1",
