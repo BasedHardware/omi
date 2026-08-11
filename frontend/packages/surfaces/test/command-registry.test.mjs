@@ -43,6 +43,8 @@ test("registry dispatches platform chords and preserves text-entry conflicts", a
 
     const modifiedArrow = new rendered.window.KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true });
     assert.equal(dispatch(modifiedArrow, registry, { ...taskContext, handlers: { "navigate-task": () => calls.push("arrow") } }), false, "modified arrows do not navigate tasks");
+    const dualPlatformModifier = new rendered.window.KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true });
+    assert.equal(dispatch(dualPlatformModifier, registry, context), false, "Meta+Control together is not a platform chord");
 
     const chatContext = {
       activeRoute: "chat",
@@ -56,6 +58,35 @@ test("registry dispatches platform chords and preserves text-entry conflicts", a
     const modifiedSend = new rendered.window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true });
     input.dispatchEvent(modifiedSend);
     assert.equal(dispatch(modifiedSend, registry, chatContext), false, "extra modifiers do not submit Chat");
+
+    const textarea = rendered.window.document.createElement("textarea");
+    rendered.container.append(textarea);
+    const composingSend = new rendered.window.KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+    textarea.dispatchEvent(composingSend);
+    assert.equal(dispatch(composingSend, registry, chatContext), false, "IME composition Enter does not submit Chat");
+    const composingSave = new rendered.window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, isComposing: true, bubbles: true });
+    textarea.dispatchEvent(composingSave);
+    assert.equal(dispatch(composingSave, registry, {
+      activeRoute: "memories",
+      navigate: () => undefined,
+      handlers: { "save-memory": () => calls.push("save") },
+    }), false, "IME composition Enter does not save a memory");
+    const legacyComposing = new rendered.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    Object.defineProperty(legacyComposing, "keyCode", { configurable: true, value: 229 });
+    textarea.dispatchEvent(legacyComposing);
+    assert.equal(dispatch(legacyComposing, registry, chatContext), false, "legacy IME keyCode does not submit Chat");
+
+    const repeatedSend = new rendered.window.KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true });
+    textarea.dispatchEvent(repeatedSend);
+    assert.equal(dispatch(repeatedSend, registry, chatContext), false, "held Enter does not repeatedly submit Chat");
+    const repeatedCreate = new rendered.window.KeyboardEvent("keydown", { key: "n", ctrlKey: true, repeat: true, bubbles: true });
+    assert.equal(dispatch(repeatedCreate, registry, taskContext), false, "held create chord does not create tasks repeatedly");
+    const repeatedDelete = new rendered.window.KeyboardEvent("keydown", { key: "d", ctrlKey: true, repeat: true, bubbles: true });
+    assert.equal(dispatch(repeatedDelete, registry, { ...taskContext, enabled: { "delete-task": true } }), false, "held delete chord does not delete tasks repeatedly");
+    const repeatedPalette = new rendered.window.KeyboardEvent("keydown", { key: "p", ctrlKey: true, shiftKey: true, repeat: true, bubbles: true });
+    assert.equal(dispatch(repeatedPalette, registry, { ...context, handlers: { "open-command-palette": () => calls.push("palette") } }), false, "held palette chord does not reopen repeatedly");
+    const repeatedArrow = new rendered.window.KeyboardEvent("keydown", { key: "ArrowDown", repeat: true, bubbles: true });
+    assert.equal(dispatch(repeatedArrow, registry, { ...taskContext, handlers: { "navigate-task": () => calls.push("arrow") } }), true, "task arrows explicitly allow keyboard repeat");
   } finally {
     await rendered.cleanup();
   }
@@ -119,7 +150,24 @@ test("command help exposes accurate landmarks, labels, chords, and focus restora
     const dialog = rendered.container.querySelector('[role="dialog"]');
     assert.ok(dialog);
     assert.equal(rendered.window.document.activeElement, dialog, "opening help moves focus into the discovery surface");
+    const primaryNav = rendered.container.querySelector(`nav[aria-label="${EN_MESSAGES["nav.primary"]}"]`);
+    assert.equal(primaryNav?.getAttribute("aria-hidden"), "true", "modal help hides the background landmark");
+    assert.equal(primaryNav?.inert, true, "modal help makes the background inert");
     assert.ok(dialog.textContent?.includes(EN_MESSAGES["chat.title"]));
+    const dialogButtons = Array.from(dialog.querySelectorAll("button:not([disabled])"));
+    const firstDialogButton = dialogButtons[0];
+    const lastDialogButton = dialogButtons.at(-1);
+    assert.ok(firstDialogButton && lastDialogButton);
+    lastDialogButton.focus();
+    await rendered.act(async () => {
+      lastDialogButton.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    });
+    assert.equal(rendered.window.document.activeElement, firstDialogButton, "forward Tab wraps within command help");
+    firstDialogButton.focus();
+    await rendered.act(async () => {
+      firstDialogButton.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    });
+    assert.equal(rendered.window.document.activeElement, lastDialogButton, "reverse Tab wraps within command help");
     const input = rendered.window.document.createElement("input");
     rendered.container.append(input);
     input.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "p", ctrlKey: true, shiftKey: true, bubbles: true }));
@@ -128,6 +176,8 @@ test("command help exposes accurate landmarks, labels, chords, and focus restora
       rendered.window.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     assert.equal(rendered.window.document.activeElement, trigger, "closing help restores trigger focus");
+    assert.equal(primaryNav?.getAttribute("aria-hidden"), null, "closing help restores the background landmark");
+    assert.equal(primaryNav?.inert, false, "closing help restores background interaction");
 
     const mobileLabels = rendered.container.querySelector(".nav-mobile")?.textContent ?? "";
     for (const label of ["Home", "Conversations", "Tasks"]) assert.match(mobileLabels, new RegExp(label));

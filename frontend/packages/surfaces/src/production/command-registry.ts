@@ -32,6 +32,7 @@ export type ProductionCommandId =
   | "close-command-palette";
 
 export type TextEntryPolicy = "ignore" | "allow" | "text-only";
+export type CommandRepeatPolicy = "allow" | "ignore";
 
 export type CommandChord = {
   readonly key: string;
@@ -57,6 +58,7 @@ export type ProductionCommand = {
   readonly chords?: readonly CommandChord[];
   readonly routeScope: ProductionRoute | "global";
   readonly textEntryPolicy: TextEntryPolicy;
+  readonly repeatPolicy: CommandRepeatPolicy;
   readonly isEnabled: (context: ProductionCommandContext) => boolean;
   readonly invoke: (context: ProductionCommandContext, event?: KeyboardEvent) => void | Promise<void>;
 };
@@ -70,6 +72,7 @@ const routeCommand = (
   labelKey,
   routeScope: "global",
   textEntryPolicy: "ignore",
+  repeatPolicy: "allow",
   isEnabled: () => true,
   invoke: (context) => context.navigate(route),
 });
@@ -98,6 +101,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "p", modifier: true, shift: true },
       routeScope: "global",
       textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
     }),
     routeCommand("navigate-home", "nav.home", "home"),
     routeCommand("navigate-memories", "nav.memories", "memories"),
@@ -113,6 +117,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "k", modifier: true },
       routeScope: "home",
       textEntryPolicy: "allow",
+      repeatPolicy: "allow",
     }),
     handlerCommand({
       id: "new-task",
@@ -120,6 +125,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "n", modifier: true },
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "navigate-task",
@@ -127,6 +133,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chords: [{ key: "ArrowDown" }, { key: "ArrowUp" }],
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      repeatPolicy: "allow",
     }),
     handlerCommand({
       id: "delete-task",
@@ -134,6 +141,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "d", modifier: true },
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "indent-task",
@@ -141,6 +149,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "]", modifier: true },
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "outdent-task",
@@ -148,6 +157,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "[", modifier: true },
       routeScope: "tasks",
       textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "save-memory",
@@ -155,6 +165,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "Enter", modifier: true },
       routeScope: "memories",
       textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "cancel-memory",
@@ -162,6 +173,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "Escape" },
       routeScope: "memories",
       textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "send-chat",
@@ -169,6 +181,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "Enter" },
       routeScope: "chat",
       textEntryPolicy: "text-only",
+      repeatPolicy: "ignore",
     }),
     handlerCommand({
       id: "close-command-palette",
@@ -176,6 +189,7 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "Escape" },
       routeScope: "global",
       textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
     }),
   ];
 }
@@ -193,11 +207,20 @@ export function chordMatches(event: KeyboardEvent, chord: CommandChord): boolean
   // Omitted modifiers mean "plain key". `modifier: true` deliberately aliases
   // Meta and Control for desktop/macOS and hardware-keyboard iOS; it never
   // permits a chord with an additional modifier to leak into a text field.
-  const hasModifier = event.metaKey || event.ctrlKey;
-  if (chord.modifier === true ? !hasModifier : hasModifier) return false;
+  const platformModifierCount = Number(event.metaKey) + Number(event.ctrlKey);
+  if (chord.modifier === true ? platformModifierCount !== 1 : platformModifierCount !== 0) return false;
   if (event.shiftKey !== (chord.shift ?? false)) return false;
   if (event.altKey !== (chord.alt ?? false)) return false;
   return true;
+}
+
+/**
+ * IME composition can surface Enter/Escape as ordinary keydowns on browsers
+ * that do not consistently set `isComposing`; keyCode 229 is their settled
+ * compatibility signal. Never let a composing keydown invoke a command.
+ */
+export function isComposingKeyboardEvent(event: KeyboardEvent): boolean {
+  return event.isComposing || event.key === "Process" || event.keyCode === 229;
 }
 
 export function commandAppliesToRoute(command: ProductionCommand, route: ProductionRoute): boolean {
@@ -210,6 +233,7 @@ export function dispatchProductionCommand(
   commands: readonly ProductionCommand[],
   context: ProductionCommandContext,
 ): boolean {
+  if (isComposingKeyboardEvent(event)) return false;
   for (const command of commands) {
     const chords = command.chord ? [command.chord] : command.chords ?? [];
     if (chords.length === 0 || !chords.some((chord) => chordMatches(event, chord))) continue;
@@ -217,6 +241,7 @@ export function dispatchProductionCommand(
     const textEntry = isTextEntryTarget(event.target);
     if (textEntry && command.textEntryPolicy === "ignore") continue;
     if (!textEntry && command.textEntryPolicy === "text-only") continue;
+    if (event.repeat && command.repeatPolicy === "ignore") continue;
     if (!command.isEnabled(context)) continue;
     event.preventDefault();
     void command.invoke(context, event);
