@@ -281,6 +281,28 @@ describe("structured Chat generation context packets", () => {
     expect(repaired.transcriptTail[0]?.payloadHash).toMatch(/^sha256:[0-9a-f]{64}$/u);
   });
 
+  test("plural and compound credential/reference aliases are redacted across packet fields", () => {
+    const aliases = "attachments:opaque-a files=opaque-b opaque_refs=opaque-c references=opaque-d attachmentReferences=opaque-e api_keys=secret access_tokens=secret tokens=secret passwords=secret";
+    const packet = createChatGenerationContextPacket({
+      accountId: ACCOUNT,
+      generationId: "generation:alias-redaction",
+      nowEpochMilliseconds: 720,
+      candidates: [candidate("aliases", { redactedPreview: aliases, inclusionReason: aliases })],
+      history: [message("history:aliases", aliases, "human", 719)],
+      attachments: [{ id: "attachment:aliases", displayName: aliases, mediaType: "api_keys=secret attachmentReferences=opaque-e", sizeBytes: 1, contentReference: "opaque" }],
+      attachmentSubset: ["attachment:aliases"],
+    });
+    const serialized = JSON.stringify(packet);
+    expect(serialized).not.toContain("opaque-a");
+    expect(serialized).not.toContain("opaque-b");
+    expect(serialized).not.toContain("opaque-c");
+    expect(serialized).not.toContain("opaque-d");
+    expect(serialized).not.toContain("opaque-e");
+    expect(serialized).not.toContain("secret");
+    expect(packet.attachments[0]?.label).toContain("[redacted]");
+    expect(packet.attachments[0]?.mediaType).toContain("[redacted]");
+  });
+
   test("malformed, extra-key, mutated, and cross-owner packets fail closed", () => {
     const packet = createChatGenerationContextPacket({
       accountId: ACCOUNT,

@@ -4,6 +4,9 @@ import {
   createAgentToolRegistry,
   createAgentToolRunner,
   type AgentToolDefinition,
+  type AgentToolExecutionControl,
+  type AgentToolPolicyDecision,
+  type AgentToolRunner,
   type AgentToolScheduler,
   type AgentToolTraceEvent,
 } from "./agent-tools";
@@ -118,6 +121,40 @@ describe("closed agent tool registry and approval seam", () => {
     expect(events.filter((event) => event.kind === "tool_result")).toHaveLength(1);
   });
 
+  test("approval resolution rejects caller identity drift before emitting or executing", async () => {
+    let executions = 0;
+    const events: AgentToolTraceEvent[] = [];
+    const registry = createAgentToolRegistry([safeTool("safe.write", async () => {
+      executions += 1;
+      return { summary: "write committed", durationMs: 1, retryable: false };
+    }, { risk: "approval-required" })]);
+    const runner = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 10, onEvent: (event) => events.push(event) });
+    const call = { callId: "call:identity", toolName: "safe.write", idempotencyKey: "idem:identity", input: {} } as const;
+    await runner.request(call);
+    const before = events.length;
+    const mismatch = await runner.resolveApproval({
+      approvalId: "approval:call:identity",
+      resolution: "approved",
+      call: { ...call, toolName: "safe.other" },
+    });
+    expect(mismatch).toMatchObject({ kind: "failed", code: "tool_input_conflict" });
+    expect(executions).toBe(0);
+    expect(events.slice(before)).toEqual([]);
+    expect(await runner.request(call)).toEqual(mismatch);
+
+    const secondEvents: AgentToolTraceEvent[] = [];
+    const secondRunner = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 10, onEvent: (event) => secondEvents.push(event) });
+    await secondRunner.request({ ...call, callId: "call:identity-idem", idempotencyKey: "idem:identity-idem" });
+    const secondBefore = secondEvents.length;
+    const idempotencyMismatch = await secondRunner.resolveApproval({
+      approvalId: "approval:call:identity-idem",
+      resolution: "approved",
+      call: { ...call, callId: "call:identity-idem", idempotencyKey: "idem:other" },
+    });
+    expect(idempotencyMismatch).toMatchObject({ kind: "failed", code: "tool_input_conflict" });
+    expect(secondEvents.slice(secondBefore)).toEqual([]);
+  });
+
   test("denial, expiry, cancellation, timeout, and unsafe results never create a false success", async () => {
     let executions = 0;
     const scheduler = new DeterministicToolScheduler();
@@ -156,5 +193,88 @@ describe("closed agent tool registry and approval seam", () => {
     const cyclic: { self?: unknown } = {};
     cyclic.self = cyclic;
     expect(await timeout.request({ callId: "call:cyclic", toolName: "safe.hang", idempotencyKey: "idem:cyclic", input: cyclic })).toMatchObject({ kind: "failed", code: "tool_invalid_input" });
+  });
+
+  test("restore rejects forged completed secrets and preserves typed failures for unknown tools", async () => {
+    const registry = createAgentToolRegistry([safeTool("safe.lookup", async () => ({ summary: "ok", durationMs: 1, retryable: false }))]);
+    const first = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 10 });
+    await first.request({ callId: "call:restore", toolName: "safe.lookup", idempotencyKey: "idem:restore", input: {} });
+    const forged = JSON.parse(JSON.stringify(first.snapshot())) as { calls: Array<Record<string, unknown>> };
+    forged.calls[0]!.outcome = {
+      kind: "completed", callId: "call:restore", summary: "api_key=secret", durationMs: -1, retryable: false,
+    };
+    const second = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 10 });
+    expect(() => second.restore(forged)).toThrow("invalid tool runner outcome snapshot");
+
+    const unknown = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 10 });
+    unknown.restore({
+      calls: [{
+        callId: "call:unknown-restore", toolName: "gone.tool", idempotencyKey: "idem:unknown-restore",
+        inputHash: "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        state: "pending_approval", approvalId: "approval:unknown-restore", expiresAt: 100,
+        outcome: { kind: "pending_approval", callId: "call:unknown-restore", approvalId: "approval:unknown-restore", expiresAt: 100, reason: "Approval is pending." },
+      }],
+    });
+    expect(await unknown.request({ callId: "call:unknown-restore", toolName: "gone.tool", idempotencyKey: "idem:unknown-restore", input: {} })).toMatchObject({ kind: "failed", code: "tool_unknown" });
+  });
+
+  test("throwing or malformed policy never executes and remains a typed replay failure", async () => {
+    let executions = 0;
+    const registry = createAgentToolRegistry([safeTool("safe.policy", async () => {
+      executions += 1;
+      return { summary: "must not run", durationMs: 1, retryable: false };
+    }, { risk: "approval-required" })]);
+    for (const policy of [
+      (): never => { throw new Error("policy unavailable"); },
+      (): AgentToolPolicyDecision => ({ kind: "garbage" } as unknown as AgentToolPolicyDecision),
+    ]) {
+      const runner = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 0, policy });
+      const outcome = await runner.request({ callId: `call:policy-${executions}`, toolName: "safe.policy", idempotencyKey: `idem:policy-${executions}`, input: {} });
+      expect(outcome).toMatchObject({ kind: "failed", code: "tool_policy_failed" });
+    }
+    expect(executions).toBe(0);
+  });
+
+  test("synchronous trace cancellation and timeout signal the executor and suppress late completion", async () => {
+    let executions = 0;
+    let runner!: AgentToolRunner;
+    const registry = createAgentToolRegistry([safeTool("safe.reentrant", async (_input, control) => {
+      executions += 1;
+      if (control.cancelled) throw new Error("cancelled before execute");
+      return { summary: "must not complete", durationMs: 1, retryable: false };
+    })]);
+    runner = createAgentToolRunner({
+      registry, nowEpochMilliseconds: () => 0,
+      onEvent: (event) => { if (event.kind === "tool_request") runner.cancel(event.callId); },
+    });
+    expect(await runner.request({ callId: "call:reentrant", toolName: "safe.reentrant", idempotencyKey: "idem:reentrant", input: {} })).toMatchObject({ kind: "cancelled" });
+    expect(executions).toBe(0);
+
+    let release!: () => void;
+    let observedControl!: AgentToolExecutionControl;
+    const scheduler = new DeterministicToolScheduler();
+    const timeoutRegistry = createAgentToolRegistry([safeTool("safe.abort", async (_input, control) => {
+      observedControl = control;
+      return await new Promise((resolve) => { release = () => resolve({ summary: "late", durationMs: 1, retryable: false }); });
+    }, { timeoutMs: 5 })]);
+    const timeoutRunner = createAgentToolRunner({ registry: timeoutRegistry, nowEpochMilliseconds: () => scheduler.now, scheduler });
+    const pending = timeoutRunner.request({ callId: "call:abort", toolName: "safe.abort", idempotencyKey: "idem:abort", input: {} });
+    await Promise.resolve();
+    scheduler.advance(5);
+    expect(await pending).toMatchObject({ kind: "failed", code: "tool_timeout" });
+    expect(observedControl.cancelled).toBe(true);
+    release();
+    expect(await timeoutRunner.request({ callId: "call:abort-replay", toolName: "safe.abort", idempotencyKey: "idem:abort", input: {} })).toMatchObject({ kind: "failed", code: "tool_timeout" });
+  });
+
+  test("safe summaries reject plural and compound credential/reference aliases", async () => {
+    const registry = createAgentToolRegistry([safeTool("safe.redact", async () => ({
+      summary: "attachments:opaque-a files=opaque-b opaque_refs=opaque-c references=opaque-d attachmentReferences=opaque-e api_keys=secret access_tokens=secret tokens=secret passwords=secret",
+      durationMs: 1,
+      retryable: false,
+    }))]);
+    const runner = createAgentToolRunner({ registry, nowEpochMilliseconds: () => 0 });
+    expect(await runner.request({ callId: "call:redact", toolName: "safe.redact", idempotencyKey: "idem:redact", input: {} }))
+      .toMatchObject({ kind: "failed", code: "tool_result_redaction_failed" });
   });
 });

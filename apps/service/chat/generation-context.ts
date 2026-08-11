@@ -18,7 +18,7 @@ const DEFAULT_CONTEXT_TOKEN_BUDGET = 1_024;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const SAFE_HASH = /^sha256:[0-9a-f]{64}$/u;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
-const REDACTION_MARKER = /(?:Bearer\s+|(?:api[_ -]?key|authorization|access[_ -]?token|token|secret|password)\s*[:=]|(?:attachment|file|opaque|reference)(?:[_ -]?id)?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
+const REDACTION_MARKER = /(?:Bearer\s+|(?:api[_. -]?keys?|authorizations?|access[_. -]?tokens?|tokens?|secrets?|passwords?)\s*[:=]|(?:attachments?|files?|opaques?|references?)(?:[_. -]?(?:ids?|refs?|references?))?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
 // Only packets produced by this module's detached builder cross the structured
 // boundary. Identity lookup is side-effect free for getters and proxies; an
 // unregistered declaration fails closed without reflective reads.
@@ -208,8 +208,8 @@ const redactText = (value: string, max = 512): string => {
   const bounded = value.slice(0, max);
   const redacted = bounded
     .replace(/Bearer\s+[^\s,;]+/giu, "[redacted]")
-    .replace(/(?:api[_. -]?key|authorization|token|secret|password|access[_. -]?token)\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
-    .replace(/(?:attachment|file|opaque|reference)(?:[_. -]?id)?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
+    .replace(/(?:api[_. -]?keys?|authorizations?|access[_. -]?tokens?|tokens?|secrets?|passwords?)\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
+    .replace(/(?:attachments?|files?|opaques?|references?)(?:[_. -]?(?:ids?|refs?|references?))?\s*[:=]\s*[^\s,;]+/giu, "[redacted]")
     .replace(/BEGIN\s+[^\n]*PRIVATE\s+KEY[\s\S]*?END\s+[^\n]*PRIVATE\s+KEY/giu, "[redacted]");
   return redacted.trim().length === 0 ? "[redacted]" : redacted;
 };

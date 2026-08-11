@@ -1,6 +1,7 @@
 // domain-pending(DIV-CHAT-TOOL-001)
 
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 export const AGENT_TOOL_SCHEMA_VERSION = 1 as const;
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
@@ -34,11 +35,43 @@ const hashInput = (input: unknown): string | null => {
 const safeSummary = (value: unknown): string | null => {
   if (typeof value !== "string" || value.length === 0 || value.length > SUMMARY_MAX
     || value.trim().length === 0 || CONTROL.test(value)) return null;
-  if (/(?:Bearer\s+|sk-[A-Za-z0-9]|(?:api[_. -]?key|authorization|access[_. -]?token|token|secret|password)\s*[:=]|(?:attachment|file|opaque|reference)(?:[_. -]?id)?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu.test(value)) {
+  if (/(?:Bearer\s+|sk-[A-Za-z0-9]|(?:api[_. -]?keys?|authorizations?|access[_. -]?tokens?|tokens?|secrets?|passwords?)\s*[:=]|(?:attachments?|files?|opaques?|references?)(?:[_. -]?(?:ids?|refs?|references?))?\s*[:=]|BEGIN\s+.*PRIVATE\s+KEY)/iu.test(value)) {
     return null;
   }
   return value;
 };
+
+const ownDataRecord = (value: unknown): Record<string, unknown> | null => {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some((key) => typeof key !== "string")) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const record = Object.create(null) as Record<string, unknown>;
+    for (const key of keys) {
+      const descriptor = descriptors[key as string];
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      record[key as string] = descriptor.value;
+    }
+    return record;
+  } catch {
+    return null;
+  }
+};
+
+const exactKeys = (record: Record<string, unknown>, expected: readonly string[]): boolean => {
+  const actual = Object.keys(record).sort();
+  const wanted = [...expected].sort();
+  return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+};
+
+const safeExpiry = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+const safeToken = (value: unknown): value is string =>
+  typeof value === "string" && SAFE_TOKEN.test(value);
 
 export type AgentToolRisk = "safe" | "approval-required";
 
@@ -114,6 +147,30 @@ export type AgentToolPolicyDecision =
   | { readonly kind: "deny"; readonly code: "tool_denied" | "tool_unknown"; readonly reason: string }
   | { readonly kind: "approval_required"; readonly approvalId: string; readonly expiresAt: number; readonly reason: string };
 
+const parsePolicyDecision = (value: unknown): AgentToolPolicyDecision | null => {
+  const record = ownDataRecord(value);
+  if (record === null || typeof record.kind !== "string") return null;
+  if (record.kind === "allow") {
+    return exactKeys(record, ["kind"]) ? { kind: "allow" } : null;
+  }
+  if (record.kind === "deny") {
+    return exactKeys(record, ["code", "kind", "reason"])
+      && (record.code === "tool_denied" || record.code === "tool_unknown")
+      && safeSummary(record.reason) !== null
+      ? { kind: "deny", code: record.code, reason: record.reason as string }
+      : null;
+  }
+  if (record.kind === "approval_required") {
+    return exactKeys(record, ["approvalId", "expiresAt", "kind", "reason"])
+      && safeToken(record.approvalId) && safeExpiry(record.expiresAt)
+      && safeSummary(record.reason) !== null
+      ? { kind: "approval_required", approvalId: record.approvalId as string,
+          expiresAt: record.expiresAt as number, reason: record.reason as string }
+      : null;
+  }
+  return null;
+};
+
 export interface AgentToolPolicyInput {
   readonly callId: string;
   readonly toolName: string;
@@ -134,6 +191,38 @@ export type AgentToolOutcome =
   | { readonly kind: "pending_approval"; readonly callId: string; readonly approvalId: string; readonly expiresAt: number; readonly reason: string }
   | { readonly kind: "failed"; readonly callId: string; readonly code: string; readonly summary: string; readonly retryable: boolean }
   | { readonly kind: "cancelled"; readonly callId: string; readonly summary: string };
+
+const parseOutcome = (
+  raw: unknown,
+  callId: string,
+): AgentToolOutcome | null => {
+  const record = ownDataRecord(raw);
+  if (record === null || record.callId !== callId || typeof record.kind !== "string") return null;
+  if (record.kind === "completed") {
+    if (!exactKeys(record, ["callId", "durationMs", "kind", "retryable", "summary"])
+      || !safeSummary(record.summary) || !Number.isSafeInteger(record.durationMs)
+      || (record.durationMs as number) < 0 || typeof record.retryable !== "boolean") return null;
+    return Object.freeze({ kind: "completed", callId, summary: record.summary, durationMs: record.durationMs, retryable: record.retryable });
+  }
+  if (record.kind === "failed") {
+    if (!exactKeys(record, ["callId", "code", "kind", "retryable", "summary"])
+      || !safeToken(record.code) || !safeSummary(record.summary) || typeof record.retryable !== "boolean") return null;
+    return Object.freeze({ kind: "failed", callId, code: record.code, summary: record.summary, retryable: record.retryable });
+  }
+  if (record.kind === "cancelled") {
+    if (!exactKeys(record, ["callId", "kind", "summary"]) || !safeSummary(record.summary)) return null;
+    return Object.freeze({ kind: "cancelled", callId, summary: record.summary });
+  }
+  if (record.kind === "pending_approval") {
+    if (!exactKeys(record, ["approvalId", "callId", "expiresAt", "kind", "reason"])
+      || !safeToken(record.approvalId) || !safeExpiry(record.expiresAt) || !safeSummary(record.reason)) return null;
+    return Object.freeze({
+      kind: "pending_approval", callId, approvalId: record.approvalId,
+      expiresAt: record.expiresAt, reason: record.reason,
+    });
+  }
+  return null;
+};
 
 export type AgentToolTraceEvent =
   | { readonly kind: "tool_request"; readonly callId: string; readonly toolName: string; readonly inputHash: string; readonly timeoutMs: number; readonly displaySummary: string }
@@ -170,6 +259,7 @@ interface MutableCallState {
   readonly idempotencyKey: string;
   readonly inputHash: string;
   state: "pending_approval" | "running" | "completed" | "failed" | "cancelled";
+  cancelRequested: boolean;
   approvalId: string | null;
   expiresAt: number | null;
   outcome: AgentToolOutcome | null;
@@ -213,10 +303,16 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
   const execute = async (state: MutableCallState, definition: AgentToolDefinition): Promise<AgentToolOutcome> => {
     state.state = "running";
     emit({ kind: "tool_progress", callId: state.callId, toolName: state.toolName, status: "running" });
+    if (state.outcome !== null || state.cancelRequested || state.state === "cancelled") {
+      return state.outcome ?? { kind: "cancelled", callId: state.callId, summary: "The tool call was cancelled." };
+    }
     const input = state.input;
     const control: AgentToolExecutionControl = {
-      get cancelled(): boolean { return state.state === "cancelled"; },
-      cancel(): void { /* state transition is owned by cancel() */ },
+      get cancelled(): boolean { return state.cancelRequested || state.state === "cancelled"; },
+      cancel(): void {
+        state.cancelRequested = true;
+        state.state = "cancelled";
+      },
     };
     state.control = control;
     return await new Promise<AgentToolOutcome>((resolve) => {
@@ -232,8 +328,14 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
         }
         finish(state, outcome);
       };
+      if (state.cancelRequested || state.state === "cancelled") {
+        settle({ kind: "cancelled", callId: state.callId, summary: "The tool call was cancelled." });
+        return;
+      }
       const timeout = scheduler.setTimeout(() => {
+        state.cancelRequested = true;
         state.state = "failed";
+        control.cancel();
         settle({ kind: "failed", callId: state.callId, code: "tool_timeout", summary: "The tool timed out.", retryable: definition.retryable });
       }, definition.timeoutMs);
       Promise.resolve().then(() => definition.execute(input, control)).then((result) => {
@@ -276,15 +378,36 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
     const state: MutableCallState = {
       callId: input.callId, toolName: input.toolName, idempotencyKey: input.idempotencyKey, inputHash,
       state: "pending_approval", approvalId: null, expiresAt: null, outcome: null, input: input.input,
-      control: null, finish: null,
+      cancelRequested: false, control: null, finish: null,
     };
     states.set(state.callId, state);
     idempotency.set(state.idempotencyKey, state.callId);
     emit({ kind: "tool_request", callId: state.callId, toolName: state.toolName, inputHash, timeoutMs: definition.timeoutMs, displaySummary: definition.displaySummary });
-    const decision = (options.policy ?? defaultPolicy)({
-      callId: state.callId, toolName: definition.name, risk: definition.risk,
-      timeoutMs: definition.timeoutMs, nowEpochMilliseconds: options.nowEpochMilliseconds(),
-    });
+    if (state.outcome !== null || state.cancelRequested || state.state === "cancelled") {
+      return state.outcome ?? { kind: "cancelled", callId: state.callId, summary: "The tool call was cancelled." };
+    }
+    let decision: AgentToolPolicyDecision | null;
+    try {
+      decision = parsePolicyDecision((options.policy ?? defaultPolicy)({
+        callId: state.callId, toolName: definition.name, risk: definition.risk,
+        timeoutMs: definition.timeoutMs, nowEpochMilliseconds: options.nowEpochMilliseconds(),
+      }));
+    } catch {
+      decision = null;
+    }
+    if (decision === null) {
+      const outcome: AgentToolOutcome = {
+        kind: "failed", callId: state.callId, code: "tool_policy_failed",
+        summary: "The tool policy was unavailable.", retryable: true,
+      };
+      emit({ kind: "tool_error", callId: state.callId, toolName: state.toolName,
+        code: outcome.code, summary: outcome.summary, retryable: outcome.retryable });
+      finish(state, outcome);
+      return outcome;
+    }
+    if (state.outcome !== null || state.cancelRequested || state.state === "cancelled") {
+      return state.outcome ?? { kind: "cancelled", callId: state.callId, summary: "The tool call was cancelled." };
+    }
     if (decision.kind === "deny") {
       const outcome: AgentToolOutcome = { kind: "failed", callId: state.callId, code: decision.code, summary: safeSummary(decision.reason) ?? "The tool was denied.", retryable: false };
       emit({ kind: "tool_error", callId: state.callId, toolName: state.toolName, code: outcome.code, summary: outcome.summary, retryable: false });
@@ -314,6 +437,14 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
       return { kind: "failed", callId: input.call.callId, code: "approval_unknown", summary: "The approval request is unavailable.", retryable: false };
     }
     state.outcome = null;
+    if (input.call.toolName !== state.toolName || input.call.idempotencyKey !== state.idempotencyKey) {
+      const outcome: AgentToolOutcome = {
+        kind: "failed", callId: state.callId, code: "tool_input_conflict",
+        summary: "The approved tool identity changed.", retryable: false,
+      };
+      finish(state, outcome);
+      return outcome;
+    }
     const resolution = input.resolution;
     if (resolution !== "approved") {
       emit({ kind: "approval_resolved", callId: state.callId, approvalId: input.approvalId, resolution });
@@ -336,13 +467,22 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
       return outcome;
     }
     const definition = options.registry.resolve(state.toolName);
-    if (definition === null) return unknownOutcome(state.callId);
+    if (definition === null) {
+      const outcome = unknownOutcome(state.callId);
+      emit({ kind: "tool_error", callId: state.callId, toolName: state.toolName,
+        code: outcome.kind === "failed" ? outcome.code : "tool_unknown",
+        summary: outcome.kind === "failed" ? outcome.summary : "The requested tool is unavailable.",
+        retryable: false });
+      finish(state, outcome);
+      return outcome;
+    }
     state.input = input.call.input;
     return await execute(state, definition);
   };
   const cancel = (callId: string): void => {
     const state = states.get(callId);
     if (state === undefined || (state.outcome !== null && state.outcome.kind !== "pending_approval")) return;
+    state.cancelRequested = true;
     state.state = "cancelled";
     state.outcome = null;
     state.control?.cancel();
@@ -352,6 +492,8 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
       finish(state, outcome);
     } else if (state.approvalId !== null) {
       emit({ kind: "approval_resolved", callId, approvalId: state.approvalId, resolution: "cancelled" });
+      finish(state, { kind: "cancelled", callId, summary: "The tool call was cancelled." });
+    } else {
       finish(state, { kind: "cancelled", callId, summary: "The tool call was cancelled." });
     }
   };
@@ -364,25 +506,56 @@ export const createAgentToolRunner = (options: AgentToolRunnerOptions): AgentToo
     }))),
   });
   const restore = (raw: unknown): void => {
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError("invalid tool runner snapshot");
-    const calls = (raw as { calls?: unknown }).calls;
-    if (!Array.isArray(calls)) throw new TypeError("invalid tool runner snapshot");
+    const snapshot = ownDataRecord(raw);
+    if (snapshot === null || !exactKeys(snapshot, ["calls"]) || !Array.isArray(snapshot.calls)) {
+      throw new TypeError("invalid tool runner snapshot");
+    }
     const next = new Map<string, MutableCallState>();
     const nextIdempotency = new Map<string, string>();
-    for (const value of calls) {
-      if (value === null || typeof value !== "object") throw new TypeError("invalid tool runner call snapshot");
-      const item = value as Partial<AgentToolRunnerSnapshot["calls"][number]>;
-      if (typeof item.callId !== "string" || !SAFE_TOKEN.test(item.callId) || typeof item.toolName !== "string"
-        || !SAFE_TOKEN.test(item.toolName) || typeof item.idempotencyKey !== "string" || !SAFE_TOKEN.test(item.idempotencyKey)
+    let now: number;
+    try { now = options.nowEpochMilliseconds(); } catch { throw new TypeError("invalid tool runner snapshot clock"); }
+    if (!Number.isSafeInteger(now) || now < 0) throw new TypeError("invalid tool runner snapshot clock");
+    for (const value of snapshot.calls) {
+      const item = ownDataRecord(value);
+      if (item === null || !exactKeys(item, ["approvalId", "callId", "expiresAt", "idempotencyKey", "inputHash", "outcome", "state", "toolName"])
+        || !safeToken(item.callId) || !safeToken(item.toolName) || !safeToken(item.idempotencyKey)
         || typeof item.inputHash !== "string" || !SAFE_HASH.test(item.inputHash)
         || (item.state !== "pending_approval" && item.state !== "completed" && item.state !== "failed" && item.state !== "cancelled")
-        || next.has(item.callId) || nextIdempotency.has(item.idempotencyKey) || item.outcome === undefined) {
+        || next.has(item.callId) || nextIdempotency.has(item.idempotencyKey)) {
         throw new TypeError("invalid tool runner call snapshot");
       }
+      const toolName = item.toolName;
+      const definition = options.registry.resolve(toolName);
+      const approvalId = item.approvalId === null ? null : item.approvalId;
+      const expiresAt = item.expiresAt === null ? null : item.expiresAt;
+      if ((approvalId !== null && !safeToken(approvalId))
+        || (expiresAt !== null && !safeExpiry(expiresAt))
+        || (approvalId === null) !== (expiresAt === null)) {
+        throw new TypeError("invalid tool runner approval snapshot");
+      }
+      let outcome = parseOutcome(item.outcome, item.callId);
+      if (outcome === null) throw new TypeError("invalid tool runner outcome snapshot");
+      let parsedState = item.state as MutableCallState["state"];
+      if (definition === null) {
+        outcome = unknownOutcome(item.callId);
+        parsedState = "failed";
+      } else if (parsedState === "pending_approval") {
+        if (outcome.kind !== "pending_approval" || approvalId !== outcome.approvalId || expiresAt !== outcome.expiresAt) {
+          throw new TypeError("invalid tool runner approval snapshot");
+        }
+        if (now >= outcome.expiresAt) {
+          outcome = { kind: "failed", callId: item.callId, code: "approval_expired", summary: "Approval expired before execution.", retryable: false };
+          parsedState = "failed";
+        }
+      } else if ((parsedState === "completed" && outcome.kind !== "completed")
+        || (parsedState === "failed" && outcome.kind !== "failed")
+        || (parsedState === "cancelled" && outcome.kind !== "cancelled")) {
+        throw new TypeError("invalid tool runner outcome state");
+      }
       const state: MutableCallState = {
-        callId: item.callId, toolName: item.toolName, idempotencyKey: item.idempotencyKey,
-        inputHash: item.inputHash, state: item.state, approvalId: item.approvalId ?? null,
-        expiresAt: item.expiresAt ?? null, outcome: item.outcome, input: undefined, control: null, finish: null,
+        callId: item.callId, toolName, idempotencyKey: item.idempotencyKey,
+        inputHash: item.inputHash, state: parsedState, approvalId, expiresAt,
+        outcome, input: undefined, cancelRequested: false, control: null, finish: null,
       };
       next.set(state.callId, state);
       nextIdempotency.set(state.idempotencyKey, state.callId);
