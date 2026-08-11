@@ -457,10 +457,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let fixtureCapture = env["OMI_PROBE_EXIT"] != nil
+    let semanticWindow = env["OMI_SEMANTIC_WINDOW"] == "1"
+    let fixtureSized = fixtureCapture || semanticWindow
+    let minimumWidth: CGFloat = semanticWindow ? 320 : 760
+    let minimumHeight: CGFloat = semanticWindow ? 360 : 560
     let contentRect = NSRect(
       x: 0, y: 0,
-      width: fixtureCapture ? captureDimension("OMI_NATIVE_VIEWPORT_WIDTH", fallback: 934, minimum: 760, maximum: 2400) : 934,
-      height: fixtureCapture ? captureDimension("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: 671, minimum: 560, maximum: 1800) : 671)
+      width: fixtureSized ? captureDimension("OMI_NATIVE_VIEWPORT_WIDTH", fallback: semanticWindow ? 420 : 934, minimum: minimumWidth, maximum: 2400) : 934,
+      height: fixtureSized ? captureDimension("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: semanticWindow ? 420 : 671, minimum: minimumHeight, maximum: 1800) : 671)
     let handlers = NativeHandlers()
     // Privileged-HTTP custody: SessionBootstrap resolves base URL + token via
     // Keychain → optional scratch issuer → OMI_API_TOKEN env. Neither value is
@@ -526,7 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.hasShadow = false
     window.isMovableByWindowBackground = true
     window.isRestorable = false
-    window.contentMinSize = NSSize(width: 760, height: 560)
+    window.contentMinSize = NSSize(width: minimumWidth, height: minimumHeight)
     glassHost = GlassHostView(
       frame: contentRect,
       webView: controller.webView,
@@ -583,14 +587,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     //                   program is about. Ordered-but-offscreen paints normally
     //                   and is invisible.
     //
-    // OMI_HEADED=1 restores the old behavior in full.
-    let headed = env["OMI_HEADED"] == "1"
+    // OMI_HEADED=1 restores the old behavior in full. Semantic keyboard tests
+    // use a small accessory window ordered behind the user's windows; the
+    // semantic probe activates it only for the bounded key sequence, hides it,
+    // and restores the previously frontmost app.
+    let headed = env["OMI_HEADED"] == "1" && !semanticWindow
     installMenu()
     if headed {
       NSApp.setActivationPolicy(.regular)
       window.center()
       window.makeKeyAndOrderFront(nil)
       NSApp.activate(ignoringOtherApps: true)
+    } else if semanticWindow {
+      NSApp.setActivationPolicy(.accessory)
+      if let visible = NSScreen.main?.visibleFrame {
+        window.setFrameOrigin(NSPoint(
+          x: visible.maxX - contentRect.width - 16,
+          y: visible.minY + 16))
+      }
+      window.orderBack(nil)
     } else {
       NSApp.setActivationPolicy(.accessory)
       // Far outside any plausible display arrangement, so it cannot appear on a
@@ -598,7 +613,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       window.setFrameOrigin(NSPoint(x: -30000, y: -30000))
       window.orderBack(nil)
     }
-    FileHandle.standardError.write(Data("display-mode: \(headed ? "headed" : "headless (OMI_HEADED=1 to show a window)")\n".utf8))
+    let displayMode = headed ? "headed" : (semanticWindow ? "background-semantic" : "headless (OMI_HEADED=1 to show a window)")
+    FileHandle.standardError.write(Data("display-mode: \(displayMode)\n".utf8))
     if let consumerEvidenceDriver {
       consumerEvidenceDriver.start(with: controller)
     } else {
@@ -742,7 +758,9 @@ MainActor.assumeIsolated {
   // applicationDidFinishLaunching runs — a smaller version of exactly the
   // problem, and the kind that is easy to call fixed because the window itself
   // no longer appears.
-  app.setActivationPolicy(ProcessInfo.processInfo.environment["OMI_HEADED"] == "1" ? .regular : .accessory)
+  let launchEnvironment = ProcessInfo.processInfo.environment
+  let headed = launchEnvironment["OMI_HEADED"] == "1" && launchEnvironment["OMI_SEMANTIC_WINDOW"] != "1"
+  app.setActivationPolicy(headed ? .regular : .accessory)
   objc_setAssociatedObject(app, "omi.delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
   app.run()
 }

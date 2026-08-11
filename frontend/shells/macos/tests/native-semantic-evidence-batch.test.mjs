@@ -26,8 +26,10 @@ function fakeProbe(file, nodeName = "memories") {
   writeFileSync(file, `#!/usr/bin/env node
 const args = process.argv.slice(2); const value = key => args[args.indexOf('--' + key) + 1];
 const kind = value('kind'); const keys = (value('keys') || '').split(',').filter(Boolean);
+if (kind === 'ax_snapshot' && (args.includes('--activate') || args.includes('--expect-after'))) { process.stderr.write('AX probes must stay background-only\\n'); process.exit(9); }
+if (kind === 'keyboard_trace' && !args.includes('--activate')) { process.stderr.write('keyboard probe must activate explicitly\\n'); process.exit(10); }
 const sourceCoreSha = value('source-core-sha'); const sourcePlatformSha = value('source-platform-sha');
-const out = { schema:'omi.native-semantic-evidence.v2', shell:'macos', runId:value('run-id'), targetPid:Number(value('pid')), coordinate:value('coordinate'), sourceCoreSha, sourcePlatformSha, axTrusted:true, matrixEligible:true, domainLandmarkFound:true, evidenceClass:kind === 'keyboard_trace' ? 'native_keyboard_trace' : 'native_ax_snapshot', target:{pid:Number(value('pid')), bundleId:value('bundle-id'), processNameBound:true, expectedPid:Number(value('pid')), expectedBundleId:value('expected-bundle-id'), bound:true}, nodes:[{role:'AXHeading',name:${JSON.stringify(nodeName)}}], keys:keys.map(key => ({key,targetConsumed:true})), windows:[], focusRestored:kind === 'keyboard_trace' ? true : null};
+const out = { schema:'omi.native-semantic-evidence.v2', shell:'macos', runId:value('run-id'), targetPid:Number(value('pid')), coordinate:value('coordinate'), sourceCoreSha, sourcePlatformSha, axTrusted:true, matrixEligible:true, domainLandmarkFound:true, evidenceClass:kind === 'keyboard_trace' ? 'native_keyboard_trace' : 'native_ax_snapshot', target:{pid:Number(value('pid')), bundleId:value('bundle-id'), processNameBound:true, expectedPid:Number(value('pid')), expectedBundleId:value('expected-bundle-id'), bound:true}, nodes:[{role:'AXHeading',name:${JSON.stringify(nodeName)}}], keys:keys.map(key => ({key,targetConsumed:true})), windows:[], focusRestored:kind === 'keyboard_trace' ? true : null, frontmostRestored:kind === 'keyboard_trace' ? true : null};
 process.stdout.write(JSON.stringify(out));
 `, { mode: 0o755 });
   chmodSync(file, 0o755);
@@ -73,6 +75,7 @@ test("keyboard trace requires each observed transition and Escape restoration", 
     const prepared = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--probe", probe, "--prepare"], { encoding: "utf8" }); assert.equal(prepared.status, 0, prepared.stderr);
     const captured = spawnSync(process.execPath, [wrapper, "--manifest", matrix, "--out-root", out, "--prepared-input-set", join(out, "prepared-input-set.json")], { encoding: "utf8" }); assert.equal(captured.status, 0, `${captured.stdout}${captured.stderr}`);
     const evidence = JSON.parse(readFileSync(join(out, "captures/macos/semantic-keyboard_trace.json"), "utf8")); assert.equal(evidence.schema, "omi.polish.keyboard/v1"); assert.deepEqual(evidence.steps.map((step) => step.result), ["observed", "observed"]); assert.equal(evidence.steps.at(-1).action, "restore-focus");
+    const sidecar = JSON.parse(readFileSync(join(out, "captures/macos/semantic-keyboard_trace.json.sidecar.json"), "utf8")); assert.equal(sidecar.frontmost_restored, true);
   } finally { rmSync(scratch, { recursive: true, force: true }); rmSync(join(root, ".build", `semantic-keyboard-test-${process.pid}`), { recursive: true, force: true }); }
 });
 

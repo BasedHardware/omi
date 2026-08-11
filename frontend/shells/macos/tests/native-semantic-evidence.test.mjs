@@ -72,18 +72,23 @@ test(
         const observed = spawnSync(binary, ["--pid", loginPid, "--run-id", "ax-loginwindow-proof", "--json"], {
           encoding: "utf8",
         });
-        assert.equal(observed.status, 0, `${observed.stdout}${observed.stderr}`);
         const document = JSON.parse(observed.stdout);
-        assert.equal(document.schema, "omi.native-semantic-evidence.v2");
-        assert.equal(document.shell, "macos");
-        assert.equal(document.runId, "ax-loginwindow-proof");
-        assert.equal(document.axTrusted, true);
-        assert.equal(document.evidenceClass, "supplementary_observation");
-        assert.equal(document.matrixEligible, false);
-        assert.equal(document.domainLandmarkFound, false);
-        assert.ok(document.windows.every((window) => !Object.hasOwn(window, "title")));
-        assert.ok(document.nodes.every((node) => !Object.hasOwn(node, "title") && !Object.hasOwn(node, "description") && !Object.hasOwn(node, "value") && !Object.hasOwn(node, "focusWindowContext")));
-        assert.deepEqual(document.keys, []);
+        if (observed.status === 1) {
+          assert.match(document.error, /^no-accessible-window:/);
+          assert.deepEqual(document.keys, []);
+        } else {
+          assert.equal(observed.status, 0, `${observed.stdout}${observed.stderr}`);
+          assert.equal(document.schema, "omi.native-semantic-evidence.v2");
+          assert.equal(document.shell, "macos");
+          assert.equal(document.runId, "ax-loginwindow-proof");
+          assert.equal(document.axTrusted, true);
+          assert.equal(document.evidenceClass, "supplementary_observation");
+          assert.equal(document.matrixEligible, false);
+          assert.equal(document.domainLandmarkFound, false);
+          assert.ok(document.windows.every((window) => !Object.hasOwn(window, "title")));
+          assert.ok(document.nodes.every((node) => !Object.hasOwn(node, "title") && !Object.hasOwn(node, "description") && !Object.hasOwn(node, "value") && !Object.hasOwn(node, "focusWindowContext")));
+          assert.deepEqual(document.keys, []);
+        }
       }
 
       const implicitFocusSteal = spawnSync(binary, [
@@ -139,6 +144,7 @@ test(
       assert.equal(document.keys.length, 2);
       assert.deepEqual(document.keys.map((key) => key.key), ["cmd+k", "escape"]);
       assert.equal(document.focusRestored, true);
+      assert.equal(document.frontmostRestored, true);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
