@@ -345,10 +345,10 @@ actor SuggestionAssistant: ProactiveAssistant {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d HH:mm"
     let when = formatter.string(from: screenshot.timestamp)
-    let where_ = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
-    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(where_)" }
+    let location = screenshot.windowTitle.map { "\(screenshot.appName) — \($0)" } ?? screenshot.appName
+    guard let ocr = screenshot.ocrText, !ocr.isEmpty else { return "\(when) · \(location)" }
     let snippet = ocr.replacingOccurrences(of: "\n", with: " ").prefix(200)
-    return "\(when) · \(where_): \(snippet)"
+    return "\(when) · \(location): \(snippet)"
   }
 
   /// Derive a search term from the window title, which is where the topic or person lives.
