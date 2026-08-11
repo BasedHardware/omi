@@ -2,14 +2,14 @@
 # ONE-COMMAND local launch of the iOS Omi shell in the Simulator against a
 # local backend. Stable entry point for the top-level dev stack launcher.
 #
-#   ./scripts/dev-run-ios.sh                      # LIVE against the default backend
-#   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4801
+#   ./scripts/dev-run-ios.sh                      # LIVE against registered local production
+#   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4851
 #   ./scripts/dev-run-ios.sh --route chat
 #   ./scripts/dev-run-ios.sh --fixture conversations   # FIXTURE, bridge bypassed
 #   ./scripts/dev-run-ios.sh --device <udid>
 #
 # Env (all overridable, local-sane defaults):
-#   OMI_API_BASE_URL   default http://127.0.0.1:4801
+#   OMI_API_BASE_URL   default http://127.0.0.1:4851 (registered local production)
 #   OMI_API_TOKEN      dev token; fetched from the issuer when unset
 #   OMI_DEV_TOKEN_ISSUER_URL   optional dev-mode token issuer
 #   FLUTTER_BIN        default: whichever `flutter` resolves to
@@ -27,7 +27,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 app="$here/app"
 
-api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4801}"
+api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4851}"
 fixture=""
 device=""
 accept=0
@@ -138,8 +138,9 @@ defines=(
 )
 
 # ---- LIVE vs FIXTURE is an explicit, visible fork, never an accident --------
-# A qa= fixture route selects an in-page fixture store and does NOT traverse the
-# privileged HTTP bridge. It can never support a backend claim or a served count.
+# A qa= fixture route is visual QA only: it selects an in-page fixture store and
+# does NOT traverse the privileged HTTP bridge. It is outside registered/local-
+# production evidence and can never support a backend claim or served count.
 if [[ -n "$fixture" ]]; then
   if [[ -n "$evidence_out" ]]; then
     echo "ERROR: consumer evidence requires LIVE mode; --fixture is forbidden." >&2

@@ -104,6 +104,7 @@ exit 0
     });
     assert.equal(defaultHome.status, 0, defaultHome.stderr || defaultHome.stdout);
     assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile/);
+    assert.match(readFileSync(argsFile, "utf8"), /OMI_API_BASE_URL=http:\/\/127\.0\.0\.1:4851/);
     assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
 
     const fixtureMode = spawnSync(
@@ -113,6 +114,7 @@ exit 0
     );
     assert.equal(fixtureMode.status, 0, fixtureMode.stderr || fixtureMode.stdout);
     assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=qa=conversations&state=normal&platform=mobile/);
+    assert.doesNotMatch(readFileSync(argsFile, "utf8"), /OMI_API_BASE_URL|OMI_API_TOKEN|OMI_RUN_CLIENT_ID/);
     assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
 
     const unknown = spawnSync("/bin/bash", [launcher, "--route", "not-a-route"], { encoding: "utf8", env });

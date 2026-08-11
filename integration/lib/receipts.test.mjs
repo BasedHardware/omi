@@ -14,7 +14,6 @@ import {
   verifyReceipt,
   receiptPath,
   parseLaneClaims,
-  parseLaneClaimOverride,
 } from "./receipts.mjs";
 import { checkLaneClaims } from "../check-lane-claims.mjs";
 import {
@@ -383,32 +382,6 @@ describe("parseLaneClaims: structured trailer only, never prose", () => {
   });
 });
 
-describe("the override hatch requires a non-empty reason", () => {
-  // red-proof: in parseLaneClaimOverride(), change
-  // `valid: reason.length > 0` to `valid: true` — an empty
-  // `Lane-Claim-Override:` trailer (no reason at all) then reports as a valid
-  // override, and checkLaneClaims below would silently bypass every failure.
-  it("an override with no reason is present but invalid", () => {
-    const outcome = parseLaneClaimOverride("fix: x\n\nLane-Claim-Override:\n");
-    assert.equal(outcome.present, true);
-    assert.equal(outcome.reason, "");
-    assert.equal(outcome.valid, false);
-  });
-
-  it("an override with a reason is present and valid", () => {
-    const outcome = parseLaneClaimOverride("fix: x\n\nLane-Claim-Override: L0 checker is down, see OMI-9999\n");
-    assert.equal(outcome.present, true);
-    assert.equal(outcome.reason, "L0 checker is down, see OMI-9999");
-    assert.equal(outcome.valid, true);
-  });
-
-  it("no override trailer at all is simply absent, not invalid", () => {
-    const outcome = parseLaneClaimOverride("fix: x\n\nno override here\n");
-    assert.equal(outcome.present, false);
-    assert.equal(outcome.valid, false);
-  });
-});
-
 describe("checkLaneClaims: end to end against real receipts", () => {
   it("claims with no matching receipts fail, and each failure names a next action", () => {
     const message = "fix: x\n\nLanes: L0,L1\n";
@@ -428,21 +401,15 @@ describe("checkLaneClaims: end to end against real receipts", () => {
     assert.deepEqual(result.failures, []);
   });
 
-  it("a failing claim bypassed by a valid override still reports the underlying failure", () => {
+  // red-proof: restore the retired override branch in checkLaneClaims(); this
+  // result becomes ok and the run can claim an unverified lane again.
+  it("a legacy override trailer cannot bypass a failing lane claim", () => {
     const message = "fix: x\n\nLanes: L1\n\nLane-Claim-Override: L1 runner is broken, tracked in OMI-4242\n";
     const result = checkLaneClaims(message, { workspaceRoot });
-    assert.equal(result.ok, true);
-    assert.equal(result.overridden, true);
+    assert.equal(result.ok, false);
     assert.equal(result.failures.length, 1);
     assert.equal(result.failures[0].lane, "L1");
-    assert.equal(result.override.reason, "L1 runner is broken, tracked in OMI-4242");
-  });
-
-  it("an override with an empty reason does not bypass the failure", () => {
-    const message = "fix: x\n\nLanes: L1\n\nLane-Claim-Override:\n";
-    const result = checkLaneClaims(message, { workspaceRoot });
-    assert.equal(result.ok, false);
-    assert.ok(result.overrideError, "an empty-reason override must be reported as an error, not silently ignored");
+    assert.equal("overridden" in result, false);
   });
 
   it("prose mentioning lanes with no trailer claims nothing and always passes", () => {
