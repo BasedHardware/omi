@@ -188,3 +188,51 @@ export async function posthogResults(
     throw err;
   }
 }
+
+/**
+ * Same as `posthogResults` but also reports whether the returned array came
+ * from a stale-cache fallback (PostHog rejected after the soft TTL expired).
+ *
+ * Callers that must distinguish live data from degraded fallback — e.g. a
+ * real-time kiosk board that should mark itself partial during an outage —
+ * use this variant. Existing callers continue to use `posthogResults`.
+ */
+export async function posthogResultsFresh(
+  host: string,
+  projectId: string,
+  apiKey: string,
+  query: string,
+  opts: { softTtlMs?: number } = {},
+): Promise<{ results: unknown[]; stale: boolean }> {
+  const softTtlMs = opts.softTtlMs ?? SOFT_TTL_MS;
+  const key = createHash("sha1").update(`${projectId}|${query}`).digest("hex");
+
+  const cached = await readCache(key);
+  if (cached && Date.now() - cached.freshAt < softTtlMs) {
+    return { results: cached.results, stale: false };
+  }
+
+  try {
+    const res = await posthogFetch(host, projectId, apiKey, query);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`PostHog API error: ${res.status} ${text.slice(0, 160)}`);
+    }
+    const raw = await res.json();
+    const results = Array.isArray(raw.results) ? raw.results : [];
+    if (results.length >= POSTHOG_SERVED_MAX_ROWS) {
+      console.warn(
+        "PostHog returned the served-max row count — result is truncated at the ceiling",
+        {
+          servedMax: POSTHOG_SERVED_MAX_ROWS,
+          querySnippet: query.replace(/\s+/g, " ").trim().slice(0, 160),
+        },
+      );
+    }
+    await writeCache(key, results);
+    return { results, stale: false };
+  } catch (err) {
+    if (cached) return { results: cached.results, stale: true };
+    throw err;
+  }
+}

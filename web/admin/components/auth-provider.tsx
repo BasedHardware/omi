@@ -5,7 +5,7 @@ import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/a
 import { doc, getDoc } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
 import { DEV_BYPASS_ENABLED, DEV_BYPASS_TOKEN, DEV_BYPASS_UID } from '@/lib/dev-auth';
-import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
+import { usePathname, useRouter } from 'next/navigation'; // Use next/navigation for App Router
 
 interface AuthContextProps {
   user: User | null;
@@ -34,6 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState<boolean>(bypassAuth);
   const [loading, setLoading] = useState<boolean>(!bypassAuth);
   const router = useRouter();
+  const pathname = usePathname();
+  const isPublicTvKiosk = pathname?.startsWith('/tv/view/');
 
   const signOut = async () => {
     try {
@@ -47,6 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Public TV kiosk is capability-token auth only — never run admin redirects
+    // or sign-out side effects that can interrupt the wall board fetch.
+    if (isPublicTvKiosk) {
+      setLoading(false);
+      return;
+    }
+
     if (bypassAuth) {
       setUser(createBypassUser());
       setIsAdmin(true);
@@ -73,14 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await firebaseSignOut(auth);
             setUser(null);
             setIsAdmin(false);
-            router.push('/login?error=unauthorized'); // Redirect non-admin to login
+            router.push('/login?error=unauthorized');
           }
         } catch (error) {
           console.error('Error checking admin status:', error);
           await firebaseSignOut(auth);
           setUser(null);
           setIsAdmin(false);
-          router.push('/login?error=check_failed'); // Redirect on error
+          router.push('/login?error=check_failed');
         }
       } else {
         setUser(null);
@@ -91,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [bypassAuth, router]); // Add router to dependency array
+  }, [bypassAuth, router, isPublicTvKiosk]);
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>

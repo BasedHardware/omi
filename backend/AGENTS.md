@@ -1,10 +1,10 @@
 # Backend (Python) — Developer Guide
 
-Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific development guidance.
+Inherits root `../AGENTS.md`. Backend-specific notes below.
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 required (Dockerfile pin; not 3.12+). Local dev uses `.python-version` + `uv`. Needs FFmpeg, Opus, Redis (optional).
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
