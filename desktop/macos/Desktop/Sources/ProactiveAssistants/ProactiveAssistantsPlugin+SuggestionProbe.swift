@@ -75,14 +75,23 @@ extension ProactiveAssistantsPlugin {
     appOverride: String?,
     windowTitleOverride: String?
   ) async -> CapturedFrame? {
-    let (beforeApp, beforeTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+    let (beforeApp, beforeTitle, beforeWindowID) = await WindowMonitor.getActiveWindowInfoAsync()
     if let beforeApp, SuggestionProbePrivacy.isExcluded(beforeApp) { return nil }
     if activeAppIsExcluded { return nil }
 
-    guard let jpeg = await ScreenCaptureService().captureActiveWindowAsync() else { return nil }
+    // Capture *this* window, not "whatever is active when the shutter opens".
+    // `captureActiveWindowAsync()` re-resolves the frontmost window internally, so an
+    // allowed → excluded → allowed flicker around the call photographs the excluded app
+    // while a before/after app comparison sees "allowed" at both ends. Binding the capture
+    // to the window ID that was authorised removes the race rather than narrowing it.
+    guard let windowID = beforeWindowID else { return nil }
+    let service = ScreenCaptureService()
+    guard case .success(let image) = await service.captureWindowCGImage(windowID: windowID),
+      let jpeg = service.encodeJPEG(from: image)
+    else { return nil }
 
-    // Re-resolve after the shutter: the capture is async and the user can switch into an
-    // excluded app while it runs.
+    // Belt and braces: the window ID binds the pixels, and this rejects the case where the
+    // app that owns it became excluded while the capture ran.
     let (afterApp, afterTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
     guard
       SuggestionProbePrivacy.allowsCapture(
@@ -94,8 +103,8 @@ extension ProactiveAssistantsPlugin {
 
     return CapturedFrame(
       jpegData: jpeg,
-      appName: appOverride ?? afterApp ?? beforeApp ?? "Unknown",
-      windowTitle: windowTitleOverride ?? afterTitle ?? beforeTitle,
+      appName: appOverride ?? beforeApp ?? "Unknown",
+      windowTitle: windowTitleOverride ?? beforeTitle ?? afterTitle,
       frameNumber: 0
     )
   }

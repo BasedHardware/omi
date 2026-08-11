@@ -763,6 +763,18 @@ final class SuggestionProbeCaptureRaceTests: XCTestCase {
     XCTAssertFalse(allows(before: "Google Chrome", after: "Warp"))
   }
 
+  /// The flicker the window-ID binding exists for: allowed at both ends, excluded in the
+  /// middle. An app-name comparison cannot see this, which is why the probe captures the
+  /// window ID it authorised rather than "whatever is active now" — this test pins that the
+  /// before/after check alone is NOT treated as sufficient.
+  func testBeforeAfterCheckAloneCannotSeeAnAllowedExcludedAllowedFlicker() {
+    // Both observations say Chrome; an excluded app was frontmost only between them.
+    XCTAssertTrue(
+      allows(before: "Google Chrome", after: "Google Chrome"),
+      "the app-name check passes here by construction — the capture must therefore be bound "
+        + "to the pre-authorised window ID, which is what actually prevents the leak")
+  }
+
   /// An unresolvable app name is not evidence of permission on the excluded side, but it
   /// must not block an otherwise clean capture either.
   func testUnknownAppNamesDoNotFabricateAMismatch() {
