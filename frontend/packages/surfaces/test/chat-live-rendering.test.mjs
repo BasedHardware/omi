@@ -674,6 +674,35 @@ test("observer and provider failures render as non-streaming assistant failures"
   }
 });
 
+test("empty cancellation retains the human without fabricating a stopped assistant bubble", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("cancelled-empty-human", "human", "Stop before content")];
+  domain.deliveries = [{
+    generationId: "cancelled-empty-generation",
+    clientMessageId: "cancelled-empty-human",
+    terminal: { kind: "cancelled", message: null },
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    const bubbles = [...rendered.container.querySelectorAll(".chat-message")];
+    assert.equal(bubbles.length, 1);
+    assert.equal(bubbles[0].dataset.delivery, "canonical");
+    assert.equal(bubbles[0].classList.contains("is-user"), true);
+    assert.equal(rendered.container.querySelector(".chat-message.is-assistant"), null);
+    assert.equal(rendered.container.querySelector(".chat-message.is-cancelled"), null);
+    assert.equal(rendered.container.textContent.includes(EN_MESSAGES["chat.stopped"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("retained dead send shows exact authored text and ordered ids with discard only", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(

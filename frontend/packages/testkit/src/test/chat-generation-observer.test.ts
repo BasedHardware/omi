@@ -77,6 +77,22 @@ test("incremental SSE survives every byte boundary, multiline data, and UTF-8 sp
   );
 });
 
+test("explicit empty cancellation is terminal without fabricating an assistant message", async () => {
+  const port = new ScriptedStreamPort([[
+    event("event-cancelled-empty", "cancelled", '{"kind":"cancelled","message":null}'),
+  ]]);
+  const observation = observeChatGeneration(port, "generation-cancelled-empty", new ManualEnv());
+  const observed: ChatGenerationObservationEvent[] = [];
+  for await (const item of observation.events) observed.push(item);
+
+  assert.deepEqual(observed, [{
+    kind: "terminal",
+    id: "event-cancelled-empty",
+    terminal: { kind: "cancelled", message: null },
+  }]);
+  assert.equal(port.streams[0]?.cancelled, true, "empty cancellation closes observation as a terminal");
+});
+
 class ScriptedStream implements BridgePayloadStream {
   cancelled = false;
 
