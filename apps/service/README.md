@@ -80,10 +80,22 @@ Example passing output:
 | `POST` | `/v1/chat-messages` | Bearer | Finite idempotent send admission; generation is read separately |
 | `POST` | `/v1/chat-attachments` | Bearer | Stage exactly one sniffed multipart `file` for a Chat send |
 | `GET` | `/v1/chat-generations/{generationId}/events` | Bearer | SSE reconnect from `Last-Event-ID` or a current snapshot |
+| `GET` | `/v1/chat-generations/{generationId}/agent-events` | Bearer | Versioned UI-safe agent-run SSE timeline; reconnects from `Last-Event-ID` |
 | `DELETE` | `/v1/chat-generations/{generationId}` | Bearer | Durable, idempotent generation cancellation |
 | `GET` | `/v1/qa/status` | none | Served-traffic counters and seed identity |
 | `POST` | `/v1/qa/reset` | Bearer (dev token) | Total deterministic reseed |
 | `GET` | `/v1/qa/evidence?run={run}` | Bearer (dev token) | Counts-only producer matrix for an exact host-owned run |
+
+The agent-run timeline is an internal platform seam keyed by the admitted
+generation id (the run id). It projects only safe summaries and typed
+capability/context/tool/approval/recovery/usage/terminal details; hidden
+events, raw arguments, credentials, and model reasoning never cross this
+route. A cursor not present in the retained ledger returns
+`410 generation_replay_expired`; a terminal cursor replays that terminal once
+for reconnect convergence. The service accepts an injected snapshot-backed
+`AgentRunEventStore` so reloads can restore the same ordered ledger. This seam
+does not add a public retry operation: `retryable` and `recoveryAction` are
+truthful receipts only where an existing executor has already declared them.
 
 ## curl examples
 

@@ -85,6 +85,11 @@ import {
   registerChatMessagesRoutes,
 } from "./routes/chat-messages";
 import type { ChatGenerationRetentionPolicy } from "./stores/chat-generation-events-store";
+import {
+  createInMemoryAgentRunEventStore,
+  type AgentRunEventStore,
+} from "./chat/agent-run-events";
+import { registerChatAgentRunRoutes } from "./routes/chat-agent-runs";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
 import {
   isActionItemsCompatInvocation,
@@ -212,6 +217,8 @@ export interface LocalServiceOptions {
   readonly generationStreamPolicy?: ChatGenerationStreamPolicy;
   readonly generationStreamScheduler?: import("./chat/generation-source").ChatGenerationScheduler;
   readonly generationRetentionPolicy?: ChatGenerationRetentionPolicy;
+  /** Internal run-event ledger; callers can inject a snapshot-backed adapter. */
+  readonly agentRunEvents?: AgentRunEventStore;
   /** Test-only complete supervisor override. */
   readonly chatSupervisor?: ChatGenerationSupervisor;
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
@@ -392,6 +399,7 @@ export interface LocalService {
     readonly chatAttachments: ChatAttachmentsStore;
     readonly chatEvents: ChatGenerationEventsStore;
     readonly chatAdmission: ChatAdmission;
+    readonly agentRunEvents: AgentRunEventStore;
   };
 }
 
@@ -601,6 +609,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       .digest("hex")}`;
   const chatNowEpochMilliseconds = options.nowEpochMilliseconds
     ?? (() => anchorEpochSeconds * 1_000);
+  const agentRunEvents = options.agentRunEvents ?? createInMemoryAgentRunEventStore();
   const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
     source: options.generationSource,
     context: options.generationContext,
@@ -835,6 +844,13 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     streamScheduler: options.generationStreamScheduler,
     retentionPolicy: options.generationRetentionPolicy,
   });
+  registerChatAgentRunRoutes(app, {
+    resolvePrincipal,
+    events: agentRunEvents,
+    resolveGenerationOwner: (accountId, generationId) =>
+      stores.chatMessages.readHumanByGeneration(accountId, generationId) !== null,
+    scheduler: options.generationStreamScheduler,
+  });
   registerChatAttachmentsRoute(app, {
     resolvePrincipal,
     attachments: stores.chatAttachments,
@@ -904,6 +920,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       chatEvents: stores.chatEvents,
       chatAdmission: stores.chatAdmission,
       chatFinalization: stores.chatFinalization,
+      agentRunEvents,
     }),
   });
 };

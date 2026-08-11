@@ -40,6 +40,11 @@ import {
 import type { ChatGenerationFrame } from "../stores/chat-generation-events-store";
 import type { ChatGenerationEventsStore } from "../stores/chat-generation-events-store";
 import type { ChatGenerationRetentionPolicy } from "../stores/chat-generation-events-store";
+import {
+  createAgentRunEventSupervisor,
+  createInMemoryAgentRunEventStore,
+  type AgentRunEventStore,
+} from "../chat/agent-run-events";
 import type { ChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import { createInMemoryChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
@@ -75,6 +80,7 @@ const boot = (
   generationStreamScheduler?: ChatGenerationScheduler,
   generationLiveness?: ChatGenerationLivenessPolicy,
   generationRetentionPolicy?: ChatGenerationRetentionPolicy,
+  agentRunEvents?: AgentRunEventStore,
 ) => {
   const db = new Database(":memory:");
   const local = createLocalDevService({
@@ -90,6 +96,7 @@ const boot = (
     generationStreamScheduler,
     generationLiveness,
     generationRetentionPolicy,
+    agentRunEvents,
   });
   return { db, local, stores };
 };
@@ -119,6 +126,20 @@ const generationEvents = (
   lastEventId?: string,
 ): Promise<Response> => Promise.resolve(local.app.request(
   `/v1/chat-generations/${generationId}/events`,
+  {
+    headers: {
+      ...auth(local.devToken),
+      ...(lastEventId === undefined ? {} : { "last-event-id": lastEventId }),
+    },
+  },
+));
+
+const agentEvents = (
+  local: ReturnType<typeof createLocalDevService>,
+  generationId: string,
+  lastEventId?: string,
+): Promise<Response> => Promise.resolve(local.app.request(
+  `/v1/chat-generations/${generationId}/agent-events`,
   {
     headers: {
       ...auth(local.devToken),
@@ -1828,6 +1849,82 @@ describe("ratified chat generation wire red proofs", () => {
     await eventsResponse.text();
     await (await generationEvents(local, admission.generation.id)).text();
     expect(stores.chatEvents.retentionMetadata!(ACCOUNT, admission.generation.id)).toBeNull();
+    db.close();
+  });
+
+  test("agent timeline transport projects reload-stable tool, approval, recovery, usage, and terminal events", async () => {
+    const agentStore = createInMemoryAgentRunEventStore();
+    const { db, local } = boot(createInMemoryLocalServiceStores(), undefined, "agent-timeline-proof",
+      createEmptyChatGenerationContextSource(), undefined, undefined, undefined, undefined, agentStore);
+    const admission = await post(local, create("agent-timeline"));
+    const accepted = await readAdmission(admission);
+    const runId = accepted.generation.id;
+    const supervisor = createAgentRunEventSupervisor({
+      events: agentStore,
+      nowEpochMilliseconds: () => 1_786_352_400_000,
+      eventId: (id, sequence, kind) => `${id}:event:${sequence}:${kind}`,
+    });
+    supervisor.accepted({ runId, attemptId: `${runId}:attempt:1`, admissionId: accepted.message.id });
+    const hidden = agentStore.append({
+      schemaVersion: 1,
+      runId,
+      attemptId: `${runId}:attempt:1`,
+      eventId: `${runId}:event:2:internal-status`,
+      sequence: 2,
+      visibility: "internal",
+      createdAt: 1_786_352_400_000,
+      safeSummary: "internal raw args must stay hidden",
+      kind: "status",
+      status: "generating",
+      progressPct: null,
+    });
+    expect(hidden.kind).toBe("appended");
+    supervisor.capability({ runId, attemptId: `${runId}:attempt:1`, capabilityId: "capability:scripted",
+      tier: "deterministic-scripted", adapter: "scripted-chat-generation", deterministic: true });
+    supervisor.context({ runId, attemptId: `${runId}:attempt:1`, contextReceiptId: "context:one",
+      sourceKind: "memory", sourceRef: "source:one", sourceHash: `sha256:${"a".repeat(64)}`,
+      ownerRef: ACCOUNT, expiresAt: null, redactedPreview: "safe context", tokenEstimate: 3,
+      inclusionReason: "selected", policyDecision: "included" });
+    supervisor.toolRequest({ runId, attemptId: `${runId}:attempt:1`, callId: "call:one", toolName: "clock",
+      timeoutMs: 1000, idempotencyKey: "idem:one" });
+    supervisor.toolResult({ runId, attemptId: `${runId}:attempt:1`, callId: "call:one", toolName: "clock",
+      resultSummary: "safe result", durationMs: 2, retryable: false });
+    supervisor.toolRequest({ runId, attemptId: `${runId}:attempt:1`, callId: "call:two", toolName: "search",
+      timeoutMs: 1000, idempotencyKey: "idem:two" });
+    supervisor.approvalRequested({ runId, attemptId: `${runId}:attempt:1`, approvalId: "approval:two",
+      callId: "call:two", reason: "needs approval", expiresAt: 1_786_352_401_000 });
+    supervisor.approvalResolved({ runId, attemptId: `${runId}:attempt:1`, approvalId: "approval:two",
+      callId: "call:two", resolution: "approved" });
+    supervisor.usage({ runId, attemptId: `${runId}:attempt:1`, usageId: "usage:one", inputTokens: 3,
+      outputTokens: 2, totalTokens: 5, durationMs: 4 });
+    supervisor.recovery({ runId, attemptId: `${runId}:attempt:1`, recoveryId: "recovery:one", action: "reconnect",
+      reason: "provider reconnect", fromAttemptId: `${runId}:attempt:1`, toAttemptId: `${runId}:attempt:2` });
+    const terminal = supervisor.terminal({ runId, attemptId: `${runId}:attempt:2`, terminalOutcome: "completed",
+      terminalCode: "completed", retryable: false, recoveryAction: null });
+    const snapshot = agentStore.snapshot();
+    const reloaded = createInMemoryAgentRunEventStore();
+    reloaded.restore(snapshot);
+    const timelineResponse = await agentEvents(local, runId);
+    const body = await timelineResponse.text();
+    expect(timelineResponse.status).toBe(200);
+    expect(body).toContain("tool_request");
+    expect(body).toContain("approval_requested");
+    expect(body).toContain("context_receipt");
+    expect(body).toContain("recovery");
+    expect(body).toContain("usage");
+    expect(body).toContain(terminal.eventId);
+    expect(body).not.toContain("raw");
+    // Exercise the route against the restored ledger, not only a detached
+    // equality check: a process reload must preserve the same projection.
+    agentStore.reset();
+    agentStore.restore(snapshot);
+    const replay = await agentEvents(local, runId, terminal.eventId);
+    expect((await replay.text())).toContain(terminal.eventId);
+    const unknownCursor = await agentEvents(local, runId, "missing:event");
+    expect(unknownCursor.status).toBe(410);
+    const foreign = await agentEvents(local, "generation:foreign");
+    expect(foreign.status).toBe(404);
+    expect(reloaded.list(runId)).toEqual(agentStore.list(runId));
     db.close();
   });
 });
