@@ -33,7 +33,8 @@ The planner accepts exact detached plain data containing:
 - the observed terminal-control tombstone, if any;
 - the immutable terminal-deletion export receipt, if any;
 - the latest restore-replay checkpoint, if the account is being recovered;
-- a closed inventory of data/work surfaces that may require cleanup; and
+- a runtime-verified complete-source inventory produced by the separately
+  pre-registered deletion cleanup inventory contract, or `null`; and
 - only the approval coordinates of retention/disposition and recovery-objective
   policy, never policy values inferred by the planner.
 
@@ -59,12 +60,12 @@ unexpected input fails closed before a plan is returned.
   projection rebuild, and index rebuild are fenced regardless of generation.
   Irreversible disposal does not begin from this state.
 - `deleted_blocked`: terminal control is present, but tombstone replay,
-  terminal export, retention/disposition approval, recovery-objective approval,
-  or artifact consistency is incomplete.
-- `deleted_cleanup_ready`: terminal tombstone and immutable export receipt are
-  exact, restore replay is safe, and the required human-approved policy
-  coordinates are present. This is eligibility only; the pure planner performs
-  no deletion.
+  terminal export, verified cleanup inventory, retention/disposition approval,
+  recovery-objective approval, or artifact consistency is incomplete.
+- `deleted_cleanup_ready`: terminal tombstone, immutable export receipt, and
+  complete held-fence inventory are exact, restore replay is safe, and the
+  required human-approved policy coordinates are present. This is eligibility
+  only; the pure planner performs no deletion.
 - `deleted_complete`: the same terminal prerequisites hold and the supplied
   inventory reports no remaining disposable surfaces.
 
@@ -103,6 +104,11 @@ The planner enumerates closed cleanup surfaces instead of executing them:
 - migration mappings and item-copy state, subject to the approved disposition;
 - stranded new-generation product data; and
 - external objects recorded by a complete per-account inventory.
+
+Raw counts are never accepted. The inventory verifier requires one
+frontier/authorization/fence/set-bound scanner receipt for every fixed surface,
+including an explicit receipt for a zero count. A missing or forged inventory
+adds `cleanup_inventory_unverified`; it never becomes an empty inventory.
 
 Append-only ledger history, legal-hold behavior, disclosure copies, support
 recovery data, and the exact fate of each listed surface are not decided by
@@ -151,13 +157,15 @@ restore drills, and David's data-disposition and RPO/RTO approvals.
    control revision remains blocked; exact-or-newer replay is accepted.
 6. Stranded data is included in terminal cleanup inventory regardless of the
    current generation.
-7. Unratified retention/disposition or recovery objectives block irreversible
-   cleanup even when inventory is empty.
+7. Missing/unverified inventory and unratified retention/disposition or
+   recovery objectives block irreversible cleanup even when every caller would
+   otherwise supply zero.
 8. Terminal tombstone retention is always an obligation and never a disposable
    surface.
 9. Cross-account and mismatched control/deletion coordinates, unexpected keys,
-   accessors, proxies, sparse/decorated arrays, unsafe integers, negative
-   counts, duplicate surface codes, and unbounded strings fail closed.
+   accessors, proxies, forged/JSON-round-tripped inventory capabilities, and
+   unbounded strings fail closed. Receipt-level sparse/decorated arrays, unsafe
+   counts, and duplicate surface codes are rejected by the inventory contract.
 10. Input mutation after planning cannot change the frozen output; equal input
     produces equal canonical output.
 11. The core has no environment, filesystem, network, database, model, route,
