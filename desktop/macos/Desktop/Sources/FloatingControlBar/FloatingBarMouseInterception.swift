@@ -21,6 +21,7 @@ enum FloatingBarMouseInterceptionPolicy {
 final class FloatingBarMouseInterceptionReconciler {
   private nonisolated(unsafe) var monitors: [Any] = []
   private var cancellables = Set<AnyCancellable>()
+  private var pollingCancellable: AnyCancellable?
 
   init(state: FloatingControlBarState, reconcile: @escaping @MainActor @Sendable () -> Void) {
     let scheduleReconciliation: @Sendable () -> Void = {
@@ -42,13 +43,6 @@ final class FloatingBarMouseInterceptionReconciler {
       monitors.append(local)
     }
 
-    // Monitor delivery is not the correctness boundary for a top-level transparent panel.
-    // Polling also reconciles a stationary pointer after frame or state transitions.
-    Timer.publish(every: 1.0 / 30.0, on: .main, in: .common)
-      .autoconnect()
-      .sink { _ in reconcile() }
-      .store(in: &cancellables)
-
     let ownershipPublishers: [AnyPublisher<Void, Never>] = [
       state.$showingAIConversation.map { _ in () }.eraseToAnyPublisher(),
       state.$showingAIResponse.map { _ in () }.eraseToAnyPublisher(),
@@ -61,6 +55,16 @@ final class FloatingBarMouseInterceptionReconciler {
       .store(in: &cancellables)
   }
 
+  func setPollingActive(_ active: Bool, reconcile: @escaping @MainActor @Sendable () -> Void) {
+    guard active != (pollingCancellable != nil) else { return }
+    pollingCancellable =
+      active
+      ? Timer.publish(every: 1.0 / 30.0, on: .main, in: .common)
+        .autoconnect()
+        .sink { _ in reconcile() }
+      : nil
+  }
+
   deinit {
     monitors.forEach(NSEvent.removeMonitor)
   }
@@ -68,6 +72,7 @@ final class FloatingBarMouseInterceptionReconciler {
 
 extension FloatingControlBarWindow {
   func syncMouseInterception(mouseLocation: NSPoint = NSEvent.mouseLocation) {
+    setMouseInterceptionPollingActive(isVisible)
     let shouldIgnore = FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
       mouseLocation: mouseLocation,
       windowFrame: frame,
@@ -83,5 +88,10 @@ extension FloatingControlBarWindow {
       state: state,
       reconcile: { [weak self] in self?.syncMouseInterception() })
     syncMouseInterception()
+  }
+
+  func setMouseInterceptionPollingActive(_ active: Bool) {
+    mouseInterceptionReconciler?.setPollingActive(
+      active, reconcile: { [weak self] in self?.syncMouseInterception() })
   }
 }

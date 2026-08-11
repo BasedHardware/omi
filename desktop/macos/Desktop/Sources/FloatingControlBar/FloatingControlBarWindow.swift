@@ -492,8 +492,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
     state.notchRevealProgress = 1
-    ignoresMouseEvents = true
     super.orderOut(sender)
+    syncMouseInterception()
   }
 
   // MARK: - Window Level

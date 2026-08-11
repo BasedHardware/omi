@@ -799,9 +799,12 @@ import XCTest
   func testPresentingDuringNotchRetractionKeepsThePanelVisibleAndRestoresItsContent() {
     let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
     let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
     unsetenv("OMI_FORCE_NO_NOTCH")
     setenv("OMI_FORCE_NOTCH", "1", 1)
     defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
       if let previousForceNoNotch {
         setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
       } else {
@@ -841,6 +844,26 @@ import XCTest
   }
 
   func testStartingPushToTalkDuringNotchRetractionKeepsThePanelVisible() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
     let window = FloatingControlBarWindow(
       contentRect: NSRect(x: 0, y: 0, width: 360, height: 58),
       styleMask: [.borderless, .nonactivatingPanel],
