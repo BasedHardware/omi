@@ -58,6 +58,35 @@ const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: fa
 const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
 const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
 
+ThemeMode shellThemeModeForSurfaceQuery(String raw) {
+  var query = raw.trim();
+  if (query.startsWith('?')) query = query.substring(1);
+  try {
+    final mode = Uri.splitQueryString(query.split('#').first)['theme'];
+    if (mode == 'light') return ThemeMode.light;
+    if (mode == 'dark') return ThemeMode.dark;
+  } on FormatException {
+    // Malformed optional appearance input follows the system without blocking boot.
+  } on ArgumentError {
+    // Invalid percent encoding is surfaced as ArgumentError by Uri parsing.
+  }
+  return ThemeMode.system;
+}
+
+Brightness shellBrightnessForSurfaceQuery(String raw, Brightness systemBrightness) {
+  return switch (shellThemeModeForSurfaceQuery(raw)) {
+    ThemeMode.light => Brightness.light,
+    ThemeMode.dark => Brightness.dark,
+    ThemeMode.system => systemBrightness,
+  };
+}
+
+Color shellBackgroundForSurfaceQuery(String raw, Brightness systemBrightness) {
+  return shellBrightnessForSurfaceQuery(raw, systemBrightness) == Brightness.dark
+      ? const Color(0xFF0B0B0F)
+      : const Color(0xFFF5F7F9);
+}
+
 void main() => runApp(const OmiApp());
 
 class OmiApp extends StatelessWidget {
@@ -65,10 +94,13 @@ class OmiApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = shellThemeModeForSurfaceQuery(_surfaceQuery);
     return MaterialApp(
       title: 'Omi',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
+      theme: ThemeData.light(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      themeMode: themeMode,
       home: const SurfaceHost(),
     );
   }
@@ -199,7 +231,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     }
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF0B0B0F))
+      ..setBackgroundColor(shellBackgroundForSurfaceQuery(
+        _surfaceQuery,
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+      ))
       // Surface console -> flutter logs, so headless runs can read bench output.
       ..setOnConsoleMessage((msg) {
         debugPrint('[surface] ${msg.message}');
@@ -768,9 +803,22 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   }
 
   @override
+  void didChangePlatformBrightness() {
+    if (shellThemeModeForSurfaceQuery(_surfaceQuery) != ThemeMode.system) return;
+    unawaited(_controller.setBackgroundColor(shellBackgroundForSurfaceQuery(
+      _surfaceQuery,
+      WidgetsBinding.instance.platformDispatcher.platformBrightness,
+    )));
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0F),
+      backgroundColor: shellBackgroundForSurfaceQuery(
+        _surfaceQuery,
+        Theme.of(context).brightness,
+      ),
       // Shell-level inset ownership: SafeArea keeps the WKWebView out of the
       // status bar and home indicator. The removed diagnostic strip previously
       // occupied that layout space; without it the shell must claim MediaQuery
