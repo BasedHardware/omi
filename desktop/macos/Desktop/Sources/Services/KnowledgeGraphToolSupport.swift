@@ -1,12 +1,49 @@
 import Foundation
 
 enum KnowledgeGraphToolSupport {
-  struct ClientGraph {
-    let nodes: [[String: Any]]
-    let edges: [[String: Any]]
+  /// Release-lane contract: this type crosses the async seam out of `resolveDiscoveryText`, so it
+  /// must stay `Sendable`: the whole-module release compile (the auto-release gate) rejects a
+  /// non-Sendable return here even when debug builds stay quiet. See #11373/#11374.
+  struct ClientGraph: Sendable {
+    struct Node: Sendable {
+      let id: String
+      let label: String
+      let nodeType: String
+      let aliases: [String]
+    }
+
+    struct Edge: Sendable {
+      let sourceId: String
+      let targetId: String
+      let label: String
+    }
+
+    let nodes: [Node]
+    let edges: [Edge]
+
+    var nodesAsPayload: [[String: Any]] {
+      nodes.map { node in
+        [
+          "id": node.id,
+          "label": node.label,
+          "node_type": node.nodeType,
+          "aliases": node.aliases,
+        ] as [String: Any]
+      }
+    }
+
+    var edgesAsPayload: [[String: Any]] {
+      edges.map { edge in
+        [
+          "source_id": edge.sourceId,
+          "target_id": edge.targetId,
+          "label": edge.label,
+        ] as [String: Any]
+      }
+    }
   }
 
-  enum ResolveOutcome {
+  enum ResolveOutcome: Sendable {
     case success(ClientGraph)
     case failure(String)
   }
@@ -25,19 +62,17 @@ enum KnowledgeGraphToolSupport {
         text: trimmed,
         expectedOwnerId: expectedOwnerId)
       let nodes = extracted.nodes.map { node in
-        [
-          "id": node.id,
-          "label": node.label,
-          "node_type": node.nodeType.rawValue,
-          "aliases": node.aliases,
-        ] as [String: Any]
+        ClientGraph.Node(
+          id: node.id,
+          label: node.label,
+          nodeType: node.nodeType.rawValue,
+          aliases: node.aliases)
       }
       let edges = extracted.edges.map { edge in
-        [
-          "source_id": edge.sourceId,
-          "target_id": edge.targetId,
-          "label": edge.label,
-        ] as [String: Any]
+        ClientGraph.Edge(
+          sourceId: edge.sourceId,
+          targetId: edge.targetId,
+          label: edge.label)
       }
       return .success(ClientGraph(nodes: nodes, edges: edges))
     } catch {

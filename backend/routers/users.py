@@ -53,7 +53,8 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
-from utils.user_language import normalize_user_language
+from models.users import AvailableLanguage, AvailableLanguagesResponse
+from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -68,6 +69,7 @@ from models.users import (
     ChatUsageQuota,
     ChatQuotaUnit,
     WebhookType,
+    webhook_url_from_setting,
     UserSubscriptionResponse,
     Subscription,
     SubscriptionPlan,
@@ -481,7 +483,7 @@ def set_user_webhook_endpoint(
 ):
     url = data.url
     set_user_webhook_db(uid, wtype, url)
-    if url == '' or url == ',':
+    if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
     else:
         enable_user_webhook_db(uid, wtype)
@@ -829,6 +831,12 @@ def set_chat_message_analytics(
 # ***************************************
 # ************* Language ****************
 # ***************************************
+
+
+@router.get('/v1/users/available-languages', tags=['v1'], response_model=AvailableLanguagesResponse)
+def get_available_languages(uid: str = Depends(auth.get_current_user_uid)):
+    """Primary-language options for the picker, in render order."""
+    return {'languages': [{'code': code, 'name': name} for code, name in PRIMARY_LANGUAGE_OPTIONS]}
 
 
 @router.get('/v1/users/language', tags=['v1'], response_model=UserLanguageResponse)

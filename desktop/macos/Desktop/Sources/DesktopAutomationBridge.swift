@@ -1666,6 +1666,61 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
+    // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
+    // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
+    // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
+    register(
+      name: "debug_hit_probe",
+      summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
+      params: ["x", "y"]
+    ) { params in
+      guard let x = Double(params["x"] ?? ""), let y = Double(params["y"] ?? "") else {
+        return ["error": "need x and y (screen top-left coords)"]
+      }
+      guard let primary = NSScreen.screens.first else { return ["error": "no screens"] }
+      let cocoaPoint = NSPoint(x: x, y: primary.frame.maxY - y)
+      var result: [String: String] = [
+        "screen_point_cg": "(\(Int(x)), \(Int(y)))",
+        "screen_point_cocoa": NSStringFromPoint(cocoaPoint),
+        "screens": NSScreen.screens.map { NSStringFromRect($0.frame) }.joined(separator: " | "),
+      ]
+      // Our own windows containing the point, front-to-back. Reliable where the window-server
+      // query is not; foreign overlap is diagnosed from outside via CGWindowList.
+      let containing = NSApp.windows
+        .filter { $0.isVisible && $0.frame.contains(cocoaPoint) }
+        .sorted { $0.orderedIndex < $1.orderedIndex }
+      result["own_windows_at_point"] =
+        containing.isEmpty
+        ? "none"
+        : containing.map { window in
+          var extras = ""
+          if let bar = window as? FloatingControlBarWindow {
+            let local = NSPoint(
+              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
+            extras =
+              " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          }
+          return
+            "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
+        }.joined(separator: " ; ")
+      if let window = containing.first {
+        let inWindow = window.convertPoint(fromScreen: cocoaPoint)
+        result["point_in_window"] = NSStringFromPoint(inWindow)
+        if let root = window.contentView?.superview ?? window.contentView {
+          let inRoot = root.convert(inWindow, from: nil)
+          let hit = root.hitTest(inRoot)
+          var chain: [String] = []
+          var view = hit
+          while let v = view, chain.count < 8 {
+            chain.append(String(describing: type(of: v)))
+            view = v.superview
+          }
+          result["hit_view_chain"] = chain.isEmpty ? "nil (click falls through)" : chain.joined(separator: " < ")
+        }
+      }
+      return result
+    }
+
     register(
       name: "reset_main_chat",
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",

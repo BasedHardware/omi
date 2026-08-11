@@ -749,14 +749,59 @@ import XCTest
     XCTAssertEqual(window.frame, expectedFrame)
   }
 
+  func testIdleNotchWindowDoesNotCoverTheInvisibleHoverMenuExtent() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.makeKeyAndOrderFront(nil)
+    window.state.setNotchHoverMenuOpen(false)
+    window.normalizeForTemporaryShow()
+
+    let chromeHeight = FloatingControlBarWindow.notchChromeHeight(for: window.screen)
+    let idleFrameHeight = chromeHeight + FloatingControlBarWindow.notchGlowOutsetBottom
+    let formerMaximumHeight =
+      chromeHeight
+      + FloatingControlBarWindow.notchHoverMenuHeight(
+        agentCount: FloatingControlBarWindow.notchAgentListMaxVisibleAgents)
+      + FloatingControlBarWindow.notchGlowOutsetBottom
+    XCTAssertEqual(window.frame.height, idleFrameHeight, accuracy: 0.5)
+    XCTAssertLessThan(window.frame.height, formerMaximumHeight)
+
+    let pointInsideFormerDeadZone = NSPoint(
+      x: window.frame.midX,
+      y: window.frame.maxY - idleFrameHeight - 20
+    )
+    XCTAssertFalse(window.frame.contains(pointInsideFormerDeadZone))
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
+    let viewSource = try floatingControlBarViewSource()
 
-    // Pill mode still resizes its panel, and that resize must animate with the
-    // same durations as its content, or the panel keeps sliding after the rows
-    // settle. Notch mode is fixed-window: the switcher open/close must never
-    // animate the NSPanel frame — it only re-asserts the constant idle/hover
-    // surface frame and lets the SwiftUI content morph carry the transition.
+    // SwiftUI owns the content morph. The notch panel snaps once instead of
+    // animating its frame per tick or reserving the maximum hover extent.
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
     XCTAssertTrue(
@@ -773,14 +818,20 @@ import XCTest
     }
     let body = String(windowSource[start.lowerBound..<end.lowerBound])
 
-    // Notch: fixed frame only, before any pill-mode resize.
+    // Notch: one non-animated boundary resize; pill mode keeps its existing
+    // semantic animated transition.
     XCTAssertTrue(body.contains("if notchModeEnabled {"))
-    XCTAssertTrue(body.contains("assertNotchFixedHoverSurfaceFrame()"))
+    XCTAssertTrue(body.contains("notchHoverMenuSurfaceSize(agentCount:"))
+    XCTAssertTrue(body.contains(": notchCollapsedSize"))
+    XCTAssertTrue(body.contains("animated: false"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
     XCTAssertTrue(body.contains("resizeSurfaceTransition("))
     XCTAssertTrue(body.contains(".agentSwitcher(visible: true)"))
     XCTAssertTrue(body.contains(".agentSwitcher(visible: false)"))
+    XCTAssertTrue(viewSource.contains("completionCriteria: .logicallyComplete"))
+    XCTAssertTrue(viewSource.contains("settleNotchAgentSwitcherCollapse()"))
+    XCTAssertTrue(viewSource.contains("resizeForHover(expanded: false)"))
     XCTAssertFalse(body.contains("resizeAnchored("))
     // No bare animated resize (which defaults to the slow 0.3s) may remain in
     // the hover-menu expand/collapse path.
@@ -840,8 +891,8 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil"))
     XCTAssertTrue(
       chatBubbleSource.contains("var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil"))
-    XCTAssertTrue(chatBubbleSource.contains("calls.compactMap(\\.agentOpenRef).last"))
-    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
+    XCTAssertTrue(chatBubbleSource.contains("ForEach(timelineItems) { item in"))
+    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("Self.cleanToolName(name) == \"spawn_agent\""))
     XCTAssertTrue(chatBubbleSource.contains("Self.labeledValue(in: output, keys: [\"id\"])"))
     XCTAssertTrue(chatBubbleSource.contains("keys: [\"sessionid\", \"session_id\"]"))
@@ -1596,24 +1647,20 @@ import XCTest
       openClaw.coloredPixels, 0, "OpenClaw row mark must be a template mask so status color owns identity.")
   }
 
-  func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
+  func testFloatingAgentToolCallsUseSharedActivityTimelinePresentation() throws {
     let chatBubbleSource = try chatBubbleSource()
     let providerSource = try chatProviderSource()
 
     XCTAssertTrue(chatBubbleSource.contains("var compact: Bool = false"))
-    XCTAssertTrue(chatBubbleSource.contains("enum ToolCallsGroupExpansionPolicy"))
-    XCTAssertTrue(chatBubbleSource.contains("static func initiallyExpanded() -> Bool {\n    false"))
-    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())"))
-    XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
-    XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
-    XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatBubbleSource.contains("minimumHeight: compact ? 34 : nil"))
-    XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
+    XCTAssertTrue(chatBubbleSource.contains("enum ToolActivityTimelinePresentation"))
+    XCTAssertTrue(chatBubbleSource.contains("connectsToNext: position < toolCalls.count - 1"))
+    XCTAssertTrue(chatBubbleSource.contains(".spring(response: 0.36, dampingFraction: 0.86)"))
+    XCTAssertTrue(chatBubbleSource.contains(".move(edge: .top).combined(with: .opacity)"))
+    XCTAssertTrue(chatBubbleSource.contains("toolActivityIcon(name: name, status: displayStatus, size: 15)"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
-    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: block.agentOpenRef"))
+    XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgent: onOpenAgent"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgentRef: onOpenAgentRef"))
-    XCTAssertTrue(chatBubbleSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
   }

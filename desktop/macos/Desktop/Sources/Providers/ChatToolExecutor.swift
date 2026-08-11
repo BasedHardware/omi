@@ -2849,8 +2849,8 @@ class ChatToolExecutor {
         discoveryText, expectedOwnerId: expectedOwnerID)
       {
       case .success(let graph):
-        nodesArray = graph.nodes
-        edgesArray = graph.edges
+        nodesArray = graph.nodesAsPayload
+        edgesArray = graph.edgesAsPayload
       case .failure(let message):
         // Explicit nodes are a usable graph on their own; losing them because the
         // extract call failed would be a regression of the compatibility path.
