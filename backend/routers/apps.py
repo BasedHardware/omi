@@ -1830,7 +1830,9 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     if not server_url:
         raise HTTPException(status_code=422, detail='MCP server URL is required')
     try:
-        assert_public_http_url(server_url)
+        # getaddrinfo() is blocking: a user-supplied hostname with a slow
+        # resolver would stall the whole event loop, so offload it.
+        await run_blocking(db_executor, assert_public_http_url, server_url)
     except UnsafeWebhookURLError:
         raise HTTPException(status_code=400, detail='MCP server URL must be a public http(s) URL')
 
