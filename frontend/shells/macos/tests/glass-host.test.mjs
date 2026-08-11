@@ -57,7 +57,15 @@ test("the visible navigation island exposes a native drag lane without covering 
 
 test("scratch shell opens at the deterministic comparison frame", async () => {
   const source = await read("shell/Sources/OmiShell/main.swift");
-  assert.match(source, /width: 934, height: 671/);
+  assert.match(source, /let fixtureCapture = env\["OMI_PROBE_EXIT"\] != nil/);
+  assert.match(
+    source,
+    /width: fixtureCapture \? captureDimension\("OMI_NATIVE_VIEWPORT_WIDTH", fallback: 934,[^\n]+\) : 934/,
+  );
+  assert.match(
+    source,
+    /height: fixtureCapture \? captureDimension\("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: 671,[^\n]+\) : 671/,
+  );
   assert.match(source, /window\.isRestorable = false/);
   assert.match(source, /window\.setContentSize\(contentRect\.size\)/);
   assert.match(source, /window\.isOpaque = false/);
