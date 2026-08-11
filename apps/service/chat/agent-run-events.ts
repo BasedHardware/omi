@@ -631,14 +631,16 @@ export interface AgentRunVisibleTimeline {
 
 const REDACTED_KEYS = new Set([
   "prompt", "rawprompt", "args", "arguments", "rawarguments", "attachment", "attachments",
-  "attachmentid", "attachmentids", "attachmentref", "attachmentreference", "fileid", "fileids", "fileref",
-  "filereference", "opaque", "opaqueid", "opaqueref", "opaquereference", "referenceid", "reference",
+  "attachmentid", "attachmentids", "attachmentref", "attachmentrefs", "attachmentreference", "attachmentreferences",
+  "fileid", "fileids", "fileref", "filerefs", "filereference", "filereferences",
+  "opaque", "opaqueid", "opaqueids", "opaqueref", "opaquerefs", "opaquereference", "opaquereferences",
+  "referenceid", "referenceids", "referenceref", "referencerefs", "reference",
   "credential", "credentials", "accesstoken", "password",
   "secret", "token", "apikey", "authorization", "auth", "reasoning", "chainofthought", "hiddenreasoning",
 ]);
 const REDACTED_STRING = /(?:Bearer\s+|sk-[A-Za-z0-9]|BEGIN\s+.*PRIVATE\s+KEY)/iu;
 const REDACTED_VALUE_STRING = /(?:api[_. -]?key|authorization|access[_. -]?token|token|secret|password)\s*[:=]\s*\S+/iu;
-const REDACTED_ATTACHMENT_STRING = /(?:attachment|file|opaque|reference)(?:[_. -]?(?:id|ref|reference))?\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
+const REDACTED_ATTACHMENT_STRING = /(?:attachment|file|opaque|reference)(?:[_. -]?(?:id|ids|ref|refs|reference|references))?\s*[:=]\s*[A-Za-z0-9._:@+-]+/iu;
 const normalizedRedactionKey = (key: string): string => key.replace(/[^A-Za-z0-9]/gu, "").toLowerCase();
 
 /** Returns scanner findings rather than exposing sensitive values. */

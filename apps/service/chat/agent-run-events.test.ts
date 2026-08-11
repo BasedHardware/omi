@@ -203,6 +203,31 @@ describe("versioned agent run events", () => {
       "nested.attachment-ref",
       "nested.safeSummary",
     ]);
+    expect(scanAgentRunRedactions({
+      nested: {
+        attachment_ids: ["opaque-a"],
+        fileIds: ["opaque-b"],
+        opaque_ids: ["opaque-c"],
+        opaque_refs: ["opaque-d"],
+        opaqueReferences: ["opaque-e"],
+        reference_ids: ["opaque-f"],
+        referenceRefs: ["opaque-g"],
+        attachmentRefs: ["opaque-h"],
+        file_refs: ["opaque-i"],
+        safeSummary: "attachment_ids=opaque-j file-ids:opaque-k opaque_refs=opaque-l opaque-references=opaque-m reference_ids=opaque-n reference-refs=opaque-o attachment-refs=opaque-p file_refs=opaque-q",
+      },
+    })).toEqual([
+      "nested.attachment_ids",
+      "nested.fileIds",
+      "nested.opaque_ids",
+      "nested.opaque_refs",
+      "nested.opaqueReferences",
+      "nested.reference_ids",
+      "nested.referenceRefs",
+      "nested.attachmentRefs",
+      "nested.file_refs",
+      "nested.safeSummary",
+    ]);
     expect(projectAgentRunTimeline(first.events.slice(1))).toBeNull();
     expect(projectAgentRunTimeline([
       first.events[0]!,
