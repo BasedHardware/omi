@@ -125,12 +125,12 @@ def test_a_changed_username_is_claimed(calls):
     assert calls['usernames'] == [('adalovelace', 'uid-1')]
 
 
-def test_the_update_carries_the_identity_fields_the_model_requires(calls):
+def test_an_omitted_username_is_not_written_back(calls):
     _patch({'name': 'Ada Lovelace'})
 
     written = calls['updates'][0]
     assert written['id'] == 'persona-1'
-    assert written['username'] == 'ada'
+    assert 'username' not in written
     assert 'updated_at' in written
 
 

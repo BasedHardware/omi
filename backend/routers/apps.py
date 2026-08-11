@@ -941,6 +941,7 @@ async def update_persona(
     uid=Depends(auth.get_current_user_uid),
 ):
     data = parse_form_json(dict, persona_data, 'persona_data')
+    username_was_supplied = 'username' in data
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
@@ -977,7 +978,6 @@ async def update_persona(
 
     # AppUpdate needs the identity fields even when the caller omitted them.
     data['id'] = persona_id
-    data.setdefault('username', persona.get('username'))
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
@@ -989,12 +989,15 @@ async def update_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
+    update_data = update_app.model_dump(exclude_unset=True)
+    if not username_was_supplied:
+        update_data.pop('username', None)
+    await run_blocking(db_executor, update_app_in_db, update_data)
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         await run_blocking(db_executor, invalidate_approved_apps_cache)
     await run_blocking(db_executor, delete_app_cache_by_id, persona_id)
-    return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
+    return {'status': 'ok', 'app_id': persona_id, 'username': data.get('username', persona.get('username'))}
 
 
 @router.get('/v1/personas', tags=['v1'], response_model=App)
