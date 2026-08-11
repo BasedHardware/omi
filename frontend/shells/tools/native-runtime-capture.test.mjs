@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   gateReplay,
+  macRuntimeAppName,
   parseMacProbe,
   validateHostMarker,
   validateManifest,
@@ -61,6 +62,16 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   assert.match(iosHook, /attempts < 80/);
   assert.match(iosHook, /polishState !== wantedState/);
   assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
+});
+
+test("macOS scratch app name binds arbitrary matrix run IDs without weakening launcher grammar", () => {
+  const runId = "mx-v1-runtime_trace-chat-macos-busy-dark-regular-none";
+  const name = macRuntimeAppName(runId);
+  assert.match(name, /^omi-on-[A-Za-z0-9][A-Za-z0-9.-]*$/);
+  assert.equal(name, macRuntimeAppName(runId));
+  assert.notEqual(name, macRuntimeAppName(`${runId}-other`));
+  assert.doesNotMatch(name, /runtime_trace|chat|busy/);
+  assert.throws(() => macRuntimeAppName("bad run id"), /run_id/);
 });
 
 test("macOS probe parser requires one real successful WK result", () => {

@@ -199,6 +199,11 @@ export function parseMacProbe(output, manifest) {
   return validateHostMarker(marker, manifest);
 }
 
+export function macRuntimeAppName(runId) {
+  if (!safeId.test(runId)) throw new Error("runtime run_id is malformed");
+  return `omi-on-runtime-${sha256(Buffer.from(runId)).slice(0, 16)}`;
+}
+
 function runMac(manifest, outputDir) {
   const launcher = path.join(macRoot, "scripts/dev-run-macos.sh");
   const screenshot = path.join(outputDir, "probe.png");
@@ -209,7 +214,10 @@ function runMac(manifest, outputDir) {
   env.OMI_SURFACES_DIST = surfacesDist;
   const scratch = path.join(outputDir, "home");
   env.HOME = scratch; env.PUB_CACHE = path.join(scratch, ".pub-cache"); env.XDG_CACHE_HOME = path.join(scratch, ".cache");
-  env.OMI_APP_NAME = `omi-on-polish-runtime-${manifest.run_id}`;
+  // The launcher deliberately accepts only short scratch bundle names. Matrix
+  // run IDs contain underscores and coordinate prose, so bind them through a
+  // deterministic digest instead of weakening that native-shell boundary.
+  env.OMI_APP_NAME = macRuntimeAppName(manifest.run_id);
   env.OMI_SURFACE_PORT = "5290"; env.OMI_FIXTURE_CAPTURE_WAIT_SECONDS = "5";
   env.OMI_PROBE_JS = probeScript(manifest); env.OMI_PROBE_DELAY = "2"; env.OMI_PROBE_SETTLE = "1";
   const args = ["--fixture", manifest.domain, "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", screenshot, "--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height)];
