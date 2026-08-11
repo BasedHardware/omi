@@ -7,7 +7,7 @@ page, moving a surface between pages, or debugging an animation that looks stuck
 
 | Route | Holds |
 |---|---|
-| `/home` | The hub **and** the chat. Chat is not a separate page: Home rests on the hub for an empty account and opens straight into the transcript once there is history — `web/app/src/lib/homeStage.ts`, ported from desktop's `HomeStagePresentation.restingMode`. Live capture also starts here, from the composer. |
+| `/home` | The hub **and** the chat. Chat is not a separate page: `web/app/src/components/home/HomePage.tsx` keeps recent history above the hub and the current exchange below it, with transcript rendering owned by `web/app/src/components/chat/ChatTranscript.tsx`. Live capture also starts here, from the composer. |
 | `/conversations` | Conversations and daily recaps in one day-grouped gallery. A recap is the summary of a day, so it leads that day rather than living in a list of its own. |
 | `/memories`, `/tasks` | As named. |
 | `/connectors` | Installed apps **and** external services — the former Settings → Integrations. |
