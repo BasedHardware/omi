@@ -1839,12 +1839,8 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
-  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and qualified Beta promotion
-  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
-  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
-  #                                     Add Contents: write only if this credential is also used for
-  #                                     candidate-release publishing. Do not reuse the legacy
-  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
+  #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -2783,9 +2779,8 @@ workflows:
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # A candidate is the evidence container. Once published, preserve its
-          # signed artifacts and every qualification observation; retries only
-          # resume the dispatch handoff below.
+          # A candidate is the immutable evidence container. Once published,
+          # preserve its signed artifacts; retries resume Beta promotion below.
           if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
             echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
           else
@@ -2816,31 +2811,34 @@ workflows:
             echo "GitHub release candidate created: $CM_TAG"
           fi
 
-      - name: Dispatch trusted macOS beta qualification
+      - name: Promote signed candidate to Omi Beta
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
-            echo "External previews do not enter beta or stable qualification."
+            echo "External previews do not enter the shared Beta channel."
             exit 0
           fi
           set -euo pipefail
-          # Per-tag GitHub concurrency and immutable qualification evidence own
-          # duplicate dispatches; this bounded retry only handles dispatch I/O.
-          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
-          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
-          # handoff explicitly to the desktop_secrets token that is scoped for
-          # candidate-release and Actions-dispatch access.
+          test -n "${BETA_PROMOTION_TOKEN:-}" || {
+            echo "ERROR: BETA_PROMOTION_TOKEN is required to promote the signed candidate" >&2
+            exit 1
+          }
+          # The endpoint independently reads the immutable release, tag, GitHub
+          # digests, and exact Beta signed-smoke asset. Retries are idempotent.
           for attempt in 1 2 3; do
-            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
-              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-              -f release_tag="$CM_TAG" --ref "$CM_TAG"; then
-              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+            if curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/promote-candidate" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"; then
+              echo "Omi Beta now points to $CM_TAG."
               exit 0
             fi
             if [[ "$attempt" -lt 3 ]]; then
               sleep "$((attempt * 2))"
             fi
           done
-          echo "ERROR: qualification dispatch was not confirmed after bounded retry; candidate remains non-live." >&2
+          echo "ERROR: Beta promotion was not confirmed after bounded retry; candidate remains non-live." >&2
           exit 1
 
     artifacts:
