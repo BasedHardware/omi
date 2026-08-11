@@ -808,6 +808,7 @@ function main() {
     argv: captureArgv,
     input_set: input,
     members,
+    coordinate_count: records.length,
     timeout_seconds: timeoutSeconds,
     wait_seconds: waitSeconds,
     stdout_sha256: sha256(stdoutLine),
