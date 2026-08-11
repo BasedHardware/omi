@@ -1,0 +1,5 @@
+{
+  "name": "@platform/firebase",
+  "private": true,
+  "type": "module"
+}
