@@ -197,7 +197,9 @@ def _stub_redact_conversation_for_integration(conv):
     return redacted
 
 
-sys.modules["utils.conversations.render"].redact_conversation_for_integration = _stub_redact_conversation_for_integration
+sys.modules["utils.conversations.render"].redact_conversation_for_integration = (
+    _stub_redact_conversation_for_integration
+)
 sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
