@@ -6,7 +6,7 @@ import type { ProductionConversationStore, ProductionFolderStore } from "./Produ
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import "./conversations.css";
 
@@ -313,9 +313,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
       <ProductionChrome locale={locale} active="conversations" placement="top" />
       <section className="desktop-page-panel">
       <ProductionLibrarySegment locale={locale} active="conversations" />
-      <header className="production-header">
-        <div><p className="eyebrow">{t(locale, "nav.conversations")}</p><h1>{t(locale, "conversations.title")}</h1><p>{t(locale, "conversations.subtitle")}</p></div>
-      </header>
+      <ProductionPageHeader className="production-header" eyebrow={t(locale, "nav.conversations")} title={t(locale, "conversations.title")} description={t(locale, "conversations.subtitle")} />
       <ProductionDataSourceBadge source={source} locale={locale} />
       <ProductionLifecycleRegion
         className="surface-notices"

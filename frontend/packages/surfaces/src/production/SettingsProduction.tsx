@@ -6,7 +6,7 @@ import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader } from "./ProductionPrimitives.js";
 import "./settings.css";
 
 type Locale = string;
@@ -159,13 +159,7 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
     <main className="production-shell settings-production-shell" data-production-shell="true" data-route="settings" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-semantic={"settings:sections:account-plan-appearance:appearance-control:" + (showAppearance ? "shown" : "hidden") + ":signout-control:" + (showPlan ? "shown" : "hidden")}>
       <ProductionChrome locale={locale} active="settings" placement="top" />
       <section className="desktop-page-panel">
-        <header className="settings-header">
-          <div>
-            <p className="settings-eyebrow">{t(locale, "nav.settings")}</p>
-            <h1>{t(locale, "settings.title")}</h1>
-            <p>{t(locale, "settings.subtitle")}</p>
-          </div>
-        </header>
+        <ProductionPageHeader className="settings-header" eyebrow={t(locale, "nav.settings")} title={t(locale, "settings.title")} description={t(locale, "settings.subtitle")} />
         <ProductionDataSourceBadge source={fixture ? { kind: "fixture", fixture } : { kind: "live", origin: "bridge" }} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"

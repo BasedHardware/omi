@@ -4,7 +4,7 @@ import { formatDate, t } from "@omi-core/i18n";
 import type { ProductionMemoryStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
@@ -186,9 +186,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
       <ProductionChrome locale={locale} active="memories" placement="top" />
       <section className="desktop-page-panel">
       <ProductionLibrarySegment locale={locale} active="memories" />
-      <header className="production-header memories-header">
-        <div><p className="eyebrow">{t(locale, "nav.memories")}</p><h1>{t(locale, "memories.title")}</h1><p>{t(locale, "memories.subtitle")}</p></div>
-      </header>
+      <ProductionPageHeader className="production-header memories-header" eyebrow={t(locale, "nav.memories")} title={t(locale, "memories.title")} description={t(locale, "memories.subtitle")} />
       <ProductionDataSourceBadge source={source} locale={locale} />
       <ProductionLifecycleRegion
         className="surface-notices"

@@ -4,7 +4,7 @@ import type { MessageKey, MessageVariables } from "@omi-core/i18n";
 import type { ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
@@ -332,18 +332,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         "outdent-task": Boolean(selectedTask),
       }} />
       <section className="desktop-page-panel">
-      <header className="tasks-header">
-        <div>
-          <p className="tasks-eyebrow">{translate("tasks.title")}</p>
-          <h1>{translate("tasks.title")}</h1>
-          <p>{translate("tasks.subtitle")}</p>
-        </div>
-        <div className="tasks-header-actions">
+      <ProductionPageHeader className="tasks-header" eyebrow={translate("tasks.title")} title={translate("tasks.title")} description={translate("tasks.subtitle")} actions={<div className="tasks-header-actions">
           <ProductionSearchField className="tasks-search" label={translate("tasks.filterSavedPlaceholder")} placeholder={translate("tasks.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
           <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}><ProductionIcon name={createOpen ? "close" : "plus"} /></button>
           <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}><ProductionIcon name="more" /></button>
-        </div>
-      </header>
+        </div>} />
       <ProductionDataSourceBadge source={source} locale={locale} />
       <ProductionLifecycleRegion
         className="surface-notices"
