@@ -12,7 +12,9 @@ import type { RetainedChatSend } from "./ProductionChatStore.js";
 export const CHAT_FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
 
 export const CHAT_FIXTURE_STATES = [
+  "loading",
   "empty",
+  "ready",
   "normal",
   "streaming",
   "cancelled",
@@ -21,6 +23,7 @@ export const CHAT_FIXTURE_STATES = [
   "older-available",
   "attachments-unknown-cap",
   "unavailable",
+  "saved-failed",
 ] as const;
 
 export type ChatFixtureState = (typeof CHAT_FIXTURE_STATES)[number];
@@ -97,7 +100,7 @@ function olderPage(): ChatHistoryPage {
 }
 
 function pageFor(state: ChatFixtureState): ChatHistoryPage {
-  if (state === "empty" || state === "unavailable") {
+  if (state === "loading" || state === "empty" || state === "unavailable") {
     return { messages: [], hasOlder: false, olderCursor: null };
   }
   if (state === "streaming") {
@@ -155,6 +158,13 @@ function pageFor(state: ChatFixtureState): ChatHistoryPage {
       olderCursor: "fixture-older-cursor-1",
     };
   }
+  if (state === "ready") {
+    return {
+      messages: baseMessages().slice(0, 3),
+      hasOlder: false,
+      olderCursor: null,
+    };
+  }
   return {
     messages: baseMessages(),
     hasOlder: false,
@@ -184,7 +194,13 @@ function capabilitiesFor(state: ChatFixtureState): ChatCapabilities {
 export function fixtureChatStore(state: ChatFixtureState): ProductionChatStore {
   let historyPage = pageFor(state);
   const caps = capabilitiesFor(state);
-  const refreshPhase: RefreshPhase = state === "unavailable" ? "unavailable" : "ready";
+  const refreshPhase: RefreshPhase = state === "loading"
+    ? "initial-loading"
+    : state === "unavailable"
+      ? "unavailable"
+      : state === "saved-failed"
+        ? "saved-but-refresh-failed"
+        : "ready";
   const status: StoreStatus = {
     refresh: { phase: refreshPhase, hasSavedData: historyPage.messages.length > 0 },
     queue: queue("idle"),

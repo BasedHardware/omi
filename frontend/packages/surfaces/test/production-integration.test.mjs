@@ -21,7 +21,7 @@ test("production surfaces depend on stable store ports instead of QA fixtures", 
   // backend generation boundary depend on QA-only implementation details.
 });
 
-test("Listen is composed from the ratified platform stream and has no fixture dispatch", async () => {
+test("Listen live composition stays on the ratified platform stream while polish fixtures remain explicit", async () => {
   const [main, listen, store] = await Promise.all([
     read("src/production/main.tsx"),
     read("src/production/ListenProduction.tsx"),
@@ -31,13 +31,15 @@ test("Listen is composed from the ratified platform stream and has no fixture di
   assert.match(main, /createPlatformProductionListenStore/);
   assert.match(main, /__OMI_LISTEN_PROTOCOL_SCHEMA__/);
   assert.match(main, /route === "listen"/);
-  assert.doesNotMatch(main, /listen-fixtures|fixtureListenStore|listenFixture/);
-  assert.doesNotMatch(listen, /fixture\??:/);
+  assert.match(main, /requestedQa === "listen" && LISTEN_FIXTURE_STATES\.includes/);
+  assert.match(main, /fixtureListenStore\(listenFixture\)/);
+  assert.match(main, /source=\{\{ kind: "fixture", fixture: evidenceLabel \}\}/);
+  assert.match(listen, /source = \{ kind: "live", origin: "bridge" \}/);
+  assert.match(listen, /data-qa-fixture=\{fixture \?\? "none"\}/);
   assert.match(listen, /ProductionDataSourceBadge/);
-  assert.match(listen, /data-qa-fixture="none"/);
   assert.match(store, /platformListenCaptureState/);
-  // red-proof: restoring the QA dispatch or bypassing the typed platform
-  // client makes the production composition assertions fail.
+  // red-proof: letting the evidence fixture become a default or bypassing the
+  // typed platform client makes the production composition assertions fail.
 });
 
 test("every live route adopts the shared source, lifecycle, and live-boundary primitives", async () => {

@@ -69,7 +69,7 @@ function deadLetter(now: number): DeadLetter {
 }
 
 export const FIXTURE_STATES = [
-  "loading", "empty", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "normal", "long", "operation-failed",
+  "loading", "empty", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "normal", "complete", "long", "operation-failed",
 ] as const;
 export type FixtureState = (typeof FIXTURE_STATES)[number];
 
@@ -79,6 +79,9 @@ function queue(phase: QueuePhase): QueueStatus {
 
 export function fixtureStore(state: FixtureState, now = FIXED_NOW): ProductionTaskStore {
   let rows = state === "empty" || state === "unavailable" || state === "loading" ? [] : baseRows(now);
+  if (state === "complete") {
+    rows = baseRows(now).map((row) => ({ ...row, completed: true, completedAt: row.completedAt ?? now - 1_800_000 }));
+  }
   if (state === "long") {
     rows = [task({
       id: id("fixture-long-task"),

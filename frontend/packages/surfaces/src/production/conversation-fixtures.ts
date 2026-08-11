@@ -147,9 +147,18 @@ function deadLetter(): DeadLetter {
   };
 }
 
-export function fixtureFolderStore(): ProductionFolderStore {
-  let rows = folders();
-  const status: StoreStatus = { refresh: { phase: "ready", hasSavedData: true }, queue: queue("idle") };
+export type FolderFixtureState = "loading" | "empty" | "ready" | "error" | "offline";
+
+export function fixtureFolderStore(state: FolderFixtureState = "ready"): ProductionFolderStore {
+  const rows = state === "loading" || state === "empty" || state === "error" ? [] : folders();
+  const phase: RefreshPhase = state === "loading"
+    ? "initial-loading"
+    : state === "error"
+      ? "unavailable"
+      : state === "offline"
+        ? "saved-but-refresh-failed"
+        : "ready";
+  const status: StoreStatus = { refresh: { phase, hasSavedData: rows.length > 0 }, queue: queue("idle") };
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   return {

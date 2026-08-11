@@ -16,7 +16,9 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   assert.match(source, /OMI_PRODUCTION_READY/);
   // red-proof: removing the qa=memories guard would make arbitrary URL state
   // values enter the synthetic fixture path in a production shell.
-  assert.match(source, /const fixtureValue = query\.get\("state"\);/);
+  assert.match(source, /const polishFixture = query\.get\("polish"\) === "1"/);
+  assert.match(source, /resolvePolishFixture\(requestedQa, query\.get\("state"\)\)/);
+  assert.match(source, /const fixtureValue = polishFixture\?\.fixture \?\? query\.get\("state"\);/);
   assert.match(source, /requestedQa === "memories"/);
   assert.match(source, /fixtureConversationDetailId\(conversationFixture\)/);
   assert.match(source, /fixtureConversationStore\(conversationFixture, requestedQa === "conversation-detail"\)/);

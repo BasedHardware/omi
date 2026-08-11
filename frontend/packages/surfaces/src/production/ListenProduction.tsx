@@ -6,7 +6,7 @@ import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
 import "./listen.css";
 
@@ -120,11 +120,13 @@ function transcriptAnnouncement(segments: readonly TranscriptSegment[]): string 
   return bounded === text ? bounded : `${bounded}…`;
 }
 
-export function ListenProduction({ store, locale = "en", onReady, announcementScheduler }: {
+export function ListenProduction({ store, locale = "en", onReady, announcementScheduler, source = { kind: "live", origin: "bridge" }, fixture }: {
   store: ProductionListenStore;
   locale?: Locale;
   onReady?: () => void;
   announcementScheduler?: ProductionAnnouncementScheduler;
+  source?: SurfaceDataSource;
+  fixture?: string;
 }): React.JSX.Element {
   const [capture, setCapture] = useState<CaptureState>(() => store.captureState());
   const [segments, setSegments] = useState<readonly TranscriptSegment[]>(() => store.transcriptSegments());
@@ -279,14 +281,14 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
       data-route="listen"
       data-surface-state={status.refresh.phase}
       data-capture-kind={presentedCapture.kind}
-      data-qa-fixture="none"
+      data-qa-fixture={fixture ?? "none"}
       data-consumer-semantic={`listen:capture:${presentedCapture.kind}:segments:${segments.length}`}
       data-consumer-transcript={segments.length > 0 ? boundedRenderedTranscript(segments) : undefined}
     >
       <ProductionChrome locale={locale} active="listen" placement="top" />
       <section className="desktop-page-panel">
         <ProductionPageHeader className="production-header listen-header" eyebrow={t(locale, "listen.title")} title={t(locale, "listen.title")} description={t(locale, "listen.subtitle")} />
-        <ProductionDataSourceBadge source={{ kind: "live", origin: "bridge" }} locale={locale} />
+        <ProductionDataSourceBadge source={source} locale={locale} />
         <ProductionLifecycleRegion
           className="surface-notices"
           phase={status.refresh.phase}
