@@ -45,13 +45,18 @@ final class NativeSemanticEvidenceUITests: XCTestCase {
         // by XCTest here.  No element value or typed text is retained.
         textField.typeText("x")
         steps.append(Step(key: "focus", action: "tap", result: "keyboard-visible"))
-        steps.append(Step(key: "typeText", action: "typeText", result: "accepted"))
+        steps.append(Step(key: "type-text", action: "typeText", result: "accepted"))
         // The simulator supports a real command-key probe.  This is recorded
         // as an input attempt only; no product shortcut is claimed by it.
         app.typeKey("k", modifierFlags: .command)
-        steps.append(Step(key: "command-k", action: "typeKey", result: "sent"))
-        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        steps.append(Step(key: "escape", action: "typeKey", result: "sent"))
+        let search = app.buttons["Search"].firstMatch
+        if search.waitForExistence(timeout: 2) {
+          steps.append(Step(key: "command-k", action: "typeKey", result: "transition-observed"))
+          app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+          if !search.exists && textField.exists {
+            steps.append(Step(key: "escape", action: "typeKey", result: "restored"))
+          }
+        }
       } else {
         steps.append(Step(key: "focus", action: "tap", result: "keyboard-not-observed"))
       }

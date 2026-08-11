@@ -1,13 +1,13 @@
 {
-  "schema": "omi.native-ios-semantic-supplementary/v1",
-  "kind": "supplementary_semantic",
+  "schema": "omi.polish.matrix-coordinate/v1",
+  "kind": "keyboard_trace",
   "domain": "chat",
   "shell": "ios",
   "state": "ready",
   "theme": "light",
   "width": "compact",
-  "accessibility": "none",
-  "run_id": "ios-semantic-chat-ready-20260811",
+  "accessibility": "keyboard",
+  "run_id": "ios-keyboard-chat-ready-20260811",
   "capture_class": "native_fixture",
   "source_tier": "native_shell",
   "source_shas": {

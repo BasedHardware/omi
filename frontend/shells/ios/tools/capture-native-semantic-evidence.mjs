@@ -7,7 +7,7 @@
  * result bundle.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,12 +23,15 @@ const states = new Set(["loading", "empty", "ready", "error", "offline", "busy",
 const themes = new Set(["light", "dark"]);
 const widths = new Set(["compact", "regular", "wide"]);
 const accessibilities = new Set(["none", "keyboard", "voiceover", "high_contrast", "reduced_motion", "reduced_transparency", "rtl", "text_scale_200"]);
+const matrixKinds = new Set(["ax_snapshot", "keyboard_trace"]);
+const matrixAxAccessibilities = new Set(["voiceover", "high_contrast", "reduced_motion", "reduced_transparency", "rtl", "text_scale_200"]);
+const supplementarySchema = "omi.native-ios-semantic-supplementary/v1";
 const safeId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const sha = /^[0-9a-f]{40}$/;
 const allowedRoles = new Set(["application", "web-view", "button", "text-field", "static-text"]);
 const allowedNames = new Set(["Omi", "Omi surface", "Memories", "Tasks", "Conversations", "Folders", "Listen", "Chat", "Settings", "Search", "Send", "Close", "Cancel", "Try again", "All Conversations"]);
 const allowedActions = new Set(["launch", "tap", "typeText", "typeKey"]);
-const allowedResults = new Set(["foreground", "accepted", "web-view-accepted", "keyboard-visible", "keyboard-not-observed", "sent"]);
+const allowedResults = new Set(["foreground", "accepted", "web-view-accepted", "keyboard-visible", "keyboard-not-observed", "sent", "transition-observed", "restored"]);
 
 function stableJson(value) {
   return `${JSON.stringify(value)}\n`;
@@ -36,6 +39,16 @@ function stableJson(value) {
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalValue(value[key])]));
+  return value;
+}
+
+function canonicalHash(value) {
+  return sha256(Buffer.from(JSON.stringify(canonicalValue(value))));
 }
 
 function parseArgs(argv) {
@@ -83,8 +96,9 @@ function gitHead(root) {
 function validateManifest(manifest) {
   const expectedKeys = ["accessibility", "capture_class", "domain", "kind", "run_id", "schema", "shell", "source_shas", "source_tier", "state", "theme", "viewport", "width"];
   if (!manifest || Object.keys(manifest).sort().join(",") !== expectedKeys.join(",")) throw new Error("manifest has unexpected or missing keys");
-  if (!manifest || manifest.schema !== "omi.polish.matrix-coordinate/v1") throw new Error("manifest schema must be omi.polish.matrix-coordinate/v1");
-  if (manifest.kind !== "semantic") throw new Error("manifest kind must be semantic");
+  const supplementary = manifest?.schema === supplementarySchema && manifest?.kind === "supplementary_semantic";
+  const matrix = manifest?.schema === "omi.polish.matrix-coordinate/v1" && matrixKinds.has(manifest?.kind);
+  if (!supplementary && !matrix) throw new Error("manifest must be an exact matrix ax_snapshot/keyboard_trace coordinate or an explicitly supplementary semantic manifest");
   if (!domains.has(manifest.domain)) throw new Error(`unknown domain '${manifest.domain}'`);
   if (manifest.shell !== "ios") throw new Error("native semantic producer only supports shell=ios");
   if (!states.has(manifest.state)) throw new Error(`unknown state '${manifest.state}'`);
@@ -95,8 +109,46 @@ function validateManifest(manifest) {
   if (manifest.capture_class !== "native_fixture") throw new Error("capture_class must be native_fixture");
   if (manifest.source_tier !== "native_shell") throw new Error("source_tier must be native_shell");
   if (!manifest.source_shas || typeof manifest.source_shas !== "object" || Object.keys(manifest.source_shas).sort().join(",") !== "core,platform" || !sha.test(manifest.source_shas.core) || !sha.test(manifest.source_shas.platform)) throw new Error("source_shas.core/platform must be full SHAs");
-  if (!manifest.viewport || typeof manifest.viewport !== "object" || Object.keys(manifest.viewport).sort().join(",") !== "height,scale,width" || !Number.isInteger(manifest.viewport.width) || !Number.isInteger(manifest.viewport.height) || !Number.isFinite(manifest.viewport.scale) || manifest.viewport.width < 320 || manifest.viewport.width > 2400 || manifest.viewport.height < 320 || manifest.viewport.height > 2800 || manifest.viewport.scale <= 0 || manifest.viewport.scale > 4) throw new Error("viewport must contain bounded width, height and scale");
-  if (manifest.accessibility !== "none") throw new Error("iOS semantic fixture currently proves accessibility=none only");
+  if (!manifest.viewport || typeof manifest.viewport !== "object" || Object.keys(manifest.viewport).sort().join(",") !== "height,scale,width" || !Number.isInteger(manifest.viewport.width) || !Number.isInteger(manifest.viewport.height) || !Number.isFinite(manifest.viewport.scale) || manifest.viewport.width < 320 || manifest.viewport.width > 2400 || manifest.viewport.height < 320 || manifest.viewport.height > 2800 || manifest.viewport.scale <= 0 || manifest.viewport.scale > 4) throw new Error("viewport must contain bounded logical width, height and scale");
+  if (supplementary && manifest.accessibility !== "none") throw new Error("supplementary semantic fixtures must use accessibility=none");
+  if (matrix && manifest.kind === "ax_snapshot" && !matrixAxAccessibilities.has(manifest.accessibility)) throw new Error("ax_snapshot requires one of the six explicit accessibility modes");
+  if (matrix && manifest.kind === "keyboard_trace" && manifest.accessibility !== "keyboard") throw new Error("keyboard_trace requires accessibility=keyboard");
+  if (matrix && manifest.kind === "ax_snapshot" && manifest.width !== "regular") throw new Error("ax_snapshot matrix coordinates use the regular logical viewport");
+  return { matrix, supplementary };
+}
+
+function domainNames(domain) {
+  return {
+    memories: new Set(["Memories"]),
+    tasks: new Set(["Tasks"]),
+    conversations: new Set(["Conversations", "All Conversations"]),
+    folders: new Set(["Folders"]),
+    chat: new Set(["Chat", "Send", "Search"]),
+    listen: new Set(["Listen"]),
+    settings: new Set(["Settings"]),
+  }[domain] || new Set();
+}
+
+function validateMatrixMarker(marker, manifest) {
+  validateMarker(marker);
+  const allowed = domainNames(manifest.domain);
+  if (!marker.nodes.some((node) => allowed.has(node.name))) throw new Error(`native AX nodes must include an allowlisted ${manifest.domain} domain landmark/action`);
+  if (manifest.kind === "keyboard_trace") {
+    validateKeyboardSteps(marker.steps);
+  }
+  return marker;
+}
+
+function validateKeyboardSteps(steps) {
+  const keys = new Map(steps.map((step) => [step.key, step]));
+  if (keys.get("type-text")?.result !== "accepted" || keys.get("command-k")?.result !== "transition-observed" || keys.get("escape")?.result !== "restored") throw new Error("keyboard_trace requires a real key action with observed transition and restoration");
+}
+
+function hasObservedKeyboardTransition(marker) {
+  const steps = new Map(marker.steps.map((step) => [step.key, step]));
+  return steps.get("type-text")?.result === "accepted"
+    && steps.get("command-k")?.result === "transition-observed"
+    && steps.get("escape")?.result === "restored";
 }
 
 function validateMarker(marker) {
@@ -165,7 +217,77 @@ function run(command, args, options) {
   return result;
 }
 
-function canonicalArtifacts(manifest, marker, outDir) {
+function relativeCore(file, label) {
+  const resolved = insideCore(file, label);
+  const relative = path.relative(coreRoot, resolved);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`${label} must be inside the core worktree`);
+  return { resolved, relative };
+}
+
+function inputEntry(file, relative) {
+  const info = lstatSync(file);
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error("replay input must be a regular file, not a symlink");
+  const bytes = readFileSync(file);
+  return { key: `core:${relative}`, sha256: sha256(bytes), size: bytes.length, mode: info.mode & 0o777 };
+}
+
+function gateReplay(manifest, manifestPath, inputPath, outputPath, outDir, emitRecords = true) {
+  const manifestLocation = relativeCore(manifestPath, "--manifest");
+  const input = relativeCore(inputPath, "--replay-input");
+  const output = relativeCore(outputPath, "--replay-output");
+  if (input.resolved === output.resolved) throw new Error("--replay-output must differ from --replay-input");
+  const inputBytes = readFileSync(input.resolved);
+  const document = readJson(input.resolved, "replay input");
+  const expectedSchema = manifest.kind === "ax_snapshot" ? "omi.polish.ax/v1" : "omi.polish.keyboard/v1";
+  if (document.schema !== expectedSchema) throw new Error(`replay input schema must be ${expectedSchema}`);
+  const metadata = { domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility, run_id: manifest.run_id, source_shas: manifest.source_shas, capture_class: manifest.capture_class, source_tier: manifest.source_tier };
+  for (const [key, value] of Object.entries(metadata)) if (JSON.stringify(document[key]) !== JSON.stringify(value)) throw new Error(`replay input metadata ${key} does not match manifest`);
+  if (manifest.kind === "ax_snapshot") {
+    if (Object.keys(document).sort().join(",") !== [...Object.keys(metadata), "nodes", "schema"].sort().join(",")) throw new Error("replay AX artifact has unexpected keys");
+    validateMatrixMarker({ schema: "omi.native-ios-semantic-marker.v1", bundleId: "me.omi.proto.omiWebviewProto", nodes: document.nodes, steps: [{ key: "launch", action: "launch", result: "foreground" }] }, manifest);
+  } else {
+    if (Object.keys(document).sort().join(",") !== [...Object.keys(metadata), "steps", "schema"].sort().join(",")) throw new Error("replay keyboard artifact has unexpected keys");
+    validateKeyboardSteps(document.steps);
+  }
+  mkdirSync(path.dirname(output.resolved), { recursive: true });
+  writeFileSync(output.resolved, inputBytes, { mode: 0o600, flag: "wx" });
+  const outputBytes = readFileSync(output.resolved);
+  const scriptLocation = relativeCore(path.resolve(fileURLToPath(import.meta.url)), "producer script");
+  const sourceEntry = inputEntry(input.resolved, input.relative);
+  const manifestEntry = inputEntry(manifestLocation.resolved, manifestLocation.relative);
+  const scriptEntry = inputEntry(scriptLocation.resolved, scriptLocation.relative);
+  const outputHash = sha256(outputBytes);
+  const inputSet = { entries: [manifestEntry, scriptEntry, sourceEntry].sort((left, right) => left.key.localeCompare(right.key)) };
+  inputSet.tree_sha256 = canonicalHash(inputSet.entries);
+  inputSet.id = `input-v1-${inputSet.tree_sha256}`;
+  const command = `node ${path.relative(coreRoot, path.resolve(fileURLToPath(import.meta.url)))} --manifest ${manifestLocation.relative} --replay-input ${input.relative} --replay-output ${output.relative} --emit-gate-records false`;
+  const member = { coordinate: [manifest.kind, manifest.domain, manifest.shell, manifest.state, manifest.theme, manifest.width, manifest.accessibility], run_id: manifest.run_id, evidence: { root: "core", path: output.relative, sha256: outputHash }, sidecar: null };
+  const batchMembers = { m0: member };
+  const batchId = `batch-v1-${canonicalHash({ command, input_set_id: inputSet.id, members: batchMembers })}`;
+  const now = new Date().toISOString();
+  const replayOutput = `NATIVE_SEMANTIC_REPLAY: kind=${manifest.kind} path=${output.relative}`;
+  const receipt = {
+    argv: ["node", path.relative(coreRoot, path.resolve(fileURLToPath(import.meta.url))), "--manifest", manifestLocation.relative, "--replay-input", input.relative, "--replay-output", output.relative, "--emit-gate-records", "false"],
+    cwd: ".", cwd_root: "core", exit_code: 0, timeout_seconds: 30, started_at: now, finished_at: now,
+    run_id: batchId, source_shas: manifest.source_shas, stdout_sha256: sha256(Buffer.from(`${replayOutput}\n`)), stderr_sha256: sha256(Buffer.from("")),
+    artifact_hashes: { [`core:${output.relative}`]: outputHash }, artifact_before_hashes: { [`core:${output.relative}`]: null }, artifact_created: { [`core:${output.relative}`]: true },
+    capture_class: manifest.capture_class, source_tier: manifest.source_tier, input_set: inputSet, batch_id: batchId, batch_members: batchMembers,
+  };
+  const receiptPath = path.join(outDir, "native-gate-command-receipt.json");
+  const coveragePath = path.join(outDir, "native-gate-coverage.json");
+  if (emitRecords) {
+    writeFileSync(receiptPath, stableJson(receipt), { mode: 0o600 });
+    writeFileSync(coveragePath, stableJson({ coverage: [{ kind: manifest.kind, domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility, capture_class: manifest.capture_class, source_tier: manifest.source_tier, root: "core", path: output.relative, sha256: outputHash, command, command_ran: true, command_receipt: receipt, run_id: manifest.run_id, sidecar: null, source_shas: manifest.source_shas, input_set_id: inputSet.id, batch_id: batchId, batch_member: "m0" }] }), { mode: 0o600 });
+  }
+  console.log(replayOutput);
+  return { receiptPath, coveragePath, receipt };
+}
+
+export function gateReplayForTest(manifest, manifestPath, inputPath, outputPath, outDir) {
+  return gateReplay(manifest, manifestPath, inputPath, outputPath, outDir);
+}
+
+function canonicalArtifacts(manifest, marker, outDir, mode) {
   const metadata = {
     domain: manifest.domain,
     shell: manifest.shell,
@@ -178,19 +300,52 @@ function canonicalArtifacts(manifest, marker, outDir) {
     capture_class: manifest.capture_class,
     source_tier: manifest.source_tier,
   };
-  const ax = { schema: "omi.polish.ax/v1", ...metadata, nodes: marker.nodes };
-  const keyboard = { schema: "omi.polish.keyboard/v1", ...metadata, steps: marker.steps };
-  const axPath = path.join(outDir, "native-ax.json");
-  const keyboardPath = path.join(outDir, "native-keyboard.json");
-  const axBytes = Buffer.from(stableJson(ax));
-  const keyboardBytes = Buffer.from(stableJson(keyboard));
-  writeFileSync(axPath, axBytes, { mode: 0o600 });
-  writeFileSync(keyboardPath, keyboardBytes, { mode: 0o600 });
-  return { axPath, keyboardPath, axSha256: sha256(axBytes), keyboardSha256: sha256(keyboardBytes) };
+  const artifacts = {};
+  if (mode.matrix && manifest.kind === "ax_snapshot") {
+    const ax = { schema: "omi.polish.ax/v1", ...metadata, nodes: marker.nodes };
+    const axPath = path.join(outDir, "matrix-ax.json");
+    const axBytes = Buffer.from(stableJson(ax));
+    writeFileSync(axPath, axBytes, { mode: 0o600 });
+    artifacts.axPath = axPath;
+    artifacts.axSha256 = sha256(axBytes);
+  } else if (mode.matrix && manifest.kind === "keyboard_trace") {
+    const keyboard = { schema: "omi.polish.keyboard/v1", ...metadata, steps: marker.steps };
+    const keyboardPath = path.join(outDir, "matrix-keyboard.json");
+    const keyboardBytes = Buffer.from(stableJson(keyboard));
+    writeFileSync(keyboardPath, keyboardBytes, { mode: 0o600 });
+    artifacts.keyboardPath = keyboardPath;
+    artifacts.keyboardSha256 = sha256(keyboardBytes);
+  } else {
+    // Supplementary output is intentionally kept out of the matrix naming
+    // convention so a coordinator cannot accidentally close a required row.
+    const ax = { schema: "omi.native-ios-ax-supplementary/v1", ...metadata, nodes: marker.nodes };
+    const axPath = path.join(outDir, "supplementary-ax.json");
+    const axBytes = Buffer.from(stableJson(ax));
+    writeFileSync(axPath, axBytes, { mode: 0o600 });
+    artifacts.axPath = axPath;
+    artifacts.axSha256 = sha256(axBytes);
+    if (hasObservedKeyboardTransition(marker)) {
+      const keyboard = { schema: "omi.native-ios-keyboard-supplementary/v1", ...metadata, steps: marker.steps };
+      const keyboardPath = path.join(outDir, "supplementary-keyboard.json");
+      const keyboardBytes = Buffer.from(stableJson(keyboard));
+      writeFileSync(keyboardPath, keyboardBytes, { mode: 0o600 });
+      artifacts.keyboardPath = keyboardPath;
+      artifacts.keyboardSha256 = sha256(keyboardBytes);
+    }
+  }
+  return artifacts;
+}
+
+export function canonicalArtifactsForTest(manifest, marker, outDir, mode) {
+  return canonicalArtifacts(manifest, marker, outDir, mode);
 }
 
 export function validateMarkerForTest(marker) {
   return validateMarker(marker);
+}
+
+export function validateMatrixMarkerForTest(marker, manifest) {
+  return validateMatrixMarker(marker, manifest);
 }
 
 export function validateManifestForTest(manifest) {
@@ -207,7 +362,8 @@ function main() {
   if (!args.manifest) { fail("--manifest is required"); return; }
   const manifestPath = path.resolve(args.manifest);
   let manifest;
-  try { manifest = readJson(manifestPath, "manifest"); validateManifest(manifest); } catch (error) { fail(`invalid manifest: ${error.message}`); return; }
+  let mode;
+  try { manifest = readJson(manifestPath, "manifest"); mode = validateManifest(manifest); } catch (error) { fail(`invalid manifest: ${error.message}`); return; }
   const sourceRoot = path.resolve(args.source_root || coreRoot);
   let currentCore;
   try { currentCore = gitHead(sourceRoot); } catch (error) { fail(error.message); return; }
@@ -220,6 +376,12 @@ function main() {
   }
   const outputDir = args.output_dir ? insideCore(args.output_dir, "--output-dir") : path.join(coreRoot, ".build/native-ios-semantic", manifest.run_id);
   mkdirSync(outputDir, { recursive: true });
+  if (args.replay_input || args.replay_output) {
+    if (!mode.matrix) { fail("--replay-input/--replay-output require an exact matrix manifest"); return; }
+    if (!args.replay_input || !args.replay_output) { fail("--replay-input and --replay-output must be provided together"); return; }
+    try { gateReplay(manifest, manifestPath, path.resolve(args.replay_input), path.resolve(args.replay_output), outputDir, args.emit_gate_records !== "false"); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+    return;
+  }
   const device = args.device || "7F64F7EE-5F25-44C3-9BA1-030E0FD6CDAD";
   const surfacesDist = process.env.SURFACES_DIST;
   if (!surfacesDist || !existsSync(path.join(surfacesDist, "index.html"))) { fail("SURFACES_DIST must point to an immutable surfaces dist/index.html"); return; }
@@ -244,10 +406,13 @@ function main() {
   const exported = run("xcrun", ["xcresulttool", "export", "attachments", "--path", resultBundle, "--output-path", exportDir, "--test-id", testIdentifier], { cwd: coreRoot, env, timeout: 30_000 });
   if (exported.status !== 0) { fail(`xcresult attachment export failed: ${exported.stderr || exported.stdout}`); return; }
   let native;
-  try { native = extractMarkerAttachment(exportDir, { testIdentifier, finishedEpoch: finishedAt.getTime() / 1000 }); } catch (error) { fail(error.message); return; }
-  const artifacts = canonicalArtifacts(manifest, native.marker, outputDir);
+  try {
+    native = extractMarkerAttachment(exportDir, { testIdentifier, finishedEpoch: finishedAt.getTime() / 1000 });
+    if (mode.matrix) validateMatrixMarker(native.marker, manifest);
+  } catch (error) { fail(error.message); return; }
+  const artifacts = canonicalArtifacts(manifest, native.marker, outputDir, mode);
   const receipt = {
-    schema: "omi.polish.native-ios-semantic/v1",
+    schema: mode.matrix ? "omi.polish.native-ios-preparation/v1" : "omi.native-ios-semantic-supplementary-receipt/v1",
     run_id: manifest.run_id,
     coordinate: { domain: manifest.domain, shell: manifest.shell, state: manifest.state, theme: manifest.theme, width: manifest.width, accessibility: manifest.accessibility },
     capture_class: manifest.capture_class,
@@ -256,16 +421,19 @@ function main() {
     surface_query: query,
     viewport: manifest.viewport,
     marker_sha256: sha256(native.bytes),
-    artifact_hashes: { ax: artifacts.axSha256, keyboard: artifacts.keyboardSha256 },
+    artifact_hashes: Object.fromEntries([
+      artifacts.axPath && ["ax", artifacts.axSha256],
+      artifacts.keyboardPath && ["keyboard", artifacts.keyboardSha256],
+    ].filter(Boolean)),
     xcresult_path: path.relative(coreRoot, resultBundle),
     command: { argv: ["xcodebuild", ...xcodeArgs], cwd: path.relative(coreRoot, path.join(iosRoot, "app")), exit_code: xcode.status, started_at: xcodeStarted.toISOString(), finished_at: finishedAt.toISOString(), timeout_seconds: 300 },
     stdout_sha256: sha256(Buffer.from(xcode.stdout || "")),
     stderr_sha256: sha256(Buffer.from(xcode.stderr || "")),
     build_commands: { surfaces: [nodeBin, path.join(iosRoot, "tools/build-surfaces-bundle.mjs")], flutter: [flutterBin, ...["build", "ios", "--simulator", "--debug", `--dart-define=SURFACE_MODE=scheme`, `--dart-define=SCHEME_BUNDLE=surfaces`, `--dart-define=SURFACE_QUERY=${query}`]] },
   };
-  const receiptPath = path.join(outputDir, "native-receipt.json");
+  const receiptPath = path.join(outputDir, mode.matrix ? "native-preparation-receipt.json" : "supplementary-receipt.json");
   writeFileSync(receiptPath, stableJson(receipt), { mode: 0o600 });
-  console.log(`NATIVE_SEMANTIC_EVIDENCE: run_id=${manifest.run_id} ax=${path.relative(coreRoot, artifacts.axPath)} keyboard=${path.relative(coreRoot, artifacts.keyboardPath)} receipt=${path.relative(coreRoot, receiptPath)}`);
+  console.log(`NATIVE_SEMANTIC_EVIDENCE: run_id=${manifest.run_id} mode=${mode.matrix ? "matrix" : "supplementary"} ${artifacts.axPath ? `ax=${path.relative(coreRoot, artifacts.axPath)}` : ""} ${artifacts.keyboardPath ? `keyboard=${path.relative(coreRoot, artifacts.keyboardPath)}` : ""} receipt=${path.relative(coreRoot, receiptPath)}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
