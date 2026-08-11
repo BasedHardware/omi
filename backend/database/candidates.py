@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import database.action_items as action_items_db
 from database._client import db
+from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
 from models.candidate import (
@@ -581,12 +582,14 @@ def list_candidates_compatibility_page(
     document cannot make a non-final page look exhausted and hide later data.
     """
 
-    query = (
-        db.collection('users')
-        .document(uid)
-        .collection(CANDIDATES_COLLECTION)
-        .where(filter=FieldFilter('account_generation', '==', account_generation))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    collection = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
+    query = CANDIDATES_COMPATIBILITY_QUERY.build(
+        collection,
+        {'account_generation': account_generation},
+        field_filter_factory=FieldFilter,
+    ).order_by(
+        'created_at',
+        direction=firestore.Query.DESCENDING,
     )
     if offset:
         query = query.offset(offset)
