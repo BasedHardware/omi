@@ -358,6 +358,108 @@ const counts = (values: readonly Readonly<MemoryContaminationFinding>[]): Readon
   });
 };
 
+const boundedInteger = (value: unknown, maximum: number, code: string): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > maximum) fail(code);
+  return value as number;
+};
+
+const boundedRate = (value: unknown, code: string): number => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) fail(code);
+  return value as number;
+};
+
+const parseCounts = (value: unknown, maximum: number): Readonly<MemoryContaminationCounts> => {
+  const input = exactRecord(value, [
+    "answers", "second_person_answers", "contaminated_answers",
+    "contaminated_percent_of_second_person",
+  ], "invalid_report");
+  const answers = boundedInteger(input["answers"], maximum, "invalid_report");
+  const secondPerson = boundedInteger(input["second_person_answers"], maximum, "invalid_report");
+  const contaminated = boundedInteger(input["contaminated_answers"], maximum, "invalid_report");
+  const percent = input["contaminated_percent_of_second_person"];
+  const expectedPercent = secondPerson ? contaminated * 100 / secondPerson : 0;
+  if (secondPerson > answers || contaminated > secondPerson || percent !== expectedPercent) fail("invalid_report");
+  return Object.freeze({
+    answers,
+    second_person_answers: secondPerson,
+    contaminated_answers: contaminated,
+    contaminated_percent_of_second_person: expectedPercent,
+  });
+};
+
+const parseNoise = (
+  value: unknown,
+  comparisons: number,
+): Readonly<{ comparisons: number; contamination_flips: number; flip_rate: number }> => {
+  const input = exactRecord(value, ["comparisons", "contamination_flips", "flip_rate"], "invalid_report");
+  const parsedComparisons = boundedInteger(input["comparisons"], MAX_REFERENCES, "invalid_report");
+  const flips = boundedInteger(input["contamination_flips"], MAX_REFERENCES, "invalid_report");
+  const rate = boundedRate(input["flip_rate"], "invalid_report");
+  const expectedRate = parsedComparisons ? flips / parsedComparisons : 0;
+  if (parsedComparisons !== comparisons || flips > parsedComparisons || rate !== expectedRate) fail("invalid_report");
+  return Object.freeze({ comparisons: parsedComparisons, contamination_flips: flips, flip_rate: rate });
+};
+
+/** Strict durable parser for the content-safe aggregate report. */
+export const parseMemoryContaminationReport = (
+  value: unknown,
+): Readonly<MemoryContaminationReport> => {
+  const input = exactRecord(value, [
+    "version", "cohort_digest", "input_count", "repeat_count", "result_count",
+    "primary_repeat_ordinal", "baseline_all_repeats", "candidate_all_repeats",
+    "both_contaminated", "baseline_only_contaminated", "candidate_only_contaminated",
+    "neither_contaminated", "net_removed", "mcnemar_exact_two_sided",
+    "baseline_self_noise", "candidate_self_noise", "report_digest",
+  ], "invalid_report");
+  if (input["version"] !== REPORT_VERSION || input["primary_repeat_ordinal"] !== 0) fail("invalid_report");
+  const inputCount = boundedInteger(input["input_count"], MAX_REFERENCES, "invalid_report");
+  const repeatCount = boundedInteger(input["repeat_count"], 1_000, "invalid_report");
+  if (inputCount < 2 || repeatCount < 2) fail("invalid_report");
+  const resultCount = boundedInteger(input["result_count"], MAX_REFERENCES, "invalid_report");
+  if (resultCount !== inputCount * repeatCount * 2) fail("invalid_report");
+  const baseline = parseCounts(input["baseline_all_repeats"], inputCount * repeatCount);
+  const candidate = parseCounts(input["candidate_all_repeats"], inputCount * repeatCount);
+  const both = boundedInteger(input["both_contaminated"], inputCount, "invalid_report");
+  const baselineOnly = boundedInteger(input["baseline_only_contaminated"], inputCount, "invalid_report");
+  const candidateOnly = boundedInteger(input["candidate_only_contaminated"], inputCount, "invalid_report");
+  const neither = boundedInteger(input["neither_contaminated"], inputCount, "invalid_report");
+  if (both + baselineOnly + candidateOnly + neither !== inputCount
+    || baseline.contaminated_answers < both + baselineOnly
+    || candidate.contaminated_answers < both + candidateOnly
+    || input["net_removed"] !== baselineOnly - candidateOnly) fail("invalid_report");
+  const mcnemarInput = exactRecord(
+    input["mcnemar_exact_two_sided"],
+    ["numerator", "denominator_power_of_two", "approximate"],
+    "invalid_report",
+  );
+  const expectedMcNemar = exactMcNemar(baselineOnly, candidateOnly);
+  if (mcnemarInput["numerator"] !== expectedMcNemar.numerator
+    || mcnemarInput["denominator_power_of_two"] !== expectedMcNemar.denominator_power_of_two
+    || mcnemarInput["approximate"] !== expectedMcNemar.approximate) fail("invalid_report");
+  const comparisons = inputCount * (repeatCount - 1);
+  const core = Object.freeze({
+    version: REPORT_VERSION,
+    cohort_digest: ref(input["cohort_digest"], DIGEST, "invalid_report"),
+    input_count: inputCount,
+    repeat_count: repeatCount,
+    result_count: resultCount,
+    primary_repeat_ordinal: 0 as const,
+    baseline_all_repeats: baseline,
+    candidate_all_repeats: candidate,
+    both_contaminated: both,
+    baseline_only_contaminated: baselineOnly,
+    candidate_only_contaminated: candidateOnly,
+    neither_contaminated: neither,
+    net_removed: baselineOnly - candidateOnly,
+    mcnemar_exact_two_sided: expectedMcNemar,
+    baseline_self_noise: parseNoise(input["baseline_self_noise"], comparisons),
+    candidate_self_noise: parseNoise(input["candidate_self_noise"], comparisons),
+  });
+  const reportDigest = ref(input["report_digest"], DIGEST, "invalid_report");
+  if (reportDigest !== sha256CanonicalContent(core)) fail("invalid_report_digest");
+  return Object.freeze({ ...core, report_digest: reportDigest });
+};
+
 export const analyzeMemoryContaminationFindings = (
   cohortValue: MemoryEvaluationCohortManifest,
   findingValues: readonly MemoryContaminationFinding[],

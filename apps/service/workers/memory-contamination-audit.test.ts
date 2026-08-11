@@ -27,6 +27,7 @@ import {
   auditMemoryReadContamination,
   defineMemoryReadProvenanceSource,
   memoryReadProvenanceSourceFromGroundingRepository,
+  parseMemoryContaminationReport,
   type MemoryContaminationFinding,
 } from "./memory-contamination-audit";
 import { buildMemoryEvaluationExport } from "./memory-evaluation-export";
@@ -308,6 +309,7 @@ describe("zero-model memory contamination audit", () => {
       candidate_self_noise: { comparisons: 2, contamination_flips: 0, flip_rate: 0 },
     });
     const reportBytes = JSON.stringify(report);
+    expect(parseMemoryContaminationReport(JSON.parse(reportBytes))).toEqual(report);
     for (const forbidden of ["msr1_", "strategy:contamination", "Who am I", "tr1_", "bystander", "owner"] ) {
       expect(reportBytes).not.toContain(forbidden);
     }

@@ -271,7 +271,7 @@ export const externalMemoryEvaluationLabelsDigest = (
   grades: [...value.grades].sort((left, right) => compare(left.result_ref, right.result_ref)),
 });
 
-const parseLabels = (
+export const parseExternalMemoryEvaluationLabels = (
   cohort: Readonly<MemoryEvaluationCohortManifest>,
   value: unknown,
 ): Readonly<ExternalMemoryEvaluationLabels> => {
@@ -351,7 +351,7 @@ export const analyzeExternalMemoryEvaluationLabels = (
   labelsValue: ExternalMemoryEvaluationLabels,
 ): Readonly<MemoryEvaluationStatisticsReport> => {
   const cohort = parseMemoryEvaluationCohort(cohortValue);
-  const labels = parseLabels(cohort, labelsValue);
+  const labels = parseExternalMemoryEvaluationLabels(cohort, labelsValue);
   const gradeByResult = new Map(labels.grades.map((row) => [row.result_ref, row.grade]));
   const baselineCounts = emptyCounts();
   const candidateCounts = emptyCounts();
