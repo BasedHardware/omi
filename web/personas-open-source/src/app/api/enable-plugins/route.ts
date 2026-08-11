@@ -4,7 +4,7 @@ import {
   PersonaAuthenticationError,
   PersonaGatewayUnavailableError,
   assertPersonaUidMatch,
-  resolvePersonaIdentity,
+  resolvePersonaOwnerIdentity,
 } from '@/lib/server/persona-chat-gateway.mjs';
 
 // Configure Redis client - credentials should be in environment variables
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   try {
     let identity;
     try {
-      identity = await resolvePersonaIdentity(req.headers.get('authorization'));
+      identity = await resolvePersonaOwnerIdentity(req.headers.get('authorization'));
     } catch (error: unknown) {
       if (error instanceof PersonaAuthenticationError) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

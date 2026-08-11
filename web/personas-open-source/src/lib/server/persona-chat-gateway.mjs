@@ -15,7 +15,7 @@ export class PersonaGatewayUnavailableError extends Error {
   }
 }
 
-export async function resolvePersonaIdentity(
+async function verifyFirebaseToken(
   authorization,
   { fetchImpl = fetch, firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY } = {},
 ) {
@@ -53,9 +53,29 @@ export async function resolvePersonaIdentity(
   if (!user?.localId || user.disabled === true) throw new PersonaAuthenticationError();
 
   const providers = Array.isArray(user.providerUserInfo) ? user.providerUserInfo : [];
-  const isAuthenticated =
-    Boolean(user.email) || providers.some((provider) => provider?.providerId);
-  return isAuthenticated ? { uid: user.localId } : null;
+  const isAnonymous = !user.email && !providers.some((provider) => provider?.providerId);
+  return { uid: user.localId, isAnonymous };
+}
+
+/**
+ * Chat-tier identity: anonymous visitors deliberately collapse to `null` so
+ * they get the unauthenticated LLM lane.
+ */
+export async function resolvePersonaIdentity(authorization, options = {}) {
+  const account = await verifyFirebaseToken(authorization, options);
+  if (!account || account.isAnonymous) return null;
+  return { uid: account.uid };
+}
+
+/**
+ * Ownership identity: any *verified* Firebase UID, anonymous included. The
+ * persona creation flow signs visitors in anonymously on purpose and writes
+ * the persona under that UID, so collapsing anonymous users here would 401
+ * their own default plugins and scraped facts.
+ */
+export async function resolvePersonaOwnerIdentity(authorization, options = {}) {
+  const account = await verifyFirebaseToken(authorization, options);
+  return account ? { uid: account.uid } : null;
 }
 
 export function assertPersonaUidMatch(identity, requestedUid) {
