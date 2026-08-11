@@ -142,17 +142,18 @@ test("conversation deletion uses a named in-product confirmation and restores fo
     const trigger = rendered.container.querySelector(".conversation-delete-trigger");
     assert.ok(trigger);
     await rendered.act(async () => { trigger.click(); });
-    const dialog = rendered.container.querySelector('[role="alertdialog"]');
-    assert.ok(dialog, "delete opens a bounded product confirmation instead of browser chrome");
-    const titleId = dialog.getAttribute("aria-labelledby");
-    const bodyId = dialog.getAttribute("aria-describedby");
+    const confirmation = rendered.container.querySelector('.conversation-delete-confirmation[role="group"]');
+    assert.ok(confirmation, "delete opens a bounded in-flow decision instead of browser chrome or a false modal");
+    assert.equal(confirmation.getAttribute("aria-busy"), null);
+    const titleId = confirmation.getAttribute("aria-labelledby");
+    const bodyId = confirmation.getAttribute("aria-describedby");
     assert.equal(rendered.window.document.getElementById(titleId)?.textContent, EN_MESSAGES["conversations.deleteConfirm"]);
     assert.equal(rendered.window.document.getElementById(bodyId)?.textContent, EN_MESSAGES["conversations.deleteBody"]);
     assert.equal(rendered.window.document.activeElement?.textContent?.trim(), EN_MESSAGES["common.cancel"]);
     await rendered.act(async () => {
-      dialog.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      confirmation.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-    assert.equal(rendered.container.querySelector('[role="alertdialog"]'), null);
+    assert.equal(rendered.container.querySelector(".conversation-delete-confirmation"), null);
     assert.equal(rendered.window.document.activeElement, trigger, "Escape returns focus to the delete trigger");
   } finally {
     await rendered.cleanup();
