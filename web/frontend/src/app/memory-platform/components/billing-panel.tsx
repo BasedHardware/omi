@@ -28,7 +28,7 @@ export default function BillingPanel() {
   const [overage, setOverage] = useState<OverageInfo | null>(null);
   const [plans, setPlans] = useState<PricingOption[]>([]);
   const [quota, setQuota] = useState<PlatformApiQuota | null>(null);
-  const [quotaPending, setQuotaPending] = useState(false);
+  const [quotaUnavailable, setQuotaUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,14 +46,14 @@ export default function BillingPanel() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load billing.');
     }
-    // Platform-API quota is a separate, still-landing endpoint: a failure here
-    // must not blank out the plan and usage the user can already see.
+    // Quota lives on a different service than payments: a failure here must not
+    // blank out the plan and usage the user can already see.
     try {
       setQuota(await getPlatformApiQuota(token));
-      setQuotaPending(false);
+      setQuotaUnavailable(false);
     } catch {
       setQuota(null);
-      setQuotaPending(true);
+      setQuotaUnavailable(true);
     }
   }, [getToken]);
 
@@ -99,8 +99,8 @@ export default function BillingPanel() {
     );
   }
 
-  const included = quota?.included_requests ?? null;
-  const used = quota?.used_requests ?? 0;
+  const included = quota?.limit ?? null;
+  const used = quota?.used ?? 0;
   const percent = included && included > 0 ? Math.min((used / included) * 100, 100) : 0;
 
   return (
@@ -130,18 +130,20 @@ export default function BillingPanel() {
             Platform API quota
           </h3>
           <span className="font-mono text-xs text-neutral-500">
-            {quotaPending
-              ? 'pending backend rollout'
-              : `${used} / ${included ?? '∞'} requests`}
+            {quotaUnavailable ? 'unavailable' : `${used} / ${included ?? '∞'} requests`}
           </span>
         </div>
         <Progress value={percent} className="mt-4 h-1.5 bg-white/10" />
         <p className="mt-3 text-sm text-neutral-400">
-          {quotaPending
-            ? 'Per-plan platform-API quota is being added to plan limits. Search and ingest remain bounded by their per-request limits in the meantime.'
+          {quotaUnavailable
+            ? 'Could not read your platform-API quota right now. Search and ingest remain bounded by their per-request limits.'
+            : included === null
+            ? `${
+                quota?.plan ?? 'Your plan'
+              } includes uncapped requests on /v1/memory/platform.`
             : `${
-                quota?.remaining_requests ?? '∞'
-              } requests remaining on /v1/memory/platform.`}
+                quota?.remaining ?? 0
+              } of ${included} requests remaining on /v1/memory/platform this month.`}
         </p>
       </div>
 

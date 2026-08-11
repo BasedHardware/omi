@@ -43,11 +43,16 @@ export interface OverageInfo {
   explainer_body: string;
 }
 
+/** Mirrors backend `MemoryPlatformQuota`. `limit`/`remaining` are null when uncapped. */
 export interface PlatformApiQuota {
-  included_requests: number | null;
-  used_requests: number;
-  remaining_requests: number | null;
-  reset_at?: number | null;
+  plan: string;
+  plan_type: string;
+  unit: 'requests';
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  allowed: boolean;
+  reset_at: number;
 }
 
 function apiBase(): string {
@@ -104,11 +109,7 @@ export function createCustomerPortalSession(token: string) {
   });
 }
 
-/**
- * PENDING: platform-API quota is being added to `PlanLimits` backend-side this
- * cycle. This is the single client seam for reading remaining quota — when the
- * route lands, only this function changes.
- */
+/** LIVE: GET /v1/memory/platform/quota */
 export function getPlatformApiQuota(token: string) {
-  return request<PlatformApiQuota>('/v1/payments/platform-api-quota', token);
+  return request<PlatformApiQuota>('/v1/memory/platform/quota', token);
 }
