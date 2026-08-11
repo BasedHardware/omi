@@ -44,6 +44,23 @@ test("registry dispatches platform chords and preserves text-entry conflicts", a
 
     const modifiedArrow = new rendered.window.KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true });
     assert.equal(dispatch(modifiedArrow, registry, { ...taskContext, handlers: { "navigate-task": () => calls.push("arrow") } }), false, "modified arrows do not navigate tasks");
+    const actionButton = rendered.window.document.createElement("button");
+    const actionLink = rendered.window.document.createElement("a");
+    actionLink.href = "#task-action";
+    rendered.container.append(actionButton, actionLink);
+    const actionIcon = rendered.window.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    actionLink.append(actionIcon);
+    for (const [control, eventTarget] of [[actionButton, actionButton], [actionLink, actionIcon]]) {
+      control.focus();
+      const arrowFromControl = new rendered.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true });
+      eventTarget.dispatchEvent(arrowFromControl);
+      assert.equal(
+        dispatch(arrowFromControl, registry, { ...taskContext, handlers: { "navigate-task": () => calls.push("arrow") } }),
+        false,
+        "task arrows do not steal focus from buttons or links",
+      );
+      assert.equal(rendered.window.document.activeElement, control);
+    }
     const dualPlatformModifier = new rendered.window.KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true });
     assert.equal(dispatch(dualPlatformModifier, registry, context), false, "Meta+Control together is not a platform chord");
 

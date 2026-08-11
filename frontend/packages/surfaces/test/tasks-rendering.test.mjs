@@ -181,3 +181,65 @@ test("TasksProduction renders shared chrome, translated affordances, and accessi
     await rendered.cleanup();
   }
 });
+
+test("Tasks arrow navigation preserves focus on nested controls and shell links", async () => {
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
+
+  const assertArrowDoesNotLeave = async (rendered, control, eventTarget = control, key) => {
+    await rendered.act(async () => { control.focus(); });
+    const before = rendered.window.document.activeElement;
+    assert.equal(before, control);
+    const event = new rendered.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    event.preventDefault();
+    eventTarget.dispatchEvent(event);
+    await Promise.resolve();
+    assert.equal(rendered.window.document.activeElement, control, `${key} does not steal focus from an interactive control`);
+  };
+
+  const renderFixture = async (fixture) => renderComponent(TasksProduction, {
+    store: fixtureStore(fixture),
+    fixture,
+    translate,
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+
+  const normal = await renderFixture("normal");
+  try {
+    const firstCard = normal.container.querySelector("article.task-card");
+    assert.ok(firstCard);
+    const nestedControls = [
+      firstCard.querySelector(".task-check"),
+      firstCard.querySelector(`button[aria-label="${EN_MESSAGES["common.edit"]}"]`),
+      firstCard.querySelector(`button[aria-label="${EN_MESSAGES["common.delete"]}"]`),
+      normal.container.querySelector("button.tasks-add-trigger"),
+      normal.container.querySelector(".production-nav-bottom a"),
+    ];
+    for (const control of nestedControls) {
+      assert.ok(control, "fixture exposes the expected action control");
+      const target = control.matches("a") ? control.querySelector("svg") : control;
+      assert.ok(target, "interactive control has an event target");
+      for (const key of ["ArrowUp", "ArrowDown"]) await assertArrowDoesNotLeave(normal, control, target, key);
+    }
+  } finally {
+    await normal.cleanup();
+  }
+
+  const long = await renderFixture("long");
+  try {
+    const showMore = long.container.querySelector("button[aria-expanded]");
+    assert.ok(showMore, "long fixture exposes a show-more action");
+    for (const key of ["ArrowUp", "ArrowDown"]) await assertArrowDoesNotLeave(long, showMore, showMore, key);
+  } finally {
+    await long.cleanup();
+  }
+
+  const retry = await renderFixture("saved-failed");
+  try {
+    const retryButton = retry.container.querySelector(`button[aria-label="${EN_MESSAGES["common.retry"]}"]`);
+    assert.ok(retryButton, "saved-failed fixture exposes a retry action");
+    for (const key of ["ArrowUp", "ArrowDown"]) await assertArrowDoesNotLeave(retry, retryButton, retryButton, key);
+  } finally {
+    await retry.cleanup();
+  }
+});
