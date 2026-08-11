@@ -47,10 +47,12 @@ import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
 import { buildTimelineDayGroups, countTimelineItems } from '@/lib/conversationTimeline';
+import {
+  MIN_CONVERSATION_GALLERY_WIDTH,
+  resizeConversationDetailPanel,
+} from '@/lib/conversationPanelSizing';
 
 // Detail pane width constraints
-const MIN_PANEL_WIDTH = 360;
-const MAX_PANEL_WIDTH = 720;
 const DEFAULT_PANEL_WIDTH = 480;
 
 type Selection =
@@ -95,6 +97,7 @@ export function ConversationSplitView() {
     'omi-timeline-detail-width',
     DEFAULT_PANEL_WIDTH,
   );
+  const splitViewRef = useRef<HTMLDivElement>(null);
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -393,8 +396,11 @@ export function ConversationSplitView() {
   const handleResize = useCallback(
     (delta: number) => {
       setPanelWidth((prev) => {
-        const newWidth = prev - delta;
-        return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth));
+        return resizeConversationDetailPanel(
+          prev,
+          delta,
+          splitViewRef.current?.clientWidth ?? window.innerWidth,
+        );
       });
     },
     [setPanelWidth],
@@ -726,7 +732,7 @@ export function ConversationSplitView() {
       />
 
       {/* Gallery + detail pane */}
-      <div className="flex flex-1 overflow-hidden w-full">
+      <div ref={splitViewRef} className="flex flex-1 overflow-hidden w-full">
         {/* Gallery */}
         <div
           className={cn(
@@ -806,7 +812,9 @@ export function ConversationSplitView() {
         {/* Detail pane */}
         {selection && (
           <div
-            style={{ width: `${panelWidth}px` }}
+            style={{
+              width: `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
+            }}
             className="w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-pane border-l border-stroke"
           >
             <AnimatePresence mode="wait">
