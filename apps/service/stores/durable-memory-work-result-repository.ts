@@ -181,7 +181,9 @@ const assertPlainTree = (value: unknown): void => {
   visit(value, 0);
 };
 
-const normalizedResult = (value: unknown): NormalizedDurableMemoryWorkResultJson => {
+export const normalizeDurableMemoryWorkResultJson = (
+  value: unknown,
+): NormalizedDurableMemoryWorkResultJson => {
   assertPlainTree(value);
   let normalized: unknown;
   try {
@@ -230,7 +232,7 @@ export const durableMemoryWorkNormalizedResultDigest = (
   result: NormalizedDurableMemoryWorkResultJson,
 ): string => {
   const contract = token(resultContractVersion, "invalid_result");
-  const normalized = normalizedResult(result);
+  const normalized = normalizeDurableMemoryWorkResultJson(result);
   return sha256CanonicalContent({
     contract_version: "durable-memory-work-normalized-result-v1",
     result_contract_version: contract,
@@ -245,7 +247,7 @@ export const durableMemoryWorkResultStageRequestDigest = (
   const contract = token(body.result_contract_version, "invalid_result");
   const responseDigest = digest(body.response_digest, "invalid_result");
   const resultDigest = digest(body.normalized_result_digest, "invalid_result");
-  const result = normalizedResult(body.normalized_result);
+  const result = normalizeDurableMemoryWorkResultJson(body.normalized_result);
   return sha256CanonicalContent({
     contract_version: "durable-memory-work-result-stage-request-v1",
     leased_job_state_digest: durableMemoryWorkStateDigest(job),
@@ -268,7 +270,7 @@ export const assertDurableMemoryWorkResultStageRequest = (
   const job = leasedJobForContext(context, input["leased_job"]);
   const contract = token(input["result_contract_version"], "invalid_result");
   const responseDigest = digest(input["response_digest"], "invalid_result");
-  const result = normalizedResult(input["normalized_result"]);
+  const result = normalizeDurableMemoryWorkResultJson(input["normalized_result"]);
   const resultDigest = digest(input["normalized_result_digest"], "invalid_result");
   if (durableMemoryWorkNormalizedResultDigest(contract, result) !== resultDigest) {
     fail("result_digest_mismatch");
@@ -321,7 +323,7 @@ export const parseStagedDurableMemoryWorkResult = (
     "normalized_result_digest", "normalized_result", "stage_request_digest",
   ], "invalid_staged_result");
   if (input["version"] !== RESULT_VERSION) fail("invalid_staged_result");
-  const result = normalizedResult(input["normalized_result"]);
+  const result = normalizeDurableMemoryWorkResultJson(input["normalized_result"]);
   const contract = token(input["result_contract_version"], "invalid_staged_result");
   const resultDigest = digest(input["normalized_result_digest"], "invalid_staged_result");
   if (durableMemoryWorkNormalizedResultDigest(contract, result) !== resultDigest) {

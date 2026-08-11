@@ -110,7 +110,10 @@ const expectedTables = [
   "memory_strategy_assignment_bundles",
   "memory_strategy_assignment_policies",
   "memory_strategy_definitions",
+  "memory_strategy_evaluation_baselines",
+  "memory_strategy_evaluation_pairs",
   "memory_strategy_policy_shadows",
+  "memory_strategy_shadow_results",
   "memory_strategy_shadow_assignments",
   "platform_accounts",
   "platform_schema_migrations",
@@ -364,6 +367,27 @@ describe("P2/P3/P4 PostgreSQL schema contract", () => {
     expect(acceptance.body).not.toContain("shadow");
     expect(allSql).toContain("Deliberately no application, worker, experiment, or migration-runner grant");
     expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_/s);
+  });
+
+  test("keeps repeated paired evaluation results physically outside memory authority", () => {
+    const baselines = tables.find((table) => table.name === "memory_strategy_evaluation_baselines")!;
+    const candidates = tables.find((table) => table.name === "memory_strategy_shadow_results")!;
+    const pairs = tables.find((table) => table.name === "memory_strategy_evaluation_pairs")!;
+    expect(baselines.body).toContain("result_version = 'memory-evaluation-result-v1'");
+    expect(baselines.body).toContain("authority_assignment_id, authority_strategy_id");
+    expect(candidates.body).toContain("memory_strategy_shadow_assignments");
+    expect(candidates.body).toContain("repeat_ordinal BETWEEN 0 AND 999");
+    expect(candidates.body).toContain("octet_length(normalized_result_json::text) <= 524288");
+    expect(pairs.body).toContain("pair_version = 'memory-evaluation-pair-v1'");
+    expect(pairs.body).toContain("input_frontier_digest");
+    expect(pairs.body).not.toMatch(/\binput_frontier\s+text\b/);
+    expect(pairs.body).toContain("baseline_strategy_id <> candidate_strategy_id");
+    expect(pairs.body).not.toMatch(/normalized_result_json|response_digest|prompt|transcript|query|answer/i);
+    for (const table of [baselines, candidates, pairs]) {
+      expect(table.body).not.toMatch(/graph_commit|projection_revision|memory_work_success/i);
+    }
+    expect(allSql).toContain("Deliberately no application, worker, evaluator, or migration-runner grant");
+    expect(allSql).not.toMatch(/GRANT[^;]*omi_memory\.memory_strategy_(?:evaluation|shadow_results)/s);
   });
 
   test("persists P4 proposition identity, history, citations, redirects, and disposable grouping without grants", () => {

@@ -55,4 +55,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
     fileName: "0008-memory-strategy-assignments.sql",
     sha256: "1d0d76885d5edb6f35bac57df7f05f86e5126bd7f8e9c9f0cfb14c15c0a0e141",
   }),
+  Object.freeze({
+    version: 9,
+    name: "memory-shadow-results",
+    fileName: "0009-memory-shadow-results.sql",
+    sha256: "8e3441e062c0347f7c3187d5028cada138186456f9a7feb75a21e85ff116ad3e",
+  }),
 ]);
