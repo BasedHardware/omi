@@ -34,7 +34,9 @@ test("shared chrome uses host-selected CSS", async () => {
   assert.match(styles, /html\[data-platform="mobile"\].*production-nav:last-child/);
   assert.match(styles, /env\(safe-area-inset-bottom/);
   assert.match(styles, /focus-visible/);
-  assert.doesNotMatch(styles, /@media\s*\(/);
+  // Host-selected layout remains attribute-driven; the shared accessibility
+  // contract is allowed its two user-preference media queries.
+  assert.doesNotMatch(styles, /@media\s*\((?!prefers-reduced-motion|prefers-reduced-transparency)/);
   // STRUCTURAL CSS ASSERTION: jsdom does not calculate these host-selected
   // platform layouts, safe-area rules, or focus-visible styles.
 });
