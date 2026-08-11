@@ -125,6 +125,53 @@ enum DesktopConversationMatchPolicy {
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
+  /// A completed backend event is telemetry-eligible only when it can be
+  /// attributed to the local recording that just ended. Durable SQLite
+  /// binding is intentionally not required: an exact client conversation id
+  /// or the legacy source/timestamp proof is sufficient.
+  static func acceptsCompletedLocalRecording(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    expectedBackendId: String?,
+    finishedRecordingStartTime: Date?
+  ) -> Bool {
+    guard !memoryId.isEmpty, memoryId != "?" else { return false }
+    guard
+      lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: expectedBackendId
+      )
+    else {
+      return false
+    }
+
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      return memoryId == expectedBackendId
+    }
+
+    guard let finishedRecordingStartTime else { return false }
+    return memoryEventMatchesFinishedSession(memory, sessionStartedAt: finishedRecordingStartTime)
+  }
+
+  static func matchingFinishedRecordingIndex(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    pending: [FinishedRecordingEnvelope]
+  ) -> Int? {
+    pending.firstIndex { envelope in
+      acceptsCompletedLocalRecording(
+        memoryId: memoryId,
+        memory: memory,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: envelope.clientConversationId,
+        finishedRecordingStartTime: envelope.startedAt
+      )
+    }
+  }
+
   /// Versioned lifecycle envelopes are an ordered protocol. A client only
   /// accepts a newer event for its own durable recording-session binding;
   /// omitted fields use the legacy compatibility path above.
@@ -198,6 +245,13 @@ enum DesktopConversationMatchPolicy {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: string)
   }
+}
+
+struct FinishedRecordingEnvelope: Equatable, Sendable {
+  let sessionId: Int64?
+  let clientConversationId: String?
+  let startedAt: Date
+  let source: ConversationSource
 }
 
 @MainActor
@@ -434,10 +488,11 @@ class AppState: ObservableObject {
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]
+  static let maxLifecycleRecordingSessions = 32
   var ignoredRotatedBackendConversationIds: Set<String> = []
-  var finishedSessionId: Int64?
-  var finishedClientConversationId: String?
-  var finishedRecordingStartTime: Date?
+  static let maxIgnoredRotatedBackendConversationIds = 16
+  var pendingFinishedRecordings: [FinishedRecordingEnvelope] = []
+  static let maxPendingFinishedRecordings = 16
 
   var willTerminateObserver: NSObjectProtocol? {
     get { servicesCoordinator.willTerminateObserver }

@@ -26,10 +26,14 @@ SOURCE_SHA = "a" * 40
 
 
 def available_metrics() -> dict[str, dict[str, object]]:
-    return {
+    metrics = {
         name: {"denominator": 100, "time_window": "PT24H", "minimum_sample": 30, "value": 0.99}
         for name in doctor.METRIC_CONTRACTS
     }
+    metrics["proactive_delivery"].update(
+        {"health_status": "healthy", "numerator": 27, "alarm_reason": None}
+    )
+    return metrics
 
 
 def healthy_snapshot(*, phase: str = "beta") -> dict[str, object]:
@@ -116,6 +120,38 @@ class DesktopReleaseDoctorTests(unittest.TestCase):
         self.assertEqual(metrics["status"], "WARN")
         self.assertEqual({item["status"] for item in report["metrics"]}, {"unavailable"})
         self.assertTrue(all(item["denominator"] is None for item in report["metrics"]))
+
+    def test_unhealthy_proactive_delivery_fails_operational_surface(self) -> None:
+        snapshot = healthy_snapshot()
+        snapshot["metrics"]["proactive_delivery"] = {
+            "health_status": "unhealthy",
+            "denominator": 882,
+            "numerator": 0,
+            "time_window": "PT24H",
+            "minimum_sample": 50,
+            "value": 0,
+            "alarm_reason": "advice_users_exactly_zero",
+        }
+
+        report = doctor.evaluate_snapshot(snapshot)
+        metrics = surface(report, "operational_metrics")
+        proactive = next(item for item in report["metrics"] if item["id"] == "proactive_delivery")
+        self.assertEqual(report["overall"], "FAIL")
+        self.assertEqual(metrics["status"], "FAIL")
+        self.assertEqual(proactive["health_status"], "unhealthy")
+        self.assertEqual(proactive["numerator"], 0)
+        self.assertEqual(proactive["alarm_reason"], "advice_users_exactly_zero")
+
+    def test_missing_proactive_health_status_is_not_rendered_as_pass(self) -> None:
+        snapshot = healthy_snapshot()
+        del snapshot["metrics"]["proactive_delivery"]["health_status"]
+
+        report = doctor.evaluate_snapshot(snapshot)
+        metrics = surface(report, "operational_metrics")
+        proactive = next(item for item in report["metrics"] if item["id"] == "proactive_delivery")
+        self.assertEqual(report["overall"], "WARN")
+        self.assertEqual(metrics["status"], "WARN")
+        self.assertEqual(proactive["status"], "unavailable")
 
     def test_unavailable_surfaces_are_warns_not_silent_success(self) -> None:
         snapshot = healthy_snapshot()

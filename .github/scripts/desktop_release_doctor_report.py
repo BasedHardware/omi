@@ -18,6 +18,7 @@ METRIC_CONTRACTS = (
     "backend_error_rate",
     "fallback_outcomes",
     "provider_runtime",
+    "proactive_delivery",
 )
 
 
@@ -386,15 +387,26 @@ def _operational_surfaces(snapshot: dict[str, object]) -> tuple[list[dict[str, o
 
     metrics = _metric_report(snapshot.get("metrics"))
     unavailable = [metric["id"] for metric in metrics if metric["status"] == "unavailable"]
+    unhealthy = [metric["id"] for metric in metrics if metric.get("health_status") == "unhealthy"]
+    unknown = [metric["id"] for metric in metrics if metric.get("health_status") == "unknown"]
+    metric_surface_status = "FAIL" if unhealthy else "WARN" if unavailable or unknown else "PASS"
     surfaces.append(
         _surface(
             "operational_metrics",
-            "WARN" if unavailable else "PASS",
-            "unknown" if unavailable else "aligned",
-            {"all_metrics_available": True},
-            {"unavailable_metrics": unavailable} if unavailable else {"all_metrics_available": True},
-            "Unavailable metrics remain explicit and are not rendered as release success."
-            if unavailable
+            metric_surface_status,
+            "divergent" if unhealthy else "unknown" if unavailable or unknown else "aligned",
+            {"all_metrics_available": True, "unhealthy_metrics": []},
+            {
+                "unavailable_metrics": unavailable,
+                "unknown_metrics": unknown,
+                "unhealthy_metrics": unhealthy,
+            }
+            if unavailable or unknown or unhealthy
+            else {"all_metrics_available": True, "unhealthy_metrics": []},
+            "Unhealthy operational metrics block a clean release-doctor result."
+            if unhealthy
+            else "Unavailable or low-sample metrics remain explicit and are not rendered as release success."
+            if unavailable or unknown
             else "Operational metrics include their denominators, windows, and minimum samples.",
         )
     )
@@ -420,6 +432,20 @@ def _metric_report(metrics: object) -> list[dict[str, object]]:
                 }
             )
             continue
+        health_status = value.get("health_status")
+        if name == "proactive_delivery" and health_status not in {"healthy", "unhealthy", "unknown"}:
+            report.append(
+                {
+                    "id": name,
+                    "status": "unavailable",
+                    "denominator": None,
+                    "time_window": None,
+                    "minimum_sample": None,
+                    "value": None,
+                    "reason": "proactive delivery metric omitted a valid health_status",
+                }
+            )
+            continue
         report.append(
             {
                 "id": name,
@@ -428,6 +454,9 @@ def _metric_report(metrics: object) -> list[dict[str, object]]:
                 "time_window": value.get("time_window"),
                 "minimum_sample": value.get("minimum_sample"),
                 "value": value.get("value"),
+                "health_status": health_status,
+                "numerator": value.get("numerator"),
+                "alarm_reason": value.get("alarm_reason"),
             }
         )
     return report

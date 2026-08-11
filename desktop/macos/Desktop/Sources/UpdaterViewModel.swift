@@ -36,7 +36,7 @@ enum UpdateChannel: String, CaseIterable {
 
 private let kUpdateChannelKey = "update_channel"
 
-enum UpdateFailureReason: String {
+enum UpdateFailureReason: String, Sendable {
   case appcastRetrieval = "appcast_retrieval"
   case download = "download"
   case signature = "signature"
@@ -49,7 +49,7 @@ enum UpdateFailureReason: String {
   case unknown = "unknown"
 }
 
-struct UpdateFailureDiagnostics: Equatable {
+struct UpdateFailureDiagnostics: Equatable, Sendable {
   let reason: UpdateFailureReason
   let message: String
   let domain: String
@@ -110,13 +110,11 @@ struct UpdateFailureDiagnostics: Equatable {
   }
 
   var analyticsProperties: [String: Any] {
-    let telemetryMessage = message.isEmpty ? "\(domain) \(code)" : message
     var properties: [String: Any] = [
-      // Emit the human-readable message under "error" so the daily report's
-      // error_or_message column is populated (previously blank on Update Check Failed).
-      "error": telemetryMessage,
+      // Keep the legacy report column populated with the closed reason. Raw
+      // Sparkle/URL error messages stay in the private local log.
+      "error": reason.rawValue,
       "phase": reason.rawValue,
-      "update_failure_message": telemetryMessage,
       "update_failure_phase": reason.rawValue,
       "update_failure_reason": reason.rawValue,
       "update_failure_domain": domain,
@@ -125,8 +123,6 @@ struct UpdateFailureDiagnostics: Equatable {
       "launch_location_bucket": launchLocationBucket,
       "source_app_version": sourceAppVersion,
       "source_app_build": sourceAppBuild,
-      "error_chain_domains": errorChainDomains,
-      "error_chain_codes": errorChainCodes,
     ]
 
     if let underlyingDomain {
@@ -140,9 +136,6 @@ struct UpdateFailureDiagnostics: Equatable {
     }
     if let failingURLHost {
       properties["failing_url_host"] = failingURLHost
-    }
-    if let failingURLPath {
-      properties["failing_url_path"] = failingURLPath
     }
     if let appcastURLHost {
       properties["appcast_url_host"] = appcastURLHost
@@ -357,14 +350,93 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Back-reference to the view model (set after init)
   weak var viewModel: UpdaterViewModel?
   private var deferredInstall: DeferredUpdateInstall?
+  private let checkAttemptTracker = UpdateCheckAttemptTracker()
 
   // NOTE: All delegate methods use logSync() to write synchronously to disk.
   // Sparkle may terminate the app immediately after willInstallUpdate / didAbortWithError,
   // so async logging (Task + logQueue.async) would be lost.
 
+  @discardableResult
+  func beginCheck(trigger: UpdateCheckTrigger) -> UpdateCheckAttempt {
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let begun = checkAttemptTracker.begin(trigger: trigger, context: context)
+    if let abandoned = begun.abandoned {
+      UpdaterCheckTelemetry.recordCompleted(abandoned)
+      logSync("Sparkle: Closed update check with missing terminal callback \(abandoned.attempt.id)")
+    }
+    UpdaterCheckTelemetry.recordStarted(begun.attempt)
+    logSync(
+      "Sparkle: Starting update check attempt \(begun.attempt.id) trigger=\(trigger.rawValue)"
+    )
+    return begun.attempt
+  }
+
+  @discardableResult
+  private func finishCheck(
+    result: UpdateCheckResult,
+    diagnostics: UpdateFailureDiagnostics? = nil
+  ) -> UpdateCheckTerminal? {
+    guard let terminal = checkAttemptTracker.finish(result: result, diagnostics: diagnostics) else {
+      logSync("Sparkle: Ignoring duplicate update check terminal callback result=\(result.rawValue)")
+      return nil
+    }
+    UpdaterCheckTelemetry.recordCompleted(terminal)
+    return terminal
+  }
+
+  @discardableResult
+  private func finishFailedCheck(
+    diagnostics: UpdateFailureDiagnostics
+  ) -> UpdateCheckTerminal? {
+    guard let terminal = checkAttemptTracker.finishFailure(diagnostics: diagnostics) else {
+      logSync("Sparkle: Ignoring duplicate update check failure callback")
+      return nil
+    }
+    UpdaterCheckTelemetry.recordCompleted(terminal)
+    return terminal
+  }
+
+  /// Sparkle's cycle-finish callback covers paths that intentionally omit
+  /// `didAbortWithError` (for example authorization deferred). Normal found,
+  /// no-update, and abort callbacks have already consumed the attempt, so this
+  /// is a quiet fallback rather than a second terminal.
+  private func finishCheckCycleFallback(error: Error?) {
+    let terminal: UpdateCheckTerminal?
+    if let error {
+      let diagnostics = UpdateFailureDiagnostics.classify(
+        error: error as NSError,
+        updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+      )
+      terminal =
+        diagnostics.reason == .noUpdate
+        ? checkAttemptTracker.finish(result: .noUpdate)
+        : checkAttemptTracker.finishFailure(diagnostics: diagnostics)
+    } else {
+      terminal = checkAttemptTracker.finish(result: .callbackMissing)
+    }
+    if let terminal {
+      UpdaterCheckTelemetry.recordCompleted(terminal)
+      logSync(
+        "Sparkle: Closed update check from cycle-finish fallback result=\(terminal.result.rawValue)"
+      )
+    }
+  }
+
   /// Called when Sparkle is about to check for updates (permission gate)
   func updater(_ updater: SPUUpdater, mayPerform check: SPUUpdateCheck) throws {
-    logSync("Sparkle: Starting update check")
+    // This is the admitted execution boundary. Registering requests earlier
+    // would create phantom attempts when Sparkle rejects an overlapping call.
+    beginCheck(trigger: check == .updates ? .manual : .automatic)
+  }
+
+  func updater(
+    _ updater: SPUUpdater,
+    didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
+    error: Error?
+  ) {
+    finishCheckCycleFallback(error: error)
   }
 
   /// Called when Sparkle finishes loading the appcast
@@ -392,6 +464,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
   /// Called when Sparkle finds a valid update
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    finishCheck(result: .updateAvailable)
     let version = item.displayVersionString
     let context = UpdateAnalyticsContext.current(
       updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
@@ -415,6 +488,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
   /// Called when no update is available
   func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    finishCheck(result: .noUpdate)
     logSync("Sparkle: No update available")
     discardDeferredInstall()
     Task { @MainActor in
@@ -435,11 +509,23 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       error: nsError,
       updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
     )
+    let terminal =
+      diagnostics.reason == .noUpdate
+      ? finishCheck(result: .noUpdate)
+      : finishFailedCheck(diagnostics: diagnostics)
+    let isExpectedAutomaticOffline = terminal?.result == .networkUnavailable
     // Always drop a quiet-moment wait on abort so the deferred install cannot
     // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
     discardDeferredInstall()
     if diagnostics.reason == .noUpdate {
       logSync("Sparkle: Already up to date")
+      Task { @MainActor in
+        self.viewModel?.lastUpdateFailure = nil
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
+      }
+    } else if isExpectedAutomaticOffline {
+      logSync("Sparkle: Automatic update check deferred while offline")
       Task { @MainActor in
         self.viewModel?.lastUpdateFailure = nil
         self.viewModel?.updateRestartImminent = false
@@ -464,6 +550,9 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
 
+      // Keep the legacy diagnostic event for existing dashboards. The new
+      // `Update Check Completed` event is the authoritative denominator and is
+      // emitted at most once by the tracker above.
       Task { @MainActor in
         AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
         self.viewModel?.lastUpdateFailure = diagnostics
