@@ -535,10 +535,15 @@ function captureIos(coordinate, artifact, output, waitSeconds, timeoutSeconds) {
   setIosAppearance(coordinate.device.udid, coordinate.theme, artifact.env);
   setIosGeometry(coordinate.device.udid, coordinate.viewport, artifact.env);
   runCommand(commandSpec("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], coreRoot, artifact.env, 30), `${coordinate.run_id}: terminate prior app`);
-  runCommand(commandSpec("xcrun", ["simctl", "launch", coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
-  runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
-  runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
-  runCommand(commandSpec("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], coreRoot, artifact.env, 30), `${coordinate.run_id}: terminate capture app`);
+  let launched = false;
+  try {
+    runCommand(commandSpec("xcrun", ["simctl", "launch", coordinate.device.udid, artifact.bundleId, `--omi-capture-query=${coordinate.surface_query}`], coreRoot, artifact.env, 30), `${coordinate.run_id}: launch capture app`);
+    launched = true;
+    runCommand(commandSpec("sleep", [String(waitSeconds)], coreRoot, artifact.env, Math.max(waitSeconds + 1, 2)), `${coordinate.run_id}: settle`);
+    runCommand(commandSpec("xcrun", ["simctl", "io", coordinate.device.udid, "screenshot", output], coreRoot, artifact.env, timeoutSeconds), `${coordinate.run_id}: simulator screenshot`);
+  } finally {
+    if (launched) spawnSync("xcrun", ["simctl", "terminate", coordinate.device.udid, artifact.bundleId], { cwd: coreRoot, env: artifact.env, stdio: "ignore", timeout: 30_000 });
+  }
 }
 
 function prepareIosArtifact(artifact, coordinates) {
