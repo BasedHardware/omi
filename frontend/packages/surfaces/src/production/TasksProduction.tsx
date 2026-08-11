@@ -170,7 +170,7 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
           </div>
         </div>
       </div>
-      <div className="task-actions" aria-label={translate("tasks.details")} onClick={(event) => event.stopPropagation()}>
+      <div className="task-actions" role="group" aria-label={translate("tasks.details")} onClick={(event) => event.stopPropagation()}>
         {editing ? <button type="button" onClick={cancelEdit}>{translate("common.cancel")}</button> :
           <button type="button" onClick={() => setEditing(true)} aria-label={translate("common.edit")}>{translate("common.edit")}</button>}
         {editing && <button type="button" onClick={() => void save()} disabled={!draft.trim()}>{translate("common.save")}</button>}
@@ -352,7 +352,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         queue={status.queue}
         deadLetterCount={dead.length}
         operationError={operationError}
-        nextAction={status.refresh.phase !== "ready" || operationError ? translate("common.retry") : null}
+        nextAction={status.refresh.phase !== "ready" ? translate("common.retry") : null}
         retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
       />
       <section className={`tasks-create${createOpen ? " is-open" : ""}`} aria-label={translate("tasks.newTask")}>

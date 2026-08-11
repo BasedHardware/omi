@@ -64,7 +64,7 @@ function MemoryCard({ memory, store, locale, run }: {
       ) : (
         <p className="memory-content">{visibleText}</p>
       )}
-      <div className="memory-actions" aria-label={t(locale, "memories.action")}>
+      <div className="memory-actions" role="group" aria-label={t(locale, "memories.action")}>
         {memory.locked ? (
           <>
             <span className="locked-label">{t(locale, "locked.title")}</span>
@@ -197,7 +197,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
         queue={status.queue}
         deadLetterCount={dead.length}
         operationError={operationError}
-        nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+        nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
         retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
       />
       {composerOpen && <form className="memory-create" aria-label={t(locale, "memories.create")} onSubmit={(event) => { event.preventDefault(); void add(); }}>

@@ -145,7 +145,7 @@ test("Home unavailable state does not promise Retry when projections have no ref
   });
   try {
     assert.equal(rendered.container.querySelector(".lifecycle-retry"), null);
-    assert.ok(rendered.container.querySelector(".production-lifecycle-region")?.textContent?.includes(EN_MESSAGES["nav.settings"]));
+    assert.equal(rendered.container.querySelector(".lifecycle-next-action"), null, "an unavailable projection without refresh cannot promise a settings action it does not render");
   } finally {
     await rendered.cleanup();
   }

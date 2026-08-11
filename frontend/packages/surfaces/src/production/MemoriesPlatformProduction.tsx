@@ -174,7 +174,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
           hasSavedData={status.refresh.hasSavedData}
           locale={locale}
           operationError={operationError}
-          nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+          nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
           retry={status.refresh.phase !== "ready" ? { onRetry: reload } : null}
         />
         <div className="surface-notices">

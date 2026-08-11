@@ -112,7 +112,7 @@ function ConversationRow({ conversation, locale, run, store, fixture }: {
           {conversation.discarded && <span>{t(locale, "conversations.discarded")}</span>}
         </div>
       </a>
-      <div className="conversation-row-actions" aria-label={t(locale, "conversations.title")}>
+      <div className="conversation-row-actions" role="group" aria-label={t(locale, "conversations.title")}>
         <button
           type="button"
           className={`conversation-star${conversation.starred ? " is-starred" : ""}`}
@@ -324,7 +324,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
         queue={status.queue}
         deadLetterCount={dead.length}
         operationError={operationError}
-        nextAction={status.refresh.phase !== "ready" || operationError ? t(locale, "common.retry") : null}
+        nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
         retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
       />
       {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <p className="empty-state" data-empty-kind="detail-not-found">{t(locale, "conversations.detailNotFound")}</p> : <>

@@ -238,3 +238,30 @@ test("production icon vocabulary is explicit and chrome/search do not draw one-o
   assert.match(primitives, /<ProductionIcon name="search"/);
   assert.doesNotMatch(styles, /\.production-search-icon::after/);
 });
+
+test("named control collections expose groups and ready errors never advertise an unbound retry", async () => {
+  const primitives = await read("src/production/ProductionPrimitives.tsx");
+  const routes = await Promise.all([
+    "ChatProduction.tsx",
+    "MemoriesProduction.tsx",
+    "MemoriesPlatformProduction.tsx",
+    "TasksProduction.tsx",
+    "ConversationsProduction.tsx",
+    "SettingsProduction.tsx",
+  ].map((file) => read(`src/production/${file}`)));
+  assert.match(primitives, /production-filter-chips[^>]+role="group"/);
+  for (const source of routes) {
+    assert.doesNotMatch(source, /nextAction=\{[^\n]*\|\| operationError/);
+  }
+  for (const [file, className] of [
+    ["HomeProduction.tsx", "home-kind-filter"],
+    ["ListenProduction.tsx", "listen-controls"],
+    ["ProductionChrome.tsx", "nav-utilities"],
+    ["TasksProduction.tsx", "task-actions"],
+    ["MemoriesProduction.tsx", "memory-actions"],
+    ["ConversationsProduction.tsx", "conversation-row-actions"],
+  ]) {
+    const source = await read(`src/production/${file}`);
+    assert.match(source, new RegExp(`className="${className}" role="group"`));
+  }
+});

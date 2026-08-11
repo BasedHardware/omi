@@ -310,7 +310,7 @@ export function ProductionFilterChips<Value extends string>({
   className?: string;
 }): React.JSX.Element {
   return (
-    <div className={`production-filter-chips${className ? ` ${className}` : ""}`} aria-label={label}>
+    <div className={`production-filter-chips${className ? ` ${className}` : ""}`} role="group" aria-label={label}>
       {options.map((option) => (
         <button
           key={option.value}

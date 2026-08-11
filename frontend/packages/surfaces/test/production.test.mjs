@@ -34,8 +34,7 @@ test("bridge-unavailable state gives a distinct recovery step and executable ret
   const source = await read("src/production/main.tsx");
   const homeStyles = await read("src/production/home.css");
   assert.match(source, /nextAction=\{t\(locale, "qa\.bridgeNext"\)\}/);
-  assert.match(source, /className="bridge-unavailable-retry"/);
-  assert.match(source, /window\.location\.reload\(\)/);
+  assert.match(source, /retry=\{\{ onRetry: \(\) => window\.location\.reload\(\) \}\}/);
   assert.doesNotMatch(homeStyles, /home-search input:focus-visible/);
   // red-proof: repeating the bridge diagnosis as the next action, omitting the
   // recovery control, or restoring Home's outline reset fails this guard.

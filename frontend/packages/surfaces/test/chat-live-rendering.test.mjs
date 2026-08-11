@@ -495,7 +495,7 @@ test("send failure preserves draft and staged descriptors and double submit is f
     assert.equal(textarea.value, "Keep this authored draft");
     assert.equal(rendered.container.querySelectorAll(".chat-attachments li").length, 1);
     assert.equal(rendered.container.querySelector(".lifecycle-retry"), null, "ready operation errors do not expose an unbound retry");
-    assert.ok(rendered.container.querySelector(".lifecycle-next-action")?.textContent?.includes(EN_MESSAGES["chat.retryComposer"]));
+    assert.equal(rendered.container.querySelector(".lifecycle-next-action"), null, "ready operation errors do not announce an action without a bound control");
     assert.equal(rendered.container.querySelector(".production-operation-error")?.getAttribute("role"), "alert");
     assert.equal(announcementCallbacks.length, 0, "assertive operation error is not duplicated in the polite live region");
 

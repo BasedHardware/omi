@@ -262,8 +262,8 @@ export function bridgeUnavailable(): React.JSX.Element {
         hasSavedData={false}
         locale={locale}
         nextAction={t(locale, "qa.bridgeNext")}
+        retry={{ onRetry: () => window.location.reload() }}
       />
-      <button type="button" className="bridge-unavailable-retry" onClick={() => window.location.reload()}>{t(locale, "common.retry")}</button>
     </main>
   );
 }
