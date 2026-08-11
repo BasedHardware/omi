@@ -5,7 +5,7 @@
 // process-start identity recorded after launch.
 
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { SERVICE_EXECUTABLE, rawRunIdFailure, validateServiceReadiness } from "./evidence-matrix.mjs";
 
 export const PROCESS_OWNER_SCHEMA = "omi.dev-stack-owner.v1";
+export const PROCESS_OWNER_BINDING_SCHEMA = "omi.dev-stack-owner-binding.v1";
 export const EXPECTED_COMMAND = `bun ${SERVICE_EXECUTABLE}`;
 const OWNER_KEYS = Object.freeze([
   "schema",
@@ -24,6 +25,14 @@ const OWNER_KEYS = Object.freeze([
   "processStartIdentity",
   "databasePath",
   "readinessPath",
+]);
+const BINDING_KEYS = Object.freeze([
+  "schema",
+  "runId",
+  "pid",
+  "expectedCommand",
+  "processStartIdentity",
+  "ownerTokenSha256",
 ]);
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -67,7 +76,52 @@ export function validateOwnerRecord(record) {
   return Object.freeze({ ok: failures.length === 0, failures: Object.freeze(failures) });
 }
 
-export function inspectOwner(record) {
+export function ownerBindingPath(recordPath) {
+  return `${recordPath}.binding`;
+}
+
+function tokenDigest(token) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function bindingFor(record) {
+  return {
+    schema: PROCESS_OWNER_BINDING_SCHEMA,
+    runId: record.runId,
+    pid: record.pid,
+    expectedCommand: record.expectedCommand,
+    processStartIdentity: record.processStartIdentity,
+    ownerTokenSha256: tokenDigest(record.ownerToken),
+  };
+}
+
+function bindingFailures(binding, record) {
+  const expected = bindingFor(record);
+  const failures = [];
+  if (!exactKeys(binding, BINDING_KEYS)) failures.push("owner binding keys are not exact");
+  for (const key of BINDING_KEYS) {
+    if (binding?.[key] !== expected[key]) failures.push(`owner binding ${key} does not match`);
+  }
+  return failures;
+}
+
+function readBinding(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`owner binding is unreadable: ${error.message}`);
+  }
+}
+
+function bindingOnDiskMatches(path, record) {
+  try {
+    return bindingFailures(readBinding(path), record).length === 0;
+  } catch {
+    return false;
+  }
+}
+
+export function inspectOwner(record, { bindingPath = null } = {}) {
   const validation = validateOwnerRecord(record);
   const snapshot = processSnapshot(record?.pid);
   const failures = [...validation.failures];
@@ -82,6 +136,13 @@ export function inspectOwner(record) {
       failures.push(...readinessResult.failures.map((failure) => `owner readiness mismatch: ${failure}`));
     } catch (error) {
       failures.push(`owner readiness record is unavailable: ${error.message}`);
+    }
+    if (bindingPath !== null) {
+      try {
+        failures.push(...bindingFailures(readBinding(bindingPath), record));
+      } catch (error) {
+        failures.push(error.message);
+      }
     }
   }
   if (snapshot === null) failures.push("owner process is not alive");
@@ -115,10 +176,22 @@ function waitBriefly() {
 export function stopOwnedProcess(path) {
   if (!existsSync(path)) return Object.freeze({ stopped: false, skipped: true, detail: "no owner record" });
   const record = readRecord(path);
-  const inspected = inspectOwner(record);
+  const bindingPath = ownerBindingPath(path);
+  const inspected = inspectOwner(record, { bindingPath });
   if (!inspected.ok) {
-    if (!inspected.alive && sameRecordOnDisk(path, record)) unlinkSync(path);
+    if (!inspected.alive && sameRecordOnDisk(path, record)) {
+      unlinkSync(path);
+      if (existsSync(bindingPath)) unlinkSync(bindingPath);
+    }
     return Object.freeze({ stopped: false, skipped: true, detail: inspected.failures.join("; "), pid: record.pid });
+  }
+
+  // Re-read both independent coordinates immediately before the first signal.
+  // A valid-looking replacement token in the public owner record must not gain
+  // authority from the PID/start/command coordinates that belong to the real
+  // owner, and a concurrent rewrite must not pass an earlier inspection.
+  if (!sameRecordOnDisk(path, record) || !bindingOnDiskMatches(bindingPath, record)) {
+    return Object.freeze({ stopped: false, skipped: true, detail: "owner record or independent binding changed before signal; stop refused", pid: record.pid });
   }
 
   process.kill(record.pid, "SIGTERM");
@@ -131,9 +204,15 @@ export function stopOwnedProcess(path) {
     if (afterTerm.startIdentity !== record.processStartIdentity || !commandMatchesService(afterTerm.command)) {
       return Object.freeze({ stopped: false, skipped: true, detail: "process identity changed before escalation; SIGKILL skipped", pid: record.pid });
     }
+    if (!sameRecordOnDisk(path, record) || !bindingOnDiskMatches(bindingPath, record)) {
+      return Object.freeze({ stopped: false, skipped: true, detail: "owner record or independent binding changed before escalation; SIGKILL skipped", pid: record.pid });
+    }
     process.kill(record.pid, "SIGKILL");
   }
-  if (sameRecordOnDisk(path, record)) unlinkSync(path);
+  if (sameRecordOnDisk(path, record) && bindingOnDiskMatches(bindingPath, record)) {
+    unlinkSync(path);
+    unlinkSync(bindingPath);
+  }
   return Object.freeze({ stopped: true, skipped: false, detail: "verified owner stopped", pid: record.pid });
 }
 
@@ -159,12 +238,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       print(snapshot);
     } else if (command === "prepare") {
       if (!path) throw new Error("prepare needs --record");
-      if (!existsSync(path)) print({ ok: true, detail: "owner slot is empty" });
+      const bindingPath = ownerBindingPath(path);
+      if (!existsSync(path)) {
+        if (existsSync(bindingPath)) unlinkSync(bindingPath);
+        print({ ok: true, detail: "owner slot is empty" });
+      }
       else {
         const record = readRecord(path);
-        const inspected = inspectOwner(record);
+        const inspected = inspectOwner(record, { bindingPath });
         if (inspected.alive) throw new Error(`owner slot belongs to live pid ${record.pid}: ${inspected.failures.join("; ") || "verified owner"}`);
-        if (sameRecordOnDisk(path, record)) unlinkSync(path);
+        if (sameRecordOnDisk(path, record)) {
+          unlinkSync(path);
+          if (existsSync(bindingPath)) unlinkSync(bindingPath);
+        }
         print({ ok: true, detail: `removed stale dead owner record for pid ${record.pid}` });
       }
     } else if (command === "write") {
@@ -182,7 +268,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       };
       const inspected = inspectOwner(record);
       if (!inspected.ok) throw new Error(inspected.failures.join("; "));
-      writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+      const bindingPath = ownerBindingPath(path);
+      const binding = bindingFor(record);
+      writeFileSync(bindingPath, `${JSON.stringify(binding, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+      try {
+        writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+      } catch (error) {
+        if (bindingOnDiskMatches(bindingPath, record)) unlinkSync(bindingPath);
+        throw error;
+      }
       print({ ok: true, pid: record.pid, runId: record.runId });
     } else if (command === "stop") {
       if (!path) throw new Error("stop needs --record");

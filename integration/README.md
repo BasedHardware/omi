@@ -62,7 +62,12 @@ host launcher, passed only to native shell custody, and never copied into final 
 launcher log, the report, or the receipt. `--up` retains a separate exact owner record with
 the raw run id, expected executable and command, random owner token, process-start identity,
 database path, and readiness path. `--stop` verifies every coordinate again before signaling;
-a stale, reused, or unknown PID is reported and left alive.
+a stale, reused, or unknown PID is reported and left alive. A separate mode-0600 ownership
+binding retains only a digest of the random owner token plus the process coordinates. Replacing
+the owner record's token with another valid-looking value therefore refuses stop without signaling.
+Service diagnostics pass through a streaming sanitizer before their first persisted byte; retained
+logs and final evidence artifacts are scanned for the readiness credential, bearer credentials,
+and backend origins.
 P7's structural and real-subprocess tests own the single-store proof; H3 does not invent
 store-set fields on this readiness schema.
 
