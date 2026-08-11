@@ -87,6 +87,13 @@ void main() {
       );
     });
 
+    test('local prod pairs production Firebase with a developer-chosen backend', () {
+      expect(AppEnvironmentProfile.localProd.firebaseProjectId, 'based-hardware');
+      expect(AppEnvironmentProfile.localProd.usesFirebaseAuthEmulator, isFalse);
+      expect(AppEnvironmentProfile.localProd.allowsProductionData, isTrue);
+      expect(AppEnvironmentProfile.localProd.authCallbackScheme, 'omi');
+    });
+
     test('local profile rejects a production Firebase project', () {
       expect(
         () => Env.validateFirebaseProject(
@@ -151,6 +158,45 @@ void main() {
           reason: endpoint,
         );
       }
+    });
+
+    test('local prod accepts loopback, private-network, and tunnel endpoints in debug builds', () {
+      for (final endpoint in [
+        'http://127.0.0.1:8000/',
+        'http://192.168.1.20:8000/',
+        'https://example.ngrok-free.app/',
+      ]) {
+        Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: endpoint,
+          releaseBuild: false,
+        );
+      }
+    });
+
+    test('local prod is rejected in release builds', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'http://127.0.0.1:8000/',
+          releaseBuild: true,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('local prod rejects a malformed endpoint', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'not a url',
+          releaseBuild: false,
+        ),
+        throwsStateError,
+      );
     });
 
     test('local development startup accepts the emulator API', () {
