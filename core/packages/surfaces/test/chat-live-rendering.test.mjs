@@ -113,6 +113,62 @@ class RenderedDomainChat {
   notify() { for (const listener of this.listeners) listener(); }
 }
 
+class JournalFirstRaceChatStore {
+  listeners = new Set();
+  messages = [];
+  sent = [];
+  holdNextHistory = false;
+  releaseOlderHistory = null;
+
+  status() { return status(); }
+  subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  async refresh() {}
+  async history() {
+    const page = {
+      messages: [...this.messages],
+      hasOlder: false,
+      olderCursor: null,
+    };
+    if (!this.holdNextHistory) return page;
+    this.holdNextHistory = false;
+    return new Promise((resolve) => { this.releaseOlderHistory = () => resolve(page); });
+  }
+  async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; }
+  async send(input) {
+    this.sent.push(input);
+    // The real outbox resolves at durable journal time. Canonical admission is
+    // a later transport callback, so the component's direct post-send history
+    // read can legitimately capture the pre-admission projection.
+    this.holdNextHistory = true;
+  }
+  capabilities() {
+    return {
+      maxAttachmentsPerMessage: 2,
+      maxAttachmentBytes: 10_000,
+      allowedAttachmentMimeTypes: ["application/pdf"],
+    };
+  }
+  stagingAvailable() { return false; }
+  async stageAttachment() { return null; }
+  async deadLetters() { return []; }
+  async discardDeadLetter() {}
+  async cancel() {}
+  admitCanonical(text) {
+    this.messages = [{
+      role: "user",
+      text,
+      delivery: {
+        kind: "canonical",
+        serverId: "canonical-race-human",
+        clientMessageId: "canonical-race-human",
+        generationOutcome: null,
+      },
+      attachments: [],
+    }];
+    for (const listener of this.listeners) listener();
+  }
+}
+
 async function setTextarea(rendered, textarea, value) {
   const setter = Object.getOwnPropertyDescriptor(
     rendered.window.HTMLTextAreaElement.prototype,
@@ -183,6 +239,45 @@ test("rendered live Chat streams changing assistant text and converges without d
     assert.equal(bubbles.length, 2, "terminal replaces the projection without a duplicate assistant");
     assert.equal(bubbles.filter((bubble) => bubble.textContent.includes("First second complete")).length, 1);
     assert.equal(rendered.container.querySelector(".chat-message.is-streaming"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("RED-PROOF older async history cannot overwrite a newer canonical admission", async () => {
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const store = new JournalFirstRaceChatStore();
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const productionRoot = rendered.container.querySelector("main[data-route='chat']");
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    const send = rendered.container.querySelector("button.chat-send");
+    assert.ok(productionRoot);
+    assert.ok(textarea);
+    assert.ok(send);
+
+    await setTextarea(rendered, textarea, "Journal-first race question");
+    await click(rendered, send);
+    assert.equal(store.sent.length, 1);
+    assert.equal(typeof store.releaseOlderHistory, "function", "post-send history is held with the pre-admission snapshot");
+
+    await rendered.act(async () => {
+      store.admitCanonical("Journal-first race question");
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(productionRoot.dataset.consumerChatAdmissionCount, "1");
+    assert.equal(rendered.container.querySelectorAll(".chat-message").length, 1);
+
+    await rendered.act(async () => {
+      store.releaseOlderHistory();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    assert.equal(
+      productionRoot.dataset.consumerChatAdmissionCount,
+      "1",
+      "a pre-admission response resolving last cannot roll rendered canonical admission backward",
+    );
+    assert.ok(rendered.container.textContent.includes("Journal-first race question"));
   } finally {
     await rendered.cleanup();
   }

@@ -109,6 +109,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const messageListRef = useRef<HTMLOListElement>(null);
+  const historyRequestRef = useRef(0);
   const sendInFlightRef = useRef(false);
   const stagingInFlightRef = useRef(false);
   const attachmentsRef = useRef<readonly StagedChatAttachment[]>(attachments);
@@ -126,20 +127,20 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
   }, [messages]);
 
   const reload = useCallback(async (): Promise<void> => {
+    const request = ++historyRequestRef.current;
     try {
       const [page, retained] = await Promise.all([store.history(), store.deadLetters()]);
+      if (request !== historyRequestRef.current) return;
       setDeadLetters(retained);
-      setMessages((current) => {
-        const next = reconcileMessages(current, page.messages);
-        setHasOlder(page.hasOlder);
-        setOlderCursor(page.olderCursor);
-        setCapabilities(store.capabilities());
-        return next;
-      });
+      setMessages((current) => reconcileMessages(current, page.messages));
+      setHasOlder(page.hasOlder);
+      setOlderCursor(page.olderCursor);
+      setCapabilities(store.capabilities());
     } catch {
+      if (request !== historyRequestRef.current) return;
       setOperationError(t(locale, "lifecycle.error"));
     }
-    setStatus(store.status());
+    if (request === historyRequestRef.current) setStatus(store.status());
   }, [locale, store]);
 
   const run = useCallback<RunOperation>(async (operation) => {
@@ -218,12 +219,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady }: {
         attachmentsRef.current = next;
         return next;
       });
+      const request = ++historyRequestRef.current;
       const page = await store.history();
-      setMessages((current) => reconcileMessages(current, page.messages));
-      setHasOlder(page.hasOlder);
-      setOlderCursor(page.olderCursor);
-      setCapabilities(store.capabilities());
-      setStatus(store.status());
+      if (request === historyRequestRef.current) {
+        setMessages((current) => reconcileMessages(current, page.messages));
+        setHasOlder(page.hasOlder);
+        setOlderCursor(page.olderCursor);
+        setCapabilities(store.capabilities());
+        setStatus(store.status());
+      }
     } catch {
       setOperationError(t(locale, "chat.error"));
       setStatus(store.status());
