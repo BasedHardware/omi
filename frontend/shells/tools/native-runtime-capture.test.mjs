@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+import {
+  gateReplay,
+  parseMacProbe,
+  validateHostMarker,
+  validateManifest,
+} from "./capture-native-runtime.mjs";
+
+const root = path.resolve(import.meta.dirname, "../..");
+const producer = path.join(root, "shells/tools/capture-native-runtime.mjs");
+const coreSha = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+const platformSha = "1".repeat(40);
+
+function manifest(overrides = {}) {
+  return {
+    schema: "omi.polish.matrix-coordinate/v1", kind: "runtime_trace", domain: "chat", shell: "macos",
+    state: "ready", theme: "dark", width: "regular", accessibility: "none", run_id: "runtime-test-1",
+    capture_class: "native_fixture", source_tier: "native_shell", source_shas: { core: coreSha, platform: platformSha },
+    viewport: { width: 960, height: 671, scale: 2 }, ...overrides,
+  };
+}
+
+function marker(m, events = [{ type: "lifecycle", name: "state", value: m.state, passed: true }]) {
+  return { schema: "omi.native-runtime-marker/v1", domain: m.domain, theme: m.theme, accessibility: m.accessibility, events };
+}
+
+test("runtime manifest is immutable and cannot be relabelled as browser or unsupported lifecycle", () => {
+  assert.throws(() => validateManifest(manifest({ capture_class: "core_browser_preview" })), /native_fixture/);
+  assert.throws(() => validateManifest(manifest({ width: "compact" })), /width=regular/);
+  assert.throws(() => validateManifest(manifest({ domain: "settings", state: "cancelled" })), /not applicable/);
+  assert.throws(() => validateManifest(manifest({ accessibility: "voiceover" })), /unsupported coordinate/);
+  assert.throws(() => validateManifest(manifest({ accessibility: "reduced_motion", state: "busy" })), /state=ready/);
+});
+
+test("native shell custody is explicit and browser shortcuts are absent", () => {
+  const source = readFileSync(producer, "utf8");
+  const iosHook = readFileSync(path.join(root, "shells/ios/app/ios/Runner/OmiUiWebView.swift"), "utf8");
+  assert.match(source, /dev-run-macos\.sh/);
+  assert.match(source, /OMI_PROBE_JS/);
+  assert.match(source, /xcodebuild/);
+  assert.match(source, /xcresulttool/);
+  assert.match(source, /allowedEnvironment/);
+  assert.match(source, /--emit-gate-records false/);
+  assert.doesNotMatch(source, /core_browser_preview/);
+  assert.match(iosHook, /OMI_POLISH_RUNTIME_PROBE/);
+  assert.match(iosHook, /omiRuntimeProbe/);
+  assert.match(iosHook, /omi\.native-runtime-marker\/v1/);
+  assert.match(iosHook, /computed_style/);
+  assert.doesNotMatch(iosHook, /OMI_API_TOKEN/);
+});
+
+test("macOS probe parser requires one real successful WK result", () => {
+  const m = manifest();
+  const good = `PROBE_JS: ${JSON.stringify(marker(m))} error: none`;
+  assert.doesNotThrow(() => parseMacProbe(good, m));
+  assert.throws(() => parseMacProbe(`${good}\n${good}`, m), /exactly one/);
+  assert.throws(() => parseMacProbe(`PROBE_JS: ${JSON.stringify(marker(m))} error: Error`, m), /exactly one/);
+  assert.throws(() => parseMacProbe(`PROBE_JS: {"schema":"omi.native-runtime-marker/v1","domain":"chat","theme":"dark","accessibility":"none","events":[] } error: none`, m), /events/);
+});
+
+test("live capture refuses to claim a shell when platform provenance is absent", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-provenance-test-"));
+  try {
+    const file = path.join(scratch, "coordinate.json");
+    writeFileSync(file, `${JSON.stringify(manifest())}\n`);
+    const run = spawnSync(process.execPath, [producer, "--manifest", file, "--output-dir", scratch], { cwd: root, encoding: "utf8" });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /platform SHA/);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("runtime host marker requires typed native events and rejects hostile values", () => {
+  const m = manifest();
+  assert.deepEqual(validateHostMarker(marker(m), m).events[0], { type: "lifecycle", name: "state", value: "ready", passed: true });
+  assert.throws(() => validateHostMarker(marker(m, [{ type: "lifecycle", name: "state", value: "ready", passed: true, secret: "token" }]), m), /secret-like/);
+  assert.throws(() => validateHostMarker(marker(m, [{ type: "native_runtime", name: "surface_domain", value: "chat", passed: true }]), m), /allowlisted/);
+  assert.throws(() => validateHostMarker(marker(m, [{ type: "lifecycle", name: "state", value: "ready", passed: false }]), m), /malformed/);
+  assert.throws(() => validateHostMarker({ ...marker(m), domain: "settings" }, m), /metadata/);
+});
+
+test("reduced runtime modes require computed policy, not AX or arbitrary values", () => {
+  const motion = manifest({ accessibility: "reduced_motion" });
+  assert.doesNotThrow(() => validateHostMarker(marker(motion, [{ type: "computed_style", name: "transition_duration", value: "0s", passed: true }]), motion));
+  assert.throws(() => validateHostMarker(marker(motion, [{ type: "computed_style", name: "transition_duration", value: "1s", passed: true }]), motion), /allowlisted/);
+  const transparency = manifest({ accessibility: "reduced_transparency" });
+  assert.doesNotThrow(() => validateHostMarker(marker(transparency, [{ type: "computed_style", name: "backdrop_filter", value: "none", passed: true }]), transparency));
+  assert.throws(() => validateHostMarker(marker(transparency, [{ type: "ax_snapshot", name: "role", value: "none", passed: true }]), transparency), /malformed/);
+});
+
+test("canonical runtime replay emits gate-shaped input set, receipt, and coverage", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-replay-test-"));
+  try {
+    const m = manifest();
+    const manifestPath = path.join(scratch, "coordinate.json");
+    const inputPath = path.join(scratch, "runtime.json");
+    const outputPath = path.join(scratch, "replayed.json");
+    const outDir = path.join(scratch, "gate");
+    const artifact = { schema: "omi.polish.runtime/v1", domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility, run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier, events: [{ type: "lifecycle", name: "state", value: m.state, passed: true }] };
+    writeFileSync(manifestPath, `${JSON.stringify(m)}\n`);
+    writeFileSync(inputPath, `${JSON.stringify(artifact)}\n`);
+    const result = gateReplay(m, manifestPath, inputPath, outputPath, outDir);
+    assert.equal(readFileSync(outputPath, "utf8"), readFileSync(inputPath, "utf8"));
+    const receipt = JSON.parse(readFileSync(result.receiptPath, "utf8"));
+    assert.equal(receipt.capture_class, "native_fixture");
+    assert.equal(receipt.cwd_root, "core");
+    assert.equal(receipt.artifact_created[`core:${path.relative(root, outputPath)}`], true);
+    assert.match(receipt.argv.join(" "), /--emit-gate-records false/);
+    const coverage = JSON.parse(readFileSync(result.coveragePath, "utf8"));
+    assert.equal(coverage.coverage[0].kind, "runtime_trace");
+    assert.equal(coverage.coverage[0].batch_id, receipt.batch_id);
+    rmSync(outputPath, { force: true });
+    const replay = spawnSync(process.execPath, receipt.argv.slice(1), { cwd: root, encoding: "utf8" });
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.equal(existsSync(outputPath), true);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("recorded replay command is runnable without a host platform checkout", () => {
+  const scratch = mkdtempSync(path.join(root, ".build", "runtime-cli-replay-test-"));
+  try {
+    const m = manifest();
+    const manifestPath = path.join(scratch, "coordinate.json");
+    const inputPath = path.join(scratch, "runtime.json");
+    const outputPath = path.join(scratch, "replayed.json");
+    const artifact = { schema: "omi.polish.runtime/v1", domain: m.domain, shell: m.shell, state: m.state, theme: m.theme, width: m.width, accessibility: m.accessibility, run_id: m.run_id, source_shas: m.source_shas, capture_class: m.capture_class, source_tier: m.source_tier, events: [{ type: "lifecycle", name: "state", value: m.state, passed: true }] };
+    writeFileSync(manifestPath, `${JSON.stringify(m)}\n`); writeFileSync(inputPath, `${JSON.stringify(artifact)}\n`);
+    const run = spawnSync(process.execPath, [producer, "--manifest", manifestPath, "--replay-input", inputPath, "--replay-output", outputPath, "--output-dir", path.join(scratch, "gate"), "--emit-gate-records", "false"], { cwd: root, encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /NATIVE_RUNTIME_REPLAY/);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});

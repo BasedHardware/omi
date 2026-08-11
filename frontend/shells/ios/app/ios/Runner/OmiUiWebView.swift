@@ -39,6 +39,7 @@ final class OmiUiWebViewFactory: NSObject, FlutterPlatformViewFactory {
 final class OmiUiWebView: NSObject, FlutterPlatformView {
   private let webView: WKWebView
   private let channel: FlutterMethodChannel
+  private var runtimeProbeHandler: OmiRuntimeProbeHandler?
 
   init(
     frame: CGRect,
@@ -52,6 +53,22 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
       OmiSchemeHandler.shared,
       forURLScheme: OmiSchemeHandler.scheme
     )
+    // This is a capture-only, opt-in host return path.  It is intentionally
+    // absent from normal launches and retains only typed lifecycle/style
+    // values (never labels, field values, URLs, or credentials).
+    var configuredRuntimeHandler: OmiRuntimeProbeHandler?
+    if ProcessInfo.processInfo.environment["OMI_POLISH_RUNTIME_PROBE"] == "1" {
+      let handler = OmiRuntimeProbeHandler()
+      configuration.userContentController.add(handler, name: "omiRuntimeProbe")
+      configuration.userContentController.addUserScript(
+        WKUserScript(
+          source: OmiRuntimeProbeHandler.script,
+          injectionTime: .atDocumentEnd,
+          forMainFrameOnly: true
+        )
+      )
+      configuredRuntimeHandler = handler
+    }
     NSLog(
       "[scheme] handler registered on owned configuration for %@:// (viewId=%lld)",
       OmiSchemeHandler.scheme,
@@ -59,6 +76,7 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     )
 
     webView = WKWebView(frame: frame, configuration: configuration)
+    runtimeProbeHandler = configuredRuntimeHandler
     webView.scrollView.contentInsetAdjustmentBehavior = .never
 
     channel = FlutterMethodChannel(
@@ -112,5 +130,70 @@ final class OmiUiWebView: NSObject, FlutterPlatformView {
     }
     webView.load(URLRequest(url: url))
     result?(nil)
+  }
+}
+
+/// Redacted and allowlisted runtime result from the real WKWebView.  The
+/// marker is surfaced through the native accessibility identifier only for the
+/// fixture UI test; the production WebView never installs this handler.
+private final class OmiRuntimeProbeHandler: NSObject, WKScriptMessageHandler {
+  static let script = #"""
+  (() => {
+    const url = new URL(location.href);
+    const domain = url.searchParams.get("qa") || "";
+    const theme = url.searchParams.get("theme") || "";
+    const accessibility = url.searchParams.get("accessibility") || "none";
+    const root = document.querySelector("main[data-production-shell]");
+    if (!root || root.dataset.route !== domain || document.documentElement.dataset.themeSelection !== theme) return;
+    const target = root.querySelector("*") || root;
+    const style = getComputedStyle(target);
+    const events = [];
+    if (accessibility === "none") {
+      events.push({type: "lifecycle", name: "state", value: root.dataset.surfaceState || "", passed: true});
+    } else if (accessibility === "reduced_motion") {
+      events.push({type: "computed_style", name: "transition_duration", value: style.transitionDuration || "", passed: true});
+      events.push({type: "computed_style", name: "animation_name", value: style.animationName || "", passed: true});
+      events.push({type: "computed_style", name: "animation_duration", value: style.animationDuration || "", passed: true});
+    } else if (accessibility === "reduced_transparency") {
+      events.push({type: "computed_style", name: "backdrop_filter", value: style.backdropFilter || "", passed: true});
+    }
+    window.webkit.messageHandlers.omiRuntimeProbe.postMessage({schema: "omi.native-runtime-marker/v1", domain, theme, accessibility, events});
+  })();
+  """#
+
+  override init() { super.init() }
+
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    guard message.name == "omiRuntimeProbe",
+          let payload = message.body as? [String: Any],
+          Set(payload.keys) == ["schema", "domain", "theme", "accessibility", "events"],
+          payload["schema"] as? String == "omi.native-runtime-marker/v1",
+          let domain = payload["domain"] as? String,
+          ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"].contains(domain),
+          let theme = payload["theme"] as? String,
+          ["light", "dark"].contains(theme),
+          let accessibility = payload["accessibility"] as? String,
+          ["none", "reduced_motion", "reduced_transparency"].contains(accessibility),
+          let events = payload["events"] as? [[String: Any]], !events.isEmpty, events.count <= 16 else { return }
+    let eventTypes = ["lifecycle", "computed_style", "native_runtime"]
+    let states = ["loading", "empty", "ready", "error", "offline", "busy", "complete", "cancelled"]
+    let names = ["state", "transition_duration", "transition_property", "animation_name", "animation_duration", "motion_policy", "backdrop_filter", "material_transparency", "transparency_policy"]
+    for event in events {
+      guard Set(event.keys) == ["type", "name", "value", "passed"],
+            let type = event["type"] as? String, eventTypes.contains(type),
+            let name = event["name"] as? String, names.contains(name),
+            let value = event["value"] as? String, !value.isEmpty, value.count <= 256,
+            value.range(of: "^[A-Za-z0-9][A-Za-z0-9 ._():,/%+\\-]{0,255}$", options: .regularExpression) != nil,
+            event["passed"] as? Bool == true else { return }
+      if type == "lifecycle" && (name != "state" || !states.contains(value)) { return }
+    }
+    guard let bytes = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]), bytes.count < 16_384 else { return }
+    let encoded = bytes.base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+    // Locate the owning view through the message's web view; no arbitrary body
+    // or user text is copied into the identifier.
+    message.webView?.accessibilityIdentifier = "OMI_RUNTIME_JSON_\(encoded)"
   }
 }
