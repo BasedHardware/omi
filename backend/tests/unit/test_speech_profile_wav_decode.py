@@ -12,7 +12,6 @@ and green once the decode is wrapped in a try/except that returns 400.
 
 import importlib.abc
 import importlib.machinery
-import importlib.util
 import io
 import os
 import sys
@@ -156,11 +155,11 @@ class TestUploadProfileWavDecodeGuard:
         with patch.object(batch_mod.os, "makedirs"), patch.object(
             batch_mod, "get_users_uid", return_value=["test-uid"]
         ), patch.object(batch_mod, "get_profile_audio_if_exists", return_value="/tmp/profile.wav"), patch.object(
-            batch_mod, "apply_vad_for_speech_profile", side_effect=batch_mod.VADEmptyError("Audio is empty")
-        ) as mock_vad, patch.object(
             batch_mod, "upload_profile_audio"
-        ) as mock_upload:
+        ) as mock_upload, patch.object(
+            vad_mod, "vad_is_empty", return_value=[]
+        ) as mock_vad:
             batch_mod.execute()
 
-        mock_vad.assert_called_once_with("/tmp/profile.wav")
+        mock_vad.assert_called_once_with("/tmp/profile.wav", return_segments=True)
         mock_upload.assert_not_called()
