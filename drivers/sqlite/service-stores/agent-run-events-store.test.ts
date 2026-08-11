@@ -6,12 +6,15 @@ import { join } from "node:path";
 
 import {
   createAgentRunEventSupervisor,
+  type AgentRunEventKind,
   type AgentRunEventStore,
 } from "../../../apps/service/chat/agent-run-events";
 import { createSqliteAgentRunEventStore } from "./agent-run-events-store";
 
 const RUN = "generation-sqlite";
 const ATTEMPT = `${RUN}:attempt:1`;
+const raceEventId = (runId: string, sequence: number, kind: AgentRunEventKind) =>
+  kind === "status" ? `${runId}:fixed-status` : `${runId}:event:${sequence}:${kind}`;
 
 const seed = (store: ReturnType<typeof createSqliteAgentRunEventStore>) => {
   const supervisor = createAgentRunEventSupervisor({
@@ -108,7 +111,7 @@ describe("SQLite AgentRunEventStore", () => {
       const acceptedSupervisor = createAgentRunEventSupervisor({
         events: first,
         nowEpochMilliseconds: () => 1_786_352_400_000,
-        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+        eventId: raceEventId,
       });
       acceptedSupervisor.accepted({ runId: RUN, attemptId: ATTEMPT, admissionId: "admission-sqlite" });
       // Hold both supervisors on the same pre-write cursor to model two
@@ -129,12 +132,12 @@ describe("SQLite AgentRunEventStore", () => {
       const firstSupervisor = createAgentRunEventSupervisor({
         events: staleView(first),
         nowEpochMilliseconds: () => 1_786_352_400_000,
-        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+        eventId: raceEventId,
       });
       const secondSupervisor = createAgentRunEventSupervisor({
         events: staleView(second),
         nowEpochMilliseconds: () => 1_786_352_400_000,
-        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+        eventId: raceEventId,
       });
       await Promise.all([
         Promise.resolve().then(() => firstSupervisor.status({
@@ -156,7 +159,7 @@ describe("SQLite AgentRunEventStore", () => {
       const replay = createAgentRunEventSupervisor({
         events: staleView(first),
         nowEpochMilliseconds: () => 1_786_352_400_000,
-        eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+        eventId: raceEventId,
       }).status({ runId: RUN, attemptId: ATTEMPT, status: "generating", progressPct: 10 });
       expect(replay.eventId).toBe(events[1]!.eventId);
       expect(first.list(RUN)).toHaveLength(3);
