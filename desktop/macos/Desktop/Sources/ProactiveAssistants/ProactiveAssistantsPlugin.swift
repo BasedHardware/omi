@@ -89,7 +89,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   // Eliminates continuous polling when the user stays on the same app/window.
   private var distributionGate = ProactiveFrameDistributionGate()
   private var distributionDebounceTimer: Timer?
-  private var latestCapturedFrame: CapturedFrame?
+  private(set) var latestCapturedFrame: CapturedFrame?
   /// Fallback interval: re-distribute even without context change to catch visual-only updates.
   private let distributionFallbackInterval: TimeInterval = 60
   private let messagingDistributionFallbackInterval: TimeInterval = 15
@@ -1051,35 +1051,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     case .skip:
       break
     }
-  }
-
-  /// Drive the suggestion assistant's grounding → evaluation → delivery path on the most
-  /// recent captured frame, optionally relabelling which app/window it came from so a
-  /// leisure context can be probed without stealing the user's focus for 30 seconds.
-  func probeSuggestionNudge(
-    appOverride: String?,
-    windowTitleOverride: String?
-  ) async -> [String: String] {
-    let registered = AssistantCoordinator.shared.assistant(withIdentifier: "suggestion")
-    guard let assistant = registered as? SuggestionAssistant else {
-      return ["outcome": "assistant_unavailable"]
-    }
-    guard let latest = latestCapturedFrame else {
-      return ["outcome": "no_frame_captured"]
-    }
-
-    let frame = CapturedFrame(
-      jpegData: latest.jpegData,
-      appName: appOverride ?? latest.appName,
-      windowTitle: windowTitleOverride ?? latest.windowTitle,
-      frameNumber: latest.frameNumber,
-      captureTime: latest.captureTime,
-      screenshotId: latest.screenshotId
-    )
-
-    // The probe's own delivery does not need to fan out assistant events; the observable
-    // result is the notification itself plus the returned outcome.
-    return await assistant.probeEvaluateAndDeliver(frame: frame) { _, _ in }
   }
 
   /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).

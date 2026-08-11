@@ -480,66 +480,64 @@ final class SuggestionDwellAnchorTests: XCTestCase {
 /// not-yet-urgent (80%), it fell under the 85% bar, and Nik got nothing. Local calendar
 /// days, not UTC.
 final class SuggestionDueDescriptionTests: XCTestCase {
-  private let edt = TimeZone(identifier: "America/New_York")!
-
-  private func calendar() -> Calendar {
+  private func calendar() throws -> Calendar {
     var c = Calendar(identifier: .gregorian)
-    c.timeZone = edt
+    c.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     return c
   }
 
-  private func date(_ iso: String) -> Date {
+  private func date(_ iso: String) throws -> Date {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime]
-    return f.date(from: iso)!
+    return try XCTUnwrap(f.date(from: iso))
   }
 
-  func testLateEveningTaskIsDueTodayNotTomorrow() {
+  func testLateEveningTaskIsDueTodayNotTomorrow() throws {
     // 2026-08-11T03:59Z == 2026-08-10 23:59 EDT
-    let due = date("2026-08-11T03:59:00Z")
-    let now = date("2026-08-10T23:18:00Z")  // 19:18 EDT, when Nik was on TikTok
+    let due = try date("2026-08-11T03:59:00Z")
+    let now = try date("2026-08-10T23:18:00Z")  // 19:18 EDT, when Nik was on TikTok
     XCTAssertEqual(
-      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: try calendar()),
       "due today"
     )
   }
 
-  func testTomorrowIsStillTomorrow() {
+  func testTomorrowIsStillTomorrow() throws {
     // 2026-08-11T15:00Z == 2026-08-11 11:00 EDT — genuinely the next calendar day.
-    let due = date("2026-08-11T15:00:00Z")
-    let now = date("2026-08-10T23:18:00Z")
+    let due = try date("2026-08-11T15:00:00Z")
+    let now = try date("2026-08-10T23:18:00Z")
     XCTAssertEqual(
-      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: try calendar()),
       "due tomorrow"
     )
   }
 
-  func testFurtherOutCountsDays() {
-    let due = date("2026-08-12T15:00:00Z")
-    let now = date("2026-08-10T23:18:00Z")
+  func testFurtherOutCountsDays() throws {
+    let due = try date("2026-08-12T15:00:00Z")
+    let now = try date("2026-08-10T23:18:00Z")
     XCTAssertEqual(
-      SuggestionDueDescription.phrase(for: due, now: now, calendar: calendar()),
+      SuggestionDueDescription.phrase(for: due, now: now, calendar: try calendar()),
       "due in 2 days"
     )
   }
 
-  func testOverdueReadsAsOverdue() {
-    let now = date("2026-08-10T23:18:00Z")
+  func testOverdueReadsAsOverdue() throws {
+    let now = try date("2026-08-10T23:18:00Z")
     XCTAssertEqual(
-      SuggestionDueDescription.phrase(for: date("2026-08-09T15:00:00Z"), now: now, calendar: calendar()),
+      SuggestionDueDescription.phrase(for: try date("2026-08-09T15:00:00Z"), now: now, calendar: try calendar()),
       "overdue by a day"
     )
     XCTAssertEqual(
-      SuggestionDueDescription.phrase(for: date("2026-07-24T04:00:00Z"), now: now, calendar: calendar()),
+      SuggestionDueDescription.phrase(for: try date("2026-07-24T04:00:00Z"), now: now, calendar: try calendar()),
       "overdue by 17 days"
     )
   }
 
   /// The phrase is what the model quotes, so it must never contain a machine date.
-  func testPhraseNeverContainsAnISODate() {
-    let now = date("2026-08-10T23:18:00Z")
+  func testPhraseNeverContainsAnISODate() throws {
+    let now = try date("2026-08-10T23:18:00Z")
     for iso in ["2026-08-11T03:59:00Z", "2026-08-11T15:00:00Z", "2026-07-24T04:00:00Z"] {
-      let phrase = SuggestionDueDescription.phrase(for: date(iso), now: now, calendar: calendar())
+      let phrase = SuggestionDueDescription.phrase(for: try date(iso), now: now, calendar: try calendar())
       XCTAssertFalse(phrase.contains("2026"), "\(phrase) leaks a machine date into the card")
       XCTAssertFalse(phrase.contains("-"), "\(phrase) leaks a machine date into the card")
     }
