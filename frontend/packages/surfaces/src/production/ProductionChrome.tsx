@@ -23,6 +23,12 @@ type CommandHandler = (event?: KeyboardEvent) => void | Promise<void>;
 const commandRegistry = createProductionCommandRegistry();
 const commandPopupRole: "dialog" = "dialog";
 
+function paletteFocusableElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])",
+  ));
+}
+
 function ChromeIcon({ name }: { name: ChromeIconName }): React.JSX.Element {
   const paths: Record<ChromeIconName, React.JSX.Element> = {
     // PR #11117 makes Home the query shell, so its persistent destination is
@@ -89,16 +95,25 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const paletteTriggerRef = React.useRef<HTMLButtonElement>(null);
   const paletteRef = React.useRef<HTMLDivElement>(null);
+  const navRef = React.useRef<HTMLElement>(null);
+  const paletteReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const paletteWasOpenRef = React.useRef(false);
   const navigate = React.useCallback((route: ProductionRoute): void => {
     location.href = href(route);
+  }, []);
+  const openPalette = React.useCallback((): void => {
+    const focused = document.activeElement;
+    paletteReturnFocusRef.current = focused instanceof HTMLElement && focused !== document.body
+      ? focused
+      : paletteTriggerRef.current;
+    setPaletteOpen(true);
   }, []);
   const context = React.useMemo<ProductionCommandContext>(() => ({
     activeRoute: active,
     navigate,
     handlers: {
       ...commandHandlers,
-      "open-command-palette": () => setPaletteOpen(true),
+      "open-command-palette": openPalette,
       "close-command-palette": () => setPaletteOpen(false),
     },
     enabled: {
@@ -107,7 +122,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
       "close-command-palette": paletteOpen,
     },
     paletteOpen,
-  }), [active, commandEnabled, commandHandlers, navigate, paletteOpen]);
+  }), [active, commandEnabled, commandHandlers, navigate, openPalette, paletteOpen]);
 
   React.useEffect(() => {
     if (!top) return;
@@ -119,12 +134,37 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
   }, [context, top]);
 
   React.useEffect(() => {
+    const nav = navRef.current as (HTMLElement & { inert?: boolean }) | null;
+    if (nav) nav.inert = paletteOpen;
+  }, [paletteOpen]);
+
+  React.useEffect(() => {
     if (!paletteOpen && paletteWasOpenRef.current) {
-      paletteTriggerRef.current?.focus();
+      const target = paletteReturnFocusRef.current;
+      if (target?.isConnected) target.focus();
+      else paletteTriggerRef.current?.focus();
+      paletteReturnFocusRef.current = null;
     }
     if (paletteOpen) paletteRef.current?.focus();
     paletteWasOpenRef.current = paletteOpen;
   }, [paletteOpen]);
+
+  const handlePaletteKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key !== "Tab") return;
+    const palette = paletteRef.current;
+    if (!palette) return;
+    const focusable = paletteFocusableElements(palette);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      palette.focus();
+      return;
+    }
+    const index = focusable.indexOf(document.activeElement as HTMLElement);
+    if (event.shiftKey ? index <= 0 : index === -1 || index === focusable.length - 1) {
+      event.preventDefault();
+      (event.shiftKey ? focusable[focusable.length - 1] : focusable[0])?.focus();
+    }
+  };
 
   const invoke = (id: ProductionCommandId): void => {
     const command = commandRegistry.find((candidate) => candidate.id === id);
@@ -135,7 +175,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
 
   return (
     <>
-      <nav className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-label={t(locale, top ? "nav.primary" : "nav.mobile")}>
+      <nav ref={navRef} className={`production-nav${top ? "" : " production-nav-bottom"}`} aria-hidden={paletteOpen ? "true" : undefined} aria-label={t(locale, top ? "nav.primary" : "nav.mobile")}>
         {top ? (
           <div className="nav-desktop">
             <div className="nav-primary">
@@ -146,7 +186,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
             <div className="nav-utilities" aria-label={t(locale, "nav.settings")}>
               <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.microphone")} title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /></button>
               <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.screenCapture")} title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /></button>
-              <button ref={paletteTriggerRef} type="button" className="command-discovery-trigger" onClick={() => setPaletteOpen(true)} aria-haspopup={commandPopupRole} aria-expanded={paletteOpen} title={t(locale, "tasks.shortcuts")}>
+              <button ref={paletteTriggerRef} type="button" className="command-discovery-trigger" onClick={openPalette} aria-haspopup={commandPopupRole} aria-expanded={paletteOpen} title={t(locale, "tasks.shortcuts")}>
                 <span className="nav-label">{t(locale, "tasks.shortcuts")}</span>
                 <kbd>{commandLabel(commandRegistry[0]!, isApplePlatform() ? "apple" : "other")}</kbd>
               </button>
@@ -165,7 +205,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
         </div>
       </nav>
       {top && paletteOpen ? <div className="command-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}>
-        <section ref={paletteRef} className="command-palette" role="dialog" aria-modal={Boolean(true)} aria-labelledby="production-command-title" tabIndex={-1}>
+        <section ref={paletteRef} className="command-palette" role="dialog" aria-modal={Boolean(true)} aria-labelledby="production-command-title" tabIndex={-1} onKeyDown={handlePaletteKeyDown}>
           <header className="command-palette-header">
             <h2 id="production-command-title">{t(locale, "tasks.shortcuts")}</h2>
             <button type="button" onClick={() => setPaletteOpen(false)} aria-label={t(locale, "common.close")}>{t(locale, "common.close")}</button>
