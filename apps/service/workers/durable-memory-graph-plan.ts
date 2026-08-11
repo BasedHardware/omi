@@ -342,6 +342,31 @@ export const materializeDurableMemoryGraphPlan = (
   strategyValue: RegisteredMemoryStrategy,
   parentCommit: string | null,
 ): Readonly<{ kind: "ready"; result_kind: "successful"; authoritative_append: AuthoritativeLedgerAppend }> => {
+  const inspected = inspectDurableMemoryGraphPlan(
+    contextValue, jobValue, stagedValue, strategyValue,
+  );
+  if (parentCommit !== null) token(parentCommit);
+  return Object.freeze({
+    kind: "ready" as const,
+    result_kind: "successful" as const,
+    authoritative_append: appendFor(
+      inspected.context, inspected.plan, inspected.strategy, parentCommit,
+    ),
+  });
+};
+
+const inspectDurableMemoryGraphPlan = (
+  contextValue: AuthorizedLedgerWriteContext,
+  jobValue: DurableMemoryWorkJob,
+  stagedValue: StagedDurableMemoryWorkResult,
+  strategyValue: RegisteredMemoryStrategy,
+): Readonly<{
+  context: AuthorizedLedgerWriteContext;
+  job: Readonly<DurableMemoryWorkJob>;
+  staged: Readonly<StagedDurableMemoryWorkResult>;
+  strategy: Readonly<RegisteredMemoryStrategy>;
+  plan: Readonly<DurableMemoryGraphPlan>;
+}> => {
   const context = assertAuthorizedLedgerWriteContext(contextValue);
   if (context.capability !== "memories.work.execute") fail("capability_denied");
   const job = parseDurableMemoryWorkJob(jobValue);
@@ -356,11 +381,22 @@ export const materializeDurableMemoryGraphPlan = (
     fail("formation_response_mismatch");
   }
   return Object.freeze({
-    kind: "ready" as const,
-    result_kind: "successful" as const,
-    authoritative_append: appendFor(context, plan, strategy, parentCommit),
+    context,
+    job,
+    staged,
+    strategy,
+    plan,
   });
 };
+
+export const durableMemoryGraphPlanIsEmpty = (
+  contextValue: AuthorizedLedgerWriteContext,
+  jobValue: DurableMemoryWorkJob,
+  stagedValue: StagedDurableMemoryWorkResult,
+  strategyValue: RegisteredMemoryStrategy,
+): boolean => inspectDurableMemoryGraphPlan(
+  contextValue, jobValue, stagedValue, strategyValue,
+).plan.revisions.length === 0;
 
 export const normalizeDurableMemoryGraphPlan = (
   value: unknown,

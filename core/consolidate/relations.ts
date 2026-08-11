@@ -126,6 +126,11 @@ export interface PredicateAlignmentResult {
   coverage: PredicateAlignmentCoverage;
 }
 
+export interface PreparedPredicateAlignmentQuestion {
+  request: PredicateAlignmentRequest;
+  excluded_predicates: readonly PredicateAlignmentExclusion[];
+}
+
 export interface PredicateAlignmentCoverage {
   eligible_predicates: number;
   total_pairs: number;
@@ -396,6 +401,26 @@ const vocabularyFrontierForView = (view: readonly PredicateView[], ownerAccountI
       name: predicate.name,
       observed_roles: predicate.slot_ids,
     })),
+  });
+};
+
+/** Canonical exact question view for a preplanned durable predicate batch. */
+export const preparePredicateAlignmentQuestion = (
+  predicates: readonly Predicate[],
+  ownerAccountId: string,
+): PreparedPredicateAlignmentQuestion => {
+  requireNonEmpty(ownerAccountId, "predicate_alignment_owner_invalid");
+  const built = buildView(predicates, ownerAccountId);
+  return Object.freeze({
+    request: Object.freeze({
+      predicate_frontier: vocabularyFrontierForView(built.view, ownerAccountId),
+      predicates: Object.freeze(built.view.map((predicate) => Object.freeze({
+        predicate_id: predicate.predicate_id,
+        name: predicate.name,
+        slot_ids: Object.freeze([...predicate.slot_ids]),
+      }))),
+    }),
+    excluded_predicates: Object.freeze([...built.excluded]),
   });
 };
 
