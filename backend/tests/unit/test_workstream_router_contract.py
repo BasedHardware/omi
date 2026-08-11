@@ -292,10 +292,11 @@ def test_what_matters_now_is_available_for_a_uid_outside_the_former_cohort(monke
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):
     captured = {}
+    wake_calls = []
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     def create(uid, payload):
         captured.update(payload)
-        now = datetime.now(timezone.utc)
         return {
             **payload,
             'goal_id': payload['id'],
@@ -308,6 +309,15 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
         }
 
     monkeypatch.setattr(goals_router.goals_db, 'create_goal', create)
+    # This contract covers the goal payload/response shape. Keep the proactive
+    # wake as an asserted seam instead of starting its Firestore-backed engine;
+    # that integration is covered by the proactive-engine tests and makes this
+    # otherwise pure unit sensitive to retry timing.
+    monkeypatch.setattr(
+        goals_router,
+        '_wake_goal_change',
+        lambda uid, goal_id, mutation_key: wake_calls.append((uid, goal_id, mutation_key)),
+    )
     result = goals_router.create_goal(
         GoalCreate(
             title='Launch desktop',
@@ -322,6 +332,7 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
     assert 'metric' not in captured
     assert result['metric'] is None
     assert result['target_value'] == 0
+    assert wake_calls == [('u1', captured['id'], now)]
 
 
 def test_all_goals_preserves_active_default_and_can_include_unbounded_history(monkeypatch):
