@@ -89,6 +89,9 @@ class _FakeAppAuth extends FlutterAppAuth {
 class _FakeSecureStorage extends FlutterSecureStorage {
   final Map<String, String> store = <String, String>{};
 
+  /// When true, write() throws — models a Keychain/Keystore failure mid-migration.
+  bool throwOnWrite = false;
+
   @override
   Future<String?> read({
     required String key,
@@ -112,6 +115,7 @@ class _FakeSecureStorage extends FlutterSecureStorage {
     MacOsOptions? mOptions,
     WindowsOptions? wOptions,
   }) async {
+    if (throwOnWrite) throw Exception('secure storage write failed');
     if (value == null) {
       store.remove(key);
     } else {
@@ -309,6 +313,26 @@ void main() {
           reason: 'the refresh must use the token migrated from the legacy pref');
       expect(SharedPreferencesUtil().getString(_refreshTokenPrefKey), '', reason: 'the plaintext pref must be scrubbed');
       expect(storage.store[_refreshTokenPrefKey], 'legacy-rt', reason: 'the token must live in secure storage');
+    });
+
+    test('a failed secure write during migration keeps the plaintext token for a retry', () async {
+      final prefs = SharedPreferencesUtil();
+      await prefs.saveString(_refreshTokenPrefKey, 'legacy-rt'); // pre-existing plaintext session
+
+      final appAuth = _FakeAppAuth(); // the migration write fails before any provider call
+      final storage = _FakeSecureStorage()..throwOnWrite = true;
+      final service = OidcAuthService.forTest(appAuth: appAuth, secureStorage: storage, clock: () => now);
+
+      // The one-time migration's secure write throws; it must NOT have scrubbed the only copy.
+      try {
+        await service.refresh(forceRefresh: true);
+      } catch (_) {
+        // A surfaced secure-write failure is acceptable; the invariant below is what matters.
+      }
+
+      expect(prefs.getString(_refreshTokenPrefKey), 'legacy-rt',
+          reason: 'a failed secure write must NOT discard the only refresh token (would strand the session)');
+      expect(storage.store.containsKey(_refreshTokenPrefKey), isFalse, reason: 'the token never reached secure storage');
     });
   });
 

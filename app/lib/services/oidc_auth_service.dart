@@ -74,10 +74,13 @@ class OidcAuthService {
     final secure = await _secureStorage.read(key: _refreshTokenKey);
     if (secure != null && secure.isNotEmpty) return secure;
     // One-time migration: an existing session may still hold the token in plaintext prefs.
-    // takeLegacy* reads and clears the plaintext slot in one step.
-    final legacy = SharedPreferencesUtil().takeLegacyOidcRefreshToken();
+    final legacy = SharedPreferencesUtil().getLegacyOidcRefreshToken();
     if (legacy.isNotEmpty) {
       await _secureStorage.write(key: _refreshTokenKey, value: legacy);
+      // Scrub the plaintext copy ONLY after the secure write succeeds. If write throws, the
+      // plaintext survives so the next refresh retries the migration — a failed write must never
+      // discard the only refresh token and strand the session.
+      SharedPreferencesUtil().clearLegacyOidcRefreshToken();
     }
     return legacy;
   }
