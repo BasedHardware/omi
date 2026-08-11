@@ -347,8 +347,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       navigate: _controller.loadRequest,
       observe: () async {
         final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
-        if (result is String) return result;
-        return result.toString() == 'null' ? null : result.toString();
+        return normalizeRenderedObservationResult(result);
       },
       startListen: () async {
         final result = await _controller.runJavaScriptReturningResult(startListenConsumerEvidenceJavaScript);
@@ -368,8 +367,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       },
       observeChatAfterAdmission: (baseline) async {
         final result = await _controller.runJavaScriptReturningResult(renderedChatObservationJavaScript(baseline));
-        if (result is String) return result;
-        return result.toString() == 'null' ? null : result.toString();
+        return normalizeRenderedObservationResult(result);
       },
     );
     await _consumerEvidence!.start();
