@@ -261,7 +261,7 @@ test("prepared one-coordinate capture recreates PNG, sidecar, and result determi
     descriptor.input_set = inputEntriesForFake(matrix, app);
     mkdirSync(outRoot, { recursive: true });
     writeFileSync(preparedPath, JSON.stringify(descriptor, null, 2));
-    const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60"], { encoding: "utf8" });
+    const run = spawnSync(process.execPath, [producer, "--manifest", matrix, "--out-root", outRoot, "--shell", "macos", "--offset", "0", "--limit", "1", "--prepared-input-set", preparedPath, "--timeout-seconds", "60", "--replay-proof"], { encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /NATIVE_FIXTURE_BATCH_COMPLETE members=1/);
     const result = JSON.parse(readFileSync(path.join(outRoot, "batch-result.json"), "utf8"));
