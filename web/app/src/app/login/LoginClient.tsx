@@ -199,7 +199,7 @@ export function LoginClient() {
               overrides Tailwind's `-translate-x-1/2 -translate-y-1/2` and left
               the ring offset by half its own box.
             */}
-            <div className="fixed left-1/2 top-[42%] z-10 -translate-x-1/2 -translate-y-1/2 sm:top-1/2">
+            <div className="fixed left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 sm:block">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -230,7 +230,7 @@ export function LoginClient() {
             </div>
 
             {/* Reserves the space the pinned mark used to occupy in flow. */}
-            <div aria-hidden="true" className="h-16 w-16 mb-8" />
+            <div aria-hidden="true" className="mb-8 hidden h-16 w-16 sm:block" />
 
             {/* Auth buttons */}
             <motion.div
