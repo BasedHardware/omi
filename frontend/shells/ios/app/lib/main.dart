@@ -58,15 +58,15 @@ const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: fa
 const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
 const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
 
-void main() => runApp(const ProtoApp());
+void main() => runApp(const OmiApp());
 
-class ProtoApp extends StatelessWidget {
-  const ProtoApp({super.key});
+class OmiApp extends StatelessWidget {
+  const OmiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Omi webview proto',
+      title: 'Omi',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
       home: const SurfaceHost(),
