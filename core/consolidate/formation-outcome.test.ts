@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 
 import {
+  formationCandidateManifestDigest,
   isPlacementDecision,
   MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION,
   parseFormationOutcomeEnvelope,
@@ -33,6 +34,7 @@ const envelope = () => ({
   input_frontier: "frontier:synthetic:1",
   response_digest: responseDigest,
   candidate_count: 3,
+  candidate_manifest_digest: formationCandidateManifestDigest(3),
   coordinates: coordinates(),
   extraction_outcomes: [
     {
@@ -191,6 +193,7 @@ test("P1 formation contract is total over raw candidates and accepted placement"
 
   const empty = envelope();
   empty.candidate_count = 0;
+  empty.candidate_manifest_digest = formationCandidateManifestDigest(0);
   empty.extraction_outcomes = [];
   empty.placement_outcomes = [];
   expect(parseFormationOutcomeEnvelope(empty)).toMatchObject({
@@ -204,4 +207,10 @@ test("P1 formation contract requires the exact response digest coordinate", () =
   const invalid = envelope();
   invalid.response_digest = "not-a-digest";
   expect(() => parseFormationOutcomeEnvelope(invalid)).toThrow("lowercase SHA-256 digest");
+});
+
+test("P2 formation contract binds the complete ordered raw-candidate manifest", () => {
+  const invalid = envelope();
+  invalid.candidate_manifest_digest = formationCandidateManifestDigest(2);
+  expect(() => parseFormationOutcomeEnvelope(invalid)).toThrow("does not match the ordered candidate manifest");
 });

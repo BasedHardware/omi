@@ -39,6 +39,29 @@ const portFixture = join(platformRoot, "scripts", "port-registry-tripwire-fixtur
 const runLint = () =>
   spawnSync("bun", ["run", "scripts/lint-import-graph.ts"], { cwd: platformRoot, encoding: "utf8" });
 
+test("authority fences reject issuer construction and raw PostgreSQL capabilities outside their owners", () => {
+  const issuerFixture = join(platformRoot, "scripts", "authorized-ledger-issuer-tripwire-fixture.ts");
+  const postgresFixture = join(platformRoot, "apps", "service", "routes", "postgres-transaction-tripwire-fixture.ts");
+  try {
+    writeFileSync(issuerFixture, [
+      'import * as authorityInternals from "../apps/service/auth/authorized-context-internal";',
+      "export const issuer = authorityInternals;",
+    ].join("\n"));
+    writeFileSync(postgresFixture, [
+      'import { withAuthorizedSerializableTransaction } from "../../../drivers/postgres/transaction";',
+      "export const raw = withAuthorizedSerializableTransaction;",
+    ].join("\n"));
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(output).toContain("ledger context minting module is private");
+    expect(output).toContain("application code may not import the raw PostgreSQL");
+  } finally {
+    rmSync(issuerFixture, { force: true });
+    rmSync(postgresFixture, { force: true });
+  }
+});
+
 const withPortFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(portFixture, source);

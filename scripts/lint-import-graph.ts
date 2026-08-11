@@ -454,6 +454,31 @@ for (const file of files(root)) {
   if (shown.startsWith("core/") && /from\s+["'][^"']*drivers\//.test(text)) {
     failures.push(`${shown}: core may not import drivers`);
   }
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const code = withoutComments(text);
+    if (shown !== "apps/service/auth/authorized-context-internal.ts"
+      && /\bcreateAuthorizedLedgerWriteContextIssuer\b/.test(code)) {
+      failures.push(
+        `${shown}: only the auth authority module may construct an authorized ledger context issuer; `
+        + "future activation must add one reviewed auth-composition seam to this fence",
+      );
+    }
+    if (shown !== "apps/service/auth/authorized-context.ts"
+      && shown !== "scripts/lint-import-graph.ts"
+      && /["'][^"']*authorized-context-internal(?:\.ts)?["']/.test(code)) {
+      failures.push(
+        `${shown}: the ledger context minting module is private to the public validation facade; `
+        + "future activation must add one reviewed auth-composition seam to this path fence",
+      );
+    }
+    if (shown.startsWith("apps/")
+      && /from\s+["'][^"']*drivers\/postgres\/(?:connection|transaction)["']/.test(code)) {
+      failures.push(
+        `${shown}: application code may not import the raw PostgreSQL connection/transaction capability; `
+        + "compose only the sealed authoritative repository adapter",
+      );
+    }
+  }
 
   // ── Rule 16: a registered port has exactly one composition ────────────────
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {

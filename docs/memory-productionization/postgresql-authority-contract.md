@@ -1,18 +1,21 @@
 # PostgreSQL memory authority contract
 
-Status: P2 pre-registration, 2026-08-11
+Status: P2 pre-registration plus inert P2.1 scaffolding, 2026-08-11
 
 ## Decision boundary
 
-This contract freezes the first PostgreSQL authority slice before a migration,
-driver, route, or worker is added. It implements the already-ratified direction in
+This contract was frozen before the first PostgreSQL migration and transaction-boundary
+scaffolding were added. It implements the already-ratified direction in
 backend ADR-009, ADR-010, ADR-013, and ADR-014; it does not choose new product or
 data-disposition policy.
 
-The current tree has no PostgreSQL dependency, migration runner, adapter, pool,
-container harness, or PostgreSQL test. SQLite remains the offline/QA reference. The
-first slice is therefore a new production adapter with shared invariant fixtures, not
-a translation of SQLite tables.
+The current tree now contains inert, checksummed migration files, a sealed service
+repository contract, and a transaction-time authority revalidation boundary with fake
+tests. It still has no PostgreSQL client dependency, migration runner, real pool or
+ledger adapter, container harness, or real PostgreSQL test. SQLite remains the
+offline/QA reference. This is scaffolding for a future production adapter with shared
+invariant fixtures, not a translation of SQLite tables and not a production authority
+claim.
 
 Two choices remain outside this unit:
 
@@ -27,17 +30,20 @@ production credential, or runtime default enters this unit.
 
 ## First slice
 
-The slice has four parts:
+The planned slice has four parts:
 
 1. an append-only, checksummed, expand-only migration manifest;
-2. an explicit PostgreSQL transaction capability over one checked-out connection;
-3. an asynchronous `AuthoritativeLedgerRepository` that accepts only a sealed write
+2. an internal PostgreSQL transaction boundary over one checked-out connection; the
+   exported callback receives only frozen, revalidated metadata and no arbitrary SQL
+   capability;
+3. an asynchronous `AuthoritativeLedgerRepository` contract that accepts only a sealed write
    authorization context and a complete atomic graph transition;
 4. shared SQLite/PostgreSQL invariant fixtures plus PostgreSQL-only concurrency,
    pooling, and crash tests.
 
-The repository is inert until one canonical service composition is deliberately wired
-in a later unit. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
+The checked-in repository contract and transaction revalidation boundary are inert;
+there is no PostgreSQL ledger implementation to wire yet. A later unit may add exactly
+one canonical service composition only after the real adapter and gate exist. The existing synchronous `LedgerPort.findCommitByIdempotencyKey` is
 not a production PostgreSQL seam and is not widened or faked. Model preflight will use
 an asynchronous authorized lookup owned by the new repository.
 
@@ -56,8 +62,11 @@ write capability binds:
 - authentication strength and expiry; and
 - an authorization-state digest covering the persisted rows that minted the context.
 
-Only the authentication/authorization composition boundary may construct the sealed
-context. The PostgreSQL transaction re-reads and locks the referenced subordinate
+The static import fence reserves construction for one future reviewed
+authentication/authorization composition boundary; no production composition is wired
+yet. Ordinary application and driver modules receive only the public validation facade.
+This is a checked code-organization boundary, not a claim that JavaScript module access
+is cryptographically unforgeable. The PostgreSQL transaction re-reads and locks the referenced subordinate
 account-control projection, credential, and grant rows. Generation, account epoch,
 lifecycle, deletion epoch, and destination activation are fields/revisions of that one
 control projection, never a second mutable lifecycle authority. Missing, stale,
@@ -171,8 +180,11 @@ schema versions, and normalized transition input digest.
   before a prior receipt can be replayed;
 - a graph-head conflict returns a typed stale-parent outcome and writes nothing; a
   caller may retry only after rebuilding the complete transition against the new head.
-  That retry creates a new append-attempt key bound to the new parent, reuses the
-  persisted formation result, and never invokes the model again; and
+  That retry creates a new append-attempt key bound to the new parent and reuses the
+  already-validated formation result retained by the caller, without invoking the model
+  again. Restart-safe persistence of accepted formation work is a P3 requirement and an
+  activation blocker; P2.1 does not falsely claim it from an outcome row whose append
+  transaction rolled back; and
 - a serialization failure is a typed retryable outcome that writes nothing and never
   mutates or silently retries the plan.
 
@@ -245,7 +257,8 @@ The first slice succeeds only when a repository-owned real PostgreSQL gate prove
   first write leaves no commit, verified from a separate connection;
 - active identity-witness verification, superseded/tampered witness rejection, monotone
   liveness, and process-restart reconstruction;
-- graph-commit-before-formation-drain recovery without a second model call;
+- stale-parent retry from one retained validated formation result without a second model
+  call; restart recovery of accepted work remains a P3 gate;
 - empty and nonempty authoritative ledger reconstructions produce byte- and
   version-stable snapshots; and
 - the shared synthetic transition has semantically identical SQLite and PostgreSQL
@@ -267,7 +280,8 @@ gate is not yet available.
 
 ## Activation blockers outside this slice
 
-The adapter stays inert until all of the following are true:
+The scaffolding stays inert and no adapter may be activated until all of the following
+are true:
 
 - PostgreSQL major, exact test image digest, and client driver are ratified and pinned;
 - the real PostgreSQL gate above passes;

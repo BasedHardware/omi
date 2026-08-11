@@ -40,6 +40,9 @@
     "drivers/model": {
       "name": "@platform/model-driver",
     },
+    "drivers/postgres": {
+      "name": "@platform/postgres",
+    },
     "drivers/sqlite": {
       "name": "@platform/sqlite",
     },
@@ -59,6 +62,8 @@
     "@platform/ledger": ["@platform/ledger@workspace:core/ledger"],
 
     "@platform/model-driver": ["@platform/model-driver@workspace:drivers/model"],
+
+    "@platform/postgres": ["@platform/postgres@workspace:drivers/postgres"],
 
     "@platform/resolve": ["@platform/resolve@workspace:core/resolve"],
 

@@ -1,6 +1,7 @@
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
 // domain-pending(DIV-DOMX-005)
+import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
 export const MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION = "memory-formation-outcome-v2" as const;
@@ -68,6 +69,8 @@ export interface FormationOutcomeEnvelope {
   readonly response_digest: string;
   /** Number of candidates in the exact model response, including all drops. */
   readonly candidate_count: number;
+  /** Digest of the complete ordered raw-candidate coordinate manifest. */
+  readonly candidate_manifest_digest: string;
   readonly coordinates: Readonly<FormationStrategyCoordinates>;
   readonly extraction_outcomes: readonly ExtractionOutcome[];
   readonly placement_outcomes: readonly PlacementOutcome[];
@@ -153,6 +156,14 @@ const nonnegativeInteger = (value: unknown, label: string): number => {
   return value as number;
 };
 
+export const formationCandidateManifestDigest = (candidateCount: number): string => {
+  const count = nonnegativeInteger(candidateCount, "candidate_count");
+  return createHash("sha256").update(JSON.stringify({
+    contract_version: "formation-candidate-manifest-v1",
+    candidate_refs: Array.from({ length: count }, (_, index) => `candidate:${index + 1}`),
+  })).digest("hex");
+};
+
 const tokenArray = (value: unknown, label: string): readonly string[] => {
   const parsed = array(value, label).map((item, index) => token(item, `${label}[${index}]`));
   if (new Set(parsed).size !== parsed.length) return fail(`${label} must be unique`);
@@ -219,13 +230,17 @@ const parsePlacementOutcome = (value: unknown, index: number): PlacementOutcome 
   if (input.kind === "admitted") {
     exactKeys(input, ["kind", "input_provisional_revision_id", "canonical_claim_revision_id", "boundary_decision", "scope_locality"], label);
     if (input.boundary_decision !== "accept_ltm") fail(`${label}.boundary_decision must be accept_ltm`);
-    if (input.scope_locality !== "durable" && input.scope_locality !== "source_local") fail(`${label}.scope_locality is unsupported`);
+    const scopeLocality: "durable" | "source_local" = input.scope_locality === "durable"
+      ? "durable"
+      : input.scope_locality === "source_local"
+        ? "source_local"
+        : fail(`${label}.scope_locality is unsupported`);
     return freezeRecord({
       kind: "admitted" as const,
       input_provisional_revision_id: token(input.input_provisional_revision_id, `${label}.input_provisional_revision_id`),
       canonical_claim_revision_id: token(input.canonical_claim_revision_id, `${label}.canonical_claim_revision_id`),
       boundary_decision: "accept_ltm" as const,
-      scope_locality: input.scope_locality,
+      scope_locality: scopeLocality,
     });
   }
   if (input.kind === "abstained") {
@@ -279,11 +294,15 @@ const parsePlacementOutcome = (value: unknown, index: number): PlacementOutcome 
 export const parseFormationOutcomeEnvelope = (value: unknown): Readonly<FormationOutcomeEnvelope> => {
   const input = record(value, "envelope");
   exactKeys(input, [
-    "contract_version", "owner_account_id", "work_id", "input_frontier", "response_digest", "candidate_count", "coordinates",
+    "contract_version", "owner_account_id", "work_id", "input_frontier", "response_digest", "candidate_count", "candidate_manifest_digest", "coordinates",
     "extraction_outcomes", "placement_outcomes",
   ], "envelope");
   if (input.contract_version !== MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION) fail("contract_version is unsupported");
   const candidateCount = nonnegativeInteger(input.candidate_count, "candidate_count");
+  const candidateManifestDigest = sha256Digest(input.candidate_manifest_digest, "candidate_manifest_digest");
+  if (candidateManifestDigest !== formationCandidateManifestDigest(candidateCount)) {
+    fail("candidate_manifest_digest does not match the ordered candidate manifest");
+  }
   const extractionOutcomes = array(input.extraction_outcomes, "extraction_outcomes")
     .map(parseExtractionOutcome);
   const placementOutcomes = array(input.placement_outcomes, "placement_outcomes")
@@ -315,6 +334,7 @@ export const parseFormationOutcomeEnvelope = (value: unknown): Readonly<Formatio
     input_frontier: token(input.input_frontier, "input_frontier"),
     response_digest: sha256Digest(input.response_digest, "response_digest"),
     candidate_count: candidateCount,
+    candidate_manifest_digest: candidateManifestDigest,
     coordinates: parseCoordinates(input.coordinates),
     extraction_outcomes: Object.freeze(extractionOutcomes),
     placement_outcomes: Object.freeze(placementOutcomes),

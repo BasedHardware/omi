@@ -219,8 +219,11 @@ P0 is closed. Runtime source changes may now begin as separately tested vertical
 
 ## P2 pre-registration — PostgreSQL authority, 2026-08-11
 
-The current tree contains no PostgreSQL migration, driver, pool, repository, or real
-database harness. P2 therefore begins with the expand-only authority contract in
+At pre-registration time the tree contained no PostgreSQL migration, driver, pool,
+repository, or real database harness. It now contains inert checksummed migration
+files, a sealed service repository contract, and a fake-tested transaction authority
+revalidation boundary. It still has no PostgreSQL client dependency, migration runner,
+real pool or ledger adapter, service composition, or real database harness. P2 began with the expand-only authority contract in
 [`postgresql-authority-contract.md`](postgresql-authority-contract.md), not a mechanical
 copy of the SQLite QA schema. The first slice requires a sealed authorized write context,
 transaction-local account and grant coordinates, tenant-bearing composite constraints,

@@ -15,6 +15,7 @@
     "input_frontier": "frontier:synthetic:1",
     "response_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "candidate_count": 3,
+    "candidate_manifest_digest": "20b4914428b1d583e0c6d70c561eeba05713eacd251f27acac20e78a00c2cf5b",
     "coordinates": {
       "contract_version": "memory-formation-outcome-v2",
       "strategy_version": "grounded-reference-v1",

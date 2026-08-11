@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { extractGrounded, groundedPrompt, materializeGroundedExtractionOutcomes, materializeGroundedMentions, materializeGroundedProvisional } from "../../core/extract/grounded";
-import { MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION, parseFormationOutcomeEnvelope } from "../../core/consolidate/formation-outcome";
+import { formationCandidateManifestDigest, MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION, parseFormationOutcomeEnvelope } from "../../core/consolidate/formation-outcome";
 import type { Evidence } from "../../core/schema";
 import type { WritingContext } from "../../core/retrieve/writing-context";
 import { DeterministicFakeModel } from "./port";
@@ -328,6 +328,7 @@ test("P1 grounded adapter produces a total valid formation envelope", async () =
     input_frontier: "frontier:1",
     response_digest: output.response_digest,
     candidate_count: 2,
+    candidate_manifest_digest: formationCandidateManifestDigest(2),
     coordinates: {
       contract_version: MEMORY_FORMATION_OUTCOME_CONTRACT_VERSION,
       strategy_version: "grounded-v1",
