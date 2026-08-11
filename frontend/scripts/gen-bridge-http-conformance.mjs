@@ -378,10 +378,11 @@ void main() {
           // conformance fails instead of accepting a late reply. The bounded
           // gate also proves old ids are evicted deterministically.
           final gate = BridgeHttpReplyGate(maxEntries: 1);
-          expect(gate.accept(requestId), isTrue, reason: row['id'] as String);
-          expect(gate.accept(requestId), isFalse, reason: row['id'] as String);
-          expect(gate.accept('$requestId-next'), isTrue, reason: row['id'] as String);
-          expect(gate.accept(requestId), isTrue, reason: row['id'] as String);
+          final documentEpoch = gate.beginDocument();
+          expect(gate.accept(documentEpoch, requestId), isTrue, reason: row['id'] as String);
+          expect(gate.accept(documentEpoch, requestId), isFalse, reason: row['id'] as String);
+          expect(gate.accept(documentEpoch, '$requestId-next'), isTrue, reason: row['id'] as String);
+          expect(gate.accept(documentEpoch, requestId), isTrue, reason: row['id'] as String);
         }
         if (expected['bodyAfterHeaders'] != null) {
           expect(applyEvents.last, expected['bodyAfterHeaders'] == true ? 'body' : isNot('body'), reason: row['id'] as String);
