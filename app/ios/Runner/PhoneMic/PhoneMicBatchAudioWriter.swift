@@ -28,6 +28,18 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
 
+    override func onOpenedLocked(_ partURL: URL) {
+        guard let raw = UserDefaults.standard.string(forKey: "flutter.phoneBatchGeolocation"),
+              let data = raw.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+        else { return }
+
+        persistRecordingGeolocationSidecar(
+            rawGeolocation: raw,
+            audioURL: partURL.deletingPathExtension()
+        )
+    }
+
     /// `dir` is resolved once at bring-up (a missing/empty `flutter.batchAudioDir`
     /// fails the session with batch_dir_unavailable before this writer is created),
     /// so it is never re-checked per append. The recovery prefix `audio_omibatchphone`
@@ -77,9 +89,13 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         }
 
         if !isOpen {
-            let startSec = nowMs / 1000
             // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
             // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+            var startSec = nowMs / 1000
+            while FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin") ||
+                FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)") {
+                startSec += 1
+            }
             let name = "audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)"
             guard openLocked(dirPath: dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
                 noteStorageFullTransition() // open refused — most likely the free-space guard tripped

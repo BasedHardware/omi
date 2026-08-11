@@ -2081,14 +2081,22 @@ public enum OmiAPI {
 
 
   public struct Geolocation: Codable {
+    public let accuracy: Double?
     public let address: String?
+    public let altitude: Double?
+    public let captureSource: String?
+    public let capturedAt: String?
     public let googlePlaceId: String?
     public let latitude: Double
     public let locationType: String?
     public let longitude: Double
 
     private enum CodingKeys: String, CodingKey {
+      case accuracy
       case address
+      case altitude
+      case captureSource = "capture_source"
+      case capturedAt = "captured_at"
       case googlePlaceId = "google_place_id"
       case latitude
       case locationType = "location_type"
@@ -2097,15 +2105,23 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      accuracy = try c.decodeIfPresent(Double.self, forKey: .accuracy)
       address = try c.decodeIfPresent(String.self, forKey: .address)
+      altitude = try c.decodeIfPresent(Double.self, forKey: .altitude)
+      captureSource = try c.decodeIfPresent(String.self, forKey: .captureSource)
+      capturedAt = try c.decodeIfPresent(String.self, forKey: .capturedAt)
       googlePlaceId = try c.decodeIfPresent(String.self, forKey: .googlePlaceId)
       latitude = try c.decode(Double.self, forKey: .latitude)
       locationType = try c.decodeIfPresent(String.self, forKey: .locationType)
       longitude = try c.decode(Double.self, forKey: .longitude)
     }
 
-    public init(address: String? = nil, googlePlaceId: String? = nil, latitude: Double, locationType: String? = nil, longitude: Double) {
+    public init(accuracy: Double? = nil, address: String? = nil, altitude: Double? = nil, captureSource: String? = nil, capturedAt: String? = nil, googlePlaceId: String? = nil, latitude: Double, locationType: String? = nil, longitude: Double) {
+      self.accuracy = accuracy
       self.address = address
+      self.altitude = altitude
+      self.captureSource = captureSource
+      self.capturedAt = capturedAt
       self.googlePlaceId = googlePlaceId
       self.latitude = latitude
       self.locationType = locationType
@@ -14218,7 +14234,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14241,6 +14257,7 @@ public enum OmiAPI {
     if let xRequestID { req.setValue(String(xRequestID), forHTTPHeaderField: "X-Request-ID") }
     if let xCloudTraceContext { req.setValue(String(xCloudTraceContext), forHTTPHeaderField: "X-Cloud-Trace-Context") }
     if let xOmiSyncCaptureManifest { req.setValue(String(xOmiSyncCaptureManifest), forHTTPHeaderField: "X-Omi-Sync-Capture-Manifest") }
+    if let xOmiConversationGeolocation { req.setValue(String(xOmiConversationGeolocation), forHTTPHeaderField: "X-Omi-Conversation-Geolocation") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }

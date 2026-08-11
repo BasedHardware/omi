@@ -48,7 +48,7 @@ void main() {
       _Listener(),
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
           claims.add(claimLiveCapture);
           return UploadFilesResult.queued('job-${claims.length}');
         },

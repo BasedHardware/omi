@@ -18,7 +18,7 @@ from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.conversations.render import conversation_to_dict
+from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
 from utils.notifications import send_notification
@@ -128,7 +128,7 @@ async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool
 
 
 def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> dict:
-    payload = conversation_to_dict(memory)
+    payload = redact_conversation_for_integration(conversation_to_dict(memory))
     populate_speaker_names(uid, [payload])
     populate_folder_names(uid, [payload])
     return payload

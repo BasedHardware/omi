@@ -1,6 +1,7 @@
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
@@ -125,6 +126,9 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Canonical start-time location snapshot for delayed/offline finalization.
+  Geolocation? geolocation;
+
   /// Number of sync retry attempts for this WAL.
   int retryCount;
 
@@ -209,6 +213,7 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
@@ -237,6 +242,9 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      geolocation: json['geolocation'] is Map<String, dynamic>
+          ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
+          : null,
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
@@ -263,6 +271,7 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,

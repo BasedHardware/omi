@@ -1410,7 +1410,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
 				PRODUCT_NAME = BatteryWidget;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

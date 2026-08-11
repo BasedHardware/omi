@@ -1325,6 +1325,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -1369,6 +1370,12 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
@@ -3035,6 +3042,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -3079,6 +3087,12 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False

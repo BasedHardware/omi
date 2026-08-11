@@ -4,9 +4,9 @@
     "backend/routers/chat.py": 1716,
     "backend/routers/developer.py": 2282,
     "backend/routers/mcp_sse.py": 2009,
-    "backend/routers/sync.py": 2083,
+    "backend/routers/sync.py": 2069,
     "backend/routers/users.py": 2155,
-    "backend/routers/conversations.py": 1507
+    "backend/routers/conversations.py": 1518
   },
   "raise_justifications": {
     "backend/routers/apps.py": "POST /v1/apps/enable reads is_setup_completed through _setup_completed_from_response so a developer-controlled body that is non-JSON or not an object returns the intended 400 instead of a 500 (46 prod occurrences Jul 21-28); the guard stays in the route that owns the enable response contract. +5 keeps deleted-source rejection at the anonymous owner-migration admission boundary so a fresh UID cannot claim state from a fenced owner (SCA-280). +28 gives /v2/apps/search the name-OR-description predicate its `q` parameter documents plus the client-parity relevance tier, next to the one handler that owns them rather than importing search policy into utils/apps.py (#11292).",
