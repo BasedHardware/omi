@@ -8,6 +8,10 @@ from models.memories import Memory, MemoryCategory
 from utils.memory.memory_system import MemorySystem
 
 
+def _request(headers=None):
+    return SimpleNamespace(headers=headers or {})
+
+
 def _authorization():
     policy = SimpleNamespace(
         consumer=SimpleNamespace(value='omi_chat'),
@@ -83,6 +87,7 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
 
     result = memory_platform.ingest_memory_platform(
+        _request(),
         Memory(content='The backend is authoritative.', category=MemoryCategory.manual),
         uid='user-1',
     )
@@ -93,6 +98,35 @@ def test_platform_ingest_uses_canonical_memory_service(monkeypatch):
     assert calls[1][1]['require_canonical_promotion'] is True
 
 
+def test_platform_ingest_preserves_capture_device_provenance(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(
+        memory_platform,
+        'canonical_write_decision',
+        lambda uid, db_client: SimpleNamespace(memory_system=MemorySystem.CANONICAL, enabled=True, reason='enabled'),
+    )
+
+    class FakeMemoryService:
+        def __init__(self, db_client):
+            pass
+
+        def create_external_memory(self, uid, memory_db, **kwargs):
+            captured['memory_db'] = memory_db
+            return SimpleNamespace(id=memory_db.id)
+
+    monkeypatch.setattr(memory_platform, 'MemoryService', FakeMemoryService)
+
+    memory_platform.ingest_memory_platform(
+        _request({'x-app-platform': 'macos', 'x-device-id-hash': 'abcd1234'}),
+        Memory(content='Captured on this laptop.'),
+        uid='user-1',
+    )
+
+    memory_db = captured['memory_db']
+    assert [evidence.client_device_id for evidence in memory_db.evidence] == ['macos_abcd1234']
+
+
 @pytest.mark.parametrize('blank_content', ['', '   ', '\n\t '])
 def test_platform_ingest_rejects_blank_content_as_client_input(monkeypatch, blank_content):
     def unreachable(*args, **kwargs):
@@ -101,7 +135,7 @@ def test_platform_ingest_rejects_blank_content_as_client_input(monkeypatch, blan
     monkeypatch.setattr(memory_platform, 'canonical_write_decision', unreachable)
 
     with pytest.raises(HTTPException) as error:
-        memory_platform.ingest_memory_platform(Memory(content=blank_content), uid='user-1')
+        memory_platform.ingest_memory_platform(_request(), Memory(content=blank_content), uid='user-1')
 
     assert error.value.status_code == 400
 
@@ -114,6 +148,6 @@ def test_platform_ingest_fails_closed_when_canonical_write_is_unavailable(monkey
     )
 
     with pytest.raises(HTTPException) as error:
-        memory_platform.ingest_memory_platform(Memory(content='not written'), uid='user-1')
+        memory_platform.ingest_memory_platform(_request(), Memory(content='not written'), uid='user-1')
 
     assert error.value.status_code == 503

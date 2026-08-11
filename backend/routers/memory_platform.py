@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from database._client import db
 from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_product import ProductMemorySearchResponse
 from models.memory_platform import MemoryPlatformCapability, MemoryPlatformIngestResponse
+from utils.client_device import resolve_client_device_from_request
 from utils.memory.canonical_activation import canonical_write_decision
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -128,6 +129,7 @@ def search_memory_platform(
     response_model=MemoryPlatformIngestResponse,
 )
 def ingest_memory_platform(
+    request: Request,
     memory: Memory,
     uid: str = Depends(_rate_limited_uid('memories:create')),
 ) -> MemoryPlatformIngestResponse:
@@ -149,6 +151,7 @@ def ingest_memory_platform(
         source_type='memory_platform',
         source_signal='memory_platform',
         extractor_id='memory_platform_ingest',
+        client_device_id=resolve_client_device_from_request(request).client_device_id,
     )
     try:
         created = MemoryService(db_client=db).create_external_memory(
