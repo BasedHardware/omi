@@ -181,6 +181,8 @@ test("batch source has bounded, fixture-only environment and atomic receipt lang
   assert.match(source, /viewport\.width \* viewport\.scale/);
   assert.match(source, /flutter, \["config", `--build-dir=/);
   assert.match(source, /found nothing to terminate/);
+  assert.match(source, /SIMCTL_CHILD_OMI_CAPTURE_QUERY/);
+  assert.match(source, /NATIVE_CAPTURE_READY/);
   assert.match(source, /simctl.*ui.*appearance/);
   assert.match(source, /elapsedSeconds/);
   assert.match(source, /validAccessibilities = new Set\(\["none"\]\)/);
