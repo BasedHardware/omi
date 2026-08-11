@@ -7946,6 +7946,26 @@ public enum OmiAPI {
     return
   }
 
+  public static func rotateApiKey(client: OmiApiClient, keyId: String) async throws -> OmiAnyCodable {
+    let _path = "/v1/dev/keys/\(keyId)/rotate"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func listActionItems(client: OmiApiClient, conversationId: String? = nil, completed: Bool? = nil, startDate: String? = nil, endDate: String? = nil, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/dev/user/action-items"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -10158,6 +10178,26 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return
+  }
+
+  public static func rotateKeyV1McpKeysKeyIdRotatePost(client: OmiApiClient, keyId: String) async throws -> OmiAnyCodable {
+    let _path = "/v1/mcp/keys/\(keyId)/rotate"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
   public static func getMemoriesV1McpMemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, categories: String? = nil, sort: String? = nil, reviewed: Bool? = nil, manuallyAdded: Bool? = nil, updatedAfter: String? = nil, includeActivity: Bool? = nil, includeSensitive: Bool? = nil) async throws -> [OmiAnyCodable] {
@@ -14800,5 +14840,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 399 Swift client methods generated.
+  // Total: 401 Swift client methods generated.
 }
