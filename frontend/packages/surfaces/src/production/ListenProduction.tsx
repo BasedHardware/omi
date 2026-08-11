@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { formatDuration, t } from "@omi-core/i18n";
+import { formatDuration, t, type MessageKey } from "@omi-core/i18n";
+import type { PlatformListenPreflightSnapshot } from "@omi-core/adapters-platform";
 import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wire-listen";
 import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
@@ -13,6 +14,21 @@ type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 
 const LISTEN_LIVE_EDGE_PX = 24;
+const LEGACY_PREFLIGHT: PlatformListenPreflightSnapshot = {
+  permission: "granted",
+  device: { state: "available", label: null },
+  recovery: null,
+};
+
+function preflightPermissionLabel(locale: Locale, state: PlatformListenPreflightSnapshot["permission"]): string {
+  const key = `listen.permission.${state}` as MessageKey;
+  return t(locale, key, {} as never);
+}
+
+function preflightDeviceLabel(locale: Locale, state: PlatformListenPreflightSnapshot["device"]["state"]): string {
+  const key = `listen.device.${state}` as MessageKey;
+  return t(locale, key, {} as never);
+}
 
 function listenScrollTarget(transcript: HTMLElement): HTMLElement {
   if (transcript.ownerDocument.documentElement.dataset["platform"] === "mobile") {
@@ -91,6 +107,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   const [showLatest, setShowLatest] = useState(false);
   const [announceTranscript, setAnnounceTranscript] = useState(true);
   const [listenAnnouncement, setListenAnnouncement] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<PlatformListenPreflightSnapshot>(() => store.preflight?.() ?? LEGACY_PREFLIGHT);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   const transcriptRef = useRef<HTMLElement>(null);
@@ -105,6 +122,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
       setCapture(store.captureState());
       setSegments(store.transcriptSegments());
       setEntitlement(store.entitlementState());
+      setPreflight(store.preflight?.() ?? LEGACY_PREFLIGHT);
     } catch {
       setOperationError(t(locale, "lifecycle.error"));
     }
@@ -201,6 +219,10 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   const buffered = bufferedSeconds(presentedCapture);
   const hours = backlogHours(description.backlogSeconds);
   const usageLabel = entitlementUsageLabel(entitlement, locale);
+  const entitlementAllowsCapture = entitlement === null || entitlement.captureContinuing;
+  const captureReady = preflight.permission === "granted"
+    && preflight.device.state === "available"
+    && entitlementAllowsCapture;
   const canRetryRefresh = !(
     presentedCapture.kind === "stopped-at-ceiling"
     || (presentedCapture.kind === "error" && !presentedCapture.retryable)
@@ -277,6 +299,41 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             </div>
           )}
         </section>
+        <section className="listen-preflight" aria-labelledby="listen-preflight-title">
+          <h2 id="listen-preflight-title">{t(locale, "listen.preflightTitle")}</h2>
+          <dl>
+            <div>
+              <dt>{t(locale, "listen.permissionLabel")}</dt>
+              <dd data-permission-state={preflight.permission}>{preflightPermissionLabel(locale, preflight.permission)}</dd>
+            </div>
+            <div>
+              <dt>{t(locale, "listen.deviceLabel")}</dt>
+              <dd data-device-state={preflight.device.state}>
+                {preflight.device.label ?? preflightDeviceLabel(locale, preflight.device.state)}
+              </dd>
+            </div>
+            <div>
+              <dt>{t(locale, "listen.entitlementLabel")}</dt>
+              <dd data-entitlement-state={entitlement ? "checked" : "pending"}>
+                {entitlement === null
+                  ? t(locale, "listen.entitlementPending")
+                  : entitlement.captureContinuing
+                    ? t(locale, "listen.entitlementAvailable")
+                    : t(locale, "listen.entitlementLimited")}
+              </dd>
+            </div>
+          </dl>
+          {preflight.recovery === "request-permission" && store.requestPermission && (
+            <button type="button" className="listen-recovery-control" onClick={() => void run(store.requestPermission!)}>
+              {t(locale, "listen.requestPermission")}
+            </button>
+          )}
+          {preflight.recovery === "open-settings" && store.openSettings && (
+            <button type="button" className="listen-recovery-control" onClick={() => void run(store.openSettings!)}>
+              {t(locale, "listen.openSettings")}
+            </button>
+          )}
+        </section>
         {description.loud && (
           <p className="visually-hidden" role="alert">{t(locale, description.titleKey)}</p>
         )}
@@ -321,7 +378,9 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
             {t(locale, "chat.latest")}
           </button>
         )}
-        <p className="listen-privacy-note">{t(locale, "listen.privacyControl")}</p>
+        <p className="listen-privacy-note" data-capture-indicator={description.capturing ? "active" : "idle"}>
+          {t(locale, description.capturing ? "listen.privacyActive" : "listen.privacyControl")}
+        </p>
         <div className="listen-controls" role="group" aria-label={t(locale, "listen.stateLabel")}>
           {description.canStart && (
             <button
@@ -329,6 +388,8 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
               className="listen-primary-control"
               data-consumer-action="start-listen"
               aria-label={t(locale, "listen.start")}
+              disabled={!captureReady}
+              aria-disabled={!captureReady}
               onClick={() => void run(() => store.start())}
             >
               {t(locale, "listen.start")}

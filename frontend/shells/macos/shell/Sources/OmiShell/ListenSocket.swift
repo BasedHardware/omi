@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import AVFoundation
 import WebKit
 
 func deterministicListenEvidenceAudio() -> Data {
@@ -26,6 +28,46 @@ func isListenProtocolReady(_ text: String) -> Bool {
 struct ListenSocketPreparedRequest {
   let id: String
   let request: URLRequest
+}
+
+enum ListenPreflightPolicy {
+  static func payload(
+    permission: AVAuthorizationStatus, inputAvailable: Bool
+  ) -> [String: Any] {
+    let permissionState: String
+    let recovery: String?
+    switch permission {
+    case .notDetermined:
+      permissionState = "unknown"
+      recovery = "request-permission"
+    case .authorized:
+      permissionState = "granted"
+      recovery = nil
+    case .denied:
+      permissionState = "denied"
+      recovery = "open-settings"
+    case .restricted:
+      permissionState = "restricted"
+      recovery = nil
+    @unknown default:
+      permissionState = "unavailable"
+      recovery = nil
+    }
+    let deviceState: String
+    if permissionState == "granted" {
+      deviceState = inputAvailable ? "available" : "unavailable"
+    } else if permissionState == "unknown" {
+      deviceState = "unknown"
+    } else {
+      deviceState = "unavailable"
+    }
+    return [
+      "permission": permissionState,
+      "deviceState": deviceState,
+      "deviceLabel": permissionState == "granted" && inputAvailable ? "Default microphone" : NSNull(),
+      "recovery": recovery ?? NSNull(),
+    ]
+  }
 }
 
 enum ListenSocketPolicyDecision {
@@ -112,6 +154,7 @@ private struct ListenSocketCommand: Decodable {
   let path: String?
   let code: Int?
   let reason: String?
+  let operation: String?
 }
 
 /// Native WebSocket owner. Base authority and bearer credential never cross to JS.
@@ -128,6 +171,12 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   private var idsByTask: [Int: String] = [:]
   private var webViewsById: [String: WKWebView] = [:]
   private var evidenceAudioSent = Set<String>()
+
+  private func listenPreflightPayload() -> [String: Any] {
+    let hasInput = AVCaptureDevice.default(for: .audio) != nil
+    return ListenPreflightPolicy.payload(
+      permission: AVCaptureDevice.authorizationStatus(for: .audio), inputAvailable: hasInput)
+  }
   private lazy var session: URLSession = {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.httpCookieStorage = nil
@@ -174,6 +223,28 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       let command = try? JSONDecoder().decode(ListenSocketCommand.self, from: data)
     else { return }
 
+    if command.action == "preflight" {
+      let operation = command.operation ?? "check"
+      switch operation {
+      case "request-permission":
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self, weak webView] _ in
+          DispatchQueue.main.async {
+            guard let self, let webView else { return }
+            self.emitPreflight(id: command.id, webView: webView)
+          }
+        }
+      case "open-settings":
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+        _ = NSWorkspace.shared.open(url)
+        emitPreflight(id: command.id, webView: webView)
+      case "check":
+        emitPreflight(id: command.id, webView: webView)
+      default:
+        return
+      }
+      return
+    }
+
     if command.action == "close" {
       let closeCode = URLSessionWebSocketTask.CloseCode(rawValue: command.code ?? 1000)
         ?? .normalClosure
@@ -193,6 +264,13 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       webViewsById[command.id] = webView
       task.resume()
     }
+  }
+
+  private func emitPreflight(id: String, webView: WKWebView) {
+    var payload = listenPreflightPayload()
+    payload["type"] = "preflight"
+    payload["requestId"] = id
+    emit(id: id, payload: payload, webView: webView, callback: "__omiListenPreflightEvent")
   }
 
   func urlSession(
@@ -257,7 +335,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     evidenceAudioSent.remove(id)
   }
 
-  private func emit(id: String, payload: [String: Any], webView: WKWebView) {
+  private func emit(id: String, payload: [String: Any], webView: WKWebView, callback: String = "__omiListenSocketEvent") {
     guard
       let idData = try? JSONSerialization.data(withJSONObject: id, options: .fragmentsAllowed),
       let payloadData = try? JSONSerialization.data(withJSONObject: payload),
@@ -265,7 +343,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       let payloadJSON = String(data: payloadData, encoding: .utf8)
     else { return }
     webView.evaluateJavaScript(
-      "window.__omiListenSocketEvent?.(\(idJSON), \(payloadJSON))",
+      "window.\(callback)?.(\(idJSON), \(payloadJSON))",
       completionHandler: nil)
   }
 }

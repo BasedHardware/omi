@@ -167,6 +167,9 @@ export function createPlatformProductionListenStore(
     captureState: () => platformListenCaptureState(client, env.now()),
     transcriptSegments: () => client.stream().getTranscriptSegments(),
     entitlementState: (): ListenEntitlementSnapshot | null => client.stream().getEntitlementState(),
+    preflight: () => client.preflight(),
+    ...(client.requestPermission ? { requestPermission: client.requestPermission } : {}),
+    ...(client.openSettings ? { openSettings: client.openSettings } : {}),
     start: () => client.start(),
     stop: () => client.stop(),
   };

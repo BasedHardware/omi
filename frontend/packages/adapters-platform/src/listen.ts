@@ -84,8 +84,75 @@ export interface PlatformListenTransportSnapshot {
   readonly failureRetryable: boolean | null;
 }
 
+export type PlatformListenPermissionState =
+  | "unknown"
+  | "checking"
+  | "granted"
+  | "denied"
+  | "restricted"
+  | "unavailable";
+
+export type PlatformListenInputDeviceState =
+  | "unknown"
+  | "checking"
+  | "available"
+  | "unavailable";
+
+/**
+ * Host-owned capture readiness. This is deliberately separate from the
+ * server's transcript wire: permission and input-device facts belong to the
+ * native shell and must never be inferred from a WebSocket response.
+ * Device identity is intentionally absent; only a safe human label may cross
+ * the shell boundary.
+ */
+export interface PlatformListenPreflightSnapshot {
+  readonly permission: PlatformListenPermissionState;
+  readonly device: {
+    readonly state: PlatformListenInputDeviceState;
+    readonly label: string | null;
+  };
+  readonly recovery: "request-permission" | "open-settings" | null;
+}
+
+export interface PlatformListenPreflightProvider {
+  snapshot(): PlatformListenPreflightSnapshot;
+  subscribe(listener: () => void): () => void;
+  refresh(): Promise<void>;
+  requestPermission?: () => Promise<void>;
+  openSettings?: () => Promise<void>;
+}
+
+export const UNAVAILABLE_LISTEN_PREFLIGHT: PlatformListenPreflightSnapshot = {
+  permission: "unavailable",
+  device: { state: "unavailable", label: null },
+  recovery: null,
+};
+
+export function createUnavailableListenPreflightProvider(): PlatformListenPreflightProvider {
+  return {
+    snapshot: () => UNAVAILABLE_LISTEN_PREFLIGHT,
+    subscribe: () => () => {},
+    async refresh() {},
+  };
+}
+
+export class PlatformListenPreflightError extends Error {
+  readonly code: "permission-required" | "device-unavailable";
+
+  constructor(code: "permission-required" | "device-unavailable") {
+    super(code === "permission-required"
+      ? "Microphone permission is required before Listen can start"
+      : "No input microphone is available");
+    this.name = "PlatformListenPreflightError";
+    this.code = code;
+  }
+}
+
 export interface PlatformListenCaptureClient {
   snapshot(): PlatformListenTransportSnapshot;
+  preflight(): PlatformListenPreflightSnapshot;
+  requestPermission?: () => Promise<void>;
+  openSettings?: () => Promise<void>;
   stream(): ListenCaptureStreamPort;
   subscribe(listener: () => void): () => void;
   refresh(): Promise<void>;
@@ -109,6 +176,7 @@ export interface PlatformListenCaptureClientOptions {
   readonly handshake?: PlatformListenHandshake;
   readonly generation?: ListenEntitlementGeneration;
   readonly reconnectDelayMs?: number;
+  readonly preflight?: PlatformListenPreflightProvider;
 }
 
 function uuidFromEnv(env: Env): string {
@@ -146,6 +214,7 @@ export function createPlatformListenCaptureClient(
 ): PlatformListenCaptureClient {
   const listeners = new Set<() => void>();
   const reconnectDelayMs = options.reconnectDelayMs ?? 1_000;
+  const preflight = options.preflight;
   const handshake = options.handshake ?? {};
   let handle = createListenCaptureStreamPort({
     sink: options.env.fallbackSink,
@@ -169,6 +238,26 @@ export function createPlatformListenCaptureClient(
   const notify = (): void => {
     for (const listener of listeners) listener();
   };
+
+  const preflightSnapshot = (): PlatformListenPreflightSnapshot =>
+    preflight?.snapshot() ?? UNAVAILABLE_LISTEN_PREFLIGHT;
+
+  const assertPreflightReady = (): void => {
+    // Existing direct adapter consumers may not have a native preflight seam
+    // yet. Production composition always supplies one; retaining this guard
+    // only for an explicitly supplied provider keeps older fixtures truthful
+    // while preventing a shell from starting before its checks complete.
+    if (preflight === undefined) return;
+    const state = preflight.snapshot();
+    if (state.permission !== "granted") {
+      throw new PlatformListenPreflightError("permission-required");
+    }
+    if (state.device.state !== "available") {
+      throw new PlatformListenPreflightError("device-unavailable");
+    }
+  };
+
+  preflight?.subscribe(notify);
 
   const observeHandle = (): void => {
     for (const unsubscribe of unobserve) unsubscribe();
@@ -296,12 +385,16 @@ export function createPlatformListenCaptureClient(
       disconnectedAt,
       failureRetryable,
     }),
+    preflight: preflightSnapshot,
+    ...(preflight?.requestPermission ? { requestPermission: () => preflight.requestPermission!() } : {}),
+    ...(preflight?.openSettings ? { openSettings: () => preflight.openSettings!() } : {}),
     stream: () => handle.port,
     subscribe(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
     async refresh() {
+      await preflight?.refresh();
       if (
         captureRequested
         && !terminalCeiling
@@ -313,6 +406,7 @@ export function createPlatformListenCaptureClient(
     },
     async start() {
       if (captureRequested) throw new Error("Listen capture is already running");
+      assertPreflightReady();
       for (const unsubscribe of unobserve) unsubscribe();
       handle = createListenCaptureStreamPort({
         sink: options.env.fallbackSink,

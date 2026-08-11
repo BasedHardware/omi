@@ -107,6 +107,8 @@ function stateStore(capture, options = {}) {
     queue: { phase: "idle", pendingCount: 0 },
   };
   let refreshes = 0;
+  let permissionRequests = 0;
+  let settingsOpens = 0;
   return {
     status: () => status,
     subscribe: () => () => {},
@@ -114,9 +116,14 @@ function stateStore(capture, options = {}) {
     captureState: () => capture,
     transcriptSegments: () => options.segments ?? [],
     entitlementState: () => options.entitlement ?? null,
+    ...(options.preflight ? { preflight: () => options.preflight } : {}),
+    ...(options.requestPermission ? { async requestPermission() { permissionRequests += 1; } } : {}),
+    ...(options.openSettings ? { async openSettings() { settingsOpens += 1; } } : {}),
     async start() {},
     async stop() {},
     refreshes: () => refreshes,
+    permissionRequests: () => permissionRequests,
+    settingsOpens: () => settingsOpens,
   };
 }
 
@@ -235,6 +242,58 @@ test("Listen idle is purposeful, private, and does not repeat an empty backlog",
     assert.ok(rendered.container.querySelector('button[data-consumer-action="start-listen"]'));
   } finally {
     await rendered.cleanup();
+  }
+});
+
+test("Listen preflight blocks capture until permission and device are truthful, with host recovery only", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const denied = stateStore({ kind: "idle" }, {
+    preflight: {
+      permission: "denied", device: { state: "unavailable", label: null }, recovery: "open-settings",
+    },
+    openSettings: true,
+  });
+  const rendered = await renderComponent(ListenProduction, { store: denied });
+  try {
+    const start = rendered.container.querySelector('[data-consumer-action="start-listen"]');
+    assert.equal(start?.getAttribute("disabled"), "");
+    assert.equal(rendered.container.querySelector("[data-permission-state=denied]")?.textContent, EN_MESSAGES["listen.permission.denied"]);
+    assert.equal(rendered.container.querySelector("[data-device-state=unavailable]")?.textContent, EN_MESSAGES["listen.device.unavailable"]);
+    const recovery = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === EN_MESSAGES["listen.openSettings"]);
+    assert.ok(recovery, "settings recovery appears only when the host advertises it");
+    await rendered.act(async () => recovery.click());
+    assert.equal(denied.settingsOpens(), 1);
+  } finally {
+    await rendered.cleanup();
+  }
+
+  const unavailable = stateStore({ kind: "idle" }, {
+    preflight: {
+      permission: "unavailable", device: { state: "unavailable", label: null }, recovery: null,
+    },
+  });
+  const unavailableRender = await renderComponent(ListenProduction, { store: unavailable });
+  try {
+    assert.equal(unavailableRender.container.querySelector(".listen-recovery-control"), null);
+    assert.equal(unavailableRender.container.querySelector('[data-consumer-action="start-listen"]')?.getAttribute("disabled"), "");
+  } finally {
+    await unavailableRender.cleanup();
+  }
+
+  const limited = stateStore({ kind: "idle" }, {
+    preflight: {
+      permission: "granted", device: { state: "available", label: "Default microphone" }, recovery: null,
+    },
+    entitlement: { source: "entitlement", status: "limit_reached", captureContinuing: false,
+      remaining: 0, usage: null, limit: { kind: "metered", amount: 1 }, reason: "limit", upgradeTarget: null,
+      suggestedAction: null },
+  });
+  const limitedRender = await renderComponent(ListenProduction, { store: limited });
+  try {
+    assert.equal(limitedRender.container.querySelector('[data-consumer-action="start-listen"]')?.getAttribute("disabled"), "");
+    assert.equal(limitedRender.container.querySelector('[data-entitlement-state="checked"]')?.textContent, EN_MESSAGES["listen.entitlementLimited"]);
+  } finally {
+    await limitedRender.cleanup();
   }
 });
 
