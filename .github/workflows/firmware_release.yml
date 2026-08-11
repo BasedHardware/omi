@@ -104,10 +104,11 @@ jobs:
         with:
           path: omi/firmware/v2.9.0
           # Include the build script hash so an NCS/toolchain bump cannot restore
-          # a mismatched workspace under a constant version key.
+          # a mismatched workspace under a constant version key. Deliberately no
+          # restore-keys: build-cv1.sh skips `west init` whenever a `.west`
+          # directory is already present, so a prefix fallback would restore the
+          # pre-bump workspace and silently defeat this invalidation.
           key: ncs-v2.9.0-${{ runner.os }}-${{ hashFiles('omi/firmware/scripts/ci/build-cv1.sh') }}
-          restore-keys: |
-            ncs-v2.9.0-${{ runner.os }}-
 
       - name: Sync firmware version into config
         env:
