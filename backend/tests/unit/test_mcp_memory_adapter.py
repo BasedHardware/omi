@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import utils.memory.memory_service as service_mod
 from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.mcp_memories import (
     McpMemoryListResult,
@@ -44,8 +45,6 @@ class _Memory:
 
 
 def test_mcp_compatibility_list_adapter_delegates_arbitrary_uid_to_universal_service(monkeypatch):
-    import utils.memory.memory_service as service_mod
-
     calls = []
 
     class _UniversalService:
@@ -71,8 +70,6 @@ def test_mcp_compatibility_list_adapter_delegates_arbitrary_uid_to_universal_ser
 
 
 def test_mcp_search_and_vector_adapters_delegate_to_universal_service(monkeypatch):
-    import utils.memory.memory_service as service_mod
-
     calls = []
 
     class _UniversalService:

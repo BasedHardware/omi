@@ -115,15 +115,15 @@ surfaces:
     current_provider_model: openai/gpt-5.6-luna
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    migration_status: acknowledged_direct_file_lifecycle_surface; recorded during OMI_LLM_GATEWAY_FEATURE_MODE=gateway until a gateway vision lane exists
+    test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py
   - surface: file_chat_assistants
     code_path: backend/utils/other/chat_file.py:FileChatTool
     current_provider_model: openai/gpt-5.6-luna with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    migration_status: acknowledged_direct_file_lifecycle_surface; recorded during OMI_LLM_GATEWAY_FEATURE_MODE=gateway until a gateway file lifecycle lane exists
+    test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
     current_provider_model: openai realtime or gemini live selected by client query

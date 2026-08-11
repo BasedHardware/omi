@@ -119,8 +119,14 @@ def _reset_universal_memory(monkeypatch):
     reset_universal_memory_fixture(monkeypatch)
 
 
-def test_arbitrary_uids_share_one_universal_reader(monkeypatch):
-    service_mod = _load_memory_service(monkeypatch)
+@pytest.fixture
+def service_mod(monkeypatch):
+    # Import isolation and module graph repair belong to setup, not the unit
+    # behavior's measured call phase.
+    return _load_memory_service(monkeypatch)
+
+
+def test_arbitrary_uids_share_one_universal_reader(service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service._canonical.read = MagicMock(return_value=[])
     service._history.read = MagicMock(return_value=[])
@@ -130,8 +136,7 @@ def test_arbitrary_uids_share_one_universal_reader(monkeypatch):
     assert [call.args[0] for call in service._canonical.read.call_args_list] == ["uid-a", "uid-b"]
 
 
-def test_memory_service_never_consults_per_user_store_selector(monkeypatch):
-    service_mod = _load_memory_service(monkeypatch)
+def test_memory_service_never_consults_per_user_store_selector(monkeypatch, service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service._canonical.read = MagicMock(return_value=[])
     service._history.read = MagicMock(return_value=[])
@@ -145,16 +150,14 @@ def test_memory_service_never_consults_per_user_store_selector(monkeypatch):
     assert service.read("uid-b") == []
 
 
-def test_read_pinned_ignores_released_memory_system_pin(monkeypatch):
-    service_mod = _load_memory_service(monkeypatch)
+def test_read_pinned_ignores_released_memory_system_pin(service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service.read = MagicMock(return_value=[])
     assert service.read_pinned("uid-test", service_mod.MemorySystem.LEGACY) == []
     service.read.assert_called_once()
 
 
-def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch):
-    service_mod = _load_memory_service(monkeypatch)
+def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     service._canonical.write = MagicMock(side_effect=RuntimeError("canonical unavailable"))
     legacy_create = MagicMock()
@@ -172,8 +175,7 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch):
     legacy_create.assert_not_called()
 
 
-def test_canonical_backend_preserves_released_adapter_signatures(monkeypatch):
-    service_mod = _load_memory_service(monkeypatch)
+def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
     backend = service_mod.CanonicalMemoryBackend()
     with (
         patch.object(service_mod, "read_canonical_memories", return_value=[]),

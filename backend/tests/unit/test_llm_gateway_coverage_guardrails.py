@@ -73,10 +73,8 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
-INVENTORIED_DIRECT_EXCEPTION_FILES = {
-    'utils/other/chat_file.py',
-    'routers/omni_relay.py',
-}
+FAIL_CLOSED_DIRECT_EXCEPTION_FILES = {'routers/omni_relay.py'}
+ACKNOWLEDGED_DIRECT_EXCEPTION_FILES = {'utils/other/chat_file.py'}
 
 
 def test_every_model_config_feature_has_inventory_and_gateway_lane():
@@ -173,14 +171,18 @@ def test_direct_provider_usage_stays_inside_approved_boundaries():
     assert stale_allowlist == []
 
 
-def test_direct_exception_files_are_inventoried_and_fail_closed_for_gateway_flip():
+def test_direct_exception_files_are_inventoried_with_their_declared_gateway_policy():
     inventory = _load_inventory()
     inventory_paths = {_code_path_file(surface['code_path']) for surface in inventory['surfaces']}
 
-    assert INVENTORIED_DIRECT_EXCEPTION_FILES <= inventory_paths
-    for rel_path in INVENTORIED_DIRECT_EXCEPTION_FILES:
+    assert FAIL_CLOSED_DIRECT_EXCEPTION_FILES | ACKNOWLEDGED_DIRECT_EXCEPTION_FILES <= inventory_paths
+    for rel_path in FAIL_CLOSED_DIRECT_EXCEPTION_FILES:
         source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
         assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' in source
+    for rel_path in ACKNOWLEDGED_DIRECT_EXCEPTION_FILES:
+        source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
+        assert 'should_route_features_through_gateway' in source
+        assert 'record_direct_exception_surface' in source
 
 
 def _load_inventory() -> dict:
